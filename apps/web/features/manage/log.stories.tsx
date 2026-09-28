@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { expect, within } from 'storybook/test';
-import { acting, agents, audit, decisions, header, logApi, now, realm, works } from './fixtures.ts';
+import { acting, audit, book, decisions, header, logApi, logNames, now, occurrences, realm } from './fixtures.ts';
 import { LogView } from './log-view.tsx';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
@@ -16,14 +16,18 @@ const meta = {
   component: LogView,
   parameters: { route: { pathname: `/en/manage/r/${realm}/log` } },
   args: { realm, actingSubject: acting.iri, view: { view: 'audit', kind: null }, first: { kind: 'audit', page: auditPage },
-    agents, works, now, locale: 'en', messages, api: logApi },
+    names: logNames, now, locale: 'en', messages, api: logApi },
   render: (args: ComponentProps<typeof LogView>) => <RealmFrame realm={realm} header={header} agent={acting}
     locale={args.locale} messages={args.messages}><LogView {...args} /></RealmFrame>,
 } satisfies Meta<typeof LogView>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Who changed what, and why: management reasons are shown as written. */
+/**
+ * Who changed what, and why: management reasons and decision rationales are
+ * shown as written, and a decision names what it was about, a chapter within
+ * its Book.
+ */
 export const AuditLog: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -33,9 +37,15 @@ export const AuditLog: Story = {
     const entries = canvas.getAllByRole('listitem').filter(item => item.closest('ol'));
     await expect(entries).toHaveLength(audit.length);
     await expect(entries[1]).toHaveTextContent('Gave Daniel Chen 陈丹尼 Community moderators until Oct 28, 2026');
-    await expect(entries[3]).toHaveTextContent('Changed membership');
-    await expect(entries[3]).toHaveTextContent('An Wu 吴安');
-    await expect(entries[3]).toHaveTextContent('“Repeated off-topic posts after two warnings”');
+    await expect(entries[2]).toHaveTextContent('Kept content and closed the report');
+    await expect(within(entries[2]!).getByRole('link', { name: '西游记' })).toBeVisible();
+    await expect(entries[3]).toHaveTextContent('Removed content');
+    await expect(entries[3]).toHaveTextContent('“Breaks rule 1, “No spoilers in titles”. The chapter title named the killer.”');
+    await expect(within(entries[3]!).getByRole('link', { name: /^第一章 雨夜\s*· 雨夜书店 · 连载小说$/ }))
+      .toHaveAttribute('href', `/en/w/${book.slice(-36)}/read/${occurrences.one.slice(-36)}`);
+    await expect(entries[4]).toHaveTextContent('Changed membership');
+    await expect(entries[4]).toHaveTextContent('An Wu 吴安');
+    await expect(entries[4]).toHaveTextContent('“Repeated off-topic posts after two warnings”');
     await expect(canvas.getByRole('link', { name: 'Realm management' })).toHaveAttribute('href',
       `/en/manage/r/${realm}/log?kind=realm_management`);
     await expect(canvas.getByRole('button', { name: 'Load more' })).toBeInTheDocument();
@@ -44,11 +54,15 @@ export const AuditLog: Story = {
 
 export const PublicDecisions: Story = {
   args: { view: { view: 'public', kind: null }, first: { kind: 'public', page: { profile: 'realm-decisions-v1',
-    items: decisions, nextCursor: null, sourcePosition: position, count: { value: 3, kind: 'exact-page', total: null } } } },
+    items: decisions, nextCursor: null, sourcePosition: position,
+    count: { value: decisions.length, kind: 'exact-page', total: null } } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Anyone can see these decisions on the Realm’s page.')).toBeVisible();
-    await expect(canvas.getByRole('link', { name: '西游记' })).toHaveAttribute('href', `/en/w/${decisions[1]!.work!.slice(-36)}`);
+    await expect(canvas.getByRole('link', { name: '西游记' })).toHaveAttribute('href', `/en/w/${decisions[2]!.work!.slice(-36)}`);
+    // An adopted chapter is named in its Book and opens in the reader there.
+    await expect(canvas.getByRole('link', { name: /^第二章 未寄出的信\s*· 雨夜书店 · 连载小说$/ }))
+      .toHaveAttribute('href', `/en/w/${book.slice(-36)}/read/${occurrences.two.slice(-36)}`);
     await expect(canvas.getAllByText('Rejected')).toHaveLength(1);
   },
 };

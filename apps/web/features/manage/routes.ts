@@ -7,23 +7,30 @@ export function realmHref(realm: string, section: RealmSection = 'queue'): strin
   return section === 'queue' ? `/manage/r/${realm}` : `/manage/r/${realm}/${section}`;
 }
 
-export interface QueueView { state: 'open' | 'closed'; type: ModerationKind | null }
+export interface QueueView { state: 'open' | 'closed'; type: ModerationKind | null;
+  /** A report reason code; only reports carry one, so it never goes with a submission kind. */
+  reason?: string | null }
 
 const kinds: readonly ModerationKind[] = ['content_report', 'rights_complaint', 'contribution_submission',
-  'correction_submission'];
+  'correction_submission', 'work_submission', 'content-publication_submission'];
+// Main's report reason codes (`reportReason` in services/main/src/modules/management-reads/read-contract.ts).
+const reasonCode = /^[a-z][a-z0-9_.-]{0,63}$/;
 
 /** The queue filters in the address. A malformed value falls back to the default view. */
 export function parseQueueView(params: Record<string, string | string[] | undefined>): QueueView {
   const state = params.state === 'closed' ? 'closed' : 'open';
   const type = typeof params.type === 'string' && (kinds as readonly string[]).includes(params.type)
     ? params.type as ModerationKind : null;
-  return { state, type };
+  const reason = typeof params.reason === 'string' && reasonCode.test(params.reason) && !type?.endsWith('_submission')
+    ? params.reason : null;
+  return { state, type, reason };
 }
 
 export function queueHref(realm: string, view: QueueView): string {
   const search = new URLSearchParams();
   if (view.state === 'closed') search.set('state', 'closed');
   if (view.type) search.set('type', view.type);
+  if (view.reason && !view.type?.endsWith('_submission')) search.set('reason', view.reason);
   const query = search.toString();
   return `${realmHref(realm)}${query ? `?${query}` : ''}`;
 }

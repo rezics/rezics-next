@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { LogView } from '../../../../../../features/manage/log-view.tsx';
+import { auditAgents, auditWorks, LogView } from '../../../../../../features/manage/log-view.tsx';
 import { ManageFailure } from '../../../../../../features/manage/parts.tsx';
-import { readAgents, readAudit, readPublicDecisions, readWorks } from '../../../../../../features/manage/read.ts';
+import { readAgents, readAudit, readPublicDecisions, readSubjects } from '../../../../../../features/manage/read.ts';
 import { logHref, parseLogView } from '../../../../../../features/manage/routes.ts';
 import { managedAddress, manager } from '../../../../../../features/manage/server.ts';
 import { localizedPath } from '../../../../../../i18n/locale.ts';
@@ -29,17 +29,16 @@ export default async function RealmLogRoute({ params, searchParams }: {
     const page = await readAudit(main, realm, { actingSubject, kind: view.kind });
     if (!page.ok) return <ManageFailure failure={page.failure} locale={locale} messages={messages}
       signInHref={signInHref} retryHref={retryHref} />;
-    const agents = await readAgents(anonymous, page.data.items.flatMap(item => [item.actingSubject,
-      ...(item.detail?.member ? [item.detail.member] : []),
-      ...(item.detail?.changes.map(change => change.member) ?? [])]));
+    const [agents, subjects] = await Promise.all([readAgents(anonymous, auditAgents(page.data.items)),
+      readSubjects(main, auditWorks(page.data.items), { language: locale, actingSubject })]);
     return <LogView realm={realm} address={address} actingSubject={actingSubject} view={view} first={{ kind: 'audit', page: page.data }}
-      agents={agents} works={{}} now={Date.now()} locale={locale} messages={messages} />;
+      names={{ agents, ...subjects }} now={Date.now()} locale={locale} messages={messages} />;
   }
   const page = await readPublicDecisions(anonymous, realm);
   if (!page.ok) return <ManageFailure failure={page.failure} locale={locale} messages={messages}
     signInHref={signInHref} retryHref={retryHref} />;
-  const works = await readWorks(main, page.data.items.flatMap(item => item.work ? [item.work] : []),
+  const subjects = await readSubjects(main, page.data.items.flatMap(item => item.work ? [item.work] : []),
     { language: locale, actingSubject });
   return <LogView realm={realm} address={address} actingSubject={actingSubject} view={view} first={{ kind: 'public', page: page.data }}
-    agents={{}} works={works} now={Date.now()} locale={locale} messages={messages} />;
+    names={{ agents: {}, ...subjects }} now={Date.now()} locale={locale} messages={messages} />;
 }

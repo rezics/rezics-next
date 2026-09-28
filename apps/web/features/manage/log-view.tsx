@@ -12,29 +12,42 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { agentLabel, dateTime, isoTime, relativeTime, shownHandle } from './format.ts';
 import { auditDetail, auditKindLabel, auditOutcome, auditRuns, publicDecisionLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
-import { AgentMark, Named, Pill } from './parts.tsx';
-import { mergeAgents, readAgents, readAudit, readPublicDecisions, readWorks } from './read.ts';
+import { AgentMark, Pill, WorkThumb } from './parts.tsx';
+import { SubjectName } from './queue-context.tsx';
+import { subjectOf } from './queue-subject.ts';
+import { mergeAgents, readAgents, readAudit, readPublicDecisions, readSubjects } from './read.ts';
 import { type AuditFilter, type LogView as View, logHref } from './routes.ts';
-import { type AgentSummary, type AuditItem, type AuditPage, type Loaded, type PublicDecision, type PublicDecisionPage,
-  uuidOf, type WorkSummary } from './types.ts';
+import type { AgentSummary, AuditItem, AuditPage, ChapterSummary, Loaded, PublicDecision, PublicDecisionPage,
+  WorkSummary } from './types.ts';
+
+/** What a log page names: people, and Works with each chapter's Book and label. */
+export interface LogNames { agents: Record<string, AgentSummary>; works: Record<string, WorkSummary>;
+  chapters: Record<string, ChapterSummary> }
 
 /** Later pages of either log. Stories pass a stand-in. */
 export interface LogApi {
   audit(kind: AuditFilter | null, cursor: string): Promise<Loaded<AuditPage>>;
   decisions(cursor: string): Promise<Loaded<PublicDecisionPage>>;
-  names(agents: readonly string[], works: readonly string[]): Promise<{ agents: Record<string, AgentSummary>;
-    works: Record<string, WorkSummary> }>;
+  names(agents: readonly string[], works: readonly string[], known: LogNames): Promise<LogNames>;
 }
+
+/** The Works an audit page's decisions were about. */
+export const auditWorks = (items: readonly AuditItem[]) =>
+  items.flatMap(item => item.target?.owner === 'graph' ? [item.target.resource] : []);
+
+/** The people an audit page names: who acted, and whom a role change was about. */
+export const auditAgents = (items: readonly AuditItem[]) => items.flatMap(item => [item.actingSubject,
+  ...(item.detail?.member ? [item.detail.member] : []), ...(item.detail?.changes.map(change => change.member) ?? [])]);
 
 export function bffLogApi(realm: string, actingSubject: string, language: string): LogApi {
   return {
     audit: (kind, cursor) => readAudit(browserMainApi(), realm, { actingSubject, kind, cursor }),
     decisions: cursor => readPublicDecisions(browserMainApi(), realm, cursor),
-    async names(agents, works) {
+    async names(agents, works, known) {
       const main = browserMainApi();
-      const [a, w] = await Promise.all([readAgents(main, agents, actingSubject),
-        readWorks(main, works, { language, actingSubject })]);
-      return { agents: a, works: w };
+      const [a, subjects] = await Promise.all([readAgents(main, agents, actingSubject),
+        readSubjects(main, works, { language, actingSubject }, known)]);
+      return { agents: a, ...subjects };
     },
   };
 }
@@ -48,14 +61,14 @@ const auditFilters: ReadonlyArray<[AuditFilter | null, 'auditAll' | 'auditModera
  * The Realm's record: the private audit log of who changed what and why, and
  * the public decisions everyone can see. Filters live in the address.
  */
-export function LogView({ realm, address = realm, actingSubject, view, first, agents: initialAgents,
-  works: initialWorks, now, locale, messages, api: givenApi }: {
+export function LogView({ realm, address = realm, actingSubject, view, first, names: initialNames, now, locale,
+  messages, api: givenApi }: {
   realm: string;
   /** How the address names the Realm: its official Zone's segment, or its ID. Links keep it. */
   address?: string;
   actingSubject: string; view: View;
   first: { kind: 'audit'; page: AuditPage } | { kind: 'public'; page: PublicDecisionPage };
-  agents: Record<string, AgentSummary>; works: Record<string, WorkSummary>; now: number;
+  names: LogNames; now: number;
   locale: UiLocale; messages: ManageMessages; api?: LogApi;
 }) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
@@ -64,7 +77,7 @@ export function LogView({ realm, address = realm, actingSubject, view, first, ag
   const [decisions, setDecisions] = useState<PublicDecision[]>(first.kind === 'public' ? first.page.items : []);
   const [cursor, setCursor] = useState(first.page.nextCursor);
   const [paging, setPaging] = useState<'idle' | 'loading' | 'moved' | 'failed'>('idle');
-  const [names, setNames] = useState({ agents: initialAgents, works: initialWorks });
+  const [names, setNames] = useState(initialNames);
 
   async function more() {
     if (!cursor) return;
@@ -74,17 +87,17 @@ export function LogView({ realm, address = realm, actingSubject, view, first, ag
       if (!read.ok) { setPaging(read.failure === 'moved' ? 'moved' : 'failed'); return; }
       setAudit(items => [...items, ...read.data.items]);
       setCursor(read.data.nextCursor);
-      const found = await api.names(read.data.items.flatMap(item => [item.actingSubject,
-        ...(item.detail?.member ? [item.detail.member] : []),
-        ...(item.detail?.changes.map(change => change.member) ?? [])]), []);
-      setNames(known => ({ ...known, agents: mergeAgents(known.agents, found.agents) }));
+      const found = await api.names(auditAgents(read.data.items), auditWorks(read.data.items), names);
+      setNames(known => ({ agents: mergeAgents(known.agents, found.agents), works: { ...known.works, ...found.works },
+        chapters: { ...known.chapters, ...found.chapters } }));
     } else {
       const read = await api.decisions(cursor);
       if (!read.ok) { setPaging(read.failure === 'moved' ? 'moved' : 'failed'); return; }
       setDecisions(items => [...items, ...read.data.items]);
       setCursor(read.data.nextCursor);
-      const found = await api.names([], read.data.items.flatMap(item => item.work ? [item.work] : []));
-      setNames(known => ({ ...known, works: { ...known.works, ...found.works } }));
+      const found = await api.names([], read.data.items.flatMap(item => item.work ? [item.work] : []), names);
+      setNames(known => ({ ...known, works: { ...known.works, ...found.works },
+        chapters: { ...known.chapters, ...found.chapters } }));
     }
     setPaging('idle');
   }
@@ -112,6 +125,7 @@ export function LogView({ realm, address = realm, actingSubject, view, first, ag
         {first.kind === 'audit' ? auditRuns(audit).map(({ item, count, latest }) => {
           const name = agentName(item.actingSubject);
           const handle = shownHandle(names.agents[item.actingSubject]?.handle ?? null);
+          const subject = item.target?.owner === 'graph' ? subjectOf(item.target.resource, names, t.workFallback) : null;
           return <li key={item.id} className="flex gap-3 px-4 py-3.5">
             <AgentMark name={name} iri={item.actingSubject} />
             <div className="grid min-w-0 flex-1 gap-1">
@@ -122,17 +136,28 @@ export function LogView({ realm, address = realm, actingSubject, view, first, ag
                   className="text-muted-foreground text-xs">{relativeTime(latest, now, locale)}</time>
               </div>
               <p className="text-muted-foreground text-sm">{t.byAgent({ agent: name })}{handle ? ` ${handle}` : ''}</p>
+              {subject ? <LocalizedLink href={subject.href} className="flex min-w-0 items-center gap-2 justify-self-start
+                rounded-md text-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+                <WorkThumb iri={subject.cover.iri} work={subject.cover.work} label={subject.book?.value ?? subject.text}
+                  className="w-6" />
+                <SubjectName subject={subject} fallback={t.workFallback} className="truncate text-primary" />
+              </LocalizedLink> : null}
               {item.reason ? <p className="text-sm" dir="auto">“{item.reason}”</p> : null}
               <div><Badge variant="secondary">{auditKindLabel(item.kind, t)}</Badge></div>
             </div>
           </li>;
         }) : decisions.map(item => {
-          const work = item.work ? names.works[item.work] : undefined;
+          const subject = item.work ? subjectOf(item.work, names, t.workFallback) : null;
           return <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
-            <div className="grid min-w-0 gap-0.5">
-              <p className="font-medium">{publicDecisionLabel(item, t)}</p>
-              {item.work ? <LocalizedLink href={`/w/${uuidOf(item.work)}`} className="truncate text-primary text-sm hover:underline">
-                {work ? <Named name={work.title} /> : t.workFallback}</LocalizedLink> : null}
+            <div className="flex min-w-0 items-center gap-3">
+              {subject ? <WorkThumb iri={subject.cover.iri} work={subject.cover.work}
+                label={subject.book?.value ?? subject.text} /> : null}
+              <div className="grid min-w-0 gap-0.5">
+                <p className="font-medium">{publicDecisionLabel(item, t)}</p>
+                {subject ? <LocalizedLink href={subject.href} className="truncate text-sm hover:underline">
+                  <SubjectName subject={subject} fallback={t.workFallback} className="text-primary" /></LocalizedLink>
+                  : null}
+              </div>
             </div>
             {item.outcome ? <Badge variant={item.outcome === 'accepted' ? 'soft' : 'secondary'}>
               {item.outcome === 'accepted' ? t.outcomeAccepted : t.outcomeRejected}</Badge> : null}

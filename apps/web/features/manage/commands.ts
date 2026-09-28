@@ -51,11 +51,22 @@ const keyed = (key: string) => ({ headers: { 'idempotency-key': key } });
 /**
  * Accepting adopts the submitted version, compare-and-set on the Realm's
  * current selection: a correction names the selection it replaces, and a new
- * contribution expects the one Main reports now (none, the first time).
+ * contribution expects the one Main reports now (none, the first time). A
+ * whole Work or an exact publication has its own slot in the Realm, whose
+ * head the Realm's submitted publications list (none, the first time).
  */
 async function acceptBasis(main: MainClient, realm: string, item: ModerationItem, actingSubject: string):
   Promise<Outcome<string | null>> {
   if (item.submission?.correctionOf) return { ok: true, data: item.submission.correctionOf };
+  if (item.kind === 'work_submission' || item.kind === 'content-publication_submission') {
+    const slots = await send(() => main.v1.realms({ realm })['submitted-publications'].get({
+      query: { work: item.target.resource, actingSubject } }));
+    if (!slots.ok) return slots;
+    const kind = item.kind === 'work_submission' ? 'work' : 'content-publication';
+    const slot = slots.data.items.find(entry => entry.kind === kind && entry.resource === item.target.resource
+      && (kind === 'work' || entry.variant === item.target.component));
+    return { ok: true, data: slot?.selection ?? null };
+  }
   const review = await readSubmission(main, realm, item.id, actingSubject);
   if (!review.ok) return { ok: false, failure: review.failure === 'moved' ? 'stale' : review.failure === 'sign-in'
     ? 'sign-in' : review.failure === 'missing' || review.failure === 'denied' ? 'missing' : 'unavailable' };

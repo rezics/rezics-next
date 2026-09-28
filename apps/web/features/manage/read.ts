@@ -1,5 +1,5 @@
-import { type AgentSummary, failureOf, iriOf, type Loaded, type MainClient, type ModerationKind, uuidOf,
-  type WorkSummary } from './types.ts';
+import { type AgentSummary, type ChapterSummary, failureOf, iriOf, type Loaded, type MainClient, type ModerationKind,
+  uuidOf, type WorkSummary } from './types.ts';
 
 // Reads shared by the server render and the browser (load more, refresh after
 // a decision). Each takes the Eden client for its side and returns `Loaded`
@@ -27,14 +27,33 @@ export interface QueueQuery {
   actingSubject: string;
   state: 'open' | 'closed';
   type: ModerationKind | null;
+  /** A report reason code; Main then lists only reports one of whose reporters gave it. */
+  reason?: string | null;
   cursor?: string | null;
 }
 
 export function readQueue(main: MainClient, realm: string, query: QueueQuery) {
   return settle(() => main.v1.realms({ realm }).moderation.get({ query: { actingSubject: query.actingSubject,
-    state: query.state, ...query.type ? { type: query.type } : {}, ...query.cursor ? { cursor: query.cursor } : {} } }),
+    state: query.state, ...query.type ? { type: query.type } : {}, ...query.reason ? { reason: query.reason } : {},
+    ...query.cursor ? { cursor: query.cursor } : {} } }),
   { management: true, cursor: query.cursor });
 }
+
+/**
+ * Who the queue's submitters and reporters are here, and what its Works are
+ * beyond their headers, in one management read (at most twenty of each).
+ */
+export function readModerationContext(main: MainClient, realm: string, query: { actingSubject: string;
+  agents: readonly string[]; works: readonly string[] }) {
+  const agents = [...new Set(query.agents)].slice(0, CONTEXT_BUDGET);
+  const works = [...new Set(query.works)].slice(0, CONTEXT_BUDGET);
+  return settle(() => main.v1.realms({ realm }).moderation.context.get({ query: { actingSubject: query.actingSubject,
+    ...agents.length ? { agents: agents.join(',') } : {}, ...works.length ? { works: works.join(',') } : {} } }),
+  { management: true });
+}
+
+/** Main's limit for one moderation context read (`MODERATION_CONTEXT_COST`). */
+const CONTEXT_BUDGET = 20;
 
 export function readAudit(main: MainClient, realm: string, query: { actingSubject: string;
   kind: 'content_moderation' | 'rights_disposition' | 'organization_publication_rejection' | 'realm_management' | null;
@@ -131,16 +150,76 @@ export function mergeAgents(known: Record<string, AgentSummary>, found: Record<s
   return merged;
 }
 
-/** The Works queue items point at, read as the acting moderator so restricted Works still show. */
+/**
+ * The Works queue items point at, read as the acting moderator so restricted
+ * Works still show, and the Book of each chapter among them, which names it
+ * and lends it a cover. Works already `known` are not read again.
+ */
 export async function readWorks(main: MainClient, iris: readonly string[], query: { language: string;
-  actingSubject: string }): Promise<Record<string, WorkSummary>> {
-  const unique = [...new Set(iris)].slice(0, NAME_BUDGET);
-  const works = await bounded(unique, 8, async iri => {
-    const read = await settle(() => main.v1.works({ id: uuidOf(iri) }).get({ query }));
-    return read.ok ? { iri, title: read.data.title, cover: read.data.cover, types: read.data.types,
-      originalTitle: read.data.originalTitle?.value ?? null } satisfies WorkSummary : null;
+  actingSubject: string }, known: Record<string, WorkSummary> = {}): Promise<Record<string, WorkSummary>> {
+  const read = async (wanted: readonly string[]) => {
+    const unique = [...new Set(wanted)].filter(iri => !known[iri]).slice(0, NAME_BUDGET);
+    const works = await bounded(unique, 8, async iri => {
+      const header = await settle(() => main.v1.works({ id: uuidOf(iri) }).get({ query }));
+      if (!header.ok) return null;
+      const work = header.data;
+      return { iri, title: work.title, cover: work.cover, types: work.types, originalTitle: work.originalTitle?.value ?? null,
+        tagline: work.tagline, partOf: work.partOf ?? null, completionStatus: work.completionStatus,
+        chapterCount: work.chapterCount } satisfies WorkSummary;
+    });
+    return Object.fromEntries(works.filter(work => work !== null).map(work => [work.iri, work]));
+  };
+  const works = await read(iris);
+  const books = await read(Object.values(works).flatMap(work => work.partOf ? [work.partOf.work] : []));
+  return { ...works, ...books };
+}
+
+/** About a screenful of a chapter: enough to judge it without reading it all. */
+export const CHAPTER_EXCERPT = 1_200;
+
+/** A chapter's opening, without the heading its text repeats, cut at the paragraph nearest `limit`. */
+export function chapterExcerpt(body: string, label: string | null, limit = CHAPTER_EXCERPT):
+  { excerpt: string | null; truncated: boolean } {
+  const lines = body.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const text = (label && lines[0]?.normalize('NFKC') === label.trim().normalize('NFKC') ? lines.slice(1) : lines)
+    .join('\n');
+  if (!text) return { excerpt: null, truncated: false };
+  const characters = Array.from(text);
+  if (characters.length <= limit) return { excerpt: text, truncated: false };
+  const cut = characters.slice(0, limit).join('');
+  const paragraph = cut.lastIndexOf('\n');
+  return { excerpt: (paragraph > limit / 2 ? cut.slice(0, paragraph) : cut).trimEnd(), truncated: true };
+}
+
+/**
+ * The chapters among `works` as their Books list them: the label a chapter
+ * has in the Book's contents, and the opening of its text. One chapter read
+ * each (Main has no batched one); a chapter placed nowhere now is left out.
+ */
+export async function readChapters(main: MainClient, works: Record<string, WorkSummary>, actingSubject: string,
+  known: Record<string, ChapterSummary> = {}): Promise<Record<string, ChapterSummary>> {
+  const chapters = Object.values(works).flatMap(work => work.partOf?.occurrence && !known[work.iri]
+    ? [{ work: work.iri, occurrence: work.partOf.occurrence }] : []).slice(0, NAME_BUDGET);
+  const read = await bounded(chapters, 4, async ({ work, occurrence }) => {
+    const chapter = await settle(() => main.v1.chapters({ id: uuidOf(occurrence) }).get({ query: { actingSubject } }));
+    if (!chapter.ok) return null;
+    const body: unknown = (chapter.data.content as { body?: { body?: unknown } }).body?.body;
+    const label = chapter.data.label ? { value: chapter.data.label.value, language: chapter.data.label.language } : null;
+    const direction = chapter.data.content.reference.direction;
+    return [work, { label, language: chapter.data.language, direction: direction === 'none' ? undefined : direction,
+      ...typeof body === 'string' ? chapterExcerpt(body, label?.value ?? null) : { excerpt: null, truncated: false } }
+    ] as const;
   });
-  return Object.fromEntries(works.filter(work => work !== null).map(work => [work.iri, work]));
+  return Object.fromEntries(read.filter(entry => entry !== null));
+}
+
+/** The Works a log page names, with each chapter's Book, label and opening, as the queue shows them. */
+export async function readSubjects(main: MainClient, iris: readonly string[], query: { language: string;
+  actingSubject: string }, known: { works: Record<string, WorkSummary>; chapters: Record<string, ChapterSummary> }
+  = { works: {}, chapters: {} }) {
+  const works = await readWorks(main, iris, query, known.works);
+  const chapters = await readChapters(main, { ...known.works, ...works }, query.actingSubject, known.chapters);
+  return { works, chapters };
 }
 
 /** A submission as its reviewer sees it, including the private note. */

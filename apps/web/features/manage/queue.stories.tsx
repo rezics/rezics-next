@@ -1,23 +1,30 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { acting, decidedPage, header, now, queue, queueApi, queuePage, realm, type Recorded, agents, works } from './fixtures.ts';
+import { acting, book, decidedPage, header, names, now, occurrences, publishedRules, queue, queueApi, queuePage, realm,
+  type Recorded } from './fixtures.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { ManageFailure } from './parts.tsx';
 import { RealmFrame } from './realm-frame.tsx';
+import { ruleMemoryKey } from './reason-dialog.tsx';
 import { QueueView } from './queue-view.tsx';
 
 const recorded: Recorded = { commits: [] };
-const reset = () => { recorded.commits.length = 0; };
+/** Each story starts with nothing sent and no rule remembered from another story. */
+const reset = () => {
+  recorded.commits.length = 0;
+  for (const action of ['reject', 'request-changes', 'remove'] as const) localStorage.removeItem(ruleMemoryKey(realm, action));
+};
 const chinese = { ...messages, ...zhHans };
+const uuid = (iri: string) => iri.slice(-36);
 
 const meta = {
   title: 'Manage/Queue',
   component: QueueView,
   parameters: { route: { pathname: `/en/manage/r/${realm}` } },
-  args: { realm, actingSubject: acting.iri, view: { state: 'open', type: null }, initial: queuePage, agents, works, now,
-    locale: 'en', messages, api: queueApi({ recorded }), undoWindowMs: 400 },
+  args: { realm, actingSubject: acting.iri, view: { state: 'open', type: null }, initial: queuePage, names, now,
+    realmRules: publishedRules(), locale: 'en', messages, api: queueApi({ recorded }), undoWindowMs: 400 },
   render: (args: ComponentProps<typeof QueueView>) => <RealmFrame realm={realm} header={header} agent={acting}
     locale={args.locale} messages={args.messages}><QueueView {...args} /></RealmFrame>,
 } satisfies Meta<typeof QueueView>;
@@ -248,7 +255,11 @@ export const Chinese: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('navigation', { name: '领域管理' })).toBeInTheDocument();
     await expect(canvas.getByRole('link', { name: '待办' })).toHaveAttribute('href', `/zh-Hans/manage/r/${realm}`);
-    await expect(canvas.getByText(/7 项待处理/)).toBeInTheDocument();
+    await expect(canvas.getByText(new RegExp(`${queue.length} 项待处理`))).toBeInTheDocument();
+    await userEvent.click(within(canvas.getByRole('list', { name: '待办事项' })).getByRole('button', { name: /第一章 雨夜/ }));
+    await expect(detailTitle(canvas)).toHaveTextContent('第一章 雨夜 · 雨夜书店 · 连载小说');
+    // The phone layout repeats the detail inside the list; this is the desktop one.
+    await expect(canvas.getAllByText('可能剧透《雨夜书店 · 连载小说》。').find(text => text.checkVisibility())).toBeDefined();
   },
 };
 
@@ -269,5 +280,151 @@ export const NotAModerator: Story = {
     <ManageFailure failure="denied" locale={args.locale} messages={args.messages} /></RealmFrame>,
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('heading', { name: 'You can’t manage this part of the Realm' })).toBeVisible();
+  },
+};
+
+/**
+ * A report on a chapter names it in its Book, with the Book's cover, and
+ * opens it in the reader at that chapter. The chapter's text waits behind a
+ * spoiler flag; the rule the report names is shown with its words.
+ */
+export const ChapterReport: Story = {
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    const row = within(list(canvas)).getByRole('button', { name: /第一章 雨夜/ });
+    await expect(row).toHaveTextContent('第一章 雨夜 · 雨夜书店 · 连载小说');
+    await expect(row).not.toHaveTextContent('雨夜书店 · 第一章 雨夜');
+    await expect(row.querySelector('[data-slot="work-cover"]')).not.toBeNull();
+    await userEvent.click(row);
+    await expect(detailTitle(canvas)).toHaveTextContent('第一章 雨夜 · 雨夜书店 · 连载小说');
+    const detail = within(detailTitle(canvas).closest('section')!);
+    await expect(detail.getByRole('link', { name: 'Read this chapter' }))
+      .toHaveAttribute('href', `/en/w/${uuid(book)}/read/${uuid(occurrences.one)}`);
+    await expect(detail.getByText('Chapter · Ongoing · 3 chapters · by Lin Mei 林梅')).toBeVisible();
+    await expect(detail.getByRole('region', { name: 'Rule it may break' })).toHaveTextContent('No spoilers in titles');
+    // The chapter's words stay hidden until asked for.
+    await expect(detail.queryByText(/没有地址的信。/)).toBeNull();
+    await expect(detail.getByText('May spoil 雨夜书店 · 连载小说.')).toBeVisible();
+    await userEvent.click(detail.getByRole('button', { name: 'Show text' }));
+    await expect(detail.getByText(/林梅在门口发现一封没有地址的信/)).toHaveAttribute('lang', 'zh-Hans');
+    await expect(detail.getByText('Reported by Aria Wang 王雅', { exact: false })).toBeVisible();
+    await expect(detail.getByText('Left the Realm', { exact: false })).toBeVisible();
+    await expect(detail.getByText('First report here')).toBeVisible();
+  },
+};
+
+/**
+ * A whole Book offered to the Realm reads as its cover, kind, status,
+ * authors and hook, with what accepting it adds, and the submitter's record.
+ */
+export const WorkSubmission: Story = {
+  args: { view: { state: 'open', type: 'work_submission' },
+    initial: { ...queuePage, items: queue.filter(item => item.kind === 'work_submission') } },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(within(list(canvas)).getByRole('button', { name: /雨夜书店 · 连载小说/ }));
+    const detail = within(detailTitle(canvas).closest('section')!);
+    await expect(detail.getByText('Book · Ongoing · 3 chapters · by Lin Mei 林梅')).toBeVisible();
+    await expect(detail.getByText('一封没有地址的信，把雨夜书店带向二十年前的秘密。')).toHaveAttribute('lang', 'zh-Hans');
+    await expect(detail.getByText(/Adds the whole Work to this Realm/)).toBeVisible();
+    await expect(detail.getByText('12 accepted · 1 sent back · 2 waiting')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Works' })).toHaveAttribute('aria-current', 'page');
+  },
+};
+
+/** A chapter's exact publication: the chapter's opening behind its spoiler flag. */
+export const PublicationSubmission: Story = {
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(within(list(canvas)).getByRole('button', { name: /第二章 未寄出的信/ }));
+    const detail = within(detailTitle(canvas).closest('section')!);
+    await expect(detail.getByText('Adds this exact published text to this Realm.')).toBeVisible();
+    await expect(detail.getByRole('link', { name: 'Read this chapter' }))
+      .toHaveAttribute('href', `/en/w/${uuid(book)}/read/${uuid(occurrences.two)}`);
+    await userEvent.click(detail.getByRole('button', { name: 'Show text' }));
+    await expect(detail.getByText(/抽屉里多了一封回信/)).toBeVisible();
+  },
+};
+
+/** A mod shows the game, version and loader its files declare; a banned submitter is marked. */
+export const ModSubmission: Story = {
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(within(list(canvas)).getByRole('button', { name: /Lantern Paths/ }));
+    const detail = within(detailTitle(canvas).closest('section')!);
+    const compatibility = detail.getByRole('region', { name: 'Compatibility' });
+    for (const text of ['Minecraft', '1.21.1', 'Fabric', '2.3.0']) await expect(compatibility).toHaveTextContent(text);
+    await expect(detail.getByText(/^Banned until/)).toBeVisible();
+    await expect(detail.getByText('3 rejected · 2 waiting · 1 withdrawn')).toBeVisible();
+  },
+};
+
+/** A prompt shows its text as readers would copy it; a skill its summary and instructions. */
+export const PromptAndSkill: Story = {
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(within(list(canvas)).getByRole('button', { name: /Chapter recap for serial readers/ }));
+    let detail = within(detailTitle(canvas).closest('section')!);
+    await expect(detail.getByRole('region', { name: 'Prompt text' })).toHaveTextContent('Never mention events after this chapter.');
+    await expect(detail.getByText('Written for claude-sonnet-5')).toBeVisible();
+    await userEvent.click(within(list(canvas)).getByRole('button', { name: /Citation checker/ }));
+    detail = within(detailTitle(canvas).closest('section')!);
+    await expect(detail.getByText('Checks that quotations name their edition and translator.')).toBeVisible();
+    await expect(detail.getByText('Shortened here. Open the Work for the full text.')).toBeVisible();
+    await expect(detail.getByText('6 upheld · 1 not upheld · 3 open')).toBeVisible();
+  },
+};
+
+/**
+ * Rejecting starts from the rule it breaks: a rule's number picks it and
+ * writes the reason. The next rejection picks the same rule again, so R then
+ * Enter decides it the same way.
+ */
+export const StickyReason: Story = {
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    await userEvent.click(within(list(canvas)).getByRole('button', { name: /西游记/ }));
+    await userEvent.keyboard('r');
+    let dialog = within(await body.findByRole('dialog', { name: 'Reject this submission' }, { timeout: 5000 }));
+    // The picker has focus, so a rule's number picks it.
+    const picker = dialog.getByRole('radiogroup', { name: 'Which rule does it break?' });
+    await waitFor(() => expect(picker.contains(document.activeElement)).toBe(true));
+    await userEvent.keyboard('2');
+    await expect(dialog.getByRole('textbox', { name: 'Reason the author sees' }))
+      .toHaveValue('Breaks rule 2, “Name the edition”.');
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ id: queue[1]!.id, action: 'reject',
+      reason: 'Breaks rule 2, “Name the edition”.' })]));
+    await userEvent.click(within(list(canvas)).getByRole('button', { name: /Frankenstein/ }));
+    await userEvent.keyboard('r');
+    dialog = within(await body.findByRole('dialog', { name: 'Reject this submission' }, { timeout: 5000 }));
+    await expect(dialog.getByText(/Picked as last time/)).toBeInTheDocument();
+    await expect(dialog.getByRole('radio', { name: /Name the edition/ })).toBeChecked();
+    await waitFor(() => expect(dialog.getByRole('radiogroup').contains(document.activeElement)).toBe(true));
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(recorded.commits).toHaveLength(2));
+    await expect(recorded.commits[1]).toMatchObject({ id: queue[3]!.id, reason: 'Breaks rule 2, “Name the edition”.' });
+  },
+};
+
+/** Filters by kind include whole Works and publications; reasons narrow reports, and both live in the address. */
+export const FilterByKindAndReason: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const kinds = within(canvas.getByRole('navigation', { name: 'Kind' }));
+    await expect(kinds.getByRole('link', { name: 'Works' })).toHaveAttribute('href', `/en/manage/r/${realm}?type=work_submission`);
+    await expect(kinds.getByRole('link', { name: 'Publications' }))
+      .toHaveAttribute('href', `/en/manage/r/${realm}?type=content-publication_submission`);
+    const reasons = within(canvas.getByRole('navigation', { name: 'Reason' }));
+    await expect(reasons.getByRole('link', { name: 'Any reason' })).toHaveAttribute('aria-current', 'page');
+    await expect(reasons.getByRole('link', { name: 'Spoiler in title' }))
+      .toHaveAttribute('href', `/en/manage/r/${realm}?reason=spoiler.in_title`);
   },
 };

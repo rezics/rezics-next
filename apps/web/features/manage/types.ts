@@ -63,7 +63,16 @@ export type RealmHeader = Ok<Realm['get']>;
 export type RealmDirectoryPage = Ok<MainClient['v1']['realms']['get']>;
 export type AgentProfile = Ok<ReturnType<MainClient['v1']['agents']>['get']>;
 export type WorkHeader = Ok<ReturnType<MainClient['v1']['works']>['get']>;
+/** Who submitted or reported, as this Realm knows them, and a queue Work's authors, mod card and prompt text. */
+export type ModerationContext = Ok<Realm['moderation']['context']['get']>;
+/** One person's membership and record here: their submissions for reviewers, their reports for moderators. */
+export type PersonRecord = ModerationContext['people'][number];
+/** A Work's authors, a mod's game, versions and loaders, and a prompt's or skill's text. */
+export type WorkFacts = ModerationContext['works'][number];
+export type ChapterRead = Ok<ReturnType<MainClient['v1']['chapters']>['get']>;
 export type LocalizedName = RealmHeader['name'];
+/** A rule as the Realm publishes it, in the reader's language; moderators cite rules by number. */
+export type PublishedRule = NonNullable<RealmHeader['rules']>[number];
 export type Avatar = RealmHeader['icon'];
 
 /**
@@ -95,7 +104,19 @@ export interface AgentSummary { iri: string; label: string | null; handle: strin
 /** A Work as a queue item shows it: its title in the reader's language and its cover. */
 export interface WorkSummary { iri: string; title: LocalizedName; cover: Avatar; originalTitle: string | null;
   /** Main's semantic types, which choose the Work's cover. */
-  types: readonly string[] }
+  types: readonly string[];
+  /** The one-line hook, in the reader's language when Main has one. */
+  tagline?: LocalizedName | null;
+  /** Set when the Work is a chapter: its Book, and its place in the Book's contents (null when it has none now). */
+  partOf?: { work: string; occurrence: string | null } | null;
+  completionStatus?: 'ongoing' | 'completed' | 'hiatus' | null;
+  chapterCount?: number | null }
+
+/** A chapter as the queue names and previews it: its label in its Book's contents and the start of its text. */
+export interface ChapterSummary {
+  label: { value: string; language: string } | null;
+  /** The opening of the chapter's text, cut at a paragraph near `CHAPTER_EXCERPT` characters. */
+  excerpt: string | null; truncated: boolean; language: string; direction: 'ltr' | 'rtl' | undefined }
 
 export const uuidOf = (iri: string) => iri.slice(-36);
 export const iriOf = (uuid: string) => `https://rezics.com/id/${uuid}`;

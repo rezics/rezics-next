@@ -231,9 +231,10 @@ describe('role impact in plain words', () => {
 describe('addresses', () => {
   test('queue filters parse strictly and round-trip', () => {
     const realm = uuid(1);
-    expect(parseQueueView({})).toEqual({ state: 'open', type: null });
-    expect(parseQueueView({ state: 'closed', type: 'content_report' })).toEqual({ state: 'closed', type: 'content_report' });
-    expect(parseQueueView({ state: 'all', type: 'spam' })).toEqual({ state: 'open', type: null });
+    expect(parseQueueView({})).toEqual({ state: 'open', type: null, reason: null });
+    expect(parseQueueView({ state: 'closed', type: 'content_report' }))
+      .toEqual({ state: 'closed', type: 'content_report', reason: null });
+    expect(parseQueueView({ state: 'all', type: 'spam' })).toEqual({ state: 'open', type: null, reason: null });
     expect(queueHref(realm, { state: 'closed', type: 'correction_submission' }))
       .toBe(`/manage/r/${realm}?state=closed&type=correction_submission`);
     expect(queueHref(realm, { state: 'open', type: null })).toBe(`/manage/r/${realm}`);
@@ -320,7 +321,7 @@ describe('G330 Manage landing and log', () => {
   const entry = (n: number, minutes: number, overrides: Partial<AuditItem> = {}): AuditItem => ({ id: uuid(n), caseId: null,
     kind: 'realm_management', outcome: 'realm.roles.manage', reason: 'Set up the Fiction moderation team', detail: null,
     actingSubject: iri(11), decidedAt: new Date(Date.UTC(2026, 8, 27, 21, minutes)).toISOString(), caseSequence: null,
-    ...overrides });
+    target: null, ...overrides });
 
   test('one act recorded as several management entries reads as one line with a count', () => {
     const runs = auditRuns([entry(1, 0, { outcome: 'realm.initialize', reason: 'Initialize Realm management' }),

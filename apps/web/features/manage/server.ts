@@ -7,7 +7,7 @@ import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { signInPath } from '../auth/paths.ts';
 import { readSession } from '../auth/session.ts';
-import { readManagedRealms, settle } from './read.ts';
+import { readManagedRealms, readRealmHeader, settle } from './read.ts';
 import { isUuid, type MainClient, uuidOf } from './types.ts';
 
 /**
@@ -69,3 +69,10 @@ export async function permissionsIn(main: MainClient, actingSubject: string, rea
   }
   return null;
 }
+
+/**
+ * A Realm's public header in one language, read once per request: the
+ * layout names the Realm with it, and the queue cites its published rules.
+ */
+export const realmHeader = cache((realm: string, language: string) =>
+  readRealmHeader(mainApiWithToken(undefined), realm, language));

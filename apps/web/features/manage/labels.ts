@@ -1,9 +1,10 @@
 import type { ContractOf } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
+import { workTypeLabel } from '../catalogue/work.ts';
 import { date, readableCode } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import type { QueueAction } from './queue-state.ts';
-import type { AuditItem, ModerationItem, PublicDecision } from './types.ts';
+import type { AuditItem, ModerationItem, PersonRecord, PublicDecision, PublishedRule, WorkSummary } from './types.ts';
 
 type T = ContractOf<ManageMessages>;
 
@@ -20,6 +21,67 @@ export function kindLabel(kind: ModerationItem['kind'], t: T): string {
 
 // Reason codes the demo and first report forms use; any other code reads as words.
 const reasons: Record<string, keyof T> = { title_review: 'reasonTitleReview', edition_details: 'reasonEditionDetails' };
+
+/** Whether a report says the content gives away the story (`spoiler`, `spoiler.in_title`, …). */
+export const isSpoilerReason = (code: string | null) => code !== null && /^spoilers?(?:[._-]|$)/.test(code);
+
+/**
+ * The published rule a report reason names, with its number as readers see
+ * it: a report form may send a rule's id (`spoilers`) or `rule.<id>`. Null
+ * when the reason is one of the platform's own codes.
+ */
+export function ruleFor(code: string | null, rules: readonly PublishedRule[]):
+  { rule: PublishedRule; number: number } | null {
+  if (!code) return null;
+  const index = rules.findIndex(rule => code === rule.id || code === `rule.${rule.id}`);
+  return index < 0 ? null : { rule: rules[index]!, number: index + 1 };
+}
+
+/** What a Work is, in a word: a chapter of a Book, or the kind its types name (Prompt, Mod, Book…). */
+export function workTypeText(work: WorkSummary | undefined, t: T): string | null {
+  if (work?.partOf) return t.typeChapter;
+  const key = workTypeLabel(work?.types ?? []);
+  return key ? t[key] : null;
+}
+
+export function completionText(status: WorkSummary['completionStatus'], t: T): string | null {
+  switch (status) {
+    case 'ongoing': return t.statusOngoing;
+    case 'completed': return t.statusCompleted;
+    case 'hiatus': return t.statusHiatus;
+    default: return null;
+  }
+}
+
+/**
+ * A person's standing and record in this Realm as short facts: whether they
+ * are a member or banned, then what became of their submissions (for
+ * reviewers) or reports (for moderators). Empty parts are left out.
+ */
+export function recordFacts(record: PersonRecord, t: T, locale: UiLocale): { standing: string; banned: boolean;
+  submissions: string[] | null; reports: string[] | null } {
+  const { membership } = record;
+  const standing = membership.banned ? membership.bannedUntil
+    ? t.bannedUntilShort({ date: date(membership.bannedUntil, locale) }) : t.bannedShort
+    : membership.state === 'joined' ? membership.joinedAt ? t.memberSince({ date: date(membership.joinedAt, locale) })
+      : t.memberJoined
+      : membership.state === 'left' ? t.leftRealm : t.notMember;
+  const counted = (entries: ReadonlyArray<[number, (count: number) => string]>, total: number, capped: boolean,
+    first: string) => {
+    const parts = entries.filter(([count]) => count > 0).map(([count, text]) => text(count));
+    if (capped) parts.push(t.countMore({ count: String(total) }));
+    // The item in front of the moderator is itself one open submission or report.
+    return total <= 1 && !capped ? [first] : parts;
+  };
+  const submissions = record.submissions;
+  const reports = record.reports;
+  return { standing, banned: membership.banned,
+    submissions: submissions ? counted([[submissions.accepted, t.countAccepted], [submissions.rejected, t.countRejected],
+      [submissions.changesRequested, t.countSentBack], [submissions.open, t.countWaiting],
+      [submissions.withdrawn, t.countWithdrawn]], submissions.total, submissions.capped, t.firstSubmission) : null,
+    reports: reports ? counted([[reports.upheld, t.countUpheld], [reports.dismissed, t.countDismissed],
+      [reports.open, t.countOpen]], reports.total, reports.capped, t.firstReport) : null };
+}
 
 /** A report's reason code, or a submission's public reason, as people read it. */
 export function reasonText(item: Pick<ModerationItem, 'kind' | 'reasonCode'>, t: T): string | null {

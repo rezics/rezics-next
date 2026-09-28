@@ -1,15 +1,32 @@
 import { browserMainApi } from '../api/browser.ts';
 import { commitDecision, type Outcome } from './commands.ts';
 import type { Decision } from './queue-state.ts';
-import { readAgents, readDecisionBasis, readDraftText, readQueue, readWorks } from './read.ts';
+import { mergeAgents, readAgents, readChapters, readDecisionBasis, readDraftText, readModerationContext, readQueue,
+  readWorks } from './read.ts';
 import type { QueueView } from './routes.ts';
-import type { AgentSummary, DecisionBasis, Loaded, ModerationItem, ModerationPage, WorkSummary } from './types.ts';
+import type { AgentSummary, ChapterSummary, DecisionBasis, Loaded, MainClient, ModerationItem, ModerationPage,
+  PersonRecord, WorkFacts, WorkSummary } from './types.ts';
+
+/**
+ * Everything the queue knows about the people and Works its items mention:
+ * public names, Work headers with each chapter's Book, chapters' labels and
+ * openings, and Main's moderation context (people's records here, authors,
+ * mod cards and prompt text). Each part fills in as reads answer.
+ */
+export interface QueueNames {
+  agents: Record<string, AgentSummary>;
+  works: Record<string, WorkSummary>;
+  chapters: Record<string, ChapterSummary>;
+  records: Record<string, PersonRecord>;
+  facts: Record<string, WorkFacts>;
+}
+
+export const noNames: QueueNames = { agents: {}, works: {}, chapters: {}, records: {}, facts: {} };
 
 /** What the queue needs from Main after the first render. Stories pass a stand-in. */
 export interface QueueApi {
   page(view: QueueView, cursor: string | null): Promise<Loaded<ModerationPage>>;
-  names(items: readonly ModerationItem[]): Promise<{ agents: Record<string, AgentSummary>;
-    works: Record<string, WorkSummary> }>;
+  names(items: readonly ModerationItem[], known: QueueNames): Promise<QueueNames>;
   draft(item: ModerationItem): Promise<Loaded<{ text: string; language: string }>>;
   /** A report's reports, statements and the rules a decision would cite. */
   basis(item: ModerationItem): Promise<Loaded<DecisionBasis>>;
@@ -28,17 +45,44 @@ export function mentioned(items: readonly ModerationItem[]) {
   works: items.filter(item => item.target.owner === 'graph').map(item => item.target.resource) };
 }
 
+/** Newly read names over known ones; a part Main could not answer keeps what was known. */
+export function mergeNames(known: QueueNames, found: Partial<QueueNames>): QueueNames {
+  return { agents: mergeAgents(known.agents, found.agents ?? {}), works: { ...known.works, ...found.works },
+    chapters: { ...known.chapters, ...found.chapters }, records: { ...known.records, ...found.records },
+    facts: { ...known.facts, ...found.facts } };
+}
+
+/**
+ * Reads what a page of items mentions: names and Work headers first, then
+ * the chapters among them and the moderation context, which need to know
+ * which Works are chapters and which Books they belong to. `names` reads
+ * public profiles (the server reads them anonymously).
+ */
+export async function readQueueNames(main: MainClient, realm: string, items: readonly ModerationItem[],
+  query: { language: string; actingSubject: string }, known: QueueNames = noNames, names: MainClient = main):
+  Promise<QueueNames> {
+  const wanted = mentioned(items);
+  const [agents, works] = await Promise.all([readAgents(names, wanted.agents, names === main ? query.actingSubject : undefined),
+    readWorks(main, wanted.works, query, known.works)]);
+  const all = { ...known.works, ...works };
+  // A chapter's authors are its Book's; the Book is what the context names.
+  const subjects = [...new Set(wanted.works.flatMap(iri => [iri, ...all[iri]?.partOf ? [all[iri].partOf.work] : []]))]
+    .filter(iri => !known.facts[iri]);
+  const people = [...new Set(items.flatMap(item => item.authorAgent ? [item.authorAgent] : []))]
+    .filter(iri => !known.records[iri]);
+  const [chapters, context] = await Promise.all([readChapters(main, all, query.actingSubject, known.chapters),
+    people.length || subjects.length ? readModerationContext(main, realm, { actingSubject: query.actingSubject,
+      agents: people, works: subjects }) : null]);
+  return mergeNames(known, { agents, works, chapters,
+    records: context?.ok ? Object.fromEntries(context.data.people.map(person => [person.agent, person])) : {},
+    facts: context?.ok ? Object.fromEntries(context.data.works.map(work => [work.work, work])) : {} });
+}
+
 /** The queue through the BFF, acting as `actingSubject`. */
 export function bffQueueApi(realm: string, actingSubject: string, language: string): QueueApi {
   return {
     page: (view, cursor) => readQueue(browserMainApi(), realm, { actingSubject, ...view, cursor }),
-    async names(items) {
-      const main = browserMainApi();
-      const { agents, works } = mentioned(items);
-      const [agentNames, workNames] = await Promise.all([readAgents(main, agents, actingSubject),
-        readWorks(main, works, { language, actingSubject })]);
-      return { agents: agentNames, works: workNames };
-    },
+    names: (items, known) => readQueueNames(browserMainApi(), realm, items, { language, actingSubject }, known),
     // Whole-Work and publication submissions carry no contribution draft to read.
     draft: item => item.submission?.contribution && item.submission.selectedDraft
       ? readDraftText(browserMainApi(), item.submission.contribution, item.submission.selectedDraft, actingSubject)
