@@ -55,6 +55,7 @@ product references for the current [frontend direction](../plan/frontend.md).
 | Retired interaction mechanisms | [Historical Fluree evidence](retired-interaction-engine-evidence.md) retains the eleven-assertion probe and its limits; it is not Jena evidence or a launch step. | [Jena interactions](../implementation/interactions-and-cache.md). |
 | Executable hosting envelope | Choose admitted runtime/isolation/secrets/cost policies before persistent hosting activation. | [Execution design](ai-hub-execution.md). |
 | Tag, filter and reverse-query references | [AO3 and VNDB](reference-ao3-vndb.md), with MyAnimeList as contrast: which of their tag, release, list and value pages the Work page, listings and Library should adopt. The query contract already names the shape. | [Queries](../contracts/queries.md), [frontend](../plan/frontend.md). |
+| Reader and author patterns on web-novel sites | [Web-novel reference](reference-webnovel.md): what 起点, 晋江, KadoKado, Royal Road, Webnovel and Wattpad do well for serials, and which of those patterns the reader, Studio and Fiction zone should adopt. | [Frontend](../plan/frontend.md), [creation](../contracts/creation.md). |
 
 Use primary specifications/code and bounded experiments appropriate to the active
 phase. Record a selected answer in its owning contract and remove the resolved
