@@ -80,6 +80,25 @@ export function splitClassic(book: GutenbergBook, text: string): ClassicChapter[
 
 // Full books stay locked offline; the demo publishes a bounded opening sample to leave room for the other seed steps.
 export const CLASSIC_CHAPTER_LIMIT = 3;
+/** Pride and Prejudice was published in three volumes (1813); the sample opens each of them. */
+const PRIDE_VOLUMES = [{ title: 'Volume I', first: 1, last: 23 }, { title: 'Volume II', first: 24, last: 42 },
+  { title: 'Volume III', first: 43, last: 61 }] as const;
+const chapterNumber = (chapter: ClassicChapter) => Number(/^Chapter (\d+)/.exec(chapter.title)?.[1] ?? 0);
+
+/** How a classic's sample is divided: Pride and Prejudice into its volumes, Frankenstein's letters into a part. */
+export function classicGroups(book: GutenbergBook['id'], chapters: readonly ClassicChapter[]):
+  Array<{ title: string; division: 'volume' | 'part'; chapters: number[] }> {
+  const indexes = (keep: (chapter: ClassicChapter) => boolean) => chapters.flatMap((chapter, index) =>
+    keep(chapter) ? [index] : []);
+  if (book === 'pride') {
+    return PRIDE_VOLUMES.map(volume => ({ title: volume.title, division: 'volume' as const,
+      chapters: indexes(chapter => chapterNumber(chapter) >= volume.first && chapterNumber(chapter) <= volume.last) }));
+  }
+  if (book === 'frankenstein') {
+    return [{ title: 'Letters', division: 'part', chapters: indexes(chapter => chapter.kind === 'letter') }];
+  }
+  return [];
+}
 export function classicText(root: string, book: GutenbergBook) {
   const fixture = readLockedFixture(root, 'gutenberg', `pg${book.edition}`) as GutenbergText;
   if (fixture.edition !== book.edition || !/^[a-f0-9]{64}$/.test(fixture.sourceSha256)) {
@@ -87,7 +106,8 @@ export function classicText(root: string, book: GutenbergBook) {
   }
   const all = splitClassic(book, fixture.text);
   const chapters = all.filter((chapter, index) => chapter.kind === 'letter'
-    || index < CLASSIC_CHAPTER_LIMIT + (book.id === 'frankenstein' ? 4 : 0));
+    || index < CLASSIC_CHAPTER_LIMIT + (book.id === 'frankenstein' ? 4 : 0)
+    || book.id === 'pride' && PRIDE_VOLUMES.some(volume => volume.first === index + 1));
   if (chapters.some(chapter => chapter.body.length > 65_536)) {
     throw new Error(`${book.id}: a sample chapter exceeds the Content text budget`);
   }

@@ -55,7 +55,8 @@ for (const book of gutenbergBooks) {
     expect(sections).toHaveLength(book.sections);
     expect(new Set(sections.map(chapter => chapter.title)).size).toBe(book.sections);
     const { chapters } = classicText(root, book);
-    expect(chapters).toHaveLength(book.id === 'frankenstein' ? 7 : 3);
+    // Frankenstein adds its four letters; Pride and Prejudice the openings of its Volumes II and III.
+    expect(chapters).toHaveLength(book.id === 'frankenstein' ? 7 : book.id === 'pride' ? 5 : 3);
     for (const chapter of chapters) {
       expect(chapter.body.length).toBeGreaterThan(500);
       expect(chapter.body.length).toBeLessThanOrEqual(65_536);

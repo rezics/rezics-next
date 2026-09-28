@@ -3,7 +3,8 @@ import { resolve } from 'node:path';
 import { derivedId } from '../../../services/main/src/modules/structure/graph.ts';
 import { type FixtureLock } from '../../fixtures/pull.ts';
 import { SeedApiError, type SeedApi } from './api.ts';
-import { classicTextPlan, type ClassicChapter } from './classics-text.ts';
+import { arrangeBook, readBookOutline } from './book-outline.ts';
+import { classicGroups, classicTextPlan, type ClassicChapter } from './classics-text.ts';
 import { grantClassicAssessmentAuthority } from './classics-text-authority.ts';
 import { grantHomeSeedAuthority } from './operator.ts';
 import { seedKey } from './plan.ts';
@@ -12,7 +13,6 @@ import { refreshSeedTokens, type SeedState, type WorkReceipt } from './state.ts'
 const short = (id: string) => id.slice(-36);
 export interface ClassicSource { provider: 'project-gutenberg'; identifier: string; url: string;
   byteDigest: string; retrievedAt: string }
-interface Contents { items: { target: string | null; selectedRevision: string | null }[] }
 
 /** Old source adoptions were untyped. State Book through its revisioned command, preserving the Work identity. */
 export async function ensureClassicBookType(input: {
@@ -113,10 +113,9 @@ async function seedTexts(state: SeedState): Promise<void> {
     api: state.operatorSession.api, book: book.id, work: target.work,
     actor: author, token: state.operatorSession.token });
     const entry = lock.entries.find(item => item.source === 'gutenberg' && item.id === `pg${book.edition}`)!;
-    let contents: Contents | null = null;
-    try { contents = await state.api.getPublic<Contents>(`/v1/works/${short(target.work)}/contents?limit=20`); }
-    catch (error) { if (!(error instanceof SeedApiError) || error.status !== 404) throw error; }
-    const complete = chapters.every((_, index) => contents?.items.some(item => item.selectedRevision
+    // Chapters are read through the whole outline: once the book is in volumes they sit inside them.
+    const contents = await readBookOutline(state.api, target.work, 'en');
+    const complete = chapters.every((_, index) => contents.items.some(item => item.selectedRevision
       && item.target === classicChapterIdentity(target.work, author, book.id, index).work));
     if (!complete) {
       await publishClassicChapters({ api: state.api, target, book: book.id, actor: author, token: writer.token,
@@ -129,7 +128,18 @@ async function seedTexts(state: SeedState): Promise<void> {
           { action: 'content.publish', scope: `content:publish:${work}` },
           { action: 'content.search-eligibility', scope: `content:search-eligibility:${work}` }]) });
     }
-    console.log(`Classic text ${book.id}: ${chapters.length}/${totalSections} sections${complete ? ' (replayed)' : ''}`);
+    const groups = classicGroups(book.id, chapters);
+    if (groups.length) {
+      const composition = await state.api.post<{ structure: string }>('/v1/compositions', { profile: 'book-composition',
+        work: target.work, mainVersion: target.mainVersion, actingSubject: author }, writer.token,
+      seedKey('classic-composition-v2', book.id));
+      await arrangeBook(state.api, { work: target.work, structure: composition.structure, language: 'en',
+        reader: { token: writer.token, actingSubject: author }, key: `classic:${book.id}`,
+        groups: groups.map(group => ({ ...group, chapters: group.chapters.map(index =>
+          classicChapterIdentity(target.work, author, book.id, index).work) })) });
+    }
+    console.log(`Classic text ${book.id}: ${chapters.length}/${totalSections} sections${complete ? ' (replayed)' : ''}${
+      groups.length ? `, in ${groups.map(group => group.title).join(', ')}` : ''}`);
   }
 }
 
@@ -137,6 +147,6 @@ export async function seedClassicTexts(state: SeedState): Promise<void> {
   const started = performance.now();
   try { await seedTexts(state); }
   finally {
-    console.log(`Classic texts step elapsed: ${((performance.now() - started) / 1000).toFixed(1)}s; planned three chapters per book, plus Frankenstein's four letters`);
+    console.log(`Classic texts step elapsed: ${((performance.now() - started) / 1000).toFixed(1)}s; planned three chapters per book, plus Frankenstein's four letters and the openings of Pride and Prejudice's Volumes II and III`);
   }
 }

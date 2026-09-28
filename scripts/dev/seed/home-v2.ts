@@ -1,5 +1,6 @@
 import { SeedApi, SeedApiError } from './api.ts';
 import { derivedId } from '../../../services/main/src/modules/structure/graph.ts';
+import { readBookOutline } from './book-outline.ts';
 import { seedKey, works } from './plan.ts';
 import type { grantHomeSeedAuthority } from './operator.ts';
 
@@ -22,22 +23,20 @@ interface Contents { compositionRevision: string | null; items: { occurrence: st
 interface Chapter { title: string; body: string }
 const LANGUAGE = 'zh-Hans';
 
-/** The serial's first level as its author reads it. A new composition may not be projected yet, and reads empty. */
+/**
+ * The serial as its author reads it, in reading order: the top level and the chapters of each volume. A new
+ * composition may not be projected yet, and reads empty.
+ */
 async function authorContents(api: SeedApi, serial: string, author: Session): Promise<Contents> {
-  try {
-    return await api.get<Contents>(`/v1/works/${short(serial)}/contents?language=${LANGUAGE}&limit=20&actingSubject=${
-      encodeURIComponent(author.actingSubject)}`, author.token);
-  } catch (error) {
-    if (error instanceof SeedApiError && error.status === 404) return { compositionRevision: null, items: [] };
-    throw error;
-  }
+  const outline = await readBookOutline(api, serial, LANGUAGE, author);
+  return { compositionRevision: outline.head, items: outline.items };
 }
 
 /** Fixture authority for exact seed targets; the seed CLI grants it through the local operator. */
 export type SeedGrant = (grants: Parameters<typeof grantHomeSeedAuthority>[1]) => Promise<void>;
 
 /** A chapter's own Content: drafted, published and made public, as Studio's editor does it. */
-async function publishChapter(api: SeedApi, author: Session, key: string, work: string, variantId: string,
+export async function publishChapter(api: SeedApi, author: Session, key: string, work: string, variantId: string,
   body: string, grant: SeedGrant) {
   await grant([
     { action: 'work.read', scope: `work:read:${work}` },
