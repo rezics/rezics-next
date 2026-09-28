@@ -40,7 +40,10 @@ export interface NativeWorkSourceAdoption {
   sourceConversion: string;
   adoptedFields: ['title'];
   title: string;
-  titleLanguage: 'en';
+  titleLanguage: string;
+  titleLanguageAtActivation: string;
+  titleLanguageBasis: 'explicit' | 'work' | 'edition' | 'inferred';
+  titleLanguageObservation: string | null;
   rightsStatus: 'undetermined';
   work: string;
   mainVersion: string;
@@ -129,7 +132,13 @@ export interface NativeWorkSourceTitleApplication {
 interface IntentRow {
   id: string; proposal_id: string; principal_id: string; acting_subject: string;
   authority_path: 'represented-agent' | 'direct-principal'; confirmed_title: string;
-  title_language: 'en'; work_idempotency_key: string;
+  title_language: string; title_language_basis: NativeWorkSourceAdoption['titleLanguageBasis'];
+  title_language_observation_id: string | null; activation_language: string;
+  request_title_language: string | null; work_idempotency_key: string;
+}
+
+interface TitleLanguageDecision {
+  language: string; basis: NativeWorkSourceAdoption['titleLanguageBasis']; observation_id: string | null;
 }
 
 interface BindingRow {
@@ -243,7 +252,8 @@ export class SourceNativeWorkAdoptionStore {
     const receipt = await readWorkTerminalReceipt(this.env.fuseki, row.admission_id);
     if (!receipt || receipt.outcome !== 'succeeded'
       || receipt.receipt !== row.graph_receipt || receipt.admissionId !== row.admission_id
-      || receipt.requestDigest !== metadataWorkRequestDigest(intent.confirmed_title)
+      || receipt.requestDigest !== metadataWorkRequestDigest(intent.confirmed_title, undefined,
+        intent.activation_language)
       || receipt.scope !== 'work:create:root' || receipt.work !== row.work
       || receipt.mainVersion !== row.main_version || receipt.workRevision !== row.work_revision
       || receipt.mainRevision !== row.main_revision || receipt.dataEpoch !== row.data_epoch
@@ -257,7 +267,12 @@ export class SourceNativeWorkAdoptionStore {
     return { profile: 'source-native-work-adoption-v1', state: 'adopted',
       binding: url(row.id), proposal: proposal.proposal, sourceRecord: proposal.record,
       sourceConversion: proposal.conversion, adoptedFields: ['title'],
-      title: intent.confirmed_title, titleLanguage: 'en', rightsStatus: 'undetermined',
+      title: intent.confirmed_title, titleLanguage: intent.title_language,
+      titleLanguageAtActivation: intent.activation_language,
+      titleLanguageBasis: intent.title_language_basis,
+      titleLanguageObservation: intent.title_language_observation_id
+        ? url(intent.title_language_observation_id) : null,
+      rightsStatus: 'undetermined',
       work: row.work, mainVersion: row.main_version, workRevision: row.work_revision,
       mainRevision: row.main_revision, receipt: row.graph_receipt,
       sourcePosition: { datasetId: 'product', dataEpoch: row.data_epoch,
@@ -266,11 +281,13 @@ export class SourceNativeWorkAdoptionStore {
 
   async adopt(principalId: string, request: Request, proposalId: string,
     input: { actingSubject: string; authorityPath: 'represented-agent' | 'direct-principal';
-      confirmedTitle: string; titleLanguage: 'en' }):
+      confirmedTitle: string; titleLanguage?: string }):
     Promise<{ adoption: NativeWorkSourceAdoption; replayed: boolean } | null> {
     if (!UUID.test(principalId) || !UUID.test(proposalId) || !ACTOR.test(input.actingSubject)
       || !['represented-agent', 'direct-principal'].includes(input.authorityPath)
-      || input.titleLanguage !== 'en') {
+      || input.titleLanguage !== undefined
+        && (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(input.titleLanguage)
+          || input.titleLanguage.length > 35)) {
       throw new SourceAdoptionInvalid('invalid source adoption intent');
     }
     const proposal = await this.proposals.read(principalId, proposalId);
@@ -278,13 +295,25 @@ export class SourceNativeWorkAdoptionStore {
     if (input.confirmedTitle !== proposal.candidateTitle) {
       throw new SourceAdoptionConflict('confirmed title differs from the source proposal');
     }
+    const reserved = (await this.pool.query<IntentRow>(`SELECT * FROM source.native_work_adoption_intent
+      WHERE proposal_id = $1 AND principal_id = $2`, [proposalId, principalId])).rows[0];
+    const decision = reserved ? null : (await this.pool.query<TitleLanguageDecision>(
+      'SELECT * FROM source.resolve_native_title_language($1, $2)',
+      [proposalId, input.titleLanguage ?? null])).rows[0];
+    if (!reserved && !decision) throw new SourceAdoptionUnavailable('source title language is unavailable');
     await this.pool.query<{ id: string }>(`INSERT INTO source.native_work_adoption_intent
       (id, proposal_id, principal_id, acting_subject, authority_path, confirmed_title,
-       title_language, work_idempotency_key)
-      VALUES ($1,$2,$3,$4,$5,$6,'en',$7)
+       title_language, title_language_basis, title_language_observation_id,
+       activation_language, request_title_language, work_idempotency_key)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       ON CONFLICT (proposal_id) DO NOTHING RETURNING id`,
     [Bun.randomUUIDv7(), proposalId, principalId, input.actingSubject, input.authorityPath,
-      input.confirmedTitle, `source-adopt-${Bun.randomUUIDv7()}`]).catch(error => {
+      input.confirmedTitle, decision?.language ?? reserved!.title_language,
+      decision?.basis ?? reserved!.title_language_basis,
+      decision ? decision.observation_id : reserved!.title_language_observation_id,
+      decision?.language ?? reserved!.activation_language,
+      input.titleLanguage ?? null,
+      `source-adopt-${Bun.randomUUIDv7()}`]).catch(error => {
       if (error.code === '23514' && error.constraint === 'native_work_attachment_proposal') {
         throw new SourceAdoptionConflict('proposal is already attached to a Work');
       }
@@ -294,7 +323,8 @@ export class SourceNativeWorkAdoptionStore {
       WHERE proposal_id = $1 AND principal_id = $2`, [proposalId, principalId])).rows[0];
     if (!intent || intent.acting_subject !== input.actingSubject
       || intent.authority_path !== input.authorityPath
-      || intent.confirmed_title !== input.confirmedTitle || intent.title_language !== 'en') {
+      || intent.confirmed_title !== input.confirmedTitle
+      || intent.request_title_language !== (input.titleLanguage ?? null)) {
       throw new SourceAdoptionConflict('proposal is reserved for another adoption intent');
     }
     const existing = (await this.pool.query<BindingRow>(`SELECT * FROM source.native_work_binding
@@ -307,7 +337,8 @@ export class SourceNativeWorkAdoptionStore {
       return { adoption: this.result(existing, intent, proposal), replayed: true };
     }
     const work = await createAdmittedMetadataWork(this.env, this.account, this.access, request,
-      { title: intent.confirmed_title, actingSubject: intent.acting_subject,
+      { title: intent.confirmed_title, language: intent.activation_language,
+        actingSubject: intent.acting_subject,
         authorityPath: intent.authority_path, idempotencyKey: intent.work_idempotency_key });
     const bound = await this.pool.query<{ id: string }>(`INSERT INTO source.native_work_binding
       (id, intent_id, proposal_id, principal_id, work, main_version, work_revision,
@@ -338,7 +369,9 @@ export class SourceNativeWorkAdoptionStore {
     const proposal = await this.proposals.read(principalId, proposalId);
     if (!proposal) return null;
     const rows = await this.pool.query<BindingRow & IntentRow>(`SELECT b.*, i.acting_subject,
-      i.authority_path, i.confirmed_title, i.title_language, i.work_idempotency_key
+      i.authority_path, i.confirmed_title, i.title_language, i.title_language_basis,
+      i.title_language_observation_id, i.activation_language, i.request_title_language,
+      i.work_idempotency_key
       FROM source.native_work_binding b
       JOIN source.native_work_adoption_intent i ON i.id = b.intent_id
       WHERE b.proposal_id = $1 AND b.principal_id = $2`, [proposalId, principalId]);
