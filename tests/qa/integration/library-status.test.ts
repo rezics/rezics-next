@@ -5,7 +5,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { automaticDiscovery } from '../../../services/main/src/modules/discovery/automation.ts';
 import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
-import { projectDiscoveryWork } from '../../../services/main/src/modules/discovery/source.ts';
+import { projectDiscoveryBatch } from '../../../services/main/src/modules/discovery/source.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
@@ -22,7 +22,8 @@ import { InvalidLibraryStatus, LibraryStatusConflict, ReaderLibraryStatusStore,
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
-test('G285 G352: reader status, own ratings, serial progress and discovery survive ordinary member authority', async () => {
+test.each(['initial context', 'retained context'])(
+  'G285 G352: reader status, own ratings, serial progress and discovery survive ordinary member authority (%s)', async () => {
   const stack = await startMediaStack('reader-library');
   try {
     const status = new ReaderLibraryStatusStore(stack.contentPool);
@@ -238,14 +239,24 @@ test('G285 G352: reader status, own ratings, serial progress and discovery survi
     expect(await withCollection.json()).toMatchObject({ customShelves: [
       { id: collection, name: 'Private favorites', disclosure: 'private' }] });
 
-    await grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
-    const contextResponse = await app.handle(new Request('http://main.local/v1/global-rating-contexts', {
-      method: 'POST', headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
-        'idempotency-key': randomUUID() },
-      body: JSON.stringify({ profile: 'global-rating-standing-context-v1', question: 'Quality',
-        actingSubject: person.agent }) }));
-    expect(contextResponse.status).toBe(201);
-    const context = await contextResponse.json() as { context: string };
+    // A preceding file may already have installed the deployment's global
+    // context. A second active one makes the reader's default ambiguous.
+    const contexts = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?context WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ?context a rv:GlobalRatingContext ; rv:contextState rv:Active }
+    } LIMIT 2`)).results?.bindings ?? [];
+    expect(contexts.length).toBeLessThanOrEqual(1);
+    let context: { context: string };
+    if (contexts[0]?.context) context = { context: contexts[0].context.value };
+    else {
+      await grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
+      const response = await app.handle(new Request('http://main.local/v1/global-rating-contexts', {
+        method: 'POST', headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() },
+        body: JSON.stringify({ profile: 'global-rating-standing-context-v1', question: 'Quality',
+          actingSubject: person.agent }) }));
+      expect(response.status).toBe(201);
+      context = await response.json() as { context: string };
+    }
     await grant(`rating:observe:${context.context}`, 'rating.observation.set');
     // G352: ordinary readers can see their own rating without a context-wide
     // observation-read grant. Provisioned Person control is their authority.
@@ -454,13 +465,15 @@ test('G285 G352: reader status, own ratings, serial progress and discovery survi
     let generation = await workRead(deps, buildRequest, {}, session =>
       discovery.register(operator, basis, session.position,
         { idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) }));
-    for (let step = 0; !generation.complete && step < 20; step++) {
+    while (!generation.complete) {
+      const previous = generation.checkpoint;
       generation = await workRead(deps, buildRequest, {}, async session => {
         const row = generation;
         const lease = await discovery.beginStep(operator, row.generation_id, row.checkpoint);
-        return { ...await discovery.commitStep(operator, row.generation_id, lease.lease, row.checkpoint,
-          await projectDiscoveryWork(session, basis, row.checkpoint), session.position), replayed: false };
+        return { ...await discovery.commitBatch(operator, row.generation_id, lease.lease, row.checkpoint,
+          await projectDiscoveryBatch(session, basis, row.checkpoint), session.position), replayed: false };
       });
+      expect(generation.complete || generation.checkpoint !== previous).toBe(true);
     }
     expect(generation.complete).toBe(true);
     await workRead(deps, buildRequest, {}, session => discovery.activate(operator,

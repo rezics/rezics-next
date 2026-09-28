@@ -68,13 +68,15 @@ export type MediaStack = Awaited<ReturnType<typeof startMediaStack>>;
 export async function startMediaStack(label: string, options: { contentProjection?: boolean } = {}) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL
-    || !Bun.env.ACCOUNT_RELAY_DATABASE_URL || !Bun.env.MAIN_S3_ENDPOINT) {
+    || !Bun.env.ACCOUNT_RELAY_DATABASE_URL || !Bun.env.MAIN_S3_ENDPOINT || !Bun.env.MAIN_OBJECT_DIRECTORY) {
     throw new Error('Run through the isolated QA integration tier');
   }
   const directory = join(root, '.temp', `${label}-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const fuseki = new CountingFuseki(Bun.env.FUSEKI_URL);
-  const env: WorkActivationEnvironment = { fuseki, objectDirectory: join(directory, 'objects'),
+  // The graph is shared by the shard, so immutable manifests must survive this
+  // fixture too. The runner removes both owners when it resets the QA stack.
+  const env: WorkActivationEnvironment = { fuseki, objectDirectory: Bun.env.MAIN_OBJECT_DIRECTORY,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
