@@ -215,7 +215,7 @@ export async function readPublishedTexts(actingSubject: string, mainVersion: str
   return loaded.ok ? { ok: true, data: loaded.data.variants.filter(variant => variant.author === actingSubject) } : loaded;
 }
 
-export interface RealmOption extends RealmChoice { reviewMode: ReviewMode | null }
+export interface RealmOption extends Omit<RealmChoice, 'reviewMode'> { reviewMode: ReviewMode | null }
 
 /** Realms to submit to: the first page of the directory, each with its review mode. */
 export async function readRealmChoices(actingSubject: string, locale: UiLocale): Promise<Loaded<RealmOption[]>> {
