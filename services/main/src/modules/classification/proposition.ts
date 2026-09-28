@@ -6,6 +6,7 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_ISOLATE_POLICY } from './context.ts';
+import { ensureGlobalClassificationContext } from './global.ts';
 
 export const CLASSIFICATION_PROPOSITION_PROFILE = 'https://rezics.com/definition/classification-proposition-v1';
 const SKOS = 'http://www.w3.org/2004/02/skos/core#';
@@ -112,14 +113,7 @@ export async function createClassificationProposition(env: WorkActivationEnviron
   const existing = await readClassificationPropositionReceipt(env, admission.id);
   if (existing) return checked(existing, admission, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('admission expired');
-  const global = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ;
-      rv:contextRole rv:GlobalClassification ; rv:contextState rv:Active ;
-      rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
-    FILTER NOT EXISTS { ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:realm ?realm }
-    FILTER NOT EXISTS { ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:fallbackContext ?fallback }
-  } }`);
-  if (global.boolean !== true) throw new ClassificationDefinitionUnavailable('Global classification context is unavailable');
+  await ensureGlobalClassificationContext(env);
   const definitions: PropositionDefinitions = { scheme: ID + Bun.randomUUIDv7(),
     concept: ID + Bun.randomUUIDv7(), path: ID + Bun.randomUUIDv7(),
     expression: ID + Bun.randomUUIDv7(), sense: ID + Bun.randomUUIDv7() };

@@ -6,9 +6,9 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 
-export const CLASSIFICATION_CONTEXT_PROFILE = 'https://rezics.com/definition/classification-context-v1';
-export const GLOBAL_CLASSIFICATION_CONTEXT = 'urn:rezics:classification-context:global';
-export const CLASSIFICATION_ISOLATE_POLICY = 'https://rezics.com/definition/classification-isolate-v1';
+import { CLASSIFICATION_CONTEXT_PROFILE, GLOBAL_CLASSIFICATION_CONTEXT,
+  CLASSIFICATION_ISOLATE_POLICY, ensureGlobalClassificationContext } from './global.ts';
+export { CLASSIFICATION_CONTEXT_PROFILE, GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_ISOLATE_POLICY } from './global.ts';
 export const CLASSIFICATION_INHERIT_POLICY = 'https://rezics.com/definition/classification-inherit-global-v1';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
@@ -122,6 +122,7 @@ export async function createClassificationContext(env: WorkActivationEnvironment
     FILTER NOT EXISTS { ${iri(input.realm)} rv:classificationContext ?context }
   } }`);
   if (realmCheck.boolean !== true) throw new ClassificationRealmUnavailable('Realm is unavailable or configured');
+  await ensureGlobalClassificationContext(env);
   const context = ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
@@ -144,9 +145,6 @@ export async function createClassificationContext(env: WorkActivationEnvironment
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ;
-          rv:contextRole rv:GlobalClassification ; rv:contextState rv:Active ;
-          rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
         ${iri(input.realm)} rv:classificationContext ${iri(context)} .
         ${iri(context)} a rv:ClassificationContext ; rv:contextRole rv:RealmClassification ;
           rv:contextState rv:Active ; rv:realm ${iri(input.realm)} ;
@@ -190,12 +188,10 @@ export async function createClassificationContext(env: WorkActivationEnvironment
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(input.realm)} rv:classificationContext ?oldContext } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} ?p ?o } }
-      FILTER (!EXISTS { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ?globalPredicate ?globalValue } }
-        || EXISTS { GRAPH ${iri(GRAPHS.current)} {
+      GRAPH ${iri(GRAPHS.current)} {
           ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ;
             rv:contextRole rv:GlobalClassification ; rv:contextState rv:Active ;
-            rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} . } })
+            rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} . }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:fallbackContext ?fallback } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {

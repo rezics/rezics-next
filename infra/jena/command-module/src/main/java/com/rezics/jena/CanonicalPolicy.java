@@ -68,7 +68,14 @@ final class CanonicalPolicy {
     /** The profile whose bound validation must name this subject as a focus, or null. */
     static String requiredBindingProfile(ProfileRegistry profiles, DatasetGraph dataset, String subject,
                                          boolean revision) {
-        return profiles.bindingDemand(types(dataset, graph(revision), NodeFactory.createURI(subject)));
+        Set<String> subjectTypes = types(dataset, graph(revision), NodeFactory.createURI(subject));
+        // The fixed Global has no Realm/context relationship to bind. Its canonical
+        // global shape still validates every write; Realm Contexts keep their binding.
+        if (!revision && subject.equals("urn:rezics:classification-context:global")
+            && subjectTypes.equals(Set.of(RV + "ClassificationContext"))
+            && (RV + "GlobalClassification").equals(singleObject(dataset, graph(false),
+                NodeFactory.createURI(subject), RV + "contextRole"))) return null;
+        return profiles.bindingDemand(subjectTypes);
     }
 
     private static Node graph(boolean revision) {

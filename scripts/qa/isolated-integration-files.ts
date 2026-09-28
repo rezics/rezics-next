@@ -3,6 +3,8 @@
 // branches append entries; git's union merge driver keeps both sides (see
 // .gitattributes), so add a comment line and a path line, never reorder.
 export const isolatedIntegrationFileList = [
+  // Global classification bootstrap exercises an empty graph and resets its own Context (G-380).
+  'tests/qa/integration/classification-bootstrap.test.ts',
   // Read stability writes concurrently while the relay catches up (G-323).
   'tests/qa/integration/read-stability.test.ts',
   // Home feed replays the relay from zero and exercises private/disclosure fences.
