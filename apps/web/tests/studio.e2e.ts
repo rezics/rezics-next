@@ -66,10 +66,11 @@ async function append(page: Page, text: string, name: RegExp = /^(Text|Chapter t
 }
 
 /** Publishes from the open editor and waits for every step Main reports; the second one may be refused. */
-async function publish(page: Page, button: string, heading: string, steps: RegExp[]) {
+async function publish(page: Page, button: string, heading: string, steps: RegExp[], where?: string) {
   await page.getByRole('button', { name: button, exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: heading })).toBeVisible();
+  if (where) await expect(dialog).toContainText(where);
   await dialog.getByRole('checkbox', { name: /I wrote this text/ }).check();
   await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
   const list = dialog.getByRole('list', { name: 'Publish' });
@@ -179,8 +180,8 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     const chapterPath = pathOf(page);
 
     // Publishing a chapter, then an update of it.
-    let dialog = await publish(page, 'Publish', 'Publish “第一章 雨夜”', [/Done/, /Done/]);
-    await expect(dialog).toContainText(`In “${title}” on REZICS, for everyone to read`);
+    let dialog = await publish(page, 'Publish', 'Publish “第一章 雨夜”', [/Done/, /Done/],
+      `In “${title}” on REZICS, for everyone to read`);
     await dialog.getByRole('button', { name: 'Close' }).first().click();
     await append(page, '\n信封里只有一张旧车票。');
     await expect(saveState(page)).toHaveText(/^Saved · /, { timeout: 30_000 });
