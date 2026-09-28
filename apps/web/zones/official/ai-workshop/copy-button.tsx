@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react';
 /**
  * Copies what a reader takes from a pick: a prompt's published text, a
  * Skill's instructions or, for any other pick, its address. A status line
- * announces the result.
+ * announces the result. Slots render on the server, so every prop is plain
+ * data a server may send to this client component.
  */
 export function CopyButton({ text, href, title, label, copied, failed, compact }: {
   /** The published text to copy; without it, the pick's address. */
