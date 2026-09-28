@@ -382,7 +382,8 @@ final class CommandService extends ActionService {
                 if (link != null) return invalid(link);
             }
             if (hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentSearchEligibilityDecision")) {
-                if (!hasNamedFocus(validations, "content-search-eligibility-v1", "decision-shape",
+                String profile = contentEligibilityProfile(dataset, subject);
+                if (profile == null || !hasNamedFocus(validations, profile, "decision-shape",
                     subject, CommandPolicy.REVISIONS))
                     return invalid("Content search eligibility focus omitted: " + subject);
                 String link = contentEligibilityLinks(dataset, receipt, subject, true);
@@ -487,6 +488,16 @@ final class CommandService extends ActionService {
         Node value = exactlyOne(dataset, leftGraph, leftSubject, property);
         return value != null && value.equals(exactlyOne(dataset, rightGraph, rightSubject, property));
     }
+    private static String contentEligibilityProfile(DatasetGraph dataset, String subject) {
+        Node revision = exactlyOne(dataset, NodeFactory.createURI(CommandPolicy.REVISIONS),
+            NodeFactory.createURI(subject), "modelRevision");
+        if (revision == null || !revision.isURI()) return null;
+        return switch (revision.getURI()) {
+            case "https://rezics.com/definition/content-search-eligibility-v1" -> "content-search-eligibility-v1";
+            case "https://rezics.com/definition/content-search-eligibility-v2" -> "content-search-eligibility-v2";
+            default -> null;
+        };
+    }
     private static String contentEligibilityLinks(DatasetGraph dataset, String receipt, String subject,
                                                   boolean fresh) {
         Node current = NodeFactory.createURI(CommandPolicy.CURRENT);
@@ -506,11 +517,18 @@ final class CommandService extends ActionService {
             || !resource.equals(exactlyOne(dataset, revisions, publication, "resource"))
             || !variant.equals(exactlyOne(dataset, revisions, publication, "component")))
             return "Content search eligibility current publication link mismatch: " + subject;
-        if (!NodeFactory.createURI(RV + "OriginalContribution").equals(
+        String profile = contentEligibilityProfile(dataset, subject);
+        boolean publicDomain = "content-search-eligibility-v2".equals(profile);
+        if (profile == null || !NodeFactory.createURI(RV + (publicDomain ? "PublicDomain" : "OriginalContribution")).equals(
                 exactlyOne(dataset, revisions, decision, "rightsBasis"))
             || !NodeFactory.createURI(RV + "Public").equals(
                 exactlyOne(dataset, revisions, decision, "disclosure")))
             return "Content search eligibility rights/disclosure mismatch: " + subject;
+        Node assessment = exactlyOne(dataset, revisions, decision, "rightsAssessment");
+        if (publicDomain ? assessment == null || !assessment.isURI()
+                || !assessment.getURI().matches("urn:rezics:rights:assessment:[0-9a-f-]{36}")
+            : assessment != null)
+            return "Content search eligibility assessment mismatch: " + subject;
         Node scope = exactlyOne(dataset, revisions, decision, "admittedScope");
         if (scope == null || !scope.isLiteral()
             || !(scope.getLiteralLexicalForm().equals("content:search-eligibility:" + resource.getURI())
@@ -534,6 +552,8 @@ final class CommandService extends ActionService {
             if (!same(dataset, revisions, decision, receipts, receiptNode, property))
                 return "Content search eligibility receipt field mismatch: " + property;
         }
+        if (publicDomain && !same(dataset, revisions, decision, receipts, receiptNode, "rightsAssessment"))
+            return "Content search eligibility receipt assessment mismatch: " + subject;
         return null;
     }
     private Map<String, Object> validateContentProjection(DatasetGraph dataset, String receipt,
@@ -570,11 +590,13 @@ final class CommandService extends ActionService {
         if (!hasNamedFocus(validations, "content-match-unit-v1", "unit-shape",
             unit.getURI(), CommandPolicy.PUBLIC_SEARCH))
             return invalid("Content MatchUnit focus omitted: " + unit.getURI());
-        ProfileRegistry.Profile eligibilityProfile = profiles.get("content-search-eligibility-v1");
+        String eligibilityProfileId = contentEligibilityProfile(dataset, eligibility.getURI());
+        ProfileRegistry.Profile eligibilityProfile = eligibilityProfileId == null ? null
+            : profiles.get(eligibilityProfileId);
         if (eligibilityProfile == null) return invalid("Content search eligibility profile unavailable");
         Map<String, Object> eligibilityShape = validateOne(dataset, new Validation(
-            "content-search-eligibility-v1", eligibilityProfile,
-            "https://rezics.com/definition/content-search-eligibility-v1/decision-shape",
+            eligibilityProfileId, eligibilityProfile,
+            "https://rezics.com/definition/" + eligibilityProfileId + "/decision-shape",
             List.of(eligibility.getURI()), List.of(CommandPolicy.REVISIONS), Map.of()));
         if (eligibilityShape != null) return eligibilityShape;
         String eligibilityLink = contentEligibilityLinks(dataset, receipt, eligibility.getURI(), false);

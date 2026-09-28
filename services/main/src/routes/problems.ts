@@ -94,7 +94,7 @@ import { ContentProjectionGap, ContentProjectionProfileUnavailable, ContentProje
   from '../modules/content-publication/relay.ts';
 import { ContentSearchBudgetExceeded, InvalidContentPhrase }
   from '../modules/content-publication/search.ts';
-import { ContentDraftDenied, ContentDraftStale, ContentDraftUnavailable }
+import { ContentDraftDenied, ContentDraftRightsDenied, ContentDraftStale, ContentDraftUnavailable }
   from '../modules/content-publication/draft.ts';
 import { ContentCommentDenied, ContentCommentWorkUnavailable }
   from '../modules/content-publication/comment.ts';
@@ -303,6 +303,10 @@ export function commandError(error: unknown): Response {
   if (error instanceof ActingContextDenied) return problem(403, 'acting_context_denied', 'Selected Agent is unavailable for this task');
   if (error instanceof ActingContextStale) return problem(409, 'stale_context', 'Acting context authority changed');
   if (error instanceof ActingContextUnavailable) return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
+  if (error instanceof ContentDraftRightsDenied) {
+    return problem(403, 'public_domain_assessment_required',
+      'A current supported public-domain assessment for this Work is required');
+  }
   if (error instanceof ContentDraftDenied) return problem(403, 'authority_denied', 'Content draft is not admitted');
   if (error instanceof ContentCommentDenied) return problem(403, 'authority_denied', 'Comment is not admitted');
   if (error instanceof ContentCommentInvalid) return problem(400, 'invalid_selector', 'Comment selector or body is invalid');

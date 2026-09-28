@@ -56,6 +56,25 @@ export interface AdmittedAuthorProvenance {
   expectedHead: string | null;
   rightsBasis: 'original-contribution';
 }
+export interface PublicDomainTextSource {
+  provider: string;
+  identifier: string;
+  url: string;
+  byteDigest: string;
+  retrievedAt: string;
+}
+export interface AdmittedPublicDomainProvenance {
+  kind: 'admitted-public-domain-v1';
+  transcriber: string;
+  rightsBasis: 'public-domain';
+  rightsAssessmentId: string;
+  source: PublicDomainTextSource;
+  admissionId: string;
+  authorityEpoch: string;
+  scope: string;
+  requestDigest: string;
+  expectedHead: string | null;
+}
 export interface SaveDraftResult {
   outcome: 'succeeded' | 'stale_head' | 'cancelled';
   revisionId: string | null;
@@ -120,11 +139,25 @@ function stable(value: unknown): string {
 /** The Access request and later rights audit bind the same exact Content bytes. */
 export function contentDraftIntentDigest(command: Pick<SaveDraftCommand,
   'variant' | 'expectedHead' | 'model' | 'sourceRevision' | 'serializedJson'>,
-author: string): string {
+author: string, publicDomain?: { rightsAssessmentId: string; source: PublicDomainTextSource }): string {
+  if (publicDomain) return hash(stable({ family: 'content-draft-public-domain-v1', variant: command.variant,
+    expectedHead: command.expectedHead, model: command.model,
+    sourceRevision: command.sourceRevision, byteDigest: hash(Buffer.from(command.serializedJson, 'utf8')),
+    transcriber: author, rightsBasis: 'public-domain', ...publicDomain }));
   return hash(stable({ family: 'content-draft-author-v1', variant: command.variant,
     expectedHead: command.expectedHead, model: command.model,
     sourceRevision: command.sourceRevision, byteDigest: hash(Buffer.from(command.serializedJson, 'utf8')),
     author, rightsBasis: 'original-contribution' }));
+}
+
+export function validPublicDomainSource(source: PublicDomainTextSource): boolean {
+  return typeof source.provider === 'string' && source.provider.length >= 1 && source.provider.length <= 100
+    && typeof source.identifier === 'string' && source.identifier.length >= 1 && source.identifier.length <= 300
+    && typeof source.url === 'string' && source.url.length <= 2048
+    && /^https:\/\/[^\s]+$/i.test(source.url)
+    && typeof source.byteDigest === 'string' && /^[0-9a-f]{64}$/.test(source.byteDigest)
+    && typeof source.retrievedAt === 'string' && Number.isFinite(Date.parse(source.retrievedAt))
+    && new Date(source.retrievedAt).toISOString() === source.retrievedAt;
 }
 
 function checkId(value: string, name: string, max = 300): void {
@@ -436,6 +469,21 @@ export class ContentCore {
         throw new ContentConflict('author proof does not bind the exact draft');
       }
     }
+    if (command.provenance.kind === 'admitted-public-domain-v1') {
+      const proof = command.provenance as unknown as AdmittedPublicDomainProvenance;
+      if (command.model !== 'content-shape-v1'
+        || !/^[0-9a-f-]{36}$/i.test(proof.admissionId)
+        || !/^[0-9a-f-]{36}$/i.test(proof.rightsAssessmentId)
+        || !/^(0|[1-9][0-9]*)$/.test(proof.authorityEpoch)
+        || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(proof.transcriber)
+        || proof.scope !== `content:draft:${command.variant.resourceId}`
+        || proof.expectedHead !== command.expectedHead || proof.rightsBasis !== 'public-domain'
+        || !proof.source || !validPublicDomainSource(proof.source)
+        || proof.requestDigest !== contentDraftIntentDigest(command, proof.transcriber,
+          { rightsAssessmentId: proof.rightsAssessmentId, source: proof.source })) {
+        throw new ContentConflict('public-domain proof does not bind the exact draft');
+      }
+    }
     let body: Record<string, unknown>;
     try { body = JSON.parse(command.serializedJson); }
     catch { throw new ContentConflict('body is not JSON'); }
@@ -466,7 +514,8 @@ export class ContentCore {
     if (bytes.length < 1 || bytes.length > MAX_BODY_BYTES) throw new ContentLimitExceeded('body exceeds 1 MiB');
     const byteDigest = hash(bytes);
     const digest = command.provenance.kind === 'admitted-original-contribution-v1'
-      ? (command.provenance as unknown as AdmittedAuthorProvenance).requestDigest
+      || command.provenance.kind === 'admitted-public-domain-v1'
+      ? (command.provenance as unknown as AdmittedAuthorProvenance | AdmittedPublicDomainProvenance).requestDigest
       : hash(stable({ action: 'draft.save', variant: command.variant,
       expectedHead: command.expectedHead, model: command.model,
       sourceRevision: command.sourceRevision, provenance: command.provenance, byteDigest }));
@@ -479,6 +528,19 @@ export class ContentCore {
         return { outcome: row.outcome === 'rejected' ? 'cancelled' : row.outcome,
           revisionId: row.revision_id, predecessor: command.expectedHead,
           position: position(row), replayed: true } as SaveDraftResult;
+      }
+      if (command.provenance.kind === 'admitted-public-domain-v1') {
+        const proof = command.provenance as unknown as AdmittedPublicDomainProvenance;
+        const accepted = await client.query(`SELECT 1 FROM rights.use_assessment a
+          JOIN rights.use_assessment_head h ON h.assessment_id = a.id
+          JOIN rights.material m ON m.id = a.material_id
+          WHERE a.id = $1 AND m.scope_kind = 'work' AND m.work_id = $2
+            AND m.component = 'body' AND m.expression_kind = 'expression'
+            AND a.family = 'data_rights' AND a.use_kind = 'redistribution'
+            AND a.use_scope = 'rezics:public-text' AND a.basis = 'public_domain'
+            AND a.outcome = 'supported' LIMIT 1 FOR SHARE OF h`,
+        [proof.rightsAssessmentId, command.variant.resourceId]);
+        if (accepted.rowCount !== 1) throw new ContentConflict('public-domain assessment is not current');
       }
       if (command.model === 'member-reply-v1') {
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
@@ -578,6 +640,22 @@ export class ContentCore {
         const receipt = await client.query('SELECT data_epoch, sequence::text AS sequence FROM content.receipt WHERE operation_id = $1', [operationId]);
         return { operationId, reference, position: position(receipt.rows[0]),
           status: old.rows[0].status, pinActive: old.rows[0].pin_active, replayed: true };
+      }
+      if (reference.provenance.kind === 'admitted-public-domain-v1') {
+        const assessmentId = reference.provenance.rightsAssessmentId;
+        if (typeof assessmentId !== 'string' || !/^[0-9a-f-]{36}$/i.test(assessmentId)) {
+          throw new ContentConflict('public-domain assessment reference is invalid');
+        }
+        const accepted = await client.query(`SELECT 1 FROM rights.use_assessment a
+          JOIN rights.use_assessment_head h ON h.assessment_id = a.id
+          JOIN rights.material m ON m.id = a.material_id
+          WHERE a.id = $1 AND m.scope_kind = 'work' AND m.work_id = $2
+            AND m.component = 'body' AND m.expression_kind = 'expression'
+            AND a.family = 'data_rights' AND a.use_kind = 'redistribution'
+            AND a.use_scope = 'rezics:public-text' AND a.basis = 'public_domain'
+            AND a.outcome = 'supported' LIMIT 1 FOR SHARE OF h`,
+        [assessmentId, reference.resourceId]);
+        if (accepted.rowCount !== 1) throw new ContentConflict('public-domain assessment is not current');
       }
       if (requireCurrentDraftHead) {
         const head = await client.query('SELECT draft_head FROM content.variant WHERE id = $1 FOR UPDATE', [reference.variantId]);

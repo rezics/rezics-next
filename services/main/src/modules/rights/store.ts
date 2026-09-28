@@ -18,7 +18,7 @@ export const ASSESS_SCOPE = 'rights:assess';
 export interface MaterialScope {
   scopeKind: typeof materialScopes[number];
   provider: string | null; namespace: string | null; sourceRecordId: string | null;
-  contentVariantId: string | null; mediaAsset: string | null; component: string;
+  contentVariantId: string | null; mediaAsset: string | null; workId?: string | null; component: string;
 }
 export interface UseKey { family: typeof assessmentFamilies[number]; useKind: typeof useKinds[number]; useScope: string }
 export interface AssessmentInput extends UseKey {
@@ -48,6 +48,14 @@ const governanceOwnerNames = new Set(['graph', 'content', 'source', 'media']);
 const governanceComponentNames = new Set(['name', 'title', 'body', 'structure', 'media_use', 'synopsis',
   'cover', 'publication', 'record']);
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+export const PUBLIC_DOMAIN_TEXT_USE = { family: 'data_rights', useKind: 'redistribution',
+  useScope: 'rezics:public-text' } as const;
+
+export function publicDomainWorkMaterial(work: string): MaterialScope {
+  if (!agentPattern.test(work)) throw new RightsInvalid('invalid public-domain Work');
+  return { scopeKind: 'work', provider: null, namespace: null, sourceRecordId: null,
+    contentVariantId: null, mediaAsset: null, workId: work, component: 'body' };
+}
 
 /** Provider-specific scope used for an exact service-terms retention assessment. */
 export function sourceRetentionScope(provider: string, namespace: string): string {
@@ -103,7 +111,8 @@ function normalize(error: unknown): Error {
 }
 
 function validMaterial(material: MaterialScope): boolean {
-  return (materialScopes as readonly string[]).includes(material.scopeKind) && componentPattern.test(material.component);
+  return (materialScopes as readonly string[]).includes(material.scopeKind) && componentPattern.test(material.component)
+    && (material.scopeKind !== 'work' || agentPattern.test(material.workId ?? ''));
 }
 
 /**
@@ -114,6 +123,45 @@ function validMaterial(material: MaterialScope): boolean {
  */
 export class RightsStore {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
+
+  /** One indexed current-head lookup. Historical or withdrawn assessments are never a public basis. */
+  async currentPublicDomainAssessment(work: string, assessmentId: string): Promise<boolean> {
+    if (!agentPattern.test(work) || !/^[0-9a-f-]{36}$/i.test(assessmentId)) {
+      throw new RightsInvalid('invalid public-domain assessment reference');
+    }
+    try {
+      const result = await this.content.query(`SELECT 1 FROM rights.use_assessment a
+        JOIN rights.use_assessment_head h ON h.assessment_id = a.id
+        JOIN rights.material m ON m.id = a.material_id
+        WHERE a.id = $1 AND m.scope_kind = 'work' AND m.work_id = $2
+          AND m.component = 'body' AND m.expression_kind = 'expression'
+          AND a.family = 'data_rights' AND a.use_kind = 'redistribution'
+          AND a.use_scope = 'rezics:public-text' AND a.basis = 'public_domain'
+          AND a.outcome = 'supported' LIMIT 1`, [assessmentId, work]);
+      return result.rowCount === 1;
+    } catch { throw new RightsUnavailable('current public-domain assessment is unavailable'); }
+  }
+
+  /** At most 512 phrase hits share one indexed rights probe, O(hits) input and result. */
+  async currentPublicDomainAssessments(refs: readonly { work: string; assessmentId: string }[]): Promise<Set<string>> {
+    if (refs.length > 512 || refs.some(ref => !agentPattern.test(ref.work)
+      || !/^[0-9a-f-]{36}$/i.test(ref.assessmentId))) {
+      throw new RightsInvalid('invalid public-domain search rights batch');
+    }
+    if (!refs.length) return new Set();
+    try {
+      const result = await this.content.query<{ work_id: string; id: string }>(`SELECT m.work_id, a.id
+        FROM unnest($1::text[], $2::uuid[]) AS requested(work_id, assessment_id)
+        JOIN rights.use_assessment a ON a.id = requested.assessment_id
+        JOIN rights.use_assessment_head h ON h.assessment_id = a.id
+        JOIN rights.material m ON m.id = a.material_id AND m.work_id = requested.work_id
+        WHERE m.scope_kind = 'work' AND m.component = 'body' AND m.expression_kind = 'expression'
+          AND a.family = 'data_rights' AND a.use_kind = 'redistribution'
+          AND a.use_scope = 'rezics:public-text' AND a.basis = 'public_domain'
+          AND a.outcome = 'supported'`, [refs.map(ref => ref.work), refs.map(ref => ref.assessmentId)]);
+      return new Set(result.rows.map(row => `${row.work_id}\0${row.id}`));
+    } catch { throw new RightsUnavailable('current public-domain search rights are unavailable'); }
+  }
 
   /** A source component fence follows its exact observation or the whole record. */
   async sourceSynopsisRestricted(record: string, observation: string, effects: readonly string[]): Promise<boolean> {
@@ -202,9 +250,10 @@ export class RightsStore {
     return (await client.query<{ id: string; expression_kind: string }>(`SELECT id, expression_kind
       FROM rights.material WHERE scope_kind = $1 AND provider IS NOT DISTINCT FROM $2
         AND namespace IS NOT DISTINCT FROM $3 AND source_record_id IS NOT DISTINCT FROM $4
-        AND content_variant_id IS NOT DISTINCT FROM $5 AND media_asset IS NOT DISTINCT FROM $6 AND component = $7`,
+        AND content_variant_id IS NOT DISTINCT FROM $5 AND media_asset IS NOT DISTINCT FROM $6
+        AND work_id IS NOT DISTINCT FROM $7 AND component = $8`,
     [material.scopeKind, material.provider, material.namespace, material.sourceRecordId, material.contentVariantId,
-      material.mediaAsset, material.component])).rows[0];
+      material.mediaAsset, material.workId ?? null, material.component])).rows[0];
   }
 
   async assess(principal: VerifiedPrincipal, input: AssessmentInput): Promise<Assessment & { replayed: boolean }> {
@@ -234,11 +283,12 @@ export class RightsStore {
         return { ...await this.read(client, prior.id), replayed: true };
       }
       await client.query(`INSERT INTO rights.material (id, scope_kind, provider, namespace, source_record_id,
-          content_variant_id, media_asset, component, expression_kind) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          content_variant_id, media_asset, work_id, component, expression_kind)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT DO NOTHING`,
       [randomUUID(), input.material.scopeKind, input.material.provider, input.material.namespace,
         input.material.sourceRecordId, input.material.contentVariantId, input.material.mediaAsset,
-        input.material.component, input.expressionKind]);
+        input.material.workId ?? null, input.material.component, input.expressionKind]);
       const material = await this.findMaterial(client, input.material);
       if (!material) throw new RightsStale('material identity is unavailable');
       if (material.expression_kind !== input.expressionKind) {

@@ -1,14 +1,13 @@
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
-import { contentDraftIntentDigest, type AdmittedAuthorProvenance,
-  type ContentCore } from '../../../../content/src/core.ts';
+import { contentDraftIntentDigest, type ContentCore, type PublicDomainTextSource }
+  from '../../../../content/src/core.ts';
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import type { RightsStore } from '../rights/store.ts';
 
 const PROFILE_ID = 'content-search-eligibility-v1';
-const PROFILE = 'https://rezics.com/definition/content-search-eligibility-v1';
-const DECISION_SHAPE = `${PROFILE}/decision-shape`;
 const VARIANT_PROFILE_ID = 'content-publication-v1';
 const VARIANT_SHAPE = 'https://rezics.com/definition/content-publication-v1/variant-shape';
 const NONE = 'urn:rezics:none';
@@ -24,13 +23,26 @@ export class ContentEligibilityPending extends Error {}
 export class ContentEligibilityProfileUnavailable extends Error {}
 
 export interface ContentSearchEligibilityInput {
+  profile?: 'content-search-eligibility-v1' | 'content-search-eligibility-v2';
   resourceId: string;
   variantId: string;
   publicationDecision: string;
   expectedEligibilityHead: string | null;
   actingSubject: string;
-  rightsBasis: 'original-contribution';
+  rightsBasis: 'original-contribution' | 'public-domain';
+  assessmentId?: string;
   disclosure: 'public';
+}
+
+function profileId(input: ContentSearchEligibilityInput): string {
+  return input.rightsBasis === 'public-domain' ? 'content-search-eligibility-v2' : PROFILE_ID;
+}
+function rightsTerm(input: ContentSearchEligibilityInput): string {
+  return input.rightsBasis === 'public-domain' ? 'rv:PublicDomain' : 'rv:OriginalContribution';
+}
+function assessmentTerm(input: ContentSearchEligibilityInput): string {
+  return input.rightsBasis === 'public-domain'
+    ? `rv:rightsAssessment ${iri(`urn:rezics:rights:assessment:${input.assessmentId}`)} ; ` : '';
 }
 
 export interface ContentSearchEligibilityResult {
@@ -52,6 +64,8 @@ interface EligibilityReceipt extends Omit<ContentSearchEligibilityResult, 'repla
   variantId: string;
   publicationDecision: string;
   expectedHead: string | null;
+  rightsBasis: string;
+  assessmentId: string | null;
 }
 
 function checkedInput(input: ContentSearchEligibilityInput): void {
@@ -59,15 +73,18 @@ function checkedInput(input: ContentSearchEligibilityInput): void {
     input.actingSubject, ...(input.expectedEligibilityHead ? [input.expectedEligibilityHead] : [])]) {
     try { iri(value); } catch { throw new InvalidContentEligibility('invalid Content eligibility IRI'); }
   }
-  if (input.resourceId === input.variantId || input.rightsBasis !== 'original-contribution'
-    || input.disclosure !== 'public') {
-    throw new InvalidContentEligibility('explicit public original-contribution decision required');
+  if (input.resourceId === input.variantId || input.disclosure !== 'public'
+    || (input.rightsBasis === 'original-contribution'
+      ? input.profile !== undefined && input.profile !== PROFILE_ID || input.assessmentId !== undefined
+      : input.rightsBasis !== 'public-domain' || input.profile !== 'content-search-eligibility-v2'
+        || !UUID.test(input.assessmentId ?? ''))) {
+    throw new InvalidContentEligibility('explicit public rights decision required');
   }
 }
 
 export function contentSearchEligibilityDigest(input: ContentSearchEligibilityInput): string {
   checkedInput(input);
-  return hash(JSON.stringify({ family: PROFILE_ID, ...input }));
+  return hash(JSON.stringify({ family: profileId(input), ...input }));
 }
 
 export function contentSearchEligibilityReceiptIri(admissionId: string): string {
@@ -98,7 +115,8 @@ function admissionMatches(admission: RegisteredAdmission, input: ContentSearchEl
 /** Resolve source bytes and original-author proof through both owner ledgers. */
 async function assertPublishedRights(env: WorkActivationEnvironment, content: ContentCore,
   access: Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>,
-  input: ContentSearchEligibilityInput): Promise<void> {
+  input: ContentSearchEligibilityInput,
+  rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>): Promise<void> {
   const source = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?revision ?digest WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(input.variantId)}
       rv:contentPublicationHead ${iri(input.publicationDecision)} ;
@@ -123,15 +141,28 @@ async function assertPublishedRights(env: WorkActivationEnvironment, content: Co
     throw new ContentEligibilityUnavailable('published Content bytes are unavailable');
   }
   const ref = exact.reference;
-  const proof = ref.provenance as unknown as Partial<AdmittedAuthorProvenance>;
+  const proof = ref.provenance as { kind?: string; author?: string; transcriber?: string;
+    rightsAssessmentId?: string; source?: PublicDomainTextSource; admissionId?: string;
+    authorityEpoch?: string; scope?: string; requestDigest?: string;
+    expectedHead?: string | null; rightsBasis?: string };
   const saved = proof.admissionId
     ? await content.readDraftReceipt(`content-draft:${proof.admissionId}`) : null;
   const owner = await content.ownerPosition();
-  if (proof.kind !== 'admitted-original-contribution-v1'
-    || proof.author !== input.actingSubject
+  const publicDomain = input.rightsBasis === 'public-domain';
+  let assessmentCurrent = false;
+  if (publicDomain) {
+    if (!rights) throw new ContentEligibilityUnavailable('public-domain rights owner is unavailable');
+    try { assessmentCurrent = await rights.currentPublicDomainAssessment(input.resourceId, input.assessmentId!); }
+    catch { throw new ContentEligibilityUnavailable('current public-domain assessment is unavailable'); }
+  }
+  if ((publicDomain ? proof.kind !== 'admitted-public-domain-v1'
+    || proof.transcriber !== input.actingSubject
+    || proof.rightsAssessmentId !== input.assessmentId
+    || !assessmentCurrent
+    : proof.kind !== 'admitted-original-contribution-v1' || proof.author !== input.actingSubject)
     || proof.scope !== `content:draft:${input.resourceId}`
     || proof.expectedHead !== ref.predecessor
-    || proof.rightsBasis !== 'original-contribution'
+    || proof.rightsBasis !== input.rightsBasis
     || !/^[0-9a-f-]{36}$/i.test(proof.admissionId ?? '')
     || !/^(0|[1-9][0-9]*)$/.test(proof.authorityEpoch ?? '')
     || !saved || saved.outcome !== 'succeeded' || saved.revisionId !== ref.revisionId
@@ -141,32 +172,36 @@ async function assertPublishedRights(env: WorkActivationEnvironment, content: Co
         language: ref.language, direction: ref.direction },
       expectedHead: ref.predecessor, model: ref.model,
       sourceRevision: ref.sourceRevision, serializedJson: exact.serializedJson,
-    }, input.actingSubject)
+    }, input.actingSubject, publicDomain ? {
+      rightsAssessmentId: input.assessmentId!, source: proof.source!,
+    } : undefined)
     || !await access.verifyContentDraftProof({ admissionId: proof.admissionId!,
       author: input.actingSubject, scope: proof.scope,
       requestDigest: proof.requestDigest!, authorityEpoch: proof.authorityEpoch!,
       contentEpoch: saved.position.dataEpoch, contentSequence: saved.position.sequence })) {
-    throw new ContentEligibilityDenied('original author provenance is unverified');
+    throw new ContentEligibilityDenied('published rights provenance is unverified');
   }
 }
 
 async function validations(env: WorkActivationEnvironment, input: ContentSearchEligibilityInput,
   decision: string): Promise<CommandValidation[]> {
   const registry = profileRegistry as Record<string, { sha256: string; shapes: readonly string[] }>;
-  const profile = registry[PROFILE_ID];
+  const id = profileId(input);
+  const shape = `https://rezics.com/definition/${id}/decision-shape`;
+  const profile = registry[id];
   const variant = registry[VARIANT_PROFILE_ID];
-  if (!profile || !profile.shapes.includes(DECISION_SHAPE)
+  if (!profile || !profile.shapes.includes(shape)
     || !variant || !variant.shapes.includes(VARIANT_SHAPE)) {
     throw new ContentEligibilityProfileUnavailable('reviewed eligibility or Content variant shape is unavailable');
   }
   const health = await env.fuseki.commandHealth();
-  if (health.profiles[PROFILE_ID] !== profile.sha256
+  if (health.profiles[id] !== profile.sha256
     || health.profiles[VARIANT_PROFILE_ID] !== variant.sha256) {
     throw new ContentEligibilityProfileUnavailable('Fuseki eligibility or Content variant profile differs');
   }
   return [{ profile: VARIANT_PROFILE_ID, sha256: variant.sha256, shape: VARIANT_SHAPE,
     focus: [input.variantId], graphs: [GRAPHS.current] },
-  { profile: PROFILE_ID, sha256: profile.sha256, shape: DECISION_SHAPE,
+  { profile: id, sha256: profile.sha256, shape,
     focus: [decision], graphs: [GRAPHS.revisions] }];
 }
 
@@ -174,7 +209,7 @@ async function readReceipt(env: WorkActivationEnvironment, admissionId: string):
   const receipt = contentSearchEligibilityReceiptIri(admissionId);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?outcome ?reason ?digest ?id ?authority ?scope ?actor ?resource ?variant
-    ?publication ?expected ?decision ?rights ?disclosure ?epoch ?sequence WHERE {
+    ?publication ?expected ?decision ?rights ?assessment ?disclosure ?epoch ?sequence WHERE {
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
         rv:outcome ?outcome ; rv:requestDigest ?digest ; rv:admissionId ?id ;
         rv:authorityEpoch ?authority ; rv:admittedScope ?scope ;
@@ -182,6 +217,7 @@ async function readReceipt(env: WorkActivationEnvironment, admissionId: string):
         rv:publicationDecision ?publication ; rv:expectedHead ?expected ;
         rv:rightsBasis ?rights ; rv:disclosure ?disclosure ;
         rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        OPTIONAL { ${iri(receipt)} rv:rightsAssessment ?assessment }
         OPTIONAL { ${iri(receipt)} rv:reason ?reason }
         OPTIONAL { ${iri(receipt)} rv:eligibilityDecision ?decision }
       }
@@ -196,7 +232,8 @@ async function readReceipt(env: WorkActivationEnvironment, admissionId: string):
     || !DECIMAL.test(value('authority') ?? '') || !value('scope') || !value('actor')
     || !value('resource') || !value('variant') || !value('publication')
     || !value('expected') || !value('epoch') || !DECIMAL.test(value('sequence') ?? '')
-    || value('rights') !== `${RV}OriginalContribution` || value('disclosure') !== `${RV}Public`
+    || ![`${RV}OriginalContribution`, `${RV}PublicDomain`].includes(value('rights') ?? '')
+    || value('disclosure') !== `${RV}Public`
     || (outcome === 'succeeded' && (!value('decision') || value('reason')))
     || (outcome === 'stale' && value('decision'))) {
     throw new ContentEligibilityConflict('eligibility receipt is incomplete');
@@ -206,7 +243,8 @@ async function readReceipt(env: WorkActivationEnvironment, admissionId: string):
     digest: value('digest')!, admissionId: value('id')!, authorityEpoch: value('authority')!,
     scope: value('scope')!, actingSubject: value('actor')!, resourceId: value('resource')!,
     variantId: value('variant')!, publicationDecision: value('publication')!,
-    expectedHead: value('expected') === NONE ? null : value('expected')! };
+    expectedHead: value('expected') === NONE ? null : value('expected')!,
+    rightsBasis: value('rights')!, assessmentId: value('assessment') ?? null };
 }
 
 function checkedReceipt(receipt: EligibilityReceipt, env: WorkActivationEnvironment,
@@ -217,6 +255,9 @@ function checkedReceipt(receipt: EligibilityReceipt, env: WorkActivationEnvironm
     || receipt.actingSubject !== input.actingSubject || receipt.resourceId !== input.resourceId
     || receipt.variantId !== input.variantId || receipt.publicationDecision !== input.publicationDecision
     || receipt.expectedHead !== input.expectedEligibilityHead
+    || receipt.rightsBasis !== `${RV}${input.rightsBasis === 'public-domain' ? 'PublicDomain' : 'OriginalContribution'}`
+    || receipt.assessmentId !== (input.rightsBasis === 'public-domain'
+      ? `urn:rezics:rights:assessment:${input.assessmentId}` : null)
     || receipt.graphDataEpoch !== env.lineage.dataEpoch
     || (receipt.outcome === 'succeeded'
       && receipt.decision !== contentSearchEligibilityDecisionIri(admission.id))) {
@@ -257,7 +298,7 @@ function receiptTriples(env: WorkActivationEnvironment, admission: RegisteredAdm
     rv:admittedScope ${lit(admission.scope)} ; rv:actingSubject ${iri(input.actingSubject)} ;
     rv:resource ${iri(input.resourceId)} ; rv:variant ${iri(input.variantId)} ;
     rv:publicationDecision ${iri(input.publicationDecision)} ; rv:expectedHead ${expected(input)} ;
-    rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public ;
+    rv:rightsBasis ${rightsTerm(input)} ; ${assessmentTerm(input)}rv:disclosure rv:Public ;
     ${outcome === 'succeeded' ? `rv:eligibilityDecision ${iri(decision)} ; rv:outcome rv:Succeeded ;`
       : 'rv:reason rv:StaleHead ; rv:outcome rv:Cancelled ;'}
     rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next`;
@@ -271,6 +312,7 @@ export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
   const decision = contentSearchEligibilityDecisionIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0eligibility`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0eligibility`)}`;
+  const profile = `https://rezics.com/definition/${profileId(input)}`;
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> DELETE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
     GRAPH ${iri(GRAPHS.current)} { ${iri(input.variantId)} rv:publicSearchEligibilityHead ?prior }
@@ -281,10 +323,10 @@ export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
       rv:component ${iri(input.variantId)} ; rv:variant ${iri(input.variantId)} ;
       rv:resource ${iri(input.resourceId)} ;
       rv:publicationDecision ${iri(input.publicationDecision)} ;
-      rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public ;
+      rv:rightsBasis ${rightsTerm(input)} ; ${assessmentTerm(input)}rv:disclosure rv:Public ;
       rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
       rv:admittedScope ${lit(admission.scope)} ; rv:actingSubject ${iri(input.actingSubject)} ;
-      rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ;
+      rv:modelRevision ${iri(profile)} ; rv:shapeRevision ${iri(profile)} ;
       rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
       rv:sequence ?next . }
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ${receiptTriples(env, admission, input, digest, 'succeeded', decision)} . }
@@ -348,7 +390,8 @@ function staleUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmiss
 /** A fresh claim dispatches; a sealed admission may only replay its exact receipt. */
 export async function selectPublicContentSearch(env: WorkActivationEnvironment,
   content: ContentCore, access: Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>,
-  admission: RegisteredAdmission, input: ContentSearchEligibilityInput): Promise<ContentSearchEligibilityResult> {
+  admission: RegisteredAdmission, input: ContentSearchEligibilityInput,
+  rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>): Promise<ContentSearchEligibilityResult> {
   const digest = contentSearchEligibilityDigest(input);
   admissionMatches(admission, input, digest);
   // A recorded terminal outcome replays without a write, even after a later
@@ -359,7 +402,7 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
     if (checked.outcome === 'stale') throw new ContentEligibilityStale('eligibility head is stale');
     return checked;
   }
-  await assertPublishedRights(env, content, access, input);
+  await assertPublishedRights(env, content, access, input, rights);
   if (!admission.dispatchEligible || admission.state !== 'claimed'
     || !Number.isFinite(Date.parse(admission.expiresAt))
     || Date.parse(admission.expiresAt) <= Date.now()) {

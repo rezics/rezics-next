@@ -181,6 +181,39 @@ test('SEARCH19: eligibility command binds one exact head change, revision, recei
   expect(update).toContain('FILTER(COALESCE(?prior, <urn:rezics:none>) = <urn:rezics:none>)');
 });
 
+test('PUBLIC-DOMAIN: v2 eligibility binds a current assessment and keeps v1 decision unchanged', async () => {
+  const { graph, input, admission, env, content, access, reference } = fixture();
+  const v1 = buildContentEligibilityUpdate(env, admission, input);
+  expect(v1).toContain('content-search-eligibility-v1');
+  const assessmentId = randomUUID();
+  const source = { provider: 'project-gutenberg', identifier: 'ebook/1342',
+    url: 'https://www.gutenberg.org/ebooks/1342', byteDigest: 'f'.repeat(64),
+    retrievedAt: '2026-09-28T00:00:00.000Z' };
+  const v2: ContentSearchEligibilityInput = { ...input, profile: 'content-search-eligibility-v2',
+    rightsBasis: 'public-domain', assessmentId };
+  const proof = reference.provenance as Record<string, unknown>;
+  reference.provenance = { ...proof, kind: 'admitted-public-domain-v1', author: undefined,
+    transcriber: input.actingSubject, rightsAssessmentId: assessmentId, source,
+    rightsBasis: 'public-domain', requestDigest: contentDraftIntentDigest({
+      variant: { id: reference.variantId, resourceId: reference.resourceId,
+        language: reference.language, direction: reference.direction },
+      expectedHead: reference.predecessor, model: reference.model,
+      sourceRevision: reference.sourceRevision, serializedJson: '{"body":"test"}',
+    }, input.actingSubject, { rightsAssessmentId: assessmentId, source }) };
+  const claimed = { ...admission, requestDigest: contentSearchEligibilityDigest(v2) };
+  const update = buildContentEligibilityUpdate(env, claimed, v2);
+  expect(update).toContain('content-search-eligibility-v2');
+  expect(update).toContain(`rv:rightsAssessment <urn:rezics:rights:assessment:${assessmentId}>`);
+  expect(update).toContain('rv:rightsBasis rv:PublicDomain');
+  const rights = { currentPublicDomainAssessment: async () => false };
+  await expect(selectPublicContentSearch(env, content, access, claimed, v2, rights))
+    .rejects.toBeInstanceOf(ContentEligibilityDenied);
+  rights.currentPublicDomainAssessment = async () => true;
+  await expect(selectPublicContentSearch(env, content, access, claimed, v2, rights))
+    .rejects.toBeInstanceOf(ContentEligibilityProfileUnavailable);
+  expect(graph.commands).toBe(0);
+});
+
 test('SEARCH19: Content projection outbox mapper accepts exact receipt and rejects missing binding', () => {
   const batch: MainOutboxBatch = { batchId: `urn:rezics:outbox:${randomUUID()}`,
     dataEpoch: randomUUID(), sequence: '12', routingEpoch: '1',

@@ -4,6 +4,7 @@ import type { AccessAdmissionRegistry, GraphTerminalProof }
   from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
+import type { RightsStore } from '../rights/store.ts';
 import { contentSearchEligibilityDigest, selectPublicContentSearch,
   type ContentSearchEligibilityInput, type ContentSearchEligibilityResult }
   from './eligibility.ts';
@@ -16,6 +17,7 @@ export async function selectAdmittedPublicContentSearch(
     'register' | 'claim' | 'recordGraphOutcome' | 'verifyContentDraftProof'>,
   request: Request,
   input: ContentSearchEligibilityInput & { idempotencyKey: string },
+  rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>,
 ): Promise<ContentSearchEligibilityResult> {
   const { idempotencyKey, ...eligibility } = input;
   const digest = contentSearchEligibilityDigest(eligibility);
@@ -26,7 +28,7 @@ export async function selectAdmittedPublicContentSearch(
     action: 'content.search-eligibility', idempotencyKey, requestDigest: digest });
   const admission = registered.state === 'sealed' ? registered
     : await access.claim(registered.id, digest, principal);
-  const result = await selectPublicContentSearch(env, content, access, admission, eligibility);
+  const result = await selectPublicContentSearch(env, content, access, admission, eligibility, rights);
   const proof: GraphTerminalProof = {
     outcome: result.outcome === 'succeeded' ? 'succeeded' : 'cancelled',
     receipt: result.receipt, admissionId: registered.id, requestDigest: digest,

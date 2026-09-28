@@ -16,28 +16,51 @@ import { authorizedReadProblems, contentCommentPageResult, contentCommentResult,
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { titleControlBasis } from './shared.ts';
+import { publicDomainRevisionCurrent } from '../modules/content-publication/public-domain-read.ts';
+
+const textDraftFields = {
+  resourceId: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+  variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
+  language: t.Object({ kind: t.Literal('tag'), tag: t.String(),
+    originalTag: t.String() }, { additionalProperties: false }),
+  direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]),
+  expectedHead: t.Union([t.String({ pattern: '^[0-9a-f-]{36}$' }), t.Null()]),
+  body: t.String({ minLength: 1, maxLength: 65536 }),
+  embeds: t.Optional(t.Array(t.String({
+    pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+  }), { maxItems: 16 })),
+  actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+};
+const publicDomainSource = t.Object({ provider: t.String({ minLength: 1, maxLength: 100 }),
+  identifier: t.String({ minLength: 1, maxLength: 300 }),
+  url: t.String({ pattern: '^https://[^\\s]+$', maxLength: 2048 }),
+  byteDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  retrievedAt: t.String({ format: 'date-time' }),
+}, { additionalProperties: false });
+const eligibilityFields = {
+  resourceId: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+  variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
+  publicationDecision: t.String(), expectedEligibilityHead: t.Nullable(t.String()),
+  actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+  disclosure: t.Literal('public'),
+};
 
 export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/content-drafts', {
-      body: t.Object({
-        profile: t.Literal('content-text-v1'),
-        resourceId: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-        variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
-        language: t.Object({ kind: t.Literal('tag'), tag: t.String(),
-          originalTag: t.String() }, { additionalProperties: false }),
-        direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]),
-        expectedHead: t.Union([t.String({ pattern: '^[0-9a-f-]{36}$' }), t.Null()]),
-        body: t.String({ minLength: 1, maxLength: 65536 }),
-        embeds: t.Optional(t.Array(t.String({
-          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-        }), { maxItems: 16 })),
-        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }),
+      body: t.Union([
+        t.Object({ profile: t.Literal('content-text-v1'), ...textDraftFields },
+          { additionalProperties: false }),
+        t.Object({ profile: t.Literal('content-public-domain-text-v1'), ...textDraftFields,
+          assessmentId: t.String({ pattern: '^[0-9a-f-]{36}$' }), source: publicDomainSource },
+        { additionalProperties: false }),
+      ]),
       response: { 200: contentDraftWriteResult, 201: contentDraftWriteResult,
         ...writeProblems, 413: problemResult(413) },
     }, async ({ request, body }) => {
-      if (!work.contentAuthoring) return problem(503, 'content_unavailable', 'Content authoring is unavailable');
+      if (!work.contentAuthoring || body.profile === 'content-public-domain-text-v1' && !work.rights?.store) {
+        return problem(503, 'content_unavailable', 'Content authoring or rights owner is unavailable');
+      }
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
@@ -50,7 +73,10 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
               language: body.language, direction: body.direction },
             expectedHead: body.expectedHead, body: body.body,
             embeds: body.embeds,
-            actingSubject: body.actingSubject, idempotencyKey });
+            actingSubject: body.actingSubject, idempotencyKey,
+            ...(body.profile === 'content-public-domain-text-v1' ? {
+              publicDomain: { assessmentId: body.assessmentId, source: body.source },
+            } : {}) }, work.rights?.store);
         return Response.json({ resourceId: body.resourceId, variantId: body.variantId,
           revisionId: saved.revisionId, predecessor: saved.predecessor,
           byteDigest: saved.byteDigest,
@@ -120,6 +146,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           || exact.reference.byteDigest !== comment.byteDigest) {
           return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
         }
+        if (!await publicDomainRevisionCurrent(exact.reference, work.rights?.store)) {
+          return problem(404, 'comment_unavailable', 'Comment is unavailable');
+        }
         const text = exact.body.body;
         const selector = comment.target.selector;
         try {
@@ -173,6 +202,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           async ids => new Set(ids)))[0];
         if (exact?.status !== 'available' || exact.reference.resourceId !== resourceId) {
           return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
+        }
+        if (!await publicDomainRevisionCurrent(exact.reference, work.rights?.store)) {
+          return problem(404, 'comment_unavailable', 'Comments are unavailable');
         }
         const text = exact.body.body;
         if (typeof text !== 'string') {
@@ -236,29 +268,31 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       } catch (error) { return commandError(error); }
     })
     .post('/v1/content-search-eligibility', {
-      body: t.Object({ profile: t.Literal('content-search-eligibility-v1'),
-        resourceId: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-        variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
-        publicationDecision: t.String(), expectedEligibilityHead: t.Nullable(t.String()),
-        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-        rightsBasis: t.Literal('original-contribution'), disclosure: t.Literal('public'),
-      }, { additionalProperties: false }),
+      body: t.Union([
+        t.Object({ profile: t.Literal('content-search-eligibility-v1'), ...eligibilityFields,
+          rightsBasis: t.Literal('original-contribution') }, { additionalProperties: false }),
+        t.Object({ profile: t.Literal('content-search-eligibility-v2'), ...eligibilityFields,
+          rightsBasis: t.Literal('public-domain'),
+          assessmentId: t.String({ pattern: '^[0-9a-f-]{36}$' }) }, { additionalProperties: false }),
+      ]),
       response: { 200: contentEligibilityWriteResult, 201: contentEligibilityWriteResult,
         ...writeProblems },
     }, async ({ request, body }) => {
-      if (!work.contentAuthoring || !work.access.verifyContentDraftProof) {
-        return problem(503, 'content_unavailable', 'Content owner or author proof is unavailable');
+      if (!work.contentAuthoring || !work.access.verifyContentDraftProof
+        || body.profile === 'content-search-eligibility-v2' && !work.rights?.store) {
+        return problem(503, 'content_unavailable', 'Content owner or draft proof is unavailable');
       }
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
-        const { profile: _profile, ...input } = body;
+        const { profile, ...input } = body;
         const result = await selectAdmittedPublicContentSearch(work.environment,
           work.contentAuthoring, work.account,
           work.access as Required<MainWorkDependencies['access']>, request,
-          { ...input, idempotencyKey });
+          { ...input, ...(profile === 'content-search-eligibility-v2' ? { profile } : {}),
+            idempotencyKey }, work.rights?.store);
         return Response.json(result, { status: result.replayed ? 200 : 201,
           headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
@@ -317,7 +351,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         }
         const exact = (await work.content.readExactBatch([params.revision],
           async ids => new Set(ids)))[0];
-        if (exact?.status === 'available') {
+        if (exact?.status === 'available'
+          && await publicDomainRevisionCurrent(exact.reference, work.rights?.store)) {
           return Response.json({ reference: exact.reference, serializedJson: exact.serializedJson,
             body: exact.body }, { headers: { 'cache-control': 'no-store' } });
         }

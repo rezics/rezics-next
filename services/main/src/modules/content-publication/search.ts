@@ -9,6 +9,7 @@ import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance
   SearchSnapshotMoved, type PublicTextPosition } from '../work/search-readiness.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { assertContentProjectionProfiles, ContentProjectionUnavailable } from './relay.ts';
+import type { RightsStore } from '../rights/store.ts';
 
 export class InvalidContentPhrase extends Error {}
 export class ContentSearchBudgetExceeded extends Error {}
@@ -146,7 +147,8 @@ async function prepareContentSearch(env: WorkActivationEnvironment,
 
 export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
   content: ContentCore, cursor: ContentProjectionCursor, consumer: string,
-  input: { phrase: string; language: string | null }) {
+  input: { phrase: string; language: string | null },
+  rights?: Pick<RightsStore, 'currentPublicDomainAssessments'>) {
   const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
   if (phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
     || (input.language !== null && !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(input.language))) {
@@ -157,7 +159,7 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX text: <http://jena.apache.org/text#>
     SELECT ?epoch ?sequence ?generation ?candidateCount ?unit ?score
-      ?resource ?variant ?revision ?decision ?eligibility ?language WHERE {
+      ?resource ?variant ?revision ?decision ?eligibility ?language ?rightsBasis ?assessment WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ;
         rv:sequence ?sequence ; rv:textIndexGeneration ?generation . }
       FILTER(?epoch = ${lit(index.dataEpoch)} && ?sequence = ${index.sequence}
@@ -183,7 +185,8 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
           rv:publicSearchEligibilityHead ?eligibility . }
         GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision ;
           rv:variant ?variant ; rv:publicationDecision ?decision ;
-          rv:disclosure rv:Public . }
+          rv:disclosure rv:Public ; rv:rightsBasis ?rightsBasis .
+          OPTIONAL { ?eligibility rv:rightsAssessment ?assessment } }
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
       }
     }`, MAX_SEARCH_RESPONSE_BYTES);
@@ -213,11 +216,34 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
     }
     return { matchUnit: row.unit.value, resource: row.resource.value,
       variant: row.variant.value, revision: row.revision.value,
-      publicationDecision: row.decision.value, language: row.language.value, score };
+      publicationDecision: row.decision.value, language: row.language.value, score,
+      rightsBasis: value(row, 'rightsBasis'), assessment: value(row, 'assessment') };
   });
   if (new Set(matches.map(match => match.matchUnit)).size !== matches.length) {
     throw new ContentProjectionUnavailable('Content phrase result has duplicate units');
   }
+  const publicDomain = matches.filter(match => match.rightsBasis === `${RV}PublicDomain`);
+  if (publicDomain.length && !rights) {
+    throw new ContentProjectionUnavailable('public-domain rights owner is unavailable');
+  }
+  const refs = publicDomain.map(match => {
+    const assessment = /^urn:rezics:rights:assessment:([0-9a-f-]{36})$/i.exec(match.assessment ?? '');
+    if (!assessment) throw new ContentProjectionUnavailable('public-domain assessment is missing');
+    return { work: match.resource, assessmentId: assessment[1]! };
+  });
+  let accepted = new Set<string>();
+  if (rights && refs.length) {
+    try { accepted = await rights.currentPublicDomainAssessments(refs); }
+    catch { throw new ContentProjectionUnavailable('current public-domain search rights are unavailable'); }
+  }
+  const visible = matches.filter(match => {
+    if (match.rightsBasis === `${RV}OriginalContribution`) return !match.assessment;
+    if (match.rightsBasis !== `${RV}PublicDomain`) {
+      throw new ContentProjectionUnavailable('Content search rights basis is unknown');
+    }
+    const assessmentId = match.assessment!.slice('urn:rezics:rights:assessment:'.length);
+    return accepted.has(`${match.resource}\0${assessmentId}`);
+  }).map(({ rightsBasis: _rightsBasis, assessment: _assessment, ...match }) => match);
   const [sourceAfter, checkpointAfter] = await Promise.all([
     content.ownerPosition(), cursor.read(consumer),
   ]);
@@ -226,11 +252,11 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
     || checkpointAfter.sequence !== source.sequence) {
     throw new SearchSnapshotMoved('Content source moved during search');
   }
-  matches.sort((left, right) => right.score - left.score
+  visible.sort((left, right) => right.score - left.score
     || left.resource.localeCompare(right.resource) || left.variant.localeCompare(right.variant));
   return { contractVersion: '1' as const, profile: 'public-content-phrase-v1' as const,
     resultGrain: 'content-variant' as const, complete: true as const,
-    total: matches.length, population: proof.population, results: matches,
+    total: visible.length, population: proof.population, results: visible,
     graphPosition: { dataEpoch: index.dataEpoch, sequence: index.sequence },
     contentPosition: source, indexGeneration: index.generation };
 }

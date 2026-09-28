@@ -417,7 +417,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           }
           if (body.profile === 'public-content-phrase-v1') {
             return queryPublicContentPhrase(work.environment, work.contentProjection!.content,
-              work.contentProjection!.cursor, work.contentProjection!.consumer, body);
+              work.contentProjection!.cursor, work.contentProjection!.consumer, body, work.rights?.store);
           }
           return withSearchGraphSnapshot(work.environment, async () => {
             const selection = await presentationSelection(request);
@@ -475,7 +475,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
               }
               const relation = await queryPublicContentPhrase(work.environment,
                 work.contentProjection.content, work.contentProjection.cursor,
-                work.contentProjection.consumer, body);
+                work.contentProjection.consumer, body, work.rights?.store);
               return pageCompleteContentRelation(body, relation);
             }
             const selection = await presentationSelection(request);
