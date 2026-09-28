@@ -65,10 +65,11 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
       }
       OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:StatementRevision, rv:RevisionAnchor ;
         rv:component ${iri(statement)} . BIND(?head AS ?headRevision) } }
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} rv:semanticContextRevision ?pin } }
-      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?pin a rv:ContextSemanticRevision ;
-        rv:component ?context } }
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure } }
+      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} rv:semanticContextRevision ?pin }
+        OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?pin a rv:ContextSemanticRevision ; rv:component ?context }
+          OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure } }
+        }
+      }
     } LIMIT 100`)).results?.bindings ?? [];
   const row = rows[0];
   if (!row?.subject) throw new StatementNotFound('Statement is unavailable');

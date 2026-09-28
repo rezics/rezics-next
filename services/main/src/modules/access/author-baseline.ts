@@ -52,6 +52,11 @@ export async function authorSubmissionProof(client: PoolClient,
   graph: Pick<FusekiClient, 'query'> | undefined, principal: string, actor: string,
   realm: string, contribution: string | null): Promise<{ work: string; generation: string | null } | null> {
   if (!graph || !contribution || !native.test(contribution)) return null;
+  // Whole-Work and Content offers pass their Work as the baseline target. The
+  // owner validates the exact publication separately; a public Work alone is
+  // insufficient, and transfer generations are pinned by the baseline receipt.
+  const generation = await authorWorkGeneration(client, graph, principal, actor, contribution);
+  if (generation !== null) return { work: contribution, generation };
   const rows = (await graph.query(`PREFIX rv: <https://rezics.com/vocab/>
     PREFIX schema: <https://schema.org/> SELECT ?work WHERE {
       GRAPH ${iri(GRAPHS.current)} {

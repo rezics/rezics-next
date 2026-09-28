@@ -13,11 +13,14 @@ import { checkedRealmSelectionReceipt, readRealmSelectionReceipt, realmSelection
   RealmSelectionUnavailable, realmSelectionSlotIri, sealRealmSelectionAdmission, selectRealmLocal, StaleRealmSelection,
   type SelectRealmLocalInput } from '../work/select-realm.ts';
 import { acknowledgeSubmission, requireCandidate } from './graph.ts';
+import { authorWorkGeneration } from '../access/author-baseline.ts';
+import { adoptResource, requireResourceCandidate, resourceSelectionHead, type ResourceAdoption } from './resource.ts';
 import { SUBMISSION_COST, SubmissionInvalid, SubmissionMissing, SubmissionStale,
   SubmissionUnavailable, viewSubmission, type DecisionInput, type SubmissionInput,
-  type SubmissionRow, type SubmissionView, type WithdrawalInput } from './schema.ts';
+  type SubmissionRow, type SubmissionView, type WithdrawalInput, type ResourceSubmissionInput,
+  type SubmissionRequest } from './schema.ts';
 
-interface Adoption { admission: RegisteredAdmission; input: SelectRealmLocalInput }
+type Adoption = { kind?: 'text'; admission: RegisteredAdmission; input: SelectRealmLocalInput } | ResourceAdoption;
 interface Operation { submission_id: string; adoption: Adoption | null; result: SubmissionView | null }
 const stable = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -113,7 +116,9 @@ export class RealmSubmissionStore {
       if (!operation.result) throw new SubmissionUnavailable('Submission settlement is pending');
       await this.access.recordGraphOutcome(admission.id,
         await acknowledgeSubmission(this.env, admission, 'succeeded'));
-      return { submission: operation.result, replayed: admission.replayed };
+      // Pre-target replay snapshots remain immutable; project the additive field
+      // at the API boundary instead of rewriting historical receipts.
+      return { submission: { ...operation.result, target: operation.result.target ?? null }, replayed: admission.replayed };
     });
   }
 
@@ -126,7 +131,8 @@ export class RealmSubmissionStore {
     return { submission_id: row.id, adoption, result };
   }
 
-  submit(principal: VerifiedPrincipal, realm: string, input: SubmissionInput, key: string) {
+  submit(principal: VerifiedPrincipal, realm: string, input: SubmissionRequest, key: string) {
+    if (input.kind === 'work' || input.kind === 'content-publication') return this.submitResource(principal, realm, input, key);
     if ((input.kind === 'correction') !== (input.correctionOf !== null)) {
       throw new SubmissionInvalid('A correction must name the Realm selection it replaces');
     }
@@ -165,6 +171,36 @@ export class RealmSubmissionStore {
       }, input.contribution);
   }
 
+  private submitResource(principal: VerifiedPrincipal, realm: string, input: ResourceSubmissionInput, key: string) {
+    return this.command(principal, input.actingSubject, 'submission.submit', `submission:submit:${realm}`,
+      key, input, async (client, admission) => {
+        await requireRealmSubmissionPolicy(client, realm, admission.principalId, input.actingSubject);
+        if (await authorWorkGeneration(client, this.env.fuseki, admission.principalId, input.actingSubject, input.work) === null) {
+          throw new AdmissionDenied('Only the current Work author can submit this target');
+        }
+        await requireResourceCandidate(this.env, realm, input);
+        const row = (await client.query<SubmissionRow>(`INSERT INTO access.realm_submission
+          (id, realm, kind, work, main_version, submitting_agent, state, revision, target, publication_decision)
+          VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8,$9) RETURNING *`, [randomUUID(), realm, input.kind,
+          input.work, input.mainVersion, input.actingSubject, randomUUID(), input,
+          input.kind === 'content-publication' ? input.publicationDecision : null])).rows[0]!;
+        const permit = await realmPermit(client, principal, input.actingSubject, realm, 'submission');
+        const policy = await readRealmPolicy(this.env, realm);
+        if (!policy || policy.visibility !== 'public' && !permit.member) throw new AdmissionDenied('Realm membership is required');
+        const direct = policy.revision && policy.revision === permit.revision
+          && (policy.reviewMode === 'open' || policy.reviewMode === 'trusted-members' && permit.member);
+        if (!direct) return this.save(client, admission, row);
+        const inputAdoption: ResourceAdoption = { kind: 'resource', admission, input: { realm, target: input,
+          selection: `https://rezics.com/id/${admission.id}`,
+          expectedHead: await resourceSelectionHead(this.env, realm, input),
+          policy: { revision: policy.revision!, mode: policy.reviewMode } } };
+        const deciding = (await client.query<SubmissionRow>(`UPDATE access.realm_submission
+          SET state = 'deciding',decision_operation = $2,revision = $3,generation = generation + 1
+          WHERE id = $1 RETURNING *`, [row.id, admission.id, randomUUID()])).rows[0]!;
+        return this.save(client, admission, deciding, inputAdoption);
+      }, input.work);
+  }
+
   private async lockSubmission(client: PoolClient, realm: string, id: string, expectedRevision: string) {
     const row = (await client.query<SubmissionRow>(`SELECT * FROM access.realm_submission
       WHERE id = $1 AND realm = $2 FOR UPDATE`, [id, realm])).rows[0];
@@ -183,9 +219,10 @@ export class RealmSubmissionStore {
         if (row.state !== 'pending') throw new SubmissionStale('Submission is not pending');
         if (input.outcome !== 'accept') {
           try {
-            await requireCandidate(this.env, realm, { actingSubject: row.submitting_agent, kind: row.kind,
-              work: row.work, mainVersion: row.main_version, contribution: row.contribution,
-              publicationDecision: row.publication_decision, selectedDraft: row.selected_draft,
+            if (row.target) await requireResourceCandidate(this.env, realm, row.target);
+            else await requireCandidate(this.env, realm, { actingSubject: row.submitting_agent, kind: row.kind as SubmissionInput['kind'],
+              work: row.work, mainVersion: row.main_version, contribution: row.contribution!,
+              publicationDecision: row.publication_decision!, selectedDraft: row.selected_draft!,
               correctionOf: row.correction_of });
           } catch (error) {
             if (error instanceof SubmissionMissing) throw new SubmissionStale('Submission candidate was superseded');
@@ -193,13 +230,23 @@ export class RealmSubmissionStore {
           }
         }
         let adoption: Adoption | null = null;
-        if (input.outcome === 'accept') {
+        if (input.outcome === 'accept' && row.target) {
+          const intent: ResourceAdoption['input'] = { realm, target: row.target,
+            selection: `https://rezics.com/id/${admission.id}`, expectedHead: input.expectedSelectionHead, policy: null };
+          const digest = hash(stable({ family: 'realm-resource-adoption-v1', ...intent }));
+          const registered = await this.access.register({ principal, actingSubject: input.actingSubject,
+            action: 'publication.adopt', scope: `publication:adopt:${realm}`,
+            idempotencyKey: `submission:${admission.id}`, requestDigest: digest });
+          const claimed = registered.state === 'sealed' || !registered.dispatchEligible
+            ? registered : await this.access.claim(registered.id, digest, principal);
+          adoption = { kind: 'resource', admission: claimed, input: intent };
+        } else if (input.outcome === 'accept') {
           if (row.correction_of && row.correction_of !== input.expectedSelectionHead) {
             throw new SubmissionStale('Correction must replace its exact Realm selection');
           }
           const selection: SelectRealmLocalInput = { context: { kind: 'realm-local', id: realm },
-            work: row.work, mainVersion: row.main_version, contribution: row.contribution,
-            publicationDecision: row.publication_decision, expectedSelectionHead: input.expectedSelectionHead,
+            work: row.work, mainVersion: row.main_version, contribution: row.contribution!,
+            publicationDecision: row.publication_decision!, expectedSelectionHead: input.expectedSelectionHead,
             selectionBasis: 'realm-manager-review', actingSubject: input.actingSubject };
           const digest = realmSelectionDigest(selection);
           const registered = await this.access.register({ principal, actingSubject: input.actingSubject,
@@ -237,10 +284,11 @@ export class RealmSubmissionStore {
 
   private async finishAdoption(admission: RegisteredAdmission, operation: Operation): Promise<Operation> {
     const stored = operation.adoption!;
+    if (stored.kind === 'resource') return this.finishResourceAdoption(admission, operation, stored);
     // PostgreSQL jsonb reorders object keys. The selection owner's existing
     // digest serializes context directly, so restore its canonical field order.
-    const adoption: Adoption = { admission: stored.admission, input: { ...stored.input,
-      context: { kind: 'realm-local', id: stored.input.context.id } } };
+    const adoption = { admission: stored.admission, input: { ...stored.input,
+      context: { kind: 'realm-local' as const, id: stored.input.context.id } } };
     let terminal = await readRealmSelectionReceipt(this.env, adoption.admission.id, adoption.admission.action === 'submission.submit');
     if (!terminal) {
       if (!adoption.admission.dispatchEligible || Date.parse(adoption.admission.expiresAt) <= Date.now()) {
@@ -276,6 +324,27 @@ export class RealmSubmissionStore {
       const result = viewSubmission(updated);
       await client.query('UPDATE access.realm_submission_operation SET result = $2 WHERE admission_id = $1',
         [admission.id, result]);
+      return { ...saved, result };
+    });
+  }
+
+  private async finishResourceAdoption(admission: RegisteredAdmission, operation: Operation, adoption: ResourceAdoption) {
+    const terminal = await adoptResource(this.env, adoption);
+    await this.access.recordGraphOutcome(adoption.admission.id, terminal);
+    return this.transaction(async client => {
+      const saved = (await client.query<Operation>(`SELECT submission_id, adoption, result
+        FROM access.realm_submission_operation WHERE admission_id = $1 FOR UPDATE`, [admission.id])).rows[0]!;
+      if (saved.result) return saved;
+      const row = (await client.query<SubmissionRow>(`UPDATE access.realm_submission SET
+        state = $3, revision = $4, generation = generation + 1, selection = $5,
+        adoption_receipt = $6, updated_at = clock_timestamp()
+        WHERE id = $1 AND decision_operation = $2 AND state = 'deciding' RETURNING *`,
+      [operation.submission_id, admission.id, terminal.outcome === 'succeeded' ? 'accepted' : 'stale', randomUUID(),
+        terminal.outcome === 'succeeded' ? adoption.input.selection : null,
+        terminal.outcome === 'succeeded' ? terminal.receipt : null])).rows[0];
+      if (!row) throw new SubmissionUnavailable('Resource adoption reservation is unavailable');
+      const result = viewSubmission(row);
+      await client.query('UPDATE access.realm_submission_operation SET result = $2 WHERE admission_id = $1', [admission.id, result]);
       return { ...saved, result };
     });
   }

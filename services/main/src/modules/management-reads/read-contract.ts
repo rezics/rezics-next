@@ -12,7 +12,8 @@ export const managementQuery = { actingSubject: readId,
   cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) };
 
 export const moderationKind = t.Union([t.Literal('content_report'), t.Literal('rights_complaint'),
-  t.Literal('contribution_submission'), t.Literal('correction_submission')]);
+  t.Literal('contribution_submission'), t.Literal('correction_submission'),
+  t.Literal('work_submission'), t.Literal('content-publication_submission')]);
 export const moderationItem = t.Object({ id: readUuid, kind: moderationKind,
   state: t.Union([t.Literal('open'), t.Literal('closed')]),
   generation: t.String(), decisionHead: t.Nullable(readUuid), openedAt: t.String(),
@@ -21,7 +22,7 @@ export const moderationItem = t.Object({ id: readUuid, kind: moderationKind,
   target: t.Object({ owner: t.String(), resource: t.String(), component: t.String() }),
   context: readId,
   submission: t.Nullable(t.Object({ revision: readUuid, state: submissionState,
-    contribution: readId, publicationDecision: readId, selectedDraft: readId,
+    contribution: t.Nullable(readId), publicationDecision: t.Nullable(t.String()), selectedDraft: t.Nullable(readId),
     correctionOf: t.Nullable(readId) })) });
 
 export const auditItem = t.Object({ id: readUuid, caseId: t.Nullable(readUuid),

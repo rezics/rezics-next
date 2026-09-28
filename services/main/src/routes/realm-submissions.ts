@@ -5,7 +5,8 @@ import { decisionInput, submissionInput, submissionPage, submissionQuery, submis
   submissionView, withdrawalInput, SubmissionInvalid, SubmissionMissing,
   SubmissionStale, SubmissionUnavailable } from '../modules/realm-submission/schema.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
-import { WorkReadInvalid, WorkReadMoved } from '../modules/work/read-session.ts';
+import { WorkReadInvalid, WorkReadMoved, WorkReadMissing, workRead } from '../modules/work/read-session.ts';
+import { readRealmPublications, realmPublicationPage } from '../modules/realm-submission/publications.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
@@ -21,7 +22,7 @@ const keyOf = (request: Request) => {
 };
 function errorResponse(error: unknown) {
   if (error instanceof SubmissionInvalid || error instanceof WorkReadInvalid) return problem(400, 'invalid_submission', error.message);
-  if (error instanceof SubmissionMissing) return problem(404, 'submission_unavailable', error.message);
+  if (error instanceof SubmissionMissing || error instanceof WorkReadMissing) return problem(404, 'submission_unavailable', error.message);
   if (error instanceof SubmissionStale || error instanceof WorkReadMoved) return problem(409, 'submission_stale', error.message);
   if (error instanceof SubmissionUnavailable) return problem(503, 'submission_pending', error.message);
   return commandError(error);
@@ -44,6 +45,15 @@ export function realmSubmissionRoutes(work: MainWorkDependencies) {
     return work.realmSubmissionReads;
   };
   return new Elysia()
+    .get('/v1/realms/:realm/submitted-publications', { params: realmParams,
+      query: t.Object({ work: readId, actingSubject: t.Optional(readId),
+        limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
+        cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) }, { additionalProperties: false }),
+      response: { 200: realmPublicationPage, ...problems } }, async ({ request, params, query }) => {
+      try { return Response.json(await workRead(work, request, query,
+        session => readRealmPublications(session, `https://rezics.com/id/${params.realm}`, query.work)), { headers }); }
+      catch (error) { return errorResponse(error); }
+    })
     .post('/v1/realms/:realm/submissions', { params: realmParams, body: submissionInput, detail,
       response: { 200: submissionResult, 201: submissionResult, ...problems } },
     async ({ request, params, body }) => {

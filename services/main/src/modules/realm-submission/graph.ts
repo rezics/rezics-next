@@ -1,4 +1,5 @@
 import type { GraphTerminalProof, RegisteredAdmission } from '../access/admission.ts';
+import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import { receiptFamilyFor } from '../access/receipt-families.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { realmSelectionSlotIri } from '../work/select-realm.ts';
@@ -61,27 +62,37 @@ export async function readSubmissionReceipt(env: WorkActivationEnvironment,
 
 /** Acknowledge an already committed Access result; no internal note reaches Jena. */
 export async function acknowledgeSubmission(env: WorkActivationEnvironment,
-  admission: RegisteredAdmission, outcome: 'succeeded' | 'cancelled') {
+  admission: RegisteredAdmission, outcome: 'succeeded' | 'cancelled', mutation?: {
+    insert: string; remove: string; where: string; validations: CommandValidation[];
+    event?: { kind: string; fields: string };
+    receiptFields?: string;
+  }) {
   const existing = await readSubmissionReceipt(env, admission);
   if (existing) return existing;
   const receipt = receiptIri(admission);
   try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
-    validations: [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
-    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
+    validations: mutation?.validations ?? [], deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
+    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } ${mutation?.remove ?? ''} }
     INSERT {
+      ${mutation?.insert ?? ''}
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+        ${mutation?.receiptFields ?? ''}
         rv:requestDigest ${lit(admission.requestDigest)} ; rv:admissionId ${lit(admission.id)} ;
         rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(admission.scope)} ;
         rv:outcome rv:${outcome === 'succeeded' ? 'Succeeded' : 'Cancelled'} ;
-        rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(`urn:rezics:outbox:${hash(receipt)}`)} a rv:OutboxBatch ;
-        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 . }
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount ${mutation?.event ? 1 : 0}
+        ${mutation?.event ? `; rv:event ${iri(`urn:rezics:event:${hash(receipt)}`)} .
+          ${iri(`urn:rezics:event:${hash(receipt)}`)} a rv:${mutation.event.kind} ; rv:ordinal 0 ;
+          rv:action ${lit(admission.action)} ; rv:receipt ${iri(receipt)} ; ${mutation.event.fields}` : ''} . }
     } WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      ${mutation?.where ?? ''}
       BIND(?n + 1 AS ?next)
     }` }); } catch { /* The receipt resolves an ambiguous transport outcome. */ }
   const terminal = await readSubmissionReceipt(env, admission);

@@ -119,6 +119,11 @@ test('Realm submissions: exact adoption, private decisions, stale offers, races,
     const first = await submit(firstInput, realm, submissionKey);
     expect(first.state).toBe('pending');
     expect((await call(author, 'POST', root(), firstInput, submissionKey)).status).toBe(200);
+    await stack.accessPool.query(`UPDATE access.realm_submission_operation
+      SET result = result - 'target' WHERE submission_id = $1`, [first.id]);
+    const legacyReplay = await call(author, 'POST', root(), firstInput, submissionKey);
+    expect(legacyReplay.status).toBe(200);
+    expect((await legacyReplay.json() as Result).submission.target).toBeNull();
     expect((await call(author, 'POST', root(), { ...firstInput, selectedDraft: `https://rezics.com/id/${randomUUID()}` },
       submissionKey)).status).toBe(409);
     expect((await decide(first, decision(first, 'accept', outsider), outsider)).status).toBe(403);

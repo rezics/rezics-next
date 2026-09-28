@@ -71,6 +71,7 @@ import { zoneModuleRoutes } from './routes/zone-modules.ts';
 import { rankingRoutes } from './routes/rankings.ts';
 import { realmDirectoryRoutes } from './routes/realm-directory.ts';
 import { realmSubmissionRoutes } from './routes/realm-submissions.ts';
+import { conceptRoutes } from './routes/concepts.ts';
 import { realmAdminRoutes } from './routes/realm-admin.ts';
 import { workContentsRoutes } from './routes/work-contents.ts';
 import { readingSettingsRoutes } from './routes/reading-settings.ts';
@@ -166,6 +167,7 @@ function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(discoveryRoutes(work))
     .use(ratingContextReadRoutes(work))
     .use(managementReadRoutes(work))
+    .use(conceptRoutes(work))
     .use(realmSubmissionRoutes(work));
 }
 

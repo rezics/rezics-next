@@ -47,4 +47,36 @@ export const outboxEventHandlers: readonly OwnerOutboxEventHandler[] = [{
           selectionManifest: row.manifest!.value, submittingAgent: row.actor.value,
           reviewPolicy: row.reviewPolicy.value, policyRevision: row.policy!.value } } };
   },
+}, {
+  kind: `${RV}RealmResourceSelectedEvent`, action: 'publication.adopt', actions: ['submission.submit'],
+  type: 'com.rezics.realm.resource-selected.v1',
+  async read({ fuseki, batch, eventId, value, ordinal }) {
+    const receipt = value('receipt'), admissionId = value('admissionId'), scope = value('scope');
+    const action = scope?.startsWith('submission:submit:') ? 'submission.submit' : 'publication.adopt';
+    if (!receipt || !admissionId || !scope || !value('digest') || !value('authorityEpoch')
+      || value('outcome') !== `${RV}Succeeded` || value('epoch') !== batch.dataEpoch
+      || value('sequence') !== batch.sequence || eventId !== `urn:rezics:event:${hash(receipt)}`) {
+      throw new Error('Resource adoption event differs from receipt');
+    }
+    const rows = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?selection ?slot ?realm ?work ?manifest WHERE {
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} a rv:RealmResourceSelectedEvent ;
+        rv:receipt ${iri(receipt)} ; rv:action ${lit(action)} ; rv:component ?slot ; rv:revision ?selection . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?selection a rv:RealmSubmissionSelection ; rv:component ?slot ;
+        rv:context ?realm ; rv:work ?work ; rv:manifest ?manifest ;
+        rv:dataEpoch ${lit(batch.dataEpoch)} ; rv:sequence ${batch.sequence} . }
+    } LIMIT 2`, 8192)).results?.bindings ?? [];
+    const row = rows[0];
+    if (rows.length !== 1 || !row?.selection || !row.slot || !row.realm || !row.work || !row.manifest
+      || scope !== `${action === 'submission.submit' ? 'submission:submit' : 'publication:adopt'}:${row.realm.value}`) {
+      throw new Error('Resource adoption revision is incomplete');
+    }
+    return { specversion: '1.0', id: eventId, source: 'https://rezics.com/services/main',
+      type: 'com.rezics.realm.resource-selected.v1', datacontenttype: 'application/json',
+      data: { batchId: batch.batchId, routingEpoch: batch.routingEpoch, ordinal,
+        sourcePosition: { datasetId: 'product', dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+        receipt: { id: receipt, action, outcome: 'succeeded', admissionId, scope,
+          requestDigest: value('digest')!, authorityEpoch: value('authorityEpoch')!,
+          selection: row.selection.value, slot: row.slot.value, realm: row.realm.value,
+          work: row.work.value, selectionManifest: row.manifest.value } } };
+  },
 }];

@@ -19,9 +19,52 @@ import { classificationContextReadResult, classificationContextWriteResult,
   writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { ContextCommandUnavailable, InvalidContextCommand, PendingContextCommand,
+  StaleContextCommand, runAdmittedCommand } from '../modules/context/command.ts';
+import { ConceptSearchInvalid } from '../modules/semantic/concept-search.ts';
+import { readStatement } from '../modules/statement/read.ts';
+import { tagProposalInput, tagProposalResult, tagProposalRequest, recordTagProposal,
+  tagProposalBudget } from '../modules/classification/tag-proposal.ts';
+
+export const openApiOperations = {
+  '/v1/tag-proposals': { post: { bearer: true, idempotencyKey: true } },
+} as const;
 
 export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
+    .post('/v1/tag-proposals', { body: tagProposalInput,
+      response: { 200: tagProposalResult, 201: tagProposalResult, 202: pendingOperation, ...writeProblems } },
+    async ({ request, body }) => {
+      const key = request.headers.get('idempotency-key');
+      if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        return await tagProposalBudget(async () => {
+          const plan = tagProposalRequest(body);
+          const receipt = await runAdmittedCommand(work.environment, work.account, work.access, request,
+            { ...plan, oauthScope: 'statement:write', actingSubject: body.actingSubject,
+              input: body, idempotencyKey: key,
+              execute: admission => recordTagProposal(work.environment, admission, body) });
+          const statement = await readStatement(work.environment, receipt.component!, async () => false);
+          if (statement.value.kind !== 'resource') throw new ContextCommandUnavailable('Tag proposal is unavailable');
+          return Response.json({ statement: statement.statement, revision: receipt.revision,
+            concept: statement.value.iri, meaningKey: statement.meaningKey, acceptance: body.acceptance,
+            state: 'proposed', replayed: receipt.replayed,
+            sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence } },
+          { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+        });
+      } catch (error) {
+        if (error instanceof ConceptSearchInvalid || error instanceof InvalidContextCommand) {
+          return problem(400, 'invalid_tag_proposal', error.message);
+        }
+        if (error instanceof ContextCommandUnavailable || error instanceof StaleContextCommand) {
+          return problem(409, 'tag_target_unavailable', error.message);
+        }
+        if (error instanceof PendingContextCommand) return problem(503, 'tag_proposal_pending', error.message);
+        return commandError(error);
+      }
+    })
     .post('/v1/classification-resolutions', {
       body: t.Object({ profile: t.Literal('classification-resolution-v1'),
         context: t.Union([

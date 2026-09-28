@@ -18,7 +18,7 @@ const organizationScope = (realm: string) => `publication:reject:${realm}`;
 
 interface Options { actingSubject: string; limit?: number; cursor?: string }
 interface CaseRow { id: string; kind: 'content_report' | 'rights_complaint'
-  | 'contribution_submission' | 'correction_submission'; state: 'open' | 'closed';
+  | 'contribution_submission' | 'correction_submission' | 'work_submission' | 'content-publication_submission'; state: 'open' | 'closed';
   generation: string; decision_head: string | null; opened_at: Date; opened_key: string; target_owner: string;
   target_resource: string; target_component: string; context: string; author_agent: string | null;
   reason_code: string | null; submission: unknown | null; escalation: unknown | null }
@@ -181,7 +181,7 @@ export class ManagementReadStore {
           CASE WHEN state IN ('pending', 'deciding') THEN 'open' ELSE 'closed' END AS state,
           generation::text, CASE WHEN state = 'pending' THEN NULL ELSE revision END AS decision_head,
           opened_at, to_char(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS opened_key,
-          'graph' AS target_owner, work AS target_resource, contribution AS target_component,
+          'graph' AS target_owner, work AS target_resource, COALESCE(contribution, target->>'variant', work) AS target_component,
           realm AS context, submitting_agent AS author_agent, public_reason AS reason_code,
           jsonb_build_object('revision', revision, 'state', state, 'contribution', contribution,
             'publicationDecision', publication_decision, 'selectedDraft', selected_draft,

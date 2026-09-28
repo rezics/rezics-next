@@ -47,6 +47,12 @@ export type BaselineTarget = { kind: 'root' }
 /** Closed permission vocabulary. In particular, a public Realm does not gain
  * a baseline policy, and translation authorization is not translation proposal. */
 export function baselineTarget(action: string, scope: string): BaselineTarget | null {
+  // The tag proposal adapter records a personal Statement under the author's
+  // Work fence. This grants neither definition administration nor acceptance.
+  if (action === 'statement.record' && scope.startsWith('work:edit:')) {
+    const id = scope.slice('work:edit:'.length);
+    return native.test(id) ? { kind: 'author-work', id } : null;
+  }
   if ((action === 'work.create' && scope === 'work:create:root')
     || (action === 'space.create' && scope === 'space:create:root')) return { kind: 'root' };
   const prefixes: Record<string, { prefix: string; kind: Exclude<BaselineTarget['kind'], 'root'> }> = {
