@@ -96,7 +96,7 @@ export const notificationItemRead = access.table('notification_item_read', {
 }, table => [primaryKey({ columns: [table.principalId, table.itemId] })]);
 
 export const notificationKinds = ['reply', 'submission_decision', 'moderation_outcome',
-  'realm_role_change', 'follow', 'claim_correction', 'review', 'review_helpful'] as const;
+  'realm_role_change', 'follow', 'claim_correction', 'review', 'review_helpful', 'realm_invitation'] as const;
 export const notificationDisplayContext = access.table('notification_display_context', {
   itemId: uuid('item_id').primaryKey(),
   kind: text('kind', { enum: notificationKinds }).notNull(),
@@ -157,7 +157,8 @@ export const notificationProducerHead = access.table('notification_producer_head
 export const notificationProducerEvent = access.table('notification_producer_event', {
   position: bigint('position', { mode: 'bigint' }).primaryKey(),
   kind: text('kind', { enum: ['submission_decision', 'moderation_outcome',
-    'realm_role_change', 'realm_membership_change'] }).notNull(),
+    'realm_role_change', 'realm_membership_change', 'review_created',
+    'review_helpful_milestone', 'realm_invitation'] }).notNull(),
   eventId: uuid('event_id').notNull(),
   createdAt: at('created_at').notNull(),
 });

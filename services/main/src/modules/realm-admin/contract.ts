@@ -52,7 +52,7 @@ export const memberQuery = { actingSubject: readId, search: t.Optional(t.String(
 export const memberPage = t.Object({ generation, items: t.Array(t.Object({ member: readId,
   joinedAt: t.Nullable(t.String()), membershipGeneration: generation,
   banned: t.Boolean(), bannedUntil: t.Nullable(t.String()),
-  state: t.Union([t.Literal('joined'), t.Literal('left')]),
+  state: t.Union([t.Literal('joined'), t.Literal('left'), t.Literal('not_joined')]),
   roles: t.Array(t.Object({ id: readUuid, name: t.String(), validUntil: t.String() })) })),
   nextCursor: t.Nullable(readId) });
 export const memberCommand = t.Object({ ...commandFields, member: readId,

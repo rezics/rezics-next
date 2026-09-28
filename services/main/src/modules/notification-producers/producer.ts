@@ -11,7 +11,7 @@ const cursorName = 'notification-producer-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type AccessKind = 'submission_decision' | 'moderation_outcome' | 'realm_role_change'
-  | 'realm_membership_change' | 'review_created' | 'review_helpful_milestone';
+  | 'realm_membership_change' | 'review_created' | 'review_helpful_milestone' | 'realm_invitation';
 interface AccessEvent { position: string; kind: AccessKind; event_id: string }
 interface RelayEnvelope { id: string; type: string; data: { receipt?: Record<string, unknown> } }
 
@@ -48,6 +48,21 @@ export class NotificationProducer {
 
   /** Source and recipient identities are read after their owner commits. */
   private async accessNotification(event: AccessEvent): Promise<NotificationEvent | null> {
+    if (event.kind === 'realm_invitation') {
+      const row = (await this.access.query<{ realm: string; member: string; inviter: string;
+        principal_id: string }>(`SELECT realm, member, inviter, principal_id
+        FROM access.realm_invitation WHERE id = $1 AND state = 'pending'
+          AND expires_at > clock_timestamp()`, [event.event_id])).rows[0];
+      if (!row) return null;
+      const recipients = await represented(this.access, row.member, row.principal_id);
+      if (!recipients.length) return null;
+      return { sourceOwner: 'access', sourceEvent: `realm-invitation:${event.event_id}`,
+        purpose: 'governance', topic: 'realm-invitation',
+        subject: { owner: 'access', ref: event.event_id, revision: null },
+        disclosureBasis: 'realm-invitation-v1', recipients,
+        display: { kind: 'realm_invitation', actorAgent: row.inviter,
+          realm: row.realm, groupKey: null } };
+    }
     if (event.kind === 'review_created' || event.kind === 'review_helpful_milestone') {
       return reviewNotification(this.access, this.graph, event.kind, event.event_id);
     }

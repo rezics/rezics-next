@@ -28,6 +28,11 @@ export const auditItem = t.Object({ id: readUuid, caseId: t.Nullable(readUuid),
   kind: t.Union([t.Literal('content_moderation'), t.Literal('rights_disposition'),
     t.Literal('organization_publication_rejection'), t.Literal('realm_management')]),
   reason: t.Nullable(t.String()),
+  detail: t.Nullable(t.Object({ kind: t.Union([t.Literal('role'), t.Literal('assignment')]),
+    role: t.Object({ id: readUuid, name: t.String() }), member: t.Nullable(readId),
+    assigned: t.Nullable(t.Boolean()), validUntil: t.Nullable(t.String()),
+    changes: t.Array(t.Object({ member: readId,
+      gained: t.Array(t.String()), lost: t.Array(t.String()) })) })),
   outcome: t.String(), actingSubject: readId, decidedAt: t.String(),
   caseSequence: t.Nullable(t.String()) });
 

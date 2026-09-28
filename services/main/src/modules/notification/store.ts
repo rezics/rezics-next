@@ -76,8 +76,9 @@ export interface StreamItem {
   subject: { owner: string; ref: string; revision: string | null } | null;
   display: (Omit<NotificationDisplayContext, 'actorAgent'> & { actor: NotificationAgentSummary | null;
     realmName: string | null; realmRouteSegment: string | null; roleName: string | null;
+    roleChange: 'given' | 'taken' | null;
     target: { title: string | null; excerpt: string | null;
-    language: string | null; linkTarget: string | null } }) | null;
+    language: string | null; linkTarget: string | null; reviewId: string | null } }) | null;
   createdAt: string;
 }
 export interface StreamPage {
@@ -458,9 +459,11 @@ export class NotificationStore {
         display: raw.kind ? { kind: raw.kind, actor, realm: fields.realm ?? null,
           realmName: fields.realmName ?? null, realmRouteSegment: fields.realmRouteSegment ?? null,
           roleName: fields.roleName ?? null,
+          roleChange: fields.roleChange === 'given' || fields.roleChange === 'taken' ? fields.roleChange : null,
           groupKey: raw.group_key, target: {
             title: fields.title ?? null, excerpt: fields.excerpt ?? null,
             language: fields.language ?? null, linkTarget: fields.linkTarget ?? null,
+            reviewId: fields.reviewId ?? null,
           } } : null });
     }
     return { ...result, items, groups: groupNotifications(items) };

@@ -235,13 +235,13 @@ export class AccessRealmManagement {
       await this.authorize(client, principal, realm, options.actingSubject, 'realm.members.manage');
       const matches = !options.search?.trim() ? null
         : await searchRealmMembers(client, realm, options.search, options.after, limit + 1);
-      // This is the public Agent roster. Private principal memberships never
-      // disclose account identities through a public Agent listing.
-      const rows = (await client.query<{ member: string; state: 'joined' | 'left';
+      // This is the Agent team roster. Private principal memberships never
+      // disclose account identities through this listing.
+      const rows = (await client.query<{ member: string; state: 'joined' | 'left' | 'not_joined';
         membership_generation: string; joined_at: Date | null;
         banned: boolean; banned_until: Date | null;
-        roles: { id: string; name: string; validUntil: string }[] }>(`SELECT m.member_subject AS member,
-        m.state, m.generation::text AS membership_generation,
+        roles: { id: string; name: string; validUntil: string }[] }>(`SELECT team.member,
+        COALESCE(m.state,'not_joined') AS state, COALESCE(m.generation,0)::text AS membership_generation,
         COALESCE(b.active AND (b.expires_at IS NULL OR b.expires_at > clock_timestamp()), false) AS banned,
         CASE WHEN b.active AND (b.expires_at IS NULL OR b.expires_at > clock_timestamp())
           THEN b.expires_at ELSE NULL END AS banned_until,
@@ -250,13 +250,22 @@ export class AccessRealmManagement {
         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name,
           'validUntil', a.valid_until) ORDER BY r.id) FROM access.realm_admin_assignment a
           JOIN access.realm_admin_role r ON r.realm = a.realm AND r.id = a.role_id
-          WHERE a.realm = $1 AND a.member = m.member_subject AND a.valid_until > clock_timestamp()), '[]') AS roles
-        FROM access.membership m LEFT JOIN access.membership_ban b ON b.kind = m.kind
-          AND b.owner_subject = m.owner_subject AND b.member_subject = m.member_subject
-        WHERE m.kind = 'realm' AND m.owner_subject = $1
-          AND ($2::text IS NULL OR m.member_subject > $2)
-          AND ($3::text[] IS NULL OR m.member_subject = ANY($3))
-        ORDER BY m.member_subject LIMIT $4`, [realm, options.after ?? null, matches, limit + 1])).rows;
+          WHERE a.realm = $1 AND a.member = team.member AND a.valid_until > clock_timestamp()), '[]') AS roles
+        FROM ((SELECT member_subject AS member FROM access.membership
+          WHERE kind = 'realm' AND owner_subject = $1
+            AND ($2::text IS NULL OR member_subject > $2)
+            AND ($3::text[] IS NULL OR member_subject = ANY($3))
+          ORDER BY member_subject LIMIT $4)
+          UNION
+          (SELECT DISTINCT member FROM access.realm_admin_assignment
+          WHERE realm = $1 AND valid_until > clock_timestamp()
+            AND ($2::text IS NULL OR member > $2)
+            AND ($3::text[] IS NULL OR member = ANY($3))
+          ORDER BY member LIMIT $4)) team
+        LEFT JOIN access.membership m ON m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject = team.member
+        LEFT JOIN access.membership_ban b ON b.kind = 'realm'
+          AND b.owner_subject = $1 AND b.member_subject = team.member
+        ORDER BY team.member LIMIT $4`, [realm, options.after ?? null, matches, limit + 1])).rows;
       return { generation, items: rows.slice(0, limit).map(row => ({ member: row.member, state: row.state,
         banned: row.banned, bannedUntil: row.banned_until?.toISOString() ?? null,
         membershipGeneration: row.membership_generation, joinedAt: row.joined_at?.toISOString() ?? null, roles: row.roles })),
@@ -399,6 +408,12 @@ export class AccessRealmManagement {
         await client.query(`UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = ANY($1::text[])`,
           [[`review:decide:${realm}`, `publication:adopt:${realm}`]]);
         return { receiptId, generation, replayed: false, impact: plan.impact,
+          auditDetail: { kind: change.kind,
+            role: { id: change.roleId, name: change.kind === 'role' ? change.name.trim() : plan.role!.name },
+            member: change.kind === 'assignment' ? change.member : null,
+            assigned: change.kind === 'assignment' ? change.assigned : null,
+            validUntil: change.kind === 'assignment' && change.assigned ? change.validUntil : null,
+            changes: plan.impact.changes },
           notificationRole: { id: change.roleId,
             name: change.kind === 'role' ? change.name.trim() : plan.role!.name } };
       });

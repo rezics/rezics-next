@@ -69,6 +69,14 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
       input.realm, reply.rootTarget);
     }
     if (input.owner !== 'access' || !uuid.test(input.ref)) return hidden;
+    if (input.disclosureBasis === 'realm-invitation-v1') {
+      const row = (await access.query<{ realm: string; member: string }>(`SELECT realm, member
+        FROM access.realm_invitation WHERE id = $1 AND state = 'pending'
+          AND expires_at > clock_timestamp()`, [input.ref])).rows[0];
+      if (!row || row.realm !== input.realm || !await represents(access, input.principalId, row.member)) return hidden;
+      return present({ status: 'available', subject: { private: true,
+        fields: { linkTarget: row.realm, realm: row.realm } } }, row.realm);
+    }
     if (input.disclosureBasis === 'submission-decision-v1') {
       if (!input.revision || !uuid.test(input.revision)) return hidden;
       const row = (await access.query<{ realm: string; work: string; submitting_agent: string;
@@ -109,7 +117,7 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
           AND action IN ('realm.roles.manage', 'realm.members.manage')`, [input.ref])).rows[0];
       if (!row || row.realm !== input.realm) return hidden;
       const result = row.result as { member?: unknown; impact?: { changes?: { member?: unknown }[] };
-        notificationRole?: unknown };
+        notificationRole?: unknown; auditDetail?: { kind?: unknown; member?: unknown; assigned?: unknown } };
       const members = typeof result.member === 'string' ? [result.member]
         : Array.isArray(result.impact?.changes) ? result.impact.changes.map(change => change.member) : [];
       const effects = (await access.query<{ member: string }>(`
@@ -121,7 +129,10 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
           const roleName = await notificationRoleName(access, row.realm, member, result.notificationRole);
           return present({ status: 'available', subject: { private: true,
             fields: { linkTarget: row.realm, realm: row.realm,
-              ...(roleName ? { roleName } : {}) } } }, row.realm);
+              ...(roleName ? { roleName } : {}),
+              ...(result.auditDetail?.kind === 'assignment' && result.auditDetail.member === member
+                && typeof result.auditDetail.assigned === 'boolean'
+                ? { roleChange: result.auditDetail.assigned ? 'given' : 'taken' } : {}) } } }, row.realm);
         }
       }
       return hidden;

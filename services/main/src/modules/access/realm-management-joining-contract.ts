@@ -3,8 +3,8 @@ import type { Static } from 'typebox';
 import { readId, readUuid } from '../work/read-contract.ts';
 import { generation } from '../realm-admin/contract.ts';
 
-// One Realm and one membership episode per mutation. Inbox pages have at most
-// 50 invitations; commands use <= 48 indexed SQL statements and one graph read.
+// One Realm and one membership episode per mutation. Invitation pages have at
+// most 50 items; commands use <= 48 indexed SQL statements and one graph read.
 export const REALM_JOIN_COST = { page: 50, maxLifetimeSeconds: 604800, sqlStatements: 48, graphCalls: 1 } as const;
 export const invitationCommand = t.Object({ actingSubject: readId, member: readId,
   expiresInSeconds: t.Integer({ minimum: 60, maximum: REALM_JOIN_COST.maxLifetimeSeconds }) }, { additionalProperties: false });
@@ -18,7 +18,8 @@ export type InvitationResponse = Static<typeof invitationResponse>;
 export type SelfJoinCommand = Static<typeof selfJoinCommand>;
 export const invitationView = t.Object({ id: readUuid, realm: readId, member: readId, inviter: readId,
   state: t.Union([t.Literal('pending'),t.Literal('expired'),t.Literal('accepted'),t.Literal('declined'),t.Literal('revoked')]),
-  expiresAt: t.String(), policyRevision: generation, termsRevision: t.String(), membershipGeneration: generation });
+  createdAt: t.String(), expiresAt: t.String(), policyRevision: generation,
+  termsRevision: t.String(), membershipGeneration: generation });
 export const invitationResult = t.Object({ invitation: invitationView, replayed: t.Boolean() });
 export const joinResult = t.Object({ membershipId: readUuid, member: readId, realm: readId,
   membershipGeneration: generation, listed: t.Boolean(), replayed: t.Boolean() });

@@ -11,6 +11,8 @@ import { realmMemberProof } from '../../../services/main/src/modules/realm-reply
 import type { RoleCommand, RoleImpact } from '../../../services/main/src/modules/realm-admin/contract.ts';
 import { RealmSubmissionStore } from '../../../services/main/src/modules/realm-submission/store.ts';
 import { REALM_ADMIN_COST } from '../../../services/main/src/modules/realm-admin/contract.ts';
+import { notificationProducerSubjectReader } from '../../../services/main/src/modules/notification-producers/subjects.ts';
+import { notificationRoleName } from '../../../services/main/src/modules/notification/display.ts';
 
 async function setup() {
   const stack = await startMediaStack('realm-admin');
@@ -75,6 +77,23 @@ test('Realm roles: exact impact matches enforced grants; retries, stale and conc
     const assigned = await s.apply(assignment, key);
     expect(assigned.result.status).toBe(201);
     expect(assigned.preview.changes).toEqual([{ member: s.moderator.actor, gained: ['governance.moderate'], lost: [] }]);
+    // A role holder is part of the team even before joining the Realm.
+    const team = await s.call('GET', `/members${s.actorQuery()}&search=${encodeURIComponent(s.moderator.actor)}`);
+    expect(team.status).toBe(200);
+    expect(team.body.items).toMatchObject([{ member: s.moderator.actor, state: 'not_joined',
+      membershipGeneration: '0', joinedAt: null, roles: [{ id: roleId, name: 'Moderators' }] }]);
+    const audit = await s.call('GET', `/audit${s.actorQuery()}&kind=realm_management`);
+    expect(audit.status).toBe(200);
+    expect(audit.body.items).toContainEqual(expect.objectContaining({ id: assigned.result.body.receiptId,
+      detail: { kind: 'assignment', role: { id: roleId, name: 'Moderators' },
+        member: s.moderator.actor, assigned: true, validUntil: assignment.change.kind === 'assignment'
+          ? assignment.change.validUntil : null,
+        changes: assigned.preview.changes } }));
+    const subject = notificationProducerSubjectReader(s.stack.accessPool, s.stack.contentPool, s.stack.env);
+    expect(await subject.resolve({ principalId: s.moderator.principalId, owner: 'access',
+      ref: String(assigned.result.body.receiptId), revision: null,
+      disclosureBasis: 'realm-role-change-v1', realm: s.realm })).toMatchObject({ status: 'available',
+      subject: { fields: { roleName: 'Moderators', roleChange: 'given' } } });
     expect((await s.call('GET', `/moderation${s.actorQuery(s.moderator.actor)}`, undefined, s.moderator.token)).status).toBe(200);
     const replay = await s.call('POST', '/role-changes', { ...assignment, impactDigest: assigned.preview.digest }, s.owner.token, key);
     expect(replay.status).toBe(200);
@@ -104,6 +123,13 @@ test('Realm roles: exact impact matches enforced grants; retries, stale and conc
       member: s.moderator.actor, assigned: false, validUntil: new Date(Date.now() + 60_000).toISOString() }));
     expect(removed.result.status).toBe(201);
     expect(removed.preview.changes).toEqual([{ member: s.moderator.actor, gained: [], lost: ['governance.rule.publish'] }]);
+    expect(await subject.resolve({ principalId: s.moderator.principalId, owner: 'access',
+      ref: String(removed.result.body.receiptId), revision: null,
+      disclosureBasis: 'realm-role-change-v1', realm: s.realm })).toMatchObject({ status: 'available',
+      subject: { fields: { roleName: 'Staff', roleChange: 'taken' } } });
+    expect(await notificationRoleName(s.stack.accessPool, s.realm, s.moderator.actor, null)).toBe('Staff');
+    expect((await s.call('GET', `/members${s.actorQuery()}&search=${encodeURIComponent(s.moderator.actor)}`)).body.items)
+      .toEqual([]);
     await expect(new GovernanceRules(s.stack.accessPool).publish(s.moderator.principal, {
       actingSubject: s.moderator.actor, ref: published.ref, scopeId: s.scope,
       expectedRevision: '1', document: { title: 'Changed' }, idempotencyKey: randomUUID() })).rejects.toThrow('authority is missing');

@@ -159,9 +159,10 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
     await drain();
     expect(notices.filter(item => item.topic === 'review')).toMatchObject([{
       recipients: [a.principalId], subject: { ref: second.review } }]);
-    expect((await reviewSubject(stack.accessPool, stack.fuseki, { principalId: a.principalId,
+    expect(await reviewSubject(stack.accessPool, stack.fuseki, { principalId: a.principalId,
       owner: 'access', ref: second.review, revision: null, disclosureBasis: 'review-created-v1',
-      realm: realm.realm })).status).toBe('available');
+      realm: realm.realm })).toMatchObject({ status: 'available', subject: {
+        fields: { linkTarget: work.work, reviewId: second.review } } });
     for (let i = 0; i < 4; i++) {
       const person = await stack.member(`helpful-${i}`);
       principals.set(person.token, person.principal);

@@ -24,6 +24,9 @@ import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activat
 import { REALM_JOIN_COST } from '../../../services/main/src/modules/access/realm-management-joining-contract.ts';
 import { REALM_ROSTER_COST } from '../../../services/main/src/modules/access/roster.ts';
 import { MANAGED_REALMS_COST } from '../../../services/main/src/modules/access/realm-management-managed.ts';
+import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
+import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
+import { notificationProducerSubjectReader } from '../../../services/main/src/modules/notification-producers/subjects.ts';
 
 type Member = Awaited<ReturnType<MediaStack['member']>>;
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -130,6 +133,18 @@ test('G314 joining: provisioned person consents, accepts only own invitation, re
       profile: 'access-membership-consent-v1',kind: 'realm',ownerSubject: s.realm,memberSubject: member.actor,
       expectedGeneration: '0',expectedPolicyRevision: '0',termsRevision: 'realm-membership-v1' })).status).toBe(403);
     const invited = await s.invite(member);
+    const sent = await json<{ items: { id: string; member: string; createdAt: string; state: string }[] }>(
+      await s.read(s.owner,`${s.root}/invitations`));
+    expect(sent.items).toMatchObject([{ id: invited.invitation.id, member: member.actor, state: 'pending' }]);
+    expect(Date.parse(sent.items[0]!.createdAt)).toBeGreaterThan(0);
+    expect((await s.read(s.outsider,`${s.root}/invitations`)).status).toBe(403);
+    const notices = new NotificationStore(s.stack.accessPool);
+    notices.setDefaultReadSubjectReader(notificationProducerSubjectReader(
+      s.stack.accessPool, s.stack.contentPool, s.stack.env));
+    const producer = new NotificationProducer(s.stack.accessPool, null, s.stack.contentPool,
+      s.stack.fuseki, notices, null);
+    expect(await producer.runAccessOnce()).toBeGreaterThan(0);
+    expect(await notices.unreadCount(member.principal)).toEqual({ count: 1, overflow: false });
     expect((await s.read(member,'/v1/me/realm-invitations')).headers.get('cache-control')).toBe('private, no-store');
     expect((await s.respond(s.outsider,invited.invitation.id)).status).toBe(403);
     expect((await s.call(s.outsider,'POST',`${s.root}/invitations`,{
@@ -139,6 +154,7 @@ test('G314 joining: provisioned person consents, accepts only own invitation, re
     const accepted = await Promise.all(results.map(r => json<InvitationResult>(r)));
     expect(accepted.map(r => r.replayed).sort()).toEqual([false,true]);
     expect(accepted[0]!.invitation.state).toBe('accepted');
+    expect(await notices.unreadCount(member.principal)).toEqual({ count: 0, overflow: false });
     expect((await s.respond(member,invited.invitation.id,'decline',false,key)).status).toBe(409);
     expect((await s.respond(member,invited.invitation.id)).status).toBe(409);
     expect(await json(await s.call(null,'GET',`${s.root}/roster`))).toEqual({ items: [],nextCursor: null });
@@ -294,6 +310,12 @@ test('G314 moderation basis: retained private statement, exact evidence and rule
       rule: { ref: basis.ruleBasis.ref,revision: basis.ruleBasis.revision,digest: basis.ruleBasis.digest },evidenceDigest: report.evidenceDigest,
       reversesDecisionId: null,answersStepId: null,rationale: 'Violates the Realm rule',disclosure: 'private',idempotencyKey: key };
     await json(await s.call(s.owner,'POST','/v1/moderation/decisions',decision,key),201);
+    expect(await json(await s.read(s.owner,`${s.root}/moderation`)))
+      .toMatchObject({ items: [] });
+    expect(await json(await s.read(s.owner,`${s.root}/moderation?state=closed`)))
+      .toMatchObject({ items: [{ id: report.caseId, decisionHead: expect.any(String) }] });
+    expect(await json(await s.read(s.owner,'/v1/me/managed-realms')))
+      .toMatchObject({ items: [{ openCount: { value: 0, kind: 'exact' } }] });
     expect((await s.read(s.owner,`${path}?cursor=${basis.nextCursor}`)).status).toBe(409);
     await s.stack.accessPool.query(`UPDATE access.permission_grant SET active = false WHERE recipient_subject = $1
       AND scope_id = $2 AND action = 'governance.moderate'`,[s.owner.actor,`governance:realm:${s.realm}`]);

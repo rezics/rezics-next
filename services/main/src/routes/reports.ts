@@ -172,7 +172,8 @@ export function reportRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/moderation/decisions', {
       body: t.Object({ profile: t.Literal('moderation-decision-v1'),
-        outcome: t.Union([t.Literal('restrict'), t.Literal('dismiss'), t.Literal('restore'), t.Literal('reverse')]),
+        outcome: t.Union([t.Literal('restrict'), t.Literal('interim_restrict'),
+          t.Literal('final_restrict'), t.Literal('dismiss'), t.Literal('restore'), t.Literal('reverse')]),
         ...decisionFields }, { additionalProperties: false }),
       response: { 200: decisionResult, 201: decisionResult, ...writeProblems },
     }, async ({ request, body }) => {

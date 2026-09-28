@@ -5,6 +5,7 @@ import { escalationCommand, escalationReceipt, impact, memberCommand, memberPage
   memberReceipt, roleCommand, roleList, roleReceipt, RealmAdminConflict, RealmAdminDenied,
   RealmAdminInvalid, RealmAdminLimit, RealmAdminStale, RealmAdminUnavailable } from '../modules/realm-admin/contract.ts';
 import { settingsCommand, settingsReceipt, settingsView } from '../modules/realm-admin/contract.ts';
+import { invitationPage } from '../modules/access/realm-management-joining-contract.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -12,6 +13,7 @@ import { commandError, problem } from './problems.ts';
 export const openApiOperations = {
   '/v1/realms/{realm}/management': { post: { bearer: true, idempotencyKey: true } },
   '/v1/realms/{realm}/members': { get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/invitations': { get: { bearer: true } },
   '/v1/realms/{realm}/roles': { get: { bearer: true } },
   '/v1/realms/{realm}/role-impact': { post: { bearer: true } },
   '/v1/realms/{realm}/role-changes': { post: { bearer: true, idempotencyKey: true } },
@@ -77,6 +79,18 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
         return Response.json(await owner().members(principal, `https://rezics.com/id/${path.realm}`, options), { headers });
+      } catch (error) { return errorResponse(error); }
+    })
+    .get('/v1/realms/:realm/invitations', { params,
+      query: t.Object({ actingSubject: readId, after: t.Optional(readUuid),
+        limit: t.Optional(t.Integer({ minimum: 1, maximum: 50 })) }, { additionalProperties: false }),
+      response: { 200: invitationPage, ...authorizedReadProblems, ...problems },
+    }, async ({ request, params: path, query: options }) => {
+      try {
+        const principal = await work.account.verify(request, ['governance:decide']);
+        if (!work.realmJoining) throw new RealmAdminUnavailable('Joining owner is unavailable');
+        return Response.json(await work.realmJoining.outgoing(principal,
+          `https://rezics.com/id/${path.realm}`, options.actingSubject, options.after, options.limit), { headers });
       } catch (error) { return errorResponse(error); }
     })
     .post('/v1/realms/:realm/members', { params, body: memberCommand,

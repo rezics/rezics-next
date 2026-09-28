@@ -39,14 +39,20 @@ export async function notificationWorkTitle(env: WorkActivationEnvironment, work
   return rows.length === 1 && rows[0]?.title?.value ? rows[0].title.value.slice(0, 200) : null;
 }
 
-/** Legacy receipts without role metadata use a name only when one current role matches. */
+/** Legacy receipts without role metadata use a name only when one role association matches. */
 export async function notificationRoleName(access: Pool, realm: string, member: string,
   receiptRole: unknown): Promise<string | null> {
+  if (typeof receiptRole === 'object' && receiptRole !== null && 'id' in receiptRole
+    && typeof receiptRole.id === 'string') {
+    const current = (await access.query<{ name: string }>(`SELECT name FROM access.realm_admin_role
+      WHERE realm = $1 AND id = $2`, [realm, receiptRole.id])).rows[0]?.name;
+    if (current) return current;
+  }
   if (typeof receiptRole === 'object' && receiptRole !== null && 'name' in receiptRole
     && typeof receiptRole.name === 'string' && receiptRole.name.length <= 80) return receiptRole.name;
   const rows = (await access.query<{ name: string }>(`SELECT r.name FROM access.realm_admin_assignment a
     JOIN access.realm_admin_role r ON r.realm = a.realm AND r.id = a.role_id
-    WHERE a.realm = $1 AND a.member = $2 AND a.valid_until > clock_timestamp()
+    WHERE a.realm = $1 AND a.member = $2
     ORDER BY r.id LIMIT 2`, [realm, member])).rows;
   return rows.length === 1 ? rows[0]!.name : null;
 }

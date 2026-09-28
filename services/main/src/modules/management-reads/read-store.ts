@@ -24,7 +24,7 @@ interface CaseRow { id: string; kind: 'content_report' | 'rights_complaint'
   reason_code: string | null; submission: unknown | null; escalation: unknown | null }
 interface DecisionRow { id: string; case_id: string | null; kind: 'content_moderation' | 'rights_disposition'
   | 'organization_publication_rejection' | 'realm_management'; outcome: string; acting_subject: string; decided_at: Date;
-  reason: string | null;
+  reason: string | null; detail: unknown | null;
   decided_key: string;
   case_sequence: string | null }
 
@@ -163,11 +163,14 @@ export class ManagementReadStore {
         ) AS escalation FROM (
         (SELECT cases.*, first_report.acting_subject AS author_agent, first_report.reason_code,
           NULL::jsonb AS submission
-        FROM (SELECT id, kind, state, generation::text, decision_head, opened_at,
+        FROM (SELECT id, kind, CASE WHEN decision_head IS NULL AND state = 'open' THEN 'open' ELSE 'closed' END AS state,
+          generation::text, decision_head, opened_at,
           to_char(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS opened_key,
           target_owner, target_resource, target_component, context
           FROM access.governance_case WHERE authority_scope_id = $1 AND authority_kind = 'realm'
-            AND $8 AND context = $2 AND state = $3 AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
+            AND $8 AND context = $2
+            AND (CASE WHEN decision_head IS NULL AND state = 'open' THEN 'open' ELSE 'closed' END) = $3
+            AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
             AND ($5::timestamptz IS NULL OR (opened_at, id) > ($5::timestamptz, $6::uuid))
           ORDER BY opened_at, id LIMIT $7) cases
         LEFT JOIN LATERAL (SELECT acting_subject, reason_code FROM access.governance_report
@@ -202,18 +205,20 @@ export class ManagementReadStore {
   audit(principal: VerifiedPrincipal, realm: string, options: Options, kind: DecisionRow['kind'] | null) {
     const scope = realmGovernanceScope(realm);
     return this.page(principal, realm, options, 'audit', kind,
-      async (client, after, limit) => (await client.query<DecisionRow>(`SELECT id, case_id, kind, outcome, reason,
+      async (client, after, limit) => (await client.query<DecisionRow>(`SELECT id, case_id, kind, outcome, reason, detail,
         acting_subject, decided_at,
         to_char(decided_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS decided_key,
         case_sequence::text FROM (
-        (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence, NULL::text AS reason
+        (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence,
+          NULL::text AS reason, NULL::jsonb AS detail
           FROM access.moderation_decision
           WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $2
             AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
             AND ($5::timestamptz IS NULL OR (decided_at, id) > ($5::timestamptz, $6::uuid))
           ORDER BY decided_at, id LIMIT $7)
         UNION ALL
-        (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence, NULL::text AS reason
+        (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence,
+          NULL::text AS reason, NULL::jsonb AS detail
           FROM access.moderation_decision
           WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $3
             AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
@@ -221,7 +226,8 @@ export class ManagementReadStore {
           ORDER BY decided_at, id LIMIT $7)
         UNION ALL
         (SELECT id, NULL::uuid AS case_id, 'realm_management' AS kind, action AS outcome,
-          acting_subject, created_at AS decided_at, NULL::bigint AS case_sequence, reason
+          acting_subject, created_at AS decided_at, NULL::bigint AS case_sequence, reason,
+          CASE WHEN action = 'realm.roles.manage' THEN result->'auditDetail' ELSE NULL END AS detail
           FROM access.realm_admin_receipt WHERE realm = $1
             AND ($4::text IS NULL OR $4 = 'realm_management')
             AND ($5::timestamptz IS NULL OR (created_at,id) > ($5::timestamptz,$6::uuid))
@@ -229,7 +235,7 @@ export class ManagementReadStore {
         ) candidates ORDER BY decided_at, id LIMIT $7`, [realm, scope, organizationScope(realm), kind,
         after?.time ?? null, after?.id ?? null, limit])).rows,
       row => ({ id: row.id, caseId: row.case_id, kind: row.kind, outcome: row.outcome,
-        reason: row.reason ?? null,
+        reason: row.reason ?? null, detail: row.detail ?? null,
         actingSubject: row.acting_subject, decidedAt: row.decided_at.toISOString(),
         caseSequence: row.case_sequence }), row => row.decided_key);
   }

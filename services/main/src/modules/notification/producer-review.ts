@@ -93,6 +93,6 @@ export async function reviewSubject(access: Pool, graph: Pick<FusekiClient, 'que
     if (!represented.rowCount) return hidden;
   }
   return { status: 'available', subject: { private: false,
-    fields: { linkTarget: input.ref, ...(row.realm ? { realm: row.realm } : {}),
+    fields: { linkTarget: row.work, reviewId: input.ref, ...(row.realm ? { realm: row.realm } : {}),
       ...(!row.spoiler ? { excerpt: row.body.slice(0, 240) } : {}) } } };
 }

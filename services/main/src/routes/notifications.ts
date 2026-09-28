@@ -47,13 +47,15 @@ const streamItem = t.Object({ id: t.String(), sequence: t.String(), purpose: t.S
   display: t.Nullable(t.Object({ kind: t.Union([
     t.Literal('reply'), t.Literal('submission_decision'), t.Literal('moderation_outcome'),
     t.Literal('realm_role_change'), t.Literal('follow'), t.Literal('claim_correction'),
-    t.Literal('review'), t.Literal('review_helpful')]),
+    t.Literal('review'), t.Literal('review_helpful'), t.Literal('realm_invitation')]),
     actor: t.Nullable(t.Object({ id: t.String(), name: t.String(), handle: t.String(),
       avatar: t.Nullable(t.String()) })), realm: t.Nullable(t.String()),
     realmName: t.Nullable(t.String()), realmRouteSegment: t.Nullable(t.String()),
-    roleName: t.Nullable(t.String()), groupKey: t.Nullable(t.String()),
+    roleName: t.Nullable(t.String()),
+    roleChange: t.Nullable(t.Union([t.Literal('given'), t.Literal('taken')])),
+    groupKey: t.Nullable(t.String()),
     target: t.Object({ title: t.Nullable(t.String()), excerpt: t.Nullable(t.String()),
-      language: t.Nullable(t.String()), linkTarget: t.Nullable(t.String()) }) })),
+      language: t.Nullable(t.String()), linkTarget: t.Nullable(t.String()), reviewId: t.Nullable(t.String()) }) })),
   createdAt: t.String() });
 const streamPage = t.Object({ profile: t.Literal('notification-stream-page-v1'), generation: t.String(),
   head: t.String(), reset: t.Boolean(), readThrough: t.String(), items: t.Array(streamItem),

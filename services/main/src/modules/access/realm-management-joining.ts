@@ -11,10 +11,12 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { REALM_JOIN_COST, type InvitationCommand, type InvitationResponse, type SelfJoinCommand } from './realm-management-joining-contract.ts';
 
 interface Invitation { id: string; realm: string; member: string; inviter: string; state: 'pending'|'accepted'|'declined'|'revoked';
-  expires_at: Date; expired: boolean; membership_generation: string; policy_revision: string; terms_revision: string }
+  created_at: Date; expires_at: Date; expired: boolean; membership_generation: string;
+  policy_revision: string; terms_revision: string }
 const digest = (intent: unknown) => createHash('sha256').update(JSON.stringify(intent)).digest('hex');
 const invitationView = (row: Invitation) => ({ id: row.id,realm: row.realm,member: row.member,inviter: row.inviter,
-  state: row.state === 'pending' && row.expired ? 'expired' as const : row.state,expiresAt: row.expires_at.toISOString(),
+  state: row.state === 'pending' && row.expired ? 'expired' as const : row.state,
+  createdAt: row.created_at.toISOString(),expiresAt: row.expires_at.toISOString(),
   membershipGeneration: row.membership_generation,policyRevision: row.policy_revision,termsRevision: row.terms_revision });
 
 /** Invitations select an Agent, never a bearer code. Acceptance binds the exact
@@ -115,6 +117,20 @@ export class AccessRealmJoining {
         FROM access.realm_invitation WHERE member = $1 AND ($2::uuid IS NULL OR id > $2)
         ORDER BY id LIMIT $3`,[actor,after ?? null,limit + 1])).rows;
       return { items: rows.slice(0,limit).map(invitationView),nextCursor: rows.length > limit ? rows[limit - 1]!.id : null };
+    });
+  }
+
+  outgoing(principal: VerifiedPrincipal, realm: string, actor: string,
+    after?: string, limit: number = REALM_JOIN_COST.page) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > REALM_JOIN_COST.page
+      || after && !/^[0-9a-f-]{36}$/.test(after)) throw new RealmAdminInvalid('Invalid invitation page');
+    return realmTransaction(this.pool,realm,false,async client => {
+      await realmManager(client,principal,realm,actor);
+      const rows = (await client.query<Invitation>(`SELECT *,expires_at <= clock_timestamp() AS expired
+        FROM access.realm_invitation WHERE realm = $1 AND ($2::uuid IS NULL OR id > $2)
+        ORDER BY id LIMIT $3`,[realm,after ?? null,limit + 1])).rows;
+      return { items: rows.slice(0,limit).map(invitationView),
+        nextCursor: rows.length > limit ? rows[limit - 1]!.id : null };
     });
   }
 
