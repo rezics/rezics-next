@@ -158,6 +158,14 @@ describe('Zone Work cards from Main', () => {
       .toMatchObject({ kind: 'prompt', testedModels: ['model-b'] });
   });
 
+  test('a release time Eden revived as a Date crosses to the page as the ISO string the SDK promises', () => {
+    const capturedAt = new Date('2026-09-28T04:27:33.000Z') as unknown as string;
+    expect(zoneWorkCards({ mod: { profile: 'mod-work-card-v1', game: 'Minecraft', gameVersions: ['1.21.1'],
+      loaders: ['Forge'], latestRelease: null, capturedAt } }).mod?.updatedAt).toBe('2026-09-28T04:27:33.000Z');
+    expect(zoneWorkCards({ mod: { profile: 'mod-work-card-v1', game: 'Minecraft', gameVersions: [],
+      loaders: [], latestRelease: null, capturedAt: 'soon' } }).mod?.updatedAt).toBeNull();
+  });
+
   test('reads without the cards, and Works without them, carry none', () => {
     expect(zoneWorkCards({})).toEqual({ mod: null, hub: null });
   });

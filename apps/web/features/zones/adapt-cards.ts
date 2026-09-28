@@ -7,9 +7,19 @@ import type { ZoneWorkPage } from '../realm/types.ts';
 
 type MainCards = Partial<Pick<ZoneWorkPage['items'][number], 'mod' | 'hub'>>;
 
+/**
+ * A moment as an ISO string. Eden revives Main's ISO times as `Date`s, which
+ * would render as `Date#toString` on the server and not hydrate; the SDK
+ * carries ISO strings, as its `updatedAt` fields promise.
+ */
+export function isoMoment(value: unknown): string | null {
+  const time = value instanceof Date ? value.getTime() : typeof value === 'string' ? Date.parse(value) : Number.NaN;
+  return Number.isNaN(time) ? null : new Date(time).toISOString();
+}
+
 function zoneMod(card: MainCards['mod']): ZoneModRelease | null {
   return card ? { game: card.game, gameVersions: card.gameVersions, loaders: card.loaders,
-    version: card.latestRelease, updatedAt: card.capturedAt } : null;
+    version: card.latestRelease, updatedAt: isoMoment(card.capturedAt) } : null;
 }
 
 function zoneHub(card: MainCards['hub']): ZoneHubItem | null {

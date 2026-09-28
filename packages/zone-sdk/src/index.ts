@@ -90,7 +90,7 @@ export interface ZoneModRelease {
   /** The release's own version, when its manifest declares one (`1.3.0`). */
   version: string | null;
   /** ISO date-time Main recorded the release: the mod's last update. */
-  updatedAt: string;
+  updatedAt: string | null;
 }
 
 /** A published prompt or Skill, as its author disclosed it. */
