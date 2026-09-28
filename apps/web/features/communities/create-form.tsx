@@ -15,6 +15,7 @@ import Link from '../shell/localized-link.tsx';
 import { uploadCommunityImage } from './images.ts';
 import { communityText as words } from './messages.ts';
 import { TopicPicker, type TopicChoice } from './topics.tsx';
+import { CommunityUploadField } from './upload-field.tsx';
 
 type Rule = { key: string; title: string; body: string };
 type Visibility = 'public' | 'restricted';
@@ -103,24 +104,26 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
         expectedHead: null, actingSubject, publication },
       { headers: { 'idempotency-key': `${operation}:profile` } });
       if (!saved.data) throw new Error('profile-write-failed');
-      router.push(localizedPath(`/manage/r/${id}`, locale));
+      try { localStorage.setItem(`rezics:community-setup:${actingSubject}:${realm}`,
+        JSON.stringify({ topics: topics.length > 0, invite: false })); } catch { /* optional local checklist */ }
+      router.push(localizedPath(`/r/${id}`, locale));
     } catch { setFailure(realm ? 'configure' : 'create'); }
     finally { setBusy(false); }
   }
 
   return <form className="grid max-w-2xl gap-7" onSubmit={event => void submit(event)}>
     <div className="grid gap-4 sm:grid-cols-2">
-      <label className="grid gap-1.5 text-sm font-medium">{words.name[locale]}
-        <Input required maxLength={120} value={name} onChange={event => setName(event.currentTarget.value)}
-          disabled={Boolean(createdRealm)} /></label>
-      <label className="grid gap-1.5 text-sm font-medium">{words.handle[locale]}
-        <Input required pattern="[a-z][a-z0-9-]{2,29}" minLength={3} maxLength={30} value={handle}
+      <div className="grid gap-1.5 text-sm font-medium"><label htmlFor="community-name">{words.name[locale]}</label>
+        <Input id="community-name" required maxLength={120} value={name} onChange={event => setName(event.currentTarget.value)}
+          disabled={Boolean(createdRealm)} /></div>
+      <div className="grid gap-1.5 text-sm font-medium"><label htmlFor="community-handle">{words.handle[locale]}</label>
+        <Input id="community-handle" required pattern="[a-z][a-z0-9-]{2,29}" minLength={3} maxLength={30} value={handle}
           onChange={event => setHandle(event.currentTarget.value.toLowerCase())} disabled={Boolean(createdRealm)} />
-        <span className="text-muted-foreground text-xs font-normal">{words.handleHelp[locale]}</span></label>
+        <span className="text-muted-foreground text-xs font-normal">{words.handleHelp[locale]}</span></div>
     </div>
-    <label className="grid gap-1.5 text-sm font-medium">{words.description[locale]}
-      <Textarea required maxLength={2000} rows={3} value={description}
-        onChange={event => setDescription(event.currentTarget.value)} /></label>
+    <div className="grid gap-1.5 text-sm font-medium"><label htmlFor="community-description">{words.description[locale]}</label>
+      <Textarea id="community-description" required maxLength={2000} rows={3} value={description}
+        onChange={event => setDescription(event.currentTarget.value)} /></div>
     <fieldset className="grid gap-2">
       <legend className="mb-2 text-sm font-semibold">{words.visibility[locale]}</legend>
       <RadioGroup value={visibility} onValueChange={details => {
@@ -143,27 +146,21 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
         <div className="flex justify-between gap-2"><span className="font-medium text-sm">{index + 1}</span>
           <Button type="button" size="sm" variant="ghost" onClick={() => setRules(before => before.filter(item =>
             item.key !== rule.key))}><Trash2Icon aria-hidden="true" />{words.removeRule[locale]}</Button></div>
-        <label className="grid gap-1 text-sm">{words.ruleTitle[locale]}
-          <Input required maxLength={100} value={rule.title} onChange={event => setRules(before => before.map(item =>
-            item.key === rule.key ? { ...item, title: event.currentTarget.value } : item))} /></label>
-        <label className="grid gap-1 text-sm">{words.ruleBody[locale]}
-          <Textarea required maxLength={1000} rows={2} value={rule.body} onChange={event => setRules(before =>
+        <div className="grid gap-1 text-sm"><label htmlFor={`rule-title-${rule.key}`}>{words.ruleTitle[locale]}</label>
+          <Input id={`rule-title-${rule.key}`} required maxLength={100} value={rule.title} onChange={event => setRules(before => before.map(item =>
+            item.key === rule.key ? { ...item, title: event.currentTarget.value } : item))} /></div>
+        <div className="grid gap-1 text-sm"><label htmlFor={`rule-body-${rule.key}`}>{words.ruleBody[locale]}</label>
+          <Textarea id={`rule-body-${rule.key}`} required maxLength={1000} rows={2} value={rule.body} onChange={event => setRules(before =>
             before.map(item => item.key === rule.key ? { ...item, body: event.currentTarget.value } : item))} />
-        </label>
+        </div>
       </div>)}
       {rules.length < 12 ? <Button type="button" variant="outline" size="sm" className="justify-self-start"
         onClick={() => setRules(before => [...before, { key: crypto.randomUUID(), title: '', body: '' }])}>
         <PlusIcon aria-hidden="true" />{words.addRule[locale]}</Button> : null}
     </fieldset>
     <div className="grid gap-4 sm:grid-cols-2">
-      {(['icon', 'banner'] as const).map(kind => <label key={kind} className="grid gap-1.5 text-sm font-medium">
-        {words[kind][locale]}
-        <Input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => {
-          const file = event.currentTarget.files?.[0] ?? null;
-          if (kind === 'icon') setIcon(file); else setBanner(file);
-        }} />
-        <span className="text-muted-foreground text-xs font-normal">{words.imageHelp[locale]}</span>
-      </label>)}
+      <CommunityUploadField kind="icon" locale={locale} file={icon} onChange={setIcon} />
+      <CommunityUploadField kind="banner" locale={locale} file={banner} onChange={setBanner} />
     </div>
     {failure ? <Alert variant="destructive" role="alert"><CircleAlertIcon aria-hidden="true" />
       <AlertDescription>{words[failure === 'create' ? 'createFailed' : failure === 'handle' ? 'handleTaken'

@@ -11,25 +11,25 @@ import { communityText as words } from './messages.ts';
 
 export interface TopicChoice { id: string; label: string }
 
-/** Global Concept search: suggestions carry identity, while chips keep the chosen labels visible. */
+/** Shared vocabulary search: suggestions carry identity and the reader's language. */
 export function TopicPicker({ locale, value, onChange, max = 3 }: { locale: UiLocale;
   value: TopicChoice[]; onChange: (topics: TopicChoice[]) => void; max?: number }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<TopicChoice[]>([]);
   const [state, setState] = useState<'idle' | 'loading' | 'failed' | 'ready'>('idle');
   useEffect(() => {
-    if (!query.trim() || value.length >= max) { setResults([]); setState('idle'); return; }
+    if (value.length >= max) { setResults([]); setState('idle'); return; }
     let current = true;
     const timer = window.setTimeout(() => { void (async () => {
       setState('loading');
       try {
-        const { data, error } = await browserMainApi().v1.concepts.get({
-          query: { q: query.trim(), language: locale === 'zh-Hans' ? 'zh-CN' : 'en', limit: 10 },
+        const { data, error } = await browserMainApi().v1['classification-vocabulary'].get({
+          query: { ...(query.trim() ? { q: query.trim() } : {}),
+            language: locale === 'zh-Hans' ? 'zh-CN' : 'en' },
         });
         if (!current) return;
         if (error || !data) { setState('failed'); return; }
-        setResults(data.items.filter(item => !value.some(selected => selected.id === item.concept))
-          .map(item => ({ id: item.concept, label: item.label })));
+        setResults(data.items.filter(item => !value.some(selected => selected.id === item.id)));
         setState('ready');
       } catch { if (current) setState('failed'); }
     })(); }, 250);
@@ -43,12 +43,12 @@ export function TopicPicker({ locale, value, onChange, max = 3 }: { locale: UiLo
         {topic.label}<XIcon aria-hidden="true" className="size-3.5" /></Button>
     </li>)}</ul> : null}
     {value.length < max ? <>
-      <Input type="search" value={query} onChange={event => setQuery(event.currentTarget.value)}
+      <Input id="community-topic-search" type="search" value={query} onChange={event => setQuery(event.currentTarget.value)}
         placeholder={words.topicSearch[locale]} aria-label={words.topicSearch[locale]} maxLength={120}
         autoComplete="off" />
       {state === 'failed' ? <p role="status" className="text-destructive-foreground text-sm">
         {words.topicUnavailable[locale]}</p> : null}
-      {state === 'ready' && query.trim() ? results.length ? <ul className="grid max-h-52 gap-1 overflow-auto
+      {state === 'ready' ? results.length ? <ul className="grid max-h-52 gap-1 overflow-auto
         rounded-xl border border-border bg-card p-1 shadow-sm">{results.map(topic => <li key={topic.id}>
         <button type="button" onClick={() => { onChange([...value, topic]); setQuery(''); }}
           className="w-full rounded-lg px-3 py-2 text-start text-sm outline-none hover:bg-accent
@@ -63,7 +63,7 @@ export function DirectoryTopicFilter({ locale, q, sort, selected }: { locale: Ui
   const [topics, setTopics] = useState<TopicChoice[]>(selected ? [selected] : []);
   return <form action={localizedPath('/r', locale)} className="grid gap-2 rounded-2xl border border-border/80
     bg-card p-4 sm:max-w-md">
-    <label className="text-sm font-semibold">{words.topics[locale]}</label>
+    <label htmlFor="community-topic-search" className="text-sm font-semibold">{words.topics[locale]}</label>
     <TopicPicker locale={locale} value={topics} onChange={setTopics} max={1} />
     {q ? <input type="hidden" name="q" value={q} /> : null}
     {sort !== 'activity' ? <input type="hidden" name="sort" value={sort} /> : null}

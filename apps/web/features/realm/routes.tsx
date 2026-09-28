@@ -25,6 +25,7 @@ import { RealmUnavailable } from './states.tsx';
 import type { ReadFailure } from './types.ts';
 import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions } from './views.tsx';
 import { profileHref } from '../profile/route.ts';
+import { CommunitySetupChecklist } from '../communities/setup-checklist.tsx';
 
 // The `/r/{realm}` routes are thin: each resolves the Realm view, renders the
 // Zone frame and its tab's content. Tabs render the frame themselves (not a
@@ -98,12 +99,17 @@ export function RealmHomeRoute(props: RealmRouteProps) {
       ? readModPreference((await cookies()).get(MOD_ENV_COOKIE)?.value) : {};
     const browse = browseEntry({ base: view.zone.links.browse, zoneName: view.zone.name.value,
       counts: window.ok ? facetCounts(window.data) : null, locale, messages: view.zoneMessages, remembered });
-    return <ZoneHome modules={modules} zone={view.zone} pkg={view.pkg} locale={view.context.locale} browse={browse}
+    return <div className="grid gap-6">
+      {view.reader.actingSubject ? <CommunitySetupChecklist realm={view.realm.realm}
+        actor={view.reader.actingSubject} path={`/r/${view.context.ref}`} locale={view.context.locale}
+        rules={Boolean(view.realm.header.rules?.length)} icon={view.realm.header.icon.kind === 'image'}
+        banner={view.realm.header.banner?.kind === 'image'} /> : null}
+      <ZoneHome modules={modules} zone={view.zone} pkg={view.pkg} locale={view.context.locale} browse={browse}
       messages={view.zoneMessages} avatarQuery={view.reader.avatarQuery} empty={<EmptyState icon={LibraryBigIcon} title={view.messages.emptyHomeTitle}
         description={view.messages.emptyHomeBody}>
         <LocalizedLink href={view.zone.links.about} className={buttonVariants({ variant: 'outline' })}>
           {view.messages.seeAbout}</LocalizedLink>
-      </EmptyState>} />;
+      </EmptyState>} /></div>;
   });
 }
 

@@ -20,13 +20,15 @@ import { PageContainer, PageHeader } from '../shell/page.tsx';
 import { communityText as words } from './messages.ts';
 import { DirectoryTopicFilter } from './topics.tsx';
 
-type Sort = 'activity' | 'members' | 'newest';
+type Sort = 'activity' | 'members' | 'newest' | 'growing';
 type Search = Record<string, string | string[] | undefined>;
-const sorts: Record<Sort, keyof typeof words> = { activity: 'active', members: 'popular', newest: 'new' };
+const sorts: Record<Sort, keyof typeof words> = { activity: 'active', members: 'popular',
+  newest: 'new', growing: 'growing' };
 
 export function directoryQuery(search: Search) {
   const q = typeof search.q === 'string' ? search.q.trim().slice(0, 80) : '';
-  const sort: Sort = search.sort === 'members' || search.sort === 'newest' ? search.sort : 'activity';
+  const sort: Sort = search.sort === 'members' || search.sort === 'newest' || search.sort === 'growing'
+    ? search.sort : 'activity';
   const cursor = typeof search.cursor === 'string' && search.cursor.length <= 2048 ? search.cursor : undefined;
   const topic = typeof search.topic === 'string' && /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(search.topic)
     ? search.topic : undefined;
@@ -74,10 +76,11 @@ export async function CommunityDirectory({ locale, search }: { locale: UiLocale;
       <form action={localizedPath('/r', locale)} className="flex min-w-0 basis-full gap-2 sm:max-w-xl sm:flex-1 sm:basis-auto">
         {sort !== 'activity' ? <input type="hidden" name="sort" value={sort} /> : null}
         {topic ? <input type="hidden" name="topic" value={topic} /> : null}
-        <label className="min-w-0 flex-1 space-y-1 text-sm font-medium">
-          <span className="sr-only">{words.search[locale]}</span>
-          <Input type="search" name="q" defaultValue={q} maxLength={80} placeholder={words.search[locale]} />
-        </label>
+        <div className="min-w-0 flex-1 space-y-1 text-sm font-medium">
+          <label htmlFor="directory-search" className="sr-only">{words.search[locale]}</label>
+          <Input id="directory-search" type="search" name="q" defaultValue={q} maxLength={80}
+            placeholder={words.search[locale]} />
+        </div>
         <button type="submit" className={buttonVariants({ variant: 'outline' })}>
           <SearchIcon aria-hidden="true" className="size-4" />{words.searchAction[locale]}</button>
       </form>
