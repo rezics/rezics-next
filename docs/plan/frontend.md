@@ -144,6 +144,19 @@ the route. Signed out, a language select and a theme button sit in the header;
 signed in, they live in the avatar menu and settings. Zones may carry their
 own themes, which people can turn off.
 
+**Natively multilingual, not bilingual** (manager, 2026-09-28, after the
+maintainer's review and a full audit found en and zh-Hans complete and the six
+other locales about a quarter English). Every UI string ships in all eight
+locales in the change that adds it; a missing key fails the check instead of
+falling back silently. Content takes any BCP 47 language: no shape, enum,
+check constraint or seed type may fix a set of languages, and no text is
+stamped `en` unless it is English. Server-sent text (email, notifications,
+consent) is written in the recipient's locale. Search analyzes each language
+on its own terms (CJK segmentation, Simplified/Traditional folding, accent
+folding). The demo seed is native too: Works, people, communities and reviews
+in several languages with translated titles and more than one language version,
+each in its own language, never two glued together.
+
 **Names show in the reader's language, one at a time** (maintainer,
 2026-09-28, after "Fiction · 小说" appeared site-wide). Realm, Zone,
 Organization and Concept names, rule titles and descriptions are stored per
