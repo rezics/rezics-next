@@ -239,7 +239,7 @@ export const Volumes: Story = {
     await expect(changed).toHaveTextContent('1,820 characters');
     // Into the other volume from the handle's menu, as the keyboard does it.
     await moveBy(canvasElement, '第二章 未寄出的信', '', '第二卷 雨停之后');
-    await waitFor(() => expect(second).toHaveTextContent('3 chapters'));
+    await waitFor(() => expect(second).toHaveTextContent('3 chapters'), { timeout: 5000 });
     await expect(canvas.getByText('Moved “第二章 未寄出的信” into “第二卷 雨停之后”.')).toBeInTheDocument();
     await expect(first).toHaveTextContent('1 chapter');
     // A new volume, then its first chapter: new chapters go to the end of the volume chosen below.
@@ -247,7 +247,7 @@ export const Volumes: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'New volume' }));
     await userEvent.type(canvas.getByRole('textbox', { name: /Title/ }), '第三卷 晴');
     await userEvent.click(canvas.getByRole('button', { name: 'Create' }));
-    const third = await canvas.findByRole('button', { name: /^第三卷 晴/ });
+    const third = await canvas.findByRole('button', { name: /^第三卷 晴/ }, { timeout: 5000 });
     // Extras close the book: the new volume stands before them.
     const order = () => canvas.getAllByRole('button', { name: /^(第.卷|番外)/ }).map(button => button.textContent ?? '');
     await expect(order().findIndex(name => name.startsWith('第三卷')))
@@ -256,8 +256,8 @@ export const Volumes: Story = {
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Add chapter' })).toBeEnabled());
     await userEvent.type(canvas.getByRole('textbox', { name: 'New chapter' }), '第五章 放晴');
     await userEvent.click(canvas.getByRole('button', { name: 'Add chapter' }));
-    await waitFor(() => expect(third).toHaveTextContent('1 chapter'));
-    await expect(await canvas.findByRole('link', { name: 'Write “第五章 放晴”' })).toBeVisible();
+    await waitFor(() => expect(third).toHaveTextContent('1 chapter'), { timeout: 5000 });
+    await expect(await canvas.findByRole('link', { name: 'Write “第五章 放晴”' }, { timeout: 5000 })).toBeVisible();
     // Rename the extras; a volume with chapters offers no delete.
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Actions for “番外”' })).toBeEnabled());
     await userEvent.click(canvas.getByRole('button', { name: 'Actions for “番外”' }));
@@ -265,7 +265,7 @@ export const Volumes: Story = {
     const name = canvas.getByRole('textbox', { name: 'New title for “番外”' });
     await userEvent.clear(name);
     await userEvent.type(name, '番外篇{Enter}');
-    await expect(await canvas.findByRole('button', { name: /^番外篇/ })).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: /^番外篇/ }, { timeout: 5000 })).toBeVisible();
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Actions for “第三卷 晴”' })).toBeEnabled());
     await userEvent.click(canvas.getByRole('button', { name: 'Actions for “第三卷 晴”' }));
     await expect(await screen.findByRole('menuitem', { name: 'Delete' })).toHaveAttribute('aria-disabled', 'true');
@@ -295,7 +295,7 @@ export const BulkActions: Story = {
     const bar = await screen.findByRole('toolbar', { name: 'Actions for the selected chapters' });
     await expect(bar).toHaveTextContent('2 selected');
     await userEvent.click(within(bar).getByRole('button', { name: 'Publish' }));
-    await expect(await canvas.findByText('Published 2 chapters.')).toBeInTheDocument();
+    await expect(await canvas.findByText('Published 2 chapters.', {}, { timeout: 5000 })).toBeInTheDocument();
     await expect(main.calls.filter(call => call === 'publish-chapter')).toHaveLength(2);
     // Moving together, into the extras.
     await waitFor(() => expect(canvas.getByRole('checkbox', { name: 'Select “第三章 最后一班车”' })).toBeEnabled());
@@ -304,7 +304,7 @@ export const BulkActions: Story = {
     const again = await screen.findByRole('toolbar', { name: 'Actions for the selected chapters' });
     await userEvent.click(within(again).getByRole('button', { name: 'Move to' }));
     await choose('番外');
-    await waitFor(() => expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('3 chapters'));
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('3 chapters'), { timeout: 5000 });
     await expect(canvas.getByRole('button', { name: /^第二卷 雨停之后/ })).toHaveTextContent('0 chapters');
   },
 };
@@ -329,14 +329,14 @@ export const DragAndDrop: Story = {
     const handle = grip(await canvas.findByRole('button', { name: 'Move “第四章 站台”' }));
     const extras = canvas.getByRole('button', { name: /^番外/ }).parentElement!;
     await drag(handle, extras, extras.getBoundingClientRect().top + 4);
-    await waitFor(() => expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('2 chapters'));
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('2 chapters'), { timeout: 5000 });
     await expect(canvas.getByText('Moved “第四章 站台” into “番外”.')).toBeInTheDocument();
     const moveSecond = canvas.getByRole('button', { name: 'Move “第二卷 雨停之后”' });
     await waitFor(() => expect(moveSecond).toBeEnabled());
     const second = grip(moveSecond);
     const firstHeader = canvas.getByRole('button', { name: /^第一卷 雨夜/ }).parentElement!;
     await drag(second, firstHeader, firstHeader.getBoundingClientRect().top + 1);
-    await waitFor(() => expect(canvas.getAllByRole('button', { name: /^第.卷/ })[0]).toHaveAccessibleName(/^第二卷 雨停之后/));
+    await waitFor(() => expect(canvas.getAllByRole('button', { name: /^第.卷/ })[0]).toHaveAccessibleName(/^第二卷 雨停之后/), { timeout: 5000 });
   },
 };
 

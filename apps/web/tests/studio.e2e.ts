@@ -258,7 +258,7 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     await page.reload();
     // Numbers run through the book in reading order: the chapter left at the top level stands before the volumes.
     await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('2 chapters');
-    await expect(chapters.getByRole('listitem').filter({ hasText: '第四章 站台' })).toContainText('4');
+    await expect(chapters.getByRole('listitem').filter({ hasText: '第四章 站台' }).last()).toContainText('4');
     await shoot(page, info, 'studio-volumes');
 
     // The book's introduction is its own text: what readers see first and what a Realm reviews.
