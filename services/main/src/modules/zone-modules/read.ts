@@ -12,6 +12,14 @@ import { readPublicHubCards } from '../hub/public-card.ts';
 import { ZONE_MODULE_COST } from './contract.ts';
 
 type Kind = 'new-adoptions' | 'recently-completed';
+
+/** A placement label in the reader's language, else its base language, else the first; placeholders name nothing. */
+export function chapterLabel(labels: readonly { value: string; language: string }[], language: string) {
+  const wanted = language.toLowerCase();
+  const label = labels.find(item => item.language.toLowerCase() === wanted)
+    ?? labels.find(item => item.language.toLowerCase().split('-')[0] === wanted.split('-')[0]) ?? labels[0];
+  return label && !/^(?:untitled chapter|未命名章节)$/iu.test(label.value.trim()) ? label : null;
+}
 function cursorOrder(value: string) {
   const parts = value.split(':');
   if (parts.length !== 2 || !parts.every(part => /^\d+$/.test(part))) {
@@ -154,7 +162,7 @@ export async function readZoneDecisions(session: WorkReadSession, realm: string)
 
 /** Current public chapter publications only. The graph relation may scan D
  * placements and sort them O(D log D); hydration is bounded to one page, and
- * one more summary batch and one serial time batch name and date its chapters. */
+ * one label query and one Content receipt read name and date its chapters. */
 export async function readZoneChapters(session: WorkReadSession, realm: string) {
   await readRealmBasis(session, realm);
   const limit = session.options.limit ?? ZONE_MODULE_COST.pageSize;
@@ -162,8 +170,8 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const order = cursor ? cursorOrder(cursor.order) : null;
   const epochs = await readEpochOrder(session);
-  const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?chapter ?publication
-    ?contentRevision ?language ?revisionEpoch ?sequence ?epochOrder WHERE {
+  const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?chapter ?placement ?publication
+    ?contentRevision ?language ?revisionEpoch ?sequence ?epochOrder ?ownerEpoch ?ownerSequence WHERE {
     ${epochs}
     GRAPH ${iri(GRAPHS.current)} {
       ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
@@ -186,6 +194,7 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
       ?publication a rv:ContentPublicationDecision, rv:RevisionAnchor ;
         rv:resource ?chapter ; rv:component ?variant ; rv:contentRevision ?contentRevision ;
         rv:contentLanguage ?language ; rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence .
+      OPTIONAL { ?publication rv:ownerDataEpoch ?ownerEpoch ; rv:ownerSequence ?ownerSequence }
       ?eligibility a rv:ContentSearchEligibilityDecision ;
         rv:publicationDecision ?publication ; rv:disclosure rv:Public .
       FILTER NOT EXISTS { ?contentRevision a rv:ErasedRevision } }
@@ -194,7 +203,7 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
       && (?sequence < ${order[1]} || (?sequence = ${order[1]}
         && STR(?publication) > ${lit(cursor.after)}))))` : ''}
   } ORDER BY ?epochOrder DESC(?sequence) STR(?publication) LIMIT ${limit + 1}`, limit + 1);
-  if (rows.some(row => !row.work || !row.head || !row.main || !row.chapter || !row.publication
+  if (rows.some(row => !row.work || !row.head || !row.main || !row.chapter || !row.placement || !row.publication
     || !row.contentRevision || !row.language || !row.revisionEpoch
     || !/^\d+$/.test(row.sequence?.value ?? '') || !/^\d+$/.test(row.epochOrder?.value ?? ''))
     || new Set(rows.map(row => row.publication!.value)).size !== rows.length) {
@@ -232,17 +241,34 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
     dataEpoch: row.revisionEpoch!.value, sequence: row.sequence!.value };
   }));
   const visible = hydrated.filter((item): item is NonNullable<typeof item> => item !== null);
-  const chapters = [...new Set(visible.map(item => item.chapter))];
-  const [names, chapterNames, times] = await Promise.all([
+  const placements = [...new Set(page.map(row => row.placement!.value))];
+  const owned = page.flatMap(row => row.ownerEpoch && row.ownerSequence
+    ? [{ epoch: row.ownerEpoch.value, sequence: row.ownerSequence.value }] : []);
+  const [names, labelRows, times] = await Promise.all([
     zoneCreditNames(session, visible.flatMap(item => item.work.primaryCredits)),
-    session.summaries(chapters),
-    session.deps.serialStats?.chapterTimes(chapters, session.position.sequence) ?? new Map<string, string>()]);
+    placements.length ? session.query(`SELECT ?placement ?label WHERE {
+      VALUES ?placement { ${placements.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?placement rv:occurrenceLabel ?label } }
+      LIMIT ${ZONE_MODULE_COST.chapterLabelRows + 1}`, ZONE_MODULE_COST.chapterLabelRows) : [],
+    session.deps.serialStats?.publicationTimes(owned) ?? new Map<string, string>()]);
+  // A chapter is named as the Book's contents name it: its placement's label in the reader's language.
+  const labels = new Map<string, { value: string; language: string }[]>();
+  for (const row of labelRows) {
+    if (!row.placement || !row.label?.['xml:lang']) throw new WorkReadUnavailable('Chapter label is incomplete');
+    labels.set(row.placement.value, [...labels.get(row.placement.value) ?? [],
+      { value: row.label.value, language: row.label['xml:lang'] }]);
+  }
+  const ofPublication = new Map(page.map(row => [row.publication!.value, row]));
   const items = visible.map(item => {
-    const chapter = chapterNames[chapters.indexOf(item.chapter)];
+    const row = ofPublication.get(item.publication)!;
+    const label = chapterLabel(labels.get(row.placement!.value) ?? [], item.language);
     return { ...item, work: { ...item.work,
       primaryCredits: displayZoneCredits(item.work.primaryCredits, names.agents, names.sources) },
-    chapterTitle: chapter?.status === 'available' && chapter.disclosure === 'public' ? chapter.name : null,
-    chapterUpdatedAt: times.get(item.chapter) ?? null };
+    chapterTitle: label ? { value: label.value, language: label.language, direction: 'ltr' as const,
+      basis: label.language.toLowerCase() === item.language.toLowerCase() ? 'requested' as const : 'fallback' as const }
+      : null,
+    chapterUpdatedAt: row.ownerEpoch && row.ownerSequence
+      ? times.get(`${row.ownerEpoch.value}:${row.ownerSequence.value}`) ?? null : null };
   });
   await readRealmBasis(session, realm);
   const last = page.at(-1);

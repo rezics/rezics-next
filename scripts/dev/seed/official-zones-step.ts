@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { derivedId } from '../../../services/main/src/modules/structure/graph.ts';
 import { SeedApiError } from './api.ts';
 import { grantRealmProfileSeed, officialModClient, realmProfileClient } from './official-authority.ts';
-import { editorList, extraWorks, fictionQuotes, fictionWorks, officialHubItems, officialMods,
+import { editorList, extraWorks, fabricApi, fictionQuotes, fictionWorks, laterModReleases, officialHubItems, officialMods,
   type OfficialRealmId, penNames, publicTexts, realmProfiles, zoneContent } from './official-plan.ts';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantImportedContributionSeedAuthority,
   type LocalOperatorInput } from './operator.ts';
@@ -341,6 +341,34 @@ async function mods(o: Official) {
       await api.post(`/v1/package-resolutions/mods/${short(resolved.resolution.resolution)}/work-binding`,
         { work: target.work.work, actingSubject: as.actingSubject }, token,
         seedKey('official-mod-binding', item.id));
+    });
+  }
+  const capture = (identity: string, text: string) => {
+    const bytes = Buffer.from(text);
+    return { identity, surface: 'manifest', status: 'observed' as const, bytesBase64: bytes.toString('base64'),
+      sha256: createHash('sha256').update(bytes).digest('hex') };
+  };
+  // Later releases list beside the first: the versions, dependencies and notes a mod page shows.
+  for (const later of laterModReleases) {
+    const item = officialMods.find(mod => mod.id === later.mod)!;
+    const key = `${item.id}:${later.release}:${later.gameVersion}`;
+    await refreshSeedTokens(o.state);
+    await o.state.optional(`Mod release ${key}`, async () => {
+      const token = await api.token(as.cookie);
+      const target = o.works.get(item.id);
+      if (!target?.published) throw new Error(`Mod Work ${item.id} is not public`);
+      const manifest = JSON.stringify({ schemaVersion: 1, id: item.nativeId, version: later.release,
+        ...later.environment ? { environment: later.environment } : {}, depends: later.depends ?? {},
+        ...later.recommends ? { recommends: later.recommends } : {}, ...later.breaks ? { breaks: later.breaks } : {} });
+      const resolved = await api.post<{ resolution: { resolution: string } }>(
+        '/v1/package-resolutions/mods', { profile: 'mod-native-capture-v1', ecosystem: item.ecosystem,
+          side: 'CLIENT', root: item.nativeId, runtime: { loaderVersion: '0.16.10', gameVersion: later.gameVersion },
+          captures: [capture(item.nativeId, manifest), capture(fabricApi.id,
+            JSON.stringify({ schemaVersion: 1, id: fabricApi.id, version: fabricApi.version }))] },
+        token, seedKey('official-mod-release-resolution', key));
+      await api.post(`/v1/package-resolutions/mods/${short(resolved.resolution.resolution)}/work-binding`,
+        { work: target.work.work, actingSubject: as.actingSubject, changelog: later.changelog }, token,
+        seedKey('official-mod-release-binding', key));
     });
   }
 }

@@ -254,6 +254,26 @@ export const officialMods = [
   { id: 'quiet-forge', ecosystem: 'forge', nativeId: 'quietvillagers', release: '1.0.2' },
 ] as const;
 
+/** The captured Fabric API the later Fabric releases need, so their captures resolve. */
+export const fabricApi = { id: 'fabric-api', version: '0.102.0' } as const;
+
+/**
+ * Releases bound after each mod's first, in order: what a mod page lists under
+ * Versions, with the dependencies its manifest declares and the owner's notes.
+ */
+export const laterModReleases: readonly { mod: (typeof officialMods)[number]['id']; release: string;
+  gameVersion: string; environment?: 'client' | 'server'; depends?: Record<string, string>;
+  recommends?: Record<string, string>; breaks?: Record<string, string>; changelog: string }[] = [
+  { mod: 'lumen-fabric', release: '1.3.1', gameVersion: '1.21.1', environment: 'client',
+    depends: { 'fabric-api': '>=0.100.0' }, recommends: { modmenu: '*' }, breaks: { optifabric: '*' },
+    changelog: 'Lanterns glow warmer at night.\nFixes flicker next to water.' },
+  { mod: 'lumen-fabric', release: '1.3.1', gameVersion: '1.20.1', environment: 'client',
+    depends: { 'fabric-api': '>=0.90.0' }, changelog: 'The same lanterns, backported to Minecraft 1.20.1.' },
+  { mod: 'tidy-fabric', release: '2.1.0', gameVersion: '1.21.1',
+    depends: { 'fabric-api': '*' }, recommends: { 'cloth-config': '>=15' },
+    changelog: 'Sorting works on servers too: install it on both sides to sort shared chests.' },
+];
+
 export const officialHubItems = [
   { id: 'club-prompt-v1', kind: 'prompt', name: 'book-club-discussion',
     content: 'Read the following book club notes. List three questions the group disagreed on. For each, quote a short phrase from the notes and explain both views. If the notes do not support three disagreements, say how many you found.\n\nNotes: {{notes}}' },

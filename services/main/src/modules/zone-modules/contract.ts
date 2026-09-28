@@ -17,7 +17,7 @@ export const zoneHubCard = t.Object({ profile: t.Literal('hub-work-card-v1'),
   preview: t.String({ maxLength: 240 }), copyText: t.String({ maxLength: 65_536 }) });
 
 export const ZONE_MODULE_COST = { pageSize: 20, candidateRows: 21, typeRows: 160, creditsPerWork: 3,
-  serialHeads: 20, summaryBatches: 2, chapterSummaryBatches: 1, chapterTimeBatches: 1, replyReviewChecks: 40, contentRevisions: 20,
+  serialHeads: 20, summaryBatches: 2, chapterLabelRows: 160, chapterTimeBatches: 1, replyReviewChecks: 40, contentRevisions: 20,
   contentBytes: 20 * 1_048_576, creditQueries: 20, retainedAuthorKeys: 60,
   graphCalls: 160, graphBytes: 4 * 1024 * 1024,
   deadlineMs: 10_000 } as const;
@@ -36,9 +36,9 @@ export const zoneDecisionPage = t.Object({ profile: t.Literal('zone-recent-decis
 export const zoneChapterPage = t.Object({ profile: t.Literal('zone-latest-chapters-v1'), realm: readId,
   items: t.Array(t.Object({ work: t.Object({ ...workCard.properties,
     primaryCredits: t.Array(discoveryCredit, { maxItems: ZONE_MODULE_COST.creditsPerWork }) }), chapter: readId,
-    /** The chapter's own title in the requested language; null when it has no public name. */
+    /** The chapter's title as the Book's contents label it, in the requested language; null when unlabelled. */
     chapterTitle: t.Nullable(readName),
-    /** When Content recorded the chapter's current text; null until the serial projection has it. */
+    /** When the Content owner recorded this publication; null when Main cannot read its receipt. */
     chapterUpdatedAt: t.Nullable(t.String({ format: 'date-time' })), publication: readId,
     contentRevision: t.String(), language: t.String(), dataEpoch: t.String(), sequence: t.String() }),
   { maxItems: ZONE_MODULE_COST.pageSize }), ...pageFields });

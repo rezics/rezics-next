@@ -300,25 +300,20 @@ export class SerialStatisticsProjection {
       lastUpdatedAt: row.last_updated_at?.toISOString() ?? null } ] as const] : []));
   }
 
-  /** When Content recorded each chapter resource's current text; one indexed join for at most 20 chapters. */
-  async chapterTimes(chapters: readonly string[], graphSequence?: string): Promise<Map<string, string>> {
-    if (chapters.length > 20 || new Set(chapters).size !== chapters.length
-      || chapters.some(chapter => !ID.test(chapter))) throw new SerialProjectionUnavailable('Chapter time batch is invalid');
-    if (!chapters.length) return new Map();
-    const head = (await this.relay.query<{ sequence: string }>(
-      `SELECT coalesce(max(sequence),0)::text AS sequence FROM relay.delivered_batch WHERE data_epoch = $1`,
-      [this.env.lineage.dataEpoch])).rows[0]!.sequence;
-    const result = await this.access.query<{ graph_epoch: string; sequence: string; resource: string | null;
-      updated_at: Date | null }>(`SELECT c.graph_epoch, c.sequence::text, t.resource, t.updated_at
-      FROM access.serial_stats_checkpoint c LEFT JOIN LATERAL (
-        SELECT ch.resource, max(w.updated_at) AS updated_at FROM access.serial_chapter ch
-        JOIN access.serial_content_words w ON w.generation = ch.generation AND w.variant = ch.variant
-        WHERE ch.generation = c.generation AND ch.resource = ANY($1::text[]) GROUP BY ch.resource) t ON true
-      WHERE c.singleton`, [chapters]);
-    const first = result.rows[0];
-    if (!first || first.graph_epoch !== this.env.lineage.dataEpoch || first.sequence !== head
-      || graphSequence !== undefined && first.sequence !== graphSequence) return new Map();
-    return new Map(result.rows.flatMap(row => row.resource && row.updated_at
-      ? [[row.resource, row.updated_at.toISOString()] as const] : []));
+  /**
+   * When the Content owner recorded each publication: the receipt at its owner
+   * position, the same source time the projection records. One unique-index read
+   * for at most 20 positions, independent of the projection's own progress.
+   */
+  async publicationTimes(positions: readonly { epoch: string; sequence: string }[]): Promise<Map<string, string>> {
+    if (positions.length > 20 || positions.some(position => !/^[0-9a-f-]{36}$/.test(position.epoch)
+      || !/^[1-9][0-9]{0,18}$/.test(position.sequence))) throw new SerialProjectionUnavailable('Publication time batch is invalid');
+    if (!positions.length) return new Map();
+    const rows = (await this.content.query<{ data_epoch: string; sequence: string; created_at: Date }>(
+      `SELECT r.data_epoch::text, r.sequence::text, r.created_at FROM content.receipt r
+       JOIN unnest($1::uuid[], $2::bigint[]) AS p(data_epoch, sequence)
+         ON r.data_epoch = p.data_epoch AND r.sequence = p.sequence`,
+    [positions.map(position => position.epoch), positions.map(position => position.sequence)])).rows;
+    return new Map(rows.map(row => [`${row.data_epoch}:${row.sequence}`, row.created_at.toISOString()]));
   }
 }

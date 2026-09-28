@@ -44,7 +44,7 @@ function session(options: { cursor?: string; candidate?: boolean; privateRealm?:
       if (body.includes('rv:RestoreCutover')) return [];
       if (body.includes('SELECT DISTINCT ?work ?head ?main ?chapter')) return options.chapter ? [{
         work: binding(work), head: binding(revision), main: binding(realm), chapter: binding(chapter),
-        publication: binding(revision), contentRevision: binding(revision), language: binding('en'),
+        placement: binding(chapter), publication: binding(revision), contentRevision: binding(revision), language: binding('en'),
         revisionEpoch: binding('epoch'), sequence: binding('4'), epochOrder: binding('0'),
       }] : [];
       if (body.includes('SELECT DISTINCT ?work ?head')) return options.candidate ? [{
