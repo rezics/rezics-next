@@ -21,7 +21,7 @@ import { formatDay } from './format.ts';
 import { statusLabel } from './labels.ts';
 import { useLibrary } from './library-context.tsx';
 import type { LibraryMessages } from './messages.ts';
-import { OwnRating, ReadDates, ReadingProgress, ReviewCell } from './row-parts.tsx';
+import { OwnRating, PrivateReviewCell, ReadDates, ReadingProgress, ReviewCell } from './row-parts.tsx';
 import { type LibraryShelf, libraryHref, parseLibraryState, statusShelves } from './state.ts';
 import type { CustomShelf, LibraryRow, ShelfStatus } from './types.ts';
 
@@ -87,6 +87,7 @@ function Row({ row, selecting, selected, onSelect, now, avatarQuery, locale, mes
         {row.stateRead && (row.status === 'read' || row.rating !== null)
           ? <OwnRating row={row} locale={locale} messages={messages} /> : null}
         {row.status === 'read' ? <ReviewCell row={row} locale={locale} messages={messages} /> : null}
+        {row.status === 'read' ? <PrivateReviewCell row={row} locale={locale} messages={messages} /> : null}
         <RowMeta row={row} now={now} locale={locale} t={t} />
       </div>
       <div className="col-start-2 mt-3 self-start sm:col-start-3 sm:mt-0">

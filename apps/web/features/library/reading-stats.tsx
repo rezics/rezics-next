@@ -19,8 +19,8 @@ export function ReadingStats({ stats, locale, messages }: { stats: Loaded<Readin
         <span>{t.booksFinished({ count: number(data.books) })}</span>
         <span>{t.chaptersFinished({ count: number(data.chapters) })}</span></p>
     </div>
-    <div className="-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
-      <ol aria-label={title} className="grid min-w-[36rem] grid-cols-12 gap-2 sm:min-w-0">
+    <div>
+      <ol aria-label={title} className="grid grid-cols-6 gap-x-1 gap-y-4 sm:grid-cols-12 sm:gap-2">
         {data.months.map(month => {
           const name = new Intl.DateTimeFormat(locale, { month: 'short', timeZone: 'UTC' })
             .format(new Date(Date.UTC(data.year, month.month - 1, 1)));

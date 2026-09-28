@@ -21,6 +21,8 @@ export const READING_STATS_COST = { finishedWorks: 240, completedOccurrences: 24
   sqlStatements: 2 } as const;
 export interface ReadingMonth { month: number; books: number; chapters: number }
 export interface ReadingYear { year: number; books: number; chapters: number; months: ReadingMonth[] }
+export interface PrivateImportReview { work: string; text: string; language: string;
+  spoiler: boolean; version: number; changedAt: string; replayed?: boolean }
 
 const columns = `work, status, started_on::text AS started_on, finished_on::text AS finished_on,
   version::text AS version, changed_at::text AS changed_at`;
@@ -42,6 +44,71 @@ function validDate(value: string | null) {
  * Reads use one indexed batch; writes serialize the key and exact status row. */
 export class ReaderLibraryStatusStore {
   constructor(private readonly pool: Pool) {}
+
+  async privateReviews(agent: string, works: string[]): Promise<PrivateImportReview[]> {
+    if (!ID.test(agent) || works.length > 24 || new Set(works).size !== works.length
+      || works.some(work => !ID.test(work))) throw new InvalidLibraryStatus('invalid private review batch');
+    if (!works.length) return [];
+    const rows = await this.pool.query<{ work: string; body: string; language: string; spoiler: boolean;
+      version: string; changed_at: string }>(`
+      SELECT work, body, language, spoiler, version::text AS version, changed_at::text AS changed_at
+      FROM reader.private_import_review WHERE agent = $1 AND work = ANY($2::text[])`, [agent, works]);
+    return rows.rows.map(row => ({ work: row.work, text: row.body, language: row.language,
+      spoiler: row.spoiler, version: Number(row.version), changedAt: row.changed_at }));
+  }
+
+  async putPrivateReview(input: { agent: string; work: string; text: string; language: string;
+    spoiler: boolean; expectedVersion: number; idempotencyKey: string }): Promise<PrivateImportReview> {
+    if (!ID.test(input.agent) || !ID.test(input.work) || !KEY.test(input.idempotencyKey)
+      || input.text.trim() !== input.text || input.text.length < 1 || input.text.length > 8000
+      || !/^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(input.language)
+      || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
+      throw new InvalidLibraryStatus('invalid private review command');
+    }
+    const digest = createHash('sha256').update(JSON.stringify([input.work, input.text, input.language,
+      input.spoiler, input.expectedVersion])).digest('hex');
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [JSON.stringify(['private-review-key', input.agent, input.idempotencyKey])]);
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [JSON.stringify(['private-review-work', input.agent, input.work])]);
+      const prior = await client.query<{ request_digest: string; result: PrivateImportReview }>(`
+        SELECT request_digest, result FROM reader.private_import_review_command
+        WHERE agent = $1 AND idempotency_key = $2`, [input.agent, input.idempotencyKey]);
+      if (prior.rows[0]) {
+        if (prior.rows[0].request_digest !== digest) throw new LibraryStatusConflict('review key has another intent');
+        await client.query('COMMIT');
+        return { ...prior.rows[0].result, replayed: true };
+      }
+      const current = await client.query<{ version: string }>(`
+        SELECT version::text AS version FROM reader.private_import_review
+        WHERE agent = $1 AND work = $2 FOR UPDATE`, [input.agent, input.work]);
+      const version = Number(current.rows[0]?.version ?? 0);
+      if (version !== input.expectedVersion) throw new StaleLibraryStatus('private review changed');
+      const written = await client.query<{ changed_at: string }>(`
+        INSERT INTO reader.private_import_review (agent, work, body, language, spoiler, version)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (agent, work) DO UPDATE SET body = EXCLUDED.body, language = EXCLUDED.language,
+          spoiler = EXCLUDED.spoiler, version = EXCLUDED.version, changed_at = clock_timestamp()
+        RETURNING changed_at::text AS changed_at`,
+      [input.agent, input.work, input.text, input.language, input.spoiler, version + 1]);
+      const result: PrivateImportReview = { work: input.work, text: input.text,
+        language: input.language, spoiler: input.spoiler, version: version + 1,
+        changedAt: written.rows[0]!.changed_at };
+      await client.query(`INSERT INTO reader.private_import_review_command
+        (agent, idempotency_key, request_digest, result) VALUES ($1,$2,$3,$4)`,
+      [input.agent, input.idempotencyKey, digest, JSON.stringify(result)]);
+      await client.query('COMMIT');
+      return { ...result, replayed: false };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
+  }
 
   /** Dated Read statuses and first completed chapter commands are distinct counters.
    * Both inputs have explicit ceilings; the read fails instead of presenting a partial year. */

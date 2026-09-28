@@ -94,6 +94,23 @@ export const ReadHistory: Story = {
   },
 };
 
+/** Imported private review text stays in Library and is labelled with its disclosure. */
+export const PrivateImportedReview: Story = {
+  args: (() => {
+    const state = libraryState({ shelf: 'read' });
+    const view = storyView(state);
+    return { state, reading: [], view: { ok: true as const, data: { ...view,
+      rows: view.rows.map((row, index) => index === 0 ? { ...row, privateReview: { ok: true as const,
+        data: { work: row.work.id, text: 'A note I kept for myself.', language: 'en', spoiler: false,
+          version: 1, changedAt: '2026-06-01T00:00:00Z' } } } : row) } } };
+  })(),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Private review', { exact: false })).toBeVisible();
+    await expect(canvas.getByText('A note I kept for myself.')).toBeVisible();
+  },
+};
+
 /** A Work already rated: the review is written and saved in place, spoiler marked. */
 export const WriteReview: Story = {
   args: { state: libraryState({ shelf: 'read' }), view: { ok: true, data: storyView(libraryState({ shelf: 'read' })) },

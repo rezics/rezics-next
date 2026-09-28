@@ -10,7 +10,8 @@ import { workHref } from '../work-page/route.ts';
 import { dayText, momentText } from './format.ts';
 import { type LibraryShelf, type LibraryState, pageOf, sortLibrary, statusShelves } from './state.ts';
 import type { ContinueItem, CustomShelf, FollowedAuthors, LibraryItem, LibraryOverview, LibraryRow, Loaded,
-  ReaderStateItem, ReadingProgress, ReadingYear, Review, ShelfStatus, StatusShelfItem, YearlyGoal } from './types.ts';
+  PrivateImportReview, ReaderStateItem, ReadingProgress, ReadingYear, Review, ShelfStatus, StatusShelfItem,
+  YearlyGoal } from './types.ts';
 
 // Server reads for `/library`, as the session's Agent. Each region returns
 // its own `Loaded` outcome, so a shelf that cannot load leaves the rest.
@@ -217,6 +218,16 @@ async function readReviews(reader: Reader, rows: readonly LibraryItem[], context
     : answer]));
 }
 
+async function readPrivateReviews(reader: Reader, rows: readonly LibraryItem[]):
+  Promise<Map<string, Loaded<PrivateImportReview | null>>> {
+  const works = rows.filter(row => row.status === 'read').map(row => row.work.id);
+  if (!works.length) return new Map();
+  const answer = await settle(() => reader.main.v1.me['import-reviews'].get({ query: {
+    actingSubject: reader.actingSubject, works: works.join(',') } }));
+  const found = new Map((answer.ok ? answer.data.items : []).map(item => [item.work, item]));
+  return new Map(works.map(work => [work, answer.ok ? { ok: true, data: found.get(work) ?? null } : answer]));
+}
+
 export interface ShelfView {
   shelf: LibraryShelf;
   /** The custom shelf shown; null for the status shelves and All. */
@@ -312,10 +323,11 @@ export async function readShelfView(state: LibraryState, locale: UiLocale): Prom
     states.set(work, item);
   }
   const shown = page.items.map(item => withState(item, states.get(item.work.id)));
-  const [progress, reviews] = await Promise.all([
+  const [progress, reviews, privateReviews] = await Promise.all([
     readProgress(shown, locale),
     state.layout === 'list' && overview.data.ratingContext
       ? readReviews(reader, shown, overview.data.ratingContext) : Promise.resolve(new Map()),
+    state.layout === 'list' ? readPrivateReviews(reader, shown) : Promise.resolve(new Map()),
   ]);
   // Shelf buttons show the status the shelf read gave when Main could not answer the rest.
   const seed: ReaderSeed = Object.fromEntries(shown.flatMap(item => {
@@ -326,7 +338,8 @@ export async function readShelfView(state: LibraryState, locale: UiLocale): Prom
   return { ok: true, data: { shelf: state.shelf, custom, total, page: page.page, pages: page.pages,
     truncated, seed, rows: shown.map(item => ({ ...item,
       ...(item.status === 'reading' ? { progress: progress.get(item.work.id) ?? null } : {}),
-      ...(reviews.has(item.work.id) ? { review: reviews.get(item.work.id) } : {}) })) } };
+      ...(reviews.has(item.work.id) ? { review: reviews.get(item.work.id) } : {}),
+      ...(privateReviews.has(item.work.id) ? { privateReview: privateReviews.get(item.work.id) } : {}) })) } };
 }
 
 /**

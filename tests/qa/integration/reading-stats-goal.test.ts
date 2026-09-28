@@ -12,6 +12,18 @@ test('G414: yearly goal counts dated finishes and preserves idempotent, concurre
   try {
     const status = new ReaderLibraryStatusStore(stack.contentPool);
     const agent = id();
+    const noteWork = id();
+    const privateReview = { agent, work: noteWork, text: 'A private imported review', language: 'en',
+      spoiler: false, expectedVersion: 0, idempotencyKey: randomUUID() };
+    const savedNote = await status.putPrivateReview(privateReview);
+    expect(savedNote).toMatchObject({ text: privateReview.text, version: 1, replayed: false });
+    expect(await status.putPrivateReview(privateReview)).toEqual({ ...savedNote, replayed: true });
+    expect(await status.privateReviews(agent, [noteWork])).toMatchObject([{ text: privateReview.text }]);
+    expect(await status.privateReviews(id(), [noteWork])).toEqual([]);
+    await expect(status.putPrivateReview({ ...privateReview, text: 'Different' }))
+      .rejects.toBeInstanceOf(LibraryStatusConflict);
+    await expect(status.putPrivateReview({ ...privateReview, idempotencyKey: randomUUID() }))
+      .rejects.toBeInstanceOf(StaleLibraryStatus);
     const goal = await status.goal(agent, 2026);
     expect(goal).toEqual({ year: 2026, target: null, completed: 0, version: 0, changedAt: null });
     for (const finishedOn of ['2026-01-12', '2026-12-31', '2025-12-31', null]) {

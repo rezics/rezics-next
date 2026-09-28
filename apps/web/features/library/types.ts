@@ -12,6 +12,7 @@ type Me = MainClient['v1']['me'];
 export type MyShelves = Ok<Me['shelves']['get']>;
 export type YearlyGoal = Ok<Me['reading-goal']['get']>;
 export type ReadingYear = Ok<Me['reading-stats']['get']>;
+export type PrivateImportReview = Ok<Me['import-reviews']['get']>['items'][number];
 export type ShelfStatus = MyShelves['statusShelves'][number]['status'];
 /** A shelf the reader made: a Collection they curate, public or private on its own. */
 export type CustomShelf = MyShelves['items'][number];
@@ -73,6 +74,7 @@ export interface LibraryRow extends LibraryItem {
   progress?: ReadingProgress | null;
   /** The reader's review, only for Read in the list; `undefined` where it was not read. */
   review?: Loaded<Review | null>;
+  privateReview?: Loaded<PrivateImportReview | null>;
 }
 
 /** What Library says about the whole reader library before a shelf is chosen. */

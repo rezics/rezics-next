@@ -65,6 +65,9 @@ const readingStats = t.Object({ year: t.Integer({ minimum: 1900, maximum: 2100 }
   books: t.Integer({ minimum: 0 }), chapters: t.Integer({ minimum: 0 }),
   months: t.Array(t.Object({ month: t.Integer({ minimum: 1, maximum: 12 }),
     books: t.Integer({ minimum: 0 }), chapters: t.Integer({ minimum: 0 }) }), { minItems: 12, maxItems: 12 }) });
+const privateReview = t.Object({ work: readId, text: t.String({ minLength: 1, maxLength: 8000 }),
+  language: t.String(), spoiler: t.Boolean(), version: t.Integer({ minimum: 1 }),
+  changedAt: t.String(), replayed: t.Optional(t.Boolean()) });
 const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500), 503: problemResult(503) };
 const privateHeaders = { 'cache-control': 'private, no-store' };
@@ -80,6 +83,8 @@ export const openApiOperations = {
   '/v1/agents/{id}/shelves/status/{status}/works': { get: { bearer: false } },
   '/v1/me/reading-goal': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
   '/v1/me/reading-stats': { get: { bearer: true } },
+  '/v1/me/import-reviews': { get: { bearer: true } },
+  '/v1/me/import-reviews/{id}': { put: { bearer: true, idempotencyKey: true } },
 } as const;
 
 function failure(error: unknown) {
@@ -217,6 +222,41 @@ export function libraryRoutes(work: MainWorkDependencies) {
         return Response.json(await workRead(work, request, query,
           session => readPublicShelves(session, `https://rezics.com/id/${params.id}`, work.libraryStatus!)),
         { headers: privateHeaders });
+      } catch (error) { return failure(error); }
+    })
+    .get('/v1/me/import-reviews', {
+      query: t.Object({ actingSubject: readId, works: t.String({ minLength: 1, maxLength: 1600 }) },
+        { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(privateReview, { maxItems: 24 }) }), ...errors },
+    }, async ({ request, query }) => {
+      if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
+      try {
+        const works = readWorks(query.works);
+        if (!await reader(request, query.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
+        return Response.json({ items: await work.libraryStatus.privateReviews(query.actingSubject, works) },
+          { headers: privateHeaders });
+      } catch (error) { return failure(error); }
+    })
+    .put('/v1/me/import-reviews/:id', {
+      params: t.Object({ id: readUuid }),
+      body: t.Object({ actingSubject: readId, text: t.String({ minLength: 1, maxLength: 8000 }),
+        language: t.String({ minLength: 2, maxLength: 35 }), spoiler: t.Boolean(),
+        expectedVersion: t.Integer({ minimum: 0 }) }, { additionalProperties: false }),
+      response: { 200: privateReview, ...errors },
+    }, async ({ request, params, body }) => {
+      if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
+      const idempotencyKey = request.headers.get('idempotency-key') ?? '';
+      if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      }
+      try {
+        if (!await reader(request, body.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
+        const workId = `https://rezics.com/id/${params.id}`;
+        await workRead(work, request, { actingSubject: body.actingSubject },
+          session => readWorkBasis(session, workId));
+        return Response.json(await work.libraryStatus.putPrivateReview({ agent: body.actingSubject, work: workId,
+          text: body.text, language: body.language, spoiler: body.spoiler,
+          expectedVersion: body.expectedVersion, idempotencyKey }), { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
     .get('/v1/me/reading-stats', {

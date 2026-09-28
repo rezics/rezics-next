@@ -255,3 +255,16 @@ export function ReviewCell({ row, locale, messages }: { row: LibraryRow; locale:
       prose(review.language))}>{review.text ?? ''}</blockquote>
   </figure>;
 }
+
+export function PrivateReviewCell({ row, locale, messages }: { row: LibraryRow;
+  locale: UiLocale; messages: LibraryMessages }) {
+  const privateReview = row.privateReview;
+  if (!privateReview?.ok || !privateReview.data) return null;
+  const t = materializeData(messages, { locale });
+  return <figure className="grid max-w-2xl gap-1.5 border-border border-s-2 ps-4">
+    <figcaption className="font-medium text-muted-foreground text-xs">
+      {t.privateImportedReview} · {t.privateImportedReviewHelp}</figcaption>
+    <blockquote lang={privateReview.data.language} className="line-clamp-4 whitespace-pre-line text-pretty text-sm">
+      {privateReview.data.text}</blockquote>
+  </figure>;
+}
