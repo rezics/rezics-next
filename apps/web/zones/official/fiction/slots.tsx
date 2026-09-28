@@ -42,10 +42,10 @@ function facts(work: ZoneWork, locale: string, includeStatus = true) {
     work.chapters === null ? null : t.chapters(number(work.chapters))].filter(Boolean);
 }
 
-/** The shared cover or row remains the card; these are the serial facts it does not yet show. */
+/** The shared cover or row remains the card; these are the serial facts it does not show (a row states its own). */
 export function FictionWorkCard({ zone, work, layout, rank, fallback, Link }: WorkCardSlotProps) {
   const t = strings(zone.locale);
-  const details = facts(work, zone.locale, layout !== 'cover' || work.status === 'completed');
+  const details = layout === 'row' ? [] : facts(work, zone.locale, layout !== 'cover' || work.status === 'completed');
   return <div className="fz-work-card" data-layout={layout} data-ranked={rank ? '' : undefined}>
     {fallback}
     {details.length ? <p className="fz-facts">{details.join(' · ')}</p> : null}

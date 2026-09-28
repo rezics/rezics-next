@@ -26,7 +26,8 @@ function facts(work: ZoneWork, locale: string, includeStatus = true) {
 /** Library cards keep the shared cover and add verified length and serial facts. */
 export function BooksWorkCard({ zone, work, layout, rank, fallback, Link }: WorkCardSlotProps) {
   const t = strings(zone.locale);
-  const details = facts(work, zone.locale, layout !== 'cover' || work.status === 'completed');
+  // A platform row states the serial facts itself; covers and rail lines do not.
+  const details = layout === 'row' ? [] : facts(work, zone.locale, layout !== 'cover' || work.status === 'completed');
   return <div className="bz-work-card" data-layout={layout} data-ranked={rank ? '' : undefined}>
     {fallback}
     {details.length ? <p className="bz-facts">{details.join(' · ')}</p> : null}
