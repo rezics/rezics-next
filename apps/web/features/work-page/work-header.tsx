@@ -37,9 +37,11 @@ export function WorkStats({ work, now, locale, messages }: {
 }) {
   const stats = serialStats(work, now, locale, materializeData(messages, { locale }));
   if (stats.length < 2) return null;
+  // On a phone the cells narrow their padding and share what is left, so four facts stay on one line.
   return <dl className="flex flex-wrap justify-center divide-x divide-border/70 rounded-2xl border border-border/60
     py-2.5 lg:justify-start">
-    {stats.map(stat => <div key={stat.term} className="grid min-w-20 gap-0.5 px-4 text-center lg:text-start">
+    {stats.map(stat => <div key={stat.term} className="grid flex-auto gap-0.5 whitespace-nowrap px-2.5 text-center
+      sm:min-w-20 sm:flex-none sm:px-4 lg:text-start">
       <dt className="order-last text-muted-foreground text-xs">{stat.term}</dt>
       <dd className="font-semibold text-base tabular-nums">{stat.value}</dd>
     </div>)}

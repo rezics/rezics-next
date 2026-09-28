@@ -68,10 +68,12 @@ function Group({ icon: Icon, label, items, scope, t }: { icon: LucideIcon; label
 }
 
 /** Goodreads' genres line: a quiet label beside the chips, so the genres read as part of what the Work is. */
-function Genres({ title, children }: { title: string; children: ReactNode }) {
+function Genres({ title, grouped = false, children }: { title: string;
+  /** Groups open with a line saying whose they are, which the label aligns with instead of the chips. */
+  grouped?: boolean; children: ReactNode }) {
   return <section aria-labelledby={CLASSIFICATION_REGION} className="grid min-w-0 gap-x-5 gap-y-2
     sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start">
-    <h2 id={CLASSIFICATION_REGION} className="text-muted-foreground text-sm sm:pt-1.5">{title}</h2>
+    <h2 id={CLASSIFICATION_REGION} className={cn('text-muted-foreground text-sm', !grouped && 'sm:pt-1.5')}>{title}</h2>
     <div className="grid min-w-0 gap-4">{children}</div>
   </section>;
 }
@@ -111,7 +113,7 @@ export function ClassificationRegion({ classifications, view, communities = [], 
     const chosen = communities.filter(group => group.items.length);
     // Nobody has tagged it anywhere: leave the section out, as Goodreads does, rather than lead with an empty box.
     if (!chosen.length) return null;
-    return <Genres title={t.classification}>
+    return <Genres title={t.classification} grouped>
       {chosen.map(group => <Group key={group.realm.id} icon={UsersRoundIcon}
         label={t.decidedIn({ realm: realmLabel(group.realm, messages, locale) })} items={group.items}
         scope={{ kind: 'realm', realm: group.realm.id }} t={t} />)}
@@ -124,7 +126,7 @@ export function ClassificationRegion({ classifications, view, communities = [], 
   }
   const local = items.filter(item => item.source === 'local');
   const inherited = items.filter(item => item.source === 'global');
-  return <Genres title={t.classification}>
+  return <Genres title={t.classification} grouped={view.scope.kind === 'realm'}>
     {view.scope.kind === 'realm' ? <>
       {local.length ? <Group icon={UsersRoundIcon} label={t.decidedIn({ realm: name })} items={local} scope={view.scope}
         t={t} /> : null}

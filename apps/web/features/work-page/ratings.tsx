@@ -110,16 +110,19 @@ export function RatingLine({ ratings, stats, locale, messages }: {
   const t = materializeData(messages, { locale });
   const counts = stats?.ok ? stats.data : null;
   const reading = counts ? <ReadingNow count={counts.reading} locale={locale} t={t} /> : null;
+  const group = 'grid justify-items-center gap-1.5 lg:justify-items-start';
   if (!ratings.ok || ratings.data.summary.status !== 'available' || !ratings.data.summary.scale) return reading;
   const { summary } = ratings.data;
-  if (!summary.count) return <><p className="text-muted-foreground text-sm">{t.noRatingsGlobal}</p>{reading}</>;
+  if (!summary.count) {
+    return <div className={group}><p className="text-muted-foreground text-sm">{t.noRatingsGlobal}</p>{reading}</div>;
+  }
   const reviews = counts?.reviews?.value ? <Link href={`#${REVIEWS_ANCHOR}`} className={countLink}>
     {counted(counts.reviews, t.reviewCount, t.reviewCountAtLeast, locale)}</Link> : null;
-  return <>
+  return <div className={group}>
     <Mean summary={summary} locale={locale} messages={messages} size="md" href={`#${RATINGS_REGION}`} reviews={reviews}
       className="justify-center lg:justify-start" />
     {reading}
-  </>;
+  </div>;
 }
 
 /**
