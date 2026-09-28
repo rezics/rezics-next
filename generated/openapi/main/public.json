@@ -154197,6 +154197,477 @@
         }
       }
     },
+    "/v1/mod-releases/{work}": {
+      "get": {
+        "operationId": "getV1Mod-releasesByWork",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "work",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "capturedAt": {
+                            "type": "string"
+                          },
+                          "changelog": {
+                            "~elyTyp": 7,
+                            "maxLength": 4000,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "dependencies": {
+                            "~elyTyp": 7,
+                            "items": {
+                              "properties": {
+                                "id": {
+                                  "maxLength": 160,
+                                  "type": "string"
+                                },
+                                "range": {
+                                  "~elyTyp": 7,
+                                  "maxLength": 128,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "requirement": {
+                                  "enum": [
+                                    "required",
+                                    "optional",
+                                    "incompatible",
+                                    "embedded"
+                                  ],
+                                  "type": "string"
+                                },
+                                "side": {
+                                  "~elyTyp": 7,
+                                  "enum": [
+                                    "client",
+                                    "server"
+                                  ],
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "requirement",
+                                "range",
+                                "side"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 32,
+                            "nullable": true,
+                            "type": [
+                              "array",
+                              "null"
+                            ]
+                          },
+                          "environment": {
+                            "~elyTyp": 7,
+                            "enum": [
+                              "client",
+                              "server",
+                              "client-and-server"
+                            ],
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "game": {
+                            "const": "Minecraft",
+                            "type": "string"
+                          },
+                          "gameVersions": {
+                            "items": {
+                              "maxLength": 32,
+                              "type": "string"
+                            },
+                            "maxItems": 16,
+                            "type": "array"
+                          },
+                          "loaders": {
+                            "items": {
+                              "enum": [
+                                "Fabric",
+                                "Forge",
+                                "NeoForge"
+                              ],
+                              "type": "string"
+                            },
+                            "maxItems": 3,
+                            "type": "array"
+                          },
+                          "mod": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "ecosystem": {
+                                "enum": [
+                                  "fabric",
+                                  "forge",
+                                  "neoforge"
+                                ],
+                                "type": "string"
+                              },
+                              "id": {
+                                "maxLength": 160,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "ecosystem"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "profile": {
+                            "const": "mod-release-v1",
+                            "type": "string"
+                          },
+                          "publishedAt": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "~elyTyp": 7,
+                            "maxLength": 64,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "profile",
+                          "mod",
+                          "version",
+                          "game",
+                          "gameVersions",
+                          "loaders",
+                          "environment",
+                          "dependencies",
+                          "changelog",
+                          "capturedAt",
+                          "publishedAt"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "mod-releases-v1",
+                      "type": "string"
+                    },
+                    "work": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "work",
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
+      }
+    },
     "/v1/moderation/decisions": {
       "post": {
         "operationId": "postV1ModerationDecisions",
@@ -191140,6 +191611,10 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "changelog": {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
                   "work": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
@@ -191160,6 +191635,10 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "changelog": {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
                   "work": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
@@ -191178,6 +191657,10 @@
                 "properties": {
                   "actingSubject": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "changelog": {
+                    "maxLength": 4000,
                     "type": "string"
                   },
                   "work": {
@@ -296205,6 +296688,1628 @@
         ]
       }
     },
+    "/v1/realms/{realm}/modules/browse": {
+      "get": {
+        "operationId": "getV1RealmsByRealmModulesBrowse",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "realm",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "maxLength": 35,
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "relevance",
+                "newest",
+                "updated"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "items": {
+                "pattern": "^https://[!-~]{1,200}$",
+                "type": "string"
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          {
+            "in": "query",
+            "name": "concept",
+            "required": false,
+            "schema": {
+              "items": {
+                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                "type": "string"
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "ongoing",
+                  "completed",
+                  "hiatus"
+                ],
+                "type": "string"
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          {
+            "in": "query",
+            "name": "length",
+            "required": false,
+            "schema": {
+              "pattern": "^(0|[1-9][0-9]{0,9})-([1-9][0-9]{0,9})?$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "loader",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "Fabric",
+                  "Forge",
+                  "NeoForge"
+                ],
+                "type": "string"
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          {
+            "in": "query",
+            "name": "gameVersion",
+            "required": false,
+            "schema": {
+              "items": {
+                "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$",
+                "type": "string"
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "client",
+                  "server"
+                ],
+                "type": "string"
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "properties": {
+                        "kind": {
+                          "const": "exact-page",
+                          "type": "string"
+                        },
+                        "total": {
+                          "type": "null"
+                        },
+                        "value": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "kind",
+                        "total"
+                      ],
+                      "type": "object"
+                    },
+                    "facets": {
+                      "properties": {
+                        "concept": {
+                          "items": {
+                            "properties": {
+                              "count": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "name": {
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 60,
+                          "type": "array"
+                        },
+                        "length": {
+                          "items": {
+                            "properties": {
+                              "count": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "name": {
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 60,
+                          "type": "array"
+                        },
+                        "modEnvironment": {
+                          "items": {
+                            "properties": {
+                              "count": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "name": {
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 60,
+                          "type": "array"
+                        },
+                        "modGameVersion": {
+                          "items": {
+                            "properties": {
+                              "count": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "name": {
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 60,
+                          "type": "array"
+                        },
+                        "modLoader": {
+                          "items": {
+                            "properties": {
+                              "count": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "name": {
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 60,
+                          "type": "array"
+                        },
+                        "status": {
+                          "items": {
+                            "properties": {
+                              "count": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "name": {
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 60,
+                          "type": "array"
+                        },
+                        "type": {
+                          "items": {
+                            "properties": {
+                              "count": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "name": {
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 60,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "concept",
+                        "status",
+                        "length",
+                        "modLoader",
+                        "modGameVersion",
+                        "modEnvironment"
+                      ],
+                      "type": "object"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "chapterCount": {
+                            "~elyTyp": 7,
+                            "minimum": 0,
+                            "nullable": true,
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "completionStatus": {
+                            "~elyTyp": 7,
+                            "enum": [
+                              "ongoing",
+                              "completed",
+                              "hiatus"
+                            ],
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "cover": {
+                            "anyOf": [
+                              {
+                                "properties": {
+                                  "key": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "fallback",
+                                    "type": "string"
+                                  },
+                                  "policy": {
+                                    "type": "string"
+                                  },
+                                  "resourceType": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "policy",
+                                  "key",
+                                  "resourceType"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "basis": {
+                                    "properties": {
+                                      "context": {
+                                        "type": "string"
+                                      },
+                                      "policy": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "policy",
+                                      "context"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "crop": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "height": {
+                                    "type": "integer"
+                                  },
+                                  "kind": {
+                                    "const": "image",
+                                    "type": "string"
+                                  },
+                                  "mediaType": {
+                                    "type": "string"
+                                  },
+                                  "selection": {
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  },
+                                  "width": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "selection",
+                                  "url",
+                                  "mediaType",
+                                  "width",
+                                  "height",
+                                  "crop",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "dataEpoch": {
+                            "type": "string"
+                          },
+                          "evidence": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "hub": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "copyText": {
+                                "maxLength": 65536,
+                                "type": "string"
+                              },
+                              "declaredModels": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "type": "array"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "prompt",
+                                  "skill-package"
+                                ],
+                                "type": "string"
+                              },
+                              "preview": {
+                                "maxLength": 240,
+                                "type": "string"
+                              },
+                              "profile": {
+                                "const": "hub-work-card-v1",
+                                "type": "string"
+                              },
+                              "testedModels": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "kind",
+                              "declaredModels",
+                              "testedModels",
+                              "preview",
+                              "copyText"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "lastUpdatedAt": {
+                            "~elyTyp": 7,
+                            "format": "date-time",
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "mainVersion": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "mod": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "environment": {
+                                "~elyTyp": 7,
+                                "enum": [
+                                  "client",
+                                  "server",
+                                  "client-and-server"
+                                ],
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "game": {
+                                "const": "Minecraft",
+                                "type": "string"
+                              },
+                              "gameVersions": {
+                                "items": {
+                                  "maxLength": 32,
+                                  "type": "string"
+                                },
+                                "maxItems": 16,
+                                "type": "array"
+                              },
+                              "latestRelease": {
+                                "~elyTyp": 7,
+                                "maxLength": 64,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "loaders": {
+                                "items": {
+                                  "enum": [
+                                    "Fabric",
+                                    "Forge",
+                                    "NeoForge"
+                                  ],
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "profile": {
+                                "const": "mod-work-card-v2",
+                                "type": "string"
+                              },
+                              "updatedAt": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "game",
+                              "gameVersions",
+                              "loaders",
+                              "environment",
+                              "latestRelease",
+                              "updatedAt"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "primaryCredits": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "properties": {
+                                    "agent": {
+                                      "type": "null"
+                                    },
+                                    "confirmation": {
+                                      "const": "source-reported",
+                                      "type": "string"
+                                    },
+                                    "displayName": {
+                                      "~elyTyp": 7,
+                                      "maxLength": 200,
+                                      "minLength": 1,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "handle": {
+                                      "type": "null"
+                                    },
+                                    "id": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "nameSource": {
+                                      "properties": {
+                                        "basis": {
+                                          "const": "facts",
+                                          "type": "string"
+                                        },
+                                        "digest": {
+                                          "type": "string"
+                                        },
+                                        "fetchedAt": {
+                                          "type": "string"
+                                        },
+                                        "field": {
+                                          "const": "/name",
+                                          "type": "string"
+                                        },
+                                        "observation": {
+                                          "type": "string"
+                                        },
+                                        "record": {
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "string"
+                                        },
+                                        "sourceRevision": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "url": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "record",
+                                        "observation",
+                                        "revision",
+                                        "sourceRevision",
+                                        "digest",
+                                        "url",
+                                        "fetchedAt",
+                                        "basis",
+                                        "field"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "ordinal": {
+                                      "type": "integer"
+                                    },
+                                    "participantKind": {
+                                      "const": "external-reference",
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "const": "open-library",
+                                      "type": "string"
+                                    },
+                                    "role": {
+                                      "const": "author",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "role",
+                                    "participantKind",
+                                    "provider",
+                                    "key",
+                                    "ordinal",
+                                    "agent",
+                                    "displayName",
+                                    "handle"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "agent": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "displayName": {
+                                      "maxLength": 200,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "handle": {
+                                      "maxLength": 100,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "id": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "key": {
+                                      "type": "null"
+                                    },
+                                    "ordinal": {
+                                      "type": "null"
+                                    },
+                                    "participantKind": {
+                                      "const": "agent",
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "null"
+                                    },
+                                    "role": {
+                                      "const": "author",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "role",
+                                    "participantKind",
+                                    "provider",
+                                    "key",
+                                    "ordinal",
+                                    "agent",
+                                    "displayName",
+                                    "handle"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "maxItems": 3,
+                            "type": "array"
+                          },
+                          "revision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "type": "string"
+                          },
+                          "tagline": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "basis": {
+                                "enum": [
+                                  "requested",
+                                  "fallback"
+                                ],
+                                "type": "string"
+                              },
+                              "direction": {
+                                "enum": [
+                                  "ltr",
+                                  "rtl"
+                                ],
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "language",
+                              "direction",
+                              "basis"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "title": {
+                            "properties": {
+                              "basis": {
+                                "enum": [
+                                  "requested",
+                                  "fallback"
+                                ],
+                                "type": "string"
+                              },
+                              "direction": {
+                                "enum": [
+                                  "ltr",
+                                  "rtl"
+                                ],
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "language",
+                              "direction",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "types": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "type": "array"
+                          },
+                          "wordCount": {
+                            "~elyTyp": 7,
+                            "minimum": 0,
+                            "nullable": true,
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "revision",
+                          "mainVersion",
+                          "title",
+                          "cover",
+                          "types",
+                          "tagline",
+                          "completionStatus",
+                          "chapterCount",
+                          "wordCount",
+                          "lastUpdatedAt",
+                          "primaryCredits",
+                          "evidence",
+                          "dataEpoch",
+                          "sequence",
+                          "mod",
+                          "hub"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
+                    },
+                    "matches": {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "exact",
+                            "lower-bound"
+                          ],
+                          "type": "string"
+                        },
+                        "value": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "zone-browse-v1",
+                      "type": "string"
+                    },
+                    "query": {
+                      "properties": {
+                        "filter": {
+                          "properties": {
+                            "all": {
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "properties": {
+                                      "any": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 8,
+                                        "minItems": 1,
+                                        "type": "array"
+                                      },
+                                      "facet": {
+                                        "enum": [
+                                          "type",
+                                          "concept",
+                                          "status",
+                                          "modLoader",
+                                          "modGameVersion",
+                                          "modEnvironment"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "facet",
+                                      "any"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "facet": {
+                                        "const": "length",
+                                        "type": "string"
+                                      },
+                                      "range": {
+                                        "properties": {
+                                          "max": {
+                                            "type": "string"
+                                          },
+                                          "min": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "min"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "facet",
+                                      "range"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "maxItems": 7,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "all"
+                          ],
+                          "type": "object"
+                        },
+                        "sort": {
+                          "enum": [
+                            "relevance",
+                            "newest",
+                            "updated"
+                          ],
+                          "type": "string"
+                        },
+                        "text": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "text",
+                        "sort",
+                        "filter"
+                      ],
+                      "type": "object"
+                    },
+                    "realm": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "tags": {
+                      "enum": [
+                        "current",
+                        "stale",
+                        "unavailable"
+                      ],
+                      "type": "string"
+                    },
+                    "window": {
+                      "properties": {
+                        "complete": {
+                          "type": "boolean"
+                        },
+                        "scanned": {
+                          "maximum": 60,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "scanned",
+                        "complete"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "realm",
+                    "query",
+                    "facets",
+                    "tags",
+                    "matches",
+                    "window",
+                    "items",
+                    "nextCursor",
+                    "sourcePosition",
+                    "count"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
+      }
+    },
     "/v1/realms/{realm}/modules/discussions": {
       "get": {
         "operationId": "getV1RealmsByRealmModulesDiscussions",
@@ -297913,6 +300018,51 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "chapterTitle": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "basis": {
+                                "enum": [
+                                  "requested",
+                                  "fallback"
+                                ],
+                                "type": "string"
+                              },
+                              "direction": {
+                                "enum": [
+                                  "ltr",
+                                  "rtl"
+                                ],
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "language",
+                              "direction",
+                              "basis"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "chapterUpdatedAt": {
+                            "~elyTyp": 7,
+                            "format": "date-time",
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "contentRevision": {
                             "type": "string"
                           },
@@ -298330,6 +300480,8 @@
                         "required": [
                           "work",
                           "chapter",
+                          "chapterTitle",
+                          "chapterUpdatedAt",
                           "publication",
                           "contentRevision",
                           "language",
@@ -298962,8 +301114,18 @@
                             "~elyTyp": 7,
                             "nullable": true,
                             "properties": {
-                              "capturedAt": {
-                                "type": "string"
+                              "environment": {
+                                "~elyTyp": 7,
+                                "enum": [
+                                  "client",
+                                  "server",
+                                  "client-and-server"
+                                ],
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "game": {
                                 "const": "Minecraft",
@@ -298971,13 +301133,15 @@
                               },
                               "gameVersions": {
                                 "items": {
+                                  "maxLength": 32,
                                   "type": "string"
                                 },
-                                "maxItems": 1,
+                                "maxItems": 16,
                                 "type": "array"
                               },
                               "latestRelease": {
                                 "~elyTyp": 7,
+                                "maxLength": 64,
                                 "nullable": true,
                                 "type": [
                                   "string",
@@ -298993,11 +301157,14 @@
                                   ],
                                   "type": "string"
                                 },
-                                "maxItems": 1,
+                                "maxItems": 3,
                                 "type": "array"
                               },
                               "profile": {
-                                "const": "mod-work-card-v1",
+                                "const": "mod-work-card-v2",
+                                "type": "string"
+                              },
+                              "updatedAt": {
                                 "type": "string"
                               }
                             },
@@ -299006,8 +301173,9 @@
                               "game",
                               "gameVersions",
                               "loaders",
+                              "environment",
                               "latestRelease",
-                              "capturedAt"
+                              "updatedAt"
                             ],
                             "type": [
                               "object",
@@ -300969,8 +303137,18 @@
                             "~elyTyp": 7,
                             "nullable": true,
                             "properties": {
-                              "capturedAt": {
-                                "type": "string"
+                              "environment": {
+                                "~elyTyp": 7,
+                                "enum": [
+                                  "client",
+                                  "server",
+                                  "client-and-server"
+                                ],
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "game": {
                                 "const": "Minecraft",
@@ -300978,13 +303156,15 @@
                               },
                               "gameVersions": {
                                 "items": {
+                                  "maxLength": 32,
                                   "type": "string"
                                 },
-                                "maxItems": 1,
+                                "maxItems": 16,
                                 "type": "array"
                               },
                               "latestRelease": {
                                 "~elyTyp": 7,
+                                "maxLength": 64,
                                 "nullable": true,
                                 "type": [
                                   "string",
@@ -301000,11 +303180,14 @@
                                   ],
                                   "type": "string"
                                 },
-                                "maxItems": 1,
+                                "maxItems": 3,
                                 "type": "array"
                               },
                               "profile": {
-                                "const": "mod-work-card-v1",
+                                "const": "mod-work-card-v2",
+                                "type": "string"
+                              },
+                              "updatedAt": {
                                 "type": "string"
                               }
                             },
@@ -301013,8 +303196,9 @@
                               "game",
                               "gameVersions",
                               "loaders",
+                              "environment",
                               "latestRelease",
-                              "capturedAt"
+                              "updatedAt"
                             ],
                             "type": [
                               "object",
