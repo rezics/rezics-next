@@ -32,7 +32,10 @@ export const Works: Story = {
     const list = canvas.getByRole('region', { name: 'All works' });
     const items = within(list).getAllByRole('listitem');
     await expect(items).toHaveLength(3);
-    await expect(items[0]).toHaveTextContent(/3 chapters·2 published/);
+    await expect(items[0]).toHaveTextContent(/Book·3 chapters·2 published/);
+    // Studio names each kind as the catalogue does: a DigitalDocument is a Guide.
+    await expect(items[1]).toHaveTextContent(/Guide·English/);
+    await expect(items[2]).toHaveTextContent(/Recipe·English/);
     await expect(items[0]).toHaveTextContent('1 Realm reviewing');
     await expect(within(items[0]!).getByRole('link', { name: 'Chapters' })).toHaveAttribute('href',
       `${home}/works/00000000-0000-4000-8000-000000000101?tab=chapters`);

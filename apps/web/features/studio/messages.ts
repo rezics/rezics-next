@@ -28,7 +28,11 @@ export const messages = {
   emptyBody: 'Start a work and write its first lines. It stays private until you publish it.',
   startWriting: 'Start a new work',
   untitled: 'Untitled work',
-  kindBook: 'Book', kindDocument: 'Story', kindRecipe: 'Recipe', kindChapter: 'Chapter',
+  // A Work's kind in the catalogue's words (the Work page and search call a DigitalDocument a Guide).
+  kindBook: 'Book', kindGuide: 'Guide', kindRecipe: 'Recipe', kindPrompt: 'Prompt', kindSkill: 'Skill', kindMod: 'Mod',
+  kindSoftware: 'Software', kindMedia: 'Media', kindChapter: 'Chapter',
+  // Retired: a DigitalDocument is a Guide (kindGuide). Kept until the other locale catalogs drop it.
+  kindDocument: 'Guide',
   chapterCount: plural({ one: insert('{{count}} chapter'), other: insert('{{count}} chapters') },
     { count: asValue(number()) }),
   chapterCountMore: plural({ other: insert('{{count}}+ chapters') }, { count: asValue(number()) }),
@@ -59,7 +63,7 @@ export const messages = {
   workTitle: 'Title', titleHint: 'Up to 200 characters.',
   workType: 'What are you writing?',
   typeBook: 'A book', typeBookHelp: 'A novel or serial, written chapter by chapter.',
-  typeDocument: 'A story', typeDocumentHelp: 'A short story, an essay or a single piece.',
+  typeDocument: 'A guide', typeDocumentHelp: 'A how-to, an essay, a short story or any other single piece.',
   typeRecipe: 'A recipe', typeRecipeHelp: 'Ingredients and steps.',
   writingLanguage: 'Language you’ll write in',
   createAs: insert('Create as {{agent}}', { agent: String }),
@@ -72,7 +76,7 @@ export const messages = {
   // Work
   backToStudio: 'Studio', backToWork: 'Back to the work', backToChapters: 'Back to the chapters',
   tabsLabel: 'Work sections', tabChapters: 'Chapters', tabRealms: 'Realms',
-  notPublished: 'Not public yet', publicWork: 'Public', viewWork: 'View on REZICS',
+  notPublished: 'Not public yet', publicWork: 'Public', viewWork: 'View on REZICS', loadingTab: 'Loading this section…',
   workMissing: 'This work isn’t available to this identity.',
   workFailed: 'Couldn’t load this work.',
   completionOngoing: 'Ongoing', completionCompleted: 'Completed', completionHiatus: 'On hiatus',
@@ -82,7 +86,10 @@ export const messages = {
   noChapters: 'No chapters yet. Add the first one below.',
   chaptersFailed: 'Couldn’t load the chapters.',
   moreChapters: 'Show more chapters',
-  chapterHidden: 'A chapter this identity can’t open',
+  chapterHidden: 'A private chapter by another writer', chapterUntitled: 'Untitled chapter',
+  // A chapter another of this person's identities writes: it opens in that identity's Studio.
+  writtenAs: insert('Written as {{agent}}', { agent: String }), switchChapter: 'Switch',
+  switchToWrite: insert('Switch to {{agent}} to write “{{title}}”', { agent: String, title: String }),
   chapterChanged: 'Unpublished changes',
   savedWhen: insert('Saved {{time}}', { time: String }),
   writeChapter: 'Write', readChapter: 'Read',

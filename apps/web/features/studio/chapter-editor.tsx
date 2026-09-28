@@ -70,13 +70,15 @@ export function ChapterEditor({ agent, book, chapter: data, locale, messages, de
     const known = readChapterMemory(storage, memoryKey);
     if (!current && known?.publication) setCurrent({ publication: known.publication, eligibility: known.eligibility });
     if (basis.current && !basis.current.epoch && known?.epoch) basis.current = { ...basis.current, epoch: known.epoch };
-    if (data.basis === 'none' && known?.head) router.replace(chapterHref(agent, book.id, data.chapter.id, known.head));
+    if (data.basis === 'none' && known?.head) {
+      router.replace(chapterHref(agent, book.id, data.chapter.id, known.head, data.chapter.language));
+    }
   }, []);
 
   const [store] = useState((): ManuscriptStore => ({
     deviceKey: () => localDraftKey(agent.iri, data.chapter.id, data.variant),
     channel: () => data.variant,
-    href: head => chapterHref(agent, book.id, data.chapter.id, head),
+    href: head => chapterHref(agent, book.id, data.chapter.id, head, data.chapter.language),
     save: (body, head, key) => saveChapterDraft(target, body, head, key, saved => {
       basis.current = saved;
       rememberChapter(storage, memoryKey, { head: saved.head, digest: saved.digest, epoch: saved.epoch,

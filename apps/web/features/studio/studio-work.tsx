@@ -2,6 +2,7 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { Skeleton } from '@rezics/ui/skeleton';
 import { cn } from '@rezics/ui/utils';
 import { ArrowLeftIcon, ExternalLinkIcon, InfoIcon, PenLineIcon, TagIcon } from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
@@ -53,14 +54,13 @@ function Section({ id, title, help, actions, children }: {
   </section>;
 }
 
-function Texts({ agent, work, texts, book, locale, t }: {
-  agent: AgentOption; work: Work; texts: Loaded<MyText[]>; book: boolean; locale: UiLocale; t: T;
+function Texts({ agent, work, language, texts, book, locale, t }: {
+  agent: AgentOption; work: Work; language: string; texts: Loaded<MyText[]>; book: boolean; locale: UiLocale; t: T;
 }) {
   const { header } = work;
   const list = texts.ok ? texts.data : [];
   const written = new Set(list.map(text => text.language.toLowerCase()));
-  const own = canonicalLanguage(header.title.language);
-  const next = [own, locale, ...writingLanguages].find(tag => !written.has(tag.toLowerCase())) ?? 'en';
+  const next = [language, locale, ...writingLanguages].find(tag => !written.has(tag.toLowerCase())) ?? 'en';
   const writeHref = studioHref(agent, `/works/${idOf(header.id)}/write`);
   const state = (text: MyText) => text.publication === 'public' ? <Badge variant="success">{t.statePublished}</Badge>
     : text.publication === 'private' ? <Badge variant="secondary">{t.statePrivate}</Badge>
@@ -137,22 +137,30 @@ function completionText(status: Work['header']['completionStatus'], t: T): strin
   }
 }
 
+interface WorkFrameProps {
+  agent: AgentOption;
+  work: Work;
+  /** The languages the Work is written in, its Main Version's (the Studio Agent's own first). */
+  languages: readonly string[];
+  locale: UiLocale;
+  messages: StudioMessages;
+}
+
 /**
  * One Work in Studio: who sees it and where it stands, then one tab at a time
  * (a Book's chapters, the Work's own text, its details and its Realms). Tabs
- * are addresses, so each opens directly and reads only what it shows.
+ * are addresses, so each opens directly and reads only what it shows; the
+ * page streams a tab in under the header.
  */
-export function StudioWork({ agent, work, content, locale, messages }: {
-  agent: AgentOption; work: Work; content: WorkTabContent; locale: UiLocale; messages: StudioMessages;
+export function StudioWorkFrame({ agent, work, languages, tab, locale, messages, children }: WorkFrameProps & {
+  tab: WorkTab; children: ReactNode;
 }) {
   const t = materializeData(messages, { locale });
   const { header } = work;
-  const kind = workKind(header.types);
   const tabs = workTabs(header.types);
-  const labels: Record<WorkTab, string> = { chapters: t.tabChapters, text: kind === 'book' ? t.introduction : t.texts,
-    details: t.details, realms: t.tabRealms };
+  const labels: Record<WorkTab, string> = { chapters: t.tabChapters,
+    text: workKind(header.types) === 'book' ? t.introduction : t.texts, details: t.details, realms: t.tabRealms };
   const completion = completionText(header.completionStatus, t);
-  const language = canonicalLanguage(header.title.language);
   return <PageContainer className="grid gap-8">
     <div className="grid gap-5">
       <Link href={studioHref(agent)} className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'justify-self-start' })}>
@@ -166,7 +174,8 @@ export function StudioWork({ agent, work, content, locale, messages }: {
           {header.tagline ? <p lang={header.tagline.language} className="text-pretty text-muted-foreground">
             {header.tagline.value}</p> : null}
           <p className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
-            <span>{kindLabel(kind, t)}</span><span aria-hidden="true">·</span><span>{languageName(language, locale)}</span>
+            <span>{kindLabel(header.types, t)}</span><span aria-hidden="true">·</span>
+            <span>{languages.map(language => languageName(language, locale)).join(', ')}</span>
             {completion ? <><span aria-hidden="true">·</span><span>{completion}</span></> : null}
           </p>
           <p className="flex flex-wrap items-center gap-2">
@@ -180,17 +189,38 @@ export function StudioWork({ agent, work, content, locale, messages }: {
       </header>
     </div>
     <nav aria-label={t.tabsLabel} className="-mx-1 -mb-3 flex gap-1 overflow-x-auto border-border/60 border-b px-1">
-      {tabs.map(tab => <Link key={tab} href={workHref(agent, header.id, tab)} aria-current={content.tab === tab ? 'page' : undefined}
+      {tabs.map(item => <Link key={item} href={workHref(agent, header.id, item)} aria-current={tab === item ? 'page' : undefined}
         className={cn('-mb-px shrink-0 border-transparent border-b-2 px-3 py-2 font-medium text-muted-foreground text-sm',
-          'hover:text-foreground aria-[current=page]:border-primary aria-[current=page]:text-foreground')}>{labels[tab]}</Link>)}
+          'hover:text-foreground aria-[current=page]:border-primary aria-[current=page]:text-foreground')}>{labels[item]}</Link>)}
     </nav>
-    {content.tab === 'chapters' ? <Section id="studio-chapters" title={t.tabChapters} help={t.chaptersHelp}>
+    {children}
+  </PageContainer>;
+}
+
+/** Where a tab's content will be while the page reads it. */
+export function WorkTabPending({ label }: { label: string }) {
+  return <div role="status" aria-label={label} aria-busy="true" className="grid gap-4">
+    <Skeleton className="h-7 w-48" />
+    <Skeleton className="h-24 rounded-2xl" />
+    <Skeleton className="h-24 rounded-2xl" />
+  </div>;
+}
+
+/** One tab of a Work, as {@link StudioWorkFrame} holds it. `language` is the one the Work is written in. */
+export function WorkTabBody({ agent, work, language, content, locale, messages }: {
+  agent: AgentOption; work: Work; language: string; content: WorkTabContent; locale: UiLocale; messages: StudioMessages;
+}) {
+  const t = materializeData(messages, { locale });
+  const { header } = work;
+  const kind = workKind(header.types);
+  switch (content.tab) {
+    case 'chapters': return <Section id="studio-chapters" title={t.tabChapters} help={t.chaptersHelp}>
       <ChapterList agent={agent} book={{ id: header.id, mainVersion: header.mainVersion, title: header.title.value, language }}
         {...content.chapters} locale={locale} messages={messages} />
-    </Section> : null}
-    {content.tab === 'text' ? <Texts agent={agent} work={work} texts={content.texts} book={kind === 'book'} locale={locale} t={t} />
-      : null}
-    {content.tab === 'details' ? <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    </Section>;
+    case 'text': return <Texts agent={agent} work={work} language={language} texts={content.texts} book={kind === 'book'}
+      locale={locale} t={t} />;
+    case 'details': return <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <Section id="studio-details" title={t.details} help={t.detailsHelp}>
         {work.metadata.ok || work.metadata.failure !== 'unavailable'
           ? <DetailsForm agent={agent} work={idOf(header.id)} book={kind === 'book'} initialState={content.details}
@@ -202,8 +232,8 @@ export function StudioWork({ agent, work, content, locale, messages }: {
           locale={locale} messages={messages} />
         <Tags tags={content.tags} t={t} />
       </div>
-    </div> : null}
-    {content.tab === 'realms' ? <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+    </div>;
+    case 'realms': return <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <Section id="studio-realms" title={t.submitHeading} help={t.realmsHelp}>
         <RealmSubmit agent={agent} work={{ id: header.id, mainVersion: header.mainVersion, book: kind === 'book' }}
           {...content.submit} locale={locale} messages={messages} />
@@ -211,6 +241,17 @@ export function StudioWork({ agent, work, content, locale, messages }: {
       <Section id="studio-submissions" title={t.submissionsHeading}>
         <History history={content.history} locale={locale} t={t} />
       </Section>
-    </div> : null}
-  </PageContainer>;
+    </div>;
+  }
+}
+
+/** One Work in Studio with one tab's content already read. */
+export function StudioWork({ agent, work, languages, content, locale, messages }: WorkFrameProps & {
+  content: WorkTabContent;
+}) {
+  return <StudioWorkFrame agent={agent} work={work} languages={languages} tab={content.tab} locale={locale}
+    messages={messages}>
+    <WorkTabBody agent={agent} work={work} language={languages[0] ?? canonicalLanguage(work.header.title.language)}
+      content={content} locale={locale} messages={messages} />
+  </StudioWorkFrame>;
 }

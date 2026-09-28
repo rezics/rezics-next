@@ -4,10 +4,11 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
-import { ArrowDownIcon, ArrowUpIcon, BookOpenIcon, LockIcon, PenLineIcon, PlusIcon, TriangleAlertIcon } from 'lucide-react';
+import { ArrowDownIcon, ArrowLeftRightIcon, ArrowUpIcon, BookOpenIcon, LockIcon, PenLineIcon, PlusIcon, TriangleAlertIcon }
+  from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type FormEvent, Suspense, use, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { relativeTime } from '../feed/time.ts';
@@ -19,6 +20,8 @@ import type { StudioMessages } from './messages.ts';
 import { chapterHref } from './agent.ts';
 import { lengthUnit } from './counts.ts';
 import { lengthLabel } from './parts.tsx';
+import type { ChapterFact, ChapterFacts, ChapterState } from './read.ts';
+import { studioAgentName } from './studio-frame.tsx';
 import type { ContentsItem, ContentsPage, Loaded, MainClient } from './types.ts';
 
 type T = ContractOf<StudioMessages>;
@@ -37,18 +40,114 @@ export interface ChapterListProps {
   main?: MainClient;
   /** Stories pin the clock for relative save times. */
   now?: number;
+  /**
+   * Who writes each chapter and where it stands, as Main says. It streams in
+   * after the list; until then a chapter's state is what readers get.
+   */
+  facts?: Promise<ChapterFacts>;
 }
 
 type Row = Pick<ContentsItem, 'occurrence' | 'label' | 'target' | 'availability'>;
 /** Marks a row added here whose place Main has not named yet. */
 const UNPLACED = 'unplaced:';
 
-function Status({ row, memory, t }: { row: Row; memory: ChapterMemory | undefined; t: T }) {
-  const changed = memory?.publishedHead && memory.head && memory.head !== memory.publishedHead;
+/** Where a chapter stands: Main's word when it has come, else what readers get and this device remembers. */
+function stateOf(row: Row, fact: ChapterFact | undefined, memory: ChapterMemory | undefined, added: boolean): ChapterState {
+  if (fact?.state) return fact.state;
   if (row.availability === 'available') {
-    return changed ? <Badge variant="warning">{t.chapterChanged}</Badge> : <Badge variant="success">{t.statePublished}</Badge>;
+    return memory?.publishedHead && memory.head && memory.head !== memory.publishedHead ? 'changed' : 'published';
   }
-  return <Badge variant="outline">{t.stateDraft}</Badge>;
+  return added && !memory?.head ? 'empty' : 'draft';
+}
+
+function Status({ state, t }: { state: ChapterState; t: T }) {
+  switch (state) {
+    case 'published': return <Badge variant="success">{t.statePublished}</Badge>;
+    case 'changed': return <><Badge variant="success">{t.statePublished}</Badge>
+      <Badge variant="warning">{t.chapterChanged}</Badge></>;
+    case 'draft': return <Badge variant="outline">{t.stateDraft}</Badge>;
+    case 'empty': return <Badge variant="secondary">{t.stateEmpty}</Badge>;
+  }
+}
+
+interface RowsProps {
+  agent: AgentOption;
+  book: ChapterListProps['book'];
+  rows: Row[];
+  facts?: Promise<ChapterFacts>;
+  memory: Record<string, ChapterMemory>;
+  revisions: Record<string, string>;
+  /** Chapters added here, which have no text yet. */
+  added: ReadonlySet<string>;
+  offset: number;
+  busy: string | null;
+  clock: number;
+  locale: UiLocale;
+  t: T;
+  move: (index: number, direction: -1 | 1) => void;
+}
+
+/**
+ * The chapters in order. Each opens for writing as the identity that writes
+ * it: the Studio Agent's own with Write, another of this person's with
+ * Switch, and one only someone else can open stays closed.
+ */
+function Rows({ agent, book, rows, facts, memory, revisions, added, offset, busy, clock, locale, t, move }: RowsProps) {
+  const known = facts ? use(facts) : {};
+  // Moving up to the top of a later page would need the chapter before it, which is on the page before.
+  const firstMovable = offset > 0 ? 2 : 1;
+  const placed = (item: Row | undefined) => Boolean(item) && !item!.occurrence.startsWith(UNPLACED);
+  return <ol className="grid divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-card">
+    {rows.map((row, index) => {
+      const fact = known[row.occurrence];
+      const target = row.target ?? fact?.target ?? null;
+      const label = row.label ?? fact?.label ?? null;
+      const writer = fact?.writer.kind === 'agent' ? fact.writer.agent : null;
+      const remembered = row.target ? memory[row.target] : undefined;
+      const language = label?.language ?? book.language;
+      const stats = [typeof remembered?.length === 'number'
+        ? lengthLabel({ unit: lengthUnit(language), value: remembered.length }, t) : null,
+        remembered?.savedAt ? t.savedWhen({ time: relativeTime(remembered.savedAt, clock, locale, 'long') }) : null]
+        .filter((part): part is string => part !== null);
+      const name = target ? label?.value ?? t.chapterUntitled : t.chapterHidden;
+      const fixed = !placed(row);
+      return <li key={row.occurrence} className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 px-3 py-3
+        sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:px-4">
+        <span className="text-center font-medium text-muted-foreground text-sm tabular-nums">{offset + index + 1}</span>
+        <div className="grid min-w-0 gap-1">
+          <p lang={target ? label?.language : undefined} className={target
+            ? 'font-medium font-work-title [overflow-wrap:anywhere]' : 'flex items-center gap-1.5 text-muted-foreground'}>
+            {target ? null : <LockIcon aria-hidden="true" className="size-4" />}{name}</p>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
+            {target ? <Status state={stateOf(row, fact, remembered, added.has(row.occurrence))} t={t} /> : null}
+            {writer ? <span>{t.writtenAs({ agent: studioAgentName(writer, t) })}</span> : null}
+            {stats.map(part => <span key={part}>{part}</span>)}
+          </p>
+        </div>
+        <div className="col-start-2 flex flex-wrap items-center gap-1 sm:col-start-3 sm:justify-end">
+          {writer && target ? <Link href={chapterHref(writer, book.id, target, undefined, book.language)}
+            aria-label={t.switchToWrite({ title: name, agent: studioAgentName(writer, t) })}
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            <ArrowLeftRightIcon aria-hidden="true" />{t.switchChapter}</Link>
+            : row.target ? <Link href={chapterHref(agent, book.id, row.target, revisions[row.target], book.language)}
+              aria-label={t.writeNamed({ title: name })} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              <PenLineIcon aria-hidden="true" />{t.writeChapter}</Link> : null}
+          {row.availability === 'available' && row.target ? <Link href={readerChapterHref(book.id.slice(-36),
+            row.occurrence.slice(-36), book.language)} aria-label={t.readNamed({ title: name })}
+            className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+            <BookOpenIcon aria-hidden="true" /><span className="max-sm:sr-only">{t.readChapter}</span></Link> : null}
+          <Button type="button" variant="ghost" size="icon-sm" aria-label={t.moveUp({ title: name })}
+            disabled={index < firstMovable || fixed || !placed(rows[index - 1]) || busy !== null}
+            onClick={() => move(index, -1)}>
+            <ArrowUpIcon aria-hidden="true" /></Button>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label={t.moveDown({ title: name })}
+            disabled={index === rows.length - 1 || fixed || !placed(rows[index + 1]) || busy !== null}
+            onClick={() => move(index, 1)}>
+            <ArrowDownIcon aria-hidden="true" /></Button>
+        </div>
+      </li>;
+    })}
+  </ol>;
 }
 
 /**
@@ -56,7 +155,8 @@ function Status({ row, memory, t }: { row: Row; memory: ChapterMemory | undefine
  * stands, words and last save as this device knows them, reordering on the
  * composition's current head, and a new chapter added in place at the end.
  */
-export function ChapterList({ agent, book, page, offset = 0, moreHref = null, locale, messages, main, now }: ChapterListProps) {
+export function ChapterList({ agent, book, page, offset = 0, moreHref = null, locale, messages, main, now, facts }:
+  ChapterListProps) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
   const formId = useId();
@@ -69,7 +169,8 @@ export function ChapterList({ agent, book, page, offset = 0, moreHref = null, lo
     if (page.ok) setComposition({ structure: page.data.composition, head: page.data.compositionRevision });
   }, [initial, page]);
 
-  // What this device remembers of each chapter's draft: Main does not yet let a writer read variant heads.
+  // What this device remembers of each chapter's draft: its length, when it last saved it, and the head it saved,
+  // which pins the chapter's address and stands for Main's word on its state until that streams in.
   const [memory, setMemory] = useState<Record<string, ChapterMemory>>({});
   const [revisions, setRevisions] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -87,6 +188,7 @@ export function ChapterList({ agent, book, page, offset = 0, moreHref = null, lo
     return () => { active = false; };
   }, [rows, agent.iri, book.language]);
 
+  const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
@@ -114,8 +216,10 @@ export function ChapterList({ agent, book, page, offset = 0, moreHref = null, lo
         attempt.current = null;
         setComposition({ structure: result.structure, head: result.head });
         // Until Main names the new place (the refresh below), the row cannot be moved.
-        setRows(current => [...current, { occurrence: result.occurrence ?? `${UNPLACED}${result.chapter}`,
-          label: { value: name, language: book.language }, target: result.chapter!, availability: 'unavailable' }]);
+        const occurrence = result.occurrence ?? `${UNPLACED}${result.chapter}`;
+        setRows(current => [...current, { occurrence, label: { value: name, language: book.language },
+          target: result.chapter!, availability: 'unavailable' }]);
+        setAdded(current => new Set([...current, occurrence]));
         form.reset();
         setAnnouncement(t.chapterAdded({ title: name }));
         router.refresh();
@@ -159,57 +263,14 @@ export function ChapterList({ agent, book, page, offset = 0, moreHref = null, lo
   };
 
   const failed = !page.ok && page.failure !== 'none' && page.failure !== 'missing';
-  const clock = now ?? Date.now();
-  // Moving up to the top of a later page would need the chapter before it, which is on the page before.
-  const firstMovable = offset > 0 ? 2 : 1;
+  const shown: RowsProps = { agent, book, rows, memory, revisions, added, offset, busy, clock: now ?? Date.now(), locale, t,
+    move: (index, direction) => void move(index, direction) };
   return <div className="grid gap-4">
     <p role="status" className="sr-only">{announcement}</p>
     {failed ? <Alert variant="destructive"><TriangleAlertIcon aria-hidden="true" />
       <AlertDescription className="text-destructive-foreground">{t.chaptersFailed}</AlertDescription></Alert> : null}
-    {rows.length ? <ol className="grid divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-card">
-      {rows.map((row, index) => {
-        const known = row.target ? memory[row.target] : undefined;
-        const language = row.label?.language ?? book.language;
-        const stats = [typeof known?.length === 'number'
-          ? lengthLabel({ unit: lengthUnit(language), value: known.length }, t) : null,
-          known?.savedAt ? t.savedWhen({ time: relativeTime(known.savedAt, clock, locale, 'long') }) : null]
-          .filter((part): part is string => part !== null);
-        const name = row.label?.value ?? t.chapterHidden;
-        const placed = (item: Row | undefined) => Boolean(item) && !item!.occurrence.startsWith(UNPLACED);
-        const fixed = !placed(row);
-        return <li key={row.occurrence} className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 px-3 py-3
-          sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:px-4">
-          <span className="text-center font-medium text-muted-foreground text-sm tabular-nums">{offset + index + 1}</span>
-          <div className="grid min-w-0 gap-1">
-            <p lang={row.label?.language} className={row.target ? 'font-medium font-work-title [overflow-wrap:anywhere]'
-              : 'flex items-center gap-1.5 text-muted-foreground'}>
-              {row.target ? null : <LockIcon aria-hidden="true" className="size-4" />}{name}</p>
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
-              {row.target ? <Status row={row} memory={known} t={t} /> : null}
-              {stats.map(part => <span key={part}>{part}</span>)}
-            </p>
-          </div>
-          <div className="col-start-2 flex flex-wrap items-center gap-1 sm:col-start-3 sm:justify-end">
-            {row.target ? <Link href={chapterHref(agent, book.id, row.target, revisions[row.target])}
-              aria-label={t.writeNamed({ title: name })} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-              <PenLineIcon aria-hidden="true" />{t.writeChapter}</Link> : null}
-            {row.availability === 'available' && row.target ? <Link href={readerChapterHref(book.id.slice(-36),
-              row.occurrence.slice(-36), book.language)} aria-label={t.readNamed({ title: name })}
-              className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-              <BookOpenIcon aria-hidden="true" /><span className="max-sm:sr-only">{t.readChapter}</span></Link> : null}
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={t.moveUp({ title: name })}
-              disabled={index < firstMovable || fixed || !placed(rows[index - 1]) || busy !== null}
-              onClick={() => void move(index, -1)}>
-              <ArrowUpIcon aria-hidden="true" /></Button>
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={t.moveDown({ title: name })}
-              disabled={index === rows.length - 1 || fixed || !placed(rows[index + 1]) || busy !== null}
-              onClick={() => void move(index, 1)}>
-              <ArrowDownIcon aria-hidden="true" /></Button>
-          </div>
-        </li>;
-      })}
-    </ol> : page.ok || page.failure === 'none' || page.failure === 'missing'
-      ? <p className="rounded-2xl border border-border/80 border-dashed px-4 py-6 text-center text-muted-foreground text-sm">
+    {rows.length ? <Suspense fallback={<Rows {...shown} />}><Rows {...shown} facts={facts} /></Suspense>
+      : page.ok || page.failure === 'none' || page.failure === 'missing' ? <p className="rounded-2xl border border-border/80 border-dashed px-4 py-6 text-center text-muted-foreground text-sm">
         {t.noChapters}</p> : null}
     {moreHref ? <Link href={moreHref} className={buttonVariants({ variant: 'outline', className: 'justify-self-start' })}>
       {t.moreChapters}</Link> : null}

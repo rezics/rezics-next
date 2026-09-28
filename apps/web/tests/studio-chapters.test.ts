@@ -4,7 +4,8 @@ import { lengthUnit, manuscriptLength } from '../features/studio/counts.ts';
 import { detailsInvalid, detailsValues } from '../features/studio/details-api.ts';
 import { ids, storyMain } from '../features/studio/fixtures.ts';
 import { chapterMemoryKey, type DraftStorage, readChapterMemory, rememberChapter } from '../features/studio/local-draft.ts';
-import { workKind, type WorkMetadata } from '../features/studio/types.ts';
+import { chapterState, readChapterFacts, readChapters } from '../features/studio/read.ts';
+import { type MainClient, workKind, workLabel, type WorkMetadata } from '../features/studio/types.ts';
 
 const agent = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 
@@ -141,5 +142,167 @@ describe('Studio Work kinds', () => {
     expect(workKind(['https://schema.org/DigitalDocument', 'https://schema.org/Book'])).toBe('book');
     expect(workKind(['https://schema.org/Recipe'])).toBe('recipe');
     expect(workKind([])).toBe('chapter');
+    // A prompt is written as one text, and is listed with the Agent's other Works.
+    expect(workKind(['https://rezics.com/vocab/PromptTemplate'])).toBe('document');
+  });
+
+  test('a Work is labelled as the catalogue labels it, the more specific type first', () => {
+    expect(workLabel(['https://schema.org/DigitalDocument'])).toBe('guide');
+    expect(workLabel(['https://schema.org/DigitalDocument', 'https://rezics.com/vocab/PromptTemplate'])).toBe('prompt');
+    expect(workLabel(['https://rezics.com/vocab/SkillPackage'])).toBe('skill');
+    expect(workLabel(['https://rezics.com/vocab/ModPackage', 'https://schema.org/SoftwareApplication'])).toBe('mod');
+    expect(workLabel(['https://schema.org/Recipe', 'https://schema.org/DigitalDocument'])).toBe('recipe');
+    expect(workLabel(['https://schema.org/BookSeries'])).toBe('book');
+    expect(workLabel([])).toBe('chapter');
+  });
+});
+
+const iri = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const self = iri(1), pen = iri(2), stranger = iri(9);
+const person = (id: string, label: string) => ({ iri: id, label, handle: null, kind: 'person' as const,
+  path: 'represented-agent' as const });
+
+interface Chapter {
+  target: string;
+  label: string | null;
+  writer: string;
+  /** Readers get it: its text is published and eligible, so anyone can see it. */
+  published: boolean;
+  /** The writer's draft head; the published revision when nothing changed since. */
+  draft: string | null;
+  language?: string;
+}
+
+/**
+ * A stand-in Main for Studio's chapter reads: a Book's contents as each Agent sees them (a private chapter only
+ * to its writer, a published one to everyone, in the language asked or the Main Version's), the Main Version's
+ * public texts, and a chapter's Content variants, which Main lists only to the chapter's writer.
+ */
+function chaptersMain({ chapters, mainLanguage, mainTexts }: {
+  chapters: Chapter[]; mainLanguage: string | null; mainTexts: Array<{ language: string; author: string }>;
+}) {
+  const calls: string[] = [];
+  const ok = (data: unknown) => ({ data, error: null });
+  const missing = () => ({ data: null, error: { status: 404, value: { code: 'work_unavailable' } } });
+  const published = (chapter: Chapter) => `urn:rezics:content:revision:${chapter.target.slice(-36)}`;
+  const main = { v1: {
+    works: (params: { id: string }) => ({
+      contents: { get: async ({ query }: { query: { actingSubject: string; language?: string } }) => {
+        const language = query.language?.toLowerCase() ?? mainLanguage;
+        calls.push(`contents ${query.actingSubject.slice(-1)} ${language}`);
+        return ok({ profile: 'work-contents-v1', work: iri(100), version: iri(101), composition: iri(102),
+          compositionRevision: iri(103), language, nextCursor: null, sourcePosition: { dataEpoch: 'e', sequence: '1' },
+          count: { value: chapters.length, kind: 'exact-page', total: null },
+          items: chapters.map((chapter, index) => {
+            const visible = chapter.published || chapter.writer === query.actingSubject;
+            const readable = chapter.published && language === (chapter.language ?? 'zh-hans');
+            return { occurrence: iri(200 + index), parent: iri(102), role: 'chapter',
+              label: visible && chapter.label ? { value: chapter.label, language: language ?? 'zh-hans' } : null,
+              target: visible ? chapter.target : null, selectedRevision: readable ? published(chapter) : null,
+              progress: null, availability: readable ? 'available' : 'unavailable' };
+          }) });
+      } },
+      'content-variants': { get: async ({ query }: { query: { actingSubject: string } }) => {
+        const chapter = chapters.find(item => item.target.endsWith(params.id));
+        calls.push(`variants ${params.id.slice(-3)} ${query.actingSubject.slice(-1)}`);
+        if (!chapter || chapter.writer !== query.actingSubject) return missing();
+        return ok({ work: chapter.target, nextCursor: null, sourcePosition: { owner: 'content', dataEpoch: 'c', sequence: '1' },
+          items: chapter.draft ? [{ variantId: `urn:rezics:variant:${chapter.target.slice(-36)}`,
+            language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-Hans' }, direction: 'ltr', draftHead: chapter.draft,
+            publicationHead: chapter.published ? 'urn:rezics:content-publication:p' : null,
+            eligibilityHead: chapter.published ? 'urn:rezics:content-search-eligibility:e' : null }] : [] });
+      } },
+    }),
+    'main-versions': () => ({ 'native-variants': { get: async () => {
+      calls.push('main texts');
+      return ok({ work: iri(100), mainVersion: iri(101), complete: true, variants: mainTexts.map((text, index) => ({
+        contribution: iri(300 + index), publicationDecision: iri(310 + index), selectedDraft: iri(320 + index),
+        language: text.language, author: text.author })) });
+    } } }),
+  } };
+  return { main: main as unknown as MainClient, calls, published };
+}
+
+const serialHeader = (language = 'en') => ({ id: iri(100), mainVersion: iri(101),
+  title: { value: '雨夜书店 · 连载小说', language, direction: 'ltr' as const, basis: 'requested' as const } });
+
+describe('Studio chapters in the language they are written in', () => {
+  const chapter = (n: number, extra: Partial<Chapter> = {}): Chapter => ({ target: iri(110 + n), label: `第${n}章`,
+    writer: self, published: true, draft: null, ...extra });
+
+  test('a serial whose title Main recorded as English reads its chapters in its Main Version’s language', async () => {
+    const { main, calls } = chaptersMain({ chapters: [chapter(1), chapter(2)], mainLanguage: 'zh-hans',
+      mainTexts: [{ language: 'zh-Hans', author: self }] });
+    const read = await readChapters(self, serialHeader('en'), { main });
+    expect(read.language).toBe('zh-Hans');
+    expect(read.page.ok && read.page.data.items.map(item => [item.label?.value, item.availability])).toEqual([
+      ['第1章', 'available'], ['第2章', 'available']]);
+    // One contents read, in parallel with the Main Version's languages: no second read in another language.
+    expect(calls.filter(call => call.startsWith('contents'))).toEqual(['contents 1 zh-hans']);
+  });
+
+  test('a Book with no published text reads its chapters in its own language', async () => {
+    const { main, calls } = chaptersMain({ chapters: [chapter(1, { language: 'ja' })], mainLanguage: null, mainTexts: [] });
+    const read = await readChapters(self, serialHeader('ja'), { main });
+    expect(read.language).toBe('ja');
+    expect(read.page.ok && read.page.data.items[0]?.availability).toBe('available');
+    expect(calls.filter(call => call.startsWith('contents'))).toEqual(['contents 1 null', 'contents 1 ja']);
+  });
+
+  test('a Main Version in several languages reads the chapters in the Studio Agent’s own', async () => {
+    const { main } = chaptersMain({ chapters: [chapter(1)], mainLanguage: 'en',
+      mainTexts: [{ language: 'en', author: stranger }, { language: 'zh-Hans', author: self }] });
+    const read = await readChapters(self, serialHeader('en'), { main });
+    expect(read.language).toBe('zh-Hans');
+    expect(read.page.ok && read.page.data.language).toBe('zh-hans');
+  });
+});
+
+describe('Studio chapter writers and states', () => {
+  test('each chapter says where it stands and which of this person’s identities writes it', async () => {
+    const chapters: Chapter[] = [
+      { target: iri(111), label: '第一章', writer: self, published: true, draft: null },
+      { target: iri(112), label: '第二章', writer: self, published: true, draft: '00000000-0000-4000-8000-00000000abcd' },
+      { target: iri(113), label: '第三章', writer: pen, published: true, draft: null },
+      { target: iri(114), label: '第四章', writer: pen, published: false, draft: '00000000-0000-4000-8000-00000000beef' },
+      { target: iri(115), label: '第五章', writer: stranger, published: false, draft: '00000000-0000-4000-8000-00000000cafe' },
+      { target: iri(116), label: '第六章', writer: self, published: false, draft: null },
+    ];
+    const { main, calls, published } = chaptersMain({ chapters, mainLanguage: 'zh-hans',
+      mainTexts: [{ language: 'zh-Hans', author: self }] });
+    // A published chapter's draft head is the revision readers get until it changes.
+    for (const item of chapters) {
+      if (item.published && !item.draft) item.draft = published(item).slice('urn:rezics:content:revision:'.length);
+    }
+    const read = await readChapters(self, serialHeader(), { main });
+    const agents = [person(self, 'Lin Mei 林梅'), person(pen, '月下书生')];
+    const facts = await readChapterFacts(agents[0]!, agents, iri(100), read, true, main);
+    const at = (n: number) => facts[iri(200 + n)];
+    expect(at(0)).toEqual({ writer: { kind: 'self' }, state: 'published' });
+    expect(at(1)).toEqual({ writer: { kind: 'self' }, state: 'changed' });
+    expect(at(2)).toEqual({ writer: { kind: 'agent', agent: agents[1] }, state: 'published' });
+    // A private chapter the pen name writes: the Studio Agent can't see it, so its title comes from the pen name.
+    expect(at(3)).toEqual({ writer: { kind: 'agent', agent: agents[1] }, state: 'draft', target: iri(114),
+      label: { value: '第四章', language: 'zh-hans' } });
+    expect(at(4)).toEqual({ writer: { kind: 'unknown' }, state: null });
+    expect(at(5)).toEqual({ writer: { kind: 'self' }, state: 'empty' });
+    // Other identities are asked only about chapters the Studio Agent doesn't write.
+    expect(calls.filter(call => call.startsWith('variants') && call.endsWith(' 2')).sort())
+      .toEqual(['variants 113 2', 'variants 114 2']);
+    // A later page's cursor is bound to the Studio Agent: no other identity reads it, so its hidden chapter stays closed.
+    const later = await readChapterFacts(agents[0]!, agents, iri(100), read, false, main);
+    expect(later[iri(203)]).toBeUndefined();
+    expect(later[iri(202)]).toEqual(at(2));
+  });
+
+  test('a chapter published in another language than the Book’s still counts as published', () => {
+    const variant = (tag: string, published: boolean) => ({ variantId: `urn:rezics:variant:${tag}`,
+      language: { kind: 'tag', tag, originalTag: tag }, direction: 'ltr', draftHead: 'h',
+      publicationHead: published ? 'p' : null, eligibilityHead: published ? 'e' : null });
+    expect(chapterState([], 'zh-Hans', null)).toBe('empty');
+    expect(chapterState([variant('zh-Hans', false)], 'zh-Hans', null)).toBe('draft');
+    expect(chapterState([variant('en', true)], 'zh-Hans', null)).toBe('published');
+    expect(chapterState([variant('zh-Hans', true)], 'zh-Hans', 'urn:rezics:content:revision:h')).toBe('published');
+    expect(chapterState([variant('zh-Hans', true)], 'zh-hans', 'urn:rezics:content:revision:g')).toBe('changed');
   });
 });

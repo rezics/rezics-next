@@ -55,8 +55,10 @@ export function textHref(agent: Pick<AgentOption, 'iri' | 'handle'>, work: strin
   return studioHref(agent, `/works/${idOf(work)}/write/${idOf(text)}${revision ? `?revision=${idOf(revision)}` : ''}`);
 }
 
-/** The editor address for one chapter of a Book, pinned like a text's. */
+/** The editor address for one chapter of a Book, pinned like a text's, in the language the Book is written in. */
 export function chapterHref(agent: Pick<AgentOption, 'iri' | 'handle'>, book: string, chapter: string,
-  revision?: string | null): string {
-  return studioHref(agent, `/works/${idOf(book)}/chapters/${idOf(chapter)}${revision ? `?revision=${idOf(revision)}` : ''}`);
+  revision?: string | null, language?: string): string {
+  const query = new URLSearchParams([...revision ? [['revision', idOf(revision)]] : [],
+    ...language ? [['language', language]] : []]).toString();
+  return studioHref(agent, `/works/${idOf(book)}/chapters/${idOf(chapter)}${query ? `?${query}` : ''}`);
 }

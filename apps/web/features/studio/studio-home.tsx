@@ -45,7 +45,7 @@ function WorkItem({ work, chapters, agent, now, locale, t }: {
       <h2 lang={work.title.language} className="font-medium font-work-title text-lg/snug [overflow-wrap:anywhere]">
         <Link href={workHref(agent, work.id)} className="rounded-sm hover:underline">{work.title.value}</Link></h2>
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-sm">
-        <span>{kindLabel(kind, t)}</span>
+        <span>{kindLabel(work.types, t)}</span>
         {chapters ? <><span aria-hidden="true">·</span><span>{chapters.more ? t.chapterCountMore(chapters.count)
           : t.chapterCount(chapters.count)}</span></> : null}
         {chapters?.published ? <><span aria-hidden="true">·</span><span>{t.publishedCount(chapters.published)}</span></>

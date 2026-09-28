@@ -4,6 +4,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { detailsValues } from './details-api.ts';
 import type { DetailsState, SaveDetails } from './details-form.tsx';
 import { agents, contents, history, ids, publishedTexts, realmOptions, serial, story, storyMain, tags } from './fixtures.ts';
+import type { ChapterFacts } from './read.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { StudioFrame } from './studio-frame.tsx';
@@ -41,7 +42,7 @@ const meta = {
   title: 'Studio/Work',
   component: StudioWork,
   parameters: { route: { pathname: base } },
-  args: { agent: agents[0]!, work: serial, content: chapters().content, locale: 'en', messages },
+  args: { agent: agents[0]!, work: serial, languages: ['zh-Hans'], content: chapters().content, locale: 'en', messages },
   beforeEach() { localStorage.clear(); },
   render: args => <StudioFrame agent={args.agent} agents={agents} session={args.agent} path="" locale={args.locale}
     messages={args.messages}><StudioWork {...args} /></StudioFrame>,
@@ -56,11 +57,13 @@ export const Chapters: Story = {
     const canvas = within(canvasElement);
     const calls = (args as unknown as { main: ReturnType<typeof storyMain> }).main.calls;
     await expect(canvas.getByRole('link', { name: 'Chapters' })).toHaveAttribute('aria-current', 'page');
+    // The Work's kind and language come from its types and its Main Version, not from its title.
+    await expect(canvas.getByRole('heading', { level: 1 }).parentElement).toHaveTextContent(/Book·Simplified Chinese·Ongoing/);
     const list = canvas.getByRole('list');
     await expect(within(list).getAllByRole('listitem')).toHaveLength(3);
     await expect(within(list).getAllByText('Published')).toHaveLength(2);
     await expect(canvas.getByRole('link', { name: 'Write “第一章 雨夜”' })).toHaveAttribute('href',
-      expect.stringContaining('/chapters/00000000-0000-4000-8000-000000000111'));
+      expect.stringContaining('/chapters/00000000-0000-4000-8000-000000000111?language=zh-Hans'));
     await expect(canvas.getByRole('button', { name: 'Move “第一章 雨夜” up' })).toBeDisabled();
     await userEvent.click(canvas.getByRole('button', { name: 'Move “第三章 最后一班车” up' }));
     await waitFor(() => expect(within(list).getAllByRole('listitem')[1]).toHaveTextContent('第三章 最后一班车'));
@@ -73,6 +76,46 @@ export const Chapters: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Move “第四章 站台” up' }));
     await waitFor(() => expect(within(list).getAllByRole('listitem')[2]).toHaveTextContent('第四章 站台'));
     await expect(calls).toEqual(['move', 'work', 'insert', 'move']);
+  },
+};
+
+const chapterFacts: ChapterFacts = {
+  [contents.items[0]!.occurrence]: { writer: { kind: 'self' }, state: 'changed' },
+  [contents.items[1]!.occurrence]: { writer: { kind: 'self' }, state: 'published' },
+  [contents.items[2]!.occurrence]: { writer: { kind: 'agent', agent: agents[1]! }, state: 'draft' },
+  [contents.items[3]!.occurrence]: { writer: { kind: 'agent', agent: agents[1]! }, state: 'empty',
+    target: 'https://rezics.com/id/00000000-0000-4000-8000-000000000114', label: { value: '第四章 站台', language: 'zh-Hans' } },
+  'https://rezics.com/id/00000000-0000-4000-8000-000000001105': { writer: { kind: 'unknown' }, state: null },
+};
+
+/**
+ * Where each chapter stands and who writes it, as Main says: the Studio Agent's own open with Write; one its pen
+ * name writes, even a private one it can't see, opens with Switch in the pen name's Studio; one only someone else
+ * can open stays closed.
+ */
+export const ChapterWriters: Story = {
+  args: { content: { tab: 'chapters', chapters: { facts: Promise.resolve(chapterFacts), page: { ok: true, data: {
+    ...contents, items: [...contents.items, { ...contents.items[3]!,
+      occurrence: 'https://rezics.com/id/00000000-0000-4000-8000-000000001105' }] } } } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const rows = within(canvas.getByRole('list')).getAllByRole('listitem');
+    await waitFor(() => expect(rows[0]).toHaveTextContent('Unpublished changes'));
+    await expect(rows[0]).toHaveTextContent('Published');
+    await expect(rows[1]).toHaveTextContent('Published');
+    await expect(within(rows[2]!).getByText('Draft')).toBeInTheDocument();
+    await expect(rows[2]).toHaveTextContent('Written as 月下书生 · Moonlit Scribe');
+    await expect(within(rows[2]!).queryByRole('link', { name: /^Write/ })).toBeNull();
+    const pen = '/studio/@agent-00000000-0000-4000-8000-000000000002/works/00000000-0000-4000-8000-000000000101';
+    await expect(canvas.getByRole('link', { name: 'Switch to 月下书生 · Moonlit Scribe to write “第三章 最后一班车”' }))
+      .toHaveAttribute('href', expect.stringContaining(`${pen}/chapters/00000000-0000-4000-8000-000000000113?language=zh-Hans`));
+    // A private chapter the pen name writes: its title and state come from the pen name's view.
+    await expect(rows[3]).toHaveTextContent('第四章 站台');
+    await expect(rows[3]).toHaveTextContent('Not started');
+    await expect(canvas.getByRole('link', { name: 'Switch to 月下书生 · Moonlit Scribe to write “第四章 站台”' }))
+      .toHaveAttribute('href', expect.stringContaining('/chapters/00000000-0000-4000-8000-000000000114'));
+    await expect(rows[4]).toHaveTextContent('A private chapter by another writer');
+    await expect(within(rows[4]!).queryAllByRole('link')).toHaveLength(0);
   },
 };
 
@@ -113,11 +156,12 @@ export const Introduction: Story = {
   },
 };
 
-/** A story has no chapters: its text is the Work. */
+/** A guide has no chapters: its text is the Work. Studio calls it what the catalogue does. */
 export const StoryText: Story = {
-  args: { work: story, content: { tab: 'text', texts: { ok: true, data: [] } } },
+  args: { work: story, languages: ['en'], content: { tab: 'text', texts: { ok: true, data: [] } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1 }).parentElement).toHaveTextContent(/Guide·English/);
     await expect(canvas.queryByRole('link', { name: 'Chapters' })).toBeNull();
     await expect(canvas.getByRole('link', { name: 'Write the first lines' })).toHaveAttribute('href',
       expect.stringContaining('/write?language=en'));
@@ -220,7 +264,7 @@ export const Chinese: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: '章节' })).toHaveAttribute('aria-current', 'page');
-    await expect(canvas.getByText('连载中')).toBeInTheDocument();
+    await expect(canvas.getByRole('heading', { level: 1 }).parentElement).toHaveTextContent(/图书·简体中文·连载中/);
     await expect(canvas.getByRole('button', { name: '添加章节' })).toBeInTheDocument();
   },
 };
