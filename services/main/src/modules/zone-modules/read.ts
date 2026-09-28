@@ -32,7 +32,7 @@ export function displayZoneCredits(credits: ProjectedCredit[],
 }
 
 /** One retained-name batch of at most 60 credits per module page. */
-async function zoneCreditNames(session: WorkReadSession, credits: ProjectedCredit[]) {
+export async function zoneCreditNames(session: WorkReadSession, credits: ProjectedCredit[]) {
   if (credits.length > ZONE_MODULE_COST.retainedAuthorKeys) {
     throw new WorkReadUnavailable('Zone credit batch is out of bounds');
   }
@@ -127,7 +127,7 @@ export async function readZoneWorks(session: WorkReadSession, realm: string, kin
   const visible = hydrated.filter((item): item is NonNullable<typeof item> => item !== null);
   const [mods, hub] = await Promise.all([
     session.deps.packageModResolutions
-      ? session.deps.packageModResolutions.readCards(visible.map(item => item.id)) : new Map(),
+      ? session.deps.packageModResolutions.readListings(visible.map(item => item.id)) : new Map(),
     session.deps.hub && session.deps.content
       ? readPublicHubCards(session, visible.map(item => item.id)) : new Map(),
   ]);

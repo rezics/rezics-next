@@ -4,8 +4,9 @@ import { readZoneReplies } from '../modules/zone-modules/replies.ts';
 import { readZoneGenres } from '../modules/zone-modules/genres.ts';
 import { discoveryError } from '../modules/discovery/management.ts';
 import { readZoneEditorLists } from '../modules/zone-modules/editor-lists.ts';
-import { zoneChapterPage, zoneDecisionPage, zoneEditorLists, zoneGenrePage, zoneReplyPage, zoneWorkPage }
-  from '../modules/zone-modules/contract.ts';
+import { readZoneBrowse } from '../modules/zone-modules/browse.ts';
+import { zoneBrowsePage, zoneBrowseQuery, zoneChapterPage, zoneDecisionPage, zoneEditorLists, zoneGenrePage,
+  zoneReplyPage, zoneWorkPage } from '../modules/zone-modules/contract.ts';
 import { pageQuery, readLanguage, readUuid } from '../modules/work/read-contract.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -25,6 +26,7 @@ export const openApiOperations = {
   '/v1/realms/{realm}/modules/reader-quotes': { get: { bearer: false } },
   '/v1/realms/{realm}/modules/genres/{context}': { get: { bearer: false } },
   '/v1/realms/{realm}/modules/editor-lists': { get: { bearer: false } },
+  '/v1/realms/{realm}/modules/browse': { get: { bearer: false } },
 } as const;
 
 /** Zone modules are public publications; a stray bearer token cannot widen them. */
@@ -86,6 +88,14 @@ export function zoneModuleRoutes(work: MainWorkDependencies) {
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, new Request(request.url), options,
         session => readZoneEditorLists(session, id(path.realm))), { headers }); }
+      catch (error) { return workReadError(error); }
+    })
+    .get('/v1/realms/:realm/modules/browse', { params, query: zoneBrowseQuery,
+      response: { 200: zoneBrowsePage, ...workReadProblems },
+    }, async ({ request, params: path, query: options }) => {
+      try { return Response.json(await workRead(work, new Request(request.url), { language: options.language,
+        limit: options.limit, cursor: options.cursor },
+      session => readZoneBrowse(session, id(path.realm), options)), { headers }); }
       catch (error) { return workReadError(error); }
     });
 }

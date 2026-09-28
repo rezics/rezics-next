@@ -1,13 +1,17 @@
 import { t } from 'elysia';
-import { pageFields, readAvatar, readId, readName, readPosition, readUuid, workCard }
+import { pageFields, pageQuery, readAvatar, readId, readName, readPosition, readUuid, workCard }
   from '../work/read-contract.ts';
+import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { realmDecision } from '../realm-reads/read-contract.ts';
 import { discoveryCredit } from '../discovery/contract.ts';
+import { MOD_RELEASE_COST } from '../package/mod-release.ts';
 
-export const zoneModCard = t.Object({ profile: t.Literal('mod-work-card-v1'), game: t.Literal('Minecraft'),
-  gameVersions: t.Array(t.String(), { maxItems: 1 }),
-  loaders: t.Array(t.Union([t.Literal('Fabric'), t.Literal('Forge'), t.Literal('NeoForge')]),
-    { maxItems: 1 }), latestRelease: t.Nullable(t.String()), capturedAt: t.String() });
+/** A mod Work's listing card: what its newest disclosed releases run on together (`ModListing`). */
+export const zoneModCard = t.Object({ profile: t.Literal('mod-work-card-v2'), game: t.Literal('Minecraft'),
+  gameVersions: t.Array(t.String({ maxLength: 32 }), { maxItems: MOD_RELEASE_COST.releasesPerListing }),
+  loaders: t.Array(t.Union([t.Literal('Fabric'), t.Literal('Forge'), t.Literal('NeoForge')]), { maxItems: 3 }),
+  environment: t.Nullable(t.Union([t.Literal('client'), t.Literal('server'), t.Literal('client-and-server')])),
+  latestRelease: t.Nullable(t.String({ maxLength: 64 })), updatedAt: t.String() });
 export const zoneHubCard = t.Object({ profile: t.Literal('hub-work-card-v1'),
   kind: t.Union([t.Literal('prompt'), t.Literal('skill-package')]),
   declaredModels: t.Array(t.String(), { maxItems: 64 }), testedModels: t.Array(t.String(), { maxItems: 64 }),
@@ -52,3 +56,45 @@ export const zoneEditorLists = t.Object({ profile: t.Literal('zone-editor-lists-
     state: t.Union([t.Literal('complete'), t.Literal('partial')]),
     items: t.Array(t.Object({ id: readId, title: readName, cover: readAvatar }), { maxItems: 8 }) }),
   { maxItems: 2 }), sourcePosition: readPosition });
+
+/**
+ * A Zone browse page reads the Realm's newest adoptions as one window, filters
+ * and sorts it in memory and hydrates one page. `windowRows` stays within one
+ * summary batch (64); Zones larger than the window report lower-bound matches.
+ */
+export const ZONE_BROWSE_COST = { windowRows: 60, pageSize: ZONE_MODULE_COST.pageSize, typeRows: 240,
+  summaryBatches: 2, listingBatches: 1, serialStatBatches: 1, serialSummaryBatches: 1,
+  creditQueries: ZONE_MODULE_COST.pageSize, filterValues: 8, textCharacters: 100 } as const;
+export const zoneBrowseSorts = ['relevance', 'newest', 'updated'] as const;
+export type ZoneBrowseSort = (typeof zoneBrowseSorts)[number];
+const modLoader = t.Union([t.Literal('Fabric'), t.Literal('Forge'), t.Literal('NeoForge')]);
+const environmentValue = t.Union([t.Literal('client'), t.Literal('server')]);
+const gameVersion = t.String({ pattern: '^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$' });
+const workType = t.Union(WORK_SEMANTIC_TYPES.map(value => t.Literal(value)));
+const values = <T extends Parameters<typeof t.Array>[0]>(item: T) =>
+  t.Optional(t.Array(item, { minItems: 1, maxItems: ZONE_BROWSE_COST.filterValues, uniqueItems: true }));
+/** Conditions as query parameters: values within a Facet match any, Facets match all. */
+export const zoneBrowseQuery = t.Object({ language: pageQuery.language, limit: pageQuery.limit,
+  cursor: pageQuery.cursor, q: t.Optional(t.String({ minLength: 1, maxLength: ZONE_BROWSE_COST.textCharacters })),
+  sort: t.Optional(t.Union(zoneBrowseSorts.map(value => t.Literal(value)))),
+  type: values(workType), loader: values(modLoader), gameVersion: values(gameVersion),
+  environment: values(environmentValue) }, { additionalProperties: false });
+/** The Facets a Zone browse page filters by, as FilterDocument Conditions name them. */
+export const zoneBrowseFacets = ['type', 'mod-loader', 'mod-game-version', 'mod-environment'] as const;
+export type ZoneBrowseFacet = (typeof zoneBrowseFacets)[number];
+const condition = t.Object({ facet: t.Union(zoneBrowseFacets.map(value => t.Literal(value))),
+  any: t.Array(t.String(), { minItems: 1, maxItems: ZONE_BROWSE_COST.filterValues }) });
+const facetValues = t.Array(t.Object({ value: t.String(), count: t.Integer({ minimum: 0 }) }),
+  { maxItems: ZONE_BROWSE_COST.windowRows });
+export const zoneBrowsePage = t.Object({ profile: t.Literal('zone-browse-v1'), realm: readId,
+  /** The Query as Main applied it: text, sort and the Filter in FilterDocument form. */
+  query: t.Object({ text: t.Nullable(t.String()), sort: t.Union(zoneBrowseSorts.map(value => t.Literal(value))),
+    filter: t.Object({ all: t.Array(condition, { maxItems: zoneBrowseFacets.length }) }) }),
+  /** How many of the window's Works each value would match, with the other Facets' Conditions applied. */
+  facets: t.Object({ type: facetValues, 'mod-loader': facetValues, 'mod-game-version': facetValues,
+    'mod-environment': facetValues }),
+  matches: t.Object({ value: t.Integer({ minimum: 0 }),
+    kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }),
+  /** The newest adoptions read; `complete` when the Realm has no older ones. */
+  window: t.Object({ scanned: t.Integer({ minimum: 0, maximum: ZONE_BROWSE_COST.windowRows }), complete: t.Boolean() }),
+  items: t.Array(zoneWork, { maxItems: ZONE_BROWSE_COST.pageSize }), ...pageFields });

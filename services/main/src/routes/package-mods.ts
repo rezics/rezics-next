@@ -3,6 +3,7 @@ import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { ModProfileInvalid, ModResolutionConflict, ModResolutionUnavailable }
   from '../modules/package/mod-resolution.ts';
+import { MOD_RELEASE_COST } from '../modules/package/mod-release.ts';
 import { GRAPHS, iri } from '../modules/work/activate.ts';
 import { publicWork, workRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -60,8 +61,44 @@ const publicCard = t.Object({ profile: t.Literal('mod-work-card-v1'), game: t.Li
   loaders: t.Array(t.Union([t.Literal('Fabric'), t.Literal('Forge'), t.Literal('NeoForge')]),
     { maxItems: 1 }), latestRelease: t.Nullable(t.String({ maxLength: 64 })), capturedAt: t.String() });
 const binding = t.Object({ work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-  actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
+  actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+  /** The owner's notes for this release, shown with it as plain text. */
+  changelog: t.Optional(t.String({ maxLength: MOD_RELEASE_COST.changelogCharacters })) },
 { additionalProperties: false });
+const loader = t.Union([t.Literal('Fabric'), t.Literal('Forge'), t.Literal('NeoForge')]);
+const release = t.Object({ profile: t.Literal('mod-release-v1'),
+  /** Null for a release disclosed before its native ID, environment and dependencies were. */
+  mod: t.Nullable(t.Object({ id: t.String({ maxLength: 160 }),
+    ecosystem: t.Union([t.Literal('fabric'), t.Literal('forge'), t.Literal('neoforge')]) })),
+  version: t.Nullable(t.String({ maxLength: 64 })), game: t.Literal('Minecraft'),
+  gameVersions: t.Array(t.String({ maxLength: 32 }), { maxItems: 16 }), loaders: t.Array(loader, { maxItems: 3 }),
+  environment: t.Nullable(t.Union([t.Literal('client'), t.Literal('server'), t.Literal('client-and-server')])),
+  dependencies: t.Nullable(t.Array(t.Object({ id: t.String({ maxLength: 160 }),
+    requirement: t.Union([t.Literal('required'), t.Literal('optional'), t.Literal('incompatible'),
+      t.Literal('embedded')]),
+    range: t.Nullable(t.String({ maxLength: MOD_RELEASE_COST.rangeCharacters })),
+    side: t.Nullable(t.Union([t.Literal('client'), t.Literal('server')])) }),
+  { maxItems: MOD_RELEASE_COST.dependencies })),
+  changelog: t.Nullable(t.String({ maxLength: MOD_RELEASE_COST.changelogCharacters })),
+  capturedAt: t.String(), publishedAt: t.String() });
+const releasePage = t.Object({ profile: t.Literal('mod-releases-v1'), work: t.String(),
+  items: t.Array(release, { maxItems: MOD_RELEASE_COST.pageSize }), nextCursor: t.Nullable(t.String()) });
+const releaseQuery = t.Object({ limit: t.Optional(t.Integer({ minimum: 1, maximum: MOD_RELEASE_COST.pageSize })),
+  cursor: t.Optional(t.String({ maxLength: 256 })) }, { additionalProperties: false });
+
+/** A release page cursor: the last release's stored time and key, never a receipt id. */
+const encodeCursor = (after: { boundAt: string; key: string }) =>
+  Buffer.from(JSON.stringify([after.boundAt, after.key])).toString('base64url');
+function decodeCursor(cursor: string): { boundAt: string; key: string } | null {
+  try {
+    const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as unknown;
+    if (Array.isArray(value) && value.length === 2 && typeof value[0] === 'string' && typeof value[1] === 'string'
+      && value[0].length <= 64 && !Number.isNaN(Date.parse(value[0].replace(' ', 'T'))) && value[1].length <= 256) {
+      return { boundAt: value[0], key: value[1] };
+    }
+  } catch { /* not a cursor this route issued */ }
+  return null;
+}
 
 export const openApiOperations = {
   '/v1/package-resolutions/mods': { post: { bearer: true, idempotencyKey: true } },
@@ -69,6 +106,7 @@ export const openApiOperations = {
   '/v1/package-resolutions/mods/{resolution}/work-binding': {
     post: { bearer: true, idempotencyKey: true } },
   '/v1/mod-compatibility/{work}': { get: { bearer: false } },
+  '/v1/mod-releases/{work}': { get: { bearer: false } },
 };
 
 async function publicModWork(work: MainWorkDependencies, request: Request, id: string): Promise<boolean> {
@@ -91,7 +129,8 @@ function modError(error: unknown): Response {
 }
 
 /** POST: one Account and Access check, bounded O(C·B+C²+R) profile, one insert and indexed read.
- * GET: one Account and Access check, one indexed row and bounded revalidation. */
+ * GET: one Account and Access check, one indexed row and bounded revalidation.
+ * Public reads: one graph check that the Work is a public mod, then one indexed page. */
 export function packageModRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/package-resolutions/mods', {
@@ -140,7 +179,7 @@ export function packageModRoutes(work: MainWorkDependencies) {
         if (!await publicModWork(work, request, body.work)) return problem(404, 'work_unavailable',
           'Public mod Work is unavailable');
         const card = await work.access.withWorkEditAuthority(principal, body.actingSubject, body.work,
-          proof => store.bind(proof.principalId, params.resolution, body.work));
+          proof => store.bind(proof.principalId, params.resolution, body.work, body.changelog ?? null));
         return Response.json(card, { status: 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return modError(error); }
     })
@@ -157,6 +196,23 @@ export function packageModRoutes(work: MainWorkDependencies) {
         const card = (await store.readCards([id])).get(id);
         return card ? Response.json(card, { headers: { 'cache-control': 'no-store' } })
           : problem(404, 'mod_compatibility_missing', 'No public mod compatibility is bound');
+      } catch (error) { return modError(error); }
+    })
+    .get('/v1/mod-releases/:work', {
+      params: t.Object({ work: groupUuid }), query: releaseQuery,
+      response: { 200: releasePage, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const store = work.packageModResolutions;
+        if (!store) return problem(503, 'mod_resolution_unavailable', 'Mod release owner is unavailable');
+        const id = `https://rezics.com/id/${params.work}`;
+        const after = query.cursor ? decodeCursor(query.cursor) : undefined;
+        if (after === null) return problem(400, 'invalid_cursor', 'Mod release cursor is invalid');
+        if (!await publicModWork(work, request, id)) return problem(404, 'work_unavailable',
+          'Public mod Work is unavailable');
+        const page = await store.readReleases(id, query.limit ?? MOD_RELEASE_COST.pageSize, after);
+        return Response.json({ profile: 'mod-releases-v1', work: id, items: page.items,
+          nextCursor: page.next ? encodeCursor(page.next) : null }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return modError(error); }
     });
 }
