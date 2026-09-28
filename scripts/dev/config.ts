@@ -12,6 +12,18 @@ export function stackStorage(options: StackOptions): 'persistent' | 'tmpfs' {
   return options.profile === 'dev' || options.persistent ? 'persistent' : 'tmpfs';
 }
 
+/** Only the fixed shared dev project outranks disposable QA and worktree stacks. */
+export function stackMemorySettings(options: StackOptions): Record<string, string> {
+  // A seeded worktree Fuseki used 5.6 GiB resident with a 2 GiB heap. Allow
+  // 7 GiB for mapped TDB2 pages while leaving the smaller QA heap below it.
+  return options.profile === 'dev'
+    ? { REZICS_FUSEKI_OOM_SCORE_ADJ: '-900', REZICS_POSTGRES_OOM_SCORE_ADJ: '-800',
+      REZICS_FUSEKI_MEMORY_LIMIT: '0', REZICS_FUSEKI_JVM_ARGS: '-Xms256m -Xmx2g' }
+    : { REZICS_FUSEKI_OOM_SCORE_ADJ: '0', REZICS_POSTGRES_OOM_SCORE_ADJ: '0',
+      REZICS_FUSEKI_MEMORY_LIMIT: '7g',
+      REZICS_FUSEKI_JVM_ARGS: '-Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m' };
+}
+
 export function assertSavedStackStorage(options: StackOptions, saved: Record<string, string>): void {
   // Projects predating the marker used named volumes for dev and tmpfs for QA.
   const actual = saved.REZICS_STACK_STORAGE ?? (options.profile === 'dev' ? 'persistent' : 'tmpfs');
@@ -150,13 +162,16 @@ export function ensureSecrets(root: string, options: StackOptions,
   if (!existsSync(path)) savePrivate(path, { ...createSecrets(), ...ports,
     ...(accountsPort ? { ACCOUNTS_PORT: accountsPort } : {}),
     REZICS_STACK_STORAGE: stackStorage(options),
-    REZICS_STACK_RAW_UPDATE: options.rawUpdate ? '1' : '0' });
+    REZICS_STACK_RAW_UPDATE: options.rawUpdate ? '1' : '0', ...stackMemorySettings(options) });
   const values = readEnv(path);
   assertSavedStackStorage(options, values);
   assertSavedStackRawUpdate(options, values);
   let upgraded = false;
   if (!values.REZICS_STACK_STORAGE) { values.REZICS_STACK_STORAGE = stackStorage(options); upgraded = true; }
   if (accountsPort && !values.ACCOUNTS_PORT) { values.ACCOUNTS_PORT = String(accountsPort); upgraded = true; }
+  for (const [name, value] of Object.entries(stackMemorySettings(options))) {
+    if (!values[name]) { values[name] = value; upgraded = true; }
+  }
   for (const name of ['FUSEKI_MAINTENANCE_TOKEN', 'FUSEKI_COMMAND_TOKEN', 'FUSEKI_TITLE_ADMISSION_KEY']) {
     if (!values[name]) { values[name] = secret(); upgraded = true; }
   }

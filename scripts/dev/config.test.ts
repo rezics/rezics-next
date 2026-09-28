@@ -100,6 +100,44 @@ test('P0.1 QA projects keep independent credentials and endpoints', () => {
   expect(nested.DOCKER_HOST).toBe('unix:///run/docker.sock');
 });
 
+test('shared dev storage wins host OOM selection while QA and worktree Fuseki stay bounded', () => {
+  const root = mkdtempSync('.temp/stack-memory-config-'); roots.push(root);
+  const dev = ensureSecrets(root, { profile: 'dev' });
+  const qa = ensureSecrets(root, { profile: 'qa', runId: 'integration' });
+  const worktree = ensureSecrets(root, { profile: 'qa', runId: 'wt-g403', accountsApp: true });
+  expect(dev.REZICS_FUSEKI_OOM_SCORE_ADJ).toBe('-900');
+  expect(dev.REZICS_POSTGRES_OOM_SCORE_ADJ).toBe('-800');
+  expect(dev.REZICS_FUSEKI_MEMORY_LIMIT).toBe('0');
+  expect(qa.REZICS_FUSEKI_OOM_SCORE_ADJ).toBe('0');
+  expect(qa.REZICS_POSTGRES_OOM_SCORE_ADJ).toBe('0');
+  expect(qa.REZICS_FUSEKI_MEMORY_LIMIT).toBe('7g');
+  expect(worktree.REZICS_FUSEKI_MEMORY_LIMIT).toBe('7g');
+  expect(worktree.REZICS_FUSEKI_JVM_ARGS).toContain('-Xmx1536m');
+
+  const compose = join(import.meta.dir, '../../infra/dev/compose.yaml');
+  for (const [saved, oom, memory] of [[dev, -900, 0], [qa, 0, 7 * 1024 ** 3],
+    [worktree, 0, 7 * 1024 ** 3]] as const) {
+    const resolved = Bun.spawnSync(['docker', 'compose', '-f', compose, 'config', '--format', 'json'],
+      { env: composeProcessEnvironment(process.env, saved) });
+    expect(resolved.exitCode).toBe(0);
+    const services = JSON.parse(new TextDecoder().decode(resolved.stdout)).services;
+    expect(services.fuseki.oom_score_adj ?? 0).toBe(oom);
+    expect(services.postgres.oom_score_adj ?? 0).toBe(oom === 0 ? 0 : -800);
+    expect(Number(services.fuseki.mem_limit ?? 0)).toBe(memory);
+    expect(services.fuseki.environment.JVM_ARGS).toBe(saved.REZICS_FUSEKI_JVM_ARGS);
+  }
+
+  const devPath = join(stackDirectory(root, { profile: 'dev' }), 'compose.env');
+  writeFileSync(devPath, readFileSync(devPath, 'utf8')
+    .replace(/^REZICS_(?:FUSEKI|POSTGRES)_(?:OOM_SCORE_ADJ|MEMORY_LIMIT|JVM_ARGS)=.*\n/gm, ''),
+  { mode: 0o600 });
+  const upgraded = ensureSecrets(root, { profile: 'dev' });
+  expect(upgraded.REZICS_FUSEKI_OOM_SCORE_ADJ).toBe('-900');
+  expect(upgraded.REZICS_POSTGRES_OOM_SCORE_ADJ).toBe('-800');
+  expect(upgraded.REZICS_FUSEKI_MEMORY_LIMIT).toBe('0');
+  expect(upgraded.REZICS_FUSEKI_JVM_ARGS).toBe('-Xms256m -Xmx2g');
+});
+
 test('OPS01/OPS14 PostgreSQL stack readiness waits for its final TCP server', () => {
   const compose = readFileSync(join(import.meta.dir, '../../infra/dev/compose.yaml'), 'utf8');
   const postgres = compose.match(/^  postgres:\n([\s\S]*?)(?=^  [a-z][a-z0-9-]*:\n)/m)?.[1];

@@ -3,6 +3,7 @@ name: rezics-dev
 services:
   postgres:
     image: postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+    oom_score_adj: ${REZICS_POSTGRES_OOM_SCORE_ADJ:-0}
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       REZICS_ACCOUNT_PASSWORD: ${REZICS_ACCOUNT_PASSWORD:?set REZICS_ACCOUNT_PASSWORD}
@@ -30,11 +31,14 @@ services:
 
   fuseki:
     image: rezics/fuseki:6.2.0-cmd0.5.34-91041c4a84f5
+    oom_score_adj: ${REZICS_FUSEKI_OOM_SCORE_ADJ:-0}
+    mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-7g}
     stop_grace_period: 60s
     build:
       context: ../..
       dockerfile: infra/jena/Dockerfile
     environment:
+      JVM_ARGS: ${REZICS_FUSEKI_JVM_ARGS:--Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m}
       FUSEKI_MAINTENANCE_TOKEN: ${FUSEKI_MAINTENANCE_TOKEN:?set FUSEKI_MAINTENANCE_TOKEN}
       FUSEKI_COMMAND_TOKEN: ${FUSEKI_COMMAND_TOKEN:?set FUSEKI_COMMAND_TOKEN}
       FUSEKI_TITLE_ADMISSION_KEY: ${FUSEKI_TITLE_ADMISSION_KEY:?set FUSEKI_TITLE_ADMISSION_KEY}
