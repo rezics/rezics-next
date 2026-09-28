@@ -60,7 +60,17 @@ const date = (raw: string): string | null => {
 };
 const isbn = (raw: string): string | null => {
   const value = raw.replace(/^="?/, '').replace(/"$/, '').replace(/[^0-9Xx]/g, '').toUpperCase();
-  return /^\d{13}$|^\d{9}[\dX]$/.test(value) ? value : null;
+  if (/^\d{9}[\dX]$/.test(value)) {
+    const sum10 = [...value].reduce((total, digit, index) =>
+      total + (10 - index) * (digit === 'X' ? 10 : Number(digit)), 0);
+    if (sum10 % 11) return null;
+  }
+  const prefix = /^\d{9}[\dX]$/.test(value) ? `978${value.slice(0, 9)}` : null;
+  const checksum = (digits: string) => (10 - [...digits].reduce((total, digit, index) =>
+    total + Number(digit) * (index % 2 ? 3 : 1), 0) % 10) % 10;
+  const isbn13 = prefix ? `${prefix}${checksum(prefix)}` : value;
+  if (!/^\d{13}$/.test(isbn13)) return null;
+  return checksum(isbn13.slice(0, 12)) === Number(isbn13[12]) ? isbn13 : null;
 };
 const rating = (raw: string): number | null => {
   if (!raw.trim()) return null;

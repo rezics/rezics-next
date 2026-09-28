@@ -20,6 +20,16 @@ test('G414: StoryGraph export keeps read status, fractional rating and read rang
     shelves: ['fiction', 'local'] });
 });
 
+test('G414: ISBN-10 matches an edition ISBN-13 and invalid check digits do not identify a Work', () => {
+  const header = 'Title,Authors,ISBN/UID,Read Status\n';
+  expect(parseLibraryImport(`${header}Pride and Prejudice,Jane Austen,0141439513,Read\n`).books[0]?.isbn)
+    .toBe('9780141439518');
+  expect(parseLibraryImport(`${header}Pride and Prejudice,Jane Austen,0141439514,Read\n`).books[0]?.isbn)
+    .toBeNull();
+  expect(parseLibraryImport(`${header}Pride and Prejudice,Jane Austen,9780141439519,Read\n`).books[0]?.isbn)
+    .toBeNull();
+});
+
 test('G414: rejects malformed or oversized exports before changing library state', () => {
   expect(() => parseLibraryImport('Title,Author,Exclusive Shelf\n"broken,Jane,read'))
     .toThrow(LibraryImportInvalid);
