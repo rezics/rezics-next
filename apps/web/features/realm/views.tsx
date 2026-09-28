@@ -1,7 +1,7 @@
 import { Badge } from '@rezics/ui/badge';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import type { ZoneDecision, ZoneWork } from '@rezics/zone-sdk';
+import type { ZoneDecision } from '@rezics/zone-sdk';
 import { ArrowLeftIcon, ArrowRightIcon, GavelIcon, LandmarkIcon, PlusIcon, RotateCwIcon, ScaleIcon, ShieldIcon,
   TagIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
