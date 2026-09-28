@@ -1,7 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@rezics/ui/tabs';
 import { WorkCover } from '@rezics/ui/work-cover';
 import { type HeaderSlotProps, type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps,
-  type ZoneLinkProps, type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
+  type ZoneLinkProps, type ZoneModRelease, type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
 import { BlocksIcon, DownloadIcon, FlameIcon, Gamepad2Icon, LayersIcon, TrendingUpIcon, UsersIcon } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { strings } from './strings.ts';
@@ -24,12 +24,26 @@ function freshness(at: string, locale: string, now = Date.now()): { ago: string;
   return { ago, thisWeek: days < 7 };
 }
 
-/** What the platform knows about a pick that matters before installing it: whether it is kept up, and when it changed. */
+/** When a pick last changed: its mod's latest release, or else its last published revision. */
+const lastUpdate = (work: ZoneWork) => work.mod?.updatedAt ?? work.updatedAt;
+
+/** The game and its versions a mod runs on, in one line (`Minecraft 1.21.1`). */
+const gameLine = (mod: ZoneModRelease) => [mod.game, ...mod.gameVersions].join(' ');
+
+/**
+ * What a player checks before installing a pick: the game and versions, the
+ * loader, the latest release, whether it is kept up and when it last changed.
+ */
 function Badges({ work, locale, t }: { work: ZoneWork; locale: string; t: Strings }) {
-  const at = work.updatedAt;
+  const at = lastUpdate(work);
   const fresh = at ? freshness(at, locale) : null;
-  if (!work.status && !fresh) return null;
+  const { mod } = work;
+  if (!mod && !work.status && !fresh) return null;
   return <ul className="mh-badges">
+    {mod ? <li data-game="" translate="no">{gameLine(mod)}</li> : null}
+    {mod?.loaders.map(loader => <li key={loader} data-loader="" translate="no">{loader}</li>)}
+    {mod?.version ? <li translate="no"><span className="sr-only">{t.release} </span>{t.version(mod.version)}</li>
+      : null}
     {work.status ? <li data-status={work.status}>{t.status[work.status]}</li> : null}
     {fresh ? <li data-fresh={fresh.thisWeek ? '' : undefined}><time dateTime={at ?? undefined}>
       {t.updated(fresh.ago)}</time></li> : null}
@@ -37,7 +51,10 @@ function Badges({ work, locale, t }: { work: ZoneWork; locale: string; t: String
 }
 
 const updatedThisWeek = (works: readonly ZoneWork[], locale: string) =>
-  works.filter(work => work.updatedAt && freshness(work.updatedAt, locale)?.thisWeek).length;
+  works.filter(work => {
+    const at = lastUpdate(work);
+    return at && freshness(at, locale)?.thisWeek;
+  }).length;
 
 /** Square tiles, as mod icons are, whatever kind of cover the Work has. */
 function Thumb({ work, Link, eager }: { work: ZoneWork; Link: ComponentType<ZoneLinkProps>; eager?: boolean }) {
@@ -64,6 +81,8 @@ export function ModsCard({ zone, work, layout, rank, Link }: WorkCardSlotProps) 
       <h3 lang={work.title?.lang} dir={work.title?.dir} className="mh-card-title">
         <Link href={work.href}>{title}</Link></h3>
       {work.author ? <p lang={work.author.lang || undefined} className="mh-by">{t.by(work.author.value)}</p> : null}
+      {work.mod && layout === 'rail' ? <p className="mh-by" translate="no">
+        {[gameLine(work.mod), ...work.mod.loaders].join(' · ')}</p> : null}
       {work.tagline && layout !== 'rail' ? <p lang={work.tagline.lang} dir={work.tagline.dir} className="mh-hook">
         {work.tagline.value}</p> : null}
       {layout !== 'rail' ? <Badges work={work} locale={zone.locale} t={t} /> : null}

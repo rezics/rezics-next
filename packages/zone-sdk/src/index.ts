@@ -73,6 +73,35 @@ export interface ZoneWork {
   latestChapter?: { title: ZoneText | null; href: string; at: string | null } | null;
   /** The public Decision that placed the Work in this Zone ("Why here?"). */
   decision: string | null;
+  /** What a game mod runs on, when its author bound a verified release to the Work. */
+  mod?: ZoneModRelease | null;
+  /** A published prompt or Skill's card, when the Work is one. */
+  hub?: ZoneHubItem | null;
+}
+
+/** A mod's latest verified release: what a player checks before installing it. */
+export interface ZoneModRelease {
+  /** `Minecraft`. */
+  game: string;
+  /** Game versions the release was checked against (`1.21.1`). */
+  gameVersions: string[];
+  /** Mod loaders it runs on (`Fabric`, `Forge`, `NeoForge`). */
+  loaders: string[];
+  /** The release's own version, when its manifest declares one (`1.3.0`). */
+  version: string | null;
+  /** ISO date-time Main recorded the release: the mod's last update. */
+  updatedAt: string;
+}
+
+/** A published prompt or Skill, as its author disclosed it. */
+export interface ZoneHubItem {
+  kind: 'prompt' | 'skill';
+  /** A short excerpt (at most 240 characters): the prompt's opening, or the Skill's description. */
+  preview: ZoneText;
+  /** Exactly the published text a reader copies: the prompt, or the Skill's instructions. */
+  copyText: string;
+  /** Models the item was tested with; empty when none are recorded. */
+  testedModels: string[];
 }
 
 export interface ZoneBanner {

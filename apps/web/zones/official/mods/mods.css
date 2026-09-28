@@ -522,6 +522,16 @@
       line-height: 1.4;
     }
 
+    /* What it runs on leads the line, the loader in the Zone's accent. */
+    .mh-badges > li[data-game] {
+      color: var(--foreground);
+    }
+
+    .mh-badges > li[data-loader] {
+      border-color: color-mix(in oklab, var(--zone-accent) 55%, var(--mh-line));
+      color: var(--foreground);
+    }
+
     .mh-badges > li[data-fresh] {
       border-color: transparent;
       background: var(--accent);

@@ -4,6 +4,7 @@ import { join, relative } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { packageDigest, workCoverProps, ZONE_PACKAGE_BUDGET, zonePresets, type ZoneTokens } from '@rezics/zone-sdk';
 import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
+import { zoneWorkCards } from '../features/zones/adapt-cards.ts';
 import { contrast, inkOn, mix, parseHex, readableOn, toHex } from '../features/zones/color.ts';
 import { isZonePage, zoneCsp, zoneNonce } from '../features/zones/csp.ts';
 import { decideExecution, isSafeMode, zoneLookEnabled } from '../features/zones/execution.ts';
@@ -125,6 +126,30 @@ describe('Zone presentation', () => {
     expect(placedModule({ id: 'r', type: 'rising', title: 'Rising', source: { kind: 'query-block', block: 'x' },
       options: { rail: true } }, '/en/r/x/works')).toEqual({ id: 'r', type: 'rising', title: 'Rising', rail: true,
       layout: 'covers', shuffle: false, more: '/en/r/x/works' });
+  });
+});
+
+describe('Zone Work cards from Main', () => {
+  test('a bound mod release keeps its game, versions, loader and release; its capture time is its last update', () => {
+    expect(zoneWorkCards({ mod: { profile: 'mod-work-card-v1', game: 'Minecraft', gameVersions: ['1.21.1'],
+      loaders: ['Fabric'], latestRelease: '1.3.0', capturedAt: '2026-09-28T04:03:27.915Z' }, hub: null }))
+      .toEqual({ mod: { game: 'Minecraft', gameVersions: ['1.21.1'], loaders: ['Fabric'], version: '1.3.0',
+        updatedAt: '2026-09-28T04:03:27.915Z' }, hub: null });
+  });
+
+  test('a published prompt or Skill copies exactly its published text and shows only its disclosed excerpt', () => {
+    const skill = { profile: 'hub-work-card-v1' as const, kind: 'skill-package' as const, declaredModels: ['model-a'],
+      testedModels: [], preview: 'Groups reading notes by theme.', copyText: '---\nname: reading-notes\n---\n' };
+    expect(zoneWorkCards({ mod: null, hub: skill })).toEqual({ mod: null, hub: { kind: 'skill',
+      preview: { value: 'Groups reading notes by theme.', lang: '', dir: 'ltr' },
+      copyText: '---\nname: reading-notes\n---\n', testedModels: [] } });
+    // Declared models are the author's intent, not a test; the card shows tested models only.
+    expect(zoneWorkCards({ hub: { ...skill, kind: 'prompt', testedModels: ['model-b'] } }).hub)
+      .toMatchObject({ kind: 'prompt', testedModels: ['model-b'] });
+  });
+
+  test('reads without the cards, and Works without them, carry none', () => {
+    expect(zoneWorkCards({})).toEqual({ mod: null, hub: null });
   });
 });
 

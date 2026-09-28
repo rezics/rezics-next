@@ -410,6 +410,66 @@
       -webkit-line-clamp: 3;
     }
 
+    .aw-kind {
+      color: var(--primary);
+      font-family: var(--font-code);
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .aw-card-text {
+      display: grid;
+      gap: 0.625rem;
+      min-inline-size: 0;
+    }
+
+    /* The prompt as it will be copied: monospace, kept to a few lines. */
+    .aw-preview {
+      display: -webkit-box;
+      overflow: hidden;
+      padding: 0.5rem 0.75rem;
+      border-inline-start: 2px solid color-mix(in oklab, var(--zone-accent) 55%, var(--aw-line));
+      border-radius: 0.375rem;
+      background: var(--aw-soft);
+      font-family: var(--font-code);
+      font-size: 0.8125rem;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+      white-space: pre-line;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 4;
+    }
+
+    .aw-spotlight .aw-preview {
+      max-inline-size: 40rem;
+      -webkit-line-clamp: 6;
+    }
+
+    .aw-models {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.375rem;
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+    }
+
+    .aw-models > ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.375rem;
+    }
+
+    .aw-models li {
+      padding: 0.0625rem 0.5rem;
+      border: 1px solid var(--aw-line);
+      border-radius: 999px;
+      color: var(--foreground);
+      font-family: var(--font-code);
+    }
+
     .aw-actions {
       display: flex;
       flex-wrap: wrap;
@@ -504,10 +564,23 @@
       padding-inline-end: 0;
     }
 
-    .aw-card:is([data-layout="row"], [data-layout="rail"]) .aw-hook {
+    .aw-card:is([data-layout="row"], [data-layout="rail"]) .aw-card-text {
       grid-area: hook;
+      gap: 0.25rem;
       padding-inline-start: 3rem;
+    }
+
+    .aw-card:is([data-layout="row"], [data-layout="rail"]) :is(.aw-hook, .aw-preview) {
       -webkit-line-clamp: 1;
+    }
+
+    .aw-card:is([data-layout="row"], [data-layout="rail"]) .aw-preview {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+      white-space: normal;
     }
 
     .aw-card:is([data-layout="row"], [data-layout="rail"]) .aw-actions {

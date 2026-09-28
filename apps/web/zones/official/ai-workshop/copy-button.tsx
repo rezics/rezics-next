@@ -4,12 +4,16 @@ import { CheckIcon, CopyIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 /**
- * Copies a pick's address, the first thing a reader does with a prompt they
- * want to keep or share. The path stays without a locale, so whoever opens it
- * reads it in their own language.
+ * Copies what a reader takes from a pick: a prompt's published text, a
+ * Skill's instructions or, for any other pick, its address. A status line
+ * announces the result.
  */
-export function CopyLink({ href, title, label, copied, failed, compact }: {
-  href: string; title: string; label: string; copied: string; failed: string;
+export function CopyButton({ text, href, title, label, copied, failed, compact }: {
+  /** The published text to copy; without it, the pick's address. */
+  text: string | null;
+  /** The pick's path, kept without a locale so whoever opens it reads it in their own language. */
+  href: string;
+  title: string; label: string; copied: string; failed: string;
   /** Icon only, for rows and the rail; the label stays for assistive technology. */
   compact?: boolean;
 }) {
@@ -21,7 +25,7 @@ export function CopyLink({ href, title, label, copied, failed, compact }: {
   }, [state]);
   async function copy() {
     try {
-      await navigator.clipboard.writeText(new URL(href, location.href).href);
+      await navigator.clipboard.writeText(text ?? new URL(href, location.href).href);
       setState('copied');
     } catch {
       setState('failed');

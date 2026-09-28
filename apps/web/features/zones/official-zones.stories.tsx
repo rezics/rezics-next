@@ -168,7 +168,7 @@ export const BooksFallbackPhoneDark: Story = {
 
 const modsRoute = { route: { pathname: '/en/r/mods' } };
 
-/** The mod hub: games and loaders up front, a trending board and download-first cards. */
+/** The mod hub: games and loaders up front, a trending board and download-first cards with what each runs on. */
 export const Mods: Story = {
   args: { slug: 'mods' },
   parameters: modsRoute,
@@ -179,15 +179,24 @@ export const Mods: Story = {
     await expect(canvas.getByRole('heading', { level: 1, name: 'Mods' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Page style' })).toBeVisible();
     const featured = canvas.getByRole('region', { name: 'Featured' });
-    await expect(within(featured).getByRole('link', { name: 'Get Minecraft shaders: a gentle first setup' }))
-      .toBeVisible();
+    await expect(within(featured).getByRole('link', { name: 'Get Lumen Lanterns' })).toBeVisible();
+    // The spotlight leads with the bound release: game and version, loader, release and when it changed.
+    const spotlight = within(featured.querySelector<HTMLElement>('.mh-spotlight')!);
+    for (const fact of ['Minecraft 1.21.1', 'Fabric', 'v1.3.0', 'Updated yesterday']) {
+      await expect(spotlight.getByText(fact)).toBeVisible();
+    }
+    // Rail entries keep one line of it.
+    await expect(within(featured).getAllByText('Minecraft 1.21.1 · Forge')).toHaveLength(2);
     await expect(within(canvas.getByRole('navigation', { name: 'Games and loaders' })).getAllByRole('link'))
       .toHaveLength(7);
     const trending = canvas.getByRole('region', { name: 'Trending' });
     await expect(within(trending).getByRole('tab', { name: 'Today' })).toHaveAttribute('aria-selected', 'true');
+    await expect(within(trending).getByText('Stardew Valley 1.6')).toBeVisible();
+    await expect(within(trending).getByText('SMAPI')).toBeVisible();
     await userEvent.click(within(trending).getByRole('tab', { name: 'This month' }));
     await expect(within(trending).getByRole('tab', { name: 'This month' })).toHaveAttribute('aria-selected', 'true');
-    await expect(within(canvas.getByRole('region', { name: 'Latest' })).getByText(/^\d+ updated this week$/))
+    // Lumen Lanterns, Chunk Weaver, the shader guide and the Stardew farm changed this week; mods count their release.
+    await expect(within(canvas.getByRole('region', { name: 'Latest' })).getByText('4 updated this week'))
       .toBeVisible();
     const collection = canvas.getByRole('region', { name: 'Editors’ picks' });
     await expect(within(collection).getByText('Collection · 4 picks')).toBeVisible();
@@ -206,7 +215,8 @@ export const ModsChinese: Story = {
     const canvas = within(context.canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: '模组' })).toBeVisible();
     await expect(within(canvas.getByRole('region', { name: '精选' }))
-      .getByRole('link', { name: '获取 Minecraft shaders: a gentle first setup' })).toBeVisible();
+      .getByRole('link', { name: '获取 Lumen Lanterns' })).toBeVisible();
+    await expect(within(canvas.getByRole('region', { name: '精选' })).getByText('昨天更新')).toBeVisible();
     await expect(canvas.getByRole('tab', { name: '今日' })).toHaveAttribute('aria-selected', 'true');
     await holds('mods')(context);
   },
@@ -219,12 +229,22 @@ export const ModsPhoneChineseDark: Story = {
   parameters: { route: { pathname: '/zh-Hans/r/mods' } }, play: holds('mods'),
 };
 
-/** The demo's three picks, without authors, states or update times: cards keep Get and the stamp. */
+/**
+ * The demo: four mods, each bound to one verified release when it was seeded,
+ * beside guides without authors, states or update times. Mod cards show what
+ * they run on; every card keeps Get and the stamp.
+ */
 export const ModsAsSeeded: Story = {
   args: { slug: 'mods', catalogue: 'seeded' },
   parameters: modsRoute,
   async play(context) {
-    await expect(within(context.canvasElement).queryByText(/updated this week$/)).toBeNull();
+    const latest = within(within(context.canvasElement).getByRole('region', { name: 'Latest' }));
+    await expect(latest.getByText('4 updated this week')).toBeVisible();
+    await expect(latest.getAllByText('Minecraft 1.21.1')).toHaveLength(4);
+    await expect(latest.getAllByText('Forge')).toHaveLength(2);
+    await expect(latest.getByText('v1.4.2')).toBeVisible();
+    // The shelf lists its first six rows, each with Get.
+    await expect(latest.getAllByRole('link', { name: /^Get / })).toHaveLength(6);
     await holds('mods')(context);
   },
 };
@@ -248,7 +268,21 @@ export const ModsFallbackPhoneDark: Story = {
 
 const workshopRoute = { route: { pathname: '/en/r/ai-workshop' } };
 
-/** The gallery: copy-first cards with Try it, the shelf as a grid and collections by task. */
+/** Records what the page copies, in place of the system clipboard. */
+function clipboard() {
+  const copied: string[] = [];
+  Object.defineProperty(navigator, 'clipboard', { configurable: true,
+    value: { writeText: (value: string) => { copied.push(value); return Promise.resolve(); } } });
+  return copied;
+}
+
+const workshopPick = (key: string, catalogue: Catalogue = 'rich') =>
+  officialWorks('ai-workshop', 'en', catalogue).find(work => work.decision?.endsWith(`#decision-${key}`))!;
+
+/**
+ * The gallery: copy-first cards with Try it, the shelf as a grid and
+ * collections by task. Copy takes the published prompt itself, not a link.
+ */
 export const AiWorkshop: Story = {
   args: { slug: 'ai-workshop' },
   parameters: workshopRoute,
@@ -260,17 +294,25 @@ export const AiWorkshop: Story = {
     await expect(canvas.getByRole('link', { name: 'Browse every prompt and skill' }))
       .toHaveAttribute('href', '/en/r/ai-workshop/works');
     const featured = canvas.getByRole('region', { name: 'Featured' });
-    let copied = '';
-    Object.defineProperty(navigator, 'clipboard', { configurable: true,
-      value: { writeText: (value: string) => { copied = value; return Promise.resolve(); } } });
-    const copy = within(featured).getByRole('button', { name: 'Copy link Book club notes assistant' });
+    const spotlight = within(featured.querySelector<HTMLElement>('.aw-spotlight')!);
+    await expect(spotlight.getByText('Prompt')).toBeVisible();
+    await expect(spotlight.getByText(/^Read the following book club notes\./)).toBeVisible();
+    await expect(spotlight.getByRole('list', { name: 'Tested with' })).toHaveTextContent('claude-sonnet-5gpt-6-luna');
+    const copied = clipboard();
+    const copy = spotlight.getByRole('button', { name: 'Copy prompt Book club discussion prompt' });
     await userEvent.click(copy);
-    await waitFor(() => expect(copy.nextElementSibling).toHaveTextContent('Link copied'));
-    await expect(copied).toMatch(/\/w\/00000000-0000-7000-8003-000000000000\?scope=realm/);
-    await expect(within(featured).getByRole('link', { name: 'Try it Book club notes assistant' })).toBeVisible();
+    await waitFor(() => expect(copy.nextElementSibling).toHaveTextContent('Prompt copied'));
+    await expect(copied).toEqual([workshopPick('club-prompt-v1').hub!.copyText]);
+    await expect(spotlight.getByRole('link', { name: 'Try it Book club discussion prompt' }))
+      .toHaveAttribute('href', expect.stringContaining('/w/00000000-0000-7000-8003-000000000000'));
     const collections = canvas.getByRole('region', { name: 'Editors’ picks' });
-    await expect(within(collections).getByRole('heading', { level: 3, name: 'For writers · 写作者的工具箱' }))
+    await expect(within(collections).getByRole('heading', { level: 3, name: 'Writing and translation · 写作与翻译' }))
       .toBeVisible();
+    // A pick that is not a published prompt or Skill still copies its address.
+    const link = within(collections).getByRole('button', { name: 'Copy link Book club notes assistant' });
+    await userEvent.click(link);
+    await waitFor(() => expect(link.nextElementSibling).toHaveTextContent('Link copied'));
+    await expect(copied.at(-1)).toMatch(/\/w\/00000000-0000-7000-8003-000000000007\?scope=realm/);
     await holds('ai-workshop')(context);
   },
 };
@@ -286,8 +328,9 @@ export const AiWorkshopChinese: Story = {
     const canvas = within(context.canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'AI 工作坊' })).toBeVisible();
     const featured = within(canvas.getByRole('region', { name: '精选' }));
-    await expect(featured.getByRole('button', { name: '复制链接 Book club notes assistant' })).toBeVisible();
-    await expect(featured.getByRole('link', { name: '试一试 Book club notes assistant' })).toBeVisible();
+    await expect(featured.getByRole('button', { name: '复制提示词 Book club discussion prompt' })).toBeVisible();
+    await expect(featured.getByRole('link', { name: '试一试 Book club discussion prompt' })).toBeVisible();
+    await expect(featured.getAllByText('提示词').length).toBeGreaterThan(0);
     await holds('ai-workshop')(context);
   },
 };
@@ -300,9 +343,24 @@ export const AiWorkshopPhoneChineseDark: Story = {
   parameters: { route: { pathname: '/zh-Hans/r/ai-workshop' } }, play: holds('ai-workshop'),
 };
 
-/** The demo's four picks, two without a hook: every card still copies, tries and shows its stamp. */
+/**
+ * The demo's two prompts and two Skills, with no tested models recorded: a
+ * Skill copies its whole SKILL.md, and every card still tries and shows its stamp.
+ */
 export const AiWorkshopAsSeeded: Story = {
-  args: { slug: 'ai-workshop', catalogue: 'seeded' }, parameters: workshopRoute, play: holds('ai-workshop'),
+  args: { slug: 'ai-workshop', catalogue: 'seeded' },
+  parameters: workshopRoute,
+  async play(context) {
+    const canvas = within(context.canvasElement);
+    await expect(canvas.queryByRole('list', { name: 'Tested with' })).toBeNull();
+    const copied = clipboard();
+    const copy = canvas.getAllByRole('button', { name: 'Copy Skill Recipe scaling skill' })[0]!;
+    await userEvent.click(copy);
+    await waitFor(() => expect(copy.nextElementSibling).toHaveTextContent('Skill instructions copied'));
+    await expect(copied).toEqual([workshopPick('recipe-skill-v1', 'seeded').hub!.copyText]);
+    await expect(copied[0]).toMatch(/^---\nname: recipe-scaling\n/);
+    await holds('ai-workshop')(context);
+  },
 };
 
 export const AiWorkshopFallback: Story = {
@@ -310,7 +368,7 @@ export const AiWorkshopFallback: Story = {
   parameters: workshopRoute,
   async play(context) {
     await fallbackRuns(context.canvasElement, 'ai-workshop');
-    await expect(within(context.canvasElement).queryByRole('button', { name: /^Copy link/ })).toBeNull();
+    await expect(within(context.canvasElement).queryByRole('button', { name: /^Copy / })).toBeNull();
     await holds('ai-workshop')(context);
   },
 };

@@ -6,10 +6,11 @@ import type { ModuleState, PlacedModule } from './zone-home.tsx';
 
 // Story data for the official Books, Mods and AI Workshop Zones. `rich` is the
 // catalogue each Zone is designed for: authors, hooks, serial states, update
-// times, genre chips, charts and people. `seeded` is what the local demo's
-// Main serves today (scripts/dev/seed/official-plan.ts): picks, the latest
-// shelf, one editors' list and decisions, with no credited authors and some
-// Works still without a hook, so each package is also seen at its thinnest.
+// times, genre chips, charts, people, mod releases and tested models. `seeded`
+// is what the local demo's Main serves today (scripts/dev/seed/official-plan.ts):
+// picks, the latest shelf, one editors' list and decisions, with no credited
+// authors, some Works still without a hook, mods bound to one verified release
+// and prompts without tested models, so each package is also seen at its thinnest.
 
 export type OfficialSlug = 'books' | 'mods' | 'ai-workshop';
 export type Catalogue = 'rich' | 'seeded';
@@ -23,7 +24,18 @@ const text = (value: string, lang: string): ZoneText => ({ value, lang, dir: 'lt
 interface Seed {
   key: string; title: string; lang: string; author?: string; tagline?: string; taglineLang?: string;
   kind?: ZoneWork['kind']; status?: ZoneWork['status']; updated?: number; chapters?: number;
+  /** A bound mod release; `released` is days ago, and the game defaults to Minecraft 1.21.1. */
+  mod?: { loader: string; version: string | null; released: number; game?: string; gameVersion?: string };
+  /** A published prompt or Skill; `tested` models show in the rich catalogue only, as the demo records none. */
+  hub?: { kind: 'prompt' | 'skill'; text: string; description?: string; tested?: string[] };
 }
+
+/** A Skill as the seed imports it: one SKILL.md whose front matter carries its description. */
+const skill = (name: string, description: string, body: string): NonNullable<Seed['hub']> =>
+  ({ kind: 'skill', description, text: `---\nname: ${name}\ndescription: ${description}\n---\n# ${name}\n${body}\n` });
+
+/** Main's card excerpt: the first 240 characters of a prompt, or a Skill's description. */
+const excerpt = (hub: NonNullable<Seed['hub']>) => Array.from(hub.description ?? hub.text).slice(0, 240).join('');
 
 const realms: Record<OfficialSlug, string> = {
   books: '01a0e4b6-ff6c-7769-a431-6ede0fd85d29',
@@ -48,7 +60,14 @@ function worksOf(slug: OfficialSlug, seeds: readonly Seed[], locale: UiLocale, c
       status: rich || seed.kind === 'book' ? seed.status ?? null : null, chapters: rich ? seed.chapters ?? null : null,
       words: null,
       updatedAt: rich && seed.updated !== undefined ? daysAgo(seed.updated) : null,
-      decision: decisionHref(slug, locale, seed.key) };
+      decision: decisionHref(slug, locale, seed.key),
+      mod: seed.mod ? { game: seed.mod.game ?? 'Minecraft', gameVersions: [seed.mod.gameVersion ?? '1.21.1'],
+        // The demo binds every release when it seeds.
+        loaders: [seed.mod.loader], version: seed.mod.version, updatedAt: daysAgo(rich ? seed.mod.released : 0) }
+        : null,
+      // Main names no language for a Hub card's text.
+      hub: seed.hub ? { kind: seed.hub.kind, preview: text(excerpt(seed.hub), ''), copyText: seed.hub.text,
+        testedModels: rich ? seed.hub.tested ?? [] : [] } : null };
   });
 }
 
@@ -92,43 +111,70 @@ const books: readonly (Seed & { seeded?: boolean })[] = [
 ];
 
 const mods: readonly (Seed & { seeded?: boolean })[] = [
+  { key: 'lumen-fabric', seeded: true, title: 'Lumen Lanterns', lang: 'en', author: 'jun', kind: 'package',
+    tagline: 'Warm lantern light for Minecraft 1.21.1 on Fabric.', status: 'ongoing', updated: 1,
+    mod: { loader: 'Fabric', version: '1.3.0', released: 1 } },
+  { key: 'weaver-forge', seeded: true, title: 'Chunk Weaver', lang: 'en', author: 'lattice', kind: 'package',
+    tagline: 'Prepare nearby Minecraft chunks before you explore on Forge.', status: 'ongoing', updated: 3,
+    mod: { loader: 'Forge', version: '1.4.2', released: 3 } },
+  { key: 'tidy-fabric', seeded: true, title: 'Tidy Inventory', lang: 'en', author: 'boxwright', kind: 'package',
+    tagline: 'Sort chests with one key on Minecraft 1.21.1 with Fabric.', status: 'ongoing', updated: 9,
+    mod: { loader: 'Fabric', version: '2.0.1', released: 9 } },
+  { key: 'quiet-forge', seeded: true, title: 'Quiet Villagers', lang: 'en', author: '木桶', kind: 'package',
+    tagline: 'Quieter trading sounds for Minecraft 1.21.1 with Forge.', status: 'hiatus', updated: 200,
+    mod: { loader: 'Forge', version: '1.0.2', released: 200 } },
   { key: 'shader-guide', seeded: true, title: 'Minecraft shaders: a gentle first setup', lang: 'en', author: 'jun',
     tagline: 'Pick one shader pack, tune three settings, keep your frame rate.', status: 'ongoing', updated: 2 },
   { key: 'stardew-farm', seeded: true, title: '星露谷物语 · 春季农场整合包', lang: 'zh-Hans', author: '阿俊',
     tagline: '二十个模组，一个存档就能用的春季农场。', status: 'ongoing', updated: 5 },
   { key: 'mod-guide', seeded: true, title: 'Mod setup checklist', lang: 'en', author: 'Mei', status: 'completed',
     updated: 40 },
-  { key: 'lumen', title: 'Lumen Shaders', lang: 'en', author: 'aurora-dev', status: 'ongoing', updated: 1,
-    tagline: 'Soft volumetric light that still runs on integrated graphics.' },
-  { key: 'chunk-weaver', title: 'Chunk Weaver', lang: 'en', author: 'lattice', status: 'ongoing', updated: 3,
-    tagline: 'Pregenerates the world in the background, so exploring never stutters.' },
-  { key: 'harvest-ledger', title: 'Harvest Ledger', lang: 'en', author: 'pelican-town', status: 'completed', updated: 90,
-    tagline: 'Every crop, gift and birthday in one quiet overlay.' },
-  { key: 'quiet-villagers', title: '安静的村民', lang: 'zh-Hans', author: '木桶', status: 'hiatus', updated: 200,
-    tagline: '村民不再冲你喊交易，其余一切保持原版。' },
-  { key: 'tidy-inventory', title: 'Tidy Inventory', lang: 'en', author: 'boxwright', status: 'ongoing', updated: 9,
-    tagline: 'One key sorts every chest by type, rarity or last used.' },
-  { key: 'lantern-roads', title: 'Lantern Roads', lang: 'en', author: 'nightwatch', status: 'ongoing', updated: 12,
-    tagline: 'Lanterns along every road, so night travel feels safe.' },
+  { key: 'harvest-ledger', title: 'Harvest Ledger', lang: 'en', author: 'pelican-town', kind: 'package',
+    status: 'completed', updated: 90, tagline: 'Every crop, gift and birthday in one quiet overlay.',
+    mod: { game: 'Stardew Valley', gameVersion: '1.6', loader: 'SMAPI', version: '2.2.0', released: 90 } },
+  { key: 'lantern-roads', title: 'Lantern Roads', lang: 'en', author: 'nightwatch', kind: 'package', status: 'ongoing',
+    updated: 12, tagline: 'Lanterns along every road, so night travel feels safe.',
+    mod: { loader: 'NeoForge', gameVersion: '1.21', version: null, released: 12 } },
   { key: 'crash-doctor', title: '崩溃日志五问', lang: 'zh-Hans', author: '阿俊', status: 'completed', updated: 20,
     tagline: '五个问题，读懂一份崩溃日志。' },
 ];
 
 const workshop: readonly (Seed & { seeded?: boolean })[] = [
-  { key: 'club-notes', seeded: true, title: 'Book club notes assistant', lang: 'en', author: 'Aria',
-    tagline: 'Turn a messy discussion into three questions for next week.' },
-  { key: 'glossary-prompt', seeded: true, title: '双语术语表 · 翻译提示词', lang: 'zh-Hans', author: 'Aria',
-    tagline: '先定术语，再译全文：让模型每次都用同一个译名。' },
-  { key: 'skill', seeded: true, title: 'Recipe scaling assistant skill', lang: 'en', author: 'Mei' },
-  { key: 'prompt', seeded: true, title: 'Bilingual book club discussion prompt', lang: 'en', author: 'Mei' },
+  { key: 'club-prompt-v1', seeded: true, title: 'Book club discussion prompt', lang: 'en', author: 'Aria',
+    tagline: 'Find the questions readers actually disagree about.',
+    hub: { kind: 'prompt', tested: ['claude-sonnet-5', 'gpt-6-luna'],
+      text: 'Read the following book club notes. List three questions the group disagreed on. For each, quote a '
+        + 'short phrase from the notes and explain both views. If the notes do not support three disagreements, '
+        + 'say how many you found.\n\nNotes: {{notes}}' } },
+  { key: 'glossary-prompt-v1', seeded: true, title: 'Bilingual glossary prompt', lang: 'en', author: 'Aria',
+    tagline: 'Set translation terms before drafting the full text.',
+    hub: { kind: 'prompt', tested: ['claude-sonnet-5'],
+      text: 'Read the source text below. List names and specialist terms with proposed translations before '
+        + 'translating. Use each chosen term consistently. At the end, list terms whose meaning remains '
+        + 'uncertain.\n\nSource text: {{notes}}' } },
+  { key: 'recipe-skill-v1', seeded: true, title: 'Recipe scaling skill', lang: 'en', author: 'Aria',
+    tagline: 'Scale ingredient amounts and flag judgment calls.',
+    hub: skill('recipe-scaling', 'Scales a recipe to any number of servings and flags what needs tasting.',
+      'Ask for the original and desired number of servings. Scale measured ingredients by the ratio. '
+        + 'Keep cooking times separate and flag ingredients such as salt and spices for a taste check.') },
+  { key: 'reading-skill-v1', seeded: true, title: 'Reading notes skill', lang: 'en', author: 'Aria',
+    tagline: 'Turn reading notes into a short recap and open questions.',
+    hub: skill('reading-notes', 'Groups reading notes by theme, writes a short recap and lists open questions.',
+      'Ask for the reader’s notes. Group the notes by theme, write a short recap, and list open '
+        + 'questions. Do not add events or quotations absent from the notes.') },
   { key: 'no-spoilers', title: 'Chapter summary, no spoilers', lang: 'en', author: 'Theo',
-    tagline: 'Summarises up to the chapter you have read, and never a page past it.' },
+    tagline: 'Summarises up to the chapter you have read, and never a page past it.',
+    hub: { kind: 'prompt', tested: ['claude-opus-5-5'],
+      text: 'Summarise the book up to the end of chapter {{chapter}}. Mention nothing that happens later.' } },
   { key: 'citations', title: 'Citation checker skill', lang: 'en', author: 'June',
-    tagline: 'Checks each quote against the edition you name and marks the misses.' },
+    tagline: 'Checks each quote against the edition you name and marks the misses.',
+    hub: skill('citation-checker', 'Checks quotations against a named edition.',
+      'For each quotation, find it in the named edition and mark any that differ.') },
   { key: 'style-mirror', title: '文风镜像', lang: 'zh-Hans', author: '三更灯',
-    tagline: '贴一段范文，让模型用同样的语气改写你的段落。' },
-  { key: 'reading-level', title: 'Reading-level adapter', lang: 'en', author: 'Maren',
-    tagline: 'Retells a hard passage for a younger reader without losing the plot.' },
+    tagline: '贴一段范文，让模型用同样的语气改写你的段落。',
+    hub: { kind: 'prompt', text: '阅读下面的范文，概括它的语气和句式，再用同样的风格改写我的段落。\n\n范文：{{sample}}\n段落：{{draft}}' } },
+  { key: 'club-notes', title: 'Book club notes assistant', lang: 'en', author: 'Aria',
+    tagline: 'Turn a messy discussion into three questions for next week.' },
 ];
 
 const catalogues = { books, mods, 'ai-workshop': workshop } as const;
@@ -200,6 +246,10 @@ export function officialModules(slug: OfficialSlug, locale: UiLocale, catalogue:
     const work = works.find(candidate => candidate.decision?.endsWith(`#decision-${key}`));
     return work ? [work] : [];
   });
+  const chipNav = (chips: readonly string[]) => place(module('games', 'chip-nav',
+    say({ en: 'Games and loaders', 'zh-Hans': '游戏与加载器' }, locale)), {
+    chips: chips.map((label, index) => ({ id: `game-${index}`, label: text(label, 'en'),
+      href: `/${locale}/discover?term=${index}` })) });
   const hero = place(module('picks', 'hero-carousel', say(common.featured, locale)), { banners: works.slice(0, 4)
     .map(work => ({ id: work.id, title: work.title!, href: work.href, image: null, work })) });
   const completed = works.filter(work => work.status === 'completed');
@@ -213,17 +263,17 @@ export function officialModules(slug: OfficialSlug, locale: UiLocale, catalogue:
         'zh-Hans': '六部适合第一次读经典的小说，附上我们信得过的版本。' },
       keys: ['pride', 'jane-eyre', 'little-women', 'secret-garden', 'alice', 'frankenstein'] }],
     mods: [{ id: 'first-mods', title: 'First mods · 第一次装模组',
-      blurb: { en: 'Start here: three picks that are hard to break and easy to undo.',
-        'zh-Hans': '从这里开始：三项不容易出错、也容易撤回的推荐。' },
-      keys: ['mod-guide', 'stardew-farm', 'shader-guide', 'tidy-inventory'] }],
+      blurb: { en: 'Start here: four mods that are hard to break and easy to undo.',
+        'zh-Hans': '从这里开始：四个不容易出错、也容易撤回的模组。' },
+      keys: ['lumen-fabric', 'weaver-forge', 'tidy-fabric', 'quiet-forge'] }],
     'ai-workshop': [{ id: 'reading-prompts', title: 'Prompts for readers · 读书人的提示词',
       blurb: { en: 'For book clubs, bilingual reading and notes you will actually reread.',
         'zh-Hans': '给读书会、双语阅读和真正会回看的笔记。' },
-      keys: ['prompt', 'glossary-prompt', 'club-notes', 'skill', 'no-spoilers'] },
-    { id: 'writing-tools', title: 'For writers · 写作者的工具箱',
-      blurb: { en: 'Check quotes, match a voice and pitch a passage at the right level.',
-        'zh-Hans': '核对引文、模仿文风，把一段文字调到合适的难度。' },
-      keys: ['citations', 'style-mirror', 'reading-level'] }],
+      keys: ['club-prompt-v1', 'reading-skill-v1', 'no-spoilers', 'club-notes'] },
+    { id: 'writing-prompts', title: 'Writing and translation · 写作与翻译',
+      blurb: { en: 'Keep terms straight, match a voice and check every quote.',
+        'zh-Hans': '统一译名、模仿文风，核对每一处引文。' },
+      keys: ['glossary-prompt-v1', 'recipe-skill-v1', 'citations', 'style-mirror'] }],
   }[slug];
   const editors = place(module('editors', 'editorial-list', say(common.editors, locale), { layout: 'rows' }), {
     lists: lists.map(list => ({ id: list.id, title: text(list.title, 'en'),
@@ -236,11 +286,7 @@ export function officialModules(slug: OfficialSlug, locale: UiLocale, catalogue:
     say({ en: 'Authors to follow', 'zh-Hans': '值得关注的作者' }, locale), { rail: true }), { items: bookPeople(locale) }),
   decisions];
   if (slug === 'mods') {
-    const chips = ['Minecraft', 'Stardew Valley', 'Skyrim SE', 'Terraria', 'Fabric', 'NeoForge', 'SMAPI'];
-    return [hero,
-      place(module('games', 'chip-nav', say({ en: 'Games and loaders', 'zh-Hans': '游戏与加载器' }, locale)), {
-        chips: chips.map((label, index) => ({ id: `game-${index}`, label: text(label, 'en'),
-          href: `/${locale}/discover?term=${index}` })) }),
+    return [hero, chipNav(['Minecraft', 'Stardew Valley', 'Skyrim SE', 'Terraria', 'Fabric', 'NeoForge', 'SMAPI']),
       place(module('trending', 'ranking', say({ en: 'Trending', 'zh-Hans': '热门趋势' }, locale),
         { more: `${home}/works` }), { metric: 'reads', tabs: (['day', 'week', 'month'] as const).map((interval, shift) => ({
         interval, items: [...works.slice(shift), ...works.slice(0, shift)].slice(0, 8)

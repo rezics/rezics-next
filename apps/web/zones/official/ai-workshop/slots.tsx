@@ -1,10 +1,10 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@rezics/ui/tabs';
 import { WorkCover } from '@rezics/ui/work-cover';
 import { type HeaderSlotProps, type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps,
-  type ZoneLinkProps, type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
+  type ZoneHubItem, type ZoneLinkProps, type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
 import { ArrowRightIcon, CornerDownLeftIcon, FolderOpenIcon, SparklesIcon, SquareTerminalIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
-import { CopyLink } from './copy-link.tsx';
+import { CopyButton } from './copy-button.tsx';
 import { strings } from './strings.ts';
 
 // Slots of the official AI Workshop Zone, a gallery of prompts and skills.
@@ -19,34 +19,70 @@ function Thumb({ work, Link }: { work: ZoneWork; Link: ComponentType<ZoneLinkPro
     <WorkCover {...workCoverProps(work)} /></Link>;
 }
 
-/** Copy first, then try: the two things a reader does with a prompt. */
+/**
+ * Copy first, then try: the two things a reader does with a prompt. A
+ * published prompt or Skill copies its own text; any other pick its address.
+ */
 function Actions({ work, title, t, Link, compact }: {
   work: ZoneWork; title: string; t: Strings; Link: ComponentType<ZoneLinkProps>; compact?: boolean;
 }) {
+  const { hub } = work;
+  const words = t.copy[hub?.kind ?? 'link'];
   return <div className="aw-actions">
-    <CopyLink href={work.href} title={title} label={t.copyLink} copied={t.copied} failed={t.copyFailed}
-      compact={compact} />
+    <CopyButton text={hub?.copyText ?? null} href={work.href} title={title} label={words.label}
+      copied={words.copied} failed={words.failed} compact={compact} />
     <Link href={work.href} className="aw-try" data-compact={compact ? '' : undefined}>
       <span className={compact ? 'sr-only' : undefined}>{t.tryIt}</span><span className="sr-only"> {title}</span>
       <ArrowRightIcon aria-hidden="true" /></Link>
   </div>;
 }
 
+/** The kind of pick and who made it: "Prompt · by Aria". */
+function Byline({ work, t }: { work: ZoneWork; t: Strings }) {
+  if (!work.hub && !work.author) return null;
+  return <p className="aw-by">
+    {work.hub ? <span className="aw-kind">{t.kind[work.hub.kind]}</span> : null}
+    {work.hub && work.author ? ' · ' : null}
+    {work.author ? <span lang={work.author.lang || undefined}>{t.by(work.author.value)}</span> : null}
+  </p>;
+}
+
+/**
+ * What the author disclosed of the prompt or Skill, as it will be copied,
+ * and the models they tested it with. A prompt's excerpt that stops short
+ * of its text ends with an ellipsis.
+ */
+function Disclosed({ hub, t }: { hub: ZoneHubItem; t: Strings }) {
+  const cut = hub.kind === 'prompt' && hub.copyText.length > hub.preview.value.length;
+  return <>
+    <p lang={hub.preview.lang || undefined} dir={hub.preview.dir} translate="no" className="aw-preview">
+      <span className="sr-only">{t.preview}: </span>{hub.preview.value}{cut ? '…' : null}</p>
+    {hub.testedModels.length ? <div className="aw-models">
+      <span>{t.testedWith}</span>
+      <ul aria-label={t.testedWith}>{hub.testedModels.map(model => <li key={model} translate="no">{model}</li>)}</ul>
+    </div> : null}
+  </>;
+}
+
 /** A copy-first card: a gallery card in grids, a row in lists and a one-line entry in the rail. */
 export function WorkshopCard({ zone, work, layout, Link }: WorkCardSlotProps) {
   const t = strings(zone.locale);
   const title = work.title?.value ?? t.untitled;
+  const full = layout !== 'rail';
   return <article className="aw-card" data-layout={layout}>
     <div className="aw-card-head">
       <Thumb work={work} Link={Link} />
       <div className="min-w-0">
         <h3 lang={work.title?.lang} dir={work.title?.dir} className="aw-card-title">
           <Link href={work.href}>{title}</Link></h3>
-        {work.author ? <p lang={work.author.lang || undefined} className="aw-by">{t.by(work.author.value)}</p> : null}
+        <Byline work={work} t={t} />
       </div>
     </div>
-    {work.tagline && layout !== 'rail' ? <p lang={work.tagline.lang} dir={work.tagline.dir} className="aw-hook">
-      {work.tagline.value}</p> : null}
+    {full && (work.tagline || work.hub) ? <div className="aw-card-text">
+      {work.tagline ? <p lang={work.tagline.lang} dir={work.tagline.dir} className="aw-hook">
+        {work.tagline.value}</p> : null}
+      {work.hub ? <Disclosed hub={work.hub} t={t} /> : null}
+    </div> : null}
     <Actions work={work} title={title} t={t} Link={Link} compact={layout !== 'cover'} />
   </article>;
 }
@@ -90,12 +126,12 @@ export function WorkshopHero({ zone, banners, card, whyHere, Link, fallback }: H
             <div className="min-w-0">
               <h3 lang={lead.title?.lang} dir={lead.title?.dir} className="aw-spotlight-title">
                 <Link href={lead.href}>{title}</Link></h3>
-              {lead.author ? <p lang={lead.author.lang || undefined} className="aw-by">{t.by(lead.author.value)}</p>
-                : null}
+              <Byline work={lead} t={t} />
             </div>
           </div>
           {lead.tagline ? <p lang={lead.tagline.lang} dir={lead.tagline.dir} className="aw-spotlight-hook">
             {lead.tagline.value}</p> : null}
+          {lead.hub ? <Disclosed hub={lead.hub} t={t} /> : null}
           <div className="aw-spotlight-foot">
             <Actions work={lead} title={title} t={t} Link={Link} />
             <span className="aw-stamp">{whyHere(lead)}</span>
