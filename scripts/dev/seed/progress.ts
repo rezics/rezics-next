@@ -26,7 +26,10 @@ export async function seedChapterProgress(api: SeedApi,
     }
     const occurrence = occurrences[at]!;
     await put(reader, occurrence, { completed: index % 3 === 0, position: `paragraph:${index + 1}` },
-      seedKey('chapter-progress', `${reader.id}:${occurrence}`));
+      seedKey('chapter-progress', `${reader.id}:${occurrence}`)).catch((error: unknown) => {
+      // So does a reader who has since moved on in this chapter.
+      if (!(error instanceof SeedApiError) || error.status !== 409) throw error;
+    });
   }
   return { chapters: occurrences.length };
 }

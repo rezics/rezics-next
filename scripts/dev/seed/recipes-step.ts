@@ -1,3 +1,4 @@
+import { SeedApiError } from './api.ts';
 import { grantHomeSeedAuthority } from './operator.ts';
 import { seedKey } from './plan.ts';
 import type { SeedState } from './state.ts';
@@ -53,8 +54,12 @@ export async function seedRecipes(state: SeedState) {
     const changed = await state.api.post<{ revision: string }>(`${path}/changes`, {
       expectedHead: created.revision, actingSubject: author.actingSubject,
       operations: pancakeOperations(created.structure),
-    }, author.token, seedKey('recipe-ingredients', 'pancakes'));
-    await state.api.post(`${path}/measures`, {
+    }, author.token, seedKey('recipe-ingredients', 'pancakes')).catch((error: unknown) => {
+      // A stack seeded before the current operations keeps its recipe; the scaling read below still checks it.
+      if (error instanceof SeedApiError && error.status === 409) return null;
+      throw error;
+    });
+    if (changed) await state.api.post(`${path}/measures`, {
       expectedHead: changed.revision, actingSubject: author.actingSubject,
       yield: { value: { numerator: servings, denominator: 1 }, unitText: 'servings',
         coverage: 'complete', provenance: 'declared' },
