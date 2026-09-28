@@ -12,7 +12,7 @@ import { accountResponses, activityView, commandView, connectedAppView,
   operatorRoleView, pageView, sessionView } from './views.ts';
 import { actionReasonCodes, adminActions, administerUser, bulkActions, bulkLimit, bulkUndoLimit, cancelBulkJob, checkActor,
   createBulkJob, profile, reasonCodes, runBulkItem, setClientDisabled } from './admin-actions.ts';
-import { auditExportFormats, auditOutcomes, exportAudit, readAudit, readJob, readOverview, readSanctions } from './admin-audit.ts';
+import { auditExportFormats, auditOutcomes, csvCell, exportAudit, readAudit, readJob, readOverview, readSanctions } from './admin-audit.ts';
 import { readSignals, reviewSignal, signalKeyPattern } from './admin-signals.ts';
 import { readTimeline, timelineCategories } from './admin-timeline.ts';
 import { adminClientView, adminUserDetailView, auditEntryView, directoryColumn, directoryView,
@@ -108,6 +108,37 @@ export async function readDirectory(pool: Pool, secret: string, actorId: string,
   } finally { try { await db.query('ROLLBACK'); } finally { db.release(); } }
 }
 
+export const directoryExportLimit = 10_000;
+const directoryCsvColumns = ['id', 'name', 'email', 'status', 'role', 'email_verified', 'two_step', 'created_at',
+  'last_sign_in_at', 'suspended_until', 'suspension_code'] as const;
+
+/** "Download users": the directory the filters select, in its sort order, at
+ * most `directoryExportLimit` rows as CSV (with a byte-order mark for CJK
+ * names). Pages of 1000 through `readDirectory`, so each query keeps its
+ * two-second budget. The download is itself audited with its filters. */
+export async function exportDirectory(pool: Pool, secret: string, actorId: string,
+  query: Omit<DirectoryQuery, 'limit' | 'cursor'>) {
+  const rows: ReturnType<typeof adminProfile>[] = [];
+  let cursor: string | undefined;
+  let truncated = false;
+  do {
+    const page = await readDirectory(pool, secret, actorId, { ...query, limit: 1000, cursor });
+    rows.push(...page.items);
+    cursor = page.nextCursor ?? undefined;
+    if (rows.length >= directoryExportLimit) { truncated = rows.length > directoryExportLimit || !!cursor; break; }
+  } while (cursor);
+  const kept = rows.slice(0, directoryExportLimit);
+  await writeAudit(pool, { actorId, action: 'users_exported', targetId: 'directory', reason: 'User directory download',
+    before: null, after: { filters: { q: query.q ?? null, email: query.email ?? null, name: query.name ?? null,
+      status: query.status ?? null, role: query.role ?? null, verified: query.verified ?? null,
+      hasTwoFactor: query.hasTwoFactor ?? null, createdFrom: query.createdFrom ?? null, createdTo: query.createdTo ?? null },
+    rows: kept.length, truncated }, requestId: randomUUID() });
+  const lines = [directoryCsvColumns.join(','), ...kept.map(user => [user.id, user.name, user.email, user.status, user.role,
+    String(user.emailVerified), String(user.twoFactorEnabled), user.createdAt, user.lastSignInAt, user.suspendedUntil,
+    user.suspensionCode].map(csvCell).join(','))];
+  return { body: `\ufeff${lines.join('\r\n')}\r\n`, rows: kept.length, truncated };
+}
+
 /** Until when the session's recent sign-in or re-authentication admits writes. */
 async function stepUpUntil(pool: Pool, sessionId: string) {
   const result = await pool.query<{ until: Date | null }>(`SELECT greatest(s."createdAt", p.verified_at) + interval '5 minutes' AS until
@@ -128,6 +159,13 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
     from: t.Optional(t.String({ format: 'date-time' })), to: t.Optional(t.String({ format: 'date-time' })),
     reasonCode: t.Optional(reasonCode), requestId: t.Optional(t.String({ format: 'uuid' })),
     q: t.Optional(t.String({ maxLength: 200 })) };
+  const directoryFilters = { q: t.Optional(t.String({ maxLength: 200 })), email: t.Optional(t.String({ maxLength: 320 })),
+    name: t.Optional(t.String({ maxLength: 200 })), status: t.Optional(literalList(statuses)),
+    role: t.Optional(literalList(roleFilters)),
+    verified: t.Optional(t.Boolean()), hasTwoFactor: t.Optional(t.Boolean()),
+    createdFrom: t.Optional(t.String({ format: 'date-time' })), createdTo: t.Optional(t.String({ format: 'date-time' })),
+    sort: t.Optional(t.Union([t.Literal('createdAt'), t.Literal('email'), t.Literal('name')])),
+    direction: t.Optional(t.Union([t.Literal('asc'), t.Literal('desc')])) };
   // A process runs each job at most once at a time, after its undo window; a
   // job whose runner died with its process resumes when anyone reads it.
   const running = new Map<string, Promise<void>>();
@@ -218,16 +256,19 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
       catch (error) { return accountFailure(error); }
     })
     .get('/api/account/admin/users', { response: accountResponses(directoryView), query: t.Object({ ...pageQuery,
-      q: t.Optional(t.String({ maxLength: 200 })), email: t.Optional(t.String({ maxLength: 320 })),
-      name: t.Optional(t.String({ maxLength: 200 })), status: t.Optional(literalList(statuses)),
-      role: t.Optional(literalList(roleFilters)),
-      verified: t.Optional(t.Boolean()), hasTwoFactor: t.Optional(t.Boolean()),
-      createdFrom: t.Optional(t.String({ format: 'date-time' })), createdTo: t.Optional(t.String({ format: 'date-time' })),
-      sort: t.Optional(t.Union([t.Literal('createdAt'), t.Literal('email'), t.Literal('name')])),
-      direction: t.Optional(t.Union([t.Literal('asc'), t.Literal('desc')])),
-    }) }, async ({ request, query }) => {
+      ...directoryFilters }) }, async ({ request, query }) => {
       try { return accountJson(await readDirectory(pool, secret, (await requireOperator(auth, pool, request, 'users:read')).userId, query)); }
       catch (error) { return accountFailure(error); }
+    })
+    .get('/api/account/admin/users/export', { query: t.Object(directoryFilters),
+      response: { ...accountResponses(t.Object({})), 200: t.String() } }, async ({ request, query }) => {
+      try {
+        const actor = await requireOperator(auth, pool, request, 'users:read');
+        const { body, rows, truncated } = await exportDirectory(pool, secret, actor.userId, query);
+        return new Response(body, { headers: { 'content-type': 'text/csv; charset=utf-8', 'cache-control': 'no-store',
+          'content-disposition': `attachment; filename="rezics-account-users-${new Date().toISOString().slice(0, 10)}.csv"`,
+          'x-rezics-rows': String(rows), 'x-rezics-truncated': String(truncated) } });
+      } catch (error) { return accountFailure(error); }
     })
     .get('/api/account/admin/users/:userId', { response: accountResponses(adminUserDetailView), params: userParams }, async ({ request, params }) => {
       try {

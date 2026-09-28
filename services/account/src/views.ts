@@ -40,7 +40,21 @@ export const clientView = t.Object({ clientId: t.String(), name: t.Nullable(t.St
   scopes: t.Nullable(t.Array(t.String())), grantTypes: t.Nullable(t.Array(t.String())), redirectUris: t.Array(t.String()),
   userId: t.Nullable(t.String()), skipConsent: t.Nullable(t.Boolean()) });
 
-export const accountResponses = <S extends ReturnType<typeof t.Object>>(success: S) => ({
+/** A capped list; `truncated` says older rows exist beyond the cap. */
+const cappedList = <S extends ReturnType<typeof t.Object>>(item: S) =>
+  t.Object({ items: t.Array(item), truncated: t.Boolean() });
+/** "Download your data": what Account keeps about the person, without
+ * credential material (password hashes, passkey keys, TOTP secrets, tokens). */
+export const accountExportView = t.Object({ format: t.Literal('rezics-account-export/1'), exportedAt: t.String(),
+  account: t.Object({ id: t.String(), name: t.String(), email: t.String(), emailVerified: t.Boolean(),
+    image: t.Nullable(t.String()), locale: t.Nullable(t.String()), createdAt: t.String(), updatedAt: t.String() }),
+  displayPreferences: t.Object({ displayMode: t.String(), showZoneThemes: t.Boolean() }),
+  signInMethods: methodsView,
+  devices: cappedList(sessionView),
+  connectedApps: cappedList(connectedAppView),
+  securityActivity: cappedList(eventView) });
+
+export const accountResponses =<S extends ReturnType<typeof t.Object>>(success: S) => ({
   200: success, 400: accountErrorSchema, 401: accountErrorSchema, 403: accountErrorSchema,
   404: accountErrorSchema, 409: accountErrorSchema, 429: accountErrorSchema, 503: accountErrorSchema,
 });

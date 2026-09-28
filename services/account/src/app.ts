@@ -14,6 +14,7 @@ import { accountFailure, accountSession } from './http.ts';
 import { observeAuthentication, securityActivityApi } from './security-activity.ts';
 import { recordSessionClient } from './sessions.ts';
 import { connectedAppsApi } from './connected-apps.ts';
+import { dataExportApi } from './data-export.ts';
 import { adminApi } from './admin.ts';
 import { accountSettingsApi } from './account-settings.ts';
 import { displayPreferencesApi } from './display-preferences.ts';
@@ -236,6 +237,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .use(emailChangeApi(auth, pool))
     .use(securityActivityApi(auth, pool))
     .use(connectedAppsApi(auth, pool))
+    .use(dataExportApi(auth, pool))
     .use(adminApi(auth, pool))
     .use(accountSettingsApi(auth, pool))
     .use(displayPreferencesApi(auth, pool, options.displayPreferenceClientIds ?? new Set()))
