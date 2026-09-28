@@ -76,7 +76,7 @@ export const reviews: readonly PlannedReview[] = [
     text: 'A gentle game with a surprising amount to plan. I like having a farm goal without a deadline.' },
   { reader: 'leo', work: 'game-hades', rating: 5, language: 'en',
     text: 'Each escape attempt taught me something new about a weapon or a character. The short runs fit my evenings.' },
-  { reader: 'mira', work: 'game-celeste', rating: 5, language: 'en',
+  { reader: 'aria', work: 'game-celeste', rating: 5, language: 'en',
     text: 'The climb is demanding, but each room is small enough that trying again feels inviting.' },
   // Prompts, skills and guides
   { reader: 'priya', work: 'club-prompt-v1', rating: 5, language: 'en', helpful: ['nora', 'aria'],
