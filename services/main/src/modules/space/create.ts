@@ -6,7 +6,8 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 
-export const SPACE_REALM_PROFILE = 'https://rezics.com/definition/space-realm-v1';
+export const SPACE_REALM_PROFILE_V1 = 'https://rezics.com/definition/space-realm-v1';
+export const SPACE_REALM_PROFILE = 'https://rezics.com/definition/space-realm-v2';
 export const SELECTION_POLICY = 'https://rezics.com/definition/realm-manager-fixed-main-fallback-v1';
 export const MEMBERSHIP_POLICY = 'https://rezics.com/definition/realm-closed-v1';
 export const REVIEW_POLICY = 'https://rezics.com/definition/realm-manager-reviewed-v1';
@@ -142,7 +143,7 @@ function checked(receipt: SpaceCreationReceipt, admission: RegisteredAdmission,
 async function validateCandidate(env: WorkActivationEnvironment, space: string, realm: string,
   input: CreateRealmSpaceInput): Promise<CommandValidation[]> {
   iri(space); iri(realm); spaceCreationDigest(input);
-  return profileValidations(env.fuseki, 'space-realm-v1', [
+  return profileValidations(env.fuseki, 'space-realm-v2', [
     { shape: `${SPACE_REALM_PROFILE}/space-shape`, focus: [space], graphs: [GRAPHS.current] },
     { shape: `${SPACE_REALM_PROFILE}/realm-shape`, focus: [realm], graphs: [GRAPHS.current] },
   ]);
@@ -192,9 +193,11 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(space)} a rv:Space ; rv:owner ${iri(input.actingSubject)} ;
+          rv:definitionProfile ${iri(SPACE_REALM_PROFILE)} ;
           rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public ;
           rdfs:label ${lit(input.name)}@en ; rv:head ${iri(spaceRevision)} .
         ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ;
+          rv:definitionProfile ${iri(SPACE_REALM_PROFILE)} ;
           ${input.handle ? `rv:communityHandle ${lit(input.handle)} ;` : ''}
           ${input.topics?.length ? `rv:topic ${[...input.topics].sort().map(iri).join(', ')} ;` : ''}
           rv:selectionPolicy ${iri(SELECTION_POLICY)} ;

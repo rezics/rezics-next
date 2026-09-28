@@ -50,7 +50,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
     let realm = createdRealm;
     try {
       if (!realm) {
-        const { data, error } = await main.v1.spaces.post({ profile: 'space-realm-v1',
+        const { data, error } = await main.v1.spaces.post({ profile: 'space-realm-v2',
           name: name.trim(), handle, topics: topics.map(topic => topic.id), capabilities: ['realm'], actingSubject },
         { headers: { 'idempotency-key': `${operation}:create` } });
         if (!data || !('realm' in data) || !data.realm) {

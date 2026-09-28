@@ -1,5 +1,6 @@
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { SPACE_REALM_PROFILE, SPACE_REALM_PROFILE_V1 } from './create.ts';
 
 export type RealmVisibility = 'public' | 'restricted' | 'private';
 export type RealmReviewMode = 'mandatory' | 'trusted-members' | 'open';
@@ -44,15 +45,24 @@ export async function deliverRealmPolicy(env: WorkActivationEnvironment, op: Rea
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded . }
   }`, 1024)).boolean === true;
   if (await committed()) return;
-  const spaces = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space WHERE {
+  const spaces = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?spaceProfile ?realmProfile WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(op.realm)} a rv:Realm ; rv:space ?space .
-      ?space a rv:Space ; rv:realmCapability ${iri(op.realm)} . }
+      ?space a rv:Space ; rv:realmCapability ${iri(op.realm)} .
+      OPTIONAL { ${iri(op.realm)} rv:definitionProfile ?realmProfile }
+      OPTIONAL { ?space rv:definitionProfile ?spaceProfile } }
   } LIMIT 2`, 2048)).results?.bindings ?? [];
   if (spaces.length !== 1 || !spaces[0]?.space) throw new Error('Realm Space is unavailable');
   const space = spaces[0].space.value;
-  const validations = await profileValidations(env.fuseki, 'space-realm-v1', [
-    { shape: 'https://rezics.com/definition/space-realm-v1/space-shape', focus: [space], graphs: [GRAPHS.current] },
-    { shape: 'https://rezics.com/definition/space-realm-v1/realm-shape', focus: [op.realm], graphs: [GRAPHS.current] },
+  const spaceProfile = spaces[0].spaceProfile?.value;
+  const realmProfile = spaces[0].realmProfile?.value;
+  const profile = spaceProfile === SPACE_REALM_PROFILE && realmProfile === SPACE_REALM_PROFILE
+    ? SPACE_REALM_PROFILE : spaceProfile === undefined && realmProfile === undefined
+    ? SPACE_REALM_PROFILE_V1 : null;
+  if (!profile) throw new Error('Realm Space profile is inconsistent');
+  const profileId = profile === SPACE_REALM_PROFILE ? 'space-realm-v2' : 'space-realm-v1';
+  const validations = await profileValidations(env.fuseki, profileId, [
+    { shape: `${profile}/space-shape`, focus: [space], graphs: [GRAPHS.current] },
+    { shape: `${profile}/realm-shape`, focus: [op.realm], graphs: [GRAPHS.current] },
   ]);
   let error: unknown;
   try { await env.fuseki.commandWithReceipt({ receipt, digest, validations, deadlineMs: 10_000,

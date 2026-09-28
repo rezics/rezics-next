@@ -184,7 +184,7 @@ export async function seedCommunityRealms(state: SeedState) {
     await refreshSeedTokens(state);
     await state.optional(`Community Realm ${plan.id}`, async () => {
       const owner = person(state, plan.owner);
-      const receipt = await state.api.post<SpaceReceipt>('/v1/spaces', { profile: 'space-realm-v1',
+      const receipt = await state.api.post<SpaceReceipt>('/v1/spaces', { profile: 'space-realm-v2',
         name: `${plan.name.en} · ${plan.name['zh-CN']}`, capabilities: ['realm'], actingSubject: owner.actingSubject },
       owner.token, seedKey('community-realm', plan.id));
       const root = `/v1/realms/${short(receipt.realm)}`;

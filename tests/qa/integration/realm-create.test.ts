@@ -19,11 +19,20 @@ test('Community creation reserves one handle and filters the directory by global
     await stack.fuseki.update(`PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
       INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(topic)} a skos:Concept ;
         skos:prefLabel "Fantasy"@en ; skos:prefLabel "奇幻"@zh-CN . } }`);
-    const command = { profile: 'space-realm-v1', name: 'Fantasy Readers', handle: 'fantasy-readers',
+    const command = { profile: 'space-realm-v2', name: 'Fantasy Readers', handle: 'fantasy-readers',
       topics: [topic], capabilities: ['realm'], actingSubject: creator.actor };
-    const created = await json<{ realm: string; owner: string }>(
+    expect((await creator.send('POST', '/v1/spaces', { ...command, profile: 'space-realm-v1' })).status)
+      .toBe(400);
+    const created = await json<{ realm: string; realmRevision: string; owner: string }>(
       await creator.send('POST', '/v1/spaces', command), 201);
     expect(created.owner).toBe(creator.actor);
+    expect((await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(created.realm)} rv:definitionProfile
+        <https://rezics.com/definition/space-realm-v2> . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(created.realmRevision)}
+        rv:modelRevision <https://rezics.com/definition/space-realm-v2> ;
+        rv:shapeRevision <https://rezics.com/definition/space-realm-v2> . }
+    }`, 1024)).boolean).toBe(true);
     expect(await json(await stack.call('GET', '/v1/realms/by-handle/fantasy-readers'), 200))
       .toEqual({ realm: created.realm, handle: command.handle });
     const selected = await json<{ topic: { id: string; label: { value: string } };
@@ -35,6 +44,24 @@ test('Community creation reserves one handle and filters the directory by global
       `https://rezics.com/id/${randomUUID()}`)}`)).status).toBe(400);
     expect((await creator.send('POST', '/v1/spaces', { ...command, name: 'Impersonator' })).status).toBe(400);
     expect((await stack.call('GET', '/v1/realms/by-handle/missing-handle')).status).toBe(404);
+    const oldSpace = `https://rezics.com/id/${randomUUID()}`;
+    const oldRealm = `https://rezics.com/id/${randomUUID()}`;
+    const oldSpaceRevision = `https://rezics.com/id/${randomUUID()}`;
+    const oldRealmRevision = `https://rezics.com/id/${randomUUID()}`;
+    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(oldSpace)} a rv:Space ; rv:owner ${iri(creator.actor)} ;
+          rv:realmCapability ${iri(oldRealm)} ; rv:disclosure rv:Public ;
+          rdfs:label "Legacy Realm"@en ; rv:head ${iri(oldSpaceRevision)} .
+        ${iri(oldRealm)} a rv:Realm ; rv:space ${iri(oldSpace)} ; rv:realmState rv:Active ;
+          rv:selectionPolicy <https://rezics.com/definition/realm-manager-fixed-main-fallback-v1> ;
+          rv:membershipPolicy <https://rezics.com/definition/realm-closed-v1> ;
+          rv:reviewPolicy <https://rezics.com/definition/realm-manager-reviewed-v1> ;
+          rv:head ${iri(oldRealmRevision)} .
+      } }`);
+    expect(await json<{ realm: string }>(await stack.call('GET', `/v1/spaces/${oldSpace.slice(-36)}`), 200))
+      .toMatchObject({ realm: oldRealm });
   } finally { await stack.stop(); }
 });
 

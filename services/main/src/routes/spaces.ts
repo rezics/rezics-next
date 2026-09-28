@@ -15,18 +15,25 @@ export const openApiOperations = {
   '/v1/realms/by-handle/{handle}': { get: { bearer: false } },
 } as const;
 
+const spaceCreateFields = {
+  name: t.String({ minLength: 1, maxLength: 120,
+    pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
+  capabilities: t.Tuple([t.Literal('realm')]),
+  actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+};
+
 export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/spaces', {
-      body: t.Object({ profile: t.Literal('space-realm-v1'),
-        name: t.String({ minLength: 1, maxLength: 120,
-          pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
+      body: t.Union([
+        t.Object({ profile: t.Literal('space-realm-v1'), ...spaceCreateFields },
+          { additionalProperties: false }),
+        t.Object({ profile: t.Literal('space-realm-v2'), ...spaceCreateFields,
         handle: t.Optional(t.String({ pattern: '^[a-z][a-z0-9-]{2,29}$' })),
         topics: t.Optional(t.Array(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
           { maxItems: 3, uniqueItems: true })),
-        capabilities: t.Tuple([t.Literal('realm')]),
-        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }),
+        }, { additionalProperties: false }),
+      ]),
       response: { 200: spaceWriteResult, 201: spaceWriteResult, 202: pendingOperation, ...writeProblems },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
@@ -35,7 +42,9 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       }
       try {
         const receipt = await createAdmittedRealmSpace(work.environment, work.account, work.access,
-          request, { name: body.name, handle: body.handle, topics: body.topics,
+          request, { name: body.name,
+            handle: body.profile === 'space-realm-v2' ? body.handle : undefined,
+            topics: body.profile === 'space-realm-v2' ? body.topics : undefined,
             actingSubject: body.actingSubject, idempotencyKey });
         return Response.json({ space: receipt.space, realm: receipt.realm,
           spaceRevision: receipt.spaceRevision, realmRevision: receipt.realmRevision,

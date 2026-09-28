@@ -50,6 +50,7 @@ import { PRIVATE_SEARCH_GRAPH, privateDraftTriples, privateDraftUnit } from '../
 import { MAIN_SELECTION_PROFILE, PUBLIC_SEARCH_GRAPH, mainSelectionDigest,
   mainSelectionReceiptIri, readMainSelectionReceipt } from './select-main.ts';
 import { MEMBERSHIP_POLICY, REVIEW_POLICY, SELECTION_POLICY, SPACE_REALM_PROFILE,
+  SPACE_REALM_PROFILE_V1,
   readSpaceCreationReceipt, spaceCreationDigest, spaceCreationReceiptIri } from '../space/create.ts';
 import { REALM_SELECTION_PROFILE, realmSelectionDigest, realmSelectionReceiptIri,
   realmSelectionSlotIri, readRealmSelectionReceipt } from './select-realm.ts';
@@ -2425,10 +2426,23 @@ export async function reconcileRetainedRealmSpaceCreate(
     || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.realmManifest)) {
     throw new RetainedEffectConflict('retained Space manifest references are invalid');
   }
-  const spaceState = readComponentState(env.objectDirectory, receipt.spaceManifest,
-    space, SPACE_REALM_PROFILE);
+  let profile = SPACE_REALM_PROFILE;
+  let spaceState: Record<string, unknown>;
+  try { spaceState = readComponentState(env.objectDirectory, receipt.spaceManifest,
+    space, profile); }
+  catch {
+    profile = SPACE_REALM_PROFILE_V1;
+    spaceState = readComponentState(env.objectDirectory, receipt.spaceManifest, space, profile);
+  }
   const realmState = readComponentState(env.objectDirectory, receipt.realmManifest,
-    realm, SPACE_REALM_PROFILE);
+    realm, profile);
+  const handle = realmState.handle;
+  const topics = realmState.topics;
+  if (handle !== undefined && typeof handle !== 'string'
+    || topics !== undefined && (!Array.isArray(topics) || topics.some(topic => typeof topic !== 'string'))
+    || profile === SPACE_REALM_PROFILE_V1 && (handle !== undefined || topics !== undefined)) {
+    throw new RetainedEffectConflict('retained Space community fields are invalid');
+  }
   if (spaceState.owner !== owner || spaceState.realmCapability !== realm
     || spaceState.disclosure !== 'public'
     || JSON.stringify(spaceState.capabilities) !== '["realm"]'
@@ -2437,7 +2451,9 @@ export async function reconcileRetainedRealmSpaceCreate(
     || realmState.selectionPolicy !== SELECTION_POLICY
     || realmState.membershipPolicy !== MEMBERSHIP_POLICY
     || realmState.reviewPolicy !== REVIEW_POLICY
-    || spaceCreationDigest({ name: spaceState.name, actingSubject: owner })
+    || spaceCreationDigest({ name: spaceState.name, actingSubject: owner,
+      ...handle !== undefined ? { handle } : {},
+      ...topics !== undefined ? { topics: topics as string[] } : {} })
       !== receipt.requestDigest) {
     throw new RetainedEffectConflict('retained Space payload differs from receipt');
   }
@@ -2467,9 +2483,13 @@ export async function reconcileRetainedRealmSpaceCreate(
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(space)} a rv:Space ; rv:owner ${iri(owner)} ;
+            ${profile === SPACE_REALM_PROFILE ? `rv:definitionProfile ${iri(profile)} ;` : ''}
             rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public ;
             rdfs:label ${lit(spaceState.name)}@en ; rv:head ${iri(spaceRevision)} .
           ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ;
+            ${profile === SPACE_REALM_PROFILE ? `rv:definitionProfile ${iri(profile)} ;` : ''}
+            ${handle !== undefined ? `rv:communityHandle ${lit(handle)} ;` : ''}
+            ${Array.isArray(topics) && topics.length ? `rv:topic ${topics.map(topic => iri(topic as string)).join(', ')} ;` : ''}
             rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
             rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ;
             rv:reviewPolicy ${iri(REVIEW_POLICY)} ; rv:head ${iri(realmRevision)} .
@@ -2477,13 +2497,13 @@ export async function reconcileRetainedRealmSpaceCreate(
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(spaceRevision)} a rv:RevisionAnchor ; rv:component ${iri(space)} ;
             rv:operation ${iri(operation)} ; rv:manifest ${iri(receipt.spaceManifest)} ;
-            rv:modelRevision ${iri(SPACE_REALM_PROFILE)} ;
-            rv:shapeRevision ${iri(SPACE_REALM_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:modelRevision ${iri(profile)} ;
+            rv:shapeRevision ${iri(profile)} ; rv:datasetId ${iri(DATASET)} ;
             rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
           ${iri(realmRevision)} a rv:RevisionAnchor ; rv:component ${iri(realm)} ;
             rv:operation ${iri(operation)} ; rv:manifest ${iri(receipt.realmManifest)} ;
-            rv:modelRevision ${iri(SPACE_REALM_PROFILE)} ;
-            rv:shapeRevision ${iri(SPACE_REALM_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:modelRevision ${iri(profile)} ;
+            rv:shapeRevision ${iri(profile)} ; rv:datasetId ${iri(DATASET)} ;
             rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
         }
         GRAPH ${iri(GRAPHS.receipts)} {
@@ -2526,9 +2546,10 @@ export async function reconcileRetainedRealmSpaceCreate(
     const existing = await readSpaceCreationReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await retainedCommand(env, update, receipt, 'space-realm-v1', [
-        { shape: `${SPACE_REALM_PROFILE}/space-shape`, focus: space },
-        { shape: `${SPACE_REALM_PROFILE}/realm-shape`, focus: realm },
+      try { await retainedCommand(env, update, receipt,
+        profile === SPACE_REALM_PROFILE ? 'space-realm-v2' : 'space-realm-v1', [
+        { shape: `${profile}/space-shape`, focus: space },
+        { shape: `${profile}/realm-shape`, focus: realm },
       ]); }
       catch (error) { updateError = error; }
     }
