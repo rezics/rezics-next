@@ -57,6 +57,7 @@ test('IAM13/IAM14: institutional Agent grant survives operator and representativ
     }
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await accountPool.query("INSERT INTO rezics_account_operator (user_id, role) VALUES ($1, 'owner') ON CONFLICT DO NOTHING", [operator.id]);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Grant API verifier', scope: 'access:grant',

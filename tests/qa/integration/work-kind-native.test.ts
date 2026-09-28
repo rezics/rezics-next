@@ -14,7 +14,7 @@ test('G318: native creation admits package, mod, Hub, recipe and media Works wit
   const call = (types: string[], key = randomUUID()) => app.handle(new Request('http://main.local/v1/works', {
     method: 'POST', headers: { authorization: `Bearer ${fixture.account.tokenA}`,
       'content-type': 'application/json', 'idempotency-key': key },
-    body: JSON.stringify({ profile: 'metadata-only-v1', title: `Native ${[...types].sort().join(' + ')}`,
+    body: JSON.stringify({ profile: 'metadata-only-v1', language: 'en', title: `Native ${[...types].sort().join(' + ')}`,
       semanticTypes: types, actingSubject: fixture.actor }),
   }));
   const types = [

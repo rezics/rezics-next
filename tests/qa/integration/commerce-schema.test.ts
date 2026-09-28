@@ -452,8 +452,12 @@ test('commerce schema: Realm review binds the exact reply revision in each Realm
   const content = seedContent(pool);
   const reply = iri();
   const first = await content.revision(reply, 'reply.create', `${reply}#body`);
+  const author = iri(), target = iri(), rootRevision = `urn:rezics:revision:${randomUUID()}`;
+  await pool.query(`INSERT INTO content.reply_author
+    (reply, variant_id, author, root_target, root_revision, operation_id)
+    VALUES ($1, $2, $3, $4, $5, $6)`, [reply, first.variant, author, target, rootRevision, first.operation]);
   await pool.query(`INSERT INTO content.reply (id, variant_id, author, root_target, root_revision, operation_id)
-    VALUES ($1, $2, $3, $4, $5, $6)`, [reply, first.variant, iri(), iri(), `urn:rezics:revision:${randomUUID()}`,
+    VALUES ($1, $2, $3, $4, $5, $6)`, [reply, first.variant, author, target, rootRevision,
     first.operation]);
   await expectFailure(pool.query(`UPDATE content.reply SET author = 'someone-else' WHERE id = $1`, [reply]), '23514');
   const realmA = iri();

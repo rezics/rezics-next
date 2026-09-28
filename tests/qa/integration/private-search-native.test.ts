@@ -281,7 +281,7 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
       body: JSON.stringify({ profile: 'public-main-phrase-v1', phrase, language: 'en' }),
     }));
     if (response.status !== 200) throw new Error(`public phrase ${response.status}: ${await response.text()}`);
-    return response.json() as Promise<{ total: number; population: number;
+    return response.json() as Promise<{ total: number; population: number; facets: unknown;
       results: Array<{ score: number; contribution: string; revision: string }> }>;
   }
   const work = await createWork(`Private native search ${randomUUID()}`);
@@ -336,7 +336,8 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
   expect(JSON.stringify(hiddenPublic)).not.toContain(hiddenBody);
   expect(JSON.stringify(hiddenPublic)).not.toContain(hiddenTerm);
   expect(hiddenPublic).not.toHaveProperty('snippets');
-  expect(hiddenPublic).not.toHaveProperty('facets');
+  // Public facets may exist, but a private write must not change their population.
+  expect(hiddenPublic.facets).toEqual(hiddenBefore.facets);
   const rawPublic = await fuseki.query(`PREFIX rv: <${RV}>
     PREFIX text: <http://jena.apache.org/text#> SELECT ?unit WHERE {
       GRAPH <urn:rezics:search:public> {

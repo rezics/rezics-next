@@ -4,6 +4,7 @@ import { startMediaStack } from '../../../tests/qa/integration/media-support.ts'
 import { createMainApp } from '../src/app.ts';
 import { RealmReplyContentStore } from '../src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../src/modules/realm-reply/store.ts';
+import { contentDraftIntentDigest } from '../../content/src/core.ts';
 
 const short = (id: string) => id.slice(-36);
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -47,11 +48,16 @@ test('Work activity: reviewed body, public history, pagination, revocation, eras
 
     const reply = `https://rezics.com/id/${randomUUID()}`;
     const variantId = `urn:rezics:variant:${randomUUID()}`;
-    const saved = await stack.content.saveDraft({ operationId: randomUUID(), variant: {
+    const draft = { operationId: randomUUID(), variant: {
       id: variantId, resourceId: reply,
-      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
-    }, expectedHead: null, model: 'content-text-v1', sourceRevision: null,
-    provenance: { kind: 'work-activity-qa' }, serializedJson: JSON.stringify({ body: 'Reviewed reply body' }) });
+      language: { kind: 'tag' as const, tag: 'en', originalTag: 'en' }, direction: 'ltr' as const,
+    }, expectedHead: null, model: 'member-reply-v1', sourceRevision: work.mainVersion,
+    serializedJson: JSON.stringify({ rootTarget: work.work, rootRevision: work.mainVersion,
+      body: 'Reviewed reply body', deleted: false }) };
+    const saved = await stack.content.saveDraft({ ...draft, provenance: {
+      kind: 'admitted-original-contribution-v1', author: member.actor, admissionId: randomUUID(),
+      authorityEpoch: '1', scope: `content:draft:${reply}`, expectedHead: null,
+      rightsBasis: 'original-contribution', requestDigest: contentDraftIntentDigest(draft, member.actor) } });
     const revisionId = saved.revisionId!;
     const digest = (await stack.contentPool.query<{ byte_digest: string }>(
       'SELECT byte_digest FROM content.revision WHERE id = $1', [revisionId])).rows[0]!.byte_digest;

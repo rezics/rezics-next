@@ -42,7 +42,7 @@ test('LIVE05: two field keys attach exact retained values and one withdrawal kee
 
     const seed = async (external: string) => {
       const record = randomUUID(), observation = randomUUID(), conversion = randomUUID();
-      const bytes = JSON.stringify({ semanticTypes: [], scalarValue: { kind: 'unknown' } });
+      const bytes = JSON.stringify({ semanticTypes: work.semanticTypes, scalarValue: { kind: 'unknown' } });
       await h.pool.query(`INSERT INTO source.record (id,provider,namespace,external_id)
         VALUES ($1,'fixture','work',$2)`, [record, external]);
       await h.pool.query(`INSERT INTO source.observation

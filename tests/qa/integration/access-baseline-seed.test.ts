@@ -1,9 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { readEnv } from '../../../scripts/dev/config.ts';
-import { people, realms, works } from '../../../scripts/dev/seed/plan.ts';
+import { penNames, people, realms, works } from '../../../scripts/dev/seed/plan.ts';
+import { communityPeople } from '../../../scripts/dev/seed/community-plan.ts';
+import { SeedApi } from '../../../scripts/dev/seed/api.ts';
+import { seedAccounts } from '../../../scripts/dev/seed/accounts-step.ts';
+import { seedWorks } from '../../../scripts/dev/seed/works-step.ts';
+import { seedContributions } from '../../../scripts/dev/seed/contributions-step.ts';
+import { seedRealms } from '../../../scripts/dev/seed/realms-step.ts';
+import { seedLibrary } from '../../../scripts/dev/seed/library-step.ts';
+import type { SeedState } from '../../../scripts/dev/seed/state.ts';
+import { demoClassics } from '../../fixtures/sources/open-library.ts';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { accountEmailQueue, smtpSender } from '../../../services/account/src/email.ts';
@@ -16,7 +25,7 @@ import { AgentVanityHandles } from '../../../services/main/src/modules/agent/van
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
 
-test('baseline demo seed: verified signups, Works, contributions, Spaces and personal shelves use public APIs without grants', async () => {
+test('baseline seed steps: verified signups, native Works, contributions, Spaces and personal shelves replay through member APIs', async () => {
   const root = resolve(import.meta.dir, '../../..');
   const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID!);
   const oldAccount = Bun.env.ACCOUNT_DATABASE_URL;
@@ -30,7 +39,7 @@ test('baseline demo seed: verified signups, Works, contributions, Spaces and per
   catch (error) { await databases.close(); throw error; }
   finally { Bun.env.ACCOUNT_DATABASE_URL = oldAccount; Bun.env.ACCESS_DATABASE_URL = oldAccess; }
   const directory = join(root, '.temp', `baseline-seed-${randomUUID()}`);
-  mkdirSync(join(directory, 'web-auth'), { recursive: true });
+  mkdirSync(directory, { recursive: true });
   const compose = readEnv(join(root, '.temp', 'stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`, 'compose.env'));
   const email = accountEmailQueue(h.accountPool, Bun.env.ACCOUNT_SECRET!, smtpSender({
     host: '127.0.0.1', port: Number(compose.MAILPIT_SMTP_PORT), secure: false,
@@ -60,43 +69,42 @@ test('baseline demo seed: verified signups, Works, contributions, Spaces and per
     agentHandles: new AgentVanityHandles(h.accessPool),
     agentProvisioning: new AgentProvisioning(h.accessPool, h.env), structureObjects: objects });
   const main = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: request => app.handle(request) });
-  writeFileSync(join(directory, 'dev.env'), `ACCOUNT_BASE_URL=${accountBase}\nMAIN_ORIGIN=http://127.0.0.1:${main.port}\nMAILPIT_HTTP_PORT=${compose.MAILPIT_HTTP_PORT}\n`);
-  writeFileSync(join(directory, 'compose.env'), `MAILPIT_HTTP_PORT=${compose.MAILPIT_HTTP_PORT}\n`);
-  writeFileSync(join(directory, 'web-auth/public.json'), JSON.stringify({ clientId: h.client.client_id,
-    redirectUris: [h.redirectUri], resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, scope: `openid ${scopes.join(' ')}` }));
+  const endpoints = { account: accountBase, main: `http://127.0.0.1:${main.port}`,
+    mailpit: `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}`, clientId: h.client.client_id,
+    redirectUri: h.redirectUri, resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, scope: `openid ${scopes.join(' ')}` };
+  const nativeWorks = works.filter(work => !demoClassics.some(classic => classic.id === work.id));
+  const accounts = people.length + communityPeople.length;
+  const agents = accounts + penNames.length;
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const child = Bun.spawn(['bun', 'scripts/dev/seed/cli.ts'], { cwd: root,
-        env: { ...process.env, REZICS_SEED_STACK_DIRECTORY: directory }, stdout: 'pipe', stderr: 'pipe' });
-      const [output, error, code] = await Promise.all([
-        new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-      writeFileSync(join(directory, `attempt-${attempt}.log`), output + error, { mode: 0o600 });
-      // This deliberately small owner fixture reports optional API gaps;
-      // provisioning and the author's baseline operations must still finish.
-      expect(code, error).toBe(2);
-      expect(error).toBe('');
-      const published = works.filter(work => work.excerpt).length;
-      const summary = `Seeded ${works.length} Works, ${realms.length} Realms, 0 official Zones, ${people.length} Account users, 9 Agents, ${published} published contributions,`;
-      if (!output.includes(summary)) console.log(output.split('\n').filter(line =>
-        /Seeded|HTTP|API gaps/.test(line)).join('\n'));
-      expect(output).toContain(summary);
-      expect(output).not.toMatch(/(?:Space \/ Realm creation|Personal collection|Text contribution|Translation link|Contribution publication).*HTTP/);
-      console.log(`Demo seed attempt ${attempt + 1}: ${summary}`);
+      const findings = new Set<string>();
+      const state: SeedState = { api: new SeedApi(endpoints), endpoints,
+        fixture: { operator: null, accountDatabaseUrl: null, accessDatabaseUrl: null, accountSecret: null },
+        findings, async optional<T>(label: string, operation: () => Promise<T>): Promise<T | null> {
+          try { return await operation(); }
+          catch (error) { findings.add(`${label}: ${error instanceof Error ? error.message : String(error)}`); return null; }
+        }, sessions: [], penAgents: new Map(), operatorInput: null, operatorSession: null, agentCount: 0,
+        created: new Map(), createdRealms: [], seededZones: [], publishedCount: 0, selectedCount: 0,
+        publicForRealm: new Map(), publicWorks: new Map(), ratingContext: null,
+        communityRealms: new Map(), discussionVotes: [], commentCount: 0, replyCount: 0,
+        reviewCount: 0, profileCreditCount: 0, profileFollowCount: 0 };
+      // The full demo CLI now requires operator-led classic acquisition (5884ab74).
+      // Exercise its member steps directly: imported classics and official setup have separate authority.
+      for (const step of [seedAccounts, seedWorks, seedContributions, seedRealms, seedLibrary]) await step(state);
+      expect(state.created.size).toBe(nativeWorks.length);
+      expect(state.createdRealms).toHaveLength(realms.length);
+      expect(state.agentCount).toBe(agents);
+      expect(state.publishedCount).toBe(nativeWorks.filter(work => work.excerpt).length);
+      expect([...findings].filter(value => /^(Space \/ Realm creation|Personal collection|Text contribution|Contribution publication):/.test(value)))
+        .toEqual([]);
+      // Provisioning creates narrow consent and Realm-owner grants; none grants these baseline writes.
+      expect((await h.accessPool.query(`SELECT count(*)::int AS n FROM access.permission_grant
+        WHERE action IN ('work.create', 'contribution.create', 'contribution.publish', 'space.create', 'collection.edit')`))
+        .rows[0]?.n).toBe(0);
+      expect((await h.accountPool.query('SELECT count(*)::int AS n FROM "user" WHERE "emailVerified"')).rows[0]?.n).toBe(accounts);
+      writeFileSync(join(directory, `attempt-${attempt}.json`), JSON.stringify({ nativeWorks: state.created.size,
+        accounts, agents, published: state.publishedCount, findings: [...findings] }));
     }
-    expect((await h.accessPool.query('SELECT count(*)::text AS n FROM access.permission_grant')).rows[0]?.n).toBe('0');
-    expect((await h.accountPool.query('SELECT count(*)::text AS n FROM "user" WHERE "emailVerified"')).rows[0]?.n).toBe(String(people.length));
-    // Keep the exact API gaps as QA evidence, without fixture credentials.
-    const output = readFileSync(join(directory, 'attempt-1.log'), 'utf8');
-    const gaps = output.slice(output.indexOf('Public API gaps or unavailable outcomes:'));
-    const evidence = join(root, '.temp', 'goal');
-    mkdirSync(evidence, { recursive: true });
-    writeFileSync(join(evidence, 'baseline-seed-evidence.json'), JSON.stringify({
-      qaRunId: Bun.env.REZICS_QA_RUN_ID, attempts: 2, works: works.length, spaces: realms.length,
-      verifiedAccounts: people.length, agents: 9,
-      publishedContributions: works.filter(work => work.excerpt).length,
-      explicitGrants: 0, gaps,
-    }, null, 2));
-    console.log(gaps);
   } finally {
     clearInterval(timer);
     await delivering;

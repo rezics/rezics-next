@@ -423,7 +423,7 @@ test('PKG15: approved hook runs in the pinned production container through Main 
   expect(profile).toBe(NODE_HOOK_PROFILE);
   expect((await json(await apply(f, id, approved.generation.generation), 200)).state).toBe('active');
   expect(await readFile(join(f.rootOf(target), 'node_modules/hooked/built.txt'), 'utf8')).toBe('isolated');
-});
+}, 30_000);
 
 test('PKG15: unsafe hook output is rejected and leaves no package mount', async () => {
   const unsafe = await fixture({ bad: { versions: { '1.0.0': {

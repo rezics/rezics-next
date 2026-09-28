@@ -136,9 +136,12 @@ test('CTX02/CTX03/WORK03/SEARCH07/SEARCH19: joined decisions and Realm selection
     expect(actual.total).toBe(expected.length);
     expect(actual.sourcePosition.dataEpoch).toBe(env.lineage.dataEpoch);
     expect(actual.sourcePosition.sequence).toMatch(/^[0-9]+$/);
-    const rows = actual.results.map(({ score, ...row }) => row)
+    // Compare selection truth independently of the card fields added by 20b6b8d1/3c2a6a52.
+    const rows = actual.results.map(({ work, mainVersion, matchUnit, contribution, revision,
+      selection, language, reason }) => ({ work, mainVersion, matchUnit, contribution, revision,
+      selection, language, ...(reason ? { reason } : {}) }))
       .sort((a, b) => a.work.localeCompare(b.work));
-    expect(rows).toEqual(expected.map(row => ({ ...row, types: [] })));
+    expect(rows).toEqual(expected);
     return rows;
   }
 

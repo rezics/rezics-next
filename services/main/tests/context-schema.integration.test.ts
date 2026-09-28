@@ -135,7 +135,9 @@ test('CTX03: schema foundation Access private Context selections install empty, 
       VALUES ($1, 'work.create', NULL, $2)`, [principal, Bun.randomUUIDv7()]);
     const before = (await pool.query('SELECT to_jsonb(p)::text AS row FROM access.principal p ORDER BY id')).rows;
     await apply(pool, [OWN, ...later]);
-    expect((await pool.query('SELECT to_jsonb(p)::text AS row FROM access.principal p ORDER BY id')).rows).toEqual(before);
+    // Later migrations may add service principals; every pre-existing identity must survive unchanged.
+    expect((await pool.query(`SELECT to_jsonb(p)::text AS row FROM access.principal p
+      WHERE id = ANY($1::uuid[]) ORDER BY id`, [[principal, other]])).rows).toEqual(before);
     expect((await pool.query('SELECT count(*)::int AS n FROM access.acting_context_preference')).rows[0].n).toBe(1);
 
     const object = native();

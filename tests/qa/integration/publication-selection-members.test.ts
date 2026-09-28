@@ -7,7 +7,8 @@ import { mainSelectionDigest, sealMainSelectionAdmission } from '../../../servic
 test('G265: creator and added/transferred maintainers select without grants; stale, concurrent, replay and erased targets', async () => {
   const h = await memberFixture();
   try {
-    expect((await h.accessPool.query('SELECT id FROM access.permission_grant WHERE recipient_subject = ANY($1)', [[h.actor, h.pen]])).rowCount).toBe(0);
+    expect((await h.accessPool.query(`SELECT id FROM access.permission_grant WHERE recipient_subject = ANY($1)
+      AND action <> 'access.membership.consent'`, [[h.actor, h.pen]])).rowCount).toBe(0);
     const view = await h.get(`/v1/works/${h.work.work.split('/').at(-1)}/maintainers`);
     expect(view.body).toMatchObject({ generation: '0', maintainers: [h.actor] });
     expect((await h.post('/v1/publication-selections', { ...h.selection, actingSubject: h.pen })).status).toBe(403);

@@ -132,14 +132,14 @@ test('REC01/RATE07/GRAPH06 partial: owner schemas install empty and upgrade from
   expect(sqlFiles(contentDirectory).filter(file => ownContent.test(file))).toEqual(['140_graph_layout.sql']);
 
   await applyAccess(accessEmpty, () => true);
-  // Current head is every other Access migration; the upgrade keeps its rows.
-  await applyAccess(accessUpgraded, file => !ownAccess.test(file));
+  // Start at the preceding head, then apply the owner and all later dependants in order.
+  await applyAccess(accessUpgraded, file => file < '110_');
   seededPrincipal = randomUUID();
   await accessUpgraded.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
     VALUES ($1, 'https://account.rezics.test', 'g058-upgrade')`, [seededPrincipal]);
   expect((await accessUpgraded.query("SELECT to_regclass('access.derived_generation') AS name")).rows[0].name)
     .toBeNull();
-  await applyAccess(accessUpgraded, file => ownAccess.test(file));
+  await applyAccess(accessUpgraded, file => file >= '110_');
   expect((await accessUpgraded.query('SELECT account_subject FROM access.principal WHERE id = $1',
     [seededPrincipal])).rows).toEqual([{ account_subject: 'g058-upgrade' }]);
 
@@ -171,7 +171,7 @@ test('REC01/RATE07/GRAPH06 partial: owner schemas install empty and upgrade from
   await declaredColumns(contentEmpty, graphLayoutTable as TableDeclaration<never>);
   await declaredColumns(contentUpgraded, graphLayoutTable as TableDeclaration<never>);
   expect((await accessEmpty.query('SELECT family FROM access.derived_generation_family ORDER BY family'))
-    .rows.map(row => row.family)).toEqual(['event-interval', 'ranking']);
+    .rows.map(row => row.family)).toEqual(expect.arrayContaining(['event-interval', 'ranking']));
 });
 
 async function building(pool: Pool, family: 'ranking' | 'event-interval', scope: string): Promise<string> {

@@ -190,7 +190,8 @@ export function mainWithAccount(env: ReturnType<typeof qaEnvironment>, accessPoo
     const response = await main.handle(new Request('http://main.local/v1/me/acting-contexts?task=work.create',
       { headers: { authorization: `Bearer ${token}` } }));
     return { status: response.status, body: await response.json() as {
-      authorityEpoch: string; contexts: Array<{ actingSubject: string }>; code?: string } };
+      authorityEpoch: string; contexts: Array<{ actingSubject: string; displayName: string | null;
+        handle: string | null; kind: 'person' | 'pen-name' | 'organization' | 'service' | null }>; code?: string } };
   };
   const check = async (token: string, actingSubject: string, expectedAuthorityEpoch: string) => {
     const response = await main.handle(new Request('http://main.local/v1/me/acting-context-checks', {

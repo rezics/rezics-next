@@ -206,9 +206,10 @@ test('IAM09: installation checks stay constant-cost as revoked installation hist
       cycleCosts.push(counter.counts.calls);
     } finally { counter.restore(); }
   }
-  // The operator session read plus O(1) indexed statements, at any history length.
+  // e6b199f4 added durable bootstrap/role checks, step-up and transactional audits.
+  // Measured endpoint costs are 14 for revoke + 16 for install, independent of history.
   expect(new Set(cycleCosts).size).toBe(1);
-  expect(cycleCosts[0]).toBeLessThanOrEqual(16);
+  expect(cycleCosts[0]).toBeLessThanOrEqual(30);
   expect((await account.pool.query('SELECT 1 FROM rezics_oauth_installation WHERE client_id = $1',
     [churned.client_id])).rowCount).toBe(17);
   const afterHistory = await measure((await account.issue(churned.client_id, member, scope, false)).access_token);
@@ -260,7 +261,8 @@ test('IAM09: a refreshed token re-evaluates the selected acting-Agent context an
   expect(await select(second.access_token, agentA!)).toBe(403);
   expect(await select(first.access_token, agentA!)).toBe(403);
   expect(await select(second.access_token, agentB!)).toBe(200);
-  expect((await discover(second.access_token)).body.contexts).toEqual([{ actingSubject: agentB }]);
+  expect((await discover(second.access_token)).body.contexts).toEqual([
+    { actingSubject: agentB, displayName: null, handle: null, kind: null }]);
 
   // Refresh keeps the consented ceiling; an unconsented registered scope stays out.
   const wider = await account.refresh(app.client_id, second.refresh_token, 'work:create work:edit');

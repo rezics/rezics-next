@@ -42,7 +42,8 @@ test('G265: members and pen names author exact contribution comments, edit/delet
     expect((await h.post('/v1/member-reply-drafts', input, key)).body.revisionId).toBe(draft.body.revisionId);
     expect((await h.get(readPath)).status).toBe(404);
     expect((await h.get(pagePath)).body.items).toEqual([]);
-    expect((await h.accessPool.query('SELECT id FROM access.permission_grant WHERE recipient_subject = ANY($1)', [[h.actor, h.pen]])).rowCount).toBe(0);
+    expect((await h.accessPool.query(`SELECT id FROM access.permission_grant WHERE recipient_subject = ANY($1)
+      AND action <> 'access.membership.consent'`, [[h.actor, h.pen]])).rowCount).toBe(0);
     const plan = await h.contentPool.query(`EXPLAIN (FORMAT JSON) SELECT id FROM content.reply
       WHERE root_target = $1 AND root_revision = $2 AND id > '' ORDER BY id LIMIT 33`, [input.rootTarget, input.rootRevision]);
     expect(JSON.stringify(plan.rows)).toContain('Limit');

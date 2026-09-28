@@ -203,10 +203,10 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(late.total).toBe(1);
     expect(late.results[0]?.work).toBe(lateWork);
     expect(fuseki.inventories).toBe(1);
-    // Work types, current fields and a 20-card window add a fixed nine reads;
-    // they share the phrase request's deadline and 72-call budget.
-    expect(fuseki.queryCalls - coldStart.queries).toBe(14);
-    expect(fuseki.healthCalls - coldStart.health).toBe(3);
+    // 3c2a6a52 batches card hydration and adds one final search-health fence.
+    // Preserve the query upper bounds; the core-only corpus probes above still cost 4/3/1.
+    expect(fuseki.queryCalls - coldStart.queries).toBeLessThanOrEqual(14);
+    expect(fuseki.healthCalls - coldStart.health).toBe(4);
     const warmStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const all = await query(null);
     expect(all.complete).toBe(true);
@@ -214,8 +214,8 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(all.total).toBe(102);
     expect(new Set(all.results.map(row => row.work))).toEqual(new Set([...works, lateWork]));
     expect(fuseki.inventories).toBe(1);
-    expect(fuseki.queryCalls - warmStart.queries).toBe(13);
-    expect(fuseki.healthCalls - warmStart.health).toBe(3);
+    expect(fuseki.queryCalls - warmStart.queries).toBeLessThanOrEqual(13);
+    expect(fuseki.healthCalls - warmStart.health).toBe(4);
     expect(all.cardWindow).toMatchObject({ hydrated: 20, limit: 20 });
     expect(all.results.filter(row => row.title !== undefined)).toHaveLength(20);
     const cardNext = await app.handle(new Request('http://main.local/v1/queries/page', {
@@ -310,14 +310,14 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     const firstAuthor = await query('en', actor);
     expect(firstAuthor.complete).toBe(true);
     expect(firstAuthor.results.map(row => row.work)).toEqual([nextWork]);
-    expect(fuseki.queryCalls - authorStart.queries).toBe(13);
-    expect(fuseki.healthCalls - authorStart.health).toBe(3);
+    expect(fuseki.queryCalls - authorStart.queries).toBeLessThanOrEqual(13);
+    expect(fuseki.healthCalls - authorStart.health).toBe(4);
     const secondAuthorStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const secondAuthor = await query('en', otherAuthor);
     expect(secondAuthor.complete).toBe(true);
     expect(secondAuthor.results.map(row => row.work)).toEqual([lateWork]);
-    expect(fuseki.queryCalls - secondAuthorStart.queries).toBe(13);
-    expect(fuseki.healthCalls - secondAuthorStart.health).toBe(3);
+    expect(fuseki.queryCalls - secondAuthorStart.queries).toBeLessThanOrEqual(13);
+    expect(fuseki.healthCalls - secondAuthorStart.health).toBe(4);
     expect(fuseki.inventories).toBe(3);
 
     const spaceInput = { name: `Scale Realm ${randomUUID()}`, actingSubject: actor };

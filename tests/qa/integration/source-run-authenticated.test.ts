@@ -53,6 +53,7 @@ test('PKG20: real Account scopes and Access admission fence Go source runs', asy
     };
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await accountPool.query("INSERT INTO rezics_account_operator (user_id, role) VALUES ($1, 'owner') ON CONFLICT DO NOTHING", [operator.id]);
     const adminHeaders = new Headers({ cookie: operator.cookie, origin: base });
     const verifier = await auth.api.adminCreateOAuthClient({ headers: adminHeaders, body: {
       client_name: 'Go source run verifier', scope: 'source:acquire',

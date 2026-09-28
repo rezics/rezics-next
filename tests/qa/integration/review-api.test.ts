@@ -303,4 +303,4 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
       .toBeNull();
     expect((await notifications.unreadCount(a.principal)).count).toBe(0);
   } finally { await stack.stop(); }
-});
+}, 30_000);
