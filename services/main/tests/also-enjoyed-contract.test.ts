@@ -12,7 +12,9 @@ test('Also enjoyed read has a bounded Eden card and cursor contract', () => {
     const author: string | null | undefined = page.data?.items[0]?.primaryCredits[0]?.displayName;
     const ratingCount: number | undefined = page.data?.items[0]?.rating?.count;
     const cursor: string | null | undefined = page.data?.nextCursor;
-    return { basis, author, ratingCount, cursor };
+    const stale: boolean | undefined = page.data?.stale;
+    const projectionSequence: string | undefined = page.data?.projectionPosition?.sequence;
+    return { basis, author, ratingCount, cursor, stale, projectionSequence };
   };
   expect(consume).toBeFunction();
   expect(ALSO_ENJOYED_COST.ratingRows).toBeLessThanOrEqual(32);

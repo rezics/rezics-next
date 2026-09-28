@@ -6,6 +6,7 @@ import type { OwnedDiscoveryBasis } from '../discovery/contract.ts';
 import { RecommendationUnavailable } from '../recommendation/derived-generation.ts';
 import { searchPageCredits, searchPageSerial } from '../search/result-cards.ts';
 import { searchPageRatings } from '../search/ratings.ts';
+import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { canonicalChapterWorks } from '../structure/chapter-work.ts';
 import { displayZoneCredits } from '../zone-modules/read.ts';
 import { GRAPHS, iri, lit, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
@@ -13,7 +14,7 @@ import { readWorkClassifications } from '../work/read-classifications.ts';
 import { readWorkBasis } from '../work/read-header.ts';
 import { readWorkPage } from '../work/read-pages.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid,
-  WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
+  WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { alsoEnjoyedItem } from './contract.ts';
 import type { AlsoEnjoyedStore } from './store.ts';
 
@@ -39,20 +40,27 @@ function creditIdentities(credits: Awaited<ReturnType<typeof searchPageCredits>>
 async function classCandidates(session: WorkReadSession, source: string): Promise<string[]> {
   const projection = session.deps.discovery;
   if (!projection) return [];
-  const classifications = await readWorkClassifications(sourceSession(session), source);
+  const nested = sourceSession(session);
+  const classifications = await readWorkClassifications(nested, source).catch(error => {
+    if (!(error instanceof WorkReadMoved || error instanceof SearchSnapshotMoved)) throw error;
+    session.stale = true;
+    return null;
+  });
+  if (nested.stale) session.stale = true;
+  if (!classifications) return [];
   if (!classifications.items.length) return [];
   const basis: OwnedDiscoveryBasis = { scope: 'global', realm: null, context: null, owner: null };
   let active;
   try { active = await projection.active(basis, session.position); }
   catch (error) { if (error instanceof RecommendationUnavailable) return []; throw error; }
-  if (active.stale) return [];
+  if (active.stale) { session.stale = true; return []; }
   const found: string[] = [];
   for (const sense of classifications.items.slice(0, 3)) {
     const rows = await projection.page(active, 'recent', '', sense.sense, 20);
     found.push(...rows.map(row => row.work));
   }
   const final = await projection.active(basis, session.position, active.generation_id);
-  if (final.stale) throw new WorkReadMoved('Classification projection changed');
+  if (final.stale) { session.stale = true; return []; }
   return [...new Set(found)].slice(0, 24);
 }
 
@@ -124,6 +132,8 @@ export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
     session.options.actingSubject ?? null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const co = await store.candidates(source, 24);
+  const projectionPosition = co.graphEpoch && co.graphSequence
+    ? { dataEpoch: co.graphEpoch, sequence: co.graphSequence } : null;
   const candidates: Candidate[] = [];
   const seen = new Set([source]);
   const append = (ids: string[], basis: Basis) => {
@@ -166,29 +176,50 @@ export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
     if (row.type) current.types.add(row.type.value);
     facts.set(row.work.value, current);
   }
-  if (facts.size !== ids.length) throw new WorkReadMoved('Recommendation Work disappeared');
-  const summaries = await session.summaries(ids);
-  const serial = await searchPageSerial(session, ids);
-  const credits = await searchPageCredits(session, ids);
-  const ratings = await searchPageRatings(session, ids.map(work => ({ work,
-    mainVersion: facts.get(work)!.main })));
+  if (facts.size !== ids.length) session.stale = true;
+  const live = selected.filter(item => facts.has(item.work));
+  const liveIds = live.map(item => item.work);
+  const summaries = await session.summaries(liveIds);
+  const serial = await searchPageSerial(session, liveIds);
+  const credits = await searchPageCredits(session, liveIds);
+  const ratings = await searchPageRatings(session, liveIds.map(work => ({ work,
+    mainVersion: facts.get(work)!.main }))).catch(error => {
+    if (!(error instanceof SearchSnapshotMoved)) throw error;
+    session.stale = true;
+    return { values: new Map<string, null>() };
+  });
   const names = await namedDiscoveryCredits(session, [...credits.values()].flat());
   const sourceNames = await readAuthorNames(session, [...credits.values()].flat()
     .flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : []));
-  const fenced = await session.summaries(ids);
-  const items: Static<typeof alsoEnjoyedItem>[] = selected.map((item, index) => {
-    const summary = summaries[index], final = fenced[index], fact = facts.get(item.work)!,
+  const fenced = await session.summaries([source, ...liveIds]);
+  const sourceFinal = fenced[0];
+  if (sourceFinal?.status !== 'available' || sourceFinal.type !== 'work'
+    || sourceBasis.disclosure === 'public' && sourceFinal.disclosure !== 'public') {
+    throw new WorkReadMissing('Work is unavailable');
+  }
+  if (sourceFinal.disclosure !== 'public' && (!session.principal || !session.options.actingSubject
+    || !await session.deps.access.canReadWork(session.principal, session.options.actingSubject, source))) {
+    throw new WorkReadMissing('Work is unavailable');
+  }
+  const finalVisible = new Set((await publicCandidates(session, live, source)).map(item => item.work));
+  const items: Static<typeof alsoEnjoyedItem>[] = live.flatMap((item, index) => {
+    const summary = summaries[index], final = fenced[index + 1], fact = facts.get(item.work)!,
       metadata = serial.get(item.work);
     if (summary?.status !== 'available' || summary.type !== 'work'
-      || summary.disclosure !== 'public' || !final || JSON.stringify(summary) !== JSON.stringify(final)
-      || !metadata) throw new WorkReadMoved('Recommendation disclosure changed');
-    return { id: item.work, revision: fact.head, mainVersion: fact.main,
+      || summary.disclosure !== 'public' || !finalVisible.has(item.work)
+      || !final || JSON.stringify(summary) !== JSON.stringify(final) || !metadata) {
+      session.stale = true;
+      return [];
+    }
+    return [{ id: item.work, revision: fact.head, mainVersion: fact.main,
       title: summary.name, cover: summary.avatar, types: [...fact.types].sort(),
       ...metadata, primaryCredits: displayZoneCredits(credits.get(item.work) ?? [], names, sourceNames),
-      rating: ratings.values.get(item.work) ?? null, basis: item.basis };
+      rating: ratings.values.get(item.work) ?? null, basis: item.basis }];
   });
   const end = start + selected.length;
-  return { profile: 'also-enjoyed-v1' as const,
+  return { profile: 'also-enjoyed-v1' as const, projectionPosition,
+    stale: co.stale || !!projectionPosition && (projectionPosition.dataEpoch !== session.position.dataEpoch
+      || projectionPosition.sequence !== session.position.sequence) || session.stale,
     ...pageResult(session, items, end < visible.length
       ? encodeReadCursor(binding, session.position, String(end), fingerprint) : null) };
 }

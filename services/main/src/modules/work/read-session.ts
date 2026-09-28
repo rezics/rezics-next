@@ -29,7 +29,9 @@ export interface ReadPosition { dataEpoch: string; sequence: string }
 export interface ReadOptions { language?: string; actingSubject?: string; cursor?: string; limit?: number;
   scope?: 'global' | 'realm' | 'mine'; realm?: string;
   /** Internal owner promise: its continuation addresses retained immutable rows. */
-  retainedBasis?: boolean }
+  retainedBasis?: boolean;
+  /** Owner reads with live disclosure fences may return a stale result as the graph advances. */
+  movingGraph?: boolean }
 export const READ_PREFIX = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
   PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
   PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -76,6 +78,7 @@ export function decodeReadCursor(token: string | undefined, binding: unknown, po
 
 export class WorkReadSession {
   principal: VerifiedPrincipal | null = null;
+  stale = false;
   private readonly realmProofs = new Map<string, string>();
 
   async realm(realm: string) {
@@ -123,6 +126,10 @@ export class WorkReadSession {
     const result = await readResourceSummaries(this.deps.environment, this.deps.media?.store, reader,
       { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null });
     if (result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
+      if (this.options.movingGraph && result.generation.graph.startsWith(`${this.position.dataEpoch}:`)) {
+        this.stale = true;
+        return result.summaries;
+      }
       throw new WorkReadMoved('Graph changed during the read');
     }
     return result.summaries;
@@ -158,7 +165,8 @@ async function position(deps: MainWorkDependencies): Promise<ReadPosition> {
 }
 
 export async function workRead<T>(deps: MainWorkDependencies, request: Request, options: ReadOptions,
-  operation: (session: WorkReadSession) => Promise<T>): Promise<T> {
+  operation: (session: WorkReadSession) => Promise<T>,
+  complete?: (result: T, session: WorkReadSession) => T): Promise<T> {
   const outer = fusekiReadBudget.getStore();
   const deadline = AbortSignal.timeout(WORK_READ_COST.deadlineMs);
   const signal = outer ? AbortSignal.any([deadline, outer.signal]) : deadline;
@@ -181,7 +189,7 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
       const url = new URL(request.url);
       // Some owners decode their own cursor without forwarding it in options.
       const hasCursor = !!options.cursor || url.searchParams.has('cursor');
-      const attempts = (!hasCursor || options.retainedBasis) && request.method === 'GET'
+      const attempts = !options.movingGraph && (!hasCursor || options.retainedBasis) && request.method === 'GET'
         && url.pathname.startsWith('/v1/') ? WORK_READ_COST.attempts : 1;
       for (let attempt = 0; ; attempt++) {
         try {
@@ -194,7 +202,11 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
           const result = await operation(session);
           const after = await position(deps);
           if (after.dataEpoch !== session.position.dataEpoch || after.sequence !== session.position.sequence) {
-            throw new WorkReadMoved('Graph changed during the read');
+            if (options.movingGraph && after.dataEpoch === session.position.dataEpoch) {
+              session.stale = true;
+            } else {
+              throw new WorkReadMoved('Graph changed during the read');
+            }
           }
           if (session.principal && !await deps.access.activePrincipalId(session.principal)) {
             throw new AccountAssertionDenied('Principal is inactive');
@@ -202,7 +214,7 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
           await session.fenceRealms();
           await fenceAuthorNames(session);
           signal.throwIfAborted();
-          return result;
+          return complete ? complete(result, session) : result;
         } catch (error) {
           if (!(error instanceof WorkReadMoved || error instanceof SearchSnapshotMoved)
             || error instanceof WorkReadExpired || attempts === 1) throw error;

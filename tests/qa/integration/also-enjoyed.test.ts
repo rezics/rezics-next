@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AlsoEnjoyedStore, ALSO_ENJOYED_COST } from '../../../services/main/src/modules/also-enjoyed/store.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { decodeReadCursor } from '../../../services/main/src/modules/work/read-session.ts';
+import { WORK_READ_COST } from '../../../services/main/src/modules/work/read-contract.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { startMediaStack } from './media-support.ts';
@@ -56,7 +58,8 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     const read = (limit = 6, cursor?: string) => app.handle(new Request(`http://main.local/v1/works/${source.work.slice(-36)}/also-enjoyed?limit=${limit}${cursor ? `&cursor=${cursor}` : ''}`));
     interface CardPage { items: { id: string; basis: string; title: { value: string };
       rating: null | { mean: number; count: number }; primaryCredits: unknown[] }[];
-      nextCursor: string | null; sourcePosition: { dataEpoch: string; sequence: string } }
+      nextCursor: string | null; sourcePosition: { dataEpoch: string; sequence: string };
+      projectionPosition: { dataEpoch: string; sequence: string } | null; stale: boolean }
     const fallback = await json<CardPage>(await read());
     expect(fallback.items.map(item => item.id)).toContain(candidate.work);
     expect(fallback.items.map(item => item.id)).toContain(another.work);
@@ -65,6 +68,51 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     expect(fallback.items.map(item => item.id)).not.toContain(hidden.work);
     expect(fallback.items.map(item => item.id)).not.toContain(chapter.work);
     expect(fallback.items.map(item => item.id)).not.toContain(sameAuthor.work);
+    const originalQuery = stack.fuseki.query.bind(stack.fuseki);
+    let churn = 0;
+    stack.fuseki.query = async (sparql, bytes) => {
+      const result = await originalQuery(sparql, bytes);
+      if (sparql.includes('SELECT ?epoch ?sequence WHERE')) {
+        const index = ++churn;
+        await fusekiReadBudget.exit(() => stack.privateWork(manager.actor, `Concurrent private Work ${index}`));
+      }
+      return result;
+    };
+    try {
+      const started = performance.now();
+      const moving = await json<CardPage>(await read(20));
+      expect(performance.now() - started).toBeLessThan(WORK_READ_COST.deadlineMs);
+      expect(churn).toBe(2);
+      expect(moving.stale).toBe(true);
+      expect(moving.items.map(item => item.id)).toContain(candidate.work);
+      expect(moving.items.map(item => item.id)).not.toContain(hidden.work);
+      expect(moving.items.map(item => item.id)).not.toContain(chapter.work);
+      expect(moving.items.map(item => item.id)).not.toContain(sameAuthor.work);
+    } finally { stack.fuseki.query = originalQuery; }
+    const erasedVariant = `urn:rezics:also-enjoyed-variant:${randomUUID()}`;
+    const erasedPublication = `urn:rezics:also-enjoyed-publication:${randomUUID()}`;
+    const erasedRevision = `urn:rezics:also-enjoyed-revision:${randomUUID()}`;
+    const erasure = `GRAPH ${iri(GRAPHS.current)} { ${iri(erasedVariant)} rv:resource ${iri(candidate.work)} ;
+      rv:contentPublicationHead ${iri(erasedPublication)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(erasedPublication)} rv:contentRevision ${iri(erasedRevision)} .
+        ${iri(erasedRevision)} a rv:ErasedRevision . }`;
+    let erased = false;
+    stack.fuseki.query = async (sparql, bytes) => {
+      const result = await originalQuery(sparql, bytes);
+      if (!erased && sparql.includes('SELECT ?work ?head ?main ?type WHERE')) {
+        erased = true;
+        await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { ${erasure} }`);
+      }
+      return result;
+    };
+    try {
+      const revoked = await json<CardPage>(await read());
+      expect(erased).toBe(true);
+      expect(revoked.items.map(item => item.id)).not.toContain(candidate.work);
+    } finally {
+      stack.fuseki.query = originalQuery;
+      if (erased) await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { ${erasure} }`);
+    }
     const readers = await Promise.all(['reader-1', 'reader-2', 'reader-3', 'reader-4', 'private-reader']
       .map(name => stack.member(name)));
     for (const [index, reader] of readers.entries()) {
@@ -123,6 +171,8 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     expect(signals.sourceReaders).toBe(4);
     expect(signals.candidates.find(item => item.work === candidate.work)?.sharedReaders).toBe(3);
     const page = await json<CardPage>(await read());
+    expect(page.stale).toBe(false);
+    expect(page.projectionPosition).toEqual(current.sourcePosition);
     expect(page.items.find(item => item.id === candidate.work)?.basis).toBe('co-readers');
     expect(page.items.find(item => item.id === candidate.work)?.title.value).toBe('A co-read book');
     expect(page.items.find(item => item.id === candidate.work)?.rating?.count).toBe(1);
@@ -143,6 +193,7 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
       version = version + 1 WHERE agent_id = $1`, [readers[0]!.actor]);
     await expect(store.advance(staleBuild.generation, context, deps, buildRequest)).rejects.toThrow();
     const stale = await json<CardPage>(await read());
+    expect(stale.stale).toBe(true);
     expect(stale.items.find(item => item.id === candidate.work)?.basis).toBe('similar');
     expect((await store.candidates(source.work)).sourceReaders).toBe(0);
   } finally { await stack.stop(); }

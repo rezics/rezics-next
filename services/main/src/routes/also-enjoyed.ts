@@ -58,8 +58,9 @@ export function alsoEnjoyedRoutes(work: MainWorkDependencies) {
     }, async ({ request, params, query }) => {
       try {
         if (!work.alsoEnjoyed) throw new WorkReadUnavailable('Co-reader owner is unavailable');
-        return Response.json(await workRead(work, request, query,
-          session => readAlsoEnjoyed(session, `https://rezics.com/id/${params.id}`, work.alsoEnjoyed!)), noStore);
+        return Response.json(await workRead(work, request, { ...query, movingGraph: true },
+          session => readAlsoEnjoyed(session, `https://rezics.com/id/${params.id}`, work.alsoEnjoyed!),
+          (page, session) => ({ ...page, stale: page.stale || session.stale })), noStore);
       } catch (error) { return readError(error); }
     })
     .post('/v1/also-enjoyed/generation-builds', {

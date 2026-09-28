@@ -310,16 +310,19 @@ export class AlsoEnjoyedStore {
     const contentRevision = await this.contentRevision();
     const result = await inAccess(this.access, async client => {
       await requireRecoveryOpen(client);
-      const head = (await client.query<{ generation: string; graph_epoch: string; access_revision: string;
+      const head = (await client.query<{ generation: string; graph_epoch: string; graph_sequence: string;
+        access_revision: string;
         content_revision: string }>(`SELECT a.generation_id AS generation,
-          a.graph_epoch, a.access_revision::text, a.content_revision::text
+          a.graph_epoch, a.graph_sequence::text, a.access_revision::text, a.content_revision::text
           FROM access.derived_generation_head h
           JOIN access.also_enjoyed_generation a ON a.generation_id = h.active_generation
           WHERE h.family = $1 AND h.scope_key = $2`, [FAMILY, SCOPE])).rows[0];
-      if (!head || head.access_revision !== (await client.query<{ revision: string }>(
+      if (!head) return { generation: null, graphEpoch: null, graphSequence: null,
+        stale: false, sourceReaders: 0, rows: [] };
+      if (head.access_revision !== (await client.query<{ revision: string }>(
         'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id')).rows[0]?.revision
         || head.content_revision !== contentRevision) return { generation: null,
-          graphEpoch: null, sourceReaders: 0, rows: [] };
+          graphEpoch: null, graphSequence: null, stale: true, sourceReaders: 0, rows: [] };
       const sourceReaders = Number((await client.query<{ readers: string }>(`
         SELECT count(*)::text AS readers FROM access.also_enjoyed_signal
         WHERE generation_id = $1 AND work = $2 AND source_eligible`,
@@ -329,13 +332,15 @@ export class AlsoEnjoyedStore {
         WHERE generation_id = $1 AND source_work = $2
         ORDER BY score DESC, candidate_work COLLATE "C" LIMIT $3`,
       [head.generation, source, limit])).rows;
-      return { generation: head.generation, graphEpoch: head.graph_epoch, sourceReaders, rows };
+      return { generation: head.generation, graphEpoch: head.graph_epoch,
+        graphSequence: head.graph_sequence, stale: false, sourceReaders, rows };
     });
     if (await this.contentRevision() !== contentRevision) {
-      return { generation: null, graphEpoch: null, sourceReaders: 0,
+      return { generation: null, graphEpoch: null, graphSequence: null, stale: true, sourceReaders: 0,
         candidates: [] as CoReaderCandidate[] };
     }
     return { generation: result.generation, graphEpoch: result.graphEpoch,
+      graphSequence: result.graphSequence, stale: result.stale,
       sourceReaders: result.sourceReaders,
       candidates: result.rows.map(row => ({ work: row.candidate_work, sharedReaders: row.shared_readers,
         score: Number(row.score) })) };
