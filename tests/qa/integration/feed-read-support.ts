@@ -55,6 +55,14 @@ export const HOME_READ_BUDGET = {
   suggestions: { graphQueries: 25, statements: 60 },
 } as const;
 
+/**
+ * One vote on one activity: its admission is a fixed read of that activity's
+ * source, author, Work, Realm and (for a reply) body, run before the vote's
+ * transaction takes the projection's checkpoint, so votes never queue behind
+ * a slow read. Measured when set in the handoff of G-401.
+ */
+export const HOME_VOTE_BUDGET = { graphQueries: 40, statements: 60 } as const;
+
 /** The budget a read is held to. */
 export const budgetFor = (name: string, signed: boolean) => name === 'continue' ? HOME_READ_BUDGET.continue
   : name === 'suggestions' ? HOME_READ_BUDGET.suggestions : signed ? HOME_READ_BUDGET.signed : HOME_READ_BUDGET.anonymous;

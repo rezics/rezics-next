@@ -45,7 +45,9 @@ export function DiscussionRegion({ discussion, view, cursor, locale, messages }:
           messages, locale) : item.realm;
         // A reply is dated by its placement, which Main minted when the community placed it.
         const placed = mintedAt(item.placement);
-        return <li key={item.placement}>
+        // Home links a discussion here by its reply; its thread lives in the Realm that placed it.
+        const reply = idOf(item.reply);
+        return <li key={item.placement} id={reply ?? undefined} className="scroll-mt-24">
           <article className="grid gap-3 rounded-xl border border-border/60 bg-background/60 p-4">
             <header className="flex flex-wrap items-center justify-between gap-2 text-xs">
               {realm && view.scope.kind !== 'realm'
@@ -60,6 +62,9 @@ export function DiscussionRegion({ discussion, view, cursor, locale, messages }:
             <div className="grid gap-2 text-pretty break-words text-sm/7">
               {paragraphs(item.body).map((line, index) => <p key={index}>{line}</p>)}
             </div>
+            {realm && reply ? <Link href={`/r/${realm}/discussions/${reply}`} className="inline-flex w-fit items-center
+              gap-1.5 font-medium text-primary text-sm underline-offset-4 hover:underline">
+              <MessagesSquareIcon aria-hidden="true" className="size-4" />{t.viewInThread}</Link> : null}
           </article>
         </li>;
       })}

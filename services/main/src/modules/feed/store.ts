@@ -211,14 +211,29 @@ export class FeedStore {
 
   /** The target is a feed activity, not its Work's quality rating or a ballot.
    * One principal-target PK across all their Agents; a vote flips by its delta.
-   * The rank row and receipt share the transaction, including lost-response replay. */
+   * The rank row and receipt share the transaction, including lost-response replay.
+   * Disclosure is a graph and Content read, so it runs before the transaction
+   * rather than while it holds the projection's checkpoint: a slow admission
+   * delayed every other vote and refresh behind that lock, which is how the
+   * seed's votes ran past their read deadline. A replay needs no admission. */
   async vote(principal: VerifiedPrincipal, target: string, epoch: string, input: FeedVoteCommand,
     key: string, disclose: () => Promise<void>): Promise<FeedVoteResult> {
     commandKey(key);
+    const intent = digest({ target, ...input });
+    const prior = await controlRead(this.pool, async client => {
+      const owner = await followPrincipal(client, principal, input.actingSubject);
+      return (await client.query<{ request_digest: string; result: FeedVoteResult }>(
+        'SELECT request_digest, result FROM access.feed_vote_receipt WHERE principal_id = $1 AND idempotency_key = $2',
+        [owner, key])).rows[0];
+    });
+    if (prior) {
+      if (prior.request_digest !== intent) throw new ControlConflict('Idempotency key has a different vote intent');
+      return { ...prior.result, replayed: true };
+    }
+    await disclose();
     return controlTransaction(this.pool, async client => {
       const owner = await followPrincipal(client, principal, input.actingSubject);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`feed-vote:${owner}`]);
-      const intent = digest({ target, ...input });
       const receipt = (await client.query<{ request_digest: string; result: FeedVoteResult }>(
         'SELECT request_digest, result FROM access.feed_vote_receipt WHERE principal_id = $1 AND idempotency_key = $2',
         [owner, key])).rows[0];
@@ -235,7 +250,6 @@ export class FeedStore {
       const prior = (await client.query<{ value: number; revision: string }>(
         'SELECT value, revision FROM access.feed_vote WHERE principal_id = $1 AND target = $2', [owner, target])).rows[0];
       if ((prior?.revision ?? null) !== input.expectedRevision) throw new ControlStale('Vote changed; refresh its state');
-      await disclose();
       const revision = randomUUID();
       const score = item.score + input.value - (prior?.value ?? 0);
       await client.query(`INSERT INTO access.feed_vote (principal_id, target, acting_subject, value, revision)

@@ -122,7 +122,7 @@ export default {
   noDiscussionRealm: insert('{{realm}}尚无经审核的回复', { realm: String }),
   discussionMine: '讨论不属于个人',
   discussionMineBody: '回复在各社区中审核并显示。',
-  replyIn: insert('来自{{realm}}', { realm: String }),
+  replyIn: insert('来自{{realm}}', { realm: String }), viewInThread: '在讨论中查看',
   scopeDiscussionGlobal: '显示所有公开社区中经审核的回复。',
   scopeDiscussionRealm: insert('显示在{{realm}}中审核的回复。', { realm: String }),
   scopeDiscussionMine: '回复不属于个人，请选择所有人或某个社区。',

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { budgetFor, HOME_READS, measureRead, meterStatements, seedHome, SIGNED_HOME_READS,
+import { budgetFor, HOME_READS, HOME_VOTE_BUDGET, measureRead, meterStatements, seedHome, SIGNED_HOME_READS,
   startHomeStack } from './feed-read-support.ts';
 
 test('G383: Home reads stay within their graph and statement budgets; lock-only reads write no row', async () => {
@@ -28,6 +28,19 @@ test('G383: Home reads stay within their graph and statement budgets; lock-only 
         statements: warm.statements <= budget.statements })
         .toEqual({ read: name, graphQueries: true, statements: true });
     }
+    // A vote admits its one activity with a fixed read, outside the projection's lock; a reply takes votes.
+    const replies = await home.json<{ items: { id: string }[] }>(await home.call('GET', '/v1/feed?kinds=reply&scope=all'));
+    expect(replies.items).toHaveLength(1);
+    const [voteQueries, voteStatements] = [home.stack.fuseki.queries, meter.count()];
+    const voted = await home.json<{ value: number; score: number }>(await home.call('POST',
+      `/v1/feed/${replies.items[0]!.id.slice(-36)}/vote`, { profile: 'feed-vote-command-v1',
+        actingSubject: seeded.reader, value: 1, expectedRevision: null }, token));
+    const vote = { graphQueries: home.stack.fuseki.queries - voteQueries, statements: meter.count() - voteStatements };
+    console.log(`home vote budget measured: ${JSON.stringify(vote)}`);
+    expect(voted).toMatchObject({ value: 1, score: 1 });
+    expect({ graphQueries: vote.graphQueries <= HOME_VOTE_BUDGET.graphQueries,
+      statements: vote.statements <= HOME_VOTE_BUDGET.statements }).toEqual({ graphQueries: true, statements: true });
+
     // The contract is not vacuous: the page carries hydrated cards of each kind.
     const best = measured.find(read => read.name === 'anonymous bestAll')!;
     expect(best.warm.items).toBeGreaterThanOrEqual(5);

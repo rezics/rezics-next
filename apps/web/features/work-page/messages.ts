@@ -159,7 +159,7 @@ const en = {
   noDiscussionRealm: insert('No reviewed replies in {{realm}} yet', { realm: String }),
   discussionMine: 'Discussion isn’t personal',
   discussionMineBody: 'Replies are reviewed and shown within communities.',
-  replyIn: insert('In {{realm}}', { realm: String }),
+  replyIn: insert('In {{realm}}', { realm: String }), viewInThread: 'View in thread',
   scopeDiscussionGlobal: 'Showing reviewed replies from every public community.',
   scopeDiscussionRealm: insert('Showing replies reviewed in {{realm}}.', { realm: String }),
   scopeDiscussionMine: 'Replies aren’t personal; choose everyone or a community.',
