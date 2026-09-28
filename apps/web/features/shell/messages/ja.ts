@@ -68,5 +68,5 @@ export default {
   followedYou: insert('{{name}}さんがあなたをフォローしました', { name: String }),
   correctionOn: insert('「{{title}}」に修正が加えられました', { title: String }),
   correctionMade: 'フォロー中の作品に修正が加えられました',
-  moreLikeThis: plural({ one: 'ほか{{count}}件も同様', other: 'ほか{{count}}件も同様' }, { count: asValue(number()) }),
+  moreLikeThis: plural({ one: insert('ほか{{count}}件も同様'), other: insert('ほか{{count}}件も同様') }, { count: asValue(number()) }),
 } satisfies Partial<ShellMessages>;

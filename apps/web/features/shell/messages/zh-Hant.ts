@@ -67,6 +67,6 @@ export default {
   followedYou: insert('{{name}}追蹤了你', { name: String }),
   correctionOn: insert('「{{title}}」已有人提出更正', { title: String }),
   correctionMade: '你追蹤的作品已有更正',
-  moreLikeThis: plural({ one: '另有 {{count}} 則類似通知', other: '另有 {{count}} 則類似通知' },
+  moreLikeThis: plural({ one: insert('另有 {{count}} 則類似通知'), other: insert('另有 {{count}} 則類似通知') },
     { count: asValue(number()) }),
 } satisfies Partial<ShellMessages>;

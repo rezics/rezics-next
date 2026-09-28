@@ -1,17 +1,17 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dir, '../..');
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 type Locale = (typeof locales)[number];
 type Token = { value: string; kind: 'word' | 'string' | 'punct'; start: number; end: number };
-type Message = { inserts: string[] };
+export type Message = { bindings: string[]; placeholders: string[]; placeholderErrors: string[] };
 type Catalog = Map<string, Message>;
 type CatalogSpec = { app: 'web' | 'accounts'; namespace: string; english: string; inline?: boolean;
   localeFiles?: Partial<Record<Locale, string>> };
 
-const webFeatures = ['auth', 'catalogue', 'discover', 'feed', 'home', 'manage', 'onboarding', 'realm', 'search', 'settings',
-  'shell', 'studio', 'work', 'work-page', 'zones'] as const;
+const webFeatures = ['auth', 'catalogue', 'discover', 'feed', 'home', 'library', 'manage', 'onboarding', 'profile', 'realm',
+  'search', 'settings', 'shell', 'studio', 'work', 'work-page', 'zones'] as const;
 const accountsFeatures = ['shell', 'auth', 'consent', 'account', 'admin'] as const;
 const specs: CatalogSpec[] = [
   ...webFeatures.map(feature => {
@@ -166,26 +166,79 @@ function inlineObject(tokens: Token[]): number | undefined {
   return undefined;
 }
 
-function insertVariables(tokens: Token[], start: number, end: number): string[] {
-  const variables = new Set<string>();
-  for (let index = start; index < end - 1; index++) {
-    if (tokens[index]!.value !== 'insert' || tokens[index + 1]!.value !== '(') continue;
-    const close = matching(tokens, index + 1);
-    if (close === undefined || close > end) continue;
-    const callClose = close;
-    let nesting: string[] = [];
-    let secondStart: number | undefined;
-    const closing: Record<string, string> = { '{': '}', '(': ')', '[': ']' };
-    for (let cursor = index + 2; cursor < callClose; cursor++) {
-      const value = tokens[cursor]!.value;
-      if (closing[value]) nesting.push(closing[value]!);
-      else if (value === nesting.at(-1)) nesting.pop();
-      else if (value === ',' && !nesting.length) { secondStart = cursor + 1; break; }
+type Range = { start: number; end: number };
+
+function argumentsOf(tokens: Token[], open: number): Range[] {
+  const close = matching(tokens, open);
+  if (close === undefined) return [];
+  const result: Range[] = [];
+  const closing: Record<string, string> = { '{': '}', '(': ')', '[': ']' };
+  const stack: string[] = [];
+  let start = open + 1;
+  for (let index = start; index < close; index++) {
+    const value = tokens[index]!.value;
+    if (closing[value]) stack.push(closing[value]!);
+    else if (value === stack.at(-1)) stack.pop();
+    else if (value === ',' && !stack.length) {
+      result.push({ start, end: index });
+      start = index + 1;
     }
-    if (secondStart === undefined || tokens[secondStart]?.value !== '{') continue;
-    for (const property of properties(tokens, secondStart)) variables.add(property.key);
   }
-  return [...variables].sort();
+  if (start < close) result.push({ start, end: close });
+  return result;
+}
+
+function analyzePlaceholders(tokens: Token[], start: number, end: number): Message {
+  const inserts: Range[] = [];
+  const plurals: Range[] = [];
+  const bindings = new Set<string>();
+  for (let index = start; index < end - 1; index++) {
+    const name = tokens[index]!.value;
+    if ((name !== 'insert' && name !== 'plural') || tokens[index + 1]?.value !== '(') continue;
+    const args = argumentsOf(tokens, index + 1);
+    if (name === 'insert' && args[0]) inserts.push(args[0]);
+    if (name === 'plural' && args[0]) plurals.push(args[0]);
+    const variables = args[1];
+    if (variables && tokens[variables.start]?.value === '{') {
+      for (const property of properties(tokens, variables.start)) bindings.add(property.key);
+    }
+  }
+
+  const placeholders = new Set<string>();
+  const placeholderErrors: string[] = [];
+  for (let index = start; index < end; index++) {
+    const token = tokens[index]!;
+    if (token.kind !== 'string' || (!token.value.includes('{{') && !token.value.includes('}}'))) continue;
+    const pattern = /\{\{\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\}\}/g;
+    const matches = [...token.value.matchAll(pattern)];
+    const remainder = token.value.replace(pattern, '');
+    if (remainder.includes('{{') || remainder.includes('}}')) {
+      placeholderErrors.push('contains a malformed or literal placeholder');
+    }
+    for (const match of matches) placeholders.add(match[1]!);
+    const inInsert = inserts.some(range => index >= range.start && index < range.end);
+    if (!inInsert) placeholderErrors.push('contains a placeholder outside insert()');
+  }
+
+  const undeclared = [...placeholders].filter(name => !bindings.has(name)
+    && !(name === 'value' && plurals.length > 0)).sort();
+  if (undeclared.length) placeholderErrors.push(`uses undeclared placeholder${undeclared.length === 1 ? '' : 's'}: ${undeclared.join(', ')}`);
+  return { bindings: [...bindings].sort(), placeholders: [...placeholders].sort(),
+    placeholderErrors: [...new Set(placeholderErrors)] };
+}
+
+/** Inspect one message expression; exported so the checker contract has focused regression tests. */
+export function inspectMessagePlaceholders(source: string): Message {
+  const tokens = tokenize(source);
+  return analyzePlaceholders(tokens, 0, tokens.length);
+}
+
+export function unlistedWebFeatures(features: readonly string[], checked: readonly string[]): string[] {
+  return features.filter(feature => !checked.includes(feature)).sort();
+}
+
+export function hasPlaceholderMismatch(english: Message, translated: Message): boolean {
+  return english.placeholders.join('\0') !== translated.placeholders.join('\0');
 }
 
 function flatten(tokens: Token[], open: number, prefix = '', aliases = new Map<string, number>(), result: Catalog = new Map()): Catalog {
@@ -201,7 +254,7 @@ function flatten(tokens: Token[], open: number, prefix = '', aliases = new Map<s
       continue;
     }
     const key = prefix ? `${prefix}.${property.key}` : property.key;
-    result.set(key, { inserts: insertVariables(tokens, property.start, property.end) });
+    result.set(key, analyzePlaceholders(tokens, property.start, property.end));
   }
   return result;
 }
@@ -239,29 +292,44 @@ function readCatalog(spec: CatalogSpec, locale: Locale): Catalog {
   return open === undefined ? new Map() : flatten(tokens, open);
 }
 
-const failures: string[] = [];
-for (const spec of specs) {
-  const english = readCatalog(spec, 'en');
-  const expectedKeys = new Set(english.keys());
-  for (const locale of locales) {
-    const translated = locale === 'en' ? english : readCatalog(spec, locale);
-    const actualKeys = new Set(translated.keys());
-    const missing = [...expectedKeys].filter(key => !actualKeys.has(key)).sort();
-    const extra = [...actualKeys].filter(key => !expectedKeys.has(key)).sort();
-    const placeholders = [...actualKeys].filter(key => expectedKeys.has(key)
-      && english.get(key)!.inserts.join('\0') !== translated.get(key)!.inserts.join('\0')).sort();
-    const status = `missing=${missing.length}${missing.length ? ` [${missing.join(', ')}]` : ''}; `
-      + `extra=${extra.length}${extra.length ? ` [${extra.join(', ')}]` : ''}; `
-      + `placeholder mismatches=${placeholders.length}${placeholders.length ? ` [${placeholders.join(', ')}]` : ''}`;
-    console.log(`${spec.app}/${locale}/${spec.namespace}: ${status}`);
-    if (extra.length) failures.push(`${spec.app}/${locale}/${spec.namespace} extra keys: ${extra.join(', ')}`);
-    if (placeholders.length) failures.push(
-      `${spec.app}/${locale}/${spec.namespace} placeholder mismatches: ${placeholders.join(', ')}`);
+function runCheck(): void {
+  const failures: string[] = [];
+  const featureRoot = resolve(root, 'apps/web/features');
+  const discoveredFeatures = readdirSync(featureRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && existsSync(resolve(featureRoot, entry.name, 'messages.ts')))
+    .map(entry => entry.name);
+  const unlisted = unlistedWebFeatures(discoveredFeatures, webFeatures);
+  if (unlisted.length) failures.push(`web features missing from the checker list: ${unlisted.join(', ')}`);
+
+  for (const spec of specs) {
+    const english = readCatalog(spec, 'en');
+    const expectedKeys = new Set(english.keys());
+    for (const locale of locales) {
+      const translated = locale === 'en' ? english : readCatalog(spec, locale);
+      const actualKeys = new Set(translated.keys());
+      const missing = [...expectedKeys].filter(key => !actualKeys.has(key)).sort();
+      const extra = [...actualKeys].filter(key => !expectedKeys.has(key)).sort();
+      const placeholders = [...actualKeys].filter(key => expectedKeys.has(key)
+        && hasPlaceholderMismatch(english.get(key)!, translated.get(key)!)).sort();
+      const invalidPlaceholders = [...translated].flatMap(([key, message]) => message.placeholderErrors.map(error => `${key} (${error})`));
+      const status = `missing=${missing.length}${missing.length ? ` [${missing.join(', ')}]` : ''}; `
+        + `extra=${extra.length}${extra.length ? ` [${extra.join(', ')}]` : ''}; `
+        + `placeholder mismatches=${placeholders.length}${placeholders.length ? ` [${placeholders.join(', ')}]` : ''}; `
+        + `invalid placeholders=${invalidPlaceholders.length}${invalidPlaceholders.length ? ` [${invalidPlaceholders.join(', ')}]` : ''}`;
+      console.log(`${spec.app}/${locale}/${spec.namespace}: ${status}`);
+      if (extra.length) failures.push(`${spec.app}/${locale}/${spec.namespace} extra keys: ${extra.join(', ')}`);
+      if (placeholders.length) failures.push(
+        `${spec.app}/${locale}/${spec.namespace} placeholder mismatches: ${placeholders.join(', ')}`);
+      if (invalidPlaceholders.length) failures.push(
+        `${spec.app}/${locale}/${spec.namespace} invalid placeholders: ${invalidPlaceholders.join(', ')}`);
+    }
+  }
+
+  if (failures.length) {
+    console.error('\nCatalog errors:');
+    for (const failure of failures) console.error(`- ${failure}`);
+    process.exitCode = 1;
   }
 }
 
-if (failures.length) {
-  console.error('\nCatalog errors:');
-  for (const failure of failures) console.error(`- ${failure}`);
-  process.exitCode = 1;
-}
+if (import.meta.main) runCheck();
