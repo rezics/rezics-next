@@ -770,6 +770,13 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
     const { committed, dirty, ahead } = changedFiles(task);
     if (dirty.length) throw new Error(`${task.id} worktree has uncommitted files:\n  ${dirty.join('\n  ')}`);
+    if (flags.has('--landed')) {
+      // The manager already landed this work on main by hand (a cherry-pick, often with a conflict resolved).
+      task.mergedCommit = git(root, ['rev-parse', 'HEAD']);
+      task.state = 'merged';
+      console.log(`${task.id} recorded as landed at ${task.mergedCommit.slice(0, 12)}`);
+      return;
+    }
     if (!ahead) {
       // A resumed task whose earlier commits already landed may hand off with nothing new.
       if (spawnSync('git', ['merge-base', '--is-ancestor', task.branch, 'main'], { cwd: root }).status === 0
@@ -960,7 +967,7 @@ async function main(argv: string[]): Promise<number> {
       console.error('Usage: goalctl init [--manager <name>] | dispatch <brief.md> [--dry-run] [--force-usage]'
         + ' | wait <id> | owner <path> | reclaim <id> <brief> | resume <id> (-m <text> | --file <path>) [--effort e]'
         + ` [--engine ${ENGINES.join('|')}] [--fresh]`
-        + ' | stop <id> | scope <id> | merge <id> [--allow-scope] | close <id> verified|cancelled'
+        + ' | stop <id> | scope <id> | merge <id> [--allow-scope] [--landed] | close <id> verified|cancelled'
         + ' | status | usage | test <task test args> | slot -- <command>');
       return 2;
   }
