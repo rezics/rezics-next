@@ -12,7 +12,7 @@ import { RealmReplyStore } from '../src/modules/realm-reply/store.ts';
 import { WorkMaintainers } from '../src/modules/work/maintainers.ts';
 
 const scopes = ['agent:create', 'work:create', 'work:edit', 'work:read', 'comment:create',
-  'space:create', 'realm:adopt'];
+  'space:create', 'realm:profile', 'realm:adopt'];
 export const nativeId = () => `https://rezics.com/id/${randomUUID()}`;
 
 export async function memberFixture() {

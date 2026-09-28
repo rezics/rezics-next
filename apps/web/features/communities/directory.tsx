@@ -71,7 +71,7 @@ export async function CommunityDirectory({ locale, search }: { locale: UiLocale;
     <PageHeader title={words.title[locale]} description={words.intro[locale]} actions={<Link href="/r/new"
       className={buttonVariants({ pill: true })}><PlusIcon aria-hidden="true" />{words.create[locale]}</Link>} />
     <div className="flex flex-wrap items-end gap-3">
-      <form action={localizedPath('/r', locale)} className="flex min-w-0 flex-1 gap-2 sm:max-w-xl">
+      <form action={localizedPath('/r', locale)} className="flex min-w-0 basis-full gap-2 sm:max-w-xl sm:flex-1 sm:basis-auto">
         {sort !== 'activity' ? <input type="hidden" name="sort" value={sort} /> : null}
         {topic ? <input type="hidden" name="topic" value={topic} /> : null}
         <label className="min-w-0 flex-1 space-y-1 text-sm font-medium">
@@ -93,21 +93,21 @@ export async function CommunityDirectory({ locale, search }: { locale: UiLocale;
     </EmptyState> : result.page.items.length ? <>
       <ul className="grid gap-3 sm:grid-cols-2">
         {result.page.items.map((item, index) => {
-          const path = `/r/${item.id.slice(-36)}`;
+          const path = `/r/${item.handle ?? item.id.slice(-36)}`;
           return <li key={item.id} className="flex min-w-0 items-start gap-3 rounded-2xl border border-border/80
             bg-card p-4 shadow-xs">
             <Link href={path} aria-label={item.name.value} className="rounded-full outline-none
               focus-visible:ring-2 focus-visible:ring-ring">
               <CommunityIcon icon={item.icon} name={item.name.value} size="md" /></Link>
             <div className="grid min-w-0 flex-1 gap-1">
-              <Link href={path} lang={item.name.language} className="truncate font-semibold underline-offset-2
+              <Link href={path} lang={item.name.language} className="line-clamp-2 font-semibold underline-offset-2
                 hover:underline">{item.name.value}</Link>
               {item.description ? <p lang={item.description.language} className="line-clamp-2 text-muted-foreground
                 text-sm">{item.description.value}</p> : null}
-              <p className="text-muted-foreground text-xs">
+              <p className="flex flex-wrap gap-x-2 text-muted-foreground text-xs">
                 {item.membership.count.kind !== 'unknown' ? <span>
                   {new Intl.NumberFormat(locale).format(item.membership.count.value)} {words.members[locale]}</span> : null}
-                {item.reviewMode === 'mandatory' ? <span className="ms-2">{words.review[locale]}</span> : null}
+                {item.reviewMode === 'mandatory' ? <span>{words.review[locale]}</span> : null}
               </p>
             </div>
             <RealmMembership realm={item.id} realmName={item.name.value} initial={memberships[index] ?? null}

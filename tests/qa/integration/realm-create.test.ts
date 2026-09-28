@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { startMediaStack } from './media-support.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { realmVisibilityFixture } from '../../../services/main/tests/realm-visibility-fixture.ts';
 
 async function json<T>(response: Response, status: number): Promise<T> {
   const body = await response.text();
@@ -36,3 +37,36 @@ test('Community creation reserves one handle and filters the directory by global
     expect((await stack.call('GET', '/v1/realms/by-handle/missing-handle')).status).toBe(404);
   } finally { await stack.stop(); }
 });
+
+test('A new owner can configure community rules and publish the public profile', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    const imageAuthority = await h.accessPool.query(`SELECT g.action, r.action AS represented
+      FROM access.permission_grant g JOIN access.representation r
+        ON r.subject_id = g.recipient_subject AND r.principal_id = $2 AND r.action = g.action
+      WHERE g.recipient_subject = $1 AND g.scope_id = $3 AND g.active AND r.active`,
+    [h.actor, h.principalId, `media:avatar:${h.realm}`]);
+    expect(imageAuthority.rows).toMatchObject([{ action: 'media.avatar', represented: 'media.avatar' }]);
+    const current = await h.call('GET', `${h.root}/settings`);
+    expect(current.status, JSON.stringify(current.body)).toBe(200);
+    const rules = [{ id: 'rule-1', title: { en: 'Be kind', 'zh-CN': '友善交流' },
+      body: { en: 'Respect other readers.', 'zh-CN': '尊重其他读者。' }, governanceRule: null }];
+    const settings = await h.call('PUT', `${h.root}/settings`, { actingSubject: h.actor,
+      expectedGeneration: current.body.generation, expectedRulesRevision: current.body.ruleBasis.revision,
+      reason: 'Set up the community', settings: { ...current.body.settings,
+        visibility: 'public', reviewRequired: false, reviewMode: 'open',
+        whoMaySubmit: 'members', selfJoin: true, rules } });
+    expect(settings.status, JSON.stringify(settings.body)).toBe(201);
+    const publication = { name: { en: 'Reading Circle', 'zh-CN': '读书会' },
+      description: { en: 'Discuss good books.', 'zh-CN': '一起讨论好书。' },
+      iconSelection: null, bannerSelection: null, replyPolicy: 'members-direct', rules,
+      count: { kind: 'exact', value: null }, moderators: [] };
+    const profile = await h.call('PUT', `${h.root}/profile`, { profile: 'realm-public-profile-v1',
+      expectedHead: null, actingSubject: h.actor, publication });
+    expect(profile.status, JSON.stringify(profile.body)).toBe(201);
+    const read = await h.call('GET', `${h.root}?language=zh-CN`, undefined, null);
+    expect(read.status, JSON.stringify(read.body)).toBe(200);
+    expect(read.body).toMatchObject({ id: h.realm, name: { value: '读书会' },
+      description: { value: '一起讨论好书。' }, reviewMode: 'open' });
+  } finally { await h.close(); }
+}, 180_000);

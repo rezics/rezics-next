@@ -20,7 +20,7 @@ export const NewCommunity: Story = {
     await userEvent.click(canvas.getByRole('radio', { name: /Restricted/ }));
     await userEvent.click(canvas.getByRole('button', { name: 'Add a rule' }));
     await expect(canvas.getByRole('textbox', { name: 'Rule title' })).toBeVisible();
-    await expect(canvas.getByText('You decide who can join and post.')).toBeVisible();
+    await expect(canvas.getByText('Anyone can read. You decide who can join and post.')).toBeVisible();
   },
 };
 

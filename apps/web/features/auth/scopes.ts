@@ -30,7 +30,7 @@ export const MAIN_SITE_SCOPES = [
   'claim:read', 'claim:create', 'claim:evidence', 'claim:challenge', 'claim:lineage',
   'claim:assess', 'claim:reliability',
   // Spaces, Realms and their classification.
-  'space:create', 'realm:adopt', 'realm:reject', 'realm:classify',
+  'space:create', 'realm:profile', 'realm:adopt', 'realm:reject', 'realm:classify',
   'classification:define', 'classification:decide',
   // Shared Contexts and the reader's private selections.
   'context:read', 'context:write', 'context:select',
@@ -55,8 +55,8 @@ export const MAIN_SITE_SCOPES = [
 
 /** Declared scopes no person uses through the site. */
 export const SCOPES_NOT_REQUESTED = [
-  // Realm profile and public-role edits have no site UI yet.
-  'realm:profile', 'realm:public-role',
+  // Realm public-role edits have no site UI yet.
+  'realm:public-role',
   // Source pipelines: intake, acquisition, conversion, correspondence, proposals.
   'source:intake', 'source:acquire', 'source:convert', 'source:correspond', 'source:propose',
   // Package tooling: capture, verification and resolution.

@@ -61,6 +61,9 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
         setCreatedRealm(realm);
       }
       const id = realm.slice(-36);
+      const enrolled = await main.v1.realms({ realm: id }).management.post({ actingSubject },
+        { headers: { 'idempotency-key': `${operation}:management` } });
+      if (!enrolled.data) throw new Error('management-enrollment-failed');
       const publishedRules = rules.map((rule, index) => ({ id: `rule-${index + 1}`,
         title: { en: rule.title.trim(), 'zh-CN': rule.title.trim() },
         body: { en: rule.body.trim(), 'zh-CN': rule.body.trim() }, governanceRule: null }));

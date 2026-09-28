@@ -61,7 +61,7 @@ export class AccessRealmManagement {
 
   /** One-time owner enrollment from the server-read successful creation receipt.
    * Replaying enrollment can never recreate a subsequently revoked grant.
-   * Cost: one exact graph read (8 KiB), one admission probe and eight grant rows. */
+   * Cost: one exact graph read (8 KiB), one admission probe and ten grant rows. */
   async initialize(principal: VerifiedPrincipal, realm: string, actor: string, env: WorkActivationEnvironment) {
     if (!native.test(realm) || !native.test(actor)) throw new RealmAdminInvalid('Invalid Realm owner');
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt ?admission WHERE {
@@ -96,12 +96,18 @@ export class AccessRealmManagement {
       await client.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
         VALUES ('realm',$1,0,'realm-membership-v1') ON CONFLICT DO NOTHING`, [realm]);
       await client.query(`INSERT INTO access.scope_gate (id) SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`,
-        [[`review:decide:${realm}`, `publication:adopt:${realm}`]]);
+        [[`review:decide:${realm}`, `publication:adopt:${realm}`,
+          `realm:profile:${realm}`, `media:avatar:${realm}`]]);
       await client.query(`INSERT INTO access.permission_grant
         (id,issuer_subject,recipient_subject,scope_id,action,valid_until,assigned_by_principal)
         SELECT gen_random_uuid(),$1,$1,scope,action,$3,$4 FROM unnest($2::text[],$5::text[]) AS p(scope,action)`,
-      [actor, [...realmPermissions, 'realm.owner'].map(action => realmPermissionScope(realm, action)),
-        identity.valid_until, identity.id, [...realmPermissions, 'realm.owner']]);
+      [actor, [...realmPermissions, 'realm.owner'].map(action => realmPermissionScope(realm, action))
+        .concat(`realm:profile:${realm}`, `media:avatar:${realm}`), identity.valid_until, identity.id,
+        [...realmPermissions, 'realm.owner', 'realm.profile.publish', 'media.avatar']]);
+      await client.query(`INSERT INTO access.representation
+        (id,principal_id,subject_id,action,valid_until)
+        SELECT gen_random_uuid(),$1,$2,action,$3 FROM unnest($4::text[]) AS p(action)`,
+      [identity.id, actor, identity.valid_until, ['realm.profile.publish', 'media.avatar']]);
       await client.query(`INSERT INTO access.realm_admin_owner_bootstrap
         (realm,owner_subject,admission_id,receipt_id,principal_id) VALUES ($1,$2,$3,$4,$5)`,
       [realm, actor, proof.admission!.value, receiptId, identity.id]);

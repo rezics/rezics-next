@@ -52,8 +52,8 @@ const readRealmZone = cache(async (realm: string): Promise<Loaded<RealmZoneRead>
   settle(() => main().v1.realms({ realm }).zone.get({ query: {} })));
 
 /**
- * The Realm behind `/r/{ref}`: a Realm UUID, or an official Zone's route
- * segment resolved to its Realm. Shared by every tab and its metadata.
+ * The Realm behind `/r/{ref}`: a Realm UUID, an official Zone route segment,
+ * or a community handle. Shared by every tab and its metadata.
  */
 export const resolveRealm = cache(async (ref: string, locale: UiLocale): Promise<RealmResolution> => {
   const parsed = parseRealmRef(ref);
@@ -62,12 +62,20 @@ export const resolveRealm = cache(async (ref: string, locale: UiLocale): Promise
   let zone: { id: string; segment: string | null } | null = null;
   if (parsed.kind === 'segment') {
     const official = await officialZone(parsed.segment);
-    if (!official.ok) return { kind: official.failure === 'missing' ? 'missing' : 'unavailable' };
-    const realmId = idOf(official.data.realm);
-    const zoneId = idOf(official.data.zone);
-    if (!realmId || !zoneId) return { kind: 'unavailable' };
-    realm = realmId;
-    zone = { id: zoneId, segment: official.data.routeSegment };
+    if (official.ok) {
+      const realmId = idOf(official.data.realm);
+      const zoneId = idOf(official.data.zone);
+      if (!realmId || !zoneId) return { kind: 'unavailable' };
+      realm = realmId;
+      zone = { id: zoneId, segment: official.data.routeSegment };
+    } else {
+      if (official.failure !== 'missing') return { kind: 'unavailable' };
+      const community = await settle(() => main().v1.realms['by-handle']({ handle: parsed.segment }).get());
+      if (!community.ok) return { kind: community.failure === 'missing' ? 'missing' : 'unavailable' };
+      const realmId = idOf(community.data.realm);
+      if (!realmId) return { kind: 'unavailable' };
+      realm = realmId;
+    }
   } else realm = parsed.id;
   const header = await readRealmHeader(realm, locale);
   if (!header.ok) return { kind: header.failure === 'missing' ? 'missing' : 'unavailable' };
