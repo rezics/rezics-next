@@ -43,7 +43,7 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     const get = (path: string) => stack.call('GET', path);
     const beforeCalls = stack.fuseki.queries;
     const activity = await json<DirectoryPage>(await get('/v1/realms?limit=1'));
-    expect(stack.fuseki.queries - beforeCalls).toBeLessThanOrEqual(13);
+    expect(stack.fuseki.queries - beforeCalls).toBeLessThanOrEqual(14);
     expect(activity.items.map(item => item.id)).toEqual([second.realm]);
     expect(activity.items[0]?.reviewMode).toBe('mandatory');
     await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {

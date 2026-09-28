@@ -13,6 +13,7 @@ const errors = { 400: problemResult(400), 409: problemResult(409),
   422: problemResult(422), 503: problemResult(503) };
 const query = t.Object({ limit: pageQuery.limit, cursor: pageQuery.cursor,
   language: t.Optional(readLanguage), q: t.Optional(t.String({ minLength: 1, maxLength: 80 })),
+  topic: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
   sort: t.Optional(t.Union([t.Literal('activity'), t.Literal('members'), t.Literal('newest')])) },
 { additionalProperties: false });
 const headers = { 'cache-control': 'no-store' };
@@ -36,7 +37,8 @@ export function realmDirectoryRoutes(work: MainWorkDependencies) {
     try {
       // A directory is public even if the caller carries an unrelated bearer token.
       return Response.json(await workRead(work, new Request(request.url), options,
-        session => readRealmDirectory(session, { sort: options.sort ?? 'activity', q: options.q })), { headers });
+        session => readRealmDirectory(session, { sort: options.sort ?? 'activity', q: options.q,
+          topic: options.topic })), { headers });
     } catch (error) { return directoryError(error); }
   });
 }

@@ -5,7 +5,7 @@ import { CancelledActivation, IdempotencyConflict,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { createRealmSpace, readSpaceCreationReceipt, sealRealmSpaceAdmission,
-  spaceCreationDigest, type CreateRealmSpaceInput, type SpaceCreationReceipt } from './create.ts';
+  spaceCreationDigest, InvalidSpaceInput, type CreateRealmSpaceInput, type SpaceCreationReceipt } from './create.ts';
 
 export async function createAdmittedRealmSpace(
   env: WorkActivationEnvironment,
@@ -33,7 +33,14 @@ export async function createAdmittedRealmSpace(
         await sealRealmSpaceAdmission(env, admission);
       } else {
         try { await createRealmSpace(env, admission, input); }
-        catch (error) { if (error instanceof IdempotencyConflict) throw error; }
+        catch (error) {
+          if (error instanceof InvalidSpaceInput) {
+            const terminal = await sealRealmSpaceAdmission(env, admission);
+            await access.recordGraphOutcome(admission.id, terminal);
+            throw error;
+          }
+          if (error instanceof IdempotencyConflict) throw error;
+        }
       }
     }
     const terminal = await readSpaceCreationReceipt(env, registered.id);
@@ -49,7 +56,8 @@ export async function createAdmittedRealmSpace(
     }
     return { ...terminal, replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation) throw error;
+    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation
+      || error instanceof InvalidSpaceInput) throw error;
     throw new PendingAdmittedWork(registered.id, 'space-create');
   }
 }

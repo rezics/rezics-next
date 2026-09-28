@@ -25,14 +25,16 @@ export class RealmDirectoryIndex {
   private async upsert(client: PoolClient, candidate: Candidate): Promise<void> {
     const count = candidate.profile?.count;
     await client.query(`INSERT INTO access.realm_directory
-      (realm, space, profile, created, activity, search_text, count_kind, count_value)
+      (realm, space, profile, created, activity, search_text, count_kind, count_value, topics)
       VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7 = 'exact' THEN
-        COALESCE((SELECT value FROM access.realm_member_count WHERE realm = $1),0) ELSE $8 END)
+        COALESCE((SELECT value FROM access.realm_member_count WHERE realm = $1),0) ELSE $8 END,$9)
       ON CONFLICT (realm) DO UPDATE SET space = EXCLUDED.space, profile = EXCLUDED.profile,
         created = EXCLUDED.created, activity = EXCLUDED.activity, search_text = EXCLUDED.search_text,
-        count_kind = EXCLUDED.count_kind, count_value = EXCLUDED.count_value`,
+        count_kind = EXCLUDED.count_kind, count_value = EXCLUDED.count_value,
+        topics = EXCLUDED.topics`,
     [candidate.id, candidate.space, candidate.profile, candidate.created.toString(),
-      candidate.activity.toString(), candidate.search, count?.kind ?? 'unknown', count?.value ?? -1]);
+      candidate.activity.toString(), candidate.search, count?.kind ?? 'unknown', count?.value ?? -1,
+      candidate.topics]);
   }
 
   private async refresh(session: WorkReadSession): Promise<boolean> {
@@ -112,9 +114,10 @@ export class RealmDirectoryIndex {
     } finally { client.release(); }
   }
 
-  async page(session: WorkReadSession, input: { sort: RealmDirectorySort; q: string }) {
+  async page(session: WorkReadSession, input: { sort: RealmDirectorySort; q: string; topic?: string }) {
     const limit = session.options.limit ?? REALM_DIRECTORY_COST.pageSize;
-    const binding = ['realm-directory-v2', input.sort, input.q, session.options.language ?? null];
+    const binding = ['realm-directory-v3', input.sort, input.q, input.topic ?? null,
+      session.options.language ?? null];
     const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
     if (!await this.refresh(session)) throw new WorkReadUnavailable('Realm directory is refreshing; retry');
     const column = input.sort === 'members' ? 'count_value' : input.sort === 'newest' ? 'created' : 'activity';
@@ -142,8 +145,9 @@ export class RealmDirectoryIndex {
         FROM access.realm_directory d LEFT JOIN access.realm_member_count c ON c.realm = d.realm
         WHERE ${cursor ? `(-d.${column}, d.realm) > ($1::numeric, $2::text)` : "$1::numeric IS NULL AND $2::text = ''"}
           AND ($3::text = '' OR strpos(d.search_text, $3) > 0)
+          AND ($5::text IS NULL OR d.topics @> ARRAY[$5::text])
         ORDER BY -d.${column}, d.realm LIMIT $4`,
-      [rank, cursor?.after ?? '', input.q, limit + 1])).rows;
+      [rank, cursor?.after ?? '', input.q, limit + 1, input.topic ?? null])).rows;
       await client.query('COMMIT');
       const page = rows.slice(0, limit);
       return { rows: page, position, next: rows.length > limit && page.length

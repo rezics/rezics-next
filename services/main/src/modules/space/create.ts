@@ -11,12 +11,19 @@ export const SELECTION_POLICY = 'https://rezics.com/definition/realm-manager-fix
 export const MEMBERSHIP_POLICY = 'https://rezics.com/definition/realm-closed-v1';
 export const REVIEW_POLICY = 'https://rezics.com/definition/realm-manager-reviewed-v1';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+export const COMMUNITY_HANDLE = /^[a-z][a-z0-9-]{2,29}$/;
+export const SPACE_CREATE_COST = { topics: 3, topicValidationCalls: 1, handleChecks: 2,
+  graphCommandCalls: 1, deadlineMs: 10_000 } as const;
 
 export class InvalidSpaceInput extends Error {}
 
 export interface CreateRealmSpaceInput {
   name: string;
   actingSubject: string;
+  /** A person-created Realm's stable public address. Older API clients omit it. */
+  handle?: string;
+  /** Global SKOS Concepts that describe this community. */
+  topics?: string[];
 }
 
 export interface SpaceCreationReceipt {
@@ -38,13 +45,45 @@ export interface SpaceCreationReceipt {
 export function spaceCreationDigest(input: CreateRealmSpaceInput): string {
   if (input.name.length < 1 || input.name.length > 120
     || /[\u0000-\u001f\u007f]/u.test(input.name)
-    || !nativeId.test(input.actingSubject)) {
+    || !nativeId.test(input.actingSubject)
+    || input.handle !== undefined && !COMMUNITY_HANDLE.test(input.handle)
+    || input.topics !== undefined && (input.topics.length > SPACE_CREATE_COST.topics
+      || input.topics.some(topic => !nativeId.test(topic))
+      || new Set(input.topics).size !== input.topics.length)) {
     throw new InvalidSpaceInput('invalid Space creation request');
   }
   return hash(JSON.stringify({ family: 'create-space-realm-v1', name: input.name,
     capabilities: ['realm'], owner: input.actingSubject,
     selectionPolicy: SELECTION_POLICY, membershipPolicy: MEMBERSHIP_POLICY,
-    reviewPolicy: REVIEW_POLICY }));
+    reviewPolicy: REVIEW_POLICY, ...input.handle ? { handle: input.handle } : {},
+    ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }));
+}
+
+async function validateTopics(env: WorkActivationEnvironment, topics: readonly string[]): Promise<void> {
+  if (!topics.length) return;
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+    SELECT DISTINCT ?topic WHERE { VALUES ?topic { ${topics.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} {
+        ?topic a skos:Concept .
+        FILTER NOT EXISTS { ?topic rv:conceptRealm ?realm }
+        FILTER NOT EXISTS { ?topic rv:conceptState rv:Retired }
+        FILTER NOT EXISTS { ?topic rv:protectionHead ?protection }
+      }
+    } LIMIT ${SPACE_CREATE_COST.topics + 1}`, 2048)).results?.bindings ?? [];
+  if (rows.length !== topics.length) throw new InvalidSpaceInput('Community topics must be active global Concepts');
+}
+
+/** One graph lookup, also used after a guard miss to report a racing handle claim. */
+export async function communityHandleTaken(env: WorkActivationEnvironment, handle: string): Promise<boolean> {
+  if (!COMMUNITY_HANDLE.test(handle)) throw new InvalidSpaceInput('Invalid community handle');
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.current)} {
+      { ?realm a rv:Realm ; rv:communityHandle ${lit(handle)} }
+      UNION { ?zone a rv:Zone ; rv:official true ; rv:routeSegment ${lit(handle)} }
+    }
+  }`, 1024);
+  return result.boolean === true;
 }
 
 export function spaceCreationReceiptIri(admissionId: string): string {
@@ -119,6 +158,10 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   await assertNotInvalidProfileReceipt(env.fuseki, spaceCreationReceiptIri(admission.id));
   const existing = await readSpaceCreationReceipt(env, admission.id);
   if (existing) return checked(existing, admission, input, digest);
+  if (input.handle && await communityHandleTaken(env, input.handle)) {
+    throw new InvalidSpaceInput('Community handle is already taken');
+  }
+  await validateTopics(env, input.topics ?? []);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Space admission expired');
   const space = ID + Bun.randomUUIDv7();
   const realm = ID + Bun.randomUUIDv7();
@@ -131,14 +174,17 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
       capabilities: ['realm'], disclosure: 'public' }, SPACE_REALM_PROFILE);
   const realmManifest = prepareComponent(env.objectDirectory, realm,
     { space, state: 'active', selectionPolicy: SELECTION_POLICY,
-      membershipPolicy: MEMBERSHIP_POLICY, reviewPolicy: REVIEW_POLICY }, SPACE_REALM_PROFILE);
+      membershipPolicy: MEMBERSHIP_POLICY, reviewPolicy: REVIEW_POLICY,
+      ...input.handle ? { handle: input.handle } : {},
+      ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }, SPACE_REALM_PROFILE);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Space admission expired');
   const receipt = spaceCreationReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
   let updateError: unknown;
   try {
-    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+    const result = await validatedCommand(env, { receipt, digest, validations,
+      deadlineMs: SPACE_CREATE_COST.deadlineMs,
       update: `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
@@ -148,6 +194,8 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
           rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public ;
           rdfs:label ${lit(input.name)}@en ; rv:head ${iri(spaceRevision)} .
         ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ;
+          ${input.handle ? `rv:communityHandle ${lit(input.handle)} ;` : ''}
+          ${input.topics?.length ? `rv:topic ${[...input.topics].sort().map(iri).join(', ')} ;` : ''}
           rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
           rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ;
           rv:reviewPolicy ${iri(REVIEW_POLICY)} ; rv:head ${iri(realmRevision)} .
@@ -186,6 +234,10 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(space)} ?sp ?so } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} ?rp ?ro } }
+      ${input.handle ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        { ?otherRealm a rv:Realm ; rv:communityHandle ${lit(input.handle)} }
+        UNION { ?otherZone a rv:Zone ; rv:official true ; rv:routeSegment ${lit(input.handle)} }
+      } }` : ''}
       BIND(?n + 1 AS ?next)
     }` }, admission);
     if (result.status === 'unknown-profile') throw new CommandRejected(result);
@@ -198,6 +250,9 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   }
   const committed = await readSpaceCreationReceipt(env, admission.id);
   if (committed) return checked(committed, admission, input, digest);
+  if (input.handle && await communityHandleTaken(env, input.handle)) {
+    throw new InvalidSpaceInput('Community handle is already taken');
+  }
   throw new PendingActivation(updateError
     ? 'Space update outcome unknown' : 'Space creation guard did not match');
 }

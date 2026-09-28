@@ -6,7 +6,7 @@ import { publicWork, WorkReadUnavailable, type WorkReadSession } from '../work/r
 import { REALM_DIRECTORY_COST } from './contract.ts';
 
 export interface Candidate { id: string; space: string; created: bigint; activity: bigint;
-  profile: PublicProfile | null; label: string; search: string }
+  profile: PublicProfile | null; label: string; search: string; topics: string[] }
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const epochSpan = 10n ** 30n;
 
@@ -51,8 +51,24 @@ export async function directorySource(session: WorkReadSession,
     if (!id || !nativeId.test(id) || !row.space || !nativeId.test(row.space.value)
       || candidates.has(id)) throw new WorkReadUnavailable('Realm directory relation is ambiguous');
     const created = ranked(row.created?.value, row.epochOrder?.value);
-    candidates.set(id, { id, space: row.space.value, created, activity: created, profile: null, label: row.label?.value ?? '', search: '' });
+    candidates.set(id, { id, space: row.space.value, created, activity: created, profile: null,
+      label: row.label?.value ?? '', search: '', topics: [] });
     if (row.profileHead) heads.set(id, row.profileHead.value);
+  }
+  if (candidates.size) {
+    const topics = await session.query(`SELECT ?realm ?topic WHERE {
+      VALUES ?realm { ${[...candidates.keys()].map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?realm rv:topic ?topic }
+    } LIMIT ${REALM_DIRECTORY_COST.sourceBatch * 3 + 1}`,
+    REALM_DIRECTORY_COST.sourceBatch * 3 + 1);
+    for (const row of topics) {
+      const candidate = candidates.get(row.realm?.value ?? '');
+      if (!candidate || !row.topic || !nativeId.test(row.topic.value)
+        || candidate.topics.includes(row.topic.value) || candidate.topics.length >= 3) {
+        throw new WorkReadUnavailable('Realm topics are invalid');
+      }
+      candidate.topics.push(row.topic.value);
+    }
   }
   if (heads.size) {
     const profiles = [];

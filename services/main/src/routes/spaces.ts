@@ -3,11 +3,17 @@ import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { iri } from '../modules/work/activate.ts';
 import { createAdmittedRealmSpace } from '../modules/space/create-admitted.ts';
+import { COMMUNITY_HANDLE } from '../modules/space/create.ts';
 import { pendingOperation } from '../api-contract.ts';
 import { readProblems, spaceReadResult, spaceWriteResult, writeProblems }
   from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+
+export const openApiOperations = {
+  '/v1/spaces': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/realms/by-handle/{handle}': { get: { bearer: false } },
+} as const;
 
 export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
@@ -15,6 +21,9 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('space-realm-v1'),
         name: t.String({ minLength: 1, maxLength: 120,
           pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
+        handle: t.Optional(t.String({ pattern: '^[a-z][a-z0-9-]{2,29}$' })),
+        topics: t.Optional(t.Array(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+          { maxItems: 3, uniqueItems: true })),
         capabilities: t.Tuple([t.Literal('realm')]),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
@@ -26,7 +35,8 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       }
       try {
         const receipt = await createAdmittedRealmSpace(work.environment, work.account, work.access,
-          request, { name: body.name, actingSubject: body.actingSubject, idempotencyKey });
+          request, { name: body.name, handle: body.handle, topics: body.topics,
+            actingSubject: body.actingSubject, idempotencyKey });
         return Response.json({ space: receipt.space, realm: receipt.realm,
           spaceRevision: receipt.spaceRevision, realmRevision: receipt.realmRevision,
           owner: receipt.owner, capabilities: ['realm'],
@@ -34,6 +44,22 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             sequence: receipt.sequence }, replayed: receipt.replayed }, {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
+      } catch (error) { return commandError(error); }
+    })
+    .get('/v1/realms/by-handle/:handle', {
+      params: t.Object({ handle: t.String({ pattern: COMMUNITY_HANDLE.source }) }),
+      response: { 200: t.Object({ realm: t.String(), handle: t.String() }), ...readProblems },
+    }, async ({ params }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const rows = (await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+          SELECT ?realm WHERE { GRAPH <urn:rezics:graph:current> {
+            ?realm a rv:Realm ; rv:realmState rv:Active ; rv:communityHandle "${params.handle}" .
+          } } LIMIT 2`, 1024)).results?.bindings ?? [];
+        if (!rows.length) return problem(404, 'realm_unavailable', 'Realm is unavailable');
+        if (rows.length !== 1 || !rows[0]?.realm) return problem(503, 'realm_unavailable', 'Realm is unavailable');
+        return Response.json({ realm: rows[0].realm.value, handle: params.handle },
+          { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .get('/v1/spaces/:space', {

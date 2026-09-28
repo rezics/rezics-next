@@ -8,6 +8,7 @@ export const spaceRealmProfile = {
   prefixes: [
     ['sh', 'http://www.w3.org/ns/shacl#'],
     ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
+    ['xsd', 'http://www.w3.org/2001/XMLSchema#'],
     ['rv', 'https://rezics.com/vocab/'],
   ],
   layout: 'compact',
@@ -26,6 +27,8 @@ export const spaceRealmProfile = {
       properties: [
         { path: 'rdf:type', hasValue: 'rv:Realm' },
         requiredIri('rv:space'),
+        { path: 'rv:communityHandle', maxCount: 1, datatype: 'xsd:string' },
+        { path: 'rv:topic', maxCount: 3, nodeKind: 'sh:IRI' },
         { path: 'rv:realmState', hasValue: 'rv:Active' },
         { path: 'rv:selectionPolicy', hasValue: '<https://rezics.com/definition/realm-manager-fixed-main-fallback-v1>' },
         { path: 'rv:membershipPolicy', hasValue: '<https://rezics.com/definition/realm-closed-v1>' },

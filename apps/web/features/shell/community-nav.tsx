@@ -75,6 +75,11 @@ export function CommunityNav({ data }: { data: CommunityNavigation }) {
   const joined = new Set(followed ? followedRealmIds(followed) : []);
   const official = data.official.filter(zone => !joined.has(realmOf(zone) ?? '') && !joined.has(zone.id));
   return <div className="grid min-w-0 gap-3">
+    <Link href={localizedPath('/r', locale)} onClick={onNavigate} title={collapsed ? t.findCommunities : undefined}
+      aria-current={pathname === '/r' ? 'page' : undefined}
+      className={cn(row, collapsed && 'justify-center px-0')}>
+      <CompassIcon aria-hidden="true" className="size-5 shrink-0" />
+      <span className={collapsed ? 'sr-only' : undefined}>{t.findCommunities}</span></Link>
     {data.moderated.length ? <Section title={t.moderation} collapsed={collapsed}>
       <Link href={localizedPath(manageHref(data.moderated), locale)} onClick={onNavigate}
         title={collapsed ? t.manage : undefined}
@@ -96,8 +101,6 @@ export function CommunityNav({ data }: { data: CommunityNavigation }) {
     {followed && !followed.zones.length && !followed.realms.length && !collapsed
       ? <Section title={t.yourRealms} collapsed={collapsed}>
         <p className="px-3 text-muted-foreground text-xs">{t.noCommunities}</p>
-        <Link href={localizedPath('/discover', locale)} onClick={onNavigate} className={cn(row, 'mt-1')}>
-          <CompassIcon aria-hidden="true" className="size-5" />{t.findCommunities}</Link>
       </Section> : null}
     {official.length ? <Section title={t.officialZones} collapsed={collapsed}>
       <CommunityList items={official} collapsed={collapsed} avatarQuery="" onNavigate={onNavigate} />
