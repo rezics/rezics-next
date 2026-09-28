@@ -32,6 +32,9 @@ Results from the retired Fluree architecture remain historical evidence. Their
 engine identities, versions, tables and raw artifacts are preserved; none validates
 Jena, supplies a Jena capacity claim or advances current runtime acceptance.
 
+The [games, mods and software store comparison](reference-stores.md) records
+product references for the current [frontend direction](../plan/frontend.md).
+
 | Question | Investigation and decision criterion | Owner |
 | --- | --- | --- |
 | Application stack and framework tradeoffs | [Stack review](application-stack.md): selected Elysia 2/Bun, Yarn workspaces and vinext/Vite on Workers; Hono/Next alternatives, version evidence and bounded verification limits. | [Main application](../../services/main/src/app.ts), [workspace layout](../development/repository-structure.md), [frontend](../plan/frontend.md). |
