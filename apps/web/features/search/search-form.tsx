@@ -73,7 +73,7 @@ export function SearchForm({ state, realm, load, locale, messages }: {
     {state.includeTypes?.length ? <input type="hidden" name="include" value={state.includeTypes.join(',')} /> : null}
     {state.excludeTypes?.length ? <input type="hidden" name="exclude" value={state.excludeTypes.join(',')} /> : null}
     <div className="relative flex-1">
-      <SearchIcon aria-hidden="true" className="pointer-events-none absolute start-4 top-1/2 size-5 -translate-y-1/2
+      <SearchIcon aria-hidden="true" className="pointer-events-none absolute start-4 top-1/2 z-10 size-5 -translate-y-1/2
         text-muted-foreground" />
       <TypeaheadInput ref={input} key={state.phrase} locale={locale} load={load} name="q" type="search"
         defaultValue={state.phrase} required minLength={PHRASE.min} maxLength={PHRASE.max} aria-label={t.phraseLabel}

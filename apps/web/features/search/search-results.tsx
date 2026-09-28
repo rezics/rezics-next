@@ -119,15 +119,16 @@ function Reasons({ hit, scopeLabel, locale, t }: { hit: SearchHit; scopeLabel: s
 function FailureNotice({ failure, state, t, onRetry, onRestart }: {
   failure: SearchFailure; state: SearchState; t: Text; onRetry: () => void; onRestart: () => void;
 }) {
+  // Results sit directly under the page's h1, so their notices are h2s.
   switch (failure) {
-    case 'restart': return <Notice icon={RefreshCwIcon} title={t.restartTitle} description={t.restartHelp}>
+    case 'restart': return <Notice icon={RefreshCwIcon} headingLevel={2} title={t.restartTitle} description={t.restartHelp}>
       <Button size="sm" onClick={onRestart}><RotateCwIcon aria-hidden="true" />{t.restart}</Button></Notice>;
-    case 'budget': return <Notice icon={LibraryIcon} title={t.budgetTitle} description={t.budgetHelp} />;
-    case 'missing': return <Notice icon={CircleSlashIcon} title={t.realmMissingTitle}>
+    case 'budget': return <Notice icon={LibraryIcon} headingLevel={2} title={t.budgetTitle} description={t.budgetHelp} />;
+    case 'missing': return <Notice icon={CircleSlashIcon} headingLevel={2} title={t.realmMissingTitle}>
       <Link href={searchHref({ ...state, scope: { kind: 'global' } })}
         className={buttonVariants({ size: 'sm', variant: 'outline' })}>{t.seeGlobal}</Link></Notice>;
-    case 'invalid': return <Notice icon={BanIcon} tone="destructive" title={t.invalidTitle} />;
-    case 'unavailable': return <Notice icon={TriangleAlertIcon} tone="destructive" title={t.errorTitle}
+    case 'invalid': return <Notice icon={BanIcon} headingLevel={2} tone="destructive" title={t.invalidTitle} />;
+    case 'unavailable': return <Notice icon={TriangleAlertIcon} headingLevel={2} tone="destructive" title={t.errorTitle}
       description={t.errorFallback}>
       <Button size="sm" variant="outline" onClick={onRetry}><RotateCwIcon aria-hidden="true" />{t.retry}</Button>
     </Notice>;
@@ -241,7 +242,7 @@ export function SearchResults(props: SearchResultsProps) {
   return <section aria-label={t.resultsRegion} aria-live="polite" className="grid min-w-0 content-start gap-4">
     {status === 'empty' || status === 'short'
       ? <EmptyState icon={SearchIcon} title={t.idleTitle} description={t.idle} /> : null}
-    {status === 'long' ? <Notice icon={BanIcon} title={t.tooLong} /> : null}
+    {status === 'long' ? <Notice icon={BanIcon} headingLevel={2} title={t.tooLong} /> : null}
     {initial && !initial.ok ? <FailureNotice failure={initial.failure} state={state} t={t}
       onRetry={() => router.refresh()} onRestart={() => router.refresh()} /> : null}
     {initial?.ok ? <Pages first={initial.page} props={props} t={t} /> : null}

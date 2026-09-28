@@ -78,7 +78,7 @@ export const Populated: Story = {
     // Each card names its author and says where the phrase was found.
     const reasons = canvas.getAllByRole('list', { name: 'Why this matched' });
     await expect(reasons[0]).toHaveTextContent('Title matches');
-    await expect(canvas.getByText('Jane Austen')).toBeVisible();
+    await expect(canvas.getAllByRole('article')[0]).toHaveTextContent('Jane Austen');
     await expect(reasons[1]).toHaveTextContent('Also titled Pride and Prejudice: a reading');
     await expect(reasons[2]).toHaveTextContent('By Pride Reading Circle');
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
