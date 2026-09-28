@@ -1,5 +1,5 @@
 import { chapterPlaceHref } from '../work-page/route.ts';
-import type { ChapterSummary, WorkSummary } from './types.ts';
+import type { ChapterSummary, WorkFacts, WorkSummary } from './types.ts';
 import { uuidOf } from './types.ts';
 
 /** A name as the page sets it: its text and, when Main knows it, its language and direction for `lang` and `dir`. */
@@ -32,11 +32,15 @@ export interface Subject {
 const named = (work: WorkSummary | undefined): ShownName | null => work
   ? { value: work.title.value, language: work.title.language, direction: work.title.direction } : null;
 
-/** The subject of a Work IRI from what the queue has read so far; `fallback` names it until Main does. */
+/**
+ * The subject of a Work IRI from what the queue has read so far; `fallback`
+ * names it until Main does. A chapter whose own record is not public is
+ * still placed in its Book by Main's moderation context (`facts`).
+ */
 export function subjectOf(iri: string, names: { works: Record<string, WorkSummary>;
-  chapters: Record<string, ChapterSummary> }, fallback: string): Subject {
+  chapters: Record<string, ChapterSummary>; facts?: Record<string, WorkFacts> }, fallback: string): Subject {
   const work = names.works[iri];
-  const partOf = work?.partOf ?? null;
+  const partOf = work?.partOf ?? names.facts?.[iri]?.partOf ?? null;
   const book = partOf ? names.works[partOf.work] : undefined;
   const chapter = names.chapters[iri];
   // A chapter's own label in its Book's contents; its Work title may still carry the Book's name.

@@ -226,6 +226,16 @@ test('G-395 moderation context: submitter and reporter records, readable Works o
 
     const readable = await stack.publicWork(owner.actor);
     const hidden = await stack.privateWork(owner.actor);
+    const chapter = await stack.privateWork(owner.actor);
+    // The public Book places the private chapter in its contents, as Studio's chapter command does.
+    const [structure, generation, placement, occurrence] = Array.from({ length: 4 },
+      () => `https://rezics.com/id/${randomUUID()}`);
+    await stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(structure)} a <${RV}Structure> ; <${RV}structureProfile> <${RV}BookComposition> ;
+        <${RV}structureOf> ${iri(readable.mainVersion)} ; <${RV}selectedGeneration> ${iri(generation)} .
+      ${iri(placement)} a <${RV}OccurrencePlacement> ; <${RV}generation> ${iri(generation)} ;
+        <${RV}occurrenceRole> <${RV}ChapterRole> ; <https://schema.org/item> ${iri(chapter.work)} ;
+        <${RV}occurrence> ${iri(occurrence)} . } }`);
     await stack.accessPool.query(`INSERT INTO access.mod_work_binding (work, resolution_id, principal_id, card)
       VALUES ($1, $2, $3, $4)`, [readable.work, randomUUID(), owner.principalId, JSON.stringify({
       profile: 'mod-work-card-v1', game: 'Minecraft', gameVersions: ['1.21.1'], loaders: ['Fabric'],
@@ -272,7 +282,7 @@ test('G-395 moderation context: submitter and reporter records, readable Works o
     interface Context { people: { agent: string; membership: { state: string; joinedAt: string | null; banned: boolean;
       bannedUntil: string | null };
       submissions: Record<string, unknown> | null; reports: Record<string, unknown> | null }[];
-    works: { work: string; authors: unknown[]; mod: unknown; hub: unknown }[] }
+    works: { work: string; partOf: unknown; authors: unknown[]; mod: unknown; hub: unknown }[] }
 
     expect((await context(moderator.actor, null, { agents })).status).toBe(401);
     expect((await context(outsider.actor, outsider.token, { agents })).status).toBe(404);
@@ -305,13 +315,16 @@ test('G-395 moderation context: submitter and reporter records, readable Works o
       membership: { banned: true, bannedUntil: expect.any(String) },
       submissions: { open: 1, accepted: 1, rejected: 1, changesRequested: 0, withdrawn: 0, total: 3, capped: false } });
 
-    // Works: only those the reader may read, with a mod's compatibility; within the graph budget.
+    // Works: those the reader may read, with a mod's compatibility, and a private chapter by its place in a
+    // readable Book; a private Work placed nowhere stays out. Within the graph budget.
     const before = stack.fuseki.queries;
-    const works = await context(moderator.actor, moderator.token, { works: `${readable.work},${hidden.work}` });
+    const works = await context(moderator.actor, moderator.token,
+      { works: `${readable.work},${hidden.work},${chapter.work}` });
     expect(works.status).toBe(200);
     expect(stack.fuseki.queries - before).toBeLessThanOrEqual(MODERATION_CONTEXT_COST.graphCalls);
-    expect((await works.json() as Context).works).toEqual([{ work: readable.work, authors: [], hub: null,
-      mod: { game: 'Minecraft', gameVersions: ['1.21.1'], loaders: ['Fabric'], latestRelease: '2.0.0' } }]);
+    expect((await works.json() as Context).works).toEqual([{ work: readable.work, partOf: null, authors: [], hub: null,
+      mod: { game: 'Minecraft', gameVersions: ['1.21.1'], loaders: ['Fabric'], latestRelease: '2.0.0' } },
+    { work: chapter.work, partOf: { work: readable.work, occurrence }, authors: [], hub: null, mod: null }]);
 
     await stack.accessPool.query(`UPDATE access.permission_grant SET active = false
       WHERE scope_id = $1 AND recipient_subject = $2`, [scope, moderator.actor]);

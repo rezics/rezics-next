@@ -15,14 +15,12 @@ import type { ManageMessages } from './messages.ts';
 import { AgentMark, Pill, WorkThumb } from './parts.tsx';
 import { SubjectName } from './queue-context.tsx';
 import { subjectOf } from './queue-subject.ts';
-import { mergeAgents, readAgents, readAudit, readPublicDecisions, readSubjects } from './read.ts';
+import { mergeAgents, readAgents, readAudit, readPublicDecisions, readSubjects, type SubjectNames } from './read.ts';
 import { type AuditFilter, type LogView as View, logHref } from './routes.ts';
-import type { AgentSummary, AuditItem, AuditPage, ChapterSummary, Loaded, PublicDecision, PublicDecisionPage,
-  WorkSummary } from './types.ts';
+import type { AgentSummary, AuditItem, AuditPage, Loaded, PublicDecision, PublicDecisionPage } from './types.ts';
 
 /** What a log page names: people, and Works with each chapter's Book and label. */
-export interface LogNames { agents: Record<string, AgentSummary>; works: Record<string, WorkSummary>;
-  chapters: Record<string, ChapterSummary> }
+export interface LogNames extends SubjectNames { agents: Record<string, AgentSummary> }
 
 /** Later pages of either log. Stories pass a stand-in. */
 export interface LogApi {
@@ -46,7 +44,7 @@ export function bffLogApi(realm: string, actingSubject: string, language: string
     async names(agents, works, known) {
       const main = browserMainApi();
       const [a, subjects] = await Promise.all([readAgents(main, agents, actingSubject),
-        readSubjects(main, works, { language, actingSubject }, known)]);
+        readSubjects(main, realm, works, { language, actingSubject }, known)]);
       return { agents: a, ...subjects };
     },
   };
@@ -89,7 +87,7 @@ export function LogView({ realm, address = realm, actingSubject, view, first, na
       setCursor(read.data.nextCursor);
       const found = await api.names(auditAgents(read.data.items), auditWorks(read.data.items), names);
       setNames(known => ({ agents: mergeAgents(known.agents, found.agents), works: { ...known.works, ...found.works },
-        chapters: { ...known.chapters, ...found.chapters } }));
+        chapters: { ...known.chapters, ...found.chapters }, facts: { ...known.facts, ...found.facts } }));
     } else {
       const read = await api.decisions(cursor);
       if (!read.ok) { setPaging(read.failure === 'moved' ? 'moved' : 'failed'); return; }
@@ -97,7 +95,7 @@ export function LogView({ realm, address = realm, actingSubject, view, first, na
       setCursor(read.data.nextCursor);
       const found = await api.names([], read.data.items.flatMap(item => item.work ? [item.work] : []), names);
       setNames(known => ({ ...known, works: { ...known.works, ...found.works },
-        chapters: { ...known.chapters, ...found.chapters } }));
+        chapters: { ...known.chapters, ...found.chapters }, facts: { ...known.facts, ...found.facts } }));
     }
     setPaging('idle');
   }

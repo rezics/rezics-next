@@ -40,7 +40,7 @@ export function SubjectHeader({ subject, facts, headingId, fallback, t }: { subj
   const work = subject.work;
   // A chapter is told by its Book: the Book's hook, status and authors.
   const told = subject.cover.work ?? work;
-  const kind = workTypeText(work, t);
+  const kind = subject.book ? t.typeChapter : workTypeText(work, t);
   const authors = facts?.authors.map(author => author.name) ?? [];
   const status = [kind, completionText(told?.completionStatus, t),
     told?.chapterCount ? t.chapterCount(told.chapterCount) : null].filter(Boolean).join(' · ');
@@ -58,7 +58,7 @@ export function SubjectHeader({ subject, facts, headingId, fallback, t }: { subj
       {told?.tagline ? <p className="text-pretty text-sm">
         <span className="sr-only">{t.hookLabel}: </span>
         <Shown name={told.tagline} className="italic" /></p> : null}
-      {work ? <LocalizedLink href={subject.href} className="inline-flex items-center gap-1 justify-self-start rounded-md
+      {work || subject.book ? <LocalizedLink href={subject.href} className="inline-flex items-center gap-1 justify-self-start rounded-md
         font-medium text-primary text-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
         {subject.book ? t.readChapter : t.openWork}<ArrowUpRightIcon aria-hidden="true" className="size-3.5" /></LocalizedLink>
         : <p className="text-muted-foreground text-xs">{t.workUnavailable}</p>}

@@ -37,6 +37,13 @@ describe('G-395 what a queue item is about', () => {
       href: '/w/00000000-0000-4000-8000-000000009999' });
   });
 
+  test('a chapter whose own record is private is placed in its Book by the moderation context', () => {
+    const { [chapterOne]: _private, ...readable } = works;
+    const subject = subjectOf(chapterOne, { works: readable, chapters, facts: names.facts }, t.workFallback);
+    expect(subject).toMatchObject({ work: undefined, text: '第一章 雨夜 · 雨夜书店 · 连载小说',
+      cover: { iri: book }, href: `/w/${uuid(book)}/read/${uuid(occurrences.one)}` });
+  });
+
   test('a Work says what it is, and mods, prompts and skills have their own facts to review', () => {
     expect(workTypeText(works[chapterOne], t)).toBe('Chapter');
     expect(workTypeText(works[book], t)).toBe('Book');

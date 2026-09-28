@@ -94,14 +94,19 @@ export const records: Record<string, PersonRecord> = {
     submissions: null, reports: { open: 1, upheld: 0, dismissed: 0, total: 1, capped: false } },
 };
 export const facts: Record<string, WorkFacts> = {
-  [book]: { work: book, authors: [{ agent: people.mei, name: 'Lin Mei 林梅' }], mod: null, hub: null },
-  [mod]: { work: mod, authors: [{ agent: people.jun, name: 'Jun Zhang 张俊' }], hub: null,
+  [book]: { work: book, partOf: null, authors: [{ agent: people.mei, name: 'Lin Mei 林梅' }], mod: null, hub: null },
+  // A chapter's context names its place and its Book's authors.
+  [chapterOne]: { work: chapterOne, partOf: { work: book, occurrence: occurrences.one },
+    authors: [{ agent: people.mei, name: 'Lin Mei 林梅' }], mod: null, hub: null },
+  [chapterTwo]: { work: chapterTwo, partOf: { work: book, occurrence: occurrences.two },
+    authors: [{ agent: people.mei, name: 'Lin Mei 林梅' }], mod: null, hub: null },
+  [mod]: { work: mod, partOf: null, authors: [{ agent: people.jun, name: 'Jun Zhang 张俊' }], hub: null,
     mod: { game: 'Minecraft', gameVersions: ['1.21.1'], loaders: ['Fabric'], latestRelease: '2.3.0' } },
-  [prompt]: { work: prompt, authors: [{ agent: people.sophie, name: 'Sophie Li 李素菲' }], mod: null,
+  [prompt]: { work: prompt, partOf: null, authors: [{ agent: people.sophie, name: 'Sophie Li 李素菲' }], mod: null,
     hub: { kind: 'prompt', summary: 'Recap a chapter without spoiling later ones.', truncated: false,
       text: 'You are recapping chapter {{chapter}} of {{book}} for a reader who has read up to it.\n'
         + 'Summarise in three sentences. Never mention events after this chapter.', declaredModels: ['claude-sonnet-5'] } },
-  [skill]: { work: skill, authors: [{ agent: people.aria, name: 'Aria Wang 王雅' }], mod: null,
+  [skill]: { work: skill, partOf: null, authors: [{ agent: people.aria, name: 'Aria Wang 王雅' }], mod: null,
     hub: { kind: 'skill-package', summary: 'Checks that quotations name their edition and translator.', truncated: true,
       text: '# Citation checker\n\nFor each quotation, find the edition it comes from and its translator.\n'
         + 'Flag quotations without one.', declaredModels: [] } },
@@ -258,7 +263,7 @@ export const logApi: LogApi = {
     sourcePosition: position, count: { value: 0, kind: 'exact-page', total: null } } }),
   names: async () => logNames,
 };
-export const logNames: LogNames = { agents, works, chapters };
+export const logNames: LogNames = { agents, works, chapters, facts };
 
 export const roles: Role[] = [
   { id: id(2001), name: 'Community moderators', permissions: ['governance.moderate', 'realm.members.manage'] },

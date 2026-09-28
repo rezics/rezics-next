@@ -50,11 +50,12 @@ export const moderationPage = t.Object({ items: t.Array(moderationItem, { maxIte
  * What a moderator reads beside one queue page: one Access transaction
  * (two optional authority checks and one aggregate over at most `agents`
  * people, each count stopping at `historyRows`) and one Work read session
- * (one summary batch, two credit queries per Work, one name batch, one Hub
- * batch and one mod-card lookup).
+ * (one chapter-place query per Work, one summary batch, two credit queries
+ * per Work or Book named, one name batch, one Hub batch and one mod-card
+ * lookup).
  */
 export const MODERATION_CONTEXT_COST = { agents: 20, works: 20, historyRows: 1_000, sqlStatements: 6,
-  graphCalls: 48, authors: 8, hubCharacters: 4_000, statementTimeoutMs: 5_000 } as const;
+  graphCalls: 72, authors: 8, hubCharacters: 4_000, statementTimeoutMs: 5_000 } as const;
 
 const historyCount = t.Integer({ minimum: 0, maximum: MODERATION_CONTEXT_COST.historyRows });
 /**
@@ -69,8 +70,15 @@ export const personContext = t.Object({ agent: readId,
     changesRequested: historyCount, withdrawn: historyCount, total: historyCount, capped: t.Boolean() })),
   reports: t.Nullable(t.Object({ open: historyCount, upheld: historyCount, dismissed: historyCount,
     total: historyCount, capped: t.Boolean() })) });
-/** What a queue item's Work is beyond its header: who wrote it, and a mod's or prompt's own facts. */
+/**
+ * What a queue item's Work is beyond its header: its place when it is a
+ * chapter, who wrote it, and a mod's or prompt's own facts. A chapter's place
+ * in a Book the reader can read is named even when the chapter's own record
+ * is not public, as the Book's contents already show it; its authors are then
+ * the Book's.
+ */
 export const workContext = t.Object({ work: readId,
+  partOf: t.Nullable(t.Object({ work: readId, occurrence: t.Nullable(readId) })),
   authors: t.Array(t.Object({ agent: t.Nullable(readId), name: t.String() }),
     { maxItems: MODERATION_CONTEXT_COST.authors }),
   mod: t.Nullable(t.Object({ game: t.String(), gameVersions: t.Array(t.String(), { maxItems: 8 }),

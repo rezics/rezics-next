@@ -4,6 +4,7 @@ import { namedDiscoveryCredits, primaryDiscoveryCredits } from '../discovery/cre
 import { type PublicHubCard, readPublicHubCards } from '../hub/public-card.ts';
 import type { PublicModCard } from '../package/mod-resolution.ts';
 import { fenceAuthorNames, readAuthorNames } from '../source/author-name-read.ts';
+import { chapterPlace } from '../structure/chapter-work.ts';
 import { WorkReadInvalid, type WorkReadSession } from '../work/read-session.ts';
 import { MODERATION_CONTEXT_COST, type personContext, type workContext } from './read-contract.ts';
 
@@ -83,20 +84,34 @@ const cut = (text: string, limit: number) => {
 /**
  * The Works a queue page shows, as far as this reader may read them: their
  * authors as discovery names them, a public mod's compatibility card and a
- * public prompt's or skill's text. Works the reader cannot read are left out.
+ * public prompt's or skill's text. A chapter placed in a Book the reader may
+ * read is named by its place even when the chapter's own record is not
+ * readable (Books list their chapters in public contents), with the Book's
+ * authors. Any other Work the reader cannot read is left out.
  */
 export async function readWorkContext(session: WorkReadSession, works: readonly string[]): Promise<WorkContext[]> {
   if (!works.length) return [];
-  const summaries = await session.summaries([...works]);
-  const readable = works.filter((_, index) => {
+  const places = await Promise.all(works.map(work => chapterPlace(session, work)));
+  const books = [...new Set(places.flatMap(place => place ? [place.work] : []))].filter(book => !works.includes(book));
+  const summaries = await session.summaries([...works, ...books]);
+  const available = new Set([...works, ...books].filter((_, index) => {
     const summary = summaries[index];
     return summary?.status === 'available' && summary.type === 'work';
+  }));
+  const shown = works.flatMap((work, index) => {
+    const place = places[index] ?? null;
+    if (available.has(work)) return [{ work, place, readable: true }];
+    // Only a place the Book's contents show: a chapter with an occurrence in a Book this reader may read.
+    return place?.occurrence && available.has(place.work) ? [{ work, place, readable: false }] : [];
   });
-  const credits = new Map(await Promise.all(readable.map(async work =>
+  // A chapter is credited through its Book; everything else through its own credits.
+  const credited = [...new Set(shown.map(item => item.place?.work ?? item.work))].filter(work => available.has(work));
+  const readable = shown.filter(item => item.readable).map(item => item.work);
+  const credits = new Map(await Promise.all(credited.map(async work =>
     [work, await primaryDiscoveryCredits(session, work)] as const)));
   const all = [...credits.values()].flat();
   const [agents, sources, hub, mods] = await Promise.all([
-    namedDiscoveryCredits(session, all, readable.length || 1),
+    namedDiscoveryCredits(session, all, credited.length || 1),
     readAuthorNames(session, all.flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : [])),
     session.deps.hub && session.deps.content ? readPublicHubCards(session, readable)
       : new Map<string, PublicHubCard>(),
@@ -104,8 +119,8 @@ export async function readWorkContext(session: WorkReadSession, works: readonly 
       : new Map<string, PublicModCard>(),
   ]);
   await fenceAuthorNames(session);
-  return readable.map(work => {
-    const authors = (credits.get(work) ?? []).flatMap((credit): WorkContext['authors'] => {
+  return shown.map(({ work, place }) => {
+    const authors = (credits.get(place?.work ?? work) ?? []).flatMap((credit): WorkContext['authors'] => {
       if (credit.participantKind === 'agent') {
         const name = agents.get(credit.agent);
         return name ? [{ agent: credit.agent, name: name.displayName }] : [];
@@ -116,7 +131,7 @@ export async function readWorkContext(session: WorkReadSession, works: readonly 
     const mod = mods.get(work);
     const card = hub.get(work);
     const body = card ? cut(card.copyText, MODERATION_CONTEXT_COST.hubCharacters) : null;
-    return { work, authors,
+    return { work, partOf: place, authors,
       mod: mod ? { game: mod.game, gameVersions: mod.gameVersions.slice(0, 8), loaders: mod.loaders.slice(0, 8),
         latestRelease: mod.latestRelease } : null,
       hub: card && body ? { kind: card.kind, summary: card.preview, ...body, declaredModels: card.declaredModels } : null };

@@ -1,8 +1,7 @@
 import { browserMainApi } from '../api/browser.ts';
 import { commitDecision, type Outcome } from './commands.ts';
 import type { Decision } from './queue-state.ts';
-import { mergeAgents, readAgents, readChapters, readDecisionBasis, readDraftText, readModerationContext, readQueue,
-  readWorks } from './read.ts';
+import { mergeAgents, readAgents, readDecisionBasis, readDraftText, readQueue, readSubjects } from './read.ts';
 import type { QueueView } from './routes.ts';
 import type { AgentSummary, ChapterSummary, DecisionBasis, Loaded, MainClient, ModerationItem, ModerationPage,
   PersonRecord, WorkFacts, WorkSummary } from './types.ts';
@@ -53,29 +52,21 @@ export function mergeNames(known: QueueNames, found: Partial<QueueNames>): Queue
 }
 
 /**
- * Reads what a page of items mentions: names and Work headers first, then
- * the chapters among them and the moderation context, which need to know
- * which Works are chapters and which Books they belong to. `names` reads
- * public profiles (the server reads them anonymously).
+ * Reads what a page of items mentions: public names, and the Works as a
+ * moderator sees them (`readSubjects`), with the records of the people who
+ * submitted or reported them. `names` reads public profiles (the server
+ * reads them anonymously).
  */
 export async function readQueueNames(main: MainClient, realm: string, items: readonly ModerationItem[],
   query: { language: string; actingSubject: string }, known: QueueNames = noNames, names: MainClient = main):
   Promise<QueueNames> {
   const wanted = mentioned(items);
-  const [agents, works] = await Promise.all([readAgents(names, wanted.agents, names === main ? query.actingSubject : undefined),
-    readWorks(main, wanted.works, query, known.works)]);
-  const all = { ...known.works, ...works };
-  // A chapter's authors are its Book's; the Book is what the context names.
-  const subjects = [...new Set(wanted.works.flatMap(iri => [iri, ...all[iri]?.partOf ? [all[iri].partOf.work] : []]))]
-    .filter(iri => !known.facts[iri]);
   const people = [...new Set(items.flatMap(item => item.authorAgent ? [item.authorAgent] : []))]
     .filter(iri => !known.records[iri]);
-  const [chapters, context] = await Promise.all([readChapters(main, all, query.actingSubject, known.chapters),
-    people.length || subjects.length ? readModerationContext(main, realm, { actingSubject: query.actingSubject,
-      agents: people, works: subjects }) : null]);
-  return mergeNames(known, { agents, works, chapters,
-    records: context?.ok ? Object.fromEntries(context.data.people.map(person => [person.agent, person])) : {},
-    facts: context?.ok ? Object.fromEntries(context.data.works.map(work => [work.work, work])) : {} });
+  const [agents, subjects] = await Promise.all([
+    readAgents(names, wanted.agents, names === main ? query.actingSubject : undefined),
+    readSubjects(main, realm, wanted.works, query, known, people)]);
+  return mergeNames(known, { agents, ...subjects });
 }
 
 /** The queue through the BFF, acting as `actingSubject`. */

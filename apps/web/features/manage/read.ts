@@ -1,5 +1,5 @@
 import { type AgentSummary, type ChapterSummary, failureOf, iriOf, type Loaded, type MainClient, type ModerationKind,
-  uuidOf, type WorkSummary } from './types.ts';
+  type PersonRecord, uuidOf, type WorkFacts, type WorkSummary } from './types.ts';
 
 // Reads shared by the server render and the browser (load more, refresh after
 // a decision). Each takes the Eden client for its side and returns `Loaded`
@@ -170,7 +170,8 @@ export async function readWorks(main: MainClient, iris: readonly string[], query
     return Object.fromEntries(works.filter(work => work !== null).map(work => [work.iri, work]));
   };
   const works = await read(iris);
-  const books = await read(Object.values(works).flatMap(work => work.partOf ? [work.partOf.work] : []));
+  const books = await read(Object.values(works).flatMap(work => work.partOf && !works[work.partOf.work]
+    ? [work.partOf.work] : []));
   return { ...works, ...books };
 }
 
@@ -191,15 +192,19 @@ export function chapterExcerpt(body: string, label: string | null, limit = CHAPT
   return { excerpt: (paragraph > limit / 2 ? cut.slice(0, paragraph) : cut).trimEnd(), truncated: true };
 }
 
+/** Where each chapter among some Works is placed in its Book, from their headers or Main's moderation context. */
+export type Placements = Record<string, { work: string; occurrence: string | null }>;
+
 /**
- * The chapters among `works` as their Books list them: the label a chapter
- * has in the Book's contents, and the opening of its text. One chapter read
- * each (Main has no batched one); a chapter placed nowhere now is left out.
+ * The chapters `placements` name as their Books list them: the label a
+ * chapter has in the Book's contents, and the opening of its text. One
+ * chapter read each (Main has no batched one); a chapter placed nowhere now
+ * is left out.
  */
-export async function readChapters(main: MainClient, works: Record<string, WorkSummary>, actingSubject: string,
+export async function readChapters(main: MainClient, placements: Placements, actingSubject: string,
   known: Record<string, ChapterSummary> = {}): Promise<Record<string, ChapterSummary>> {
-  const chapters = Object.values(works).flatMap(work => work.partOf?.occurrence && !known[work.iri]
-    ? [{ work: work.iri, occurrence: work.partOf.occurrence }] : []).slice(0, NAME_BUDGET);
+  const chapters = Object.entries(placements).flatMap(([work, place]) => place.occurrence && !known[work]
+    ? [{ work, occurrence: place.occurrence }] : []).slice(0, NAME_BUDGET);
   const read = await bounded(chapters, 4, async ({ work, occurrence }) => {
     const chapter = await settle(() => main.v1.chapters({ id: uuidOf(occurrence) }).get({ query: { actingSubject } }));
     if (!chapter.ok) return null;
@@ -213,13 +218,37 @@ export async function readChapters(main: MainClient, works: Record<string, WorkS
   return Object.fromEntries(read.filter(entry => entry !== null));
 }
 
-/** The Works a log page names, with each chapter's Book, label and opening, as the queue shows them. */
-export async function readSubjects(main: MainClient, iris: readonly string[], query: { language: string;
-  actingSubject: string }, known: { works: Record<string, WorkSummary>; chapters: Record<string, ChapterSummary> }
-  = { works: {}, chapters: {} }) {
-  const works = await readWorks(main, iris, query, known.works);
-  const chapters = await readChapters(main, { ...known.works, ...works }, query.actingSubject, known.chapters);
-  return { works, chapters };
+/** What the queue and the log know of the Works they name. */
+export interface SubjectNames { works: Record<string, WorkSummary>; chapters: Record<string, ChapterSummary>;
+  facts: Record<string, WorkFacts> }
+
+/**
+ * The Works a page names as a moderator sees them: their headers, Main's
+ * moderation context (authors, a mod's or prompt's facts, and a chapter's
+ * place even when the chapter itself is not public), then each chapter's
+ * Book and its label and opening. `people` asks the context for their
+ * records too.
+ */
+export async function readSubjects(main: MainClient, realm: string, iris: readonly string[], query: { language: string;
+  actingSubject: string }, known: SubjectNames = { works: {}, chapters: {}, facts: {} }, people: readonly string[] = []):
+  Promise<SubjectNames & { records: Record<string, PersonRecord> }> {
+  const wanted = [...new Set(iris)].filter(iri => !known.facts[iri]);
+  const [works, context] = await Promise.all([readWorks(main, iris, query, known.works),
+    wanted.length || people.length ? readModerationContext(main, realm, { actingSubject: query.actingSubject,
+      agents: people, works: wanted }) : null]);
+  const facts: Record<string, WorkFacts> = context?.ok
+    ? Object.fromEntries(context.data.works.map(work => [work.work, work])) : {};
+  const all = { ...known.works, ...works };
+  const placements: Placements = {};
+  for (const iri of iris) {
+    const place = all[iri]?.partOf ?? facts[iri]?.partOf ?? known.facts[iri]?.partOf;
+    if (place) placements[iri] = place;
+  }
+  const [books, chapters] = await Promise.all([
+    readWorks(main, Object.values(placements).map(place => place.work), query, all),
+    readChapters(main, placements, query.actingSubject, known.chapters)]);
+  return { works: { ...works, ...books }, chapters, facts,
+    records: context?.ok ? Object.fromEntries(context.data.people.map(person => [person.agent, person])) : {} };
 }
 
 /** A submission as its reviewer sees it, including the private note. */
