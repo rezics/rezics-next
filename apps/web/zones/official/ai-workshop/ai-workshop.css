@@ -425,10 +425,9 @@
       min-inline-size: 0;
     }
 
-    /* The prompt as it will be copied: monospace, kept to a few lines. */
+    /* The prompt as it will be copied: monospace, kept to a few lines. The clamp sits
+       inside the padding, so no cut line shows through it. */
     .aw-preview {
-      display: -webkit-box;
-      overflow: hidden;
       padding: 0.5rem 0.75rem;
       border-inline-start: 2px solid color-mix(in oklab, var(--zone-accent) 55%, var(--aw-line));
       border-radius: 0.375rem;
@@ -436,6 +435,11 @@
       font-family: var(--font-code);
       font-size: 0.8125rem;
       line-height: 1.55;
+    }
+
+    .aw-preview-text {
+      display: -webkit-box;
+      overflow: hidden;
       overflow-wrap: anywhere;
       white-space: pre-line;
       -webkit-box-orient: vertical;
@@ -444,6 +448,9 @@
 
     .aw-spotlight .aw-preview {
       max-inline-size: 40rem;
+    }
+
+    .aw-spotlight .aw-preview-text {
       -webkit-line-clamp: 6;
     }
 
@@ -570,7 +577,7 @@
       padding-inline-start: 3rem;
     }
 
-    .aw-card:is([data-layout="row"], [data-layout="rail"]) :is(.aw-hook, .aw-preview) {
+    .aw-card:is([data-layout="row"], [data-layout="rail"]) :is(.aw-hook, .aw-preview-text) {
       -webkit-line-clamp: 1;
     }
 
@@ -580,6 +587,9 @@
       background: none;
       color: var(--muted-foreground);
       font-size: 0.75rem;
+    }
+
+    .aw-card:is([data-layout="row"], [data-layout="rail"]) .aw-preview-text {
       white-space: normal;
     }
 

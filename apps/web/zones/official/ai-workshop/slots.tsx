@@ -56,7 +56,8 @@ function Disclosed({ hub, t }: { hub: ZoneHubItem; t: Strings }) {
   const cut = hub.kind === 'prompt' && hub.copyText.length > hub.preview.value.length;
   return <>
     <p lang={hub.preview.lang || undefined} dir={hub.preview.dir} translate="no" className="aw-preview">
-      <span className="sr-only">{t.preview}: </span>{hub.preview.value}{cut ? '…' : null}</p>
+      <span className="aw-preview-text"><span className="sr-only">{t.preview}: </span>{hub.preview.value}
+        {cut ? '…' : null}</span></p>
     {hub.testedModels.length ? <div className="aw-models">
       <span>{t.testedWith}</span>
       <ul aria-label={t.testedWith}>{hub.testedModels.map(model => <li key={model} translate="no">{model}</li>)}</ul>
