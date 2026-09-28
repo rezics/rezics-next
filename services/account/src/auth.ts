@@ -145,6 +145,10 @@ export function accountAuthOptions(config: AccountConfig) {
         clientRegistrationDefaultResources: [config.resource],
         allowDynamicClientRegistration: false,
         storeTokens: 'hashed',
+        // Account's token boundary serializes a rotation and rechecks the live
+        // authority before returning any cached response. Ten seconds covers
+        // simultaneous isolates without making a stale token reusable later.
+        refreshTokenReuseInterval: 10,
         accessTokenExpiresIn: 300,
         clientPrivileges: async ({ user }) => {
           if (!user) return false;

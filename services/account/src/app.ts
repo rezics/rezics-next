@@ -6,6 +6,7 @@ import { currentInstallationIn, installClient, InstallationConflict, Installatio
   InstallationNotFound, readInstallation, revokeInstallation } from './installations.ts';
 import { currentIntrospection, presentedToken } from './introspection.ts';
 import { guardedAuthorizationCodeExchange } from './oauth-code-guard.ts';
+import { guardedRefreshTokenExchange } from './refresh-token-guard.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { consentApi } from './consent.ts';
 import { methodsApi, requireStepUp, sensitiveAuthPaths } from './methods.ts';
@@ -239,7 +240,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .use(accountSettingsApi(auth, pool))
     .use(displayPreferencesApi(auth, pool, options.displayPreferenceClientIds ?? new Set()))
     .post('/api/auth/oauth2/token', ({ request }) =>
-      guardedAuthorizationCodeExchange(guard(), request, () => auth.handler(request)))
+      guardedAuthorizationCodeExchange(guard(), request, () =>
+        guardedRefreshTokenExchange(guard(), request, () => auth.handler(request))))
     // A product must bind and consume state at its callback. Require the input
     // here as well so an authorization request cannot omit that CSRF binding.
     // An App asks only within its active installation, so neither consent nor
