@@ -21,7 +21,7 @@ export interface NavigationItem {
 export const navigation: readonly NavigationItem[] = [
   { href: '/', icon: House, bottom: true, label: localeText({ en: 'Home', 'zh-Hant': '首頁', 'zh-Hans': '首页', ja: 'ホーム', ko: '홈', de: 'Startseite', fr: 'Accueil', es: 'Inicio' }) },
   { href: '/discover', icon: Compass, bottom: true, label: localeText({ en: 'Discover', 'zh-Hant': '探索', 'zh-Hans': '探索', ja: '見つける', ko: '둘러보기', de: 'Entdecken', fr: 'Découvrir', es: 'Explorar' }) },
-  { href: '/studio', icon: Plus, bottom: true, emphasized: true, label: localeText({ en: 'Create', 'zh-Hant': '創作', 'zh-Hans': '创作', ja: '作る', ko: '만들기', de: 'Erstellen', fr: 'Créer', es: 'Crear' }) },
+  { href: '/submit', icon: Plus, bottom: true, emphasized: true, label: localeText({ en: 'Create', 'zh-Hant': '創作', 'zh-Hans': '创作', ja: '作る', ko: '만들기', de: 'Erstellen', fr: 'Créer', es: 'Crear' }) },
   { href: '/notifications', icon: Bell, bottom: true,
     label: localeText({ en: 'Notifications', 'zh-Hant': '通知', 'zh-Hans': '通知', ja: '通知', ko: '알림', de: 'Benachrichtigungen', fr: 'Notifications', es: 'Notificaciones' }),
     bottomLabel: localeText({ en: 'Alerts', 'zh-Hant': '通知', 'zh-Hans': '通知', ja: '通知', ko: '알림', de: 'Meldungen', fr: 'Alertes', es: 'Avisos' }) },

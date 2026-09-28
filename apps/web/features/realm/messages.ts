@@ -36,6 +36,7 @@ export const messages = {
   openWork: 'Open the work',
   decisionLinked: 'The decision you followed',
   discussionsTitle: 'Discussions',
+  createPost: 'Create post',
   discussionsIntro: 'Conversations happen on each work. Pick one to read and join what this community is saying about it.',
   openDiscussion: 'Open discussion',
   aboutTitle: insert('About {{realm}}', { realm: String }),

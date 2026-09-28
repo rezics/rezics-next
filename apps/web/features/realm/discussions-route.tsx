@@ -1,6 +1,6 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
-import { CalendarRangeIcon, MessagesSquareIcon, RefreshCwIcon, RotateCwIcon, TriangleAlertIcon } from 'lucide-react';
+import { CalendarRangeIcon, MessagesSquareIcon, PlusIcon, RefreshCwIcon, RotateCwIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { Suspense } from 'react';
 import type { FeedMessages } from '../feed/messages.ts';
@@ -82,6 +82,10 @@ export async function RealmDiscussionsRoute({ params, searchParams }: RealmRoute
   const sort = parseThreadSort(search), window = parseThreadWindow(search), cursor = parseCursor(search);
   return <DiscussionFrame view={view} locale={resolved.locale} feed={feed} search={search}
     here={listHref(realmPathOf(view), sort, window, cursor)}>
+    <div className="mb-4 flex justify-end">
+      <LocalizedLink href={`${realmPathOf(view)}/submit`} className={buttonVariants({ size: 'sm', pill: true })}>
+        <PlusIcon aria-hidden="true" className="size-4" />{view.messages.createPost}</LocalizedLink>
+    </div>
     <Suspense fallback={<ListSkeleton />}>
       <Threads view={view} sort={sort} window={window} cursor={cursor} feed={feed} />
     </Suspense>

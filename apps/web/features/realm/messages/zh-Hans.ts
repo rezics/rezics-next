@@ -34,6 +34,7 @@ export default {
   openWork: '打开作品',
   decisionLinked: '你点开的决定',
   discussionsTitle: '讨论',
+  createPost: '发布帖子',
   discussionsIntro: '讨论在每部作品下进行。选一部作品，看看这个社区在聊什么，也可以加入。',
   openDiscussion: '进入讨论',
   aboutTitle: insert('关于 {{realm}}', { realm: String }),
