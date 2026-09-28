@@ -129,3 +129,22 @@ test('G291: progress outbox replays once; ranking cursor and scores reset on gra
     expect(counted.filter(event => event.finished)).toHaveLength(1);
   } finally { await stack.stop(); }
 });
+
+test('G385: ten or more review rank changes advance the ranking checkpoint in position order', async () => {
+  const stack = await startMediaStack('ranking-reviews');
+  try {
+    const projection = new ReadRankingProjection(stack.accessPool, stack.content, stack.contentPool, stack.env);
+    for (let i = 0; i < 100 && (await projection.tick()) > 0; i++) { /* bounded catch-up */ }
+    const work = id();
+    // Positions 1–12 in text order would read 1, 10, 11, 12, 2, … and stall the projection as not contiguous.
+    for (let i = 0; i < 12; i++) {
+      await stack.accessPool.query('SELECT access.append_reader_review_rank_change($1, clock_timestamp(), 1)', [work]);
+    }
+    for (let i = 0; i < 100 && (await projection.tick()) > 0; i++) { /* bounded catch-up */ }
+    const positions = await stack.accessPool.query<{ checkpoint: string; head: string }>(`SELECT
+      c.review_position::text AS checkpoint, h.position::text AS head
+      FROM access.read_ranking_checkpoint c CROSS JOIN access.reader_review_rank_head h WHERE c.singleton`);
+    expect(positions.rows[0]!.checkpoint).toBe(positions.rows[0]!.head);
+    expect(await projection.tick()).toBe(0);
+  } finally { await stack.stop(); }
+});
