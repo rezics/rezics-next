@@ -9,7 +9,7 @@ import { seedAdoptions } from './adoptions-step.ts';
 import { seedChapters } from './chapters-step.ts';
 import { checkPublicReads } from './checks-step.ts';
 import { seedClassics } from './classics-step.ts';
-import { seedCommunityDiscussions } from './community-discussions.ts';
+import { seedCommunityDiscussions, seedCommunityVotes } from './community-discussions.ts';
 import { communityPeople, communityRealms } from './community-plan.ts';
 import { seedCommunityRealms } from './community-step.ts';
 import { seedContributions } from './contributions-step.ts';
@@ -103,15 +103,16 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// Each phase owns one file; this is the only ordering declaration. Community
-// Realms, reading lives, ratings and reviews follow the official Zones, whose
-// Works they discuss and rate; co-readers are built from all of it, last.
+// Each phase owns one file; this is the only ordering declaration. Shelves,
+// community Realms, ratings and reviews follow the official Zones, which make
+// the classics readable and publish the Works they discuss and rate. Votes wait
+// a few steps for Home's projection; co-readers are built from all of it, last.
 export const steps: readonly SeedStep[] = [
   seedAccounts, seedClassics, seedWorks, seedContributions, seedRealms, seedAdoptions,
   seedLibrary, seedChapters, seedModeration, seedHomeFeed,
-  seedProfileCredits, seedProfileBios, seedProfileShelves, seedProfileFollows, seedOfficialZones,
-  seedOfficialThemes, seedCommunityRealms, seedCommunityDiscussions, seedReadingLives, seedRatings,
-  seedReviews, seedCoReaders,
+  seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedOfficialThemes,
+  seedProfileShelves, seedCommunityRealms, seedCommunityDiscussions, seedReadingLives, seedRatings,
+  seedReviews, seedCommunityVotes, seedCoReaders,
   checkPublicReads, printSeedReport,
 ];
 
@@ -146,7 +147,7 @@ async function run(options: Options): Promise<boolean> {
     sessions: [], penAgents: new Map(), operatorInput: null, operatorSession: null, agentCount: 0,
     created: new Map(), createdRealms: [], seededZones: [],
     publishedCount: 0, selectedCount: 0, publicForRealm: new Map(), publicWorks: new Map(),
-    ratingContext: null, communityRealms: new Map(),
+    ratingContext: null, communityRealms: new Map(), discussionVotes: [],
     commentCount: 0, replyCount: 0, reviewCount: 0, profileCreditCount: 0, profileFollowCount: 0 };
   const timings: string[] = [];
   const started = performance.now();

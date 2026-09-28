@@ -73,8 +73,9 @@ async function discuss(state: SeedState, realm: { realm: string; owner: Session 
 
 /**
  * A vote needs Home's projection of the placement, which follows the relay: an
- * unprojected activity answers 404 until the shared deadline passes, and the
- * next run casts what is left. A 409 means the voter already holds a vote on it.
+ * unprojected activity answers 404 (or 503 while the read catches up) until the
+ * shared deadline passes, and the next run casts what is left. A 409 means the
+ * voter already holds a vote on it.
  */
 async function vote(api: SeedApi, voter: Session, placement: string, value: 1 | -1, key: string, deadline: number) {
   for (;;) {
@@ -99,7 +100,7 @@ export function threadVoters(thread: Pick<CommunityThread, 'realm'>, author: str
 
 export async function seedCommunityDiscussions(state: SeedState) {
   const roots = new Map<string, Root>();
-  const votes: { voter: string; placement: string; value: 1 | -1; key: string }[] = [];
+  const votes = state.discussionVotes;
   let threads = 0, replies = 0;
   const post = async (thread: CommunityThread) => {
     await refreshSeedTokens(state);
@@ -127,6 +128,14 @@ export async function seedCommunityDiscussions(state: SeedState) {
   await Promise.all(communityRealms.map(async plan => {
     for (const thread of communityThreads.filter(item => item.realm === plan.id)) await post(thread);
   }));
+  state.commentCount += threads;
+  state.replyCount += replies;
+  console.log(`Community discussions: ${threads}/${communityThreads.length} threads, ${replies} replies.`);
+}
+
+/** Members' votes on the discussions, a few steps after placing them so Home's projection has caught up. */
+export async function seedCommunityVotes(state: SeedState) {
+  const votes = state.discussionVotes;
   let voted = 0, waiting = 0;
   const deadline = Date.now() + 90_000, lanes = 4;
   await Promise.all(Array.from({ length: lanes }, async (_, lane) => {
@@ -137,13 +146,11 @@ export async function seedCommunityDiscussions(state: SeedState) {
         await vote(state.api, person(state, item.voter), item.placement, item.value, item.key, deadline);
         voted++;
       } catch (error) {
-        if (error instanceof SeedApiError && error.status === 404) waiting++;
+        if (error instanceof SeedApiError && [404, 503].includes(error.status)) waiting++;
         else state.findings.add(`Community discussion vote: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }));
   if (waiting) state.findings.add(`Community discussions: ${waiting} votes wait for Home's projection; run the seed again`);
-  state.commentCount += threads;
-  state.replyCount += replies;
-  console.log(`Community discussions: ${threads}/${communityThreads.length} threads, ${replies} replies, ${voted} votes.`);
+  console.log(`Community votes: ${voted}/${votes.length} cast.`);
 }

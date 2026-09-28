@@ -34,6 +34,8 @@ export interface SeedState {
   ratingContext: string | null;
   /** Community Realms by plan id, as later steps place discussions in them. */
   communityRealms: Map<string, { realm: string; owner: Session }>;
+  /** Votes on placed discussions, cast a few steps later once Home has projected them. */
+  discussionVotes: { voter: string; placement: string; value: 1 | -1; key: string }[];
   commentCount: number;
   replyCount: number;
   reviewCount: number;

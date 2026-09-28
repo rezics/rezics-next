@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { communityPeople } from './community-plan.ts';
 import { extraWorks, fictionWorks, penNames } from './official-plan.ts';
-import { people, works } from './plan.ts';
+import { people, profilePlan, works } from './plan.ts';
 import { ratingPlan } from './ratings.ts';
 import { coReaderWorks, readingLives } from './reading-lives-plan.ts';
 import { reviews } from './reviews-plan.ts';
@@ -83,6 +83,16 @@ describe('Reading lives', () => {
       }
     }
     expect(readingLives.filter(life => life.shelf.some(entry => entry.work === 'serial')).length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('agree with the profile plan’s public shelves, which the profile step writes first', () => {
+    for (const library of profilePlan.libraries) {
+      const life = readingLives.find(item => item.person === library.person);
+      expect(life).toBeDefined();
+      for (const entry of library.shelf) {
+        expect(life!.shelf.find(item => item.work === entry.work)?.status).toBe(entry.status);
+      }
+    }
   });
 
   test('overlap enough for co-readers on Pride and Prejudice, 雨夜书店 and a mod', () => {
