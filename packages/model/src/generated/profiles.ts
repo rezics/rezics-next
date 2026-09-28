@@ -686,6 +686,18 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "realm-submission-selection-v1": {
+    "sha256": "9bfc405a024d6db800620c6080cfc98cbae49cf027f57e41ca007337943c8996",
+    "file": "shapes/realm-submission-selection-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/realm-submission-selection-v1/selection-shape",
+      "https://rezics.com/definition/realm-submission-selection-v1/slot-shape"
+    ],
+    "focusRoles": [
+      "selection",
+      "slot"
+    ]
+  },
   "recipe-structure-v1": {
     "sha256": "b950e8eb396bc5261a976cf9c8378e42655b0aa2bdf9531701c7aaa51958dd72",
     "file": "shapes/recipe-structure-v1.ttl",
@@ -902,6 +914,16 @@ export const profileRegistry = {
       "removed-placement",
       "revision",
       "seal"
+    ]
+  },
+  "tag-proposal-concept-v1": {
+    "sha256": "a671d7af426d72082e47f328093c27c6088b2496a7d4925a38cd2ba29df0ca94",
+    "file": "shapes/tag-proposal-concept-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/tag-proposal-concept-v1/concept-shape"
+    ],
+    "focusRoles": [
+      "concept"
     ]
   },
   "text-contribution-v1": {

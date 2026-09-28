@@ -67158,6 +67158,263 @@
         ]
       }
     },
+    "/v1/concepts": {
+      "get": {
+        "operationId": "getV1Concepts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": true,
+            "schema": {
+              "maxLength": 40,
+              "minLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "realm",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "hasMore": {
+                      "type": "boolean"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "concept": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "language": {
+                            "type": "string"
+                          },
+                          "realm": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "concept",
+                          "label",
+                          "language",
+                          "realm"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "hasMore"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
+      }
+    },
     "/v1/concepts/{id}/spoiler-hints": {
       "post": {
         "operationId": "postV1ConceptsByIdSpoiler-hints",
@@ -118947,6 +119204,630 @@
         ]
       }
     },
+    "/v1/me/agents/{agent}/works/{id}": {
+      "get": {
+        "operationId": "getV1MeAgentsByAgentWorksById",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "item": {
+                      "properties": {
+                        "cover": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "fallback",
+                                  "type": "string"
+                                },
+                                "policy": {
+                                  "type": "string"
+                                },
+                                "resourceType": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "policy",
+                                "key",
+                                "resourceType"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "basis": {
+                                  "properties": {
+                                    "context": {
+                                      "type": "string"
+                                    },
+                                    "policy": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "policy",
+                                    "context"
+                                  ],
+                                  "type": "object"
+                                },
+                                "crop": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "height": {
+                                  "type": "integer"
+                                },
+                                "kind": {
+                                  "const": "image",
+                                  "type": "string"
+                                },
+                                "mediaType": {
+                                  "type": "string"
+                                },
+                                "selection": {
+                                  "type": "string"
+                                },
+                                "url": {
+                                  "type": "string"
+                                },
+                                "width": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "selection",
+                                "url",
+                                "mediaType",
+                                "width",
+                                "height",
+                                "crop",
+                                "basis"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "disclosure": {
+                          "enum": [
+                            "public",
+                            "restricted"
+                          ],
+                          "type": "string"
+                        },
+                        "id": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "mainRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "mainVersion": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "relationship": {
+                          "enum": [
+                            "authored",
+                            "curated"
+                          ],
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "empty",
+                            "draft",
+                            "published"
+                          ],
+                          "type": "string"
+                        },
+                        "submissions": {
+                          "items": {
+                            "properties": {
+                              "id": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "openedAt": {
+                                "type": "string"
+                              },
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "state": {
+                                "type": "string"
+                              },
+                              "updatedAt": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "realm",
+                              "state",
+                              "openedAt",
+                              "updatedAt"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 200,
+                          "type": "array"
+                        },
+                        "texts": {
+                          "items": {
+                            "properties": {
+                              "contribution": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "draftHead": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "publicationDraft": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "publicationHead": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "contribution",
+                              "language",
+                              "draftHead",
+                              "publicationHead",
+                              "publicationDraft"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 200,
+                          "type": "array"
+                        },
+                        "title": {
+                          "properties": {
+                            "language": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "types": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        },
+                        "workRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "mainVersion",
+                        "workRevision",
+                        "mainRevision",
+                        "title",
+                        "relationship",
+                        "cover",
+                        "types",
+                        "disclosure",
+                        "state",
+                        "texts",
+                        "submissions",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "item",
+                    "sourcePosition"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/me/authority-admissions": {
       "post": {
         "operationId": "postV1MeAuthority-admissions",
@@ -146697,8 +147578,13 @@
                             ]
                           },
                           "contribution": {
+                            "~elyTyp": 7,
+                            "nullable": true,
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "correctionOf": {
                             "~elyTyp": 7,
@@ -146719,7 +147605,9 @@
                           "kind": {
                             "enum": [
                               "contribution",
-                              "correction"
+                              "correction",
+                              "work",
+                              "content-publication"
                             ],
                             "type": "string"
                           },
@@ -146731,8 +147619,12 @@
                             "type": "string"
                           },
                           "publicationDecision": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "publicReason": {
                             "~elyTyp": 7,
@@ -146760,8 +147652,13 @@
                             "type": "string"
                           },
                           "selectedDraft": {
+                            "~elyTyp": 7,
+                            "nullable": true,
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "selection": {
                             "~elyTyp": 7,
@@ -146788,6 +147685,100 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "target": {
+                            "~elyTyp": 7,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "actingSubject": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "work",
+                                        "type": "string"
+                                      },
+                                      "mainVersion": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "work": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "workRevision": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "actingSubject",
+                                      "work",
+                                      "mainVersion",
+                                      "workRevision",
+                                      "kind"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "actingSubject": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "contentRevision": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "content-publication",
+                                        "type": "string"
+                                      },
+                                      "mainVersion": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "publicationDecision": {
+                                        "pattern": "^urn:rezics:content-publication:[0-9a-f]{64}$",
+                                        "type": "string"
+                                      },
+                                      "variant": {
+                                        "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "work": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "workRevision": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "actingSubject",
+                                      "work",
+                                      "mainVersion",
+                                      "workRevision",
+                                      "kind",
+                                      "variant",
+                                      "publicationDecision",
+                                      "contentRevision"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "nullable": true
+                          },
                           "updatedAt": {
                             "type": "string"
                           },
@@ -146807,6 +147798,7 @@
                           "selectedDraft",
                           "correctionOf",
                           "submittingAgent",
+                          "target",
                           "state",
                           "revision",
                           "generation",
@@ -274661,6 +275653,14 @@
                             ],
                             "type": "object"
                           },
+                          "reviewMode": {
+                            "enum": [
+                              "mandatory",
+                              "trusted-members",
+                              "open"
+                            ],
+                            "type": "string"
+                          },
                           "space": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -274670,6 +275670,7 @@
                           "id",
                           "space",
                           "name",
+                          "reviewMode",
                           "icon",
                           "description",
                           "membership",
@@ -284259,7 +285260,9 @@
                 "content_report",
                 "rights_complaint",
                 "contribution_submission",
-                "correction_submission"
+                "correction_submission",
+                "work_submission",
+                "content-publication_submission"
               ],
               "type": "string"
             }
@@ -284364,7 +285367,9 @@
                               "content_report",
                               "rights_complaint",
                               "contribution_submission",
-                              "correction_submission"
+                              "correction_submission",
+                              "work_submission",
+                              "content-publication_submission"
                             ],
                             "type": "string"
                           },
@@ -284391,8 +285396,13 @@
                             "nullable": true,
                             "properties": {
                               "contribution": {
+                                "~elyTyp": 7,
+                                "nullable": true,
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                "type": "string"
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "correctionOf": {
                                 "~elyTyp": 7,
@@ -284404,16 +285414,25 @@
                                 ]
                               },
                               "publicationDecision": {
-                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                "type": "string"
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "revision": {
                                 "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                                 "type": "string"
                               },
                               "selectedDraft": {
+                                "~elyTyp": 7,
+                                "nullable": true,
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                "type": "string"
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "state": {
                                 "enum": [
@@ -300592,176 +301611,443 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "contribution": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "correctionOf": {
-                    "~elyTyp": 7,
-                    "nullable": true,
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "kind": {
-                    "enum": [
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "contribution": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "correctionOf": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "kind": {
+                        "enum": [
+                          "contribution",
+                          "correction"
+                        ],
+                        "type": "string"
+                      },
+                      "mainVersion": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "publicationDecision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "selectedDraft": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "actingSubject",
+                      "kind",
+                      "work",
+                      "mainVersion",
                       "contribution",
-                      "correction"
+                      "publicationDecision",
+                      "selectedDraft",
+                      "correctionOf"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "mainVersion": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "publicationDecision": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "selectedDraft": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "work": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "actingSubject": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "work",
+                            "type": "string"
+                          },
+                          "mainVersion": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "work": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "workRevision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "actingSubject",
+                          "work",
+                          "mainVersion",
+                          "workRevision",
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "actingSubject": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "contentRevision": {
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "content-publication",
+                            "type": "string"
+                          },
+                          "mainVersion": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "publicationDecision": {
+                            "pattern": "^urn:rezics:content-publication:[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "variant": {
+                            "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "work": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "workRevision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "actingSubject",
+                          "work",
+                          "mainVersion",
+                          "workRevision",
+                          "kind",
+                          "variant",
+                          "publicationDecision",
+                          "contentRevision"
+                        ],
+                        "type": "object"
+                      }
+                    ]
                   }
-                },
-                "required": [
-                  "actingSubject",
-                  "kind",
-                  "work",
-                  "mainVersion",
-                  "contribution",
-                  "publicationDecision",
-                  "selectedDraft",
-                  "correctionOf"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "contribution": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "correctionOf": {
-                    "~elyTyp": 7,
-                    "nullable": true,
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "kind": {
-                    "enum": [
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "contribution": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "correctionOf": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "kind": {
+                        "enum": [
+                          "contribution",
+                          "correction"
+                        ],
+                        "type": "string"
+                      },
+                      "mainVersion": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "publicationDecision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "selectedDraft": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "actingSubject",
+                      "kind",
+                      "work",
+                      "mainVersion",
                       "contribution",
-                      "correction"
+                      "publicationDecision",
+                      "selectedDraft",
+                      "correctionOf"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "mainVersion": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "publicationDecision": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "selectedDraft": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "work": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "actingSubject": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "work",
+                            "type": "string"
+                          },
+                          "mainVersion": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "work": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "workRevision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "actingSubject",
+                          "work",
+                          "mainVersion",
+                          "workRevision",
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "actingSubject": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "contentRevision": {
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "content-publication",
+                            "type": "string"
+                          },
+                          "mainVersion": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "publicationDecision": {
+                            "pattern": "^urn:rezics:content-publication:[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "variant": {
+                            "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "work": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "workRevision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "actingSubject",
+                          "work",
+                          "mainVersion",
+                          "workRevision",
+                          "kind",
+                          "variant",
+                          "publicationDecision",
+                          "contentRevision"
+                        ],
+                        "type": "object"
+                      }
+                    ]
                   }
-                },
-                "required": [
-                  "actingSubject",
-                  "kind",
-                  "work",
-                  "mainVersion",
-                  "contribution",
-                  "publicationDecision",
-                  "selectedDraft",
-                  "correctionOf"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "contribution": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "correctionOf": {
-                    "~elyTyp": 7,
-                    "nullable": true,
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "kind": {
-                    "enum": [
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "contribution": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "correctionOf": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "kind": {
+                        "enum": [
+                          "contribution",
+                          "correction"
+                        ],
+                        "type": "string"
+                      },
+                      "mainVersion": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "publicationDecision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "selectedDraft": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "actingSubject",
+                      "kind",
+                      "work",
+                      "mainVersion",
                       "contribution",
-                      "correction"
+                      "publicationDecision",
+                      "selectedDraft",
+                      "correctionOf"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "mainVersion": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "publicationDecision": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "selectedDraft": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "work": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "actingSubject": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "work",
+                            "type": "string"
+                          },
+                          "mainVersion": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "work": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "workRevision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "actingSubject",
+                          "work",
+                          "mainVersion",
+                          "workRevision",
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "actingSubject": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "contentRevision": {
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "content-publication",
+                            "type": "string"
+                          },
+                          "mainVersion": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "publicationDecision": {
+                            "pattern": "^urn:rezics:content-publication:[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "variant": {
+                            "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "work": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "workRevision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "actingSubject",
+                          "work",
+                          "mainVersion",
+                          "workRevision",
+                          "kind",
+                          "variant",
+                          "publicationDecision",
+                          "contentRevision"
+                        ],
+                        "type": "object"
+                      }
+                    ]
                   }
-                },
-                "required": [
-                  "actingSubject",
-                  "kind",
-                  "work",
-                  "mainVersion",
-                  "contribution",
-                  "publicationDecision",
-                  "selectedDraft",
-                  "correctionOf"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -300787,8 +302073,13 @@
                           ]
                         },
                         "contribution": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "correctionOf": {
                           "~elyTyp": 7,
@@ -300809,7 +302100,9 @@
                         "kind": {
                           "enum": [
                             "contribution",
-                            "correction"
+                            "correction",
+                            "work",
+                            "content-publication"
                           ],
                           "type": "string"
                         },
@@ -300821,8 +302114,12 @@
                           "type": "string"
                         },
                         "publicationDecision": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "publicReason": {
                           "~elyTyp": 7,
@@ -300850,8 +302147,13 @@
                           "type": "string"
                         },
                         "selectedDraft": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "selection": {
                           "~elyTyp": 7,
@@ -300878,6 +302180,100 @@
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
+                        "target": {
+                          "~elyTyp": 7,
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actingSubject": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "work",
+                                      "type": "string"
+                                    },
+                                    "mainVersion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "workRevision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "actingSubject",
+                                    "work",
+                                    "mainVersion",
+                                    "workRevision",
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actingSubject": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "contentRevision": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "content-publication",
+                                      "type": "string"
+                                    },
+                                    "mainVersion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "publicationDecision": {
+                                      "pattern": "^urn:rezics:content-publication:[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "variant": {
+                                      "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "workRevision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "actingSubject",
+                                    "work",
+                                    "mainVersion",
+                                    "workRevision",
+                                    "kind",
+                                    "variant",
+                                    "publicationDecision",
+                                    "contentRevision"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "nullable": true
+                        },
                         "updatedAt": {
                           "type": "string"
                         },
@@ -300897,6 +302293,7 @@
                         "selectedDraft",
                         "correctionOf",
                         "submittingAgent",
+                        "target",
                         "state",
                         "revision",
                         "generation",
@@ -300939,8 +302336,13 @@
                           ]
                         },
                         "contribution": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "correctionOf": {
                           "~elyTyp": 7,
@@ -300961,7 +302363,9 @@
                         "kind": {
                           "enum": [
                             "contribution",
-                            "correction"
+                            "correction",
+                            "work",
+                            "content-publication"
                           ],
                           "type": "string"
                         },
@@ -300973,8 +302377,12 @@
                           "type": "string"
                         },
                         "publicationDecision": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "publicReason": {
                           "~elyTyp": 7,
@@ -301002,8 +302410,13 @@
                           "type": "string"
                         },
                         "selectedDraft": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "selection": {
                           "~elyTyp": 7,
@@ -301030,6 +302443,100 @@
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
+                        "target": {
+                          "~elyTyp": 7,
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actingSubject": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "work",
+                                      "type": "string"
+                                    },
+                                    "mainVersion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "workRevision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "actingSubject",
+                                    "work",
+                                    "mainVersion",
+                                    "workRevision",
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actingSubject": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "contentRevision": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "content-publication",
+                                      "type": "string"
+                                    },
+                                    "mainVersion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "publicationDecision": {
+                                      "pattern": "^urn:rezics:content-publication:[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "variant": {
+                                      "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "workRevision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "actingSubject",
+                                    "work",
+                                    "mainVersion",
+                                    "workRevision",
+                                    "kind",
+                                    "variant",
+                                    "publicationDecision",
+                                    "contentRevision"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "nullable": true
+                        },
                         "updatedAt": {
                           "type": "string"
                         },
@@ -301049,6 +302556,7 @@
                         "selectedDraft",
                         "correctionOf",
                         "submittingAgent",
+                        "target",
                         "state",
                         "revision",
                         "generation",
@@ -301410,8 +302918,13 @@
                           ]
                         },
                         "contribution": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "correctionOf": {
                           "~elyTyp": 7,
@@ -301432,7 +302945,9 @@
                         "kind": {
                           "enum": [
                             "contribution",
-                            "correction"
+                            "correction",
+                            "work",
+                            "content-publication"
                           ],
                           "type": "string"
                         },
@@ -301444,8 +302959,12 @@
                           "type": "string"
                         },
                         "publicationDecision": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "publicReason": {
                           "~elyTyp": 7,
@@ -301473,8 +302992,13 @@
                           "type": "string"
                         },
                         "selectedDraft": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "selection": {
                           "~elyTyp": 7,
@@ -301501,6 +303025,100 @@
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
+                        "target": {
+                          "~elyTyp": 7,
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actingSubject": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "work",
+                                      "type": "string"
+                                    },
+                                    "mainVersion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "workRevision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "actingSubject",
+                                    "work",
+                                    "mainVersion",
+                                    "workRevision",
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actingSubject": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "contentRevision": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "content-publication",
+                                      "type": "string"
+                                    },
+                                    "mainVersion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "publicationDecision": {
+                                      "pattern": "^urn:rezics:content-publication:[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "variant": {
+                                      "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "workRevision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "actingSubject",
+                                    "work",
+                                    "mainVersion",
+                                    "workRevision",
+                                    "kind",
+                                    "variant",
+                                    "publicationDecision",
+                                    "contentRevision"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "nullable": true
+                        },
                         "updatedAt": {
                           "type": "string"
                         },
@@ -301520,6 +303138,7 @@
                         "selectedDraft",
                         "correctionOf",
                         "submittingAgent",
+                        "target",
                         "state",
                         "revision",
                         "generation",
@@ -302063,8 +303682,13 @@
                           ]
                         },
                         "contribution": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "correctionOf": {
                           "~elyTyp": 7,
@@ -302085,7 +303709,9 @@
                         "kind": {
                           "enum": [
                             "contribution",
-                            "correction"
+                            "correction",
+                            "work",
+                            "content-publication"
                           ],
                           "type": "string"
                         },
@@ -302097,8 +303723,12 @@
                           "type": "string"
                         },
                         "publicationDecision": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "publicReason": {
                           "~elyTyp": 7,
@@ -302126,8 +303756,13 @@
                           "type": "string"
                         },
                         "selectedDraft": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "selection": {
                           "~elyTyp": 7,
@@ -302154,6 +303789,100 @@
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
+                        "target": {
+                          "~elyTyp": 7,
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actingSubject": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "work",
+                                      "type": "string"
+                                    },
+                                    "mainVersion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "workRevision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "actingSubject",
+                                    "work",
+                                    "mainVersion",
+                                    "workRevision",
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actingSubject": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "contentRevision": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "content-publication",
+                                      "type": "string"
+                                    },
+                                    "mainVersion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "publicationDecision": {
+                                      "pattern": "^urn:rezics:content-publication:[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "variant": {
+                                      "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "workRevision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "actingSubject",
+                                    "work",
+                                    "mainVersion",
+                                    "workRevision",
+                                    "kind",
+                                    "variant",
+                                    "publicationDecision",
+                                    "contentRevision"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "nullable": true
+                        },
                         "updatedAt": {
                           "type": "string"
                         },
@@ -302173,6 +303902,7 @@
                         "selectedDraft",
                         "correctionOf",
                         "submittingAgent",
+                        "target",
                         "state",
                         "revision",
                         "generation",
@@ -302596,8 +304326,13 @@
                           ]
                         },
                         "contribution": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "correctionOf": {
                           "~elyTyp": 7,
@@ -302618,7 +304353,9 @@
                         "kind": {
                           "enum": [
                             "contribution",
-                            "correction"
+                            "correction",
+                            "work",
+                            "content-publication"
                           ],
                           "type": "string"
                         },
@@ -302630,8 +304367,12 @@
                           "type": "string"
                         },
                         "publicationDecision": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "publicReason": {
                           "~elyTyp": 7,
@@ -302659,8 +304400,13 @@
                           "type": "string"
                         },
                         "selectedDraft": {
+                          "~elyTyp": 7,
+                          "nullable": true,
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "selection": {
                           "~elyTyp": 7,
@@ -302687,6 +304433,100 @@
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
+                        "target": {
+                          "~elyTyp": 7,
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actingSubject": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "work",
+                                      "type": "string"
+                                    },
+                                    "mainVersion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "workRevision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "actingSubject",
+                                    "work",
+                                    "mainVersion",
+                                    "workRevision",
+                                    "kind"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actingSubject": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "contentRevision": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "content-publication",
+                                      "type": "string"
+                                    },
+                                    "mainVersion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "publicationDecision": {
+                                      "pattern": "^urn:rezics:content-publication:[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "variant": {
+                                      "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "workRevision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "actingSubject",
+                                    "work",
+                                    "mainVersion",
+                                    "workRevision",
+                                    "kind",
+                                    "variant",
+                                    "publicationDecision",
+                                    "contentRevision"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "nullable": true
+                        },
                         "updatedAt": {
                           "type": "string"
                         },
@@ -302706,6 +304546,7 @@
                         "selectedDraft",
                         "correctionOf",
                         "submittingAgent",
+                        "target",
                         "state",
                         "revision",
                         "generation",
@@ -303008,6 +304849,444 @@
             "bearerAuth": []
           }
         ]
+      }
+    },
+    "/v1/realms/{realm}/submitted-publications": {
+      "get": {
+        "operationId": "getV1RealmsByRealmSubmitted-publications",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "realm",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "work",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "properties": {
+                        "kind": {
+                          "const": "exact-page",
+                          "type": "string"
+                        },
+                        "total": {
+                          "type": "null"
+                        },
+                        "value": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "kind",
+                        "total"
+                      ],
+                      "type": "object"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "contentRevision": {
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "work",
+                              "content-publication"
+                            ],
+                            "type": "string"
+                          },
+                          "publicationDecision": {
+                            "type": "string"
+                          },
+                          "resource": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "selection": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "variant": {
+                            "type": "string"
+                          },
+                          "work": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "work",
+                          "resource",
+                          "selection",
+                          "kind",
+                          "variant",
+                          "publicationDecision",
+                          "contentRevision"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor",
+                    "sourcePosition",
+                    "count"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
       }
     },
     "/v1/realms/{realm}/works": {
@@ -303891,6 +306170,51 @@
                                       "maxLength": 120,
                                       "minLength": 1,
                                       "type": "string"
+                                    },
+                                    "labels": {
+                                      "properties": {
+                                        "de": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "en": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "es": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "fr": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "ja": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "ko": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "zh-Hans": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "zh-Hant": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": "object"
                                     },
                                     "source": {
                                       "anyOf": [
@@ -369580,6 +371904,803 @@
         }
       }
     },
+    "/v1/tag-proposals": {
+      "post": {
+        "operationId": "postV1Tag-proposals",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "acceptance": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "global",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "realm",
+                            "type": "string"
+                          },
+                          "realm": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "realm"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "mainVersion": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "tag": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "concept": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "concept"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "label": {
+                            "maxLength": 240,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "language": {
+                            "maxLength": 40,
+                            "minLength": 2,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "language"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "work": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "work",
+                  "mainVersion",
+                  "actingSubject",
+                  "tag",
+                  "acceptance"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "acceptance": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "global",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "realm",
+                            "type": "string"
+                          },
+                          "realm": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "realm"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "mainVersion": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "tag": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "concept": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "concept"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "label": {
+                            "maxLength": 240,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "language": {
+                            "maxLength": 40,
+                            "minLength": 2,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "language"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "work": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "work",
+                  "mainVersion",
+                  "actingSubject",
+                  "tag",
+                  "acceptance"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "acceptance": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "global",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "realm",
+                            "type": "string"
+                          },
+                          "realm": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "realm"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "mainVersion": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "tag": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "concept": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "concept"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "label": {
+                            "maxLength": 240,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "language": {
+                            "maxLength": 40,
+                            "minLength": 2,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "language"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "work": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "work",
+                  "mainVersion",
+                  "actingSubject",
+                  "tag",
+                  "acceptance"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "acceptance": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "global",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "realm",
+                              "type": "string"
+                            },
+                            "realm": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "realm"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "concept": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "meaningKey": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "state": {
+                      "const": "proposed",
+                      "type": "string"
+                    },
+                    "statement": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statement",
+                    "revision",
+                    "concept",
+                    "meaningKey",
+                    "acceptance",
+                    "state",
+                    "replayed",
+                    "sourcePosition"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "acceptance": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "global",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "realm",
+                              "type": "string"
+                            },
+                            "realm": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "realm"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "concept": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "meaningKey": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "state": {
+                      "const": "proposed",
+                      "type": "string"
+                    },
+                    "statement": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statement",
+                    "revision",
+                    "concept",
+                    "meaningKey",
+                    "acceptance",
+                    "state",
+                    "replayed",
+                    "sourcePosition"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "null"
+                    },
+                    "retry": {
+                      "properties": {
+                        "afterMs": {
+                          "type": "number"
+                        },
+                        "allowed": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "allowed",
+                        "afterMs"
+                      ],
+                      "type": "object"
+                    },
+                    "status": {
+                      "const": "reconciling",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "operationId",
+                    "status",
+                    "phase",
+                    "result",
+                    "retry"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/themes": {
       "post": {
         "operationId": "postV1Themes",
@@ -409026,6 +412147,51 @@
                                     "minLength": 1,
                                     "type": "string"
                                   },
+                                  "labels": {
+                                    "properties": {
+                                      "de": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "en": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "es": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "fr": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "ja": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "ko": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "zh-Hans": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "zh-Hant": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
                                   "source": {
                                     "anyOf": [
                                       {
@@ -409613,6 +412779,51 @@
                                     "minLength": 1,
                                     "type": "string"
                                   },
+                                  "labels": {
+                                    "properties": {
+                                      "de": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "en": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "es": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "fr": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "ja": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "ko": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "zh-Hans": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "zh-Hant": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
                                   "source": {
                                     "anyOf": [
                                       {
@@ -410199,6 +413410,51 @@
                                     "maxLength": 120,
                                     "minLength": 1,
                                     "type": "string"
+                                  },
+                                  "labels": {
+                                    "properties": {
+                                      "de": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "en": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "es": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "fr": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "ja": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "ko": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "zh-Hans": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "zh-Hant": {
+                                        "maxLength": 120,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
                                   },
                                   "source": {
                                     "anyOf": [
@@ -412626,6 +415882,51 @@
                                       "maxLength": 120,
                                       "minLength": 1,
                                       "type": "string"
+                                    },
+                                    "labels": {
+                                      "properties": {
+                                        "de": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "en": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "es": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "fr": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "ja": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "ko": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "zh-Hans": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "zh-Hant": {
+                                          "maxLength": 120,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": "object"
                                     },
                                     "source": {
                                       "anyOf": [

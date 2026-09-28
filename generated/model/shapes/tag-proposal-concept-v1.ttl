@@ -1,0 +1,14 @@
+# An author-proposed named concept is an identity, never an accepted classification.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rv: <https://rezics.com/vocab/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix schema: <https://schema.org/> .
+
+<https://rezics.com/definition/tag-proposal-concept-v1/concept-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue schema:DefinedTerm ] ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:AuthorTagConcept ] ;
+    sh:property [ sh:path skos:prefLabel ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype rdf:langString ; sh:uniqueLang true ] ;
+    sh:property [ sh:path rv:conceptState ; sh:maxCount 1 ; sh:hasValue rv:Active ] ;
+    sh:property [ sh:path rv:conceptRealm ; sh:maxCount 1 ; sh:class rv:Realm ] .
