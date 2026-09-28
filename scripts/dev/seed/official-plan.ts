@@ -220,7 +220,7 @@ export const extraWorks: readonly { id: string; realm: OfficialRealmId; owner: s
     language: 'en', tagline: 'Turn a messy discussion into three questions for next week.',
     text: 'How to use it\nPaste the notes. Ask for the three questions the group disagreed on, with one quote each.' },
   { id: 'lumen-fabric', realm: 'mods', owner: 'jun', title: 'Lumen Lanterns', type: 'mod', language: 'en',
-    tagline: 'Warm lantern light for Minecraft 1.21.1 on Fabric.',
+    tagline: 'Warm lantern light for Minecraft worlds on Fabric or Forge.',
     text: 'Lumen Lanterns 1.3.0\nInstall the matching Fabric loader and keep a backup of your world before adding mods.' },
   { id: 'weaver-forge', realm: 'mods', owner: 'jun', title: 'Chunk Weaver', type: 'mod', language: 'en',
     tagline: 'Prepare nearby Minecraft chunks before you explore on Forge.',
@@ -262,13 +262,18 @@ export const fabricApi = { id: 'fabric-api', version: '0.102.0' } as const;
  * Versions, with the dependencies its manifest declares and the owner's notes.
  */
 export const laterModReleases: readonly { mod: (typeof officialMods)[number]['id']; release: string;
-  gameVersion: string; environment?: 'client' | 'server'; depends?: Record<string, string>;
+  gameVersion: string; ecosystem?: 'fabric' | 'forge'; environment?: 'client' | 'server';
+  depends?: Record<string, string>;
   recommends?: Record<string, string>; breaks?: Record<string, string>; changelog: string }[] = [
   { mod: 'lumen-fabric', release: '1.3.1', gameVersion: '1.21.1', environment: 'client',
     depends: { 'fabric-api': '>=0.100.0' }, recommends: { modmenu: '*' }, breaks: { optifabric: '*' },
     changelog: 'Lanterns glow warmer at night.\nFixes flicker next to water.' },
   { mod: 'lumen-fabric', release: '1.3.1', gameVersion: '1.20.1', environment: 'client',
     depends: { 'fabric-api': '>=0.90.0' }, changelog: 'The same lanterns, backported to Minecraft 1.20.1.' },
+  { mod: 'lumen-fabric', release: '1.4.0', gameVersion: '1.20.1', ecosystem: 'forge', environment: 'client',
+    changelog: 'A stable Forge edition for Minecraft 1.20.1.' },
+  { mod: 'lumen-fabric', release: '2.0.0-beta.1', gameVersion: '1.21.1', environment: 'client',
+    depends: { 'fabric-api': '>=0.100.0' }, changelog: 'Preview warmer lanterns on Fabric 1.21.1.' },
   { mod: 'tidy-fabric', release: '2.1.0', gameVersion: '1.21.1',
     depends: { 'fabric-api': '*' }, recommends: { 'cloth-config': '>=15' },
     changelog: 'Sorting works on servers too: install it on both sides to sort shared chests.' },

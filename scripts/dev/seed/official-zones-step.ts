@@ -144,10 +144,12 @@ async function publish(o: Official, key: string, target: WorkReceipt, author: st
 
 /** The Work's hook and serial state. Main refuses a write whose basis moved meanwhile; it is read again, a few times. */
 async function describeWork(o: Official, key: string, target: WorkReceipt, author: string, as: Session,
-  language: string, tagline: string, completionStatus: 'ongoing' | 'completed' | 'hiatus' | null) {
+  language: string, tagline: string, completionStatus: 'ongoing' | 'completed' | 'hiatus' | null,
+  refreshExisting = false) {
   for (let attempt = 0; ; attempt++) {
-    const current = await o.read<{ tagline: unknown; metadataRevision: string | null }>(`/v1/works/${short(target.work)}`);
-    if (current?.tagline) return;
+    const current = await o.read<{ tagline: { value: string } | null; metadataRevision: string | null }>(
+      `/v1/works/${short(target.work)}`);
+    if (current?.tagline && (!refreshExisting || current.tagline.value === tagline)) return;
     try {
       await o.api.put(`/v1/works/${short(target.work)}/metadata`, { profile: 'work-metadata-details-v1',
         expectedHead: current?.metadataRevision ?? null,
@@ -310,7 +312,8 @@ async function lighterTexts(o: Official) {
       const target = await createWork(o, { profile: 'metadata-only-v1', title: extra.title,
         semanticTypes: [kinds[extra.type]], language: extra.language, authoring: 'own-work',
         actingSubject: as.actingSubject }, as.token, seedKey('official-work', extra.id));
-      await describeWork(o, extra.id, target, as.actingSubject, as, extra.language, extra.tagline, null);
+      await describeWork(o, extra.id, target, as.actingSubject, as, extra.language, extra.tagline, null,
+        extra.id === 'lumen-fabric');
       o.works.set(extra.id, { work: target, language: extra.language,
         published: await publish(o, extra.id, target, as.actingSubject, as, extra.language, extra.text) });
     });
@@ -351,20 +354,24 @@ async function mods(o: Official) {
   // Later releases list beside the first: the versions, dependencies and notes a mod page shows.
   for (const later of laterModReleases) {
     const item = officialMods.find(mod => mod.id === later.mod)!;
-    const key = `${item.id}:${later.release}:${later.gameVersion}`;
+    const ecosystem = later.ecosystem ?? item.ecosystem;
+    const key = `${item.id}:${later.release}:${later.gameVersion}${ecosystem === item.ecosystem ? '' : `:${ecosystem}`}`;
     await refreshSeedTokens(o.state);
     await o.state.optional(`Mod release ${key}`, async () => {
       const token = await api.token(as.cookie);
       const target = o.works.get(item.id);
       if (!target?.published) throw new Error(`Mod Work ${item.id} is not public`);
-      const manifest = JSON.stringify({ schemaVersion: 1, id: item.nativeId, version: later.release,
-        ...later.environment ? { environment: later.environment } : {}, depends: later.depends ?? {},
-        ...later.recommends ? { recommends: later.recommends } : {}, ...later.breaks ? { breaks: later.breaks } : {} });
+      const manifest = ecosystem === 'forge'
+        ? `modLoader="javafml"\nloaderVersion="[47,)"\nlicense="MIT"\nclientSideOnly=true\n[[mods]]\nmodId="${item.nativeId}"\nversion="${later.release}"\n`
+        : JSON.stringify({ schemaVersion: 1, id: item.nativeId, version: later.release,
+          ...later.environment ? { environment: later.environment } : {}, depends: later.depends ?? {},
+          ...later.recommends ? { recommends: later.recommends } : {}, ...later.breaks ? { breaks: later.breaks } : {} });
       const resolved = await api.post<{ resolution: { resolution: string } }>(
-        '/v1/package-resolutions/mods', { profile: 'mod-native-capture-v1', ecosystem: item.ecosystem,
-          side: 'CLIENT', root: item.nativeId, runtime: { loaderVersion: '0.16.10', gameVersion: later.gameVersion },
-          captures: [capture(item.nativeId, manifest), capture(fabricApi.id,
-            JSON.stringify({ schemaVersion: 1, id: fabricApi.id, version: fabricApi.version }))] },
+        '/v1/package-resolutions/mods', { profile: 'mod-native-capture-v1', ecosystem,
+          side: 'CLIENT', root: item.nativeId,
+          runtime: { loaderVersion: ecosystem === 'forge' ? '47' : '0.16.10', gameVersion: later.gameVersion },
+          captures: [capture(item.nativeId, manifest), ...ecosystem === 'fabric' ? [capture(fabricApi.id,
+            JSON.stringify({ schemaVersion: 1, id: fabricApi.id, version: fabricApi.version }))] : []] },
         token, seedKey('official-mod-release-resolution', key));
       await api.post(`/v1/package-resolutions/mods/${short(resolved.resolution.resolution)}/work-binding`,
         { work: target.work.work, actingSubject: as.actingSubject, changelog: later.changelog }, token,

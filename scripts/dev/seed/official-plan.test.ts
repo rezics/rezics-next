@@ -2,8 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { checkZonePresentation } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { checkFirstPartyBundle } from '../../../services/main/src/modules/theme/first-party-bundle.ts';
 import { uiLocales } from '../../../apps/web/i18n/define.ts';
-import { editorList, extraWorks, fictionQuotes, fictionWorks, officialPresentation, type OfficialRealmId, penNames,
-  officialTheme, packagedZone, publicTexts, realmProfiles, zoneContent } from './official-plan.ts';
+import { editorList, extraWorks, fictionQuotes, fictionWorks, laterModReleases, officialMods, officialPresentation,
+  type OfficialRealmId, penNames, officialTheme, packagedZone, publicTexts, realmProfiles, zoneContent }
+  from './official-plan.ts';
 import { officialBuildBundle, officialSourceDigest, themeNeedsActivation, themeNeedsRevision }
   from './official-theme-step.ts';
 import { people, penNames as basePenNames, realms, works } from './plan.ts';
@@ -146,5 +147,17 @@ describe('Official Zone content', () => {
       for (const person of profile.moderators) expect(people.map(item => item.id)).toContain(person);
       expect(profile.rules.length).toBeGreaterThan(0);
     }
+  });
+
+  test('one public mod seeds an older Forge stable release and a newer Fabric beta', () => {
+    const work = 'lumen-fabric';
+    expect(officialMods.find(mod => mod.id === work)?.ecosystem).toBe('fabric');
+    const releases = laterModReleases.filter(release => release.mod === work);
+    const forge = releases.find(release => release.ecosystem === 'forge');
+    const beta = releases.find(release => release.release.includes('beta'));
+    expect(forge).toMatchObject({ release: '1.4.0', gameVersion: '1.20.1', environment: 'client' });
+    expect(beta).toMatchObject({ release: '2.0.0-beta.1', gameVersion: '1.21.1',
+      depends: { 'fabric-api': '>=0.100.0' } });
+    expect(releases.indexOf(forge!)).toBeLessThan(releases.indexOf(beta!));
   });
 });

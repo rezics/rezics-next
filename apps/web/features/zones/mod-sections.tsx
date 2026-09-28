@@ -83,7 +83,7 @@ export function ModSections({ releases, failed, exact, exactFailed, selection, m
             {messages.modNotCompatible}</p>
             : current && selection ? <div data-release-state={exact?.state} className="rounded-xl border border-border/70
               bg-card p-4 text-sm">
-              <p>{exact?.state === 'stale' ? messages.modOlderCompatible : messages.modCompatibility}:
+              <p>{exact?.state === 'stale' ? messages.modOlderCompatible : `${messages.modCompatibility}:`}
                 {' '}<strong translate="no">{current.version ?? '—'}</strong>
                 {' · '}{current.channel === 'release' ? messages.modChannelRelease
                   : current.channel === 'beta' ? messages.modChannelBeta

@@ -172,8 +172,8 @@ const modsRoute = { route: { pathname: '/en/r/mods' } };
 
 /**
  * Mods as Modrinth lists them: search and filters first, then every pick as a
- * result row with what it runs on and when it changed. No row offers a
- * download or counts one, since REZICS counts none.
+ * result row with a link to check its exact release. Before an environment is
+ * chosen, rows disclose neither aggregate compatibility nor a download.
  */
 export const Mods: Story = {
   args: { slug: 'mods' },
@@ -191,15 +191,19 @@ export const Mods: Story = {
     await expect(canvas.getByRole('link', { name: 'Client 4' })).toHaveAttribute('href', '/en/r/mods/browse?env=client');
     const featured = canvas.getByRole('region', { name: 'Featured' });
     const lumen = within(featured).getByRole('heading', { level: 3, name: /Lumen Lanterns/ }).closest('article')!;
-    for (const fact of ['Client', 'Fabric', '1.21.1', '1.20.1', 'Updated yesterday']) {
+    for (const fact of ['Choose a game version, loader and side to check a release', 'Updated yesterday']) {
       await expect(within(lumen).getByText(fact)).toBeVisible();
     }
+    await expect(lumen.querySelector('[data-release-state]')).toBeNull();
+    await expect(within(lumen).queryByRole('list', { name: 'Runs on' })).toBeNull();
     await expect(canvas.queryByRole('link', { name: /^Get / })).toBeNull();
     await expect(within(canvas.getByRole('navigation', { name: 'Games and loaders' })).getAllByRole('link'))
       .toHaveLength(7);
     const trending = canvas.getByRole('region', { name: 'Trending' });
     await expect(within(trending).getByRole('tab', { name: 'Today' })).toHaveAttribute('aria-selected', 'true');
-    await expect(within(trending).getAllByText('SMAPI').length).toBeGreaterThan(0);
+    await expect(within(trending).getByRole('heading', { level: 3, name: 'Lumen Lanterns' })).toBeVisible();
+    await expect(within(trending).getAllByText('Choose a game version, loader and side to check a release').length)
+      .toBeGreaterThan(0);
     await userEvent.click(within(trending).getByRole('tab', { name: 'This month' }));
     await expect(within(trending).getByRole('tab', { name: 'This month' })).toHaveAttribute('aria-selected', 'true');
     const collection = canvas.getByRole('region', { name: 'Editors’ picks' });
@@ -219,7 +223,10 @@ export const ModsChinese: Story = {
     const canvas = within(context.canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: '模组' })).toBeVisible();
     await expect(canvas.getByRole('search', { name: '搜索模组' })).toBeVisible();
-    await expect(within(canvas.getByRole('region', { name: '精选' })).getAllByText('客户端').length).toBeGreaterThan(0);
+    const featured = canvas.getByRole('region', { name: '精选' });
+    await expect(within(featured).getAllByText('选择游戏版本、加载器和运行端，查看兼容版本').length)
+      .toBeGreaterThan(0);
+    await expect(featured.querySelector('[data-release-state]')).toBeNull();
     await expect(within(canvas.getByRole('region', { name: '精选' })).getByText('昨天更新')).toBeVisible();
     await expect(canvas.getByRole('tab', { name: '今日' })).toHaveAttribute('aria-selected', 'true');
     await holds('mods')(context);
@@ -235,15 +242,17 @@ export const ModsPhoneChineseDark: Story = {
 
 /**
  * The demo: four mods, each with one verified release, beside guides without
- * authors, states or update times. Mod rows show what they run on.
+ * authors, states or update times. Mod rows wait for the reader's environment
+ * before naming a compatible release.
  */
 export const ModsAsSeeded: Story = {
   args: { slug: 'mods', catalogue: 'seeded' },
   parameters: modsRoute,
   async play(context) {
     const latest = within(within(context.canvasElement).getByRole('region', { name: 'Latest' }));
-    await expect(latest.getAllByText('Forge')).toHaveLength(2);
-    await expect(latest.getAllByText('Fabric')).toHaveLength(2);
+    await expect(latest.getAllByText('Choose a game version, loader and side to check a release')).toHaveLength(4);
+    await expect(latest.queryByText('Forge')).toBeNull();
+    await expect(latest.queryByText('Fabric')).toBeNull();
     await expect(latest.getByRole('link', { name: 'Minecraft shaders: a gentle first setup' })).toBeVisible();
     await holds('mods')(context);
   },

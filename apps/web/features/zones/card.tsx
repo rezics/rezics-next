@@ -179,7 +179,7 @@ export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, heading
         : null}
       {work.mod ? exact ? <div data-release-state={exact.state}
         className="grid gap-0.5 text-muted-foreground text-xs">
-        <p>{exact.state === 'stale' ? messages.modOlderCompatible : messages.modCompatibility}:
+        <p>{exact.state === 'stale' ? messages.modOlderCompatible : `${messages.modCompatibility}:`}
           {' '}<strong translate="no">{exact.version ?? '—'}</strong>
           {' · '}{exact.channel === 'beta' ? messages.modChannelBeta
             : exact.channel === 'alpha' ? messages.modChannelAlpha
