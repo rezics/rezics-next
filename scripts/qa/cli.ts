@@ -15,6 +15,7 @@ import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
 import { readEnv } from '../dev/config.ts';
 import { browserBudgets, browserFileCounts } from './browser-budget.ts';
+import { cleanupQaStacks, QA_STACK_REGISTRY } from './stack-ownership.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const options = parseArgs(process.argv.slice(2));
@@ -28,6 +29,7 @@ const isolation: IsolationRecord[] = [];
 const errors: string[] = [];
 const startedProjects: string[] = [];
 const startedFixtureProjects: string[] = [];
+const childStackRegistries = new Set<string>();
 const inventory = caseInventory(root);
 const backendSelection = options.backend ? selectBackendCases(inventory) : undefined;
 const cases = backendSelection?.cases ?? inventory;
@@ -36,6 +38,15 @@ const selection = options.onlyFailed ? failedSelection(join(root, '.artifacts', 
 const selected = selection?.tiers ?? (options.tier ? [options.tier] : options.backend ? backendTiers : implementedTiers);
 const chosen = options.files || options.id ? options : undefined;
 const release = options.tier || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
+
+async function resetChildStacks(registry: string): Promise<string[]> {
+  const failures = await cleanupQaStacks(registry, async args => {
+    const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', ...args], 120_000);
+    if (!down.ok) throw new Error(down.output);
+  });
+  if (!failures.length) childStackRegistries.delete(registry);
+  return failures;
+}
 
 function runTier(name: Tier, program: string, args: string[], budget: number,
   env: NodeJS.ProcessEnv = process.env): boolean {
@@ -107,18 +118,23 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
   }
   record.stage = 'test';
   const outfile = join(directory, 'shards', `${label}.xml`);
+  const registry = join(root, '.temp', 'qa-child-stacks', projectRunId);
+  childStackRegistries.add(registry);
   const testStart = Date.now();
   const result = await commandAsync(root, 'bun', ['test', ...files, ...flags, '--reporter=junit',
     `--reporter-outfile=${outfile}`], budget,
   { ...process.env, ...apps, REZICS_QA_RUN_ID: projectRunId,
+    [QA_STACK_REGISTRY]: registry,
     REZICS_QA_ARTIFACT_DIR: directory,
     ...(needsStack ? { REZICS_S3_GATE_PROJECT: projectRunId,
       TOXIPROXY_API_URL: `http://127.0.0.1:${compose.TOXIPROXY_API_PORT}`,
       TOXIPROXY_FUSEKI_URL: `http://127.0.0.1:${compose.TOXIPROXY_FUSEKI_PORT}/rezics/` } : {}) });
   const testEnd = Date.now();
+  const cleanupFailures = await resetChildStacks(registry);
+  if (cleanupFailures.length) writeFileSync(join(logs, `${label}-cleanup.log`), cleanupFailures.join('\n'));
   record.elapsedMs = result.elapsedMs;
   const noMatch = !result.ok && !result.timedOut && matchedNoTests(result.output);
-  const ok = (result.ok || noMatch) && result.elapsedMs <= budget;
+  const ok = (result.ok || noMatch) && result.elapsedMs <= budget && !cleanupFailures.length;
   if (!ok) writeFileSync(join(logs, `${label}.log`), result.output);
   return finish({ ok, timedOut: result.timedOut, noMatch, testStart, testEnd,
     xml: existsSync(outfile) ? readFileSync(outfile, 'utf8')
@@ -396,6 +412,9 @@ try {
 } catch (error) {
   errors.push(error instanceof Error ? error.message : String(error));
 } finally {
+  for (const registry of childStackRegistries) {
+    errors.push(...(await resetChildStacks(registry)).map(error => `QA child stack cleanup failed: ${error}`));
+  }
   if (!options.keep) for (const projectRunId of startedProjects) {
     const down = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
     if (!down.ok) { errors.push(`QA stack cleanup failed: ${projectRunId}`); writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }

@@ -16,6 +16,7 @@ import { compatibleLoadStorage, loadCompatibility,
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { devResetPlan, devResetTarget } from './reset.ts';
 import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
+import { forgetQaStack, rememberQaStack } from '../qa/stack-ownership.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -258,6 +259,7 @@ function printEndpoints(options: StackOptions, env: Record<string, string>, dir:
 }
 
 async function stackUp(options: StackOptions): Promise<{ apps: Record<string, string>; dir: string }> {
+  rememberQaStack(options);
   const releaseMarker = join(stackDirectory(root, options), 'release-format.json');
   if (existsSync(releaseMarker)) {
     const saved = JSON.parse(readFileSync(releaseMarker, 'utf8')) as { state?: string };
@@ -590,7 +592,10 @@ async function main(): Promise<void> {
   if (command === 'stack:down' || command === 'stack:reset') {
     const options = parseOptions(args);
     const dir = stackDirectory(root, options);
-    if (!existsSync(join(dir, 'compose.env'))) { console.log(`${projectName(options)} has no saved stack`); return; }
+    if (!existsSync(join(dir, 'compose.env'))) {
+      if (command === 'stack:reset') forgetQaStack(options);
+      console.log(`${projectName(options)} has no saved stack`); return;
+    }
     compose(options, command === 'stack:reset' ? ['down', '--volumes', '--remove-orphans'] : ['down'], runtimeEnv());
     if (command === 'stack:reset') {
       const apps = readEnv(join(dir, 'apps.env'));
@@ -600,6 +605,7 @@ async function main(): Promise<void> {
       rmSync(join(dir, 'recovery-backups'), { recursive: true, force: true });
       // Retaining the lineage prevents a routine restart from silently changing it.
       console.log(`Volumes removed. Configuration retained at ${dir}`);
+      forgetQaStack(options);
     }
     return;
   }

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { hostname } from 'node:os';
 import { acceptanceStatuses, parseJUnit, titleIds, type Case, type TestResult } from './acceptance.ts';
 import { isolatedIntegrationFileList } from './isolated-integration-files.ts';
@@ -206,13 +206,37 @@ export async function commandAsync(root: string, name: string, args: string[], t
   env: NodeJS.ProcessEnv = process.env): Promise<{ ok: boolean; output: string; elapsedMs: number;
   timedOut: boolean }> {
   const start = Date.now();
-  const child = Bun.spawn([name, ...args], { cwd: root,
+  const child = spawn(name, args, { cwd: root, detached: true,
     env: name === 'bun' && args[0] === 'test' ? testLogEnvironment(env) : env,
-    stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: timeoutMs, killSignal: 'SIGTERM' });
-  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(),
-    new Response(child.stderr).text(), child.exited]);
+    stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '', stderr = '', timedOut = false;
+  child.stdout.on('data', chunk => { stdout += String(chunk); });
+  child.stderr.on('data', chunk => { stderr += String(chunk); });
+  const terminate = (signal: NodeJS.Signals) => {
+    if (!child.pid) return;
+    try { process.kill(-child.pid, signal); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+  };
+  let force: ReturnType<typeof setTimeout> | undefined;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    // Kill the process group, including an in-progress child stack:up. Otherwise
+    // it could recreate containers while the runner resets the recorded stacks.
+    terminate('SIGTERM');
+    force = setTimeout(() => terminate('SIGKILL'), 1_000);
+  }, timeoutMs);
+  let code: number | null;
+  try {
+    code = await new Promise<number | null>((resolve, reject) => {
+      child.on('error', reject);
+      child.on('close', resolve);
+    });
+  } finally {
+    clearTimeout(timer);
+    if (force) clearTimeout(force);
+    if (timedOut) terminate('SIGKILL');
+  }
   const elapsedMs = Date.now() - start;
-  const timedOut = child.signalCode !== null && elapsedMs >= timeoutMs;
   return { ok: code === 0 && !timedOut, elapsedMs, timedOut,
     output: [stdout, stderr, timedOut ? `${name} timed out after ${timeoutMs} ms` : ''].filter(Boolean).join('\n') };
 }
