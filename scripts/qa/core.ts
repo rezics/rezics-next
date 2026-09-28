@@ -198,7 +198,7 @@ export function writeSummary(directory: string, report: {
 // owns one disposable project; results merge into the tier's single JUnit file.
 export interface ShardRecord { project: string; files: string[]; status: 'passed' | 'failed';
   stage: 'stack' | 'bootstrap' | 'test'; elapsedMs?: number; isolation?: boolean;
-  startupMs?: number; bootstrapMs?: number; stopMs?: number; cleanupMs?: number }
+  startupMs?: number; bootstrapMs?: number; cleanupMs?: number }
 export interface IsolationRecord { tier: Tier; file: string; afterProject: string; afterFiles: number;
   project?: string; shardFailures: string[];
   status: 'order-dependent' | 'infrastructure-dependent' | 'failed-alone' | 'not-run' }
