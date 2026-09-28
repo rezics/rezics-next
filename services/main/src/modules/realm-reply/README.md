@@ -30,3 +30,11 @@ cut in `../commerce/recovery-coverage.ts` streams each owner table in 128-row
 chunks in one repeatable-read transaction; it is O(n) in retained owner rows and
 O(128) memory. The global recovery release must include that cut before a
 pre-revocation Commerce snapshot can be rejected at release.
+
+The Realm thread reads (`thread-read.ts`, `GET /v1/realms/{realm}/threads` and
+`/threads/{reply}`) serve a Realm's Discussions tab and thread pages. They admit
+a whole page or thread in fixed batches instead of `visible()` per reply: one
+graph read of placement heads, one Content statement for review, origin and pin
+(`thread-store.ts`), one vote read from Home's projection and 64-revision body
+batches. `thread-contract.ts` states their bounds. A discussion's title is its
+first line (`discussion-text.ts`), for these reads and Home's alike.
