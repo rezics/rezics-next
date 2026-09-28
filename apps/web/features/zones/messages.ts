@@ -69,6 +69,7 @@ export const messages = {
   modRequired: 'Required', modOptional: 'Optional', modIncompatible: 'Incompatible', modEmbedded: 'Included',
   modNoDependencies: 'This release needs no other mods.',
   modDependenciesUnknown: 'Listed before REZICS showed dependencies.',
+  modFor: insert('For {{version}} on {{runtime}}', { version: String, runtime: String }),
   modNoNotes: 'No notes for this release.', modRange: insert('Version {{range}}', { range: String }),
   modClientOnly: 'Client only', modServerOnly: 'Server only',
   modUnavailable: 'Couldn’t load this mod’s versions.', modReleases: insert('{{count}} releases', { count: String }),

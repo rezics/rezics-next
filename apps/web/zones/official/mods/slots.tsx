@@ -90,10 +90,13 @@ export function ModsHero({ zone, banners, card, fallback }: HeroSlotProps) {
   const picks = banners.flatMap(banner => banner.work && !banner.image ? [banner.work] : []);
   if (!picks.length || picks.length !== banners.length) return fallback;
   const t = strings(zone.locale);
-  return <section aria-labelledby="mh-featured" className="mh-page mh-section">
-    <header className="mh-head"><h2 id="mh-featured">{t.featured}</h2></header>
-    <ul className="mh-grid">{picks.map(work => <li key={work.id}>{card(work, { layout: 'row' })}</li>)}</ul>
-  </section>;
+  // The page gutter and the panel's own padding sit on separate boxes, so the panel lines up with the modules below.
+  return <div className="mh-page">
+    <section aria-labelledby="mh-featured" className="mh-section">
+      <header className="mh-head"><h2 id="mh-featured">{t.featured}</h2></header>
+      <ul className="mh-grid">{picks.map(work => <li key={work.id}>{card(work, { layout: 'row' })}</li>)}</ul>
+    </section>
+  </div>;
 }
 
 /** Rankings as numbered rows: today, this week and this month. */

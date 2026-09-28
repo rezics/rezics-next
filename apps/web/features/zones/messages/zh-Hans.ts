@@ -64,6 +64,7 @@ export default {
   modRequired: '必需', modOptional: '可选', modIncompatible: '不兼容', modEmbedded: '已内置',
   modNoDependencies: '这个版本不需要其他模组。',
   modDependenciesUnknown: '这个版本在 REZICS 显示依赖之前发布。',
+  modFor: insert('{{version}}，适用于 {{runtime}}', { version: String, runtime: String }),
   modNoNotes: '这个版本没有更新说明。', modRange: insert('版本 {{range}}', { range: String }),
   modClientOnly: '仅客户端', modServerOnly: '仅服务端',
   modUnavailable: '无法加载这个模组的版本。', modReleases: insert('{{count}} 个版本', { count: String }),

@@ -62,7 +62,9 @@ export function ModSections({ releases, failed, locale, messages }: {
   const versions = [...new Set(releases.flatMap(release => release.gameVersions))].sort(newestFirst);
   const loaders = [...new Set(releases.flatMap(release => release.loaders))];
   const environments = [...new Set(releases.flatMap(release => release.environment ? [release.environment] : []))];
-  const dependencies = newest.dependencies;
+  // What a player on the newest game version installs beside it: that version's newest release.
+  const current = releases.find(release => versions[0] && release.gameVersions.includes(versions[0])) ?? newest;
+  const dependencies = current.dependencies;
   const groups = (['required', 'optional', 'incompatible', 'embedded'] as const).map(requirement => ({ requirement,
     label: { required: messages.modRequired, optional: messages.modOptional, incompatible: messages.modIncompatible,
       embedded: messages.modEmbedded }[requirement],
@@ -78,6 +80,8 @@ export function ModSections({ releases, failed, locale, messages }: {
       </div>
     </Section>
     <Section id="mod-dependencies" title={messages.modDependencies}>
+      <p translate="no" className="-mt-2 text-muted-foreground text-sm">{t.modFor({ version: current.version ?? '—',
+        runtime: [current.game, ...current.gameVersions, ...current.loaders].join(' ') })}</p>
       {dependencies === null ? <p className="text-muted-foreground text-sm">{messages.modDependenciesUnknown}</p>
         : groups.length ? <div className="grid grid-cols-1 gap-4">
           {groups.map(group => <div key={group.requirement} className="grid grid-cols-1 gap-2">

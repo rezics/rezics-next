@@ -118,6 +118,7 @@ export const ModDetail: StoryObj<typeof ModSections> = {
     await expect(within(dependencies).getByText('fabric-api')).toBeVisible();
     await expect(within(dependencies).getByText('Version >=0.100.0 · Client only')).toBeVisible();
     await expect(within(dependencies).getByText('Incompatible')).toBeVisible();
+    await expect(within(dependencies).getByText('For 1.3.0 on Minecraft 1.21.1 Fabric')).toBeVisible();
     await expect(within(canvas.getByRole('region', { name: 'Versions' })).getAllByRole('row')).toHaveLength(4);
     await expect(within(canvas.getByRole('region', { name: 'Changelog' })).getByText(/Fixes flicker/)).toBeVisible();
   },
