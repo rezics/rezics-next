@@ -395904,6 +395904,26 @@
                       "const": "also-enjoyed-v1",
                       "type": "string"
                     },
+                    "projectionPosition": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "sourcePosition": {
                       "properties": {
                         "dataEpoch": {
@@ -395918,11 +395938,16 @@
                         "sequence"
                       ],
                       "type": "object"
+                    },
+                    "stale": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "profile",
                     "items",
+                    "stale",
+                    "projectionPosition",
                     "nextCursor",
                     "sourcePosition",
                     "count"
