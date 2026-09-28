@@ -2,6 +2,7 @@ import { Elysia, NotFound, ParseError, ValidationError } from 'elysia';
 import type { FusekiClient } from './infrastructure/fuseki.ts';
 import { accessAuthorityRoutes } from './routes/access-authority.ts';
 import { agentRoutes } from './routes/agents.ts';
+import { authorRoutes } from './routes/authors.ts';
 import { onboardingRoutes } from './routes/onboarding.ts';
 import { accessMembershipRoutes } from './routes/access-memberships.ts';
 import { managedRealmRoutes } from './routes/managed-realms.ts';
@@ -218,6 +219,7 @@ function extraRoutes6(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(semanticRoutes(fuseki, work))
     .use(relationRoutes(fuseki, work))
     .use(hubRoutes(work))
+    .use(authorRoutes(work))
     .use(progressRoutes(fuseki, work));
 }
 

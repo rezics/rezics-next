@@ -40,6 +40,36 @@ export async function fenceAuthorNames(session: WorkReadSession) {
   }
 }
 
+/** Records the retained author references of these Works for the read's final fence. */
+function recordReported(session: WorkReadSession, works: readonly string[],
+  refs: Map<string, Array<{ id: string; key: string; ordinal: number }>>) {
+  const prior = reportedReads.get(session) ?? new Map<string, string>();
+  for (const work of works) {
+    const value = JSON.stringify(refs.get(work) ?? []);
+    if (prior.has(work) && prior.get(work) !== value) {
+      throw new WorkReadMoved('Source author binding changed during the read');
+    }
+    prior.set(work, value);
+  }
+  reportedReads.set(session, prior);
+}
+
+/**
+ * Works a retained adoption reports for one author, found through the reverse
+ * index and read forward again, so a Work is listed only while its binding
+ * still names the author and a change before the read ends moves it. At most
+ * `AUTHOR_WORKS_COST.works` Works; `complete` says whether that was all.
+ */
+export async function sourceReportedAuthorWorks(session: WorkReadSession, key: string) {
+  const store = session.deps.sourceAuthorNames, adoptions = session.deps.sourceAdoptions;
+  if (!store || !adoptions) return { works: [] as string[], complete: true };
+  const found = await store.reportedWorks(key);
+  const refs = await adoptions.authorReferences(found.works);
+  recordReported(session, found.works, refs);
+  session.checkDeadline();
+  return { works: found.works.filter(work => refs.get(work)?.some(ref => ref.key === key)), complete: found.complete };
+}
+
 /** A bounded, read-only attribution from the retained adoption. A confirmed
  * graph credit for the same source occurrence replaces it at the caller. */
 export async function sourceReportedCredits(session: WorkReadSession, works: readonly string[],
@@ -52,15 +82,7 @@ export async function sourceReportedCredits(session: WorkReadSession, works: rea
   if (!works.length || !session.deps.sourceAdoptions) return new Map();
   const refs = await session.deps.sourceAdoptions?.authorReferences(works)
     ?? new Map<string, Array<{ id: string; key: string; ordinal: number }>>();
-  const prior = reportedReads.get(session) ?? new Map<string, string>();
-  for (const work of works) {
-    const value = JSON.stringify(refs.get(work) ?? []);
-    if (prior.has(work) && prior.get(work) !== value) {
-      throw new WorkReadMoved('Source author binding changed during the read');
-    }
-    prior.set(work, value);
-  }
-  reportedReads.set(session, prior);
+  recordReported(session, works, refs);
   const selected = [...refs.values()].flatMap(items => items.slice(0, perWork));
   const names = await readAuthorNames(session, selected.map(item => item.key));
   return new Map([...refs].map(([work, items]) => [work, items.slice(0, perWork).map(item => ({

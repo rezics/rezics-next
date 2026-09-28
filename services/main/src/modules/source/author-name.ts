@@ -4,6 +4,8 @@ import { t } from 'elysia';
 import { SourceIntakeConflict, SourceIntakeInvalid, SourceIntakeUnavailable,
   type SourceIntakeStore } from './intake.ts';
 import { fetchOpenLibraryJson, OpenLibraryAcquisitionUnavailable } from './open-library.ts';
+import { authorFactsWithSource, projectOpenLibraryAuthorFacts, sourceFactProvenance,
+  type AuthorFacts } from './author-facts.ts';
 
 export const AUTHOR_NAME_COST = { keys: 192, readQueries: 1, providerRequests: 1,
   searchQueries: 2, searchFenceQueries: 1,
@@ -12,10 +14,9 @@ const authorKey = /^\/authors\/OL[1-9][0-9]{0,11}A$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const uri = (id: string) => `https://rezics.com/id/${id}`;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
-export const authorNameProvenance = t.Object({ record: t.String(), observation: t.String(),
-  revision: t.String(), sourceRevision: t.Nullable(t.String()), digest: t.String(),
-  url: t.String(), fetchedAt: t.String(), basis: t.Literal('facts'),
-  field: t.Literal('/name') });
+export const authorNameProvenance = t.Object({ ...sourceFactProvenance, field: t.Literal('/name') });
+/** Adopted Works one author page lists, as `SOURCE_ADOPTION_READ_COST.authorWorks` binds them. */
+export const AUTHOR_WORKS_COST = { works: 64, queries: 1, statementMs: 1_000 } as const;
 export interface AuthorName { displayName: string; nameSource: {
   record: string; observation: string; revision: string; sourceRevision: string | null;
   digest: string; url: string; fetchedAt: string; basis: 'facts'; field: '/name' } }
@@ -94,6 +95,66 @@ export class SourceAuthorNameStore {
       if (rows.length > AUTHOR_NAME_COST.keys) throw new SourceIntakeUnavailable('Author name search exceeds its candidate bound');
       await client.query('COMMIT');
       return { names: new Map(rows.map(row => [row.author_key, name(row)!])), generation };
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    finally { client.release(); }
+  }
+
+  /**
+   * The current name with the record's other facts (`author-facts.ts`), all
+   * projected from the capture the head selects, so each fact carries the
+   * name's provenance with its own field. One indexed head lookup reads the
+   * retained bytes (≤64 KiB), whose digest is checked first. A removed name
+   * shows no facts either: removal withdraws the record, not only its label.
+   */
+  async facts(author: string): Promise<{ name: AuthorName; facts: AuthorFacts } | null> {
+    if (!authorKey.test(author)) throw new SourceIntakeInvalid('Invalid author key');
+    const client = await this.pool.connect();
+    let row: (Row & { raw_bytes: Buffer | null }) | undefined;
+    try {
+      await client.query('BEGIN READ ONLY');
+      await client.query(`SET LOCAL statement_timeout = '${AUTHOR_NAME_COST.statementMs}ms'`);
+      row = (await client.query<Row & { raw_bytes: Buffer | null }>(`SELECT n.*, o.record_id,
+        o.source_revision, o.byte_digest, o.capture, o.raw_bytes
+        FROM source.author_name_revision n JOIN source.author_name_head h ON h.revision = n.id
+        LEFT JOIN source.observation o ON o.id = n.observation_id WHERE h.author_key = $1`, [author])).rows[0];
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    finally { client.release(); }
+    const current = row ? name(row) : null;
+    if (!row || !current) return null;
+    if (!row.raw_bytes || row.raw_bytes.byteLength > AUTHOR_NAME_COST.captureBytes
+      || createHash('sha256').update(row.raw_bytes).digest('hex') !== row.byte_digest) {
+      throw new SourceIntakeUnavailable('Author capture is unavailable');
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(row.raw_bytes));
+      projectOpenLibraryAuthor(author, body);
+    } catch { throw new SourceIntakeUnavailable('Author capture is unavailable'); }
+    return { name: current, facts: authorFactsWithSource(projectOpenLibraryAuthorFacts(body), current.nameSource) };
+  }
+
+  /**
+   * Works whose retained adoption reports this author and was not withdrawn:
+   * the reverse of `SourceNativeWorkAdoptionStore.authorReferences`, which a
+   * caller still reads forward to fence. One query over the GIN index on the
+   * conversion's author references (Content migration 410), probing 65 rows.
+   */
+  async reportedWorks(author: string): Promise<{ works: string[]; complete: boolean }> {
+    if (!authorKey.test(author)) throw new SourceIntakeInvalid('Invalid author key');
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN READ ONLY');
+      await client.query(`SET LOCAL statement_timeout = '${AUTHOR_WORKS_COST.statementMs}ms'`);
+      const rows = (await client.query<{ work: string }>(`SELECT b.work FROM source.conversion c
+        JOIN source.native_work_proposal p ON p.conversion_id = c.id
+        JOIN source.native_work_binding b ON b.proposal_id = p.id
+        WHERE c.projection -> 'authorRefs' @> $1::jsonb
+          AND NOT EXISTS (SELECT 1 FROM source.native_work_support_withdrawal w WHERE w.binding_id = b.id)
+        ORDER BY b.work LIMIT ${AUTHOR_WORKS_COST.works + 1}`, [JSON.stringify([{ sourceKey: author }])])).rows;
+      await client.query('COMMIT');
+      return { works: rows.slice(0, AUTHOR_WORKS_COST.works).map(row => row.work),
+        complete: rows.length <= AUTHOR_WORKS_COST.works };
     } catch (error) { await client.query('ROLLBACK'); throw error; }
     finally { client.release(); }
   }
