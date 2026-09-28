@@ -73138,6 +73138,15 @@
               "minimum": 1,
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "isolated",
+            "required": false,
+            "schema": {
+              "const": "true",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -283268,404 +283277,893 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "asOf": {},
-                  "context": {
-                    "anyOf": [
-                      {
-                        "const": "global",
-                        "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {},
+                      "context": {
+                        "anyOf": [
+                          {
+                            "const": "global",
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "realm"
+                            ],
+                            "type": "object"
+                          }
+                        ]
                       },
-                      {
+                      "filter": {},
+                      "page": {
                         "additionalProperties": false,
                         "properties": {
-                          "realm": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                          "continuation": {},
+                          "size": {
+                            "maximum": 64,
+                            "minimum": 1,
+                            "type": "integer"
                           }
                         },
                         "required": [
-                          "realm"
+                          "size"
                         ],
                         "type": "object"
-                      }
-                    ]
-                  },
-                  "filter": {},
-                  "page": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "continuation": {},
-                      "size": {
-                        "maximum": 64,
-                        "minimum": 1,
-                        "type": "integer"
+                      },
+                      "scope": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "all",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "realm",
+                                "type": "string"
+                              },
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "realm"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "sort": {
+                        "enum": [
+                          "relevance",
+                          "newest",
+                          "updated"
+                        ],
+                        "type": "string"
+                      },
+                      "sourcePolicy": {},
+                      "text": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "phrase": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "phrase"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "body": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              },
+                              "title": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "title",
+                              "body"
+                            ],
+                            "type": "object"
+                          }
+                        ]
                       }
                     },
                     "required": [
-                      "size"
+                      "context",
+                      "page",
+                      "scope",
+                      "sort"
                     ],
                     "type": "object"
                   },
-                  "scope": {
-                    "anyOf": [
-                      {
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "asOf": {},
+                      "context": {
+                        "anyOf": [
+                          {
+                            "const": "global",
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "realm"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "filter": {},
+                      "page": {
                         "additionalProperties": false,
                         "properties": {
-                          "kind": {
-                            "const": "all",
-                            "type": "string"
+                          "continuation": {},
+                          "size": {
+                            "maximum": 64,
+                            "minimum": 1,
+                            "type": "integer"
                           }
                         },
                         "required": [
-                          "kind"
+                          "size"
                         ],
                         "type": "object"
                       },
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "kind": {
-                            "const": "realm",
-                            "type": "string"
+                      "profile": {
+                        "const": "filter-document-v2",
+                        "type": "string"
+                      },
+                      "ratingContext": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "all",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "type": "object"
                           },
-                          "realm": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "realm",
+                                "type": "string"
+                              },
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "realm"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "mine",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "type": "object"
                           }
-                        },
-                        "required": [
-                          "kind",
-                          "realm"
+                        ]
+                      },
+                      "sort": {
+                        "enum": [
+                          "relevance",
+                          "newest",
+                          "updated",
+                          "top-rated"
                         ],
-                        "type": "object"
+                        "type": "string"
+                      },
+                      "sourcePolicy": {},
+                      "text": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "phrase": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "phrase"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "body": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              },
+                              "title": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "title",
+                              "body"
+                            ],
+                            "type": "object"
+                          }
+                        ]
                       }
-                    ]
-                  },
-                  "sort": {
-                    "enum": [
-                      "relevance",
-                      "newest",
-                      "updated"
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "page",
+                      "scope",
+                      "sort"
                     ],
-                    "type": "string"
-                  },
-                  "sourcePolicy": {},
-                  "text": {
-                    "anyOf": [
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "phrase": {
-                            "maxLength": 80,
-                            "minLength": 2,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "phrase"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "body": {
-                            "maxLength": 80,
-                            "minLength": 2,
-                            "type": "string"
-                          },
-                          "title": {
-                            "maxLength": 80,
-                            "minLength": 2,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "title",
-                          "body"
-                        ],
-                        "type": "object"
-                      }
-                    ]
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "context",
-                  "scope",
-                  "sort",
-                  "page"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "asOf": {},
-                  "context": {
-                    "anyOf": [
-                      {
-                        "const": "global",
-                        "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {},
+                      "context": {
+                        "anyOf": [
+                          {
+                            "const": "global",
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "realm"
+                            ],
+                            "type": "object"
+                          }
+                        ]
                       },
-                      {
+                      "filter": {},
+                      "page": {
                         "additionalProperties": false,
                         "properties": {
-                          "realm": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                          "continuation": {},
+                          "size": {
+                            "maximum": 64,
+                            "minimum": 1,
+                            "type": "integer"
                           }
                         },
                         "required": [
-                          "realm"
+                          "size"
                         ],
                         "type": "object"
-                      }
-                    ]
-                  },
-                  "filter": {},
-                  "page": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "continuation": {},
-                      "size": {
-                        "maximum": 64,
-                        "minimum": 1,
-                        "type": "integer"
+                      },
+                      "scope": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "all",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "realm",
+                                "type": "string"
+                              },
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "realm"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "sort": {
+                        "enum": [
+                          "relevance",
+                          "newest",
+                          "updated"
+                        ],
+                        "type": "string"
+                      },
+                      "sourcePolicy": {},
+                      "text": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "phrase": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "phrase"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "body": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              },
+                              "title": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "title",
+                              "body"
+                            ],
+                            "type": "object"
+                          }
+                        ]
                       }
                     },
                     "required": [
-                      "size"
+                      "context",
+                      "page",
+                      "scope",
+                      "sort"
                     ],
                     "type": "object"
                   },
-                  "scope": {
-                    "anyOf": [
-                      {
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "asOf": {},
+                      "context": {
+                        "anyOf": [
+                          {
+                            "const": "global",
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "realm"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "filter": {},
+                      "page": {
                         "additionalProperties": false,
                         "properties": {
-                          "kind": {
-                            "const": "all",
-                            "type": "string"
+                          "continuation": {},
+                          "size": {
+                            "maximum": 64,
+                            "minimum": 1,
+                            "type": "integer"
                           }
                         },
                         "required": [
-                          "kind"
+                          "size"
                         ],
                         "type": "object"
                       },
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "kind": {
-                            "const": "realm",
-                            "type": "string"
+                      "profile": {
+                        "const": "filter-document-v2",
+                        "type": "string"
+                      },
+                      "ratingContext": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "all",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "type": "object"
                           },
-                          "realm": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "realm",
+                                "type": "string"
+                              },
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "realm"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "mine",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "type": "object"
                           }
-                        },
-                        "required": [
-                          "kind",
-                          "realm"
+                        ]
+                      },
+                      "sort": {
+                        "enum": [
+                          "relevance",
+                          "newest",
+                          "updated",
+                          "top-rated"
                         ],
-                        "type": "object"
+                        "type": "string"
+                      },
+                      "sourcePolicy": {},
+                      "text": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "phrase": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "phrase"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "body": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              },
+                              "title": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "title",
+                              "body"
+                            ],
+                            "type": "object"
+                          }
+                        ]
                       }
-                    ]
-                  },
-                  "sort": {
-                    "enum": [
-                      "relevance",
-                      "newest",
-                      "updated"
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "page",
+                      "scope",
+                      "sort"
                     ],
-                    "type": "string"
-                  },
-                  "sourcePolicy": {},
-                  "text": {
-                    "anyOf": [
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "phrase": {
-                            "maxLength": 80,
-                            "minLength": 2,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "phrase"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "body": {
-                            "maxLength": 80,
-                            "minLength": 2,
-                            "type": "string"
-                          },
-                          "title": {
-                            "maxLength": 80,
-                            "minLength": 2,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "title",
-                          "body"
-                        ],
-                        "type": "object"
-                      }
-                    ]
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "context",
-                  "scope",
-                  "sort",
-                  "page"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "asOf": {},
-                  "context": {
-                    "anyOf": [
-                      {
-                        "const": "global",
-                        "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "asOf": {},
+                      "context": {
+                        "anyOf": [
+                          {
+                            "const": "global",
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "realm"
+                            ],
+                            "type": "object"
+                          }
+                        ]
                       },
-                      {
+                      "filter": {},
+                      "page": {
                         "additionalProperties": false,
                         "properties": {
-                          "realm": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                          "continuation": {},
+                          "size": {
+                            "maximum": 64,
+                            "minimum": 1,
+                            "type": "integer"
                           }
                         },
                         "required": [
-                          "realm"
+                          "size"
                         ],
                         "type": "object"
-                      }
-                    ]
-                  },
-                  "filter": {},
-                  "page": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "continuation": {},
-                      "size": {
-                        "maximum": 64,
-                        "minimum": 1,
-                        "type": "integer"
+                      },
+                      "scope": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "all",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "realm",
+                                "type": "string"
+                              },
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "realm"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "sort": {
+                        "enum": [
+                          "relevance",
+                          "newest",
+                          "updated"
+                        ],
+                        "type": "string"
+                      },
+                      "sourcePolicy": {},
+                      "text": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "phrase": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "phrase"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "body": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              },
+                              "title": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "title",
+                              "body"
+                            ],
+                            "type": "object"
+                          }
+                        ]
                       }
                     },
                     "required": [
-                      "size"
+                      "context",
+                      "page",
+                      "scope",
+                      "sort"
                     ],
                     "type": "object"
                   },
-                  "scope": {
-                    "anyOf": [
-                      {
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "asOf": {},
+                      "context": {
+                        "anyOf": [
+                          {
+                            "const": "global",
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "realm"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "filter": {},
+                      "page": {
                         "additionalProperties": false,
                         "properties": {
-                          "kind": {
-                            "const": "all",
-                            "type": "string"
+                          "continuation": {},
+                          "size": {
+                            "maximum": 64,
+                            "minimum": 1,
+                            "type": "integer"
                           }
                         },
                         "required": [
-                          "kind"
+                          "size"
                         ],
                         "type": "object"
                       },
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "kind": {
-                            "const": "realm",
-                            "type": "string"
+                      "profile": {
+                        "const": "filter-document-v2",
+                        "type": "string"
+                      },
+                      "ratingContext": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "scope": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "all",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "type": "object"
                           },
-                          "realm": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "realm",
+                                "type": "string"
+                              },
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "realm"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "mine",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "type": "object"
                           }
-                        },
-                        "required": [
-                          "kind",
-                          "realm"
+                        ]
+                      },
+                      "sort": {
+                        "enum": [
+                          "relevance",
+                          "newest",
+                          "updated",
+                          "top-rated"
                         ],
-                        "type": "object"
+                        "type": "string"
+                      },
+                      "sourcePolicy": {},
+                      "text": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "phrase": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "phrase"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "body": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              },
+                              "title": {
+                                "maxLength": 80,
+                                "minLength": 2,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "title",
+                              "body"
+                            ],
+                            "type": "object"
+                          }
+                        ]
                       }
-                    ]
-                  },
-                  "sort": {
-                    "enum": [
-                      "relevance",
-                      "newest",
-                      "updated"
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "page",
+                      "scope",
+                      "sort"
                     ],
-                    "type": "string"
-                  },
-                  "sourcePolicy": {},
-                  "text": {
-                    "anyOf": [
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "phrase": {
-                            "maxLength": 80,
-                            "minLength": 2,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "phrase"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "body": {
-                            "maxLength": 80,
-                            "minLength": 2,
-                            "type": "string"
-                          },
-                          "title": {
-                            "maxLength": 80,
-                            "minLength": 2,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "title",
-                          "body"
-                        ],
-                        "type": "object"
-                      }
-                    ]
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "context",
-                  "scope",
-                  "sort",
-                  "page"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -291866,6 +292364,19 @@
                                 "realm"
                               ],
                               "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "mine",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "type": "object"
                             }
                           ]
                         },
@@ -291881,7 +292392,8 @@
                           "enum": [
                             "relevance",
                             "newest",
-                            "updated"
+                            "updated",
+                            "top-rated"
                           ],
                           "type": "string"
                         },
