@@ -44,7 +44,8 @@ export class NotificationProducer {
   constructor(private readonly access: Pool, private readonly relay: Pool | null,
     private readonly content: Pool, private readonly graph: Pick<FusekiClient, 'query'>,
     private readonly notifications: Pick<NotificationStore, 'enqueue'>,
-    private readonly relayConsumer: string | null) {}
+    private readonly relayConsumer: string | null,
+    private readonly relayCheckpoint: Pool | null = relay) {}
 
   /** Source and recipient identities are read after their owner commits. */
   private async accessNotification(event: AccessEvent): Promise<NotificationEvent | null> {
@@ -220,16 +221,16 @@ export class NotificationProducer {
   }
 
   async runRelayOnce(): Promise<number> {
-    if (!this.relay || !this.relayConsumer) return 0;
+    if (!this.relay || !this.relayCheckpoint || !this.relayConsumer) return 0;
+    const upstream = (await this.relayCheckpoint.query<{ data_epoch: string; sequence: string }>(`
+      SELECT data_epoch, sequence::text FROM relay.checkpoint WHERE consumer = $1`,
+    [this.relayConsumer])).rows[0];
+    if (!upstream) throw new Error('graph relay checkpoint is unavailable');
     const client: PoolClient = await this.relay.connect();
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '10s'");
-      const upstream = (await client.query<{ data_epoch: string; sequence: string }>(`
-        SELECT data_epoch, sequence::text FROM relay.checkpoint WHERE consumer = $1`,
-      [this.relayConsumer])).rows[0];
-      if (!upstream) throw new Error('graph relay checkpoint is unavailable');
       await client.query(`INSERT INTO relay.notification_producer_cursor (consumer, data_epoch)
         VALUES ($1, $2) ON CONFLICT DO NOTHING`, [cursorName, upstream.data_epoch]);
       const cursor = (await client.query<{ data_epoch: string; sequence: string }>(`
@@ -248,8 +249,9 @@ export class NotificationProducer {
         throw new Error('notification cursor exceeds graph relay checkpoint');
       }
       const batch = (await client.query<{ sequence: string; event_count: number }>(`
-        SELECT sequence::text, event_count FROM relay.delivered_batch
-        WHERE data_epoch = $1 AND sequence > $2 AND sequence <= $3 ORDER BY sequence LIMIT 1`,
+        SELECT batch.sequence::text, event_count FROM relay.delivered_batch AS batch
+        WHERE data_epoch = $1 AND batch.sequence > $2 AND batch.sequence <= $3
+        ORDER BY batch.sequence LIMIT 1`,
       [cursor.data_epoch, cursor.sequence, upstream.sequence])).rows[0];
       if (!batch) { await client.query('COMMIT'); return 0; }
       if (batch.event_count > PRODUCER_COST.relayEventsPerBatch) throw new Error('relay event bound exceeded');

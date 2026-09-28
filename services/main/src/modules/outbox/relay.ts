@@ -22,6 +22,18 @@ export class RelayEventBlocked extends OutboxIncomplete {
   }
 }
 
+/** Transport failures cannot decide whether an event is malformed. */
+export function isRelayTransientFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as Error & { code?: string }).code;
+  if (code && (/^08/.test(code) || ['57P01', '57P02', '57P03', '40001', '40P01',
+    'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE'].includes(code))) return true;
+  if (/timed out|timeout|network|fetch failed|connection|socket|ECONN|EPIPE|Fuseki query returned 5\d\d/i.test(error.message)) {
+    return true;
+  }
+  return error.cause !== undefined && isRelayTransientFailure(error.cause);
+}
+
 export interface RelayCoverage {
   consumer: string;
   dataEpoch: string;
@@ -185,9 +197,9 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
     }
     const rows = await client.query<{ sequence: string; batch_id: string;
       routing_epoch: string; event_count: number }>(
-      `SELECT sequence::text, batch_id, routing_epoch, event_count
-       FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence > $2
-       ORDER BY sequence LIMIT $3`, [coverage.dataEpoch, afterSequence, limit]);
+      `SELECT batch.sequence::text, batch_id, routing_epoch, event_count
+       FROM relay.delivered_batch AS batch WHERE data_epoch = $1 AND batch.sequence > $2
+       ORDER BY batch.sequence LIMIT $3`, [coverage.dataEpoch, afterSequence, limit]);
     const batches: RetainedRelayBatch[] = [];
     let next = BigInt(afterSequence) + 1n;
     for (const row of rows.rows) {
@@ -1579,6 +1591,7 @@ export async function relayMainOutboxOnce(
   const events = await Promise.all(batch.eventIds.map(async eventId => {
     try { return await readMainOutboxEnvelope(fuseki, batch, eventId); }
     catch (error) {
+      if (isRelayTransientFailure(error)) throw error;
       throw new RelayEventBlocked(batch, eventId,
         error instanceof Error ? error.message : String(error));
     }

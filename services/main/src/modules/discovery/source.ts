@@ -63,8 +63,8 @@ export async function projectDiscoveryBatch(session: WorkReadSession, basis: Dis
     ?classified ?credited WHERE {
       VALUES ?work { ${candidates.slice(0, limit).map(iri).join(' ')} }
       ${publicWork(target, '?main')}
-      GRAPH ${iri(GRAPHS.current)} { FILTER NOT EXISTS { ${target} schema:isPartOf ?parentWork }
-        FILTER NOT EXISTS { ?legacyStructure a rv:Structure ;
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${target} schema:isPartOf ?parentWork } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?legacyStructure a rv:Structure ;
           rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?legacyGeneration .
           ?legacyPlacement a rv:OccurrencePlacement ; rv:generation ?legacyGeneration ;
             rv:occurrenceRole rv:ChapterRole ; schema:item ${target} .

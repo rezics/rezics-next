@@ -58,7 +58,11 @@ export class DiscoveryRefreshWorker {
 
   async tick(): Promise<RefreshOutcome> {
     await this.store.purge();
-    await this.enroll();
+    try { await this.enroll(); }
+    catch (error) {
+      if (!(error instanceof WorkReadUnavailable)) throw error;
+      // The catalog retries on its next due time; existing jobs still advance.
+    }
     const job = await this.store.claim();
     if (!job) return 'idle';
     return this.advance(job);

@@ -282,7 +282,8 @@ notificationDispatcher?.registerSubjectReader('verification-correction-subscript
 for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-outcome-v1',
   'realm-role-change-v1', 'review-created-v1', 'review-helpful-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationSourceReader);
 const notificationProducerWorker = new NotificationProducerWorker(new NotificationProducer(
-  pool, relayPool ?? null, contentPool, fuseki, notificationStore, config.MAIN_RELAY_CONSUMER ?? null));
+  pool, relayPool ? erasureRelayPool! : null, contentPool, fuseki,
+  notificationStore, config.MAIN_RELAY_CONSUMER ?? null, relayPool ?? null));
 const notificationRealtime = relayPool ? new NotificationRealtimeHub(pool) : undefined;
 if (notificationRealtime) await notificationRealtime.start();
 const notificationDeliveryWorker = notificationDispatcher

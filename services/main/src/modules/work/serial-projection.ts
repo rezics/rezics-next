@@ -159,8 +159,8 @@ export class SerialStatisticsProjection {
       || BigInt(prior.sequence) > BigInt(head);
     const after = reset ? '0' : prior.sequence;
     const batch = (await this.relay.query<{ sequence: string; event_count: number }>(
-      `SELECT sequence::text, event_count FROM relay.delivered_batch
-        WHERE data_epoch = $1 AND sequence > $2::numeric ORDER BY sequence LIMIT 1`,
+      `SELECT batch.sequence::text, event_count FROM relay.delivered_batch AS batch
+        WHERE data_epoch = $1 AND batch.sequence > $2::numeric ORDER BY batch.sequence LIMIT 1`,
       [this.env.lineage.dataEpoch, after])).rows[0];
     if (batch && BigInt(batch.sequence) !== BigInt(after) + 1n
       || !batch && BigInt(after) < BigInt(head)) {

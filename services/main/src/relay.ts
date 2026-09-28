@@ -3,6 +3,7 @@ import { FusekiClient } from './infrastructure/fuseki.ts';
 import { relayMainOutboxOnce, RelayEventBlocked } from './modules/outbox/relay.ts';
 import { cleanEnv } from 'envalid';
 import { relaySpec } from './config.ts';
+import { runMainRelay } from './modules/outbox/worker.ts';
 
 const config = cleanEnv(process.env, relaySpec);
 const interval = config.MAIN_RELAY_INTERVAL_MS;
@@ -18,10 +19,8 @@ process.on('SIGINT', () => { running = false; });
 process.on('SIGTERM', () => { running = false; });
 
 try {
-  while (running) {
-    const batch = await relayMainOutboxOnce(fuseki, pool, consumer);
-    if (!batch) await Bun.sleep(interval);
-  }
+  await runMainRelay(async () => !!await relayMainOutboxOnce(fuseki, pool, consumer), () => running, interval,
+    { consumer });
 } catch (error) {
   console.error(JSON.stringify(error instanceof RelayEventBlocked
     ? { level: 'error', event: 'main_relay_blocked', consumer,
