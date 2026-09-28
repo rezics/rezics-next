@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
-import { cn } from './utils.ts';
+import { cn } from '@rezics/ui/utils';
 
+// cn now merges with tailwind-variants' bundled merger instead of tailwind-merge plus clsx (a page-weight fix);
+// these are the clsx and tailwind-merge behaviours the components rely on.
 test('cn joins class values as clsx did and lets the last conflicting Tailwind class win', () => {
   expect(cn('px-2', 'px-4')).toBe('px-4');
   expect(cn('px-4', 'p-2')).toBe('p-2');
