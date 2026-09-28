@@ -118,10 +118,13 @@ test('keyboard: every stop through the header and navigation shows where focus i
 
 test('keyboard: search suggestions open, are chosen with arrows and Enter, and close with Escape', async ({ page }) => {
   await page.goto('/en/discover');
-  await page.locator('#main-content').click({ position: { x: 1, y: 1 } });
-  await page.keyboard.press('/');
   const search = page.getByRole('combobox', { name: 'Search works' });
-  await expect(search).toBeFocused();
+  // `/` is handled once the page has hydrated; press until it lands.
+  await expect(async () => {
+    await page.locator('#main-content').click({ position: { x: 1, y: 1 } });
+    await page.keyboard.press('/');
+    await expect(search).toBeFocused({ timeout: 1_000 });
+  }).toPass();
   // The seeded title is indexed shortly after the seed; ask until a suggestion appears.
   await expect(async () => {
     await search.fill('');

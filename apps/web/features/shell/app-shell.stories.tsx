@@ -184,7 +184,7 @@ export const Phone: Story = {
     await expect(within(bottom).getByRole('link', { name: 'Discover' })).toHaveAttribute('aria-current', 'page');
     await expect(canvas.getByRole('combobox', { name: 'Language' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
-    const drawer = within(await within(document.body).findByRole('dialog', { name: 'Menu' }));
+    const drawer = within(await within(document.body).findByRole('dialog', { name: 'Menu' }, { timeout: 5000 }));
     await expect(drawer.queryByText('Preferences')).toBeNull();
     await userEvent.click(drawer.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(within(document.body).queryByRole('dialog')).toBeNull());
@@ -269,7 +269,7 @@ export const PhoneCommunities: Story = {
     const bar = canvas.getByRole('navigation', { name: 'Main navigation' });
     await expect(within(bar).getByRole('link', { name: 'Notifications · Notifications, 99+ unread' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
-    const drawer = within(await within(document.body).findByRole('dialog', { name: 'Menu' }));
+    const drawer = within(await within(document.body).findByRole('dialog', { name: 'Menu' }, { timeout: 5000 }));
     await waitFor(() => expect(drawer.getByRole('region', { name: 'Your Realms' })).toBeVisible());
     await userEvent.click(drawer.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(within(document.body).queryByRole('dialog')).toBeNull());

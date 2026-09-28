@@ -1,13 +1,10 @@
 'use client';
 
 import { Button } from '@rezics/ui/button';
-import { Sheet, SheetClose, SheetContent, SheetTitle } from '@rezics/ui/sheet';
-import { MenuIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, XIcon } from 'lucide-react';
+import { MenuIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
-import { type ReactNode, useState } from 'react';
-import { LogoMark } from './logo.tsx';
+import { lazy, type ReactNode, Suspense, useState } from 'react';
 import { useShell } from './shell-provider.tsx';
-import { SideNav } from './side-nav.tsx';
 
 export const SIDE_NAVIGATION_ID = 'side-navigation';
 
@@ -23,30 +20,27 @@ export function NavCollapseToggle() {
   </Button>;
 }
 
-/** Phones: the side navigation in a drawer. */
+// The drawer's sheet brings a dialog, focus trap and scroll area that pages without dialogs otherwise never load.
+const NavDrawerSheet = lazy(() => import('./nav-drawer-sheet.tsx'));
+const warm = () => { void import('./nav-drawer-sheet.tsx'); };
+
+/** Phones: the side navigation in a drawer, loaded when the reader first reaches for it. */
 export function NavDrawer({ communities }: { communities?: ReactNode }) {
   const { t } = useShell();
   const pathname = usePathname();
   // Remember where the drawer opened: any navigation closes it without an effect.
   const [openedAt, setOpenedAt] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
   const open = openedAt === pathname;
   const setOpen = (next: boolean) => setOpenedAt(next ? pathname : null);
-  return <Sheet open={open} onOpenChange={details => setOpen(details.open)}>
+  return <>
     <Button variant="ghost" size="icon-md" aria-label={t.openNavigation} aria-haspopup="dialog"
-      aria-expanded={open} onClick={() => setOpen(true)} className="text-muted-foreground md:hidden">
+      aria-expanded={open} onPointerEnter={warm} onFocus={warm} onTouchStart={warm}
+      onClick={() => { setMounted(true); setOpen(true); }} className="text-muted-foreground md:hidden">
       <MenuIcon aria-hidden="true" className="size-5" />
     </Button>
-    <SheetContent placement="left" showCloseButton={false} className="w-72 max-w-[85vw] bg-sidebar">
-      <div className="flex h-16 shrink-0 items-center gap-2.5 border-border/60 border-b px-4">
-        <LogoMark />
-        <SheetTitle className="flex-1 font-semibold text-base">{t.menu}</SheetTitle>
-        <SheetClose asChild>
-          <Button variant="ghost" size="icon-md" aria-label={t.close} className="text-muted-foreground">
-            <XIcon aria-hidden="true" className="size-5" />
-          </Button>
-        </SheetClose>
-      </div>
-      <SideNav variant="drawer" onNavigate={() => setOpen(false)} communities={communities} />
-    </SheetContent>
-  </Sheet>;
+    {mounted ? <Suspense fallback={null}>
+      <NavDrawerSheet open={open} onOpenChange={setOpen} communities={communities} />
+    </Suspense> : null}
+  </>;
 }
