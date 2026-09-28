@@ -21,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ loc
   const form = await request.formData();
   const agent = session.agent.agent.iri;
   if (form.get('agent') !== agent) return NextResponse.redirect(back('denied'), 303);
-  const profile = await readAgentProfile(agent);
+  const profile = await readAgentProfile(agent, token);
   if (!profile) return NextResponse.redirect(back('unavailable'), 303);
   if (profile.revision !== form.get('expectedHead')) return NextResponse.redirect(back('conflict'), 303);
   const file = form.get('avatar');

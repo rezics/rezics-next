@@ -42,7 +42,8 @@ function sentence(item: StreamItem, t: T): string {
   const title = display.target.title;
   const realm = display.realmName;
   switch (display.kind) {
-    case 'reply': return title ? t.repliedOn({ name, title }) : t.replied({ name });
+    case 'reply': return item.topic === 'mention' ? t.mentionedYou({ name })
+      : title ? t.repliedOn({ name, title }) : t.replied({ name });
     case 'submission_decision': {
       if (!title) return t.submissionDecided;
       const state = display.target.excerpt;

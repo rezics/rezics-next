@@ -32,6 +32,12 @@ export const Person: Story = {
     await expect(canvas.getByRole('heading', { name: 'Notifications' })).toBeVisible();
     await expect(canvas.getByRole('switch', { name: 'Replies · In-app' })).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: 'Library and shelves' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: 'Profile visibility' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: 'Who can follow you' })).toBeVisible();
+    await expect(canvas.getByRole('switch', { name: 'Hide my reading activity from other people’s Home' }))
+      .toBeVisible();
+    await expect(canvas.getByRole('textbox', { name: 'Content languages' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: 'Unread chapter spoilers' })).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: 'Theme' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Open Accounts' }))
       .toHaveAttribute('href', 'https://account.rezics.test');
@@ -82,6 +88,8 @@ export const ChinesePhone: Story = {
     await expect(canvas.getByRole('heading', { name: '个人资料设置' })).toBeVisible();
     await expect(canvas.getByRole('heading', { name: '隐私' })).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: '书库和书架' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: '资料可见范围' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: '未读章节剧透' })).toBeVisible();
     await expect(canvas.getByText('选择图片')).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },

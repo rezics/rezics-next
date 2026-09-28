@@ -72,6 +72,7 @@ export interface Preference { purpose: string; topic: string; channel: string; s
 /** Settings show only topics with an active producer. Keep this list in producer contract order. */
 export const SETTINGS_NOTIFICATION_TOPICS = [
   { purpose: 'social', topic: 'reply' },
+  { purpose: 'social', topic: 'mention' },
   { purpose: 'social', topic: 'review-helpful' },
   { purpose: 'social', topic: 'review' },
   { purpose: 'governance', topic: 'submission-decision' },

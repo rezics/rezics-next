@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { controlRead, controlTransaction, ControlConflict, ControlInvalid, ControlStale } from '../access/topology-control.ts';
+import { controlRead, controlTransaction, ControlConflict, ControlDenied, ControlInvalid, ControlStale } from '../access/topology-control.ts';
 import { digest } from '../recommendation/derived-generation.ts';
 import { FOLLOWS_COST, followTargetMatches, type BatchFollowCommand, type BatchFollowResult,
   type FollowCommand, type FollowKind, type FollowResult } from './contract.ts';
@@ -16,6 +16,15 @@ function checkTarget(target: string, kind: FollowKind) {
 }
 export class FollowsStore {
   constructor(private readonly pool: Pool) {}
+
+  private async allowPersonFollow(client: import('pg').PoolClient, target: string, kind: FollowKind,
+    following: boolean) {
+    if (kind !== 'agent' || !following) return;
+    await client.query('SELECT id FROM access.authority_subject WHERE id = $1 FOR SHARE', [target]);
+    const policy = (await client.query<{ follow_policy: string }>(
+      'SELECT follow_policy FROM access.person_preferences WHERE agent_id = $1', [target])).rows[0];
+    if (policy?.follow_policy === 'nobody') throw new ControlDenied('This person does not accept new followers');
+  }
 
   /** One receipt and inventory lock make an onboarding choice all or nothing.
    * Public target disclosure is repeated for new follows inside the transaction. */
@@ -54,7 +63,10 @@ export class FollowsStore {
       for (const item of input.targets) {
         const existing = byTarget.get(item.target);
         if (existing && existing.kind !== item.kind) throw new ControlStale('Follow kind changed');
-        if (!existing?.following) await disclose(item.target, item.kind);
+        if (!existing?.following) {
+          await this.allowPersonFollow(client, item.target, item.kind, true);
+          await disclose(item.target, item.kind);
+        }
         const revision = existing?.following ? existing.revision : randomUUID();
         if (!existing?.following) await client.query(`INSERT INTO access.follow
           (principal_id, target, kind, acting_subject, following, revision) VALUES ($1,$2,$3,$4,true,$5)
@@ -149,7 +161,10 @@ export class FollowsStore {
       }
       // Removing a hidden/deleted target remains possible. Replay precedes all
       // mutable target reads, so a lost response can always recover its receipt.
-      if (input.following) await disclose();
+      if (input.following) {
+        await this.allowPersonFollow(client, input.target, input.kind, true);
+        await disclose();
+      }
       const revision = randomUUID();
       const delta = Number(input.following) - Number(prior?.following ?? false);
       const changed = await client.query(`UPDATE access.follow_inventory SET revision = $2,

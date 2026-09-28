@@ -34,6 +34,10 @@ export const publicAgent = (agent: string) => `GRAPH ${iri(GRAPHS.current)} {
 
 export async function readAgent(session: WorkReadSession, agent: string) {
   const owner = profileAccess(session);
+  if (!session.deps.personPreferences) throw new WorkReadUnavailable('Profile preferences are unavailable');
+  if (!await session.deps.personPreferences.profileVisible(agent, session.principal)) {
+    throw new WorkReadMissing('Agent unavailable');
+  }
   const before = await owner.agentFence(agent);
   if (!before) throw new WorkReadMissing('Agent unavailable');
   const rows = await session.query(`SELECT ?displayName ?agentKind ?handle ?agentHead ?profileHead ?predecessor
@@ -79,6 +83,9 @@ export async function readAgent(session: WorkReadSession, agent: string) {
     && !!await session.deps.access.canReadAsBaselineMember?.(session.principal, agent);
   const statusShelves = library.visibility === 'public' ? `${path}/shelves`
     : ownerVisible ? `/v1/me/shelves?actingSubject=${encodeURIComponent(agent)}` : null;
+  if (!await session.deps.personPreferences.profileVisible(agent, session.principal)) {
+    throw new WorkReadMissing('Agent unavailable');
+  }
   if (await owner.agentFence(agent) !== before
     || (await owner.visibility.read(agent)).version !== library.version) {
     throw new WorkReadMoved('Agent profile changed');

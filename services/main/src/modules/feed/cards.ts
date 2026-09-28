@@ -15,7 +15,8 @@ type Card = { card: Static<typeof feedCard>; primaryAction: Static<typeof feedAc
  * recipe totalTime/yield, persisted chapter word count or timed-media owner.
  * Optional fields in the card contract deliberately stay absent in those cases. */
 export async function feedCardData(session: WorkReadSession, source: FeedSource,
-  target: FeedItem['target'], href: string, knownTypes?: ReadonlyMap<string, readonly string[]>): Promise<Card> {
+  target: FeedItem['target'], href: string, knownTypes?: ReadonlyMap<string, readonly string[]>,
+  showSpoilers = false): Promise<Card> {
   const workEvent = source.kind === 'work' || source.kind === 'added';
   const fallback: Card = { card: { kind: workEvent ? 'work' : 'activity' },
     primaryAction: workEvent && source.work ? { kind: 'want-to-read', work: source.work } : { kind: 'open', href } };
@@ -23,7 +24,7 @@ export async function feedCardData(session: WorkReadSession, source: FeedSource,
     const row = source.readerReview;
     return { card: { kind: 'review', review: row.id, rating: row.rating,
       scale: row.realm ? 10 : 5, spoiler: row.spoiler, helpfulCount: row.helpful_count,
-      opening: row.spoiler ? null : row.body.slice(0, 400) },
+      opening: row.spoiler && !showSpoilers ? null : row.body.slice(0, 400) },
     primaryAction: { kind: 'read-review', review: row.id, href } };
   }
   if (source.kind === 'collection') return listCard(session, source, href);

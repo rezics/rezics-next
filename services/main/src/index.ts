@@ -15,6 +15,7 @@ import { FeedStore } from './modules/feed/store.ts';
 import { ReaderReviews } from './modules/review/store.ts';
 import { FeedViewerStateReader } from './modules/feed/viewer-state.ts';
 import { HomePersonalStore } from './modules/feed/personal.ts';
+import { PersonPreferencesStore } from './modules/preferences/store.ts';
 import { RankingHomeTrendingReader } from './modules/feed/trending.ts';
 import { FeedRefreshWorker } from './modules/feed/refresh.ts';
 import { DiscoveryRefreshWorker } from './modules/discovery/refresh.ts';
@@ -311,6 +312,7 @@ const app = createMainApp(fuseki, {
   readRankings,
   feedViewerState: new FeedViewerStateReader(),
   homePersonal: new HomePersonalStore(pool),
+  personPreferences: new PersonPreferencesStore(pool),
   homeTrending: new RankingHomeTrendingReader(readRankings),
   discovery: new DiscoveryProjection(pool),
   alsoEnjoyed: new AlsoEnjoyedStore(pool, contentPool),

@@ -314,11 +314,14 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   if (!store || !follows) throw new WorkReadUnavailable('Feed owner is unavailable');
   const homePersonal = session.deps.homePersonal;
   if (reader && !homePersonal) throw new WorkReadUnavailable('Home preferences are unavailable');
+  if (reader && !session.deps.personPreferences) throw new WorkReadUnavailable('Person preferences are unavailable');
   if (query.scope === 'following' && !reader) throw new WorkReadInvalid('Following requires authentication');
-  const [personal, checkpoint, following] = await inOrder(
+  const [personal, checkpoint, following, personSettings] = await inOrder(
     reader ? homePersonal!.read(reader.principal, reader.agent) : null,
     store.checkpoint(session.position.dataEpoch),
-    reader ? follows.matches(reader.principal, reader.agent, []) : null);
+    reader ? follows.matches(reader.principal, reader.agent, []) : null,
+    reader && session.deps.personPreferences
+      ? session.deps.personPreferences.read(reader.principal, reader.agent) : null);
   if (!query.contentLanguages && personal?.preferences.contentLanguages.length) {
     query = { ...query, contentLanguages: personal.preferences.contentLanguages };
   }
@@ -329,7 +332,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const watermarkRead = settle(reader && scope === 'following' && sort === 'new'
     ? homePersonal!.getWatermark(reader.principal, reader.agent, 'following') : Promise.resolve(null));
   const binding = ['home-feed-v1', FEED_RANKING.version, scope, sort, window, normalized(query),
-    following?.owner ?? null, reader?.agent ?? null];
+    following?.owner ?? null, reader?.agent ?? null,
+    personSettings ? digest([personSettings.version, personSettings.blockedPeople]) : null];
   const cursor = decodeReadCursor(query.cursor, binding, session.position);
   let after: { key: string; id: string } | undefined;
   let asOf = Date.now(), followedSeen = 0;
@@ -429,7 +433,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   // Selection waits only for interest kinds and tag rules, so without them
   // the card parts start alongside the page's presentation batches.
   const candidatesRead = kindsRead.then(async workKinds => {
-    const filtered = sources.filter(source => !(personal && excludedFeedSource(source, personal.exclusions))
+    const filtered = sources.filter(source => !personSettings?.blockedPeople.includes(source.actor)
+      && !(personal && excludedFeedSource(source, personal.exclusions))
       && !(query.kinds && !query.kinds.includes(source.kind)) && matchesFeedInterest(source, interests, workKinds)
       && !(query.realms && (!source.realm || !query.realms.includes(source.realm))));
     const tagMatches = tagRules.length ? await readTagSets(session, query.language, filtered, tagRules.map(rule => rule.target))
@@ -454,7 +459,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
           const summary = source.work ? summaries.get(source.work) : undefined;
           const target = summary?.status === 'available' ? { name: summary.name, icon: summary.avatar } : null;
           return settle(feedCardData(session, source, itemTarget(source, target, undefined, source),
-            targetLink(source), types));
+            targetLink(source), types, personSettings?.spoilerPolicy === 'show'));
         }))),
       query.concepts ? readTagSets(session, query.language, candidates, query.concepts) : new Map<string, Settled<string[]>>());
   });
@@ -485,8 +490,11 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       const followed = matches?.reasons[sources.indexOf(source)]?.[0];
       item.reason = followed ? { kind: 'followed', target: followed.target, targetKind: followed.kind }
         : { kind: 'recommended', basis: scope === 'following' ? 'thin-following' : 'all' };
-      if (query.contentLanguages && (!item.target.language
-        || !query.contentLanguages.some(language => language.toLowerCase() === item.target.language!.toLowerCase()))) continue;
+      const matchesLanguages = (languages: readonly string[] | undefined) => !languages?.length
+        || !!item.post.language && languages.some(language =>
+          language.toLowerCase() === item.post.language!.toLowerCase());
+      if (!matchesLanguages(query.contentLanguages)
+        || !matchesLanguages(personSettings?.contentLanguages)) continue;
       if (query.concepts) {
         if (!source.work) continue;
         const senses = unwrap(acceptedTags.get(tagKey(source))!);
@@ -528,7 +536,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       .flatMap(source => source.work ? [source.work] : []))]) : new Map<string, HomeInterestKind[]>(),
     Promise.all(itemSources.map(source => settle(replyExcerpt(session, source)))),
     Promise.all(items.map((item, index) => fenceCards(item) && item.kind !== 'review'
-      ? settle(feedCardData(session, itemSources[index]!, item.target, item.links.target)) : null)));
+      ? settle(feedCardData(session, itemSources[index]!, item.target, item.links.target,
+        undefined, personSettings?.spoilerPolicy === 'show')) : null)));
   const graphFields = (source: FeedSource) => JSON.stringify([source.id, source.kind, source.target, source.work,
     source.realm, source.zone, source.language, source.occurrence, source.contentTarget, source.reply,
     source.contentRevision, source.review]);
@@ -569,7 +578,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       if (item.card.kind === 'list') unwrap(targetFence.lists[index]!);
       if (fenceCards(item)) {
         // A review card is the review row itself, so it is rebuilt from the final row.
-        const card = item.kind === 'review' ? await feedCardData(session, finalSource, item.target, item.links.target)
+        const card = item.kind === 'review' ? await feedCardData(session, finalSource, item.target,
+          item.links.target, undefined, personSettings?.spoilerPolicy === 'show')
           : unwrap(cardChecks[index]!);
         if (JSON.stringify(card.card) !== JSON.stringify(item.card)
           || JSON.stringify(card.primaryAction) !== JSON.stringify(item.primaryAction)) throw new WorkReadMoved('Card content changed');
@@ -582,7 +592,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const targets = viewerTargets(selected);
   const states = unwrap(await readViewer(targets));
   for (const item of selected) {
-    const state = states?.get(item.id) ?? { status: reader ? 'unavailable' : 'anonymous' };
+    const rawState = states?.get(item.id) ?? { status: reader ? 'unavailable' : 'anonymous' };
+    const state = rawState.status === 'available' && personSettings?.spoilerPolicy === 'show'
+      ? { ...rawState, spoiler: { policy: 'show' as const, hidden: false } } : rawState;
     if (!Value.Check(feedViewerState, state)) throw new WorkReadUnavailable('Viewer state differs');
     item.viewerState = state;
     if (state.status === 'available' && state.nextUnread && item.card.kind === 'chapter'
@@ -602,6 +614,13 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   }
   const projected = checkpoint.sequence === session.position.sequence && checkpoint.after_id === '\uffff'
     && !checkpoint.rebuild_epoch;
+  if (reader && personSettings) {
+    const current = await session.deps.personPreferences!.read(reader.principal, reader.agent);
+    if (current.version !== personSettings.version
+      || JSON.stringify(current.blockedPeople) !== JSON.stringify(personSettings.blockedPeople)) {
+      throw new WorkReadMoved('Person preferences changed');
+    }
+  }
   const [latest, followsNow, personalNow, pending, watermark] = await Promise.all([
     settle(store.checkpoint(session.position.dataEpoch)),
     settle(reader ? follows.matches(reader.principal, reader.agent, []) : Promise.resolve(null)),

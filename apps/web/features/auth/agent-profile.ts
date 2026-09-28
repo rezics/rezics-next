@@ -10,12 +10,15 @@ export interface PublicAgentProfile {
 }
 
 /** Main's public read is the CAS basis for settings and the header image. */
-export async function readAgentProfile(agent: string, send: typeof fetch = fetch): Promise<PublicAgentProfile | null> {
+export async function readAgentProfile(agent: string, accessToken?: string,
+  send: typeof fetch = fetch): Promise<PublicAgentProfile | null> {
   const id = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(agent)?.[1];
   if (!id) return null;
   try {
-    const response = await send(`${serviceOrigin('MAIN_ORIGIN')}/v1/agents/${id}`, {
+    const response = await send(`${serviceOrigin('MAIN_ORIGIN')}/v1/agents/${id}`
+      + (accessToken ? `?actingSubject=${encodeURIComponent(agent)}` : ''), {
       cache: 'no-store', signal: AbortSignal.timeout(10_000),
+      ...(accessToken ? { headers: { authorization: `Bearer ${accessToken}` } } : {}),
     });
     if (!response.ok) return null;
     const profile = await response.json() as PublicAgentProfile;

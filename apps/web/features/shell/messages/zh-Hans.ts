@@ -40,6 +40,7 @@ export default {
   someone: '有人',
   replied: insert('{{name}} 回复了你', { name: String }),
   repliedOn: insert('{{name}} 在《{{title}}》中回复了你', { name: String, title: String }),
+  mentionedYou: insert('{{name}} 提及了你', { name: String }),
   submissionAccepted: insert('你提交的《{{title}}》已被接受', { title: String }),
   submissionRejected: insert('你提交的《{{title}}》未被接受', { title: String }),
   submissionChanges: insert('你提交的《{{title}}》需要修改', { title: String }),

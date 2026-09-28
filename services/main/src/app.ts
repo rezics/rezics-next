@@ -79,6 +79,7 @@ import { conceptRoutes } from './routes/concepts.ts';
 import { realmAdminRoutes } from './routes/realm-admin.ts';
 import { workContentsRoutes } from './routes/work-contents.ts';
 import { readingSettingsRoutes } from './routes/reading-settings.ts';
+import { preferencesRoutes } from './routes/preferences.ts';
 import { workActivityRoutes } from './routes/work-activity.ts';
 import { profileRoutes } from './routes/profiles.ts';
 import { studioRoutes } from './routes/studio.ts';
@@ -148,6 +149,9 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(workMaintainerRoutes(work))
     .use(workReadRoutes(work))
     .use(alsoEnjoyedRoutes(work));
+    .use(alsoEnjoyedRoutes(work))
+    .use(realmReadRoutes(work))
+    .use(preferencesRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

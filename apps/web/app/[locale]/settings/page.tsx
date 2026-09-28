@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { signInPath } from '../../../features/auth/paths.ts';
 import { readAgentProfile } from '../../../features/auth/agent-profile.ts';
 import { readSession } from '../../../features/auth/session.ts';
+import { ACCESS_COOKIE } from '../../../features/auth/cookies.ts';
 import { ProfileSettings } from '../../../features/settings/profile-settings.tsx';
 import { isUiLocale } from '../../../i18n/define.ts';
 import { localizedPath } from '../../../i18n/locale.ts';
@@ -17,7 +19,7 @@ export default async function SettingsPage({ params, searchParams }: {
   const session = await readSession();
   if (!session) redirect(signInPath(localizedPath('/settings', locale)));
   const agent = session.agent.status === 'selected' ? session.agent.agent : null;
-  const profile = agent ? await readAgentProfile(agent.iri) : null;
+  const profile = agent ? await readAgentProfile(agent.iri, (await cookies()).get(ACCESS_COOKIE)?.value) : null;
   return <ProfileSettings agent={agent} profile={profile}
     accountOrigin={serviceOrigin('ACCOUNT_ORIGIN')}
     locale={locale}

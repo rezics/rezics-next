@@ -103,6 +103,7 @@ export interface MainWorkDependencies {
   feed?: import('../modules/feed/store.ts').FeedStore;
   reviews?: import('../modules/review/store.ts').ReaderReviews;
   homePersonal?: import('../modules/feed/personal.ts').HomePersonalStore;
+  personPreferences?: import('../modules/preferences/store.ts').PersonPreferencesStore;
   homeTrending?: import('../modules/feed/trending.ts').HomeTrendingReader;
   feedViewerState?: FeedViewerStateReader;
   maintainers?: import('../modules/work/maintainers.ts').WorkMaintainers;

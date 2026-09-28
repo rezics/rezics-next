@@ -18,9 +18,16 @@ type Reader = { profile: 'reader-settings-v1'; fontSize: 15 | 17 | 19 | 22 | 25;
   lineWidth: 'narrow' | 'medium' | 'wide'; typeface: 'serif' | 'sans'; paragraphIndent: boolean;
   theme: 'system' | 'light' | 'dark'; cjkSpacing: 'auto' | 'none';
   cjkPunctuation: 'standard' | 'strict'; version: number };
+type PersonPreferences = { profile: 'person-preferences-v1'; profileVisibility: 'public' | 'private';
+  followPolicy: 'everyone' | 'nobody'; hideReadingActivity: boolean; contentLanguages: string[];
+  spoilerPolicy: 'hide-unread' | 'show'; adultContent: boolean; version: number; blockedPeople: string[] };
+const previewPerson: PersonPreferences = { profile: 'person-preferences-v1', profileVisibility: 'public',
+  followPolicy: 'everyone', hideReadingActivity: false, contentLanguages: [],
+  spoilerPolicy: 'hide-unread', adultContent: false, version: 0, blockedPeople: [] };
 
 const topics = [
   ['social', 'reply', 'notificationReply'],
+  ['social', 'mention', 'notificationMention'],
   ['social', 'review-helpful', 'notificationReviewHelpful'],
   ['social', 'review', 'notificationReview'],
   ['governance', 'submission-decision', 'notificationSubmissionDecision'],
@@ -104,7 +111,8 @@ function Notifications({ t, preview = false }: { t: SettingsMessages; preview?: 
   </Section>;
 }
 
-function Privacy({ agent, t, preview = false }: { agent: string | null; t: SettingsMessages; preview?: boolean }) {
+function Privacy({ agent, t, preview = false, extra }: { agent: string | null; t: SettingsMessages;
+  preview?: boolean; extra?: ReactNode }) {
   const [current, setCurrent] = useState<Library | null>(preview ? { visibility: 'private', version: 0 } : null);
   const [draft, setDraft] = useState<Library['visibility']>('private');
   const [busy, setBusy] = useState(false);
@@ -137,10 +145,12 @@ function Privacy({ agent, t, preview = false }: { agent: string | null; t: Setti
         disabled={busy || preview || draft === 'followers' || draft === current.visibility}>
         {t.saveSection}</Button></div> : <p role="status" className="text-muted-foreground text-sm">{status || '…'}</p>}
     {current && status ? <p role="status" className="text-sm">{status}</p> : null}
+    {extra}
   </Section>;
 }
 
-function Reading({ agent, t, preview = false }: { agent: string | null; t: SettingsMessages; preview?: boolean }) {
+function Reading({ agent, t, preview = false, extra }: { agent: string | null; t: SettingsMessages;
+  preview?: boolean; extra?: ReactNode }) {
   const sample: Reader = { profile: 'reader-settings-v1', fontSize: 17, lineWidth: 'medium', typeface: 'serif',
     paragraphIndent: false, theme: 'system', cjkSpacing: 'auto', cjkPunctuation: 'standard', version: 0 };
   const [current, setCurrent] = useState<Reader | null>(preview ? sample : null);
@@ -194,7 +204,106 @@ function Reading({ agent, t, preview = false }: { agent: string | null; t: Setti
         onClick={() => void save()}>{t.saveSection}</Button>
     </> : <p role="status" className="text-muted-foreground text-sm">{status || '…'}</p>}
     {current && status ? <p role="status" className="text-sm">{status}</p> : null}
+    {extra}
   </Section>;
+}
+
+function PersonControls({ agent, t, preview = false }: { agent: string; t: SettingsMessages; preview?: boolean }) {
+  const [current, setCurrent] = useState<PersonPreferences | null>(preview ? previewPerson : null);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState('');
+  const [blockName, setBlockName] = useState('');
+  const [languages, setLanguages] = useState('');
+  const path = `/v1/me/person-preferences?actingSubject=${encodeURIComponent(agent)}`;
+  useEffect(() => {
+    if (preview) return;
+    let active = true;
+    void read<PersonPreferences>(path).then(value => { if (active) {
+      setCurrent(value); setLanguages(value.contentLanguages.join(', '));
+    } }).catch(() => { if (active) setStatus(t.personUnavailable); });
+    return () => { active = false; };
+  }, [path, preview, t]);
+  const save = async (patch: Partial<PersonPreferences>) => {
+    if (!current || busy || preview) return;
+    setBusy(true); setStatus('');
+    try {
+      const { profile: _profile, version: _version, blockedPeople: _blocked, ...prior } = current;
+      const next = await write<PersonPreferences>('/v1/me/person-preferences', {
+        actingSubject: agent, expectedVersion: current.version, ...prior, ...patch });
+      setCurrent(next); setLanguages(next.contentLanguages.join(', ')); setStatus(t.personSaved);
+    } catch (error) { setStatus(String(error).includes('409') ? t.sectionStale : t.sectionFailed); }
+    setBusy(false);
+  };
+  const block = async (target: string, blocked: boolean) => {
+    if (busy || preview) return;
+    setBusy(true); setStatus('');
+    try {
+      await write('/v1/me/blocked-people', { actingSubject: agent, target: target.trim(), blocked });
+      const next = await read<PersonPreferences>(path);
+      setCurrent(next); setBlockName(''); setStatus(blocked ? t.personBlocked : t.personUnblocked);
+    } catch { setStatus(t.sectionFailed); }
+    setBusy(false);
+  };
+  const privacy = <div className="grid gap-4 border-t pt-5">
+    <div className="grid gap-1"><h3 className="font-medium">{t.profilePrivacyTitle}</h3>
+      <p className="text-muted-foreground text-sm">{t.profilePrivacyHelp}</p></div>
+    {current ? <>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="grid gap-1 text-sm font-medium">{t.profileVisibility}
+          <ChoiceSelect label={t.profileVisibility} value={current.profileVisibility} disabled={busy || preview}
+            options={[{ value: 'public', label: t.libraryPublic }, { value: 'private', label: t.libraryPrivate }]}
+            onValueChange={value => void save({ profileVisibility: value === 'private' ? 'private' : 'public' })} />
+        </label>
+        <label className="grid gap-1 text-sm font-medium">{t.whoCanFollow}
+          <ChoiceSelect label={t.whoCanFollow} value={current.followPolicy} disabled={busy || preview}
+            options={[{ value: 'everyone', label: t.followEveryone }, { value: 'nobody', label: t.followNobody }]}
+            onValueChange={value => void save({ followPolicy: value === 'nobody' ? 'nobody' : 'everyone' })} />
+        </label>
+      </div>
+      <div className="flex items-center gap-3 text-sm"><Switch aria-label={t.hideReadingActivity}
+        checked={current.hideReadingActivity} disabled={busy || preview}
+        onCheckedChange={details => void save({ hideReadingActivity: details.checked })} />
+        <span>{t.hideReadingActivity}</span></div>
+      <div className="grid gap-2"><h3 className="font-medium">{t.blockedPeople}</h3>
+        <p className="text-muted-foreground text-sm">{t.blockedPeopleHelp}</p>
+        <form className="flex flex-wrap gap-2" onSubmit={event => { event.preventDefault(); void block(blockName, true); }}>
+          <input className="min-w-48 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+            aria-label={t.blockPerson} placeholder="@handle" value={blockName} disabled={busy || preview}
+            onChange={event => setBlockName(event.target.value)} />
+          <Button type="submit" disabled={busy || preview || !blockName.trim()}>{t.blockPerson}</Button>
+        </form>
+        {current.blockedPeople.length ? <ul className="grid gap-2">{current.blockedPeople.map(id =>
+          <li key={id} className="flex items-center justify-between gap-2 text-sm">
+            <span>{t.blockedPersonId} {id.slice(-8)}</span>
+            <Button type="button" variant="soft" disabled={busy || preview}
+              onClick={() => void block(id, false)}>{t.unblockPerson}</Button>
+          </li>)}</ul> : <p className="text-muted-foreground text-sm">{t.noBlockedPeople}</p>}
+      </div>
+    </> : <p role="status" className="text-muted-foreground text-sm">{status || '…'}</p>}
+  </div>;
+  const content = <div className="grid gap-4 border-t pt-5">
+    <div className="grid gap-1"><h3 className="font-medium">{t.contentPreferences}</h3>
+      <p className="text-muted-foreground text-sm">{t.contentPreferencesHelp}</p></div>
+    {current ? <>
+      <form className="flex flex-wrap items-end gap-2" onSubmit={event => {
+        event.preventDefault(); void save({ contentLanguages: languages.split(',').map(value => value.trim())
+          .filter(Boolean) });
+      }}><label className="grid min-w-48 flex-1 gap-1 text-sm font-medium">{t.contentLanguages}
+        <input className="rounded-md border bg-background px-3 py-2 text-sm" value={languages}
+          placeholder={t.contentLanguagesExample} disabled={busy || preview}
+          onChange={event => setLanguages(event.target.value)} /></label>
+        <Button type="submit" disabled={busy || preview}>{t.saveSection}</Button></form>
+      <label className="grid gap-1 text-sm font-medium">{t.spoilerHandling}
+        <ChoiceSelect label={t.spoilerHandling} value={current.spoilerPolicy} disabled={busy || preview}
+          options={[{ value: 'hide-unread', label: t.spoilerHideUnread },
+            { value: 'show', label: t.spoilerShow }]}
+          onValueChange={value => void save({ spoilerPolicy: value === 'show' ? 'show' : 'hide-unread' })} />
+      </label>
+    </> : <p role="status" className="text-muted-foreground text-sm">{status || '…'}</p>}
+  </div>;
+  return <><Privacy agent={agent} t={t} preview={preview} extra={privacy} />
+    <Reading agent={agent} t={t} preview={preview} extra={content} />
+    {current && status ? <p role="status" className="text-sm">{status}</p> : null}</>;
 }
 
 function Display({ locale, t, preview = false }: { locale: UiLocale; t: SettingsMessages; preview?: boolean }) {
@@ -228,8 +337,7 @@ export function SettingsSections({ agent, locale, accountOrigin, t, preview = fa
 }) {
   return <>
     <Notifications t={t} preview={preview} />
-    {agent ? <><Privacy agent={agent} t={t} preview={preview} />
-      <Reading agent={agent} t={t} preview={preview} /></> : null}
+    {agent ? <PersonControls agent={agent} t={t} preview={preview} /> : null}
     <Display locale={locale} t={t} preview={preview} />
     {children}
     <Section id="account" title={t.accountTitle} help={t.accountHelp}>

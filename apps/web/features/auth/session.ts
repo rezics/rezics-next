@@ -73,7 +73,7 @@ export const readSession = cache(async (): Promise<Session | null> => {
   const agent = state ? resolveSessionAgent(agents, state.sessionAgent.actingSubject)
     : { status: 'unverified', previous: null } as const;
   if (agent.status === 'selected') {
-    const profile = await readAgentProfile(agent.agent.iri);
+    const profile = await readAgentProfile(agent.agent.iri, jar.get(ACCESS_COOKIE)?.value);
     if (profile) {
       agent.agent.label = profile.displayName;
       agent.agent.avatarUrl = profile.avatarUrl;

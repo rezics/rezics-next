@@ -40,6 +40,7 @@ export const messages = {
   someone: 'Someone',
   replied: insert('{{name}} replied', { name: String }),
   repliedOn: insert('{{name}} replied on “{{title}}”', { name: String, title: String }),
+  mentionedYou: insert('{{name}} mentioned you', { name: String }),
   submissionAccepted: insert('Your submission “{{title}}” was accepted', { title: String }),
   submissionRejected: insert('Your submission “{{title}}” was declined', { title: String }),
   submissionChanges: insert('Changes were requested on your submission “{{title}}”', { title: String }),

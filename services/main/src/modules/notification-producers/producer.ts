@@ -3,6 +3,7 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import type { NotificationEvent, NotificationStore } from '../notification/store.ts';
 import { reviewNotification } from '../notification/producer-review.ts';
+import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
 
 /** One serialized source position, one bounded owner read and at most 256 inbox writes per event. */
 export const PRODUCER_COST = { accessEventsPerTick: 16, relayEventsPerBatch: 256,
@@ -183,8 +184,8 @@ export class NotificationProducer {
     finally { client.release(); }
   }
 
-  private async replyNotification(envelope: RelayEnvelope): Promise<NotificationEvent | null> {
-    if (envelope.type !== 'com.rezics.realm.reply-placed.v1') return null;
+  private async replyNotifications(envelope: RelayEnvelope): Promise<NotificationEvent[]> {
+    if (envelope.type !== 'com.rezics.realm.reply-placed.v1') return [];
     const receipt = envelope.data.receipt;
     if (!receipt) throw new Error('reply relay event has no receipt');
     const realm = receipt.realm;
@@ -207,17 +208,40 @@ export class NotificationProducer {
       const authors = await this.contributionAuthors(root as string, rootRevision as string);
       targetAuthor = authors.length === 1 ? authors[0]! : null;
     }
-    if (!targetAuthor || targetAuthor === author) return null;
     const actor = (await this.access.query<{ principal_id: string }>(`
       SELECT principal_id FROM access.admission WHERE id = $1`, [admission])).rows[0]?.principal_id;
     if (!actor) throw new Error('reply admission is unavailable');
-    const recipients = await represented(this.access, targetAuthor, actor);
-    if (!recipients.length) return null;
-    return { sourceOwner: 'graph', sourceEvent: envelope.id, purpose: 'social', topic: 'reply',
+    const events: NotificationEvent[] = [];
+    const event = (topic: string, recipients: string[]): NotificationEvent => ({ sourceOwner: 'graph',
+      sourceEvent: envelope.id, purpose: 'social', topic,
       subject: { owner: 'graph', ref: reply as string, revision: revision as string },
       disclosureBasis: 'realm-reply-v1', recipients,
       display: { kind: 'reply', actorAgent: author as string, realm: realm as string,
-        groupKey: typeof parent === 'string' ? parent : root as string } };
+        groupKey: topic === 'mention' ? `mention:${reply}`
+          : typeof parent === 'string' ? parent : root as string } });
+    if (targetAuthor && targetAuthor !== author) {
+      const recipients = await represented(this.access, targetAuthor, actor);
+      if (recipients.length) events.push(event('reply', recipients));
+    }
+    const current = await new RealmReplyContentStore(this.content).readCurrent(reply as string);
+    if (current && current.author === author && revision === `urn:rezics:content:revision:${current.revisionId}`) {
+      const handles = [...new Set([...current.body.matchAll(/(?:^|[^\p{L}\p{N}_])@([a-z0-9_]{3,30})\b/giu)]
+        .map(match => match[1]!.toLowerCase()))].slice(0, 20);
+      if (handles.length) {
+        const mentioned = (await this.access.query<{ agent_id: string }>(`SELECT agent_id
+          FROM access.agent_handle WHERE handle = ANY($1::text[]) AND state = 'current'
+          ORDER BY agent_id LIMIT 21`, [handles])).rows;
+        if (mentioned.length > 20) throw new Error('mention target bound exceeded');
+        const recipients = new Set<string>();
+        for (const agent of mentioned) {
+          if (agent.agent_id === author) continue;
+          for (const id of await represented(this.access, agent.agent_id, actor)) recipients.add(id);
+        }
+        if (recipients.size > PRODUCER_COST.recipientsPerEvent) throw new Error('mention recipient bound exceeded');
+        if (recipients.size) events.push(event('mention', [...recipients]));
+      }
+    }
+    return events;
   }
 
   async runRelayOnce(): Promise<number> {
@@ -262,8 +286,9 @@ export class NotificationProducer {
       if (events.length !== batch.event_count) throw new Error('relay batch is incomplete');
       let produced = 0;
       for (const event of events) {
-        const notice = await this.replyNotification(event.envelope);
-        if (notice) { await this.notifications.enqueue(notice); produced++; }
+        for (const notice of await this.replyNotifications(event.envelope)) {
+          await this.notifications.enqueue(notice); produced++;
+        }
       }
       await client.query(`UPDATE relay.notification_producer_cursor SET sequence = $2,
         updated_at = clock_timestamp() WHERE consumer = $1`, [cursorName, batch.sequence]);
