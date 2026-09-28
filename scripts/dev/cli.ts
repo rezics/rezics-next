@@ -589,14 +589,15 @@ async function main(): Promise<void> {
     console.log(compose(options, ['ps', '--all'], runtimeEnv()));
     return;
   }
-  if (command === 'stack:down' || command === 'stack:reset') {
+  if (command === 'stack:stop' || command === 'stack:down' || command === 'stack:reset') {
     const options = parseOptions(args);
     const dir = stackDirectory(root, options);
     if (!existsSync(join(dir, 'compose.env'))) {
       if (command === 'stack:reset') forgetQaStack(options);
       console.log(`${projectName(options)} has no saved stack`); return;
     }
-    compose(options, command === 'stack:reset' ? ['down', '--volumes', '--remove-orphans'] : ['down'], runtimeEnv());
+    compose(options, command === 'stack:stop' ? ['stop']
+      : command === 'stack:reset' ? ['down', '--volumes', '--remove-orphans'] : ['down'], runtimeEnv());
     if (command === 'stack:reset') {
       const apps = readEnv(join(dir, 'apps.env'));
       rmSync(apps.MAIN_OBJECT_DIRECTORY, { recursive: true, force: true });

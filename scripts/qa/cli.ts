@@ -71,7 +71,8 @@ interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMat
 // unless --keep, so finished shards release their capacity early.
 async function runShard(tier: StackTier, projectRunId: string, files: string[], flags: string[],
   budget: number, isolated = false,
-  startStack?: <T>(work: () => Promise<T>) => Promise<T>): Promise<ShardRun> {
+  startStack?: <T>(work: () => Promise<T>) => Promise<T>,
+  deferCleanup?: (cleanup: Promise<void>) => void): Promise<ShardRun> {
   const needsStack = tier !== 'fault/recovery' || !files.every(file => selfManagedFaultFiles.has(file));
   const persistent = tier === 'integration' && files.some(file => commandOnlyIntegrationFiles.has(file));
   const stackArgs = ['--profile', 'qa', '--run-id', projectRunId, ...(persistent ? ['--persistent'] : [])];
@@ -85,9 +86,19 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
       writeFileSync(join(logs, `${label}-stack.log`), stackLogs.output);
     }
     if (!options.keep && needsStack) {
-      const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs], 120_000);
-      record.cleanupMs = down.elapsedMs;
-      if (down.ok) started.splice(started.indexOf(projectRunId), 1);
+      const reset = async () => {
+        const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs], 120_000);
+        record.cleanupMs = down.elapsedMs;
+        if (down.ok) started.splice(started.indexOf(projectRunId), 1);
+      };
+      if (deferCleanup) {
+        // Release the live-service capacity only after every container stops.
+        // Removing stopped containers/networks can overlap the next fresh setup.
+        const stopped = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:stop', ...stackArgs], 120_000);
+        record.stopMs = stopped.elapsedMs;
+        if (stopped.ok) deferCleanup(reset());
+        else await reset();
+      } else await reset();
     }
     record.status = run.ok ? 'passed' : 'failed';
     return { record, ...run };
@@ -183,6 +194,10 @@ async function runStackTier(tier: StackTier): Promise<void> {
     : Math.min(maximum, estimates.size, Math.max(
       shardCount(estimates, budget, maximum) + Number(isolated > 0 && isolated < estimates.size), isolated));
   const slots = acquireQaSlots(goalSlotDirectory(root), wanted);
+  const cleanups: Promise<void>[] = [];
+  const deferCleanup = tier === 'integration' ? (cleanup: Promise<void>) => {
+    cleanups.push(cleanup.catch(error => { errors.push(`Integration cleanup failed: ${String(error)}`); }));
+  } : undefined;
   mkdirSync(join(directory, 'shards'), { recursive: true });
   try {
     const prefix = tier === 'integration' ? '' : 'f';
@@ -199,7 +214,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
       while (project < projects.length) {
         const index = project++;
         runs[index] = await runShard(tier, `${runId}-${prefix}${index + 1}`, projects[index]!, flags,
-          budget, false, startInitialStack);
+          budget, false, startInitialStack, deferCleanup);
       }
     }));
     const candidates = runs.filter(run => !run.ok && !run.timedOut && run.record.stage === 'test'
@@ -213,9 +228,10 @@ async function runStackTier(tier: StackTier): Promise<void> {
       while (next < candidates.length) {
         const index = next++;
         reruns[index] = await runShard(tier, `${runId}-${prefix}r${index + 1}`,
-          [candidates[index]!.file], flags, budget, true, startRerunStack);
+          [candidates[index]!.file], flags, budget, true, startRerunStack, deferCleanup);
       }
     }));
+    await Promise.all(cleanups);
     const replaced = new Map<string, ShardRun>();
     candidates.forEach(({ run, file, names, afterFiles, infrastructure }, index) => {
       const rerun = reruns[index];
@@ -251,7 +267,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
     const ok = executed && elapsedMs <= budget && runs.every(resolved) && completed.every(run => run.ok);
     tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs,
       shards: [...runs, ...completed].map(run => run.record) });
-  } finally { slots.release(); }
+  } finally { await Promise.all(cleanups); slots.release(); }
 }
 
 try {

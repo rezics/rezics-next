@@ -94,6 +94,9 @@ export const isolatedIntegrationFileList = [
   // Owner settlement and library discovery compare a complete fresh population.
   'tests/qa/integration/content-variant-order.test.ts',
   'tests/qa/integration/library-status.test.ts',
+  // Home replays prior receipts; public paging requires coherent card owners.
+  'tests/qa/integration/follows-authors.test.ts',
+  'tests/qa/integration/paging-authority-search.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
