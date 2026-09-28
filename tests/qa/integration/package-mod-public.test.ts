@@ -6,7 +6,7 @@ import { ModResolutionConflict, ModResolutionStore }
   from '../../../services/main/src/modules/package/mod-resolution.ts';
 import type { ModRequest } from '../../../services/main/src/modules/package/mod-profile.ts';
 
-test('public mod binding owns its private receipt and returns only bounded card facts', async () => {
+test('public mod binding owns its private receipt, lists releases and returns only bounded card facts', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL || !Bun.env.ACCESS_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
@@ -41,5 +41,27 @@ test('public mod binding owns its private receipt and returns only bounded card 
     expect([...await store.readCards([work])]).toEqual([[work, first]]);
     expect(JSON.stringify(first)).not.toContain('bytesBase64');
     expect(JSON.stringify(first)).not.toContain('sha256');
+
+    // A later release for another game version lists beside the first; the card shows the newest.
+    const older = await store.resolve(owner, `public-${randomUUID()}`, { ...request,
+      runtime: { loaderVersion: '0.16.10', gameVersion: '1.20.1' } });
+    const second = await store.bind(owner, older.resolution.resolution.slice(-36), work, 'Backport.');
+    expect(second).toMatchObject({ gameVersions: ['1.20.1'], latestRelease: '1.3.0' });
+    expect((await store.readCards([work])).get(work)).toEqual(second);
+    expect((await store.readListings([work])).get(work)).toMatchObject({ profile: 'mod-work-card-v2',
+      gameVersions: ['1.21.1', '1.20.1'], loaders: ['Fabric'], environment: 'client', latestRelease: '1.3.0' });
+    const page = await store.readReleases(work, 1);
+    expect(page.items.map(item => [item.gameVersions, item.changelog])).toEqual([[['1.20.1'], 'Backport.']]);
+    const rest = await store.readReleases(work, 1, page.next!);
+    expect(rest.items.map(item => item.gameVersions)).toEqual([['1.21.1']]);
+    expect(rest.next).toBeNull();
+    await expect(access.query('DELETE FROM access.mod_work_release WHERE work = $1', [work])).rejects.toThrow();
+
+    // A writer that still binds through migration 770 lists its release, with nothing undisclosed invented.
+    const legacy = `https://rezics.com/id/${randomUUID()}`;
+    await access.query(`INSERT INTO access.mod_work_binding (work, resolution_id, principal_id, card)
+      VALUES ($1, $2, $3, $4)`, [legacy, randomUUID(), owner, JSON.stringify(first)]);
+    expect((await store.readReleases(legacy, 20)).items).toMatchObject([{ profile: 'mod-release-v1', mod: null,
+      version: '1.3.0', gameVersions: ['1.21.1'], environment: null, dependencies: null, changelog: null }]);
   } finally { await Promise.all([content.end(), access.end()]); }
 });

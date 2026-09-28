@@ -18,7 +18,7 @@ export const zoneHubCard = t.Object({ profile: t.Literal('hub-work-card-v1'),
   preview: t.String({ maxLength: 240 }), copyText: t.String({ maxLength: 65_536 }) });
 
 export const ZONE_MODULE_COST = { pageSize: 20, candidateRows: 21, typeRows: 160, creditsPerWork: 3,
-  serialHeads: 20, summaryBatches: 2, replyReviewChecks: 40, contentRevisions: 20,
+  serialHeads: 20, summaryBatches: 2, chapterSummaryBatches: 1, chapterTimeBatches: 1, replyReviewChecks: 40, contentRevisions: 20,
   contentBytes: 20 * 1_048_576, creditQueries: 20, retainedAuthorKeys: 60,
   graphCalls: 160, graphBytes: 4 * 1024 * 1024,
   deadlineMs: 10_000 } as const;
@@ -36,7 +36,11 @@ export const zoneDecisionPage = t.Object({ profile: t.Literal('zone-recent-decis
     semanticRuleChange: t.Integer({ minimum: 0 }), basis: t.Literal('exact-page') }) });
 export const zoneChapterPage = t.Object({ profile: t.Literal('zone-latest-chapters-v1'), realm: readId,
   items: t.Array(t.Object({ work: t.Object({ ...workCard.properties,
-    primaryCredits: t.Array(discoveryCredit, { maxItems: ZONE_MODULE_COST.creditsPerWork }) }), chapter: readId, publication: readId,
+    primaryCredits: t.Array(discoveryCredit, { maxItems: ZONE_MODULE_COST.creditsPerWork }) }), chapter: readId,
+    /** The chapter's own title in the requested language; null when it has no public name. */
+    chapterTitle: t.Nullable(readName),
+    /** When Content recorded the chapter's current text; null until the serial projection has it. */
+    chapterUpdatedAt: t.Nullable(t.String({ format: 'date-time' })), publication: readId,
     contentRevision: t.String(), language: t.String(), dataEpoch: t.String(), sequence: t.String() }),
   { maxItems: ZONE_MODULE_COST.pageSize }), ...pageFields });
 export const zoneReplyPage = t.Object({ profile: t.Union([
@@ -63,36 +67,57 @@ export const zoneEditorLists = t.Object({ profile: t.Literal('zone-editor-lists-
  * summary batch (64); Zones larger than the window report lower-bound matches.
  */
 export const ZONE_BROWSE_COST = { windowRows: 60, pageSize: ZONE_MODULE_COST.pageSize, typeRows: 240,
-  summaryBatches: 2, listingBatches: 1, serialStatBatches: 1, serialSummaryBatches: 1,
+  summaryBatches: 3, listingBatches: 1, serialStatBatches: 2, serialSummaryBatches: 1, tagBatches: 1,
   creditQueries: ZONE_MODULE_COST.pageSize, filterValues: 8, textCharacters: 100 } as const;
 export const zoneBrowseSorts = ['relevance', 'newest', 'updated'] as const;
 export type ZoneBrowseSort = (typeof zoneBrowseSorts)[number];
+/**
+ * Length bands as novel sites offer them, in words (characters for CJK text),
+ * each `min-max` inclusive or open-ended: what a `length` Condition may name.
+ */
+export const zoneLengthBands = ['0-99999', '100000-299999', '300000-999999', '1000000-'] as const;
 const modLoader = t.Union([t.Literal('Fabric'), t.Literal('Forge'), t.Literal('NeoForge')]);
 const environmentValue = t.Union([t.Literal('client'), t.Literal('server')]);
 const gameVersion = t.String({ pattern: '^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$' });
 const workType = t.Union(WORK_SEMANTIC_TYPES.map(value => t.Literal(value)));
+const status = t.Union([t.Literal('ongoing'), t.Literal('completed'), t.Literal('hiatus')]);
 const values = <T extends Parameters<typeof t.Array>[0]>(item: T) =>
   t.Optional(t.Array(item, { minItems: 1, maxItems: ZONE_BROWSE_COST.filterValues, uniqueItems: true }));
 /** Conditions as query parameters: values within a Facet match any, Facets match all. */
 export const zoneBrowseQuery = t.Object({ language: pageQuery.language, limit: pageQuery.limit,
   cursor: pageQuery.cursor, q: t.Optional(t.String({ minLength: 1, maxLength: ZONE_BROWSE_COST.textCharacters })),
   sort: t.Optional(t.Union(zoneBrowseSorts.map(value => t.Literal(value)))),
-  type: values(workType), loader: values(modLoader), gameVersion: values(gameVersion),
-  environment: values(environmentValue) }, { additionalProperties: false });
-/** The Facets a Zone browse page filters by, as FilterDocument Conditions name them. */
-export const zoneBrowseFacets = ['type', 'mod-loader', 'mod-game-version', 'mod-environment'] as const;
+  type: values(workType), concept: values(readId), status: values(status),
+  length: t.Optional(t.String({ pattern: '^(0|[1-9][0-9]{0,9})-([1-9][0-9]{0,9})?$' })),
+  loader: values(modLoader), gameVersion: values(gameVersion), environment: values(environmentValue) },
+{ additionalProperties: false });
+/**
+ * The Facets a Zone browse page filters by, named as FilterDocument Conditions
+ * name them. `type` and `concept` are admitted Facets (GET /v1/facets); the
+ * others read Main facts no admitted Facet reaches yet and keep Facet-shaped names.
+ */
+export const zoneBrowseFacets = ['type', 'concept', 'status', 'length', 'modLoader', 'modGameVersion',
+  'modEnvironment'] as const;
 export type ZoneBrowseFacet = (typeof zoneBrowseFacets)[number];
-const condition = t.Object({ facet: t.Union(zoneBrowseFacets.map(value => t.Literal(value))),
-  any: t.Array(t.String(), { minItems: 1, maxItems: ZONE_BROWSE_COST.filterValues }) });
-const facetValues = t.Array(t.Object({ value: t.String(), count: t.Integer({ minimum: 0 }) }),
-  { maxItems: ZONE_BROWSE_COST.windowRows });
+const condition = t.Union([t.Object({ facet: t.Union(zoneBrowseFacets.filter(facet => facet !== 'length')
+  .map(value => t.Literal(value))), any: t.Array(t.String(), { minItems: 1, maxItems: ZONE_BROWSE_COST.filterValues }) }),
+t.Object({ facet: t.Literal('length'), range: t.Object({ min: t.String(), max: t.Optional(t.String()) }) })]);
+const facetValues = t.Array(t.Object({ value: t.String(), count: t.Integer({ minimum: 0 }),
+  /** A Concept's name in the requested language; other values are labelled by the client's Facet vocabulary. */
+  name: t.Optional(readName) }), { maxItems: ZONE_BROWSE_COST.windowRows });
 export const zoneBrowsePage = t.Object({ profile: t.Literal('zone-browse-v1'), realm: readId,
   /** The Query as Main applied it: text, sort and the Filter in FilterDocument form. */
   query: t.Object({ text: t.Nullable(t.String()), sort: t.Union(zoneBrowseSorts.map(value => t.Literal(value))),
     filter: t.Object({ all: t.Array(condition, { maxItems: zoneBrowseFacets.length }) }) }),
   /** How many of the window's Works each value would match, with the other Facets' Conditions applied. */
-  facets: t.Object({ type: facetValues, 'mod-loader': facetValues, 'mod-game-version': facetValues,
-    'mod-environment': facetValues }),
+  facets: t.Object(Object.fromEntries(zoneBrowseFacets.map(facet => [facet, facetValues])) as
+    Record<ZoneBrowseFacet, typeof facetValues>),
+  /**
+   * Tags come from the Realm's Discovery projection: `current`, `stale` (built
+   * before the latest change; Works filtered by Tags are withheld until it catches
+   * up, as Discover withholds them) or `unavailable`.
+   */
+  tags: t.Union([t.Literal('current'), t.Literal('stale'), t.Literal('unavailable')]),
   matches: t.Object({ value: t.Integer({ minimum: 0 }),
     kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }),
   /** The newest adoptions read; `complete` when the Realm has no older ones. */

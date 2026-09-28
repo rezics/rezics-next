@@ -3,20 +3,25 @@ import { primaryDiscoveryCredits } from '../discovery/credits.ts';
 import { readEpochOrder } from '../discovery/lineage.ts';
 import { readPublicHubCards } from '../hub/public-card.ts';
 import type { ModListing } from '../package/mod-release.ts';
+import { RecommendationUnavailable } from '../recommendation/derived-generation.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
-import { ZONE_BROWSE_COST, type ZoneBrowseFacet, type zoneBrowseQuery, type ZoneBrowseSort }
-  from './contract.ts';
+import { ZONE_BROWSE_COST, type ZoneBrowseFacet, zoneBrowseFacets, type zoneBrowseQuery, type ZoneBrowseSort,
+  zoneLengthBands } from './contract.ts';
 import { displayZoneCredits, zoneCreditNames } from './read.ts';
 
 type Query = Static<typeof zoneBrowseQuery>;
+type Status = 'ongoing' | 'completed' | 'hiatus';
 
 /** One window candidate with what its Conditions and sorts read. */
 export interface BrowseCandidate {
   work: string; order: number; title: string; types: string[];
+  /** Accepted Concepts, or null when the Realm's Tags could not be read. */
+  concepts: string[] | null;
+  status: Status | null; words: number | null;
   listing: ModListing | null; updatedAt: string | null;
 }
 
@@ -32,33 +37,60 @@ export function textRelevance(text: string, title: string): number {
   return name.includes(query) ? 1 : 0;
 }
 
-/** Each Facet's test for one candidate; an empty selection holds for every candidate. */
-const tests: Record<ZoneBrowseFacet, (item: BrowseCandidate, value: string) => boolean> = {
-  type: (item, value) => item.types.includes(value),
-  'mod-loader': (item, value) => item.listing?.loaders.includes(value as never) ?? false,
-  'mod-game-version': (item, value) => item.listing?.gameVersions.includes(value) ?? false,
-  // A mod for both sides serves a reader filtering by either.
-  'mod-environment': (item, value) => item.listing?.environment === value
-    || item.listing?.environment === 'client-and-server',
+/** A `min-max` length band (max optional) as inclusive bounds. */
+export function lengthBand(value: string): { min: number; max: number | null } {
+  const [min, max] = value.split('-');
+  return { min: Number(min), max: max ? Number(max) : null };
+}
+const inBand = (words: number | null, value: string) => {
+  const band = lengthBand(value);
+  return words !== null && words >= band.min && (band.max === null || words <= band.max);
 };
-const valuesOf: Record<ZoneBrowseFacet, (item: BrowseCandidate) => readonly string[]> = {
-  type: item => item.types,
-  'mod-loader': item => item.listing?.loaders ?? [],
-  'mod-game-version': item => item.listing?.gameVersions ?? [],
-  'mod-environment': item => !item.listing?.environment ? []
-    : item.listing.environment === 'client-and-server' ? ['client', 'server'] : [item.listing.environment],
+
+/** Each Facet's test for one candidate and the values it counts for; an empty selection holds for every candidate. */
+const facets: Record<ZoneBrowseFacet, { test: (item: BrowseCandidate, value: string) => boolean;
+  values: (item: BrowseCandidate) => readonly string[] }> = {
+  type: { test: (item, value) => item.types.includes(value), values: item => item.types },
+  concept: { test: (item, value) => item.concepts?.includes(value) ?? false, values: item => item.concepts ?? [] },
+  status: { test: (item, value) => item.status === value, values: item => item.status ? [item.status] : [] },
+  length: { test: (item, value) => inBand(item.words, value),
+    values: item => zoneLengthBands.filter(band => inBand(item.words, band)) },
+  modLoader: { test: (item, value) => item.listing?.loaders.includes(value as never) ?? false,
+    values: item => item.listing?.loaders ?? [] },
+  modGameVersion: { test: (item, value) => item.listing?.gameVersions.includes(value) ?? false,
+    values: item => item.listing?.gameVersions ?? [] },
+  // A mod for both sides serves a reader filtering by either.
+  modEnvironment: { test: (item, value) => item.listing?.environment === value
+    || item.listing?.environment === 'client-and-server',
+  values: item => !item.listing?.environment ? []
+    : item.listing.environment === 'client-and-server' ? ['client', 'server'] : [item.listing.environment] },
 };
 
 export type BrowseFilter = Partial<Record<ZoneBrowseFacet, readonly string[]>>;
 
-export function browseFilter(query: Pick<Query, 'type' | 'loader' | 'gameVersion' | 'environment'>): BrowseFilter {
-  return { type: query.type, 'mod-loader': query.loader, 'mod-game-version': query.gameVersion,
-    'mod-environment': query.environment };
+export function browseFilter(query: Omit<Query, 'q' | 'sort' | 'limit' | 'cursor' | 'language'>): BrowseFilter {
+  return { type: query.type, concept: query.concept, status: query.status,
+    length: query.length ? [query.length] : undefined, modLoader: query.loader,
+    modGameVersion: query.gameVersion, modEnvironment: query.environment };
+}
+
+/** The Filter as a FilterDocument: one Condition per chosen Facet, a length as its range. */
+type Condition = { facet: Exclude<ZoneBrowseFacet, 'length'>; any: string[] }
+  | { facet: 'length'; range: { min: string; max?: string } };
+
+export function filterDocument(filter: BrowseFilter): { all: Condition[] } {
+  return { all: zoneBrowseFacets.flatMap((facet): Condition[] => {
+    const chosen = filter[facet];
+    if (!chosen?.length) return [];
+    if (facet !== 'length') return [{ facet, any: [...chosen] }];
+    const band = lengthBand(chosen[0]!);
+    return [{ facet, range: { min: String(band.min), ...band.max === null ? {} : { max: String(band.max) } } }];
+  }) };
 }
 
 const holds = (item: BrowseCandidate, filter: BrowseFilter, except?: ZoneBrowseFacet) =>
-  (Object.keys(tests) as ZoneBrowseFacet[]).every(facet => facet === except || !filter[facet]?.length
-    || filter[facet]!.some(value => tests[facet](item, value)));
+  zoneBrowseFacets.every(facet => facet === except || !filter[facet]?.length
+    || filter[facet]!.some(value => facets[facet].test(item, value)));
 
 /**
  * The matching candidates in the requested order, and each Facet's value
@@ -73,31 +105,56 @@ export function browseWindow(candidates: readonly BrowseCandidate[], filter: Bro
   const time = (item: BrowseCandidate) => item.updatedAt ? Date.parse(item.updatedAt) : Number.NEGATIVE_INFINITY;
   found.sort(sort === 'relevance' ? (a, b) => relevance.get(b.work)! - relevance.get(a.work)! || newest(a, b)
     : sort === 'updated' ? (a, b) => time(b) - time(a) || newest(a, b) : newest);
-  const facets = Object.fromEntries((Object.keys(tests) as ZoneBrowseFacet[]).map(facet => {
-    const counts = new Map<string, number>();
+  const counts = Object.fromEntries(zoneBrowseFacets.map(facet => {
+    const tally = new Map<string, number>();
     for (const item of candidates) {
       if (relevance.get(item.work)! > 0 && holds(item, filter, facet)) {
-        for (const value of new Set(valuesOf[facet](item))) counts.set(value, (counts.get(value) ?? 0) + 1);
+        for (const value of new Set(facets[facet].values(item))) tally.set(value, (tally.get(value) ?? 0) + 1);
       }
     }
     // Chosen values stay listed even when nothing matches them, so they can be cleared.
-    for (const value of filter[facet] ?? []) if (!counts.has(value)) counts.set(value, 0);
-    return [facet, [...counts].map(([value, count]) => ({ value, count }))
-      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))];
+    for (const value of filter[facet] ?? []) if (!tally.has(value)) tally.set(value, 0);
+    const listed = [...tally].map(([value, count]) => ({ value, count }));
+    // Length bands keep their own order; other values list the most common first.
+    return [facet, facet === 'length'
+      ? listed.sort((a, b) => zoneLengthBands.indexOf(a.value as never) - zoneLengthBands.indexOf(b.value as never))
+      : listed.sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))];
   })) as Record<ZoneBrowseFacet, { value: string; count: number }[]>;
-  return { found, facets };
+  return { found, facets: counts };
 }
 
 const later = (a: string | null | undefined, b: string | null | undefined) =>
   !a ? b ?? null : !b ? a : Date.parse(a) >= Date.parse(b) ? a : b;
 
+/** The window's accepted Concepts from the Realm's Discovery projection, as Discover's Realm scope reads them. */
+async function readTags(session: WorkReadSession, realm: string, works: readonly string[]):
+  Promise<{ state: 'current' | 'stale' | 'unavailable'; concepts: Map<string, string[]> }> {
+  const projection = session.deps.discovery;
+  if (!projection) return { state: 'unavailable', concepts: new Map() };
+  try {
+    const active = await projection.active({ scope: 'realm', realm, context: null, owner: null }, session.position);
+    const concepts = new Map<string, string[]>();
+    for (const row of await projection.workTerms(active, works)) {
+      if (!works.includes(row.work) || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(row.concept ?? '')) {
+        throw new WorkReadUnavailable('Zone browse Tags are inconsistent');
+      }
+      concepts.set(row.work, [...new Set([...concepts.get(row.work) ?? [], row.concept])]);
+    }
+    return { state: active.stale ? 'stale' : 'current', concepts };
+  } catch (error) {
+    if (error instanceof RecommendationUnavailable) return { state: 'unavailable', concepts: new Map() };
+    throw error;
+  }
+}
+
 /**
  * A Zone's browse page. One candidate query reads the Realm's newest
- * ZONE_BROWSE_COST.windowRows public adoptions (the graph sorts D Realm
- * decisions, O(D log D), as the other module reads do); one type query, one
- * summary batch, one listing batch and one serial statistics batch read the
- * window; one page of at most 20 is hydrated with its serial summaries,
- * credits, names and Hub cards, then fenced by a second summary batch.
+ * ZONE_BROWSE_COST.windowRows public adoptions with their completion status
+ * (the graph sorts D Realm decisions, O(D log D), as the other module reads
+ * do); one type query, one summary batch, one listing batch, one serial
+ * statistics batch and one Tags batch read the window; one page of at most 20
+ * is hydrated with its serial summaries, credits, names and Hub cards, then
+ * fenced by a second summary batch. A third names at most 60 Concepts.
  */
 export async function readZoneBrowse(session: WorkReadSession, realm: string, query: Query) {
   await readRealmBasis(session, realm);
@@ -105,8 +162,12 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   const sort: ZoneBrowseSort = query.sort ?? (text ? 'relevance' : 'newest');
   if (sort === 'relevance' && !text) throw new WorkReadInvalid('Relevance needs search text');
   const filter = browseFilter(query);
+  if (query.length) {
+    const band = lengthBand(query.length);
+    if (band.max !== null && band.max < band.min) throw new WorkReadInvalid('Length range is empty');
+  }
   const limit = session.options.limit ?? ZONE_BROWSE_COST.pageSize;
-  const binding = ['zone-browse-v1', realm, text, sort, filter, session.options.language ?? null];
+  const binding = ['zone-browse-v1', realm, text, sort, filterDocument(filter), session.options.language ?? null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const offset = cursor ? Number(cursor.after) : 0;
   if (!Number.isSafeInteger(offset) || offset < 0 || offset >= ZONE_BROWSE_COST.windowRows) {
@@ -114,12 +175,13 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   }
   const epochs = await readEpochOrder(session);
   const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?evidence ?revisionEpoch
-    ?sequence ?epochOrder WHERE {
+    ?sequence ?epochOrder ?status WHERE {
     ${epochs}
     GRAPH ${iri(GRAPHS.current)} {
       ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
         rv:mainVersion ?main ; rv:selectionHead ?evidence .
       ?work rv:head ?head .
+      OPTIONAL { ?work rv:completionStatus ?status }
       ?contribution rv:publicationHead ?decision . }
     GRAPH ${iri(GRAPHS.revisions)} { ?evidence a rv:PublicationSelection ;
       rv:component ?slot ; rv:context ${iri(realm)} ; rv:work ?work ;
@@ -140,7 +202,8 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   } ORDER BY ?epochOrder DESC(?sequence) STR(?evidence) LIMIT ${ZONE_BROWSE_COST.windowRows + 1}`,
   ZONE_BROWSE_COST.windowRows + 1);
   if (rows.some(row => !row.work || !row.head || !row.main || !row.evidence || !row.revisionEpoch
-    || !/^\d+$/.test(row.sequence?.value ?? '') || !/^\d+$/.test(row.epochOrder?.value ?? ''))
+    || !/^\d+$/.test(row.sequence?.value ?? '') || !/^\d+$/.test(row.epochOrder?.value ?? '')
+    || row.status && !['ongoing', 'completed', 'hiatus'].includes(row.status.value))
     || new Set(rows.map(row => row.work!.value)).size !== rows.length) {
     throw new WorkReadUnavailable('Zone browse candidates are ambiguous');
   }
@@ -157,23 +220,32 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
     }
     types.set(row.work.value, [...types.get(row.work.value) ?? [], row.type.value].sort());
   }
-  const [summaries, listings, stats] = await Promise.all([session.summaries(ids),
+  const [summaries, listings, stats, tags] = await Promise.all([session.summaries(ids),
     session.deps.packageModResolutions?.readListings(ids) ?? new Map<string, ModListing>(),
     session.deps.serialStats?.batch(ids, session.position.sequence)
-      ?? new Map<string, { lastUpdatedAt: string | null }>()]);
+      ?? new Map<string, { wordCount: number | null; lastUpdatedAt: string | null }>(),
+    readTags(session, realm, ids)]);
+  if (filter.concept?.length && tags.state === 'unavailable') {
+    throw new WorkReadUnavailable('Zone Tags are unavailable');
+  }
   const candidates = window.flatMap((row, order): BrowseCandidate[] => {
     const summary = summaries[order], work = row.work!.value;
     if (summary?.status !== 'available' || summary.disclosure !== 'public') return [];
-    const listing = listings.get(work) ?? null;
-    return [{ work, order, title: summary.name.value, types: types.get(work) ?? [], listing,
-      updatedAt: later(listing?.updatedAt, stats.get(work)?.lastUpdatedAt) }];
+    const listing = listings.get(work) ?? null, stat = stats.get(work);
+    return [{ work, order, title: summary.name.value, types: types.get(work) ?? [],
+      concepts: tags.state === 'unavailable' ? null : tags.concepts.get(work) ?? [],
+      status: (row.status?.value ?? null) as Status | null, words: stat?.wordCount ?? null, listing,
+      updatedAt: later(listing?.updatedAt, stat?.lastUpdatedAt) }];
   });
-  const { found, facets } = browseWindow(candidates, filter, text, sort);
+  const { found: matched, facets: counts } = browseWindow(candidates, filter, text, sort);
+  // Tags built before the latest change are not applied, as Discover withholds its term matches.
+  const found = filter.concept?.length && tags.state !== 'current' ? [] : matched;
   const page = found.slice(offset, offset + limit), pageIds = page.map(item => item.work);
-  const serial = await readSerialSummaries(session, page.flatMap(item => {
+  const conceptIds = counts.concept.map(item => item.value).slice(0, ZONE_BROWSE_COST.windowRows);
+  const [serial, conceptNames] = await Promise.all([readSerialSummaries(session, page.flatMap(item => {
     const summary = summaries[item.order];
     return summary?.status === 'available' && summary.type === 'work' ? [item.work] : [];
-  }));
+  })), session.summaries(conceptIds)]);
   const hydrated = await Promise.all(page.map(async item => {
     const row = window[item.order]!, summary = summaries[item.order]!;
     if (summary.status !== 'available') throw new WorkReadUnavailable('Zone browse summary moved');
@@ -194,12 +266,17 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   const items = hydrated.map(item => ({ ...item,
     primaryCredits: displayZoneCredits(item.primaryCredits, names.agents, names.sources),
     mod: listings.get(item.id) ?? null, hub: hub.get(item.id) ?? null }));
+  // A Concept shows under its public name only; one without is left out rather than shown as an IRI.
+  const concept = counts.concept.flatMap((item, index) => {
+    const summary = conceptNames[index];
+    return summary?.status === 'available' && summary.disclosure === 'public' && summary.type === 'concept'
+      ? [{ ...item, name: summary.name }] : [];
+  });
   await readRealmBasis(session, realm);
   const complete = rows.length <= ZONE_BROWSE_COST.windowRows;
   const next = offset + limit < found.length ? encodeReadCursor(binding, session.position, String(offset + limit)) : null;
   return { profile: 'zone-browse-v1' as const, realm,
-    query: { text, sort, filter: { all: (Object.keys(tests) as ZoneBrowseFacet[]).flatMap(facet =>
-      filter[facet]?.length ? [{ facet, any: [...filter[facet]!] }] : []) } },
-    facets, matches: { value: found.length, kind: complete ? 'exact' as const : 'lower-bound' as const },
+    query: { text, sort, filter: filterDocument(filter) }, facets: { ...counts, concept }, tags: tags.state,
+    matches: { value: found.length, kind: complete ? 'exact' as const : 'lower-bound' as const },
     window: { scanned: window.length, complete }, ...pageResult(session, items, next) };
 }

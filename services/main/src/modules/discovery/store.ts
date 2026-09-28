@@ -378,6 +378,26 @@ export class DiscoveryProjection {
     });
   }
 
+  /** The accepted Concepts of at most 64 Works, one primary-key range per Work: a Zone browse window's Tags. */
+  async workTerms(row: DiscoveryGeneration, works: readonly string[]) {
+    if (works.length > 64 || new Set(works).size !== works.length
+      || works.some(work => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work))) {
+      throw new RecommendationUnavailable('Work term batch is out of bounds');
+    }
+    const bound = works.length * DISCOVERY_COST.termsPerWork;
+    return inAccess(this.pool, async client => {
+      const fence = await sourceFence(client);
+      if (fence.generation !== row.recovery_generation) throw new RecommendationRestart('Discovery recovery basis expired');
+      if (!works.length) return [];
+      const rows = (await client.query<{ work: string; term: string; concept: string }>(`
+        SELECT work, term, payload->'classification'->>'concept' AS concept FROM access.discovery_entry
+        WHERE generation_id = $1 AND work = ANY($2::text[]) AND work_type = '' AND term <> ''
+        LIMIT ${bound + 1}`, [row.generation_id, works])).rows;
+      if (rows.length > bound) throw new RecommendationUnavailable('Work terms exceed their bound');
+      return rows;
+    });
+  }
+
   async popular(row: DiscoveryGeneration, limit: number) {
     return inAccess(this.pool, async client => {
       const fence = await sourceFence(client);

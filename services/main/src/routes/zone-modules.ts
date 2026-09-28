@@ -96,6 +96,6 @@ export function zoneModuleRoutes(work: MainWorkDependencies) {
       try { return Response.json(await workRead(work, new Request(request.url), { language: options.language,
         limit: options.limit, cursor: options.cursor },
       session => readZoneBrowse(session, id(path.realm), options)), { headers }); }
-      catch (error) { return workReadError(error); }
+      catch (error) { return discoveryError(error); }
     });
 }

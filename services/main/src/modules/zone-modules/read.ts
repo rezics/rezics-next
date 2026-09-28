@@ -153,7 +153,8 @@ export async function readZoneDecisions(session: WorkReadSession, realm: string)
 }
 
 /** Current public chapter publications only. The graph relation may scan D
- * placements and sort them O(D log D); hydration is bounded to one page. */
+ * placements and sort them O(D log D); hydration is bounded to one page, and
+ * one more summary batch and one serial time batch name and date its chapters. */
 export async function readZoneChapters(session: WorkReadSession, realm: string) {
   await readRealmBasis(session, realm);
   const limit = session.options.limit ?? ZONE_MODULE_COST.pageSize;
@@ -231,9 +232,18 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
     dataEpoch: row.revisionEpoch!.value, sequence: row.sequence!.value };
   }));
   const visible = hydrated.filter((item): item is NonNullable<typeof item> => item !== null);
-  const names = await zoneCreditNames(session, visible.flatMap(item => item.work.primaryCredits));
-  const items = visible.map(item => ({ ...item, work: { ...item.work,
-    primaryCredits: displayZoneCredits(item.work.primaryCredits, names.agents, names.sources) } }));
+  const chapters = [...new Set(visible.map(item => item.chapter))];
+  const [names, chapterNames, times] = await Promise.all([
+    zoneCreditNames(session, visible.flatMap(item => item.work.primaryCredits)),
+    session.summaries(chapters),
+    session.deps.serialStats?.chapterTimes(chapters, session.position.sequence) ?? new Map<string, string>()]);
+  const items = visible.map(item => {
+    const chapter = chapterNames[chapters.indexOf(item.chapter)];
+    return { ...item, work: { ...item.work,
+      primaryCredits: displayZoneCredits(item.work.primaryCredits, names.agents, names.sources) },
+    chapterTitle: chapter?.status === 'available' && chapter.disclosure === 'public' ? chapter.name : null,
+    chapterUpdatedAt: times.get(item.chapter) ?? null };
+  });
   await readRealmBasis(session, realm);
   const last = page.at(-1);
   return { profile: 'zone-latest-chapters-v1' as const, realm,
