@@ -148,8 +148,10 @@ export class ReadRankingProjection {
     const events = await this.content.readOutbox(owner.dataEpoch, after, RANKING_COST.sourceEvents);
     const reviewAfter = reset ? '0' : existing.review_position;
     const reviewEvents = (await this.access.query<{ position: string; work: string;
-      occurred_at: Date; delta: number }>(`SELECT position::text, work, occurred_at, delta
-      FROM access.reader_review_rank_change WHERE position > $1 ORDER BY position LIMIT $2`,
+      occurred_at: Date; delta: number }>(`SELECT c.position::text, c.work, c.occurred_at, c.delta
+      FROM access.reader_review_rank_change c WHERE c.position > $1
+      -- Qualified: a bare name would sort by the text alias, putting 10 before 5.
+      ORDER BY c.position LIMIT $2`,
     [reviewAfter, RANKING_COST.sourceEvents])).rows;
     if (!reviewEvents.length && BigInt(reviewAfter) < BigInt(reviewHead.position)) {
       throw new RankingProjectionUnavailable('Review ranking source has a gap');

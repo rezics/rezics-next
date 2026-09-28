@@ -439,6 +439,8 @@ const discoveryWorker = relayPool ? new DiscoveryRefreshWorker({ environment, ac
 new DiscoveryRefreshStore(pool), new DiscoveryProjection(pool)) : undefined;
 app.listen({ hostname: '127.0.0.1', port });
 const feedWorker = relayPool ? new FeedRefreshWorker({ environment, account, access, content,
+  // Without the review owner the worker never ingests review events, and Home reports catching-up for good.
+  reviews: new ReaderReviews(pool),
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) }, new FeedStore(pool), relayPool) : undefined;
 feedWorker?.start();
 worker.start();
