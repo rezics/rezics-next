@@ -36,9 +36,10 @@ test('search credit batch caps each card while retaining later Works in the same
     expect(limit).toBe(192);
     return [1, 2, 3, 4].map(n => ({ work: field(one), id: field(id(n + 2)),
       key: field(`/authors/OL${n}A`), ordinal: field(String(n)) }))
-      .concat([{ work: field(two), id: field(id(9)), key: field('/authors/OL9A'), ordinal: field('1') }]);
-  } } as unknown as WorkReadSession;
+      .concat([{ work: field(two), id: field(id(9)), key: field('/authors/OL9A'), ordinal: field('1') }]).reverse();
+  }, deps: {} } as unknown as WorkReadSession;
   const cards = await searchPageCredits(session, [one, two]);
   expect(cards.get(one)).toHaveLength(3);
+  expect(cards.get(one)?.map(credit => credit.key)).toEqual(['/authors/OL1A', '/authors/OL2A', '/authors/OL3A']);
   expect(cards.get(two)).toMatchObject([{ key: '/authors/OL9A' }]);
 });

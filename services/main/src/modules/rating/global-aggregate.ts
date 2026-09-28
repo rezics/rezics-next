@@ -48,7 +48,7 @@ function contextPattern(kind: Kind, context: string): string {
 
 /** One read transaction for every component: each root plus at most 101 candidates.
  * Candidates do not require a head, so damaged or unsealed slots stay detectable. */
-export function standingComponentsQuery(env: WorkActivationEnvironment,
+function standingComponentsSelect(env: WorkActivationEnvironment,
   components: readonly { kind: Kind; context: string }[], target: Target): string {
   const branches = components.flatMap(({ kind, context }) => {
     const spec = KINDS[kind];
@@ -86,8 +86,7 @@ export function standingComponentsQuery(env: WorkActivationEnvironment,
       }
     }`];
   });
-  return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-  SELECT ?kind ?component ?epoch ?sequence ?owner ?contextRevision ?contextManifest ?question
+  return `SELECT ?kind ?component ?epoch ?sequence ?owner ?contextRevision ?contextManifest ?question
     ?contextEpoch ?contextSequence ?observation ?slot ?head ?availability ?value ?manifest ?evaluatedAt
     ?submittedAt ?originalSubmissionAt ?revisedAt ?revisionEpoch ?revisionSequence ?receipt ?digest
     ?predecessor WHERE {
@@ -100,10 +99,15 @@ export function standingComponentsQuery(env: WorkActivationEnvironment,
   } LIMIT ${components.length * 102 + 1}`;
 }
 
+export function standingComponentsQuery(env: WorkActivationEnvironment,
+  components: readonly { kind: Kind; context: string }[], target: Target): string {
+  return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>\n${standingComponentsSelect(env, components, target)}`;
+}
+
 /** Compare one Context's sealed Access inventory with the shared graph snapshot. */
 function verifyComponent(env: WorkActivationEnvironment, kind: Kind, context: string, target: Target,
   inventory: RatingAggregateInventory, root: Row, rows: readonly Row[], budget: RevisionReadBudget,
-  onlySlot?: string) {
+  onlySlot?: string, contexts?: Map<string, Record<string, unknown>>) {
   const spec = KINDS[kind];
   const epoch = root.epoch!.value, sequence = root.sequence!.value;
   const later = (dataEpoch: string, at: string) => dataEpoch === epoch && BigInt(at) > BigInt(sequence);
@@ -111,8 +115,10 @@ function verifyComponent(env: WorkActivationEnvironment, kind: Kind, context: st
     || root.contextEpoch?.value !== inventory.contextDataEpoch || root.contextSequence?.value !== inventory.contextSequence
     || root.receipt?.value !== inventory.contextReceipt || !root.contextManifest || root.question?.['xml:lang'] !== 'en'
     || later(inventory.contextDataEpoch, inventory.contextSequence)) unavailable();
-  const contextState = readComponentState(env.objectDirectory, root.contextManifest!.value, context,
-    spec.contextProfile, budget);
+  const contextKey = `${context}\0${root.contextManifest.value}\0${spec.contextProfile}`;
+  const contextState = contexts?.get(contextKey) ?? readComponentState(env.objectDirectory,
+    root.contextManifest.value, context, spec.contextProfile, budget);
+  contexts?.set(contextKey, contextState);
   if (kind === 'global' ? !isGlobalContextState(contextState, context, root.question!.value)
     : contextState.context !== context || contextState.realm !== inventory.realm
       || contextState.question !== root.question!.value || contextState.state !== 'active'
@@ -247,6 +253,65 @@ export async function queryWorkStandingRating(env: WorkActivationEnvironment, ac
   const result = await bounded(signal => snapshot(env, access,
     [{ kind: input.kind, context: input.context }], input, signal, input.onlySlot));
   return { ...result.components[0]!, sourcePosition: result.sourcePosition };
+}
+
+/** Search's page adapter preserves the single-Work sealed-inventory verifier.
+ * One graph transaction for <=64 targets, <=100 slots per target, one shared
+ * 1 MiB graph / 512 KiB manifest budget and one recovery fence. Access still
+ * owns each exact inventory; a missing, extra or damaged slot fails the page.
+ * Grouping/verification is O(targets + slots); the shared Context manifest is
+ * read and charged once, while each target retains its exact receipt checks. */
+export async function queryWorkStandingRatings(env: WorkActivationEnvironment, access: InventoryAccess,
+  input: { kind: Kind; context: string; targets: readonly Target[] }) {
+  if (input.targets.length > 64 || !nativeId.test(input.context)
+    || input.targets.some(target => !nativeId.test(target.work) || !nativeId.test(target.mainVersion))
+    || new Set(input.targets.map(target => target.work)).size !== input.targets.length
+    || new Set(input.targets.map(target => target.mainVersion)).size !== input.targets.length) {
+    throw new InvalidRatingAggregateQuery('invalid Work Rating batch');
+  }
+  return bounded(async signal => {
+    const values = new Map<string, Awaited<ReturnType<typeof queryWorkStandingRating>>>();
+    if (!input.targets.length) return values;
+    const inventories: RatingAggregateInventory[] = [];
+    for (const target of input.targets) {
+      const inventory = await access.readRatingAggregateInventory(input.context, target.mainVersion, signal);
+      if ((inventory.realm === GLOBAL_RATING_POPULATION_OWNER) !== (input.kind === 'global')) unavailable();
+      if (inventory.heads.length > MAX_RATING_AGGREGATE_SLOTS) {
+        throw new RatingAggregateBudgetExceeded('standing Rating population exceeds admitted bound');
+      }
+      inventories.push(inventory);
+    }
+    if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration)) unavailable();
+    const branches = input.targets.map(target => `{ {
+      ${standingComponentsSelect(env, [{ kind: input.kind, context: input.context }], target)}
+    } BIND(${iri(target.work)} AS ?targetWork) }`);
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      SELECT * WHERE { ${branches.join(' UNION ')} } LIMIT ${input.targets.length * 103 + 1}`,
+    GLOBAL_AGGREGATE_BUDGET.graphBytes)).results?.bindings ?? [];
+    const root = rows[0];
+    if (!root?.epoch || !/^\d+$/.test(root.sequence?.value ?? '')) unavailable();
+    const groups = new Map<string, Row[]>(input.targets.map(target => [target.work, []]));
+    for (const row of rows) {
+      const group = groups.get(row.targetWork?.value ?? '');
+      if (!group || row.epoch?.value !== root.epoch.value || row.sequence?.value !== root.sequence!.value
+        || row.component?.value !== input.kind || !['context', 'observation'].includes(row.kind?.value ?? '')) unavailable();
+      group.push(row);
+    }
+    const budget = { bytesLeft: GLOBAL_AGGREGATE_BUDGET.manifestBytes as number, signal };
+    const contexts = new Map<string, Record<string, unknown>>();
+    for (const [index, target] of input.targets.entries()) {
+      const own = groups.get(target.work)!;
+      const roots = own.filter(row => row.kind?.value === 'context');
+      if (roots.length !== 1) unavailable();
+      const component = verifyComponent(env, input.kind, input.context, target, inventories[index]!, roots[0]!,
+        own.filter(row => row.kind?.value === 'observation'), budget, undefined, contexts);
+      values.set(target.work, { ...component, sourcePosition: { datasetId: 'product',
+        dataEpoch: root.epoch.value, sequence: root.sequence!.value } });
+    }
+    if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal)) unavailable();
+    signal.throwIfAborted();
+    return values;
+  });
 }
 
 export async function queryRealmGlobalSynthesis(env: WorkActivationEnvironment, access: InventoryAccess,

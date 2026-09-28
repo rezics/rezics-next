@@ -28,6 +28,7 @@ import { decoratePhraseRelation } from '../modules/work/search-facets.ts';
 import { enrichSerialSearch } from '../modules/work/summary-serial.ts';
 import { enrichSearchCardPage } from '../modules/search/result-cards.ts';
 import { searchCardWindow } from '../modules/search/card-window.ts';
+import { withSearchGraphSnapshot } from '../modules/search/snapshot.ts';
 import { MAX_SEARCH_RESPONSE_BYTES } from '../modules/work/search-readiness.ts';
 import { assertPublicTextReady } from '../modules/work/search-readiness.ts';
 import { querySearchFields, normalizedSearchText, SEARCH_FIELD_COST, fenceSearchFields } from '../modules/search/fields.ts';
@@ -410,31 +411,33 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             return queryPublicContentPhrase(work.environment, work.contentProjection!.content,
               work.contentProjection!.cursor, work.contentProjection!.consumer, body);
           }
-          const selection = await presentationSelection(request);
-          const relation = body.profile === 'public-main-title-body-v1'
-            ? await queryPublicMainTitleBody(work.environment, body)
-            : body.profile === 'public-realm-classified-rated-phrase-v1'
-            ? await protectClassifiedResults(work,
-              await queryPublicRealmClassifiedRatedPhrase(work.environment, { ...body, publicFields }), body.context.id)
-            : body.profile === 'public-realm-phrase-v1'
-            ? await queryPublicRealmPhrase(work.environment, { ...body, publicFields })
-            : body.profile === 'public-main-phrase-v1'
-              ? await queryPublicMainPhrase(work.environment, { ...body, publicFields })
-              : body.profile === 'public-realm-classified-phrase-v1'
-                ? await protectClassifiedResults(work,
-                  await queryPublicRealmClassifiedPhrase(work.environment, { ...body, publicFields }), body.context.id)
-                : await protectClassifiedResults(work,
-                  await queryPublicMainClassifiedPhrase(work.environment, { ...body, publicFields }));
-          const complete = await decoratePhraseRelation(work.environment, await present(selection, relation), body);
-          const window = searchCardWindow(body, complete, selection?.generation);
-          const hydrated = await enrichSearchCardPage(work, request, window.page, body.language);
-          await fenceSearchFields(publicFields);
-          const result = { ...complete, cardWindow: window.cardWindow,
-            results: [...hydrated.results, ...complete.results.slice(window.cardWindow.hydrated)] };
-          if (Buffer.byteLength(JSON.stringify(result)) > MAX_SEARCH_RESPONSE_BYTES) {
-            throw new PublicQueryBudgetExceeded('Hydrated search response exceeds its byte bound');
-          }
-          return result;
+          return withSearchGraphSnapshot(work.environment, async () => {
+            const selection = await presentationSelection(request);
+            const relation = body.profile === 'public-main-title-body-v1'
+              ? await queryPublicMainTitleBody(work.environment, body)
+              : body.profile === 'public-realm-classified-rated-phrase-v1'
+              ? await protectClassifiedResults(work,
+                await queryPublicRealmClassifiedRatedPhrase(work.environment, { ...body, publicFields }), body.context.id)
+              : body.profile === 'public-realm-phrase-v1'
+              ? await queryPublicRealmPhrase(work.environment, { ...body, publicFields })
+              : body.profile === 'public-main-phrase-v1'
+                ? await queryPublicMainPhrase(work.environment, { ...body, publicFields })
+                : body.profile === 'public-realm-classified-phrase-v1'
+                  ? await protectClassifiedResults(work,
+                    await queryPublicRealmClassifiedPhrase(work.environment, { ...body, publicFields }), body.context.id)
+                  : await protectClassifiedResults(work,
+                    await queryPublicMainClassifiedPhrase(work.environment, { ...body, publicFields }));
+            const complete = await decoratePhraseRelation(work.environment, await present(selection, relation), body);
+            const window = searchCardWindow(body, complete, selection?.generation);
+            const hydrated = await enrichSearchCardPage(work, request, window.page, body.language);
+            await fenceSearchFields(publicFields);
+            const result = { ...complete, cardWindow: window.cardWindow,
+              results: [...hydrated.results, ...complete.results.slice(window.cardWindow.hydrated)] };
+            if (Buffer.byteLength(JSON.stringify(result)) > MAX_SEARCH_RESPONSE_BYTES) {
+              throw new PublicQueryBudgetExceeded('Hydrated search response exceeds its byte bound');
+            }
+            return result;
+          });
         }, undefined, diagnostics);
         return Response.json(result, {
           headers: { 'cache-control': 'no-store' },
@@ -455,67 +458,71 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         const unsupported = unsupportedSearchSelection(body);
         if (unsupported) return unsupported;
         const page = await withStableSearchSnapshot(fuseki, async () => {
-          const publicFields = fieldOwners();
-          const read = async () => {
-          if (body.profile === 'public-content-phrase-page-v1') {
-            if (!work.contentProjection) {
-              throw new ContentProjectionUnavailable('Public Content projection is unavailable');
+          const readPage = async () => {
+            const publicFields = fieldOwners();
+            const read = async () => {
+            if (body.profile === 'public-content-phrase-page-v1') {
+              if (!work.contentProjection) {
+                throw new ContentProjectionUnavailable('Public Content projection is unavailable');
+              }
+              const relation = await queryPublicContentPhrase(work.environment,
+                work.contentProjection.content, work.contentProjection.cursor,
+                work.contentProjection.consumer, body);
+              return pageCompleteContentRelation(body, relation);
             }
-            const relation = await queryPublicContentPhrase(work.environment,
-              work.contentProjection.content, work.contentProjection.cursor,
-              work.contentProjection.consumer, body);
-            return pageCompleteContentRelation(body, relation);
-          }
-          const selection = await presentationSelection(request);
-          if (body.profile === 'public-main-phrase-page-v1') {
-            const relation = await decoratePhraseRelation(work.environment,
-              await present(selection, await queryPublicMainPhrase(work.environment, { ...body, publicFields })), body);
-            return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
-              facets: relation.facets };
-          }
-          if (body.profile === 'public-main-title-body-page-v1') {
-            const relation = await decoratePhraseRelation(work.environment,
-              await present(selection, await queryPublicMainTitleBody(work.environment, body)), body);
-            return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
-              facets: relation.facets };
-          }
-          if (body.profile === 'public-realm-phrase-page-v1') {
-            const relation = await decoratePhraseRelation(work.environment,
-              await present(selection, await queryPublicRealmPhrase(work.environment, { ...body, publicFields })), body);
-            return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
-              facets: relation.facets };
-          }
-          if (body.profile === 'public-main-classified-phrase-page-v1') {
+            const selection = await presentationSelection(request);
+            if (body.profile === 'public-main-phrase-page-v1') {
+              const relation = await decoratePhraseRelation(work.environment,
+                await present(selection, await queryPublicMainPhrase(work.environment, { ...body, publicFields })), body);
+              return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
+                facets: relation.facets };
+            }
+            if (body.profile === 'public-main-title-body-page-v1') {
+              const relation = await decoratePhraseRelation(work.environment,
+                await present(selection, await queryPublicMainTitleBody(work.environment, body)), body);
+              return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
+                facets: relation.facets };
+            }
+            if (body.profile === 'public-realm-phrase-page-v1') {
+              const relation = await decoratePhraseRelation(work.environment,
+                await present(selection, await queryPublicRealmPhrase(work.environment, { ...body, publicFields })), body);
+              return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
+                facets: relation.facets };
+            }
+            if (body.profile === 'public-main-classified-phrase-page-v1') {
+              const relation = await decoratePhraseRelation(work.environment,
+                await present(selection, await protectClassifiedResults(work,
+                  await queryPublicMainClassifiedPhrase(work.environment, { ...body, publicFields }))), body);
+              return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
+                classificationSense: relation.classificationSense, facets: relation.facets };
+            }
+            if (body.profile === 'public-realm-classified-phrase-page-v1') {
+              const relation = await decoratePhraseRelation(work.environment,
+                await present(selection, await protectClassifiedResults(work,
+                  await queryPublicRealmClassifiedPhrase(work.environment, { ...body, publicFields }), body.context.id)), body);
+              return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
+                classificationSense: relation.classificationSense, facets: relation.facets };
+            }
             const relation = await decoratePhraseRelation(work.environment,
               await present(selection, await protectClassifiedResults(work,
-                await queryPublicMainClassifiedPhrase(work.environment, { ...body, publicFields }))), body);
+                await queryPublicRealmClassifiedRatedPhrase(work.environment, { ...body, publicFields }), body.context.id)), body);
             return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
-              classificationSense: relation.classificationSense, facets: relation.facets };
-          }
-          if (body.profile === 'public-realm-classified-phrase-page-v1') {
-            const relation = await decoratePhraseRelation(work.environment,
-              await present(selection, await protectClassifiedResults(work,
-                await queryPublicRealmClassifiedPhrase(work.environment, { ...body, publicFields }), body.context.id)), body);
-            return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
-              classificationSense: relation.classificationSense, facets: relation.facets };
-          }
-          const relation = await decoratePhraseRelation(work.environment,
-            await present(selection, await protectClassifiedResults(work,
-              await queryPublicRealmClassifiedRatedPhrase(work.environment, { ...body, publicFields }), body.context.id)), body);
-          return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
-            classificationSense: relation.classificationSense, facets: relation.facets,
-            ratingCriterion: relation.ratingCriterion,
-            ratingPopulation: relation.ratingPopulation };
+              classificationSense: relation.classificationSense, facets: relation.facets,
+              ratingCriterion: relation.ratingCriterion,
+              ratingPopulation: relation.ratingPopulation };
+            };
+            const selected = await read();
+            const result = selected.resultGrain === 'mainVersion'
+              ? await enrichSearchCardPage(work, request, selected, body.language)
+              : await enrichSerialSearch(selected, work.serialStats);
+            await fenceSearchFields(publicFields);
+            if (Buffer.byteLength(JSON.stringify(result)) > MAX_SEARCH_RESPONSE_BYTES) {
+              throw new PublicQueryBudgetExceeded('Hydrated search page exceeds its byte bound');
+            }
+            return result;
           };
-          const selected = await read();
-          const result = selected.resultGrain === 'mainVersion'
-            ? await enrichSearchCardPage(work, request, selected, body.language)
-            : await enrichSerialSearch(selected, work.serialStats);
-          await fenceSearchFields(publicFields);
-          if (Buffer.byteLength(JSON.stringify(result)) > MAX_SEARCH_RESPONSE_BYTES) {
-            throw new PublicQueryBudgetExceeded('Hydrated search page exceeds its byte bound');
-          }
-          return result;
+          return body.profile === 'public-content-phrase-page-v1' ? readPage()
+            : withSearchGraphSnapshot(work.environment, readPage);
         }, undefined, diagnostics);
         return Response.json(page,
           { headers: { 'cache-control': 'no-store' } });

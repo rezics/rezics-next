@@ -146,6 +146,7 @@ test('CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence 
       .toMatchObject({ type: 'com.rezics.statement.cutover.v1',
         data: { receipt: { action: 'statement.cutover', revision: cutover.revision } } });
     f.resetQueries();
+    const migrationReadStarted = performance.now();
     const newMain = await f.json<Search>(await classified('main'), 200);
     const newRealm = await f.json<Search>(await classified('realm'), 200);
     expect(newMain.results).toHaveLength(1);
@@ -160,6 +161,10 @@ test('CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence 
     expect(newJoined.results[0]?.classification).toMatchObject({ decision: migrated.decision,
       application: null, source: 'inherited-global' });
     const migrationReadQueries = f.queries();
+    const migrationReadCost = { graphCalls: migrationReadQueries,
+      latencyMs: Math.round((performance.now() - migrationReadStarted) * 100) / 100 };
+    await Bun.write(`.temp/search-context-cost-${Bun.env.REZICS_QA_RUN_ID}.json`,
+      JSON.stringify(migrationReadCost));
     expect((await f.call('POST', '/v1/classification-decisions',
       { profile: 'classification-direct-decision-v1', ...decisionInput })).status).toBe(410);
     const mapped = await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?statement ?revision WHERE {

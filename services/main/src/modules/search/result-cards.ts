@@ -10,11 +10,13 @@ import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { readAuthorNames, sourceReportedCredits } from '../source/author-name-read.ts';
 import { WorkReadMoved } from '../work/read-session.ts';
 import { searchPageRatings } from './ratings.ts';
+import { searchCardReadDependencies } from './card-reads.ts';
 
 export const SEARCH_CARD_COST = { works: 64, creditsPerWork: 3,
   summaryBatches: 2, serialQueries: 1, creditQueries: 1, creditRows: 192,
-  sourceNameQueries: 2, ratingContextQueries: 1, ratingQueriesPerWork: 1,
-  agentNameQueries: 1, graphCallsWithoutAgentNames: 7, graphCallsWithAgentNames: 8 } as const;
+  sourceNameQueries: 2, ratingContextQueries: 1, ratingQueries: 1,
+  factBatches: 1, agentNameQueries: 1,
+  graphCallsWithoutAgentNames: 2, graphCallsWithAgentNames: 3 } as const;
 
 /** Exact current metadata heads, one graph query plus the existing serial
  * stats owner batch. Nest the revision OPTIONAL under its owning head: two
@@ -80,6 +82,10 @@ export async function searchPageCredits(session: WorkReadSession, works: readonl
   } ORDER BY STR(?work) ?ordinal STR(?id) LIMIT ${SEARCH_CARD_COST.creditRows + 1}`,
   SEARCH_CARD_COST.creditRows);
   const seen = new Set<string>();
+  // A UNION of independently bounded fact subqueries does not retain their order.
+  rows.sort((a, b) => (a.work?.value ?? '').localeCompare(b.work?.value ?? '')
+    || Number(a.ordinal?.value ?? -1) - Number(b.ordinal?.value ?? -1)
+    || (a.id?.value ?? '').localeCompare(b.id?.value ?? ''));
   for (const row of rows) {
     const own = result.get(row.work?.value ?? '');
     if (!own || !row.id || seen.has(row.id.value) || (row.agent && (row.key || row.ordinal))
@@ -118,25 +124,23 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
   const ids = [...new Set(matches.map(match => match.work))];
   if (ids.length > SEARCH_CARD_COST.works) throw new WorkReadUnavailable('Search card page exceeds its bound');
   if (!ids.length) return page;
-  const cards = await workRead(deps, new Request(request.url), { language: language ?? undefined }, async session => {
+  const cards = await workRead(searchCardReadDependencies(deps), new Request(request.url),
+    { language: language ?? undefined }, async session => {
     if (session.position.dataEpoch !== page.sourcePosition!.dataEpoch
       || session.position.sequence !== page.sourcePosition!.sequence) {
       throw new SearchSnapshotMoved('Search card graph position changed');
     }
-    const summaries: ResourceSummary[] = [];
-    for (let i = 0; i < ids.length; i += MAX_SUMMARY_BATCH) {
-      summaries.push(...await session.summaries(ids.slice(i, i + MAX_SUMMARY_BATCH)));
-    }
+    const [summaries, serial, credits, ratings] = await Promise.all([
+      session.summaries(ids), searchPageSerial(session, ids), searchPageCredits(session, ids),
+      searchPageRatings(session, matches, page.context),
+    ]);
     if (summaries.some(summary => summary.status !== 'available'
       || summary.type !== 'work' || summary.disclosure !== 'public')) {
       throw new SearchSnapshotMoved('Search card disclosure changed');
     }
-    const serial = await searchPageSerial(session, ids);
-    const credits = await searchPageCredits(session, ids);
     const names = await namedDiscoveryCredits(session, [...credits.values()].flat(), SEARCH_CARD_COST.works);
     const sourceNames = await readAuthorNames(session, [...credits.values()].flat()
       .flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : []));
-    const ratings = await searchPageRatings(session, matches, page.context);
     const fenced: ResourceSummary[] = [];
     for (let i = 0; i < ids.length; i += MAX_SUMMARY_BATCH) {
       fenced.push(...await session.summaries(ids.slice(i, i + MAX_SUMMARY_BATCH)));

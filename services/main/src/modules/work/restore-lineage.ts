@@ -1,5 +1,6 @@
 import { DATASET, GRAPHS, RV, hash, iri, lit, type GraphLineage } from './activate.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { knownSearchPosition } from '../search/snapshot-state.ts';
 import type { Pool, PoolClient } from 'pg';
 import { accessOutboxCoverage, accessStateCoverage,
   scanAccessOutbox, scanAccessState } from './access-recovery-coverage.ts';
@@ -191,6 +192,7 @@ export async function assertGraphDeletionEvidence(
 }
 
 export async function assertGraphAdmissionOpen(fuseki: FusekiClient, lineage: GraphLineage): Promise<void> {
+  if (knownSearchPosition(fuseki, lineage)) return;
   const result = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
     ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} .
     FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }

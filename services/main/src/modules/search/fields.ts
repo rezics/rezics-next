@@ -8,6 +8,7 @@ import { parsedMetadataState } from '../work/metadata-read.ts';
 import { MAX_SEARCH_RESPONSE_BYTES, SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../work/search-budget.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
+import { knownSearchPosition } from './snapshot-state.ts';
 
 /** Native body search bounds the public population at 20,000 units. This live
  * field join has no derived freshness gap: at most 513 candidate rows / 1 MiB,
@@ -161,6 +162,8 @@ export async function querySearchFields(env: WorkActivationEnvironment,
     }
   }
   await fenceSearchFields(owners);
+  // The route's final uncached fence covers matching, facets and card facts.
+  if (knownSearchPosition(env.fuseki, env.lineage)) return rankedSearchMatches(matches);
   const after = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
       FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } } }`, 8192)).results?.bindings ?? [];

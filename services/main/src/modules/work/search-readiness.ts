@@ -3,6 +3,7 @@ import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   TEXT_INDEX_PROBE_GRAPH, type GraphLineage } from './activate.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
+import { knownSearchPosition } from '../search/snapshot-state.ts';
 import { FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded, fusekiReadBudget,
   type FusekiClient, type SearchDeltaProof, type SparqlResult } from '../../infrastructure/fuseki.ts';
 
@@ -209,6 +210,8 @@ export async function assertQuerySnapshotMoved(fuseki: FusekiClient,
  */
 export async function assertPublicTextReady(fuseki: FusekiClient,
   lineage: GraphLineage): Promise<PublicTextPosition> {
+  const known = knownSearchPosition(fuseki, lineage);
+  if (known) return known;
   const state = await serverState(fuseki);
   if (state.publicSearchWriteActive) throw new SearchSnapshotMoved('public index write is in progress');
   const control = await fuseki.query(`PREFIX rv: <${RV}>
@@ -216,7 +219,7 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
     SELECT ?epoch ?sequence ?generation WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
-          rv:textIndexProfile ${iri(TEXT_INDEX_PROFILE)} ;
+          rv:routingEpoch ${lit(lineage.routingEpoch)} ; rv:textIndexProfile ${iri(TEXT_INDEX_PROFILE)} ;
           rv:textIndexGeneration ?generation .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
       }

@@ -1,12 +1,12 @@
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { RATING_STANDING_CADENCE } from '../rating/context.ts';
-import { queryWorkStandingRating } from '../rating/global-aggregate.ts';
+import { queryWorkStandingRatings } from '../rating/global-aggregate.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import type { ProjectedWork } from '../discovery/contract.ts';
 
-/** One context lookup and at most one existing sealed-inventory read per card.
+/** One context lookup and one graph batch of existing sealed inventories per page.
  * No new aggregation policy: ratings share the Work owner's 100-slot cap and
  * debit the enclosing search's deadline/call/byte budget. Rated query matches
  * keep the exact rating that determined membership. */
@@ -35,12 +35,17 @@ export async function searchPageRatings(session: WorkReadSession,
   if (!access.readRatingAggregateInventory || !access.checkRatingAggregateFence) {
     throw new WorkReadUnavailable('Rating inventory owner is unavailable');
   }
-  for (const target of targets) {
+  const completeTargets = targets.map(target => {
     if (!target.mainVersion) throw new WorkReadUnavailable('Search rating target is incomplete');
-    const rating = await queryWorkStandingRating(session.deps.environment, {
+    return { work: target.work, mainVersion: target.mainVersion };
+  });
+  const batch = await queryWorkStandingRatings(session.deps.environment, {
       readRatingAggregateInventory: (ctx, main, signal) => access.readRatingAggregateInventory!(ctx, main, signal),
       checkRatingAggregateFence: (generation, signal) => access.checkRatingAggregateFence!(generation, signal),
-    }, { work: target.work, mainVersion: target.mainVersion, kind: realm ? 'realm' : 'global', context: selected });
+    }, { targets: completeTargets, kind: realm ? 'realm' : 'global', context: selected });
+  for (const target of completeTargets) {
+    const rating = batch.get(target.work);
+    if (!rating) throw new WorkReadUnavailable('Search rating batch is incomplete');
     if (rating.sourcePosition.dataEpoch !== session.position.dataEpoch
       || rating.sourcePosition.sequence !== session.position.sequence) throw new SearchSnapshotMoved('Search rating moved');
     if (rating.count) ratings.set(target.work, { context: selected, count: rating.count,

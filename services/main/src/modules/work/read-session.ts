@@ -15,6 +15,7 @@ import { DATASET, GRAPHS, RV, iri, lit } from './activate.ts';
 import { WORK_READ_COST } from './read-contract.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
 import { fenceAuthorNames } from '../source/author-name-read.ts';
+import { knownSearchPosition } from '../search/snapshot-state.ts';
 export { publicWork, unerased } from './public-patterns.ts';
 
 export class WorkReadInvalid extends Error {}
@@ -143,6 +144,8 @@ export class WorkReadSession {
 
 async function position(deps: MainWorkDependencies): Promise<ReadPosition> {
   const env = deps.environment;
+  const known = knownSearchPosition(env.fuseki, env.lineage);
+  if (known) return { dataEpoch: known.dataEpoch, sequence: known.sequence };
   const rows = (await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
