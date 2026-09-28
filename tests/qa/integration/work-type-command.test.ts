@@ -47,6 +47,18 @@ test('G398: Open Library adoption states Book; a guarded Work type revision upda
       types: [SKILL], actingSubject: h.actor })).status).toBe(409);
     expect((await h.call('GET', `/v1/compositions/${shortId(structure)}?actingSubject=${encodeURIComponent(h.actor)}`)).status)
       .toBe(200);
+    const adoptedType = await h.json<{ revision: string }>(await h.call('PUT',
+      `/v1/works/${shortId(adopted.work)}/type`, {
+        profile: 'work-type-v1', expectedHead: adopted.workRevision,
+        types: [BOOK, 'https://schema.org/DigitalDocument'], actingSubject: h.actor }), 200);
+    const sourceSupport = await h.json<{ sourceProposal: string; adoptedAtRevision: string;
+      currentHead: string; appliedRevisionIsHead: boolean }>(await h.call('GET',
+        `/v1/works/${shortId(adopted.work)}/source-support`), 200);
+    expect(sourceSupport).toMatchObject({ sourceProposal: proposal.proposal,
+      adoptedAtRevision: adopted.workRevision, currentHead: adoptedType.revision,
+      appliedRevisionIsHead: false });
+    expect((await h.call('GET', `/v1/compositions/${shortId(structure)}?actingSubject=${encodeURIComponent(h.actor)}`)).status)
+      .toBe(200);
 
     const generic = await h.json<{ work: string; mainVersion: string; workRevision: string }>(
       await h.call('POST', '/v1/works', { profile: 'metadata-only-v1', title: 'Type revision', language: 'en',
