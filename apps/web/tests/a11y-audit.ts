@@ -7,10 +7,11 @@
 //
 // `--account` signs in someone who writes in Studio and manages the Realm, as
 // the demo seed's first person does; without it only signed-out pages run.
+import { rmSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { type Browser, chromium, type Page } from '@playwright/test';
-import { signInAtAccounts } from './account-sign-in.ts';
 import { axeViolations, formatViolations } from './a11y-axe.ts';
+import { signIn } from './perf-targets.ts';
 
 const { values } = parseArgs({ options: { base: { type: 'string' }, work: { type: 'string' },
   chapter: { type: 'string' }, profile: { type: 'string' }, realm: { type: 'string', default: 'fiction' },
@@ -108,11 +109,12 @@ try {
     const [email, password] = [values.account.slice(0, values.account.indexOf(':')),
       values.account.slice(values.account.indexOf(':') + 1)];
     const context = await browser.newContext({ baseURL: values.base });
-    await signInAtAccounts(await context.newPage(), '/en', { email, password });
+    await signIn(await context.newPage(), '/en', { email, password });
     const state = `${process.env.TMPDIR ?? '/tmp'}/rezics-a11y-audit-${process.pid}.json`;
     await context.storageState({ path: state });
     await context.close();
-    failures += await audit(browser, signedIn, state);
+    try { failures += await audit(browser, signedIn, state); }
+    finally { rmSync(state, { force: true }); }
   }
   console.log(`\n${failures} page states with violations`);
   process.exitCode = failures ? 1 : 0;

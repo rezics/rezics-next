@@ -12,6 +12,7 @@ import { parseArgs } from 'node:util';
 import { chromium, type Page } from '@playwright/test';
 import { startPerfEdge } from './perf-edge.ts';
 import { formatSamples, measure, perfProfiles, type PerfSample, type PerfTarget } from './perf-measure.ts';
+import { signIn } from './perf-targets.ts';
 
 const { values } = parseArgs({ options: { base: { type: 'string' }, work: { type: 'string' },
   chapter: { type: 'string' }, profile: { type: 'string' }, realm: { type: 'string', default: 'fiction' },
@@ -47,8 +48,7 @@ try {
       values.author.slice(values.author.indexOf(':') + 1)];
     const context = await browser.newContext({ baseURL: values.base });
     const page = await context.newPage();
-    const { signInAtAccounts } = await import('./account-sign-in.ts');
-    await signInAtAccounts(page, '/en', { email, password });
+    await signIn(page, '/en', { email, password });
     // Studio redirects to the signed-in person's own desk; measure the desk, not the redirect.
     await page.goto('/en/studio');
     await page.waitForURL(/\/studio\/@/);

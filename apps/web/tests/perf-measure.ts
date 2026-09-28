@@ -37,12 +37,18 @@ export interface PerfSample {
   /** What the largest contentful paint drew, for finding the cost behind it. */
   lcpElement: string;
   cls: number;
+  /** The elements that moved in the largest shifts, for finding what caused them. */
+  shifts: { value: number; at: number; nodes: string[] }[];
   /** The slowest interaction's input-to-next-paint time, when the page has a scripted interaction. */
   inp: number | null;
   /** Main-thread time beyond 50 ms per long task, from first paint until the page settled. */
   tbt: number;
   requests: number;
+  /** Everything the page fetched until the network settled, prefetches for likely next pages included. */
   transfer: Record<ResourceKind | 'total', number>;
+  /** What the page itself needs: its document, the scripts its HTML declares (so not those fetched for
+   * prefetched routes or lazy components), and the styles, fonts and images requested before the load event. */
+  initial: Record<ResourceKind | 'total', number>;
 }
 
 /** A page to measure: an address and, optionally, one representative
@@ -55,7 +61,8 @@ export interface PerfTarget {
 
 const observers = () => {
   const state = { lcp: 0, lcpElement: '', cls: 0, windowValue: 0, windowStart: 0, windowLast: 0,
-    tbt: 0, fcp: 0, interactions: new Map<number, number>() };
+    tbt: 0, fcp: 0, interactions: new Map<number, number>(),
+    shifts: [] as { value: number; at: number; nodes: string[] }[] };
   (globalThis as unknown as { __perf: typeof state }).__perf = state;
   const describe = (node: Element | null | undefined) => node
     ? `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}${node.getAttribute('class')
@@ -68,8 +75,11 @@ const observers = () => {
   }).observe({ type: 'largest-contentful-paint', buffered: true });
   // CLS is the largest session window: shifts less than 1 s apart, at most 5 s long.
   new PerformanceObserver(list => {
-    for (const entry of list.getEntries() as (PerformanceEntry & { value: number; hadRecentInput: boolean })[]) {
+    for (const entry of list.getEntries() as (PerformanceEntry & { value: number; hadRecentInput: boolean;
+      sources?: { node?: Node | null }[] })[]) {
       if (entry.hadRecentInput) continue;
+      state.shifts.push({ value: entry.value, at: Math.round(entry.startTime), nodes: (entry.sources ?? [])
+        .map(source => source.node instanceof Element ? describe(source.node) : source.node?.nodeName ?? '?') });
       if (state.windowValue && entry.startTime - state.windowLast < 1_000 && entry.startTime - state.windowStart < 5_000) {
         state.windowValue += entry.value;
       } else {
@@ -143,17 +153,19 @@ export async function measure(browser: Browser, baseURL: string, target: PerfTar
     await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
     if (profile.network) await cdp.send('Network.emulateNetworkConditions', { offline: false, ...profile.network });
     if (profile.cpuSlowdown > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: profile.cpuSlowdown });
+    await cdp.send('Page.enable');
     const types = new Map<string, string>();
-    const transfer: PerfSample['transfer'] = { document: 0, script: 0, stylesheet: 0, font: 0, image: 0, fetch: 0,
-      other: 0, total: 0 };
-    let requests = 0;
-    cdp.on('Network.responseReceived', event => types.set(event.requestId, event.type));
-    cdp.on('Network.loadingFinished', event => {
-      const kind = kindOf(types.get(event.requestId));
-      transfer[kind] += event.encodedDataLength;
-      transfer.total += event.encodedDataLength;
-      requests += 1;
+    const urls = new Map<string, string>();
+    const started = new Map<string, number>();
+    const finished: { id: string; bytes: number }[] = [];
+    let loaded = Number.POSITIVE_INFINITY;
+    cdp.on('Network.requestWillBeSent', event => {
+      started.set(event.requestId, event.timestamp);
+      urls.set(event.requestId, new URL(event.request.url).pathname);
     });
+    cdp.on('Network.responseReceived', event => types.set(event.requestId, event.type));
+    cdp.on('Network.loadingFinished', event => finished.push({ id: event.requestId, bytes: event.encodedDataLength }));
+    cdp.on('Page.loadEventFired', event => { loaded = Math.min(loaded, event.timestamp); });
     await page.addInitScript(observers);
     const response = await page.goto(target.path, { waitUntil: 'commit' });
     if (!response || response.status() >= 400) throw new Error(`${target.path} answered ${response?.status()}`);
@@ -169,12 +181,28 @@ export async function measure(browser: Browser, baseURL: string, target: PerfTar
     }
     const vitals = await page.evaluate(() => {
       const state = (globalThis as unknown as { __perf: { lcp: number; lcpElement: string; cls: number;
-        fcp: number; tbt: number } }).__perf;
+        fcp: number; tbt: number; shifts: { value: number; at: number; nodes: string[] }[] } }).__perf;
       const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
       return { lcp: state.lcp, lcpElement: state.lcpElement, cls: state.cls, fcp: state.fcp, tbt: state.tbt,
+        shifts: state.shifts.toSorted((a, b) => b.value - a.value).slice(0, 5),
         ttfb: navigation ? navigation.responseStart : 0 };
     });
-    return { page: target.name, profile: profile.name, url: page.url(), ...vitals, inp, requests, transfer };
+    const document = finished.find(({ id }) => types.get(id) === 'Document');
+    const html = document ? (await cdp.send('Network.getResponseBody', { requestId: document.id })).body : '';
+    const declared = new Set([...html.matchAll(/(?:href|src)="([^"]+\.js)"/g)].map(match => match[1]!));
+    const empty = () => ({ document: 0, script: 0, stylesheet: 0, font: 0, image: 0, fetch: 0, other: 0, total: 0 });
+    const transfer: PerfSample['transfer'] = empty();
+    const initial: PerfSample['initial'] = empty();
+    for (const { id, bytes } of finished) {
+      const kind = kindOf(types.get(id));
+      const needed = kind === 'script' ? declared.has(urls.get(id) ?? '') : (started.get(id) ?? 0) <= loaded;
+      for (const sum of needed ? [transfer, initial] : [transfer]) {
+        sum[kind] += bytes;
+        sum.total += bytes;
+      }
+    }
+    return { page: target.name, profile: profile.name, url: page.url(), ...vitals, inp, requests: finished.length,
+      transfer, initial };
   } finally {
     await context.close();
   }
@@ -187,9 +215,9 @@ const ms = (value: number | null) => value === null ? '–' : Math.round(value).
 export function formatSamples(samples: readonly PerfSample[]): string {
   const rows = samples.map(sample => `| ${sample.page} | ${sample.profile} | ${ms(sample.ttfb)} | ${ms(sample.fcp)} | `
     + `${ms(sample.lcp)} | ${sample.cls.toFixed(3)} | ${ms(sample.inp)} | ${ms(sample.tbt)} | ${sample.requests} | `
-    + `${kb(sample.transfer.document)} | ${kb(sample.transfer.script)} | ${kb(sample.transfer.stylesheet)} | `
-    + `${kb(sample.transfer.font)} | ${kb(sample.transfer.image)} | ${kb(sample.transfer.total)} |`);
-  return ['| Page | Profile | TTFB | FCP | LCP | CLS | INP | TBT | Req | HTML KB | JS KB | CSS KB | Font KB | Img KB | Total KB |',
-    '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+    + `${kb(sample.initial.document)} | ${kb(sample.initial.script)} | ${kb(sample.initial.stylesheet)} | `
+    + `${kb(sample.initial.font)} | ${kb(sample.initial.image)} | ${kb(sample.initial.total)} | ${kb(sample.transfer.total)} |`);
+  return ['| Page | Profile | TTFB | FCP | LCP | CLS | INP | TBT | Req | HTML KB | JS KB | CSS KB | Font KB | Img KB | Load KB | Settled KB |',
+    '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     ...rows].join('\n');
 }
