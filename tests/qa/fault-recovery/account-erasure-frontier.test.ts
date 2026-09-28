@@ -288,9 +288,17 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
         "\narchive_mode = off\nrestore_command = 'false'\n");
       writeFileSync(join(data, 'recovery.signal'), '');
       const replayPort = await freePort();
-      execFileSync('pg_ctl', ['-D', data, '-l', join(state, `${name}.log`),
-        '-o', `-h 127.0.0.1 -p ${replayPort} -k ${socketDirectory}`,
-        '-t', '20', '-w', 'start'], { cwd: state, timeout: 25_000 });
+      const log = join(state, `${name}.log`);
+      try {
+        // Initial fsync of the copied physical backup can exceed 20 seconds
+        // on the shared QA host. Keep readiness bounded without skipping sync.
+        execFileSync('pg_ctl', ['-D', data, '-l', log,
+          '-o', `-h 127.0.0.1 -p ${replayPort} -k ${socketDirectory}`,
+          '-t', '60', '-w', 'start'], { cwd: state, timeout: 65_000 });
+      } catch (error) {
+        throw new Error(`Restored PostgreSQL failed to start:\n${readFileSync(log, 'utf8').slice(-8_000)}`,
+          { cause: error });
+      }
       const restored = (database: string) => new Pool({ host: '127.0.0.1',
         port: replayPort, database, user: 'postgres', password: compose.POSTGRES_PASSWORD! });
       const restoredAccount = restored('account');
