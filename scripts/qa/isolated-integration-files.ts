@@ -91,6 +91,9 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/feed-reviews.test.ts',
   // G-401's assertions stay unchanged; the budget's population belongs to this file.
   'tests/qa/integration/feed-read-budget.test.ts',
+  // Owner settlement and library discovery compare a complete fresh population.
+  'tests/qa/integration/content-variant-order.test.ts',
+  'tests/qa/integration/library-status.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */

@@ -3,6 +3,14 @@ import { join } from 'node:path';
 import { parseOptions, projectName, type StackOptions } from '../dev/config.ts';
 
 export const QA_STACK_REGISTRY = 'REZICS_QA_STACK_REGISTRY';
+export const QA_STACK_TIER = 'REZICS_QA_STACK_TIER';
+
+/** Integration uses owner endpoints directly. Fault drills and manual stacks
+ * keep the complete topology, including the network fault proxy. */
+export function qaStartupServices(options: StackOptions, tier: string | undefined): string[] {
+  return options.profile === 'qa' && tier === 'integration'
+    ? ['postgres', 'fuseki', 'rustfs', 'mailpit'] : [];
+}
 
 /** The runner owns child-created stacks too: a killed test cannot run finally. */
 export function rememberQaStack(options: StackOptions, directory = process.env[QA_STACK_REGISTRY]): void {

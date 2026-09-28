@@ -15,7 +15,7 @@ import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
 import { readEnv } from '../dev/config.ts';
 import { browserBudgets, browserFileCounts } from './browser-budget.ts';
-import { cleanupQaStacks, QA_STACK_REGISTRY } from './stack-ownership.ts';
+import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -97,7 +97,8 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
   if (needsStack) {
     started.push(projectRunId);
     const upCommand = () => commandAsync(root, 'bun',
-      ['scripts/dev/cli.ts', 'stack:up', ...stackArgs], 180_000);
+      ['scripts/dev/cli.ts', 'stack:up', ...stackArgs], 180_000,
+      { ...process.env, [QA_STACK_TIER]: tier });
     const up = await (startStack ? startStack(upCommand) : upCommand());
     record.startupMs = up.elapsedMs;
     if (!up.ok) {
@@ -133,7 +134,8 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
   { ...process.env, ...apps, REZICS_QA_RUN_ID: projectRunId,
     [QA_STACK_REGISTRY]: registry,
     REZICS_QA_ARTIFACT_DIR: directory,
-    ...(needsStack ? { REZICS_S3_GATE_PROJECT: projectRunId,
+    ...(needsStack ? { REZICS_S3_GATE_PROJECT: projectRunId } : {}),
+    ...(needsStack && tier === 'fault/recovery' ? {
       TOXIPROXY_API_URL: `http://127.0.0.1:${compose.TOXIPROXY_API_PORT}`,
       TOXIPROXY_FUSEKI_URL: `http://127.0.0.1:${compose.TOXIPROXY_FUSEKI_PORT}/rezics/` } : {}) });
   const testEnd = Date.now();

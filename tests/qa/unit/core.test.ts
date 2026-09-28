@@ -9,10 +9,19 @@ import { acquireFullLock, acquireQaSlots, concurrencyGate, estimatedDurations, e
   implementedTiers, tierArtifactName,
   xmlForCommand, type Tier } from '../../../scripts/qa/core.ts';
 import { parseJUnit } from '../../../scripts/qa/acceptance.ts';
+import { qaStartupServices } from '../../../scripts/qa/stack-ownership.ts';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const scratch = join(import.meta.dir, '../../../.temp');
 mkdirSync(scratch, { recursive: true });
+
+test('QA setup: only integration omits the unused fault proxy', () => {
+  expect(qaStartupServices({ profile: 'qa' }, 'integration'))
+    .toEqual(['postgres', 'fuseki', 'rustfs', 'mailpit']);
+  expect(qaStartupServices({ profile: 'dev' }, 'integration')).toEqual([]);
+  expect(qaStartupServices({ profile: 'qa' }, 'fault/recovery')).toEqual([]);
+  expect(qaStartupServices({ profile: 'qa' }, undefined)).toEqual([]);
+});
 
 test('QA01: overlapping full runs are rejected and lock releases', () => {
   const root = mkdtempSync(join(scratch, 'rezics-qa-lock-'));

@@ -16,7 +16,7 @@ import { compatibleLoadStorage, loadCompatibility,
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { devResetPlan, devResetTarget } from './reset.ts';
 import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
-import { forgetQaStack, rememberQaStack } from '../qa/stack-ownership.ts';
+import { forgetQaStack, rememberQaStack, qaStartupServices, QA_STACK_TIER } from '../qa/stack-ownership.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -277,7 +277,7 @@ async function stackUp(options: StackOptions): Promise<{ apps: Record<string, st
   for (let attempt = 0; ; attempt++) {
     const config = await stackConfig(options);
     try {
-      compose(options, ['up', '-d', '--wait'], env);
+      compose(options, ['up', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])], env);
       printEndpoints(options, config.composeEnv, config.dir);
       return config;
     } catch (error) {

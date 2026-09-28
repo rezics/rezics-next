@@ -13,10 +13,7 @@ const ownerUrls = {
   relay: apps.ACCOUNT_RELAY_DATABASE_URL,
 };
 
-for (const [owner, dir] of [
-  ['access', 'services/main/migrations/access'],
-  ['relay', 'services/main/migrations/relay'],
-] as const) {
+async function migrateOwner(owner: 'access' | 'relay', dir: string) {
   const db = new Client({ connectionString: ownerUrls[owner] });
   await db.connect();
   try {
@@ -26,12 +23,36 @@ for (const [owner, dir] of [
   } finally { await db.end(); }
 }
 
-const accountMigration = Bun.spawnSync(['bun', 'services/account/src/migrate.ts'], {
-  cwd: root, env: { ...process.env, ...apps }, stdout: 'pipe', stderr: 'pipe',
-});
-if (accountMigration.exitCode !== 0) {
-  throw new Error(`Account migration failed: ${accountMigration.stderr.toString()}`);
+async function migrateAccount() {
+  const migration = Bun.spawn(['bun', 'services/account/src/migrate.ts'], {
+    cwd: root, env: { ...process.env, ...apps }, stdout: 'ignore', stderr: 'pipe',
+  });
+  const [code, stderr] = await Promise.all([migration.exited, new Response(migration.stderr).text()]);
+  if (code !== 0) throw new Error(`Account migration failed: ${stderr}`);
 }
+
+async function initializeGraph() {
+  const fuseki = new FusekiClient(apps.FUSEKI_URL, apps.FUSEKI_MAINTENANCE_TOKEN,
+    apps.FUSEKI_COMMAND_TOKEN);
+  const moduleHealth = await fuseki.commandHealth();
+  const expectedModuleVersion = expectedFusekiModuleVersion(
+    readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8'));
+  if (moduleHealth.moduleVersion !== expectedModuleVersion) {
+    throw new Error(`Fuseki command module ${moduleHealth.moduleVersion} differs from Compose pin ${expectedModuleVersion}`);
+  }
+  await initializeFreshGraph(fuseki, {
+    dataEpoch: apps.MAIN_DATA_EPOCH, routingEpoch: apps.MAIN_ROUTING_EPOCH,
+  });
+}
+
+// Independent owners prepare together; each SQL owner's migrations remain ordered.
+// Wait for every connection/process before cloning the consistent templates.
+const prepared = await Promise.allSettled([
+  migrateOwner('access', 'services/main/migrations/access'),
+  migrateOwner('relay', 'services/main/migrations/relay'), migrateAccount(), initializeGraph(),
+]);
+const failures = prepared.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+if (failures.length) throw new AggregateError(failures.map(result => result.reason), 'QA owner bootstrap failed');
 
 const compose = JSON.parse(readFileSync(process.argv[3], 'utf8')) as Record<string, string>;
 const admin = new Client({ connectionString:
@@ -44,15 +65,4 @@ try {
   }
 } finally { await admin.end(); }
 
-const fuseki = new FusekiClient(apps.FUSEKI_URL, apps.FUSEKI_MAINTENANCE_TOKEN,
-  apps.FUSEKI_COMMAND_TOKEN);
-const moduleHealth = await fuseki.commandHealth();
-const expectedModuleVersion = expectedFusekiModuleVersion(
-  readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8'));
-if (moduleHealth.moduleVersion !== expectedModuleVersion) {
-  throw new Error(`Fuseki command module ${moduleHealth.moduleVersion} differs from Compose pin ${expectedModuleVersion}`);
-}
-await initializeFreshGraph(fuseki, {
-  dataEpoch: apps.MAIN_DATA_EPOCH, routingEpoch: apps.MAIN_ROUTING_EPOCH,
-});
 console.log('QA owner templates and Fuseki graph initialized');
