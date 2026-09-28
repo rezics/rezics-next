@@ -2,8 +2,6 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { conceptFilter } from '../../../services/main/src/modules/concept-page/contract.ts';
 import { resolveFacet } from '../../../services/main/src/modules/facets/registry.ts';
-import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
-import { SavedFilterStore } from '../../../services/main/src/modules/saved-filter/store.ts';
 import { seedHome, startHomeStack } from './feed-read-support.ts';
 
 interface Item { id: string; name: string | null; concept: { id: string; name: { value: string } | null } | null;
@@ -18,9 +16,6 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
   + 'a pinned tab reads Home filtered by it', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the integration tier');
   const home = await startHomeStack('saved-filter');
-  // Home's feed reads person settings, which the shared Home stack does not wire yet.
-  Object.assign(home.deps, { savedFilters: new SavedFilterStore(home.stack.accessPool),
-    personPreferences: new PersonPreferencesStore(home.stack.accessPool) });
   try {
     const seeded = await seedHome(home);
     const { call, json } = home;

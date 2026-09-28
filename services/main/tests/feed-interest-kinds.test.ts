@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { interestKinds, interestSources, matchingActivityKinds, matchingWorkKinds }
-  from '../src/modules/onboarding-interests/kinds.ts';
+  from '../src/modules/work/work-kinds.ts';
 
 test('G302: home interests map admitted types and accepted terms without treating documents as software', () => {
   expect(interestKinds).toEqual(['books', 'software', 'ai', 'recipes', 'media', 'discussions']);

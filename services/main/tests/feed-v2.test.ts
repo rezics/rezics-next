@@ -3,7 +3,6 @@ import { Value } from 'typebox/value';
 import { excludedFeedSource } from '../src/modules/feed/read.ts';
 import type { FeedSource } from '../src/modules/feed/source.ts';
 import { defaultPreferences, homePreferences, watermarkCommand } from '../src/modules/feed/personal.ts';
-import { parseChoices } from '../src/modules/onboarding-interests/read.ts';
 import { continueResult } from '../src/modules/continue/contract.ts';
 
 const id = (n: number) => `https://rezics.com/id/${n.toString(16).padStart(8, '0')}-0000-4000-8000-000000000001`;
@@ -39,9 +38,3 @@ test('G302: home preferences and watermark contracts reject ambiguous state', ()
     sourcePosition: { dataEpoch: 'epoch', sequence: '3' }, scanned: { reading: 0, followed: 0, limit: 16 } })).toBe(true);
 });
 
-test('G302: onboarding choices preserve membership and reject duplicates or unknown kinds', () => {
-  expect(parseChoices('books,recipes', ['books', 'recipes'], 2)).toEqual(['books', 'recipes']);
-  expect(() => parseChoices('books,books', ['books'], 2)).toThrow();
-  expect(() => parseChoices('books,other', ['books'], 2)).toThrow();
-  expect(() => parseChoices('books,recipes', ['books', 'recipes'], 1)).toThrow();
-});

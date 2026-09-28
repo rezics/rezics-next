@@ -1,25 +1,31 @@
 import { Elysia } from 'elysia';
 import { ControlInvalid } from '../modules/access/topology-control.ts';
-import { interestsQuery, interestsResult, suggestionsQuery, suggestionsResult }
-  from '../modules/onboarding-interests/contract.ts';
-import { readInterests, readSuggestedFollows } from '../modules/onboarding-interests/read.ts';
+import { readChoices } from '../modules/onboarding/choices.ts';
+import { choicesQuery, onboardingChoices, suggestionsQuery, suggestionsResult } from '../modules/onboarding/contract.ts';
+import { readSuggestedFollows } from '../modules/onboarding/suggestions.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { homeError, homeHeaders } from './follows.ts';
 import { workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/onboarding/interests': { get: { bearer: false } },
+  '/v1/onboarding/choices': { get: { bearer: false } },
   '/v1/onboarding/suggested-follows': { get: { bearer: false } },
 } as const;
 
+/**
+ * A new reader's first minute: languages and Concepts to choose, then Realms
+ * to follow for them. Registered in app.ts under this module's former name,
+ * `onboardingInterestsRoutes`; the composition root keeps its lines.
+ */
 export function onboardingInterestsRoutes(work: MainWorkDependencies) {
-  return new Elysia().get('/v1/onboarding/interests', { query: interestsQuery,
-    response: { 200: interestsResult, ...workReadProblems },
+  return new Elysia().get('/v1/onboarding/choices', { query: choicesQuery,
+    response: { 200: onboardingChoices, ...workReadProblems },
   }, async ({ request, query }) => {
-    try { return Response.json(await workRead(work, new Request(request.url), { language: query.locale },
-      readInterests), { headers: homeHeaders }); }
-    catch (error) { return homeError(error); }
+    try {
+      return Response.json(await workRead(work, new Request(request.url), { language: query.locale }, readChoices),
+        { headers: homeHeaders });
+    } catch (error) { return homeError(error); }
   }).get('/v1/onboarding/suggested-follows', { query: suggestionsQuery,
     response: { 200: suggestionsResult, ...workReadProblems },
   }, async ({ request, query }) => {
