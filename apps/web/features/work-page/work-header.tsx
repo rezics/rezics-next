@@ -1,4 +1,5 @@
 import { Badge } from '@rezics/ui/badge';
+import { cn } from '@rezics/ui/utils';
 import { LockIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
@@ -53,11 +54,12 @@ export function WorkStats({ work, now, locale, messages }: {
  * Work-title face, who made it, the rating summary, a plain line of what it
  * is and, for a serial, its state. Model detail lives in Details below.
  */
-export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale, messages }: {
+export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale, messages, compact = false }: {
   work: Header; credits: ReactNode; ratingLine?: ReactNode;
   /** The moment "Updated 3 days ago" is measured from; stories fix it. */
   now?: Date;
   locale: UiLocale; messages: WorkPageMessages;
+  compact?: boolean;
 }) {
   const t = materializeData(messages, { locale });
   const types = typeNames(work.types, t);
@@ -65,8 +67,8 @@ export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale
   const single = serialStats(work, now, locale, t);
   const facts = [types[0], work.selectedLanguage ? languageName(work.selectedLanguage, locale) : null,
     single.length === 1 ? single[0]!.text : null].filter(fact => fact !== undefined && fact !== null);
-  return <header className="grid min-w-0 content-start justify-items-center gap-3 text-center lg:justify-items-start
-    lg:text-start">
+  return <header className={cn('grid min-w-0 content-start gap-3',
+    compact ? 'justify-items-start text-start' : 'justify-items-center text-center lg:justify-items-start lg:text-start')}>
     {work.disclosure === 'restricted'
       ? <Badge variant="warning" title={t.restrictedHelp}><LockIcon aria-hidden="true" />{t.restricted}</Badge> : null}
     <h1 lang={work.title.language} dir={work.title.direction} className="text-balance font-semibold font-work-title
@@ -80,7 +82,7 @@ export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale
       ? <p className="text-muted-foreground text-sm">{t.originalTitle}{': '}
         <span lang={work.originalTitle.language} dir={work.originalTitle.direction}
           className="font-work-title text-foreground">{work.originalTitle.value}</span></p> : null}
-    {credits}
+    {compact ? <div className="w-full [&_p]:justify-start">{credits}</div> : credits}
     {ratingLine}
     {facts.length ? <p className="text-muted-foreground text-sm">{facts.join(' · ')}</p> : null}
     <WorkStats work={work} now={now} locale={locale} messages={messages} />

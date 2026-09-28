@@ -1,9 +1,11 @@
 import { headers } from 'next/headers';
+import { buttonVariants } from '@rezics/ui/button';
 import { materializeData } from 'native-i18n';
 import { type ReactNode, Suspense } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
+import Link from '../shell/localized-link.tsx';
 import { browseReader } from '../discover/server.ts';
 import { lifespan } from '../author/facts.ts';
 import { authorHref } from '../author/route.ts';
@@ -25,8 +27,9 @@ import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
 import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readAlsoEnjoyed, readClassifications,
   readContents, readCredits, readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm,
-  readReviewer, readReviews, readStart, readVersions, readWorkStats } from './read.ts';
-import { RegionSkeleton } from './region.tsx';
+  readReviewer, readReviews, readStart, readVersions, readWorkStats, readRecipeWorkPage,
+  readHubWorkPage, readText } from './read.ts';
+import { Region, RegionFailure, RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
 import { type ContentsQuery, EVERYONE, type HistoryFilter, idOf, type VersionQuery, type WorkScope, workHref }
   from './route.ts';
@@ -37,6 +40,10 @@ import { VersionsRegion } from './versions.tsx';
 import { InvalidScope, OverviewLayout, ReadButton, WorkFrame, WorkPageCover } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 import { WorkTypeSections } from '../zones/work-sections.tsx';
+import { workPageKind } from './types/kind.ts';
+import { RecipeExperience } from './types/recipe.tsx';
+import { HubExperience } from './types/hub.tsx';
+import { GuideExperience } from './types/guide.tsx';
 
 // Server compositions for the `/w/[ref]` routes: each region reads Main on its
 // own under Suspense, so the page streams as answers arrive and one failure
@@ -90,9 +97,18 @@ async function RatingLineSlot({ id, locale, messages }: Common & { id: string })
   return <RatingLine ratings={ratings} stats={stats} locale={locale} messages={messages} />;
 }
 
-/** "Read": the next unread chapter, chapter 1 or the one text, read after the page has started to stream. */
+/** A type's primary action, or the next readable chapter for books. */
 async function ReadSlot({ workRef, id, work, locale, messages }: Common & { workRef: string; id: string;
   work: Header }) {
+  const kind = workPageKind(work.types);
+  if (kind !== 'book') {
+    const href = kind === 'recipe' ? '#recipe-experience'
+      : kind === 'guide' ? '#guide-experience' : '#hub-experience';
+    const label = kind === 'recipe' ? messages.viewRecipe
+      : kind === 'prompt' ? messages.viewPrompt
+        : kind === 'skill' ? messages.viewSkill : messages.viewGuide;
+    return <Link href={href} className={buttonVariants({ size: 'lg', pill: true })}>{label}</Link>;
+  }
   return <ReadButton workRef={workRef} start={await readStart(id, work.id, locale, work.selectedLanguage)}
     messages={messages} />;
 }
@@ -115,7 +131,8 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, child
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       <Credits id={id} locale={locale} messages={messages} /></Suspense>}
     ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} locale={locale} messages={messages} /></Suspense>}
-    readAction={<Suspense fallback={<ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} />}>
+    readAction={<Suspense fallback={workPageKind(work.types) === 'book'
+      ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} /> : null}>
       <ReadSlot workRef={workRef} id={id} work={work} locale={locale} messages={messages} /></Suspense>}>
     {children}</WorkFrame>;
 }
@@ -229,17 +246,42 @@ async function Adoption(props: ScopedProps) {
   return <AdoptionRegion adoptions={adoptions} view={scopeView} locale={props.locale} messages={props.messages} />;
 }
 
+async function TypeExperience({ id, work, locale, messages }: Common & { id: string; work: Header }) {
+  const kind = workPageKind(work.types);
+  if (kind === 'book') return null;
+  if (kind === 'recipe') {
+    const [recipe, text, agent] = await Promise.all([readRecipeWorkPage(id),
+      readText(work.mainVersion, work.selectedLanguage ?? undefined), readingAgent()]);
+    if (!recipe.ok) return <RegionFailure title={messages.recipeMethod} failure={recipe.failure} messages={messages} />;
+    return <RecipeExperience initial={recipe.data} workId={id} actingSubject={agent.actingSubject}
+      text={text.ok ? text.data.body : null} locale={locale} messages={messages} />;
+  }
+  if (kind === 'prompt' || kind === 'skill') {
+    const hub = await readHubWorkPage(id);
+    if (!hub.ok) return <RegionFailure title={messages.hubUnavailable} failure={hub.failure} messages={messages} />;
+    return hub.data ? <HubExperience page={hub.data} locale={locale} messages={messages} />
+      : <Region id="hub-experience" title={messages.hubNotPublished}><p>{messages.hubNotPublished}</p></Region>;
+  }
+  const text = await readText(work.mainVersion, work.selectedLanguage ?? undefined);
+  if (!text.ok) return <RegionFailure title={messages.guideUnavailable} failure={text.failure} messages={messages} />;
+  return <GuideExperience body={text.data.body} title={work.title.value} updatedAt={work.lastUpdatedAt}
+    locale={locale} messages={messages} />;
+}
+
 /** Overview: each region reads in parallel under its own Suspense boundary. */
 export function WorkOverview({ workRef, id, work, scope, context, locale, messages }: Common & {
   workRef: string; id: string; work: Header; scope: WorkScope | null; context: string | undefined;
 }) {
   const t = messages;
   const loading = t.loadingRegion;
-  // A Work's type may add sections after its description, such as a mod's versions and dependencies.
-  return <OverviewLayout messages={messages} about={<>
+  // Specialist reading or cooking leads; shared type sections follow the description.
+  return <OverviewLayout messages={messages} about={<div className="grid gap-8">
+    {workPageKind(work.types) === 'book' ? null : <Suspense fallback={<RegionSkeleton
+      id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
+      <TypeExperience id={id} work={work} locale={locale} messages={messages} /></Suspense>}
     <WorkAbout work={work} messages={messages} />
     <Suspense fallback={null}><WorkTypeSections work={id} types={work.types} locale={locale} /></Suspense>
-  </>}
+  </div>}
     scopeBar={<Suspense fallback={<ScopeBarSkeleton label={loading} />}>
       <ScopeBarSlot workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />
     </Suspense>}

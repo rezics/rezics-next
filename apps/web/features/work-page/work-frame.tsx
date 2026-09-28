@@ -16,9 +16,10 @@ import { workHref } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { WorkHeader } from './work-header.tsx';
 import { WorkTabs } from './work-tabs.tsx';
+import { workPageKind } from './types/kind.ts';
 
 /**
- * Header and tabs around every Work view, laid out as Goodreads' book page:
+ * Header and tabs around every Work view. Books use the Goodreads layout:
  * a large cover on the left with the primary actions under it (Read, the
  * shelf and the reader's rating), and the title, authors and rating summary
  * beside it. On a phone the cover leads, centred, and the actions follow the
@@ -54,6 +55,26 @@ export function WorkFrame({ workRef, work, credits, authors = [], cover, ratingL
   avatarQuery?: string;
   locale: UiLocale; messages: WorkPageMessages; children: ReactNode;
 }) {
+  if (workPageKind(work.types) !== 'book') {
+    return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'}
+      actingSubject={actingSubject} seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
+      <PageContainer className="grid gap-7 [text-autospace:normal]">
+        <div className="grid min-w-0 gap-5 border-border/60 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <WorkHeader work={work} credits={credits} ratingLine={ratingLine} locale={locale}
+            messages={messages} compact />
+          <div className="flex flex-wrap content-start items-center gap-2 sm:max-w-56 sm:flex-col sm:items-stretch">
+            {readAction === undefined ? <ReadButton workRef={workRef} start={{ kind: 'contents' }}
+              messages={messages} /> : readAction}
+            <RateWork work={work.id} locale={locale} className="sm:mt-2" />
+          </div>
+        </div>
+        <WorkTabs workRef={workRef} label={messages.sections} labels={{ overview: messages.overview,
+          contents: messages.contents, versions: messages.versions, discussion: messages.discussion,
+          history: messages.history }} />
+        <div className="grid min-w-0 content-start gap-8">{children}</div>
+      </PageContainer>
+    </ReaderActionsProvider>;
+  }
   return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'} actingSubject={actingSubject}
     seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
     {/* CJK text spaces itself from inserted Latin names and digits ("来自 Tidewater Readers"). */}

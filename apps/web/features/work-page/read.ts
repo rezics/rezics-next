@@ -12,7 +12,8 @@ import { chapterHref, chapterPlaceHref, type ContentsQuery, idOf, iriOf, mainSco
   type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedPage, ChapterRead, ClassificationPage,
   ContentsPage, CreditPage, DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingContextPage, RatingRead,
-  ReadFailure, RealmHeader, Reviewer, ReviewPage, ReviewQuery, VersionPage, WorkHeader, WorkStats, WorkText }
+  ReadFailure, RealmHeader, Reviewer, ReviewPage, ReviewQuery, RecipeWorkPage, HubWorkPage,
+  VersionPage, WorkHeader, WorkStats, WorkText }
   from './types.ts';
 
 // Server reads for the Work page. Each returns a `Loaded` result instead of
@@ -60,6 +61,14 @@ async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promi
   }
 }
 
+/** These two type pages use JSON null for a visible Work without an owner-specific publication. */
+async function settleNullable<T>(call: () => Promise<Answer<T>>): Promise<Loaded<T | null>> {
+  try {
+    const { data, error } = await call();
+    return error ? { ok: false, failure: failureOf(error.status) } : { ok: true, data };
+  } catch { return { ok: false, failure: 'unavailable' }; }
+}
+
 export type ResolvedRef =
   | { kind: 'work'; id: string }
   /** The slug was renamed or merged; the page moves to the current one. */
@@ -86,6 +95,17 @@ export const readWorkHeader = cache(async (id: string, locale: UiLocale): Promis
   const { main, actingSubject } = await reader();
   return settle(() => main.v1.works({ id }).get({ query: { language: locale, actingSubject } }));
 });
+
+export async function readRecipeWorkPage(id: string, servings?: number): Promise<Loaded<RecipeWorkPage | null>> {
+  const { main, actingSubject } = await reader();
+  return settleNullable(() => main.v1.recipes.works({ id }).get({ query: { actingSubject,
+    ...(servings === undefined ? {} : { servings }) } }));
+}
+
+export async function readHubWorkPage(id: string): Promise<Loaded<HubWorkPage | null>> {
+  const { main, actingSubject } = await reader();
+  return settleNullable(() => main.v1.hub.works({ id }).get({ query: { actingSubject } }));
+}
 
 export type WorkResolution =
   | { kind: 'work'; id: string; header: WorkHeader }

@@ -8,6 +8,8 @@ type Work = ReturnType<Main['v1']['works']>;
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
 
 export type WorkHeader = Ok<Work['get']>;
+export type RecipeWorkPage = NonNullable<Ok<ReturnType<Main['v1']['recipes']['works']>['get']>>;
+export type HubWorkPage = NonNullable<Ok<ReturnType<Main['v1']['hub']['works']>['get']>>;
 export type WorkName = WorkHeader['title'];
 export type WorkCover = WorkHeader['cover'];
 export type VersionPage = Ok<Work['versions']['get']>;

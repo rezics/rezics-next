@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { buttonVariants } from '@rezics/ui/button';
 import type { ReactNode } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -14,14 +15,26 @@ import type { WorkHeader } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
 import { WorkFrame } from './work-frame.tsx';
 import { WorkNotFound, WorkSkeleton, WorkUnavailable, WorkViewSkeleton } from './work-states.tsx';
+import { RecipeExperience } from './types/recipe.tsx';
+import { HubExperience } from './types/hub.tsx';
+import { GuideExperience } from './types/guide.tsx';
+import { workPageKind } from './types/kind.ts';
+import type { RecipeWorkPage, HubWorkPage } from './types.ts';
 
 /** A Work view inside the header and tabs, as the `/w/[ref]` layout renders it. */
 function Framed({ work = fixture.work, locale = 'en', children }: {
   work?: WorkHeader; locale?: UiLocale; children: ReactNode;
 }) {
+  const kind = workPageKind(work.types);
+  const action = kind === 'recipe' ? ['#recipe-experience', messages[locale].viewRecipe]
+    : kind === 'prompt' || kind === 'skill' ? ['#hub-experience', kind === 'prompt'
+      ? messages[locale].viewPrompt : messages[locale].viewSkill]
+      : kind === 'guide' ? ['#guide-experience', messages[locale].viewGuide] : null;
   return <WorkFrame workRef={fixture.workRef} work={work} locale={locale} messages={messages[locale]}
-    credits={<WorkCredits agentCredits={fixture.agentCredits} credits={fixture.credits} locale={locale}
-      messages={messages[locale]} />}>
+    readAction={action ? <a className={buttonVariants({ size: 'lg', pill: true })} href={action[0]}>{action[1]}</a>
+      : undefined}
+    credits={kind === 'book' ? <WorkCredits agentCredits={fixture.agentCredits} credits={fixture.credits}
+      locale={locale} messages={messages[locale]} /> : null}>
     {children}</WorkFrame>;
 }
 
@@ -34,6 +47,106 @@ const meta = {
 } satisfies Meta<typeof Framed>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+const typedWork = (type: string, title: string): WorkHeader => ({ ...fixture.work,
+  title: { ...fixture.work.title, value: title }, types: [type],
+  tagline: null, originalTitle: null, completionStatus: null,
+  chapterCount: null, wordCount: null });
+
+const recipeStory: RecipeWorkPage = {
+  profile: 'recipe-work-page-v1', structure: fixture.work.id, revision: fixture.work.revision,
+  occurrences: [{ occurrence: 'https://rezics.com/id/00000000-0000-0000-0000-000000000091', state: 'active',
+    parent: fixture.work.id, role: 'ingredient', labels: [], introducedBy: fixture.work.revision,
+    qualifier: { type: 'ingredient-line', originalText: { value: '2 cups flour', language: 'en' },
+      amount: { numerator: 2, denominator: 1 }, unitText: 'cups', optional: false,
+      scaling: 'linear', substituteFor: [], parseStatus: 'parsed' } },
+  { occurrence: 'https://rezics.com/id/00000000-0000-0000-0000-000000000092', state: 'active',
+    parent: fixture.work.id, role: 'step', labels: [], introducedBy: fixture.work.revision,
+    qualifier: { type: 'recipe-step', instructionText: { value: 'Cook for 5 minutes until golden.', language: 'en' },
+      usesIngredient: [], media: [], scaling: 'linear' } }],
+  measures: [{ kind: 'yield', value: { numerator: 4, denominator: 1 }, unitText: 'servings',
+    basis: 'whole-recipe', coverage: 'complete', provenance: 'declared' },
+  { kind: 'servings', value: { numerator: 4, denominator: 1 }, unitText: 'servings',
+    basis: 'whole-recipe', coverage: 'complete', provenance: 'declared' },
+  { kind: 'total-duration', value: { numerator: 25, denominator: 1 }, unitText: 'min',
+    basis: 'whole-recipe', coverage: 'complete', provenance: 'declared' }],
+  ingredients: [{ occurrence: 'https://rezics.com/id/00000000-0000-0000-0000-000000000091',
+    originalText: '2 cups flour', amount: { numerator: 2, denominator: 1 }, unitText: 'cups', scaled: true }],
+  cost: { pages: 1, pagesRead: 2, occurrences: 2 },
+};
+
+const promptStory: HubWorkPage = { profile: 'hub-work-page-v1', kind: 'prompt',
+  revision: '00000000-0000-0000-0000-000000000093', content: 'Discuss {{notes}}.\nAsk for two views.',
+  parameterSchema: { properties: { notes: { type: 'string' } } },
+  examples: [{ parameters: { notes: 'The ending divided readers.' }, output: 'What did each reader mean?' }],
+  declaredModels: [], testedModels: [], versions: [
+    { revision: '00000000-0000-0000-0000-000000000093', createdAt: '2026-09-27T10:00:00.000Z' }],
+  moreVersions: false, createdAt: '2026-09-27T10:00:00.000Z' };
+
+export const RecipeCooking: Story = { parameters: at('overview'),
+  render: (_args, context) => {
+    const locale = context.globals.locale as UiLocale;
+    return <Framed work={typedWork('https://schema.org/Recipe', 'Weekend pancakes')} locale={locale}>
+    <RecipeExperience initial={recipeStory} workId={fixture.workRef} actingSubject={null}
+      text="Rest the batter before cooking." locale={locale} messages={messages[locale]} /></Framed>;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('spinbutton', { name: 'Servings' })).toHaveValue(4);
+    await expect(canvas.getByText('2 cups flour')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Cook this' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cooking mode' });
+    await expect(within(dialog).getByText('Cook for 5 minutes until golden.')).toBeVisible();
+    await expect(within(dialog).getByRole('timer')).toHaveTextContent('5:00');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close cooking mode' }));
+    await expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  },
+};
+
+export const PromptCopy: Story = { parameters: at('overview'),
+  render: (_args, context) => {
+    const locale = context.globals.locale as UiLocale;
+    return <Framed work={typedWork('https://rezics.com/vocab/PromptTemplate', 'Book club prompt')}
+      locale={locale}><HubExperience page={promptStory} locale={locale} messages={messages[locale]} /></Framed>;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('{{notes}}')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Copy prompt' })).toBeEnabled();
+    await expect(canvas.getByText('No tested models have been reported.')).toBeVisible();
+  },
+};
+
+export const SkillChinesePhone: Story = { parameters: at('overview'),
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  render: () => <Framed work={typedWork('https://rezics.com/vocab/SkillPackage', '食谱换算技能')}
+    locale="zh-Hans"><HubExperience page={{ ...promptStory, kind: 'skill',
+      content: '---\nname: recipe-scaling\n---\n# Recipe scaling\nCheck servings.' }}
+    locale="zh-Hans" messages={messages['zh-Hans']} /></Framed>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: '复制 SKILL.md' })).toBeEnabled();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const GuideWithContents: Story = { parameters: at('overview'),
+  render: (_args, context) => {
+    const locale = context.globals.locale as UiLocale;
+    return <Framed work={typedWork('https://schema.org/DigitalDocument', 'Bun setup guide')}
+      locale={locale}>
+    <GuideExperience body={'# Install\nInstall Bun.\n# Run\nRun a small script.'}
+      title="Bun setup guide" updatedAt="2026-09-27T10:00:00.000Z" locale={locale}
+      messages={messages[locale]} />
+    </Framed>;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const nav = canvas.getByRole('navigation', { name: 'On this page' });
+    await expect(within(nav).getAllByRole('link')).toHaveLength(2);
+    await expect(canvas.getByText('1 min read')).toBeVisible();
+  },
+};
 
 export const Versions: Story = {
   parameters: at('versions'),
