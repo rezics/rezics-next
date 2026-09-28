@@ -10,6 +10,20 @@ export const profileRegistry = {
       "profile"
     ]
   },
+  "agent-profile-v2": {
+    "sha256": "c4b8bb40f451f742d13887220ac6ed3288a192301f4295097ac85a1f94fb5e27",
+    "file": "shapes/agent-profile-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/agent-profile-v2/profile-shape",
+      "https://rezics.com/definition/agent-profile-v2/revision-shape",
+      "https://rezics.com/definition/agent-profile-v2/legacy-revision-shape"
+    ],
+    "focusRoles": [
+      "profile",
+      "revision",
+      "legacy-revision"
+    ]
+  },
   "agent-provision-v1": {
     "sha256": "39be9701579192f77c67c10996d9c66aa5daf0b1182fa0566c07064281038028",
     "file": "shapes/agent-provision-v1.ttl",

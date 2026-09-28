@@ -1,0 +1,45 @@
+# Organization names have one original language and at most twenty language-tagged labels.
+# A v1 Agent has no name-format marker and keeps its original public profile valid.
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rv: <https://rezics.com/vocab/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://rezics.com/definition/agent-profile-v2/profile-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Agent ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 200 ] ;
+    sh:property [ sh:path rv:profileHandle ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:profileDisclosure ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Public rv:Private ) ] ;
+    sh:property [ sh:path rv:profileNameFormat ; sh:maxCount 1 ; sh:hasValue rv:LocalizedNameV2 ] ;
+    sh:property [ sh:path rv:originalNameLanguage ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" ; sh:maxLength 35 ] ;
+    sh:property [ sh:path rv:localizedName ; sh:minCount 1 ; sh:maxCount 20 ; sh:datatype rdf:langString ; sh:uniqueLang true ; sh:maxLength 200 ] ;
+    sh:property [ sh:path rv:profileAvatarSelection ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:profileBio ; sh:maxCount 1 ; sh:datatype rdf:langString ] .
+
+<https://rezics.com/definition/agent-profile-v2/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:AgentPublicProfileRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Agent ] ;
+    sh:property [ sh:path rv:predecessor ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:originalNameLanguage ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" ; sh:maxLength 35 ] ;
+    sh:property [ sh:path rv:localizedName ; sh:minCount 1 ; sh:maxCount 20 ; sh:datatype rdf:langString ; sh:uniqueLang true ; sh:maxLength 200 ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/agent-profile-v2> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/agent-profile-v2> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:maxCount 1 ; sh:hasValue <urn:rezics:dataset:product> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .
+
+<https://rezics.com/definition/agent-profile-v2/legacy-revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:AgentPublicProfileRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Agent ] ;
+    sh:property [ sh:path rv:predecessor ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/agent-profile-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/agent-profile-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:maxCount 1 ; sh:hasValue <urn:rezics:dataset:product> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .
