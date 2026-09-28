@@ -1,4 +1,5 @@
 import { insert, plural } from 'native-i18n';
+import { de as additions } from './additions-rest.ts';
 
 export default {
   sections: 'Kontobereiche',
@@ -283,4 +284,5 @@ export default {
   deleteBlocked: 'Für dieses Konto bestehen noch Verpflichtungen, die zuerst auf eine andere Person übertragen werden müssen: Admin-Rechte, registrierte Apps oder die Verantwortung als Wiederherstellungsperson.',
   deleteNotAvailable: 'Das Löschen von Konten ist auf diesem Server noch nicht verfügbar.',
   deleteRetry: 'Ihr Konto wurde nicht gelöscht, weil eine Sicherheitsprüfung nicht abgeschlossen werden konnte. Versuchen Sie es gleich noch einmal.',
+  ...additions,
 } satisfies Partial<typeof import('./en.ts').default>;

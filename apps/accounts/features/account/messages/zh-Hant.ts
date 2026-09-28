@@ -1,4 +1,5 @@
 import { insert, plural } from 'native-i18n';
+import { zhHant as additions } from './additions-rest.ts';
 
 export default {
   sections: '帳戶區段',
@@ -278,4 +279,5 @@ export default {
   deleteBlocked: '此帳戶仍有必須先轉交給其他人的職責：營運權限、已註冊的應用程式或復原監護人身分。',
   deleteNotAvailable: '此伺服器目前不支援刪除帳戶。',
   deleteRetry: '安全檢查未能完成，因此帳戶並未刪除。請稍後再試。',
+  ...additions,
 } satisfies Partial<typeof import('./en.ts').default>;

@@ -1,4 +1,5 @@
 import { insert, plural } from 'native-i18n';
+import { ko as additions } from './additions-rest.ts';
 
 export default {
   sections: '계정 섹션',
@@ -282,4 +283,5 @@ export default {
   deleteBlocked: '이 계정에는 먼저 다른 사람에게 이전해야 하는 역할이 있습니다. 운영자 권한, 등록된 앱 또는 계정 복구 보호자 역할을 이전하세요.',
   deleteNotAvailable: '이 서버에서는 아직 계정 삭제를 사용할 수 없습니다.',
   deleteRetry: '안전 확인을 완료하지 못해 계정을 삭제하지 않았습니다. 잠시 후 다시 시도하세요.',
+  ...additions,
 } satisfies Partial<typeof import('./en.ts').default>;

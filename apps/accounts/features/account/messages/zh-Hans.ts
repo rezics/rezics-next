@@ -1,4 +1,5 @@
 import { insert, plural } from 'native-i18n';
+import { zhHans as additions } from './additions.ts';
 
 export default {
   sections: '账号分区',
@@ -278,4 +279,5 @@ export default {
   deleteBlocked: '此账号仍承担需要先移交给他人的职责：运营者权限、已注册的应用或账号找回监护人。',
   deleteNotAvailable: '此服务器暂不支持删除账号。',
   deleteRetry: '由于一项安全检查未能完成，您的账号未被删除。请稍后重试。',
+  ...additions,
 } satisfies typeof import('./en.ts').default;

@@ -1,4 +1,5 @@
 import { insert, plural } from 'native-i18n';
+import { fr as additions } from './additions-rest.ts';
 
 export default {
   sections: 'Rubriques du compte',
@@ -283,4 +284,5 @@ export default {
   deleteBlocked: 'Ce compte a encore des responsabilités qui doivent d’abord être confiées à quelqu’un d’autre : droits d’opérateur, applications enregistrées ou rôle de responsable de récupération.',
   deleteNotAvailable: 'La suppression de compte n’est pas encore disponible sur ce serveur.',
   deleteRetry: 'Votre compte n’a pas été supprimé, car une vérification de sécurité n’a pas pu aboutir. Réessayez dans quelques instants.',
+  ...additions,
 } satisfies Partial<typeof import('./en.ts').default>;

@@ -1,11 +1,11 @@
-import type { SecurityEvent, SignInMethods } from '../api/account-data.ts';
+import type { ConnectedApp, SecurityEvent, SignInMethods } from '../api/account-data.ts';
 
 /** What happened, in the account centre's words. Account actions without one
  * (a later service addition) are left out rather than shown as raw codes. */
 export type ActivityKind = 'signed-in' | 'sign-in-failed' | 'signed-out' | 'device-signed-out'
   | 'password-changed' | 'password-added' | 'password-removed' | 'passkey-added' | 'passkey-removed'
   | 'passkey-renamed' | 'two-step-on' | 'two-step-off' | 'authenticator-renamed' | 'backup-codes-changed'
-  | 'email-changed' | 'app-connected' | 'app-removed' | 'administrator';
+  | 'email-changed' | 'app-connected' | 'app-removed' | 'data-downloaded' | 'administrator';
 type SignInMethod = 'password' | 'passkey' | 'authenticator' | 'backup-code';
 
 const kinds: Record<string, ActivityKind> = {
@@ -15,7 +15,7 @@ const kinds: Record<string, ActivityKind> = {
   passkey_renamed: 'passkey-renamed', totp_added: 'two-step-on', totp_removed: 'two-step-off',
   totp_renamed: 'authenticator-renamed', backup_codes_changed: 'backup-codes-changed',
   email_changed: 'email-changed', consent_granted: 'app-connected', app_revoked: 'app-removed',
-  consent_revoked: 'app-removed', admin_action: 'administrator',
+  consent_revoked: 'app-removed', data_exported: 'data-downloaded', admin_action: 'administrator',
 };
 // Account names the sign-in endpoint that succeeded or failed.
 const methods: Record<string, SignInMethod> = { email: 'password', 'verify-authentication': 'passkey',
@@ -23,7 +23,8 @@ const methods: Record<string, SignInMethod> = { email: 'password', 'verify-authe
 
 /** Changes someone else could have made: each offers "Wasn't you?". */
 export const reviewable = new Set<ActivityKind>(['signed-in', 'sign-in-failed', 'password-changed',
-  'password-removed', 'passkey-added', 'two-step-off', 'email-changed', 'app-connected', 'backup-codes-changed']);
+  'password-removed', 'passkey-added', 'two-step-off', 'email-changed', 'app-connected', 'backup-codes-changed',
+  'data-downloaded']);
 
 export interface ActivityEntry {
   id: string;
@@ -82,19 +83,44 @@ export function presentActivity(events: readonly SecurityEvent[], now: Date, mor
   return { entries, complete: !more || recent.length < events.length };
 }
 
-export type CheckupIssue = 'verify-email' | 'failed-sign-ins' | 'add-second-step';
+export type CheckupIssue = 'verify-email' | 'failed-sign-ins' | 'add-second-step' | 'unused-apps';
 
 /** Sign-in failures in a day that deserve a look rather than a typo or two. */
 export const FAILED_SIGN_IN_ALERT = 3;
+/** An App unused this long probably no longer needs access, as Google's checkup suggests. */
+export const UNUSED_APP_DAYS = 90;
 
-/** What the account needs now, most urgent first. Empty when nothing does:
- * the Home checkup card appears only then (a "no issues" card is noise). */
+/** Apps from outside REZICS that haven't used the account in `UNUSED_APP_DAYS`. */
+export function unusedApps<T extends Pick<ConnectedApp, 'firstParty' | 'lastUsedAt' | 'grantedAt'>>(apps: readonly T[],
+  now: Date): T[] {
+  const since = now.getTime() - UNUSED_APP_DAYS * 86_400_000;
+  return apps.filter(app => !app.firstParty && Date.parse(app.lastUsedAt ?? app.grantedAt) < since);
+}
+
+/** What the account needs now, most urgent first; empty when all is well.
+ * `apps` is null when they could not be read. */
 export function securityCheckup(input: { emailVerified: boolean; methods: SignInMethods | null;
-  failedLast24Hours: number | null }): CheckupIssue[] {
+  failedLast24Hours: number | null; apps?: readonly ConnectedApp[] | null; now?: Date }): CheckupIssue[] {
   const issues: CheckupIssue[] = [];
   if (!input.emailVerified) issues.push('verify-email');
   if ((input.failedLast24Hours ?? 0) >= FAILED_SIGN_IN_ALERT) issues.push('failed-sign-ins');
   // A password alone can be phished or reused; a passkey or 2-Step Verification protects it.
   if (input.methods && !input.methods.passkeys.length && !input.methods.totp?.verified) issues.push('add-second-step');
+  if (input.apps && unusedApps(input.apps, input.now ?? new Date()).length) issues.push('unused-apps');
   return issues;
+}
+
+/** The checkup's four areas, in the order it reviews them. */
+export type CheckupArea = 'devices' | 'activity' | 'sign-in' | 'apps';
+export const checkupAreas: readonly CheckupArea[] = ['devices', 'activity', 'sign-in', 'apps'];
+export const issueArea: Record<CheckupIssue, CheckupArea> = { 'verify-email': 'sign-in',
+  'failed-sign-ins': 'activity', 'add-second-step': 'sign-in', 'unused-apps': 'apps' };
+/** Issues someone else may be causing now, or that lock the person out. */
+export const urgentIssues: ReadonlySet<CheckupIssue> = new Set(['verify-email', 'failed-sign-ins']);
+export type CheckupTone = 'ok' | 'tip' | 'warn' | 'unknown';
+
+/** An area's status: a warning for an urgent issue, a tip for a suggestion. */
+export function areaTone(area: CheckupArea, issues: readonly CheckupIssue[]): CheckupTone {
+  const found = issues.filter(issue => issueArea[issue] === area);
+  return found.some(issue => urgentIssues.has(issue)) ? 'warn' : found.length ? 'tip' : 'ok';
 }

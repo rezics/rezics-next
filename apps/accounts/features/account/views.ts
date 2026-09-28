@@ -1,12 +1,15 @@
 // Server-side view models: dates are localized once on the server so the
 // hydrated page shows the same text.
-import { type ActivityEntry, presentActivity } from './activity.ts';
+import { type ActivityEntry, presentActivity, securityCheckup, unusedApps } from './activity.ts';
 import type { ActivityView } from './activity-list.tsx';
 import type { ConnectedAppView } from './connected-apps.tsx';
 import type { DeviceView } from './devices.tsx';
 import type { PasskeyView } from './passkeys.tsx';
 import { calendarDate, relativeTime } from './format.ts';
-import type { AccountLocale, ConnectedApp, DeviceSession, Passkey, SecurityActivity } from '../api/account-data.ts';
+import type { CheckupView } from './security-checkup.tsx';
+import type { AccountLocale, AccountSession, ConnectedApp, DeviceSession, Passkey, SecurityActivity,
+  SignInMethods } from '../api/account-data.ts';
+import type { Read } from '../api/server.ts';
 
 export function passkeyViews(passkeys: Passkey[], now: Date, locale: AccountLocale): PasskeyView[] {
   return passkeys.map(passkey => ({ id: passkey.id, name: passkey.name, provider: passkey.provider,
@@ -77,4 +80,32 @@ export function firstPartyPermissionGroups(scopes: string[]): FirstPartyPermissi
     else groups.add('manage');
   }
   return (['account', 'read', 'create', 'participate', 'manage'] as const).filter(group => groups.has(group));
+}
+
+/** The account's reads as the Security Checkup (and the home and security
+ * pages' status) present them. `recent` limits the activity entries listed. */
+export function checkupView(input: { user: AccountSession['user']; methods: Read<SignInMethods>;
+  sessions: Read<{ items: DeviceSession[]; nextCursor?: string | null }>; activity: Read<SecurityActivity>;
+  apps: Read<{ items: ConnectedApp[]; nextCursor?: string | null }>; now: Date; locale: AccountLocale; recent?: number }): CheckupView {
+  const { user, now, locale } = input;
+  const methods = input.methods.status === 'ok' ? input.methods.data : null;
+  const apps = input.apps.status === 'ok' ? input.apps.data.items : null;
+  const failed = input.activity.status === 'ok' ? input.activity.data.failedLast24Hours.count : null;
+  const unused = new Set(apps ? unusedApps(apps, now).map(app => app.clientId) : []);
+  return {
+    complete: input.methods.status === 'ok' && input.sessions.status === 'ok' && !input.sessions.data.nextCursor
+      && input.activity.status === 'ok' && input.apps.status === 'ok' && !input.apps.data.nextCursor,
+    issues: securityCheckup({ emailVerified: user.emailVerified, methods, failedLast24Hours: failed, apps, now }),
+    failedSignIns: failed ?? 0,
+    devices: input.sessions.status === 'ok' ? { status: 'ok', items: deviceViews(input.sessions.data.items, now, locale) }
+      : { status: 'unavailable' },
+    activity: input.activity.status === 'ok' ? { status: 'ok', apps: input.apps.status === 'ok' ? appNames(input.apps) : {},
+      entries: activityPage(input.activity.data, now, locale).entries.slice(0, input.recent) } : { status: 'unavailable' },
+    signIn: methods ? { email: user.email, emailVerified: user.emailVerified, password: methods.password,
+      passwordChanged: methods.passwordChangedAt ? calendarDate(methods.passwordChangedAt, locale) : null,
+      passkeys: methods.passkeys.length, twoStep: methods.totp?.verified === true } : null,
+    apps: apps ? { status: 'ok', items: apps.map(app => ({ clientId: app.clientId, name: app.name,
+      lastUsed: app.lastUsedAt ? relativeTime(app.lastUsedAt, now, locale) : null, unused: unused.has(app.clientId) })) }
+      : { status: 'unavailable' },
+  };
 }

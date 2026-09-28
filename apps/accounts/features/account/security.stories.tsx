@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { ActivityView } from './activity-list.tsx';
 import type { DeviceView } from './devices.tsx';
+import { DevicesPage } from './devices-page.tsx';
 import { SecurityOverview } from './security.tsx';
 import { AccountFrame } from '../../.storybook/account-frame.tsx';
 import { chinese, dark, phone } from '../../.storybook/variants.ts';
@@ -27,7 +28,8 @@ const activity: ActivityView[] = [
 const meta = {
   title: 'Accounts/Account centre/Security', component: SecurityOverview,
   args: { signIn: { password: true, passwordChanged: 'Sep 1, 2026', passkeys: 2, twoStep: true }, issues: [],
-    failedSignIns: 0, devices: { status: 'ok', items: devices }, activity: { status: 'ok', entries: activity } },
+    failedSignIns: 0, unusedApps: 0, checkupComplete: true,
+    devices: { status: 'ok', items: devices }, activity: { status: 'ok', entries: activity } },
   decorators: [(Story, { parameters }) => <AccountFrame section="security" stepUp={parameters.stepUp}><Story /></AccountFrame>],
 } satisfies Meta<typeof SecurityOverview>;
 export default meta;
@@ -42,8 +44,8 @@ export const Overview: Story = {
     await expect(canvas.getByRole('link', { name: /2-Step Verification is on/ }))
       .toHaveAttribute('href', '/security/two-step-verification');
     await expect(canvas.getByText('This device')).toBeVisible();
-    await expect(canvas.getByText('REZICS on Chrome · macOS')).toBeVisible();
-    await expect(canvas.getByText('2 sign-ins')).toBeVisible();
+    await expect(canvas.getByText('REZICS · Chrome on macOS')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: /Manage all devices/ })).toHaveAttribute('href', '/security/devices');
     await expect(canvas.getByText('Unknown device')).toBeVisible();
     await expect(canvas.getByText('Signed in with a passkey')).toBeVisible();
     await expect(canvas.getByText('2 failed sign-in attempts')).toBeVisible();
@@ -58,10 +60,11 @@ const revoke = fn(async (): Promise<{ ok: true; data: undefined } | { ok: false;
 const reauthenticated = fn(async () => ({ ok: true as const, data: undefined }));
 const refreshed = fn();
 export const SignOutADevice: Story = {
+  render: () => <DevicesPage devices={{ status: 'ok', items: devices }} />,
   parameters: { account: { refresh: refreshed, api: { revokeSessions: revoke, reauthenticate: reauthenticated } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: 'Sign out · REZICS on Safari · iOS' }));
+    await userEvent.click(await canvas.findByRole('button', { name: 'Sign out · REZICS · Safari on iOS' }));
     // The service wants the person to confirm first; the change runs again afterwards.
     const dialog = await screen.findByRole('dialog', { name: 'Confirm it’s you' });
     await userEvent.type(within(dialog).getByLabelText('Enter your password'), 'correct horse battery');
@@ -75,13 +78,17 @@ export const SignOutADevice: Story = {
 };
 
 export const ConfirmWithPasskeyAndCode: Story = {
+  render: () => <DevicesPage devices={{ status: 'ok', items: devices }} />,
   parameters: { stepUp: { password: true, passkey: true, totp: true },
     account: { api: { revokeOtherSessions: async () => ({ ok: false, kind: 'step-up-required', status: 403 }),
       reauthenticateWithPasskey: async () => ({ ok: false, kind: 'invalid-credentials', status: 403 }) } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Sign out of all other devices' }));
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Sign out of all other devices?' });
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Sign out everywhere else' }));
     const dialog = await screen.findByRole('dialog', { name: 'Confirm it’s you' });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     await userEvent.click(within(dialog).getByRole('button', { name: 'Use your passkey' }));
     await expect(await within(dialog).findByRole('alert')).toHaveTextContent('That passkey couldn’t confirm it’s you.');
     await expect(within(dialog).getByRole('textbox', { name: 'Code from your authenticator app' })).toBeVisible();
@@ -137,7 +144,7 @@ export const Recommendations: Story = {
 };
 
 export const Unavailable: Story = {
-  args: { signIn: null, devices: { status: 'unavailable' }, activity: { status: 'unavailable' } },
+  args: { signIn: null, checkupComplete: false, devices: { status: 'unavailable' }, activity: { status: 'unavailable' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect((await canvas.findAllByText(/We could not reach the REZICS Account service/))[0]).toBeVisible();
@@ -154,6 +161,6 @@ export const Chinese: Story = {
     await expect(await canvas.findByRole('heading', { level: 1, name: '安全与登录' })).toBeVisible();
     await expect(canvas.getByText('当前设备')).toBeVisible();
     await expect(canvas.getByText('使用通行密钥登录')).toBeVisible();
-    await expect(canvas.getByRole('button', { name: '在所有其他设备上退出登录' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: '管理所有设备' })).toHaveAttribute('href', '/security/devices');
   },
 };

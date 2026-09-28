@@ -8,8 +8,9 @@ import { ReadStatePanel } from '../shell/state-panel.tsx';
 
 const meta = {
   title: 'Accounts/Account centre/Home', component: AccountHome,
-  args: { summary: { user: ada, issues: [], failedSignIns: 0, security: { passkeys: 2, twoStep: true }, devices: 2,
-    apps: 3 } },
+  args: { summary: { user: ada, issues: [], checkupComplete: true, failedSignIns: 0,
+    security: { passkeys: 2, twoStep: true }, devices: 2,
+    apps: 3, unusedApps: 0 } },
   decorators: [(Story, { parameters }) => <AccountFrame section="home"
     signedIn={parameters.signedIn !== false}><Story /></AccountFrame>],
 } satisfies Meta<typeof AccountHome>;
@@ -20,8 +21,7 @@ export const Overview: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: 'Welcome, Ada Lovelace' })).toBeVisible();
-    // Nothing needs doing, so there is no status card.
-    await expect(canvas.queryByRole('heading', { name: /needs attention|safer/ })).toBeNull();
+    await expect(canvas.getByRole('heading', { name: 'Your account is protected' })).toBeVisible();
     await expect(canvas.getByText('2-Step Verification is on')).toBeVisible();
     await expect(canvas.getByText('2 passkeys')).toBeVisible();
     await expect(canvas.getByText('Signed in on 2 devices')).toBeVisible();
@@ -33,7 +33,8 @@ export const Overview: Story = {
 
 export const NeedsAttention: Story = {
   args: { summary: { user: { ...ada, emailVerified: false }, issues: ['verify-email', 'failed-sign-ins', 'add-second-step'],
-    failedSignIns: 4, security: { passkeys: 0, twoStep: false }, devices: null, apps: 0 } },
+    checkupComplete: true, failedSignIns: 4, security: { passkeys: 0, twoStep: false }, devices: null, apps: 0,
+    unusedApps: 0 } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 2, name: 'Your account needs attention: 3 things to check' }))
@@ -48,11 +49,22 @@ export const NeedsAttention: Story = {
 };
 
 export const Recommendation: Story = {
-  args: { summary: { user: ada, issues: ['add-second-step'], failedSignIns: 0, security: { passkeys: 0, twoStep: false },
-    devices: 1, apps: 1 } },
+  args: { summary: { user: ada, issues: ['add-second-step'], checkupComplete: true, failedSignIns: 0,
+    security: { passkeys: 0, twoStep: false },
+    devices: 1, apps: 1, unusedApps: 0 } },
   async play({ canvasElement }) {
     await expect(await within(canvasElement).findByRole('heading', { level: 2, name: 'One way to make your account safer' }))
       .toBeVisible();
+  },
+};
+
+export const CheckUnavailable: Story = {
+  args: { summary: { user: ada, issues: [], checkupComplete: false, failedSignIns: 0,
+    security: null, devices: null, apps: null, unusedApps: 0 } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { name: 'Some checks are unavailable' })).toBeVisible();
+    await expect(canvas.queryByRole('heading', { name: 'Your account is protected' })).toBeNull();
   },
 };
 

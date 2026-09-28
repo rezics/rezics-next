@@ -1,4 +1,5 @@
 import { insert, plural } from 'native-i18n';
+import { en as additions } from './additions.ts';
 
 export default {
   sections: 'Account sections',
@@ -183,7 +184,7 @@ export default {
   network: insert('Network {{network}}', { network: String }),
   unknownDevice: 'Unknown device',
   deviceOn: insert('{{browser}} on {{os}}', { browser: String, os: String }),
-  appDevice: insert('{{app}} on {{device}}', { app: String, device: String }),
+  appDevice: insert('{{app}} · {{device}}', { app: String, device: String }),
   sessionsInGroup: insert('{{value}} sign-ins', { value: Number }),
   signOutDevice: 'Sign out',
   signOutAll: 'Sign out of all other devices',
@@ -284,4 +285,5 @@ export default {
   deleteBlocked: 'This account still has duties that must move to someone else first: operator rights, registered apps or recovery guardianship.',
   deleteNotAvailable: 'Account deletion isn’t available on this server yet.',
   deleteRetry: 'Your account wasn’t deleted because a safety check could not finish. Try again in a moment.',
+  ...additions,
 };

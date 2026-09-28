@@ -10,7 +10,7 @@ import type { CheckupIssue } from './activity.ts';
 import { ActivityList, type ActivityView } from './activity-list.tsx';
 import { SectionHeading, SettingsCard, SettingsLinkRow, SettingsRow } from './account-shell.tsx';
 import { CheckupCard } from './checkup-card.tsx';
-import { Devices, type DevicesView } from './devices.tsx';
+import { DeviceSummary, type DevicesView } from './devices.tsx';
 import { failureText } from './failure-text.ts';
 import { useStepUp } from './step-up.tsx';
 import { useAccountClient } from '../api/account-client.tsx';
@@ -158,8 +158,9 @@ function Status({ on, children }: { on: boolean; children: string }) {
 }
 
 /** Security & sign-in: how the person signs in, where, and what happened lately. */
-export function SecurityOverview({ signIn, issues, failedSignIns, devices, activity }: {
-  signIn: SignInSummary | null; issues: CheckupIssue[]; failedSignIns: number; devices: DevicesView;
+export function SecurityOverview({ signIn, issues, checkupComplete, failedSignIns, unusedApps, devices, activity }: {
+  signIn: SignInSummary | null; issues: CheckupIssue[]; checkupComplete: boolean; failedSignIns: number;
+  unusedApps: number; devices: DevicesView;
   activity: ActivitySummary }) {
   const { t } = useTranslation('account');
   const common = useTranslation('common').t;
@@ -167,7 +168,7 @@ export function SecurityOverview({ signIn, issues, failedSignIns, devices, activ
   return <>
     <SectionHeading title={t.security} intro={t.securityIntro} />
     <div className="flex flex-col gap-6">
-      <CheckupCard issues={issues} failedSignIns={failedSignIns} />
+      <CheckupCard issues={issues} complete={checkupComplete} failedSignIns={failedSignIns} unusedApps={unusedApps} />
       <SettingsCard title={t.signInMethods} description={t.signInMethodsIntro}>
         <PasswordRow summary={signIn} />
         <SettingsLinkRow label={t.methodPasskeys} href="/security/passkeys"
@@ -181,7 +182,7 @@ export function SecurityOverview({ signIn, issues, failedSignIns, devices, activ
             : <span className="text-muted-foreground">{common.unavailableTitle}</span>}
         </SettingsLinkRow>
       </SettingsCard>
-      <SettingsCard title={t.devices} description={t.devicesIntro}><Devices devices={devices} /></SettingsCard>
+      <SettingsCard title={t.devices} description={t.devicesIntro}><DeviceSummary devices={devices} /></SettingsCard>
       <SettingsCard title={t.activity} description={t.activityIntro}>
         {activity.status === 'ok' ? <ActivityList entries={activity.entries} apps={activity.apps} />
           : <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">

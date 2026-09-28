@@ -13,7 +13,7 @@ export function pendingAutofill(signal?: AbortSignal) {
 
 /** Story parameter `account`: API outcomes to fake and spies to assert on. */
 export interface FakeAccount { api?: Partial<AccountApi>; navigate?: (url: string) => void;
-  refresh?: () => void }
+  refresh?: () => void; download?: (file: Blob, name: string) => void }
 
 export const totpEnrollment = { totpURI: 'otpauth://totp/REZICS:ada%40example.test?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=REZICS',
   backupCodes: ['k3Hx7-Qm2pW', 'r9Tc4-Vn8sL', 'b2Yf6-Jd5hK', 'w7Pe3-Xa9gM', 'n4Zu8-Cq1tR', 'h6Ls2-Fk7vB',
@@ -35,7 +35,8 @@ export function fakeAccountClient(fake: FakeAccount = {}): AccountClient {
     regenerateBackupCodes: () => ok(totpEnrollment.backupCodes), revokeSession: () => ok(undefined),
     revokeSessions: () => ok(undefined),
     revokeOtherSessions: () => ok(undefined), revokeApp: () => ok(undefined), deleteAccount: () => ok(undefined),
+    exportData: () => ok({ file: new Blob(['{}'], { type: 'application/json' }), name: 'rezics-account-2026-09-28.json' }),
     ...fake.api,
   };
-  return { api, navigate: fake.navigate ?? fn(), refresh: fake.refresh ?? fn() };
+  return { api, navigate: fake.navigate ?? fn(), refresh: fake.refresh ?? fn(), download: fake.download ?? fn() };
 }

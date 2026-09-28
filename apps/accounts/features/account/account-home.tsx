@@ -12,9 +12,12 @@ import { useTranslation } from '../../i18n/client.ts';
 
 export interface HomeSummary {
   user: AvatarUser & { emailVerified: boolean };
-  /** What needs doing now; the checkup card shows only when this is not empty. */
+  /** What needs doing now; empty shows the account as protected. */
   issues: CheckupIssue[];
   failedSignIns: number;
+  checkupComplete: boolean;
+  /** Apps from outside REZICS unused for 90 days. */
+  unusedApps: number;
   /** Null when the source could not be read right now. */
   security: { passkeys: number; twoStep: boolean } | null;
   devices: number | null;
@@ -52,7 +55,8 @@ export function AccountHome({ summary }: { summary: HomeSummary }) {
       <p className="text-muted-foreground">{user.email}</p>
       <p className="max-w-lg text-base text-muted-foreground">{t.homeIntro}</p>
     </header>
-    <CheckupCard issues={summary.issues} failedSignIns={summary.failedSignIns} />
+    <CheckupCard issues={summary.issues} complete={summary.checkupComplete} failedSignIns={summary.failedSignIns}
+      unusedApps={summary.unusedApps} />
     <div className="grid gap-4 sm:grid-cols-2">
       <Tile icon={ShieldIcon} title={t.security} href={sectionPaths.security} action={t.reviewSecurity}>
         <ul className="text-foreground">
@@ -72,8 +76,8 @@ export function AccountHome({ summary }: { summary: HomeSummary }) {
       <Tile icon={AppWindowIcon} title={t.connectedApps} href={sectionPaths['connected-apps']} action={t.manageApps}>
         {summary.apps === null ? t.appsIntro : t.appsCardBody(summary.apps)}
       </Tile>
-      <Tile icon={SlidersHorizontalIcon} title={t.dataPrivacy} href={sectionPaths['data-privacy']} action={t.dataPrivacy}>
-        {t.privacyIntro}
+      <Tile icon={SlidersHorizontalIcon} title={t.dataPrivacy} href={sectionPaths['data-privacy']} action={t.manageData}>
+        {t.privacyTileBody}
       </Tile>
     </div>
   </div>;

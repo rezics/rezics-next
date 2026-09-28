@@ -1,4 +1,5 @@
 import { insert, plural } from 'native-i18n';
+import { ja as additions } from './additions-rest.ts';
 
 export default {
   sections: 'アカウントのセクション',
@@ -278,4 +279,5 @@ export default {
   deleteBlocked: 'このアカウントには、ほかの人に引き継ぐ必要がある役割が残っています。運営権限、登録済みアプリ、復元保護者の役割を先に引き継いでください。',
   deleteNotAvailable: 'このサーバーでは現在、アカウントを削除できません。',
   deleteRetry: '安全性の確認を完了できなかったため、アカウントは削除されませんでした。しばらくしてからもう一度お試しください。',
+  ...additions,
 } satisfies Partial<typeof import('./en.ts').default>;

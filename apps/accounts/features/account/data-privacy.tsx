@@ -1,78 +1,49 @@
 'use client';
 
-import { Alert, AlertDescription } from '@rezics/ui/alert';
-import { Button } from '@rezics/ui/button';
-import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
-import { Input } from '@rezics/ui/input';
-import { TriangleAlertIcon } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
-import { SectionHeading, SettingsCard } from './account-shell.tsx';
-import { useStepUp } from './step-up.tsx';
-import { useAccountClient } from '../api/account-client.tsx';
-import { PasswordField } from '../auth/fields.tsx';
+import { AppWindowIcon, DownloadIcon, FingerprintIcon, HistoryIcon, LaptopIcon, type LucideIcon, SlidersHorizontalIcon,
+  Trash2Icon, UserRoundIcon } from 'lucide-react';
+import { SectionHeading, SettingsCard, SettingsLinkRow } from './account-shell.tsx';
+import { focusedPaths, sectionPaths } from './sections.ts';
 import { useTranslation } from '../../i18n/client.ts';
 
-/** Account deletion through Better Auth's delete-user flow, which Account
- * enables only with its Access deletion fence. A passkey-only account has no
- * password to type; it confirms with its passkey instead. */
-export function DataPrivacy({ hasPassword = true }: { hasPassword?: boolean }) {
+/** What Account keeps, in the order "Download your data" writes it. */
+export const keptData = [
+  { icon: UserRoundIcon, text: 'keptAccount' },
+  { icon: SlidersHorizontalIcon, text: 'keptPreferences' },
+  { icon: FingerprintIcon, text: 'keptMethods' },
+  { icon: LaptopIcon, text: 'keptDevices' },
+  { icon: AppWindowIcon, text: 'keptApps' },
+  { icon: HistoryIcon, text: 'keptActivity' },
+] as const satisfies readonly { icon: LucideIcon; text: string }[];
+
+/** What Account keeps, one line each. */
+export function KeptData() {
   const { t } = useTranslation('account');
-  const showLabel = useTranslation('auth').t.showPassword;
-  const { api, navigate } = useAccountClient();
-  const stepUp = useStepUp();
-  const [password, setPassword] = useState('');
-  const [phrase, setPhrase] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [failure, setFailure] = useState('');
-  const [busy, setBusy] = useState(false);
-  const confirmed = phrase.trim().toLocaleLowerCase() === t.deletePhrase.toLocaleLowerCase();
+  return <ul className="flex flex-col gap-3 px-5 pb-5 sm:px-6">
+    {keptData.map(({ icon: Icon, text }) => <li key={text} className="flex items-start gap-3">
+      <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" /><span>{t[text]}</span></li>)}
+  </ul>;
+}
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!confirmed) return;
-    if (hasPassword && !password) return setPasswordError(t.deletePassword);
-    setBusy(true);
-    setFailure('');
-    const result = await stepUp(() => api.deleteAccount(password), { password: password || undefined });
-    if (result.ok) return navigate('/sign-in?deleted=1');
-    setBusy(false);
-    if (result.kind === 'cancelled') return;
-    if (result.kind === 'invalid-credentials') return setPasswordError(t.wrongCurrentPassword);
-    setFailure(result.kind === 'conflict' ? t.deleteBlocked : result.kind === 'not-enabled'
-      ? t.deleteNotAvailable : t.deleteRetry);
-  }
-
+/** Data & privacy, as Google Account arranges it: the options (download,
+ * app access, delete) first, then what the account keeps and why. Download
+ * and deletion are each a guided page of their own.
+ * See https://support.google.com/accounts/answer/7660719 */
+export function DataPrivacy({ apps }: { apps: number | null }) {
+  const { t } = useTranslation('account');
+  const icon = (Icon: LucideIcon) => <Icon className="size-4" aria-hidden="true" />;
   return <>
     <SectionHeading title={t.dataPrivacy} intro={t.privacyIntro} />
-    <SettingsCard title={t.deleteTitle}>
-      <form method="post" noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-5 px-5 py-5 sm:px-6">
-        <div className="flex gap-3 rounded-2xl bg-destructive/5 p-4">
-          <TriangleAlertIcon className="mt-0.5 size-5 shrink-0 text-destructive-foreground" aria-hidden="true" />
-          <div>
-            <p className="font-medium">{t.deleteIntro}</p>
-            <ul className="mt-2 list-disc space-y-1 ps-5 text-sm text-muted-foreground">
-              <li>{t.deleteSignedOut}</li><li>{t.deleteApps}</li><li>{t.deleteContent}</li>
-            </ul>
-          </div>
-        </div>
-        {hasPassword ? <>
-          <input type="text" name="username" autoComplete="username" hidden readOnly />
-          <PasswordField label={t.deletePassword} name="password" value={password} error={passwordError}
-            autoComplete="current-password" visibilityLabel={showLabel} disabled={busy}
-            onChange={value => { setPassword(value); setPasswordError(''); }} />
-        </> : null}
-        <Field disabled={busy}>
-          <FieldLabel>{t.deleteConfirm({ phrase: t.deletePhrase })}</FieldLabel>
-          <Input size="lg" name="confirmation" autoComplete="off" spellCheck={false} value={phrase}
-            onChange={event => setPhrase(event.currentTarget.value)} />
-          <FieldError />
-        </Field>
-        {failure ? <Alert role="alert" variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert> : null}
-        <div className="flex justify-end">
-          <Button type="submit" variant="destructive" size="lg" disabled={!confirmed || busy} isLoading={busy}>
-            {busy ? t.deleting : t.deleteButton}</Button>
-        </div>
-      </form>
-    </SettingsCard>
+    <div className="flex flex-col gap-6">
+      <SettingsCard title={t.privacyOptions} description={t.privacyOptionsBody}>
+        <SettingsLinkRow label={t.downloadTitle} href={focusedPaths.download} icon={icon(DownloadIcon)}>
+          {t.downloadRowBody}</SettingsLinkRow>
+        <SettingsLinkRow label={t.connectedApps} href={sectionPaths['connected-apps']} icon={icon(AppWindowIcon)}>
+          {apps === null ? t.appsIntro : t.appsCardBody(apps)}</SettingsLinkRow>
+        <SettingsLinkRow label={t.deleteRow} href={focusedPaths.deleteAccount} icon={icon(Trash2Icon)}>
+          {t.deleteRowBody}</SettingsLinkRow>
+      </SettingsCard>
+      <SettingsCard title={t.keptTitle} description={t.keptBody}><KeptData /></SettingsCard>
+    </div>
   </>;
 }

@@ -51,6 +51,8 @@ export interface AccountApi {
   revokeOtherSessions(): Promise<Result<void>>;
   revokeApp(clientId: string): Promise<Result<void>>;
   deleteAccount(password: string): Promise<Result<void>>;
+  /** "Download your data": the archive of what Account keeps, after a recent sign-in. */
+  exportData(): Promise<Result<{ file: Blob; name: string }>>;
 }
 
 type Body = Record<string, unknown>;
@@ -233,4 +235,19 @@ export const browserAccountApi: AccountApi = {
     return done(await account(`/connected-apps/${encodeURIComponent(clientId)}/revoke`, {}));
   },
   async deleteAccount(password) { return done(await auth('/delete-user', password ? { password } : {})); },
+  async exportData() {
+    let response: Response;
+    try {
+      response = await fetch('/api/account/data-export', { method: 'POST', credentials: 'same-origin',
+        headers: { accept: 'application/json', 'content-type': 'application/json' }, body: '{}' });
+    } catch { return failed('unavailable'); }
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as unknown;
+      return { ok: false, kind: classifyFailure(response.status, body), status: response.status };
+    }
+    const name = /filename="([^"]+)"/.exec(response.headers.get('content-disposition') ?? '')?.[1]
+      ?? 'rezics-account.json';
+    try { return { ok: true, data: { file: await response.blob(), name } }; }
+    catch { return failed('unavailable'); }
+  },
 };

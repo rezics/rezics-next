@@ -1,9 +1,10 @@
 'use client';
 
 import { AppWindowIcon, BadgeCheckIcon, CircleAlertIcon, FingerprintIcon, KeyRoundIcon, LockKeyholeIcon,
-  LogInIcon, LogOutIcon, type LucideIcon, MailIcon, ShieldCheckIcon, ShieldOffIcon, UserCogIcon } from 'lucide-react';
+  DownloadIcon, LogInIcon, LogOutIcon, type LucideIcon, MailIcon, ShieldCheckIcon, ShieldOffIcon, UserCogIcon } from 'lucide-react';
 import { type ActivityEntry, type ActivityKind, reviewable } from './activity.ts';
 import { useDeviceName } from './devices.tsx';
+import { focusedPaths } from './sections.ts';
 import { useTranslation } from '../../i18n/client.ts';
 
 /** An activity entry with its time already localized on the server. */
@@ -15,10 +16,8 @@ const icons: Record<ActivityKind, LucideIcon> = {
   'password-removed': LockKeyholeIcon, 'passkey-added': FingerprintIcon, 'passkey-removed': FingerprintIcon,
   'passkey-renamed': FingerprintIcon, 'two-step-on': ShieldCheckIcon, 'two-step-off': ShieldOffIcon,
   'authenticator-renamed': ShieldCheckIcon, 'backup-codes-changed': KeyRoundIcon, 'email-changed': MailIcon,
-  'app-connected': AppWindowIcon, 'app-removed': AppWindowIcon, administrator: UserCogIcon,
+  'app-connected': AppWindowIcon, 'app-removed': AppWindowIcon, 'data-downloaded': DownloadIcon, administrator: UserCogIcon,
 };
-
-export const SECURE_ACCOUNT_PATH = '/security/secure-account';
 
 /** Security events, newest first; the ones someone else could have caused
  * offer "Wasn't you?". */
@@ -64,7 +63,7 @@ export function ActivityList({ entries, apps = {} }: { entries: ActivityView[];
             {entry.network ? <> · <span className="tabular-nums">{t.network({ network: entry.network })}</span></> : null}
           </p>
         </div>
-        {reviewable.has(entry.kind) ? <a href={SECURE_ACCOUNT_PATH}
+        {reviewable.has(entry.kind) ? <a href={focusedPaths.secureAccount}
           className="shrink-0 rounded-md py-1 text-sm font-medium text-primary outline-none hover:underline
             focus-visible:ring-[3px] focus-visible:ring-ring/32">{t.wasntYou}</a> : null}
       </li>;
@@ -81,5 +80,5 @@ const titles = {
   'passkey-renamed': 'activityPasskeyRenamed', 'two-step-on': 'activityTwoStepOn', 'two-step-off': 'activityTwoStepOff',
   'authenticator-renamed': 'activityAuthenticatorRenamed', 'backup-codes-changed': 'activityBackupCodes',
   'email-changed': 'activityEmailChanged', 'app-connected': 'activityAppConnected', 'app-removed': 'activityAppRemoved',
-  administrator: 'activityAdministrator',
+  'data-downloaded': 'activityDataDownloaded', administrator: 'activityAdministrator',
 } as const satisfies Record<Exclude<ActivityKind, 'signed-in' | 'sign-in-failed' | 'device-signed-out'>, string>;

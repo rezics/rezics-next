@@ -1,4 +1,5 @@
 import { insert, plural } from 'native-i18n';
+import { es as additions } from './additions-rest.ts';
 
 export default {
   sections: 'Secciones de la cuenta',
@@ -282,4 +283,5 @@ export default {
   deleteBlocked: 'Esta cuenta aún tiene responsabilidades que primero deben transferirse a otra persona: derechos de operador, aplicaciones registradas o su designación como tutor de recuperación.',
   deleteNotAvailable: 'La eliminación de cuentas aún no está disponible en este servidor.',
   deleteRetry: 'No se ha eliminado tu cuenta porque no se ha podido completar una comprobación de seguridad. Vuelve a intentarlo dentro de un momento.',
+  ...additions,
 } satisfies Partial<typeof import('./en.ts').default>;

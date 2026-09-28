@@ -3,9 +3,10 @@
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { ShieldAlertIcon } from 'lucide-react';
-import { ActivityList, type ActivityView, SECURE_ACCOUNT_PATH } from './activity-list.tsx';
+import { ActivityList, type ActivityView } from './activity-list.tsx';
 import { SectionHeading, SettingsCard } from './account-shell.tsx';
 import { FAILED_SIGN_IN_ALERT } from './activity.ts';
+import { focusedPaths } from './sections.ts';
 import { ReadStatePanel } from '../shell/state-panel.tsx';
 import { useTranslation } from '../../i18n/client.ts';
 
@@ -28,7 +29,7 @@ export function SecurityActivityPage({ activity }: { activity: ActivityPageView 
         <ShieldAlertIcon aria-hidden="true" />
         <AlertTitle>{t.checkupFailedSignIns(failed.count)}</AlertTitle>
         <AlertDescription>{t.failedSignInsBody}</AlertDescription>
-        <AlertAction><Button variant="outline" size="sm" asChild><a href={SECURE_ACCOUNT_PATH}>{t.secureAccount}</a></Button></AlertAction>
+        <AlertAction><Button variant="outline" size="sm" asChild><a href={focusedPaths.secureAccount}>{t.secureAccount}</a></Button></AlertAction>
       </Alert> : null}
       <SettingsCard title={activity.paged ? t.olderActivity : t.recentActivity}>
         <ActivityList entries={activity.entries} apps={activity.apps} />
