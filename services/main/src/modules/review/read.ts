@@ -6,7 +6,7 @@ import { standingRatingSlotIri } from '../rating/observation.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import type { RatingLink, ReviewRow } from './store.ts';
 
-export async function reviewTarget(session: WorkReadSession, context: string, work: string):
+export async function reviewTarget(session: Pick<WorkReadSession, 'query'>, context: string, work: string):
   Promise<{ mainVersion: string; realm: string | null }> {
   const rows = await session.query(`SELECT DISTINCT ?main ?realm WHERE {
     ${publicWork(iri(work), '?main')}

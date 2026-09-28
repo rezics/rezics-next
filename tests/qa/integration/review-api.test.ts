@@ -12,9 +12,14 @@ import { ReviewReportOwner } from '../../../services/main/src/modules/governance
 import { GLOBAL_CONTEXT, GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
 import { GovernanceRules } from '../../../services/main/src/modules/governance/rules.ts';
 import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
+import { notificationProducerSubjectReader } from '../../../services/main/src/modules/notification-producers/subjects.ts';
+import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
+import { NotificationDispatcher } from '../../../services/main/src/modules/notification/dispatcher.ts';
+import { deliverRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
 import type { NotificationEvent } from '../../../services/main/src/modules/notification/store.ts';
 import { reviewSubject } from '../../../services/main/src/modules/notification/producer-review.ts';
 import { ReadRankingProjection } from '../../../services/main/src/modules/rankings/projection.ts';
+import { FakeDeliveryProvider } from '../support/fake-delivery.ts';
 import { startMediaStack } from './media-support.ts';
 
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -102,7 +107,7 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
       profile: 'realm-standing-rating-observation-v1', context: context.context,
       work: work.work, mainVersion: work.mainVersion, expectedRevisionHead: null,
       value: 6, actingSubject: voter }, b.token), 201);
-    const second = await json<{ review: string }>(await call('POST', '/v1/reviews', {
+    const second = await json<{ review: string; revision: string }>(await call('POST', '/v1/reviews', {
       ...body, actingSubject: voter, text: 'A second perspective', spoiler: false }, b.token), 201);
     const firstPage = await json<{ items: Array<{ id: string }>; nextCursor: string | null }>(
       await call('GET', `${path}&actingSubject=${encodeURIComponent(author)}&limit=1`, undefined, a.token));
@@ -160,9 +165,36 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
     expect(notices.filter(item => item.topic === 'review')).toMatchObject([{
       recipients: [a.principalId], subject: { ref: second.review } }]);
     expect(await reviewSubject(stack.accessPool, stack.fuseki, { principalId: a.principalId,
-      owner: 'access', ref: second.review, revision: null, disclosureBasis: 'review-created-v1',
+      owner: 'access', ref: second.review, revision: second.revision, disclosureBasis: 'review-created-v1',
       realm: realm.realm })).toMatchObject({ status: 'available', subject: {
         fields: { linkTarget: work.work, reviewId: second.review } } });
+    const notifications = new NotificationStore(stack.accessPool);
+    const subjects = notificationProducerSubjectReader(stack.accessPool, stack.contentPool, stack.env);
+    notifications.registerReadSubjectReader('review-created-v1', subjects);
+    notifications.registerReadSubjectReader('review-helpful-v1', subjects);
+    await notifications.registerEndpoint(a.principal, { channel: 'email', deviceId: null,
+      address: null, addressDigest: 'a'.repeat(64), lockScreenDisclosure: false });
+    await notifications.registerEndpoint(a.principal, { channel: 'push', deviceId: 'review-phone',
+      address: 'review-push-fixture', addressDigest: 'b'.repeat(64), lockScreenDisclosure: false });
+    const provider = new FakeDeliveryProvider();
+    const dispatcher = new NotificationDispatcher(stack.accessPool, provider,
+      { resolve: async () => ({ status: 'undisclosed' }) });
+    dispatcher.registerSubjectReader('review-created-v1', subjects);
+    dispatcher.registerSubjectReader('review-helpful-v1', subjects);
+    const createdNotice = notices.find(item => item.topic === 'review' && item.subject.ref === second.review)!;
+    const createdItem = (await notifications.enqueue(createdNotice))[0]!;
+    expect((await notifications.unreadCount(a.principal)).count).toBe(1);
+    await deliverRealmPolicy(stack.env, { realm: realm.realm, receipt_id: randomUUID(),
+      generation: '1', visibility: 'private', review_mode: 'mandatory' });
+    expect((await call('GET', `/v1/reviews/${second.review}`)).status).toBe(404);
+    expect((await notifications.readStream(a.principal, null)).items.find(item => item.id === createdItem.itemId)?.subject)
+      .toBeNull();
+    expect((await notifications.unreadCount(a.principal)).count).toBe(0);
+    expect((await dispatcher.runOnce()).cancelled).toBe(2);
+    expect(provider.calls.send).toBe(0);
+    await deliverRealmPolicy(stack.env, { realm: realm.realm, receipt_id: randomUUID(),
+      generation: '2', visibility: 'public', review_mode: 'mandatory' });
+    expect((await notifications.unreadCount(a.principal)).count).toBe(1);
     for (let i = 0; i < 4; i++) {
       const person = await stack.member(`helpful-${i}`);
       principals.set(person.token, person.principal);
@@ -173,6 +205,9 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
     await drain();
     expect(notices.filter(item => item.topic === 'review-helpful')).toMatchObject([{
       recipients: [a.principalId], subject: { ref: first.review } }]);
+    await notifications.enqueue(notices.find(item => item.topic === 'review-helpful'
+      && item.subject.ref === first.review)!);
+    expect((await notifications.unreadCount(a.principal)).count).toBe(2);
     const milestone = await stack.accessPool.query(`SELECT milestone FROM access.reader_review_milestone
       WHERE review_id = $1`, [first.review]);
     expect(milestone.rows).toEqual([{ milestone: 5 }]);
@@ -218,14 +253,18 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
       .some(item => item.review === first.review)).toBe(false);
     expect((await rank()).find(item => item.work === work.work)?.score).toBe('1');
     const helpfulSubject = { principalId: a.principalId, owner: 'access', ref: first.review,
-      revision: null, disclosureBasis: 'review-helpful-v1', realm: realm.realm };
+      revision: winner.revision, disclosureBasis: 'review-helpful-v1', realm: realm.realm };
     expect((await reviewSubject(stack.accessPool, stack.fuseki, helpfulSubject)).status).toBe('undisclosed');
+    expect((await notifications.unreadCount(a.principal)).count).toBe(1);
+    expect((await dispatcher.runOnce()).cancelled).toBe(2);
+    expect(provider.calls.send).toBe(0);
     expect((await call('POST', '/v1/reviews', { ...edit, expectedRevision: winner.revision }, a.token)).status)
       .toBe(403);
     await governance.decide(a.principal, { ...decision, outcome: 'restore', expectedGeneration: '1',
       idempotencyKey: randomUUID() });
     expect((await call('GET', `/v1/reviews/${first.review}`)).status).toBe(200);
     expect((await reviewSubject(stack.accessPool, stack.fuseki, helpfulSubject)).status).toBe('available');
+    expect((await notifications.unreadCount(a.principal)).count).toBe(2);
     expect((await rank()).find(item => item.work === work.work)?.score).toBe('2');
     const previousGeneration = (await projection.current()).generation;
     const reset = new ReadRankingProjection(stack.accessPool, rankingContent, stack.contentPool,
@@ -258,5 +297,10 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
       await expect(new ReaderReviews(stack.accessPool).eventsAfter('0')).rejects.toThrow();
     } finally { await releaseAccessRecoveryFence(stack.accessPool, generation); }
     expect((await call('GET', path)).status).toBe(200);
+    await stack.accessPool.query(`UPDATE access.representation SET active = false
+      WHERE principal_id = $1 AND subject_id = $2`, [a.principalId, author]);
+    expect((await notifications.readStream(a.principal, null)).items.find(item => item.id === createdItem.itemId)?.subject)
+      .toBeNull();
+    expect((await notifications.unreadCount(a.principal)).count).toBe(0);
   } finally { await stack.stop(); }
 });

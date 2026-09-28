@@ -4,7 +4,8 @@ import type { NotificationSubjectReader, SubjectResolution } from './dispatcher.
 import type { NotificationEvent } from './store.ts';
 import { reviewVisibleSql } from '../review/store.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
-import { publicWork } from '../work/public-patterns.ts';
+import { reviewTarget } from '../review/read.ts';
+import { READ_PREFIX, WorkReadMissing, type WorkReadSession } from '../work/read-session.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const hidden: SubjectResolution = { status: 'undisclosed' };
@@ -24,26 +25,40 @@ async function publicAuthors(graph: Pick<FusekiClient, 'query'>, work: string): 
   return rows.map(row => row.author?.value ?? '').filter(native.test.bind(native));
 }
 
-async function currentPublicWork(graph: Pick<FusekiClient, 'query'>, work: string): Promise<boolean> {
-  if (!native.test(work)) return false;
-  const rows = (await graph.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT DISTINCT ?main WHERE { ${publicWork(iri(work), '?main')} } LIMIT 2`, 16_384)).results?.bindings ?? [];
-  return rows.length === 1;
+/** Use the review reader's Context/Work decision, including Realm protection and the selected Main version. */
+async function currentReviewTarget(graph: Pick<FusekiClient, 'query'>,
+  row: { context: string; work: string; realm: string | null; main_version: string }): Promise<boolean> {
+  if (!native.test(row.work) || !native.test(row.main_version)) return false;
+  try { iri(row.context); } catch { return false; }
+  const reader: Pick<WorkReadSession, 'query'> = { async query(body, limit) {
+    const rows = (await graph.query(`${READ_PREFIX}\n${body}`, 16_384)).results?.bindings ?? [];
+    if (rows.length > limit) throw new Error('review target bound exceeded');
+    return rows;
+  } };
+  try {
+    const target = await reviewTarget(reader, row.context, row.work);
+    return target.realm === row.realm && target.mainVersion === row.main_version;
+  } catch (error) {
+    if (error instanceof WorkReadMissing) return false;
+    throw error;
+  }
 }
 
 /** Producer events are appended by the review writer's Access transaction. */
 export async function reviewNotification(access: Pool, graph: Pick<FusekiClient, 'query'>,
   kind: ReviewKind, eventId: string): Promise<NotificationEvent | null> {
   const row = (await access.query<{ id: string; revision: string; principal_id: string;
-    acting_subject: string; work: string; realm: string | null; milestone: number | null }>(`
+    acting_subject: string; context: string; work: string; main_version: string;
+    realm: string | null; milestone: number | null }>(`
     SELECT r.id::text, r.revision::text, r.principal_id::text, r.acting_subject,
-      r.work, r.realm, m.milestone
+      r.context, r.work, r.main_version, r.realm, m.milestone
     FROM access.reader_review_event ev JOIN access.reader_review r ON r.id = ev.review_id
     LEFT JOIN access.reader_review_milestone m ON m.event_id = ev.id
-    WHERE ev.id = $1 AND ev.kind = $2 AND NOT r.deleted AND ${reviewVisibleSql}`,
+    WHERE ev.id = $1 AND ev.kind = $2 AND NOT r.deleted
+      AND ($2 <> 'created' OR ev.revision = r.revision) AND ${reviewVisibleSql}`,
   [eventId, kind === 'review_created' ? 'created' : 'helpful-changed'])).rows[0];
   if (!row || kind === 'review_helpful_milestone' && !row.milestone
-    || !await currentPublicWork(graph, row.work)) return null;
+    || !await currentReviewTarget(graph, row)) return null;
   let recipients: string[];
   if (kind === 'review_created') {
     const authors = (await publicAuthors(graph, row.work)).filter(author => author !== row.acting_subject);
@@ -75,11 +90,14 @@ export async function reviewSubject(access: Pool, graph: Pick<FusekiClient, 'que
   input: Parameters<NotificationSubjectReader['resolve']>[0]): Promise<SubjectResolution> {
   if (input.owner !== 'access' || !/^[0-9a-f-]{36}$/.test(input.ref)
     || !['review-created-v1', 'review-helpful-v1'].includes(input.disclosureBasis)) return hidden;
-  const row = (await access.query<{ principal_id: string; acting_subject: string; work: string;
-    realm: string | null; body: string; spoiler: boolean }>(`SELECT r.principal_id::text,
-      r.acting_subject, r.work, r.realm, r.body, r.spoiler FROM access.reader_review r
+  const row = (await access.query<{ principal_id: string; acting_subject: string; context: string;
+    work: string; main_version: string; realm: string | null; revision: string;
+    body: string; spoiler: boolean }>(`SELECT r.principal_id::text,
+      r.acting_subject, r.context, r.work, r.main_version, r.realm, r.revision::text,
+      r.body, r.spoiler FROM access.reader_review r
       WHERE r.id = $1 AND NOT r.deleted AND ${reviewVisibleSql}`, [input.ref])).rows[0];
-  if (!row || row.realm !== (input.realm ?? null) || !await currentPublicWork(graph, row.work)) return hidden;
+  if (!row || row.realm !== (input.realm ?? null) || row.revision !== input.revision
+    || !await currentReviewTarget(graph, row)) return hidden;
   if (input.disclosureBasis === 'review-helpful-v1') {
     if (row.principal_id !== input.principalId) return hidden;
   } else {
@@ -92,6 +110,12 @@ export async function reviewSubject(access: Pool, graph: Pick<FusekiClient, 'que
         AND rep.valid_until > clock_timestamp() LIMIT 1`, [input.principalId, authors]);
     if (!represented.rowCount) return hidden;
   }
+  const current = (await access.query(`SELECT 1 FROM access.reader_review r
+    WHERE r.id = $1 AND r.revision = $2 AND r.context = $3 AND r.work = $4
+      AND r.main_version = $5 AND r.realm IS NOT DISTINCT FROM $6
+      AND NOT r.deleted AND ${reviewVisibleSql}`, [input.ref, row.revision, row.context,
+    row.work, row.main_version, row.realm])).rowCount === 1;
+  if (!current || !await currentReviewTarget(graph, row)) return hidden;
   return { status: 'available', subject: { private: false,
     fields: { linkTarget: row.work, reviewId: input.ref, ...(row.realm ? { realm: row.realm } : {}),
       ...(!row.spoiler ? { excerpt: row.body.slice(0, 240) } : {}) } } };

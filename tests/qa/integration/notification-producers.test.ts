@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
+import { NotificationDispatcher } from '../../../services/main/src/modules/notification/dispatcher.ts';
 import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
 import { notificationProducerSubjectReader } from '../../../services/main/src/modules/notification-producers/subjects.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
-import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases, FakeDeliveryProvider } from '../support/fake-delivery.ts';
 
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
 
@@ -169,25 +170,111 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
     const replyRevision = randomUUID();
     const root = agent();
     const rootRevision = agent();
+    const placementId = agent();
+    const reviewId = randomUUID();
+    const preparationId = randomUUID();
+    const realmSpace = agent();
     let publicRoot = true;
+    let privateRealm = false;
+    let reviewApproved = true;
     const readerGraph = { query: async (sparql: string, budget: number) => {
       await syntaxGraph.query(sparql, budget);
       if (sparql.includes(' ASK ')) return { boolean: publicRoot };
-      return { results: { bindings: [{ placement: { value: agent() },
+      if (sparql.includes('SELECT ?space ?realmRevision')) return { results: { bindings: [{
+        space: { value: realmSpace }, disclosure: { value: `https://rezics.com/vocab/${privateRealm ? 'Private' : 'Public'}` },
+        ...(privateRealm ? { visibility: { value: 'private' } } : {}),
+      }] } };
+      return { results: { bindings: [{ placement: { value: placementId },
         revision: { value: `urn:rezics:content:revision:${replyRevision}` },
-        review: { value: `urn:rezics:realm-review:${randomUUID()}` },
-        root: { value: root }, author: { value: actor }, preparation: { value: randomUUID() } }] } };
+        review: { value: `urn:rezics:realm-review:${reviewId}` },
+        root: { value: root }, author: { value: actor }, preparation: { value: preparationId } }] } };
     } } as unknown as FusekiClient;
-    const readerContent = { query: async () => ({ rows: [{ reply, author: actor,
-      rootTarget: root, rootRevision, revisionId: replyRevision, body: 'A visible reply' }] }) } as unknown as Pool;
+    const readerContent = { query: async (sql: string) => ({ rowCount: sql.includes('SELECT 1 FROM content.reply p')
+      ? Number(reviewApproved) : 1, rows: sql.includes('SELECT origin_realm')
+      ? [{ origin_realm: null }] : sql.includes('SELECT 1 FROM content.reply p') ? [{}]
+        : [{ reply, author: actor, rootTarget: root, rootRevision,
+          revisionId: replyRevision, body: 'A visible reply' }] }) } as unknown as Pool;
     const replyReader = notificationProducerSubjectReader(access, readerContent,
-      { fuseki: readerGraph } as WorkActivationEnvironment);
+      { fuseki: readerGraph, lineage: { dataEpoch: 'test', routingEpoch: 'test' } } as WorkActivationEnvironment);
     const replyInput = { principalId: recipientId, owner: 'graph', ref: reply,
       revision: `urn:rezics:content:revision:${replyRevision}`,
       disclosureBasis: 'realm-reply-v1', realm };
     expect((await replyReader.resolve(replyInput)).status).toBe('available');
     publicRoot = false;
     expect((await replyReader.resolve(replyInput)).status).toBe('undisclosed');
+    publicRoot = true;
+
+    // The public root's author receives an item, but a private Realm must hide the discussion.
+    store.registerReadSubjectReader('realm-reply-v1', replyReader);
+    await store.registerEndpoint({ issuer: 'test', subject: 'recipient' }, { channel: 'email',
+      deviceId: null, address: null, addressDigest: 'a'.repeat(64), lockScreenDisclosure: false });
+    await store.registerEndpoint({ issuer: 'test', subject: 'recipient' }, { channel: 'push',
+      deviceId: 'phone', address: 'push-fixture', addressDigest: 'b'.repeat(64), lockScreenDisclosure: false });
+    const provider = new FakeDeliveryProvider();
+    const dispatcher = new NotificationDispatcher(access, provider, { resolve: async () => ({ status: 'undisclosed' }) });
+    dispatcher.registerSubjectReader('realm-reply-v1', replyReader);
+    const replyEvent = (sourceEvent: string) => ({ sourceOwner: 'graph' as const, sourceEvent,
+      purpose: 'social' as const, topic: 'reply', subject: { owner: 'graph' as const, ref: reply,
+        revision: replyInput.revision }, disclosureBasis: 'realm-reply-v1', recipients: [recipientId],
+      display: { kind: 'reply' as const, actorAgent: actor, realm, groupKey: root } });
+    const principal = { issuer: 'test', subject: 'recipient' };
+    const publicItem = (await store.enqueue(replyEvent(`reply-public-${randomUUID()}`)))[0]!;
+    expect((await store.readStream(principal, null)).items.find(item => item.id === publicItem.itemId)?.display?.target.excerpt)
+      .toBe('A visible reply');
+    expect((await store.unreadCount(principal)).count).toBe(1);
+    expect((await dispatcher.runOnce()).delivered).toBe(2);
+    expect([...provider.accepted.values()].every(value => value.payload.excerpt === 'A visible reply')).toBe(true);
+
+    privateRealm = true;
+    expect((await replyReader.resolve(replyInput)).status).toBe('undisclosed');
+    expect((await store.readStream(principal, null)).items.find(item => item.id === publicItem.itemId)?.subject)
+      .toBeNull();
+    expect((await store.unreadCount(principal)).count).toBe(0);
+    const outsideItem = (await store.enqueue(replyEvent(`reply-outside-${randomUUID()}`)))[0]!;
+    const sentBefore = provider.calls.send;
+    expect((await dispatcher.runOnce()).cancelled).toBe(2);
+    expect(provider.calls.send).toBe(sentBefore);
+    expect((await access.query<{ state: string }>(`SELECT state FROM access.notification_delivery
+      WHERE item_id = $1`, [outsideItem.itemId])).rows.map(row => row.state)).toEqual(['cancelled', 'cancelled']);
+
+    await access.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')`, [realm]);
+    await access.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
+      VALUES ('realm',$1,1,'terms-1')`, [realm]);
+    await access.query(`INSERT INTO access.membership
+      (id,kind,owner_subject,member_subject,state,generation,policy_revision,terms_revision,consent_reference)
+      VALUES ($1,'realm',$2,$3,'joined',1,1,'terms-1','notification-fixture')`,
+    [randomUUID(), realm, member]);
+    expect((await replyReader.resolve(replyInput)).status).toBe('available');
+    const privateSubject = await replyReader.resolve(replyInput);
+    expect(privateSubject.status).toBe('available');
+    if (privateSubject.status !== 'available') throw new Error('member reply was not disclosed');
+    expect(privateSubject.subject.private).toBe(true);
+    const memberItem = (await store.enqueue(replyEvent(`reply-member-${randomUUID()}`)))[0]!;
+    expect((await store.unreadCount(principal)).count).toBe(3);
+    expect((await dispatcher.runOnce()).delivered).toBe(2);
+    const memberDeliveries = (await access.query<{ id: string; channel: string }>(`
+      SELECT id, channel FROM access.notification_delivery WHERE item_id = $1`, [memberItem.itemId])).rows;
+    expect(provider.accepted.get(memberDeliveries.find(item => item.channel === 'email')!.id)?.payload.excerpt)
+      .toBe('A visible reply');
+    expect(provider.accepted.get(memberDeliveries.find(item => item.channel === 'push')!.id)?.payload)
+      .toEqual({ notice: 'new-activity' });
+
+    reviewApproved = false;
+    expect((await replyReader.resolve(replyInput)).status).toBe('undisclosed');
+    expect((await store.unreadCount(principal)).count).toBe(0);
+    reviewApproved = true;
+    await access.query(`UPDATE access.membership SET state = 'left', generation = generation + 1,
+      terms_revision = NULL, consent_reference = NULL WHERE kind = 'realm' AND owner_subject = $1`, [realm]);
+    expect((await replyReader.resolve(replyInput)).status).toBe('undisclosed');
+    expect((await store.unreadCount(principal)).count).toBe(0);
+    await access.query(`UPDATE access.membership SET state = 'joined', generation = generation + 1,
+      terms_revision = 'terms-1', consent_reference = 'notification-rejoin'
+      WHERE kind = 'realm' AND owner_subject = $1`, [realm]);
+    expect((await replyReader.resolve(replyInput)).status).toBe('available');
+    await access.query(`UPDATE access.representation SET active = false WHERE principal_id = $1`, [recipientId]);
+    expect((await replyReader.resolve(replyInput)).status).toBe('undisclosed');
+    expect((await store.unreadCount(principal)).count).toBe(0);
+    await access.query(`UPDATE access.representation SET active = true WHERE principal_id = $1`, [recipientId]);
 
     const work = agent();
     const scope = `review:decide:${realm}`;

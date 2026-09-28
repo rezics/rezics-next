@@ -1,8 +1,10 @@
 import type { Pool } from 'pg';
 import type { NotificationSubjectReader, SubjectResolution } from '../notification/dispatcher.ts';
-import { readPlacementHead } from '../realm-reply/graph.ts';
 import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
 import { publicReplyRoot } from '../realm-reply/root.ts';
+import { visibleRealmReply } from '../realm-reply/store.ts';
+import { AccessAdmissionRegistry, type VerifiedPrincipal } from '../access/admission.ts';
+import { readRealmPolicy } from '../space/policy.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { reviewSubject } from '../notification/producer-review.ts';
 import { notificationRealmDisplay, notificationRoleName, notificationWorkTitle }
@@ -11,6 +13,30 @@ import { notificationRealmDisplay, notificationRoleName, notificationWorkTitle }
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const hidden: SubjectResolution = { status: 'undisclosed' };
+
+/** One represented participation candidate; the Access permit makes the final decision. */
+async function realmActors(access: Pool, principalId: string, realm: string): Promise<{
+  principal: VerifiedPrincipal; actor: string }[]> {
+  const rows = (await access.query<{ issuer: string; subject: string; actor: string }>(`
+    SELECT DISTINCT p.account_issuer AS issuer, p.account_subject AS subject, r.subject_id AS actor
+    FROM access.principal p JOIN access.representation r ON r.principal_id = p.id
+    JOIN access.authority_subject s ON s.id = r.subject_id AND s.active AND s.kind = 'agent'
+    WHERE p.id = $1 AND p.active AND r.active AND r.valid_until > clock_timestamp()
+      AND (EXISTS (SELECT 1 FROM access.private_membership m
+        WHERE m.kind = 'realm' AND m.owner_subject = $2 AND m.principal_id = p.id AND m.state = 'joined')
+        OR EXISTS (SELECT 1 FROM access.membership m WHERE m.kind = 'realm'
+          AND m.owner_subject = $2 AND m.member_subject = r.subject_id AND m.state = 'joined')
+        OR EXISTS (SELECT 1 FROM access.permission_grant g WHERE g.scope_id = 'governance:realm:' || $2
+          AND g.recipient_subject = r.subject_id AND g.action = 'realm.owner' AND g.active
+          AND g.valid_until > clock_timestamp() AND g.membership_id IS NULL))
+      AND NOT EXISTS (SELECT 1 FROM access.private_membership_ban b
+        WHERE b.kind = 'realm' AND b.owner_subject = $2 AND b.principal_id = p.id AND b.active)
+      AND NOT EXISTS (SELECT 1 FROM access.membership_ban b
+        WHERE b.kind = 'realm' AND b.owner_subject = $2 AND b.member_subject = r.subject_id
+          AND b.active AND (b.expires_at IS NULL OR b.expires_at > clock_timestamp()))
+    ORDER BY actor LIMIT 1`, [principalId, realm])).rows;
+  return rows.map(row => ({ principal: { issuer: row.issuer, subject: row.subject }, actor: row.actor }));
+}
 
 async function represents(access: Pool, principalId: string, agent: string, action?: string): Promise<boolean> {
   if (!native.test(agent)) return false;
@@ -40,6 +66,7 @@ async function currentContributionAuthors(env: WorkActivationEnvironment, resour
 export function notificationProducerSubjectReader(access: Pool, content: Pool,
   env: WorkActivationEnvironment): NotificationSubjectReader {
   const replies = new RealmReplyContentStore(content);
+  const realmAccess = new AccessAdmissionRegistry(access);
   const present = async (result: SubjectResolution, realm: string | null | undefined,
     work?: string, publicOnly = true): Promise<SubjectResolution> => {
     if (result.status !== 'available') return result;
@@ -54,19 +81,43 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
       if (result.status !== 'available') return result;
       const row = (await access.query<{ work: string }>(`SELECT work FROM access.reader_review
         WHERE id = $1`, [input.ref])).rows[0];
-      return present(result, input.realm, row?.work);
+      const presented = await present(result, input.realm, row?.work);
+      const checked = await reviewSubject(access, env.fuseki, input);
+      return checked.status === 'available' && JSON.stringify(checked.subject) === JSON.stringify(result.subject)
+        ? presented : hidden;
     }
     if (input.disclosureBasis === 'realm-reply-v1') {
       if (input.owner !== 'graph' || !native.test(input.ref) || !input.realm || !native.test(input.realm)
         || !input.revision?.startsWith('urn:rezics:content:revision:')) return hidden;
-      const placement = await readPlacementHead(env, input.realm, input.ref);
+      const policy = await readRealmPolicy(env, input.realm);
+      if (!policy) return hidden;
+      const candidates = policy.visibility === 'private'
+        ? await realmActors(access, input.principalId, input.realm) : [];
+      if (policy.visibility === 'private' && !candidates.length) return hidden;
+      let accepted: { principal?: VerifiedPrincipal; actor?: string } | null = null;
+      let placement = policy.visibility === 'private' ? null
+        : await visibleRealmReply(replies, realmAccess, env, input.realm, input.ref);
+      if (placement) accepted = {};
+      for (const candidate of candidates) {
+        placement = await visibleRealmReply(replies, realmAccess, env, input.realm, input.ref,
+          candidate.principal, candidate.actor);
+        if (placement) { accepted = candidate; break; }
+      }
       if (!placement || `urn:rezics:content:revision:${placement.revisionId}` !== input.revision) return hidden;
       const reply = await replies.readCurrent(input.ref);
       if (!reply || reply.revisionId !== placement.revisionId) return { status: 'erased' };
       if (!await publicReplyRoot(env.fuseki, reply.rootTarget, reply.rootRevision)) return hidden;
-      return present({ status: 'available', subject: { private: false,
+      const result = await present({ status: 'available', subject: { private: policy.visibility !== 'public',
         fields: { linkTarget: input.ref, realm: input.realm, excerpt: reply.body.slice(0, 240) } } },
-      input.realm, reply.rootTarget);
+        input.realm, reply.rootTarget);
+      const current = await visibleRealmReply(replies, realmAccess, env, input.realm, input.ref,
+        accepted?.principal, accepted?.actor);
+      const currentReply = await replies.readCurrent(input.ref);
+      if (current?.placement !== placement.placement || current.revisionId !== placement.revisionId
+        || currentReply?.revisionId !== placement.revisionId
+        || JSON.stringify(await readRealmPolicy(env, input.realm)) !== JSON.stringify(policy)
+        || !await publicReplyRoot(env.fuseki, reply.rootTarget, reply.rootRevision)) return hidden;
+      return result;
     }
     if (input.owner !== 'access' || !uuid.test(input.ref)) return hidden;
     if (input.disclosureBasis === 'realm-invitation-v1') {
