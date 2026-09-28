@@ -56,6 +56,12 @@ export class ReaderLibraryRatings {
     const heads = await this.heads(principalId, [global, selectedRealm].filter((x): x is string => !!x),
       works.map(item => item.work));
     if (heads.length) {
+      // This inventory is restricted to the current Account principal's own
+      // observations. Use the same live Person control as the reader library;
+      // a context-wide observation-read grant is not needed to read one's rating.
+      if (!await session.deps.access.canReadAsBaselineMember?.(session.principal!, actor)) {
+        throw new WorkReadUnavailable('Reader authority is unavailable');
+      }
       const ratingPrincipal = await session.deps.account.verify(session.request, ['rating:read']);
       if (ratingPrincipal.issuer !== session.principal!.issuer
         || ratingPrincipal.subject !== session.principal!.subject) {
@@ -66,9 +72,6 @@ export class ReaderLibraryRatings {
     const result = new Map<string, { global: OwnRating | null; realm: OwnRating | null }>();
     const budget = { bytesLeft: 512 * 1024, signal: AbortSignal.timeout(5_000) };
     for (const head of heads) {
-      if (!await session.deps.access.canReadStandingRating(session.principal!, actor, head.context)) {
-        throw new WorkReadUnavailable('Rating authority is unavailable');
-      }
       if (head.main_version !== currentMain.get(head.work)) continue;
       const kind = head.context === global ? 'global' : head.context === selectedRealm ? 'realm' : null;
       if (!kind) throw new WorkReadUnavailable('Rating inventory context changed');
@@ -120,10 +123,8 @@ export class ReaderLibraryRatings {
         stale: row.currentHead?.value !== head.revision };
       result.set(head.work, owned);
     }
-    for (const context of new Set(heads.map(head => head.context))) {
-      if (!await session.deps.access.canReadStandingRating(session.principal!, actor, context)) {
-        throw new WorkReadUnavailable('Rating authority changed');
-      }
+    if (heads.length && !await session.deps.access.canReadAsBaselineMember?.(session.principal!, actor)) {
+      throw new WorkReadUnavailable('Reader authority changed');
     }
     return result;
   }

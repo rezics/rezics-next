@@ -2,6 +2,11 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { automaticDiscovery } from '../../../services/main/src/modules/discovery/automation.ts';
+import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
+import { projectDiscoveryWork } from '../../../services/main/src/modules/discovery/source.ts';
+import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
@@ -17,7 +22,7 @@ import { InvalidLibraryStatus, LibraryStatusConflict, ReaderLibraryStatusStore,
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
-test('G285: status set, clear, retry, stale and concurrent commands preserve one shelf per Work', async () => {
+test('G285 G352: reader status, own ratings, serial progress and discovery survive ordinary member authority', async () => {
   const stack = await startMediaStack('reader-library');
   try {
     const status = new ReaderLibraryStatusStore(stack.contentPool);
@@ -66,15 +71,19 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
       [b.token, { ...b.principal, emailVerified: true }]]);
     const structureObjects = stack.objects('reader-library/structure/');
     await structureObjects.initialize();
-    const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
-      account: { verify: async request => {
+    const discovery = new DiscoveryProjection(stack.accessPool);
+    let ratingConsent = true;
+    const deps = { environment: stack.env, access: stack.access, discovery,
+      account: { verify: async (request: Request, scopes: readonly string[]) => {
+        if (scopes.includes('rating:read') && !ratingConsent) throw new AccountAssertionDenied('Missing rating consent');
         const principal = tokens.get(request.headers.get('authorization')?.replace('Bearer ', '') ?? '');
         if (!principal) throw new Error('unknown bearer');
         return principal;
       } }, libraryStatus: status, libraryRatings: new ReaderLibraryRatings(stack.accessPool),
       profiles: new ProfilesAccess(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
-      media: stack.media, mediaAccess: stack.mediaAccess, structureObjects });
+      media: stack.media, mediaAccess: stack.mediaAccess, structureObjects };
+    const app = createMainApp(stack.fuseki, deps);
     const signedOut = await app.handle(new Request(`http://main.local/v1/works/${work.slice(-36)}/reader-state`));
     expect(signedOut.status).toBe(200);
     expect(signedOut.headers.get('cache-control')).toContain('public');
@@ -238,7 +247,10 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
     expect(contextResponse.status).toBe(201);
     const context = await contextResponse.json() as { context: string };
     await grant(`rating:observe:${context.context}`, 'rating.observation.set');
-    await grant(`rating:read:${context.context}`, 'rating.observation.read');
+    // G352: ordinary readers can see their own rating without a context-wide
+    // observation-read grant. Provisioned Person control is their authority.
+    expect(await stack.access.canReadStandingRating({ ...a.principal, emailVerified: true },
+      person.agent, context.context)).toBe(false);
     const observation = await app.handle(new Request('http://main.local/v1/global-rating-observations', {
       method: 'POST', headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
         'idempotency-key': randomUUID() },
@@ -251,6 +263,12 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
     expect(withRating.status).toBe(200);
     expect(await withRating.json()).toMatchObject({ rating: { global: { value: 5,
       availability: 'available' } } });
+    ratingConsent = false;
+    expect((await view()).status).toBe(401);
+    ratingConsent = true;
+    expect((await app.handle(new Request(
+      `http://main.local${route}/reader-state?actingSubject=${actingSubject}`,
+      { headers: { authorization: `Bearer ${b.token}` } }))).status).toBe(403);
     await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(observed.observation)} rv:observationHead ${iri(observed.observationRevision)} } }`);
     expect((await view()).status).toBe(503);
@@ -287,6 +305,13 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
           expectedCompositionHead: composition.revision, actingSubject: person.agent }) }));
     expect(chapterResponse.status).toBe(200);
     const chapter = await chapterResponse.json() as { work: string };
+    const bookRating = await app.handle(new Request('http://main.local/v1/global-rating-observations', {
+      method: 'POST', headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+        'idempotency-key': randomUUID() },
+      body: JSON.stringify({ profile: 'global-rating-standing-observation-v1',
+        context: context.context, work: book.work, mainVersion: book.mainVersion,
+        expectedRevisionHead: null, value: 4, actingSubject: person.agent }) }));
+    expect(bookRating.status).toBe(201);
     const occurrence = id();
     await new StructureProgressStore(stack.contentPool).write({ principal: a.principal,
       structure: composition.structure, occurrence, completed: false, position: 'paragraph-4',
@@ -295,8 +320,9 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
       `http://main.local/v1/works/${book.work.slice(-36)}/reader-state?actingSubject=${actingSubject}`,
       { headers: { authorization: `Bearer ${a.token}` } }));
     expect(withProgress.status).toBe(200);
-    expect(await withProgress.json()).toMatchObject({ progress: { structure: composition.structure,
-      occurrence, position: 'paragraph-4', completed: false, version: 1 } });
+    expect(await withProgress.json()).toMatchObject({ rating: { global: { value: 4, availability: 'available' } },
+      progress: { structure: composition.structure,
+        occurrence, position: 'paragraph-4', completed: false, version: 1 } });
     const setBookStatus = (current: number, next: 'reading' | 'read') => app.handle(new Request(
       `http://main.local/v1/works/${book.work.slice(-36)}/reader-status`, { method: 'PUT',
         headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
@@ -419,5 +445,59 @@ test('G285: status set, clear, retry, stale and concurrent commands preserve one
     expect(legacyPublic.status).toBe(200);
     expect(await legacyPublic.json()).toMatchObject({ statusShelves: expect.arrayContaining([
       expect.objectContaining({ status: 'reading', count: 2 })]) });
+
+    // G352: the same rated serial is a public discovery candidate; chapter Works
+    // do not turn into separate cards or poison a first page with a 503.
+    const basis = { scope: 'global' as const, realm: null, context: null };
+    const operator = automaticDiscovery(null);
+    const buildRequest = new Request('http://main.internal/library-discovery-build');
+    let generation = await workRead(deps, buildRequest, {}, session =>
+      discovery.register(operator, basis, session.position,
+        { idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) }));
+    for (let step = 0; !generation.complete && step < 20; step++) {
+      generation = await workRead(deps, buildRequest, {}, async session => {
+        const row = generation;
+        const lease = await discovery.beginStep(operator, row.generation_id, row.checkpoint);
+        return { ...await discovery.commitStep(operator, row.generation_id, lease.lease, row.checkpoint,
+          await projectDiscoveryWork(session, basis, row.checkpoint), session.position), replayed: false };
+      });
+    }
+    expect(generation.complete).toBe(true);
+    await workRead(deps, buildRequest, {}, session => discovery.activate(operator,
+      generation.generation_id, generation.active_head, session.position,
+      { idempotencyKey: randomUUID(), requestDigest: 'b'.repeat(64) }));
+    const discover = () => app.handle(new Request('http://main.local/v1/works?limit=5'));
+    const discoveryPage = await discover();
+    expect(discoveryPage.status).toBe(200);
+    const discovered = await discoveryPage.json() as { stale: boolean; items: { id: string }[] };
+    expect(discovered.stale).toBe(false);
+    expect(discovered.items.map(item => item.id)).toContain(book.work);
+    expect(discovered.items.map(item => item.id)).not.toContain(chapter.work);
+    await stack.privateWork(person.agent, 'Unrelated write after discovery');
+    const retained = await discover();
+    expect(retained.status).toBe(200);
+    expect(await retained.json()).toMatchObject({ stale: true, items: discovered.items });
+
+    // Revoking Person control during rating hydration must discard the entire
+    // response, including any owned rating already loaded from the inventory.
+    const query = stack.fuseki.query.bind(stack.fuseki);
+    let revoked = false;
+    stack.fuseki.query = async (sparql, bytes) => {
+      const result = await query(sparql, bytes);
+      if (!revoked && sparql.includes('SELECT ?availability ?value ?manifest ?currentHead')) {
+        revoked = true;
+        await stack.accessPool.query(`UPDATE access.representation SET active = false
+          WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control'`,
+        [a.principalId, person.agent]);
+      }
+      return result;
+    };
+    try {
+      const revokedRead = await view();
+      expect(revoked).toBe(true);
+      expect(revokedRead.status).toBe(503);
+      expect(await revokedRead.json()).toMatchObject({ code: 'work_read_unavailable' });
+    } finally { stack.fuseki.query = query; }
+    expect((await view()).status).toBe(403);
   } finally { await stack.stop(); }
 }, 120_000);
