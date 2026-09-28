@@ -11,7 +11,7 @@ Revise it as slices are used in a real browser.
 Revised 2026-09-28 after the maintainer compared the first slices with the old
 site, Reddit and Goodreads: they exposed the model instead of the content.
 
-- **Content first, concepts inside.** Readers see covers, titles, authors,
+- **Content first, model inside.** Readers see covers, titles, authors,
   ratings in words they know, and what people are saying. Scopes, Contexts,
   generations, count bounds and identifiers stay internal; scope appears only
   where it changes meaning, and model detail sits behind "Details" or "Cite".
@@ -42,20 +42,44 @@ next chapter, then to keep up with communities, then to discover.
   Zones, Manage for moderators. Centre: a **Continue** strip (each item opens
   the next unread chapter or a compatible package update), then the feed.
   Right rail: trending in my Realms, Realms to follow, my moderation queue.
-- **Tabs and sort.** `Following` and `All`; `Best`, `New` and `Top` stay
-  visible. Following · New is strictly chronological and ends with "You're all
-  caught up". Recommendations fill a thin Following, labelled with their
-  reason, never under Following · New, and can be turned off.
+- **Tabs.** `Following`, `All`, then the Saved Filters a reader pins (usually
+  one Concept) and `+`, as X pins topic timelines; see
+  [Concepts and value pages](../contracts/queries.md#concepts-and-value-pages).
+  Following · New is strictly chronological and ends with "You're all caught
+  up". Recommendations fill a thin Following, labelled with their reason,
+  never under Following · New, and can be turned off.
+- **One compact control line** under the tabs, as Reddit's: a `Best ▾` menu
+  (Best, New, Top; Top adds its period menu on the same line), a `Filters`
+  popover (a sheet on phones) with active filters as removable chips on the
+  same line, and the card/compact view switch. Sorts are not spread into
+  separate buttons. The maintainer revised this on 2026-09-28: the separate
+  sort pills and chip rows cost two rows of density.
 - **Best** rewards real readers and recent activity but keeps small Realms
   visible: scores are normalised within each Realm and no Realm fills a page.
   The versioned constants live in `services/main/src/modules/feed/ranking.ts`.
-- **Cards.** One anatomy for every kind (Realm · person · time, the content, a
-  bottom bar with one kind-specific action). Repeated updates collapse into one
-  card; shelving and ratings without text never become cards; chapter cards
-  hide spoilers past the reader's position.
-- **Never empty.** Signed out: All · Best with official-Zone tiles. A new person
-  picks kinds, languages and topics and follows suggested Realms in one step.
-  Filters use six human kinds, not the model's types.
+- **Posts: X's treatment, Reddit's anatomy** (maintainer, 2026-09-28). No card
+  frame and no framed feed container: rows separated by a divider, the whole
+  row clickable and tinted on hover (X uses about 3% ink). REZICS posts have
+  titles, belong to a Realm and are about a Work, so they keep Reddit's order
+  rather than X's avatar column: one meta line (Realm · person · time · what
+  happened, with Join and the overflow menu), the post's own title, at most
+  three lines of preview, the Work as an attachment (cover thumbnail and one
+  line of title and author), and a bare icon action bar with counts and one
+  kind-specific action. The title is the post's subject: a discussion's title,
+  "Chapter 212 · its title", a review. Main's feed item has a single `target`
+  today, so a discussion shows its Work's title and its own title as the
+  excerpt; the API separates the post from the Work it is about. A text post
+  measured 237–303 px tall on desktop with seven stacked rows; aim for about
+  120–150 px. A compact one-line view follows. Repeated updates collapse into
+  one post; shelving and ratings without text never become posts; chapter
+  posts hide spoilers past the reader's position.
+- **Never empty.** Signed out: All · Best. A new person picks languages and
+  Concepts, which become follows and pinned tabs, and follows suggested Realms
+  in one step. Broad fields are Zones, listed in the left navigation; Home has
+  no kind chips and no official-Zone chip row.
+- **Styled controls only.** No native `<select>`: menus and selects use
+  `@rezics/ui` Select and Menu, enforced by a lint rule, so every control
+  matches the design in every browser and theme.
 
 ## Zones
 

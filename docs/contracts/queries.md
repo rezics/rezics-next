@@ -58,9 +58,37 @@ For example, fiction based on Blue Archive with a female lead, as Global reads i
 
 Retired words: *kind* for a Work's type; *interest* for a grouping; *Sense* for a
 Concept; *category* and *typed predicate* for a Facet; *tag* except for a
-source's unmapped term or an author's proposed Concept. TypeScript
+source's unmapped term, an author's proposed Concept, or the UI label of the
+free Concept Facet ("Tags" is that Facet's label, not a model term). TypeScript
 discriminants named `kind` are unaffected. A persisted profile id such as
 `work-kind-v1` changes only through a new profile revision.
+
+## Concepts and value pages
+
+Decided by the maintainer on 2026-09-28. Tags were clear because one mechanism
+served every use: a tag opened the list of what carried it, and several tags
+combined as all, any or none. That experience stays, generalized to every value.
+
+- **Every value has its own page.** Opening a value opens its Resource, drawn
+  as its type calls for, with the Resources that reach it through a Facet: the
+  reverse query. A Concept page is what a tag page was (description, broader and
+  narrower Concepts, matching Works, a Condition bar, Follow). Blue Archive's
+  Work page adds "Based on this"; a character's page lists appearances and
+  filters them by role.
+- **Values combine as tags did.** A listing's Condition bar holds values; each
+  is included or excluded, and several values of one Facet match all or any.
+  AO3's typed tag filters are the reference: its tag types are Facets.
+- **Concepts lead in the product, not in query mechanics.** Concepts are the
+  values people meet most, so they get the surfaces: chips on Works grouped by
+  Facet ("Genre: Fantasy · Tags: 後宮 · Based on: Blue Archive · Characters:
+  Hoshino (lead)"), Follow, pinning as a Home tab, and the onboarding choice.
+  Querying stays one Condition grammar. A tag-only mechanism would again make
+  Blue Archive a tag without its Work page and relations, and could not say
+  that one character is both the lead and female.
+- **Home tabs are pinned Saved Filters.** Following a Concept follows its
+  one-Condition Filter; the Home tabs after Following and All are the filters
+  a reader pins, as X pins topic timelines and Reddit keeps custom feeds. The
+  feed's `tags` parameter, which already filters by Concept, becomes `concepts`.
 
 ## Filter contract
 
