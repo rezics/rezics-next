@@ -1,10 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, openSync, readFileSync } from 'node:fs';
+import { closeSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { initializeRelayCheckpoint } from '../../services/main/src/modules/outbox/relay.ts';
 import { readEnv } from '../dev/config.ts';
+import { browserBudgets, browserFileCounts } from './browser-budget.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const [appsPath, artifactDir, runId, ...playwrightArgs] = process.argv.slice(2);
@@ -12,15 +13,31 @@ if (!appsPath || !artifactDir || !runId || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(run
   throw new Error('e2e requires an apps file, artifact directory and isolated run ID');
 }
 const apps = JSON.parse(readFileSync(appsPath, 'utf8')) as Record<string, string>;
+const counts = browserFileCounts(root, playwrightArgs);
+const budgets = browserBudgets(counts.playwright, counts.storybook);
 const authDir = join(root, '.temp', 'stack', `rezics-qa-${runId}`, 'web-auth');
 const runtime = readEnv(join(authDir, 'runtime.env'));
 const publicConfig = JSON.parse(readFileSync(join(authDir, 'public.json'), 'utf8')) as { clientId: string };
-const env = { ...process.env, ...apps, ...runtime, WEB_OAUTH_CLIENT_ID: publicConfig.clientId,
+const env: NodeJS.ProcessEnv = { ...process.env, ...apps, ...runtime, WEB_OAUTH_CLIENT_ID: publicConfig.clientId,
   REZICS_QA_RUN_ID: runId,
   REZICS_WEB_AUTH_PUBLIC_PATH: join(authDir, 'public.json'),
   REZICS_WEB_AUTH_PRIVATE_PATH: join(authDir, 'private.json') };
 const children: ChildProcess[] = [];
 const launchErrors = new WeakMap<ChildProcess, Error>();
+const steps: { step: string; budgetMs: number; elapsedMs: number; passed: boolean; error?: string }[] = [];
+
+async function measured(step: string, budgetMs: number, run: () => Promise<void>): Promise<void> {
+  const start = Date.now();
+  const result: typeof steps[number] = { step, budgetMs, elapsedMs: 0, passed: false };
+  console.log(`${step}: ${budgetMs / 1000}s budget`);
+  try { await run(); result.passed = true; }
+  catch (error) { result.error = error instanceof Error ? error.message : String(error); throw error; }
+  finally {
+    result.elapsedMs = Date.now() - start;
+    steps.push(result);
+    writeFileSync(join(artifactDir!, 'e2e-steps.json'), JSON.stringify(steps, null, 2));
+  }
+}
 
 function launch(name: string, program: string, args: string[], extraEnv: NodeJS.ProcessEnv = {},
   workdir = root): ChildProcess {
@@ -58,6 +75,7 @@ async function assertPortAvailable(port: number): Promise<void> {
 
 async function ready(name: string, url: string, child: ChildProcess, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  let last = 'no response';
   while (Date.now() < deadline) {
     const launchError = launchErrors.get(child);
     if (launchError) throw new Error(`${name} could not start: ${launchError.message}`);
@@ -65,65 +83,79 @@ async function ready(name: string, url: string, child: ChildProcess, timeoutMs: 
       throw new Error(`${name} exited before readiness (code ${child.exitCode}, signal ${child.signalCode})`);
     }
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1_500) });
+      const response = await fetch(url, { signal: AbortSignal.timeout(Math.min(10_000, Math.max(1, deadline - Date.now()))) });
       if (response.ok) return;
-    } catch { /* startup may still be in progress */ }
+      last = `HTTP ${response.status}`;
+      await response.body?.cancel();
+    } catch (error) { last = error instanceof Error ? error.message : String(error); }
     await new Promise(resolveWait => setTimeout(resolveWait, 400));
   }
-  throw new Error(`${name} did not become ready at ${url} within ${timeoutMs / 1000}s`);
+  throw new Error(`${name} did not become ready at ${url} within ${timeoutMs / 1000}s (${last})`);
 }
 
-async function completed(child: ChildProcess, timeoutMs: number): Promise<number> {
+async function completed(name: string, child: ChildProcess, timeoutMs: number): Promise<number> {
   return await new Promise<number>((resolveExit, reject) => {
     const timer = setTimeout(() => {
       stop(child);
-      reject(new Error(`Playwright exceeded its ${timeoutMs / 1000}s budget`));
+      reject(new Error(`${name} exceeded its ${timeoutMs / 1000}s budget`));
     }, timeoutMs);
     child.once('error', error => { clearTimeout(timer); reject(error); });
     child.once('exit', (code, signal) => {
       clearTimeout(timer);
-      if (signal) reject(new Error(`Playwright ended with ${signal}`));
+      if (signal) reject(new Error(`${name} ended with ${signal}`));
       else resolveExit(code ?? 1);
     });
   });
 }
 
 try {
-  await assertPortAvailable(3003);
-  if (!env.MAIN_RELAY_DATABASE_URL || !env.MAIN_RELAY_CONSUMER || !env.MAIN_DATA_EPOCH) {
-    throw new Error('The e2e stack needs a Main relay checkpoint');
-  }
-  const relay = new Pool({ connectionString: env.MAIN_RELAY_DATABASE_URL });
-  try { await initializeRelayCheckpoint(relay, env.MAIN_RELAY_CONSUMER, env.MAIN_DATA_EPOCH); }
-  finally { await relay.end(); }
-  const account = launch('account', 'bun', ['services/account/src/index.ts']);
-  await ready('Account', `http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, account, 30_000);
-  if (!apps.ACCOUNTS_PORT) throw new Error('The e2e stack has no public Accounts origin');
-  const accounts = launch('accounts', join(root, 'node_modules/.bin/vinext'),
-    ['dev', '--hostname', '127.0.0.1', '--port', apps.ACCOUNTS_PORT], {
-      ACCOUNT_SERVICE_ORIGIN: `http://127.0.0.1:${apps.ACCOUNT_PORT}`,
-      WEB_ORIGIN: 'http://127.0.0.1:3003',
-    }, join(root, 'apps/accounts'));
-  await ready('Accounts', `http://127.0.0.1:${apps.ACCOUNTS_PORT}/sign-in`, accounts, 90_000);
-  const main = launch('main', 'bun', ['services/main/src/index.ts']);
-  await ready('Main', `http://127.0.0.1:${apps.MAIN_PORT}/health/ready`, main, 30_000);
-  const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', runId]);
-  await ready('Web Worker', 'http://127.0.0.1:3003/search', preview, 240_000);
-  const browser = launch('playwright', 'node_modules/.bin/playwright', ['test', '--config', 'apps/web/playwright.config.ts', ...playwrightArgs,
-    '--reporter=junit', '--output', join(artifactDir, 'playwright')], {
-    PLAYWRIGHT_JUNIT_OUTPUT_FILE: join(artifactDir, 'e2e.xml'),
+  await measured('Application setup', budgets.setup, async () => {
+    await assertPortAvailable(3003);
+    if (!env.MAIN_RELAY_DATABASE_URL || !env.MAIN_RELAY_CONSUMER || !env.MAIN_DATA_EPOCH) {
+      throw new Error('The e2e stack needs a Main relay checkpoint');
+    }
+    const relay = new Pool({ connectionString: env.MAIN_RELAY_DATABASE_URL });
+    try { await initializeRelayCheckpoint(relay, env.MAIN_RELAY_CONSUMER, env.MAIN_DATA_EPOCH); }
+    finally { await relay.end(); }
+    const account = launch('account', 'bun', ['services/account/src/index.ts']);
+    await ready('Account', `http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, account, 30_000);
+    if (!apps.ACCOUNTS_PORT) throw new Error('The e2e stack has no public Accounts origin');
+    const accounts = launch('accounts', join(root, 'node_modules/.bin/vinext'),
+      ['dev', '--hostname', '127.0.0.1', '--port', apps.ACCOUNTS_PORT], {
+        ACCOUNT_SERVICE_ORIGIN: `http://127.0.0.1:${apps.ACCOUNT_PORT}`,
+        WEB_ORIGIN: 'http://127.0.0.1:3003',
+      }, join(root, 'apps/accounts'));
+    await ready('Accounts', `http://127.0.0.1:${apps.ACCOUNTS_PORT}/sign-in`, accounts, 90_000);
+    const main = launch('main', 'bun', ['services/main/src/index.ts']);
+    await ready('Main', `http://127.0.0.1:${apps.MAIN_PORT}/health/ready`, main, 30_000);
+    const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', runId]);
+    await ready('Web Worker', 'http://127.0.0.1:3003/search', preview, 240_000);
   });
-  const code = await completed(browser, 300_000);
-  if (code !== 0) throw new Error(`Playwright failed (${code}); see logs/e2e-playwright.log`);
-  const storybook = launch('storybook', 'node_modules/.bin/vitest', ['run', '--root', 'apps/web', '--project', 'storybook']);
-  const storybookCode = await completed(storybook, 180_000);
-  if (storybookCode !== 0) {
-    throw new Error(`Storybook browser tests failed (${storybookCode}); see logs/e2e-storybook.log`);
-  }
-  console.log('Built Worker, Main, Account, Playwright and Storybook completed');
+  await measured('Playwright', budgets.playwright, async () => {
+    const browser = launch('playwright', 'node_modules/.bin/playwright', ['test', '--config', 'apps/web/playwright.config.ts', ...playwrightArgs,
+      '--reporter=junit', '--output', join(artifactDir, 'playwright')], {
+      PLAYWRIGHT_JUNIT_OUTPUT_FILE: join(artifactDir, 'e2e.xml'),
+    });
+    const code = await completed('Playwright', browser, budgets.playwright);
+    if (code !== 0) throw new Error(`Playwright failed (${code}); see logs/e2e-playwright.log`);
+  });
+  console.log('Built Worker, Main, Account and Playwright completed');
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 } finally {
   stopAll();
 }
+
+// The browser suite has finished using the services. Release them before
+// Storybook and give it a separate deadline, even if Playwright failed.
+try {
+  await measured('Storybook', budgets.storybook, async () => {
+    const stories = launch('storybook', 'node_modules/.bin/vitest', ['run', '--root', 'apps/web', '--project', 'storybook']);
+    const code = await completed('Storybook', stories, budgets.storybook);
+    if (code !== 0) throw new Error(`Storybook failed (${code}); see logs/e2e-storybook.log`);
+  });
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+} finally { stopAll(); }

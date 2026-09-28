@@ -78,7 +78,7 @@ export function acceptanceStatuses(cases: Case[], tests: TestResult[], completeR
   caseCoverage: ReadonlyMap<string, readonly string[]> = new Map()): Record<string, {
   status: 'uncovered' | 'partial-pass' | 'passed' | 'failed'; page: string; tests: string[];
 }> {
-  const map = Object.fromEntries(cases.map(item => [item.id, { status: 'uncovered' as const,
+  const map: ReturnType<typeof acceptanceStatuses> = Object.fromEntries(cases.map(item => [item.id, { status: 'uncovered' as const,
     page: item.page, tests: [] as string[] }]));
   for (const test of tests) {
     for (const id of titleIds(test.name)) {

@@ -15,6 +15,7 @@ import { compatibleLoadStorage, loadCompatibility,
   type LoadCompatibility } from '../load/compatibility.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { devResetPlan, devResetTarget } from './reset.ts';
+import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -497,6 +498,7 @@ async function devStart(args: string[]): Promise<void> {
     await assertWebInstallationReady(shared, join(mainRoot, '.temp', 'stack', 'rezics-dev', 'web-auth', 'public.json'));
   } else {
     if (options!.rawUpdate) throw new Error('--raw-update cannot run with task dev');
+    if (mode === 'backend') rememberDevStack(root, options!);
     envFile = join(stackDirectory(root, options!), 'dev.env');
     replacePrivate(envFile, await prepareDev(options!));
   }
@@ -515,10 +517,11 @@ async function devStart(args: string[]): Promise<void> {
 
 function devStop(args: string[]): void {
   const { mode, options } = devTarget(args);
-  aspireCli(['stop']);
-  if (mode === 'backend' && !options!.persistent) {
-    compose(options!, ['down', '--volumes', '--remove-orphans'], runtimeEnv());
-  }
+  stopDevSession(root, () => { aspireCli(['stop']); }, stack => {
+    if (existsSync(join(stackDirectory(root, stack), 'compose.env'))) {
+      compose(stack, devStackStopArgs(stack), runtimeEnv());
+    }
+  }, mode === 'backend' ? options : undefined);
 }
 
 async function devReset(args: string[]): Promise<void> {

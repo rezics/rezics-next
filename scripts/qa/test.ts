@@ -2,11 +2,17 @@ import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath } from './acceptance.ts';
 import { affectedPlan, affectedTiers, formatPlan, type AffectedPlan } from './affected.ts';
+import { parseArgs } from './core.ts';
 
 const root = resolve(import.meta.dir, '../..');
-const testFile = /\.(?:test|spec|e2e)\.[cm]?[jt]sx?$/;
+const testFile = /\.(?:test|spec|e2e|stories)\.[cm]?[jt]sx?$/;
 
 export function selectTestCommand(args: string[]): [string, string[]] {
+  // Explicit tier runs still pass through goalctl's QA slot.
+  if (args[0] === '--tier') {
+    parseArgs(args);
+    return ['bun', ['scripts/qa/cli.ts', ...args]];
+  }
   const paths = args.filter(arg => testFile.test(arg));
   if (!paths.length) throw new Error('Provide explicit test file paths or --affected; full-suite execution belongs to task qa.');
   const files = paths.map(path => {
@@ -17,6 +23,15 @@ export function selectTestCommand(args: string[]): [string, string[]] {
     }
     return local;
   });
+  const stories = files.filter(file => file.includes('.stories.'));
+  if (stories.length) {
+    const workspace = stories[0]!.startsWith('apps/accounts/') ? 'apps/accounts' : 'apps/web';
+    if (stories.length !== files.length || !stories.every(file => file.startsWith(`${workspace}/`))) {
+      throw new Error('Run each workspace’s stories separately from other tests');
+    }
+    return ['task', [workspace === 'apps/web' ? 'storybook:test' : 'accounts:storybook:test', '--',
+      ...args.map(arg => testFile.test(arg) ? relative(resolve(root, workspace), resolve(root, arg)) : arg)]];
+  }
   const integration = files.filter(isQaIntegrationPath);
   const model = files.filter(isQaModelPath);
   const fault = files.filter(isQaFaultPath);

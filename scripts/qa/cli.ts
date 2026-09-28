@@ -14,6 +14,7 @@ import { selectBackendCases } from './backend-scope.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
 import { readEnv } from '../dev/config.ts';
+import { browserBudgets, browserFileCounts } from './browser-budget.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const options = parseArgs(process.argv.slice(2));
@@ -305,13 +306,21 @@ try {
         continue;
       }
       const args = e2eArgs(selection, chosen);
-      const result = command(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args], 540_000);
+      const counts = browserFileCounts(root, args);
+      const budgets = browserBudgets(counts.playwright, counts.storybook);
+      const result = command(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args],
+        budgets.setup + budgets.playwright + budgets.storybook + 30_000);
+      writeFileSync(join(logs, 'e2e.log'), result.output);
       const browserTests = junitResults(directory, ['e2e']);
       const ok = result.ok && browserTests.length > 0 && browserTests.every(test => !test.failed);
       tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
       if (!ok) {
-        errors.push('e2e failed or exceeded its setup/browser budget');
-        writeFileSync(join(logs, 'e2e.log'), result.output);
+        const stepsPath = join(directory, 'e2e-steps.json');
+        const steps = existsSync(stepsPath) ? JSON.parse(readFileSync(stepsPath, 'utf8')) as
+          { step: string; passed: boolean; error?: string }[] : [];
+        const failed = steps.filter(step => !step.passed);
+        errors.push(...(failed.length ? failed.map(step => `${step.step}: ${step.error ?? 'failed'} (see logs/e2e.log)`)
+          : ['e2e runner failed or exceeded its combined step budgets (see logs/e2e.log)']));
         if (!existsSync(join(directory, 'e2e.xml'))) {
           writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, result.elapsedMs, result.output));
         }
