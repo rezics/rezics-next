@@ -223,8 +223,16 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
       await expect(chapters.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible({ timeout: 30_000 });
     };
     await volume('第一卷 雨夜');
-    await menu('Move “第一章 雨夜”', 'Move to');
-    await page.getByRole('menuitem', { name: '第一卷 雨夜' }).click();
+    // Into a volume from the Move menu, as the keyboard does it: the submenu opens with →.
+    await expect(async () => {
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: 'Move “第一章 雨夜”', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Move to' }).focus();
+      await page.keyboard.press('ArrowRight');
+      await expect(page.getByRole('menuitem', { name: '第一卷 雨夜' })).toBeVisible({ timeout: 3_000 });
+    }).toPass({ timeout: 60_000 });
+    await page.getByRole('menuitem', { name: '第一卷 雨夜' }).focus();
+    await page.keyboard.press('Enter');
     await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('1 chapter', { timeout: 30_000 });
     // A pointer drags the grip beside the Move button.
     await chapters.getByRole('listitem').filter({ hasText: '第二章 未寄出的信' }).last().locator('[data-drag-handle]')
