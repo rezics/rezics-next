@@ -4,11 +4,13 @@ import { SeedApiError } from './api.ts';
 import { grantRealmProfileSeed, realmProfileClient } from './official-authority.ts';
 import { editorList, extraWorks, fictionQuotes, fictionWorks, type OfficialRealmId, penNames, publicTexts,
   realmProfiles, zoneContent } from './official-plan.ts';
-import { grantCuratedCollectionSeed, grantHomeSeedAuthority, type LocalOperatorInput } from './operator.ts';
+import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantImportedContributionSeedAuthority,
+  type LocalOperatorInput } from './operator.ts';
+import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
 import { people, profilePlan, seedKey, works } from './plan.ts';
 import { seedReply } from './replies.ts';
-import type { AgentReceipt, ContributionReceipt, PublicationReceipt, SeedState, Session, WorkReceipt }
-  from './state.ts';
+import { refreshSeedTokens, type AgentReceipt, type ContributionReceipt, type PublicationReceipt,
+  type SeedState, type Session, type WorkReceipt } from './state.ts';
 
 // The official Zones' content, through Main's public APIs as their authors,
 // editors and readers would make it: pen names write serials chapter by
@@ -110,6 +112,9 @@ async function publish(o: Official, key: string, target: WorkReceipt, author: st
   language: string, body: string): Promise<Published> {
   const contribution = await o.api.post<ContributionReceipt>('/v1/contributions', { profile: 'text-contribution-v1',
     work: target.work, language, body, actingSubject: author }, as.token, seedKey('official-contribution', key));
+  if (demoClassics.some(classic => classic.id === key) && o.state.operatorInput) {
+    await grantImportedContributionSeedAuthority(o.state.operatorInput, contribution.contribution);
+  }
   const published = await o.api.post<PublicationReceipt>('/v1/contribution-publications', {
     profile: 'text-publication-v1', contribution: contribution.contribution,
     expectedDraftHead: contribution.draftRevision, expectedPublicationHead: null,
@@ -243,6 +248,7 @@ async function readers(o: Official, key: string, structure: string, contents: Co
 
 async function fictionSerials(o: Official) {
   for (const work of fictionWorks) {
+    await refreshSeedTokens(o.state);
     await o.state.optional(`Fiction serial ${work.id}`, async () => {
       const author = o.agent(work.author), as = o.writer(work.author), name = work.seedName ?? work.id;
       const target = await o.api.post<WorkReceipt>('/v1/works', { profile: 'metadata-only-v1', title: work.title,
@@ -269,6 +275,7 @@ async function fictionSerials(o: Official) {
 /** Classics, recipes and guides for the lighter Zones: public texts on base-plan Works, and a few new Works. */
 async function lighterTexts(o: Official) {
   for (const [id, text] of Object.entries(publicTexts)) {
+    await refreshSeedTokens(o.state);
     const target = o.state.created.get(id);
     if (!target || o.state.publicForRealm.has(id)) continue;
     await o.state.optional(`Public text ${id}`, async () => {
@@ -284,6 +291,7 @@ async function lighterTexts(o: Official) {
     });
   }
   for (const extra of extraWorks) {
+    await refreshSeedTokens(o.state);
     await o.state.optional(`Zone work ${extra.id}`, async () => {
       const as = o.person(extra.owner);
       const target = await o.api.post<WorkReceipt>('/v1/works', { profile: 'metadata-only-v1', title: extra.title,
@@ -513,9 +521,14 @@ export async function seedOfficialZones(state: SeedState) {
   await state.optional('Official Zones: pen names', () => penNameAgents(o));
   await fictionSerials(o);
   await lighterTexts(o);
+  await refreshSeedTokens(state);
   await state.optional('Official Zones: adoptions', () => adoptions(o));
+  await refreshSeedTokens(state);
   await editorLists(o);
+  await refreshSeedTokens(state);
   await state.optional('Official Realms: joining and rules', () => joining(o));
+  await refreshSeedTokens(state);
   await profiles(o);
+  await refreshSeedTokens(state);
   await state.optional('Fiction: reader quotes', () => quotes(o));
 }

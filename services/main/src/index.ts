@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { ContentComments, ContentCore, ContentProjectionCursor,
   migrateContent } from '../../content/src/index.ts';
 import { createMainApp } from './app.ts';
+import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
 import { FollowsStore } from './modules/follows/store.ts';
@@ -295,6 +296,8 @@ const sourceFieldWithdrawals = new SourceFieldWithdrawalStore(contentPool, envir
 const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrectionPublisher(
   new VerificationStore(contentPool), new NotificationStore(pool)));
 const actingContextDiscovery = new AccessActingContexts(pool, environment);
+const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
+  ? openLibraryFixtureFetch(config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT) : fetch;
 const app = createMainApp(fuseki, {
   follows: new FollowsStore(pool),
   feed: new FeedStore(pool),
@@ -371,10 +374,12 @@ const app = createMainApp(fuseki, {
   roles: new AccessRoles(pool),
   accessPolicy: new AccessPolicyOwner(pool),
   sourceIntake,
-  sourceAuthorNames: new SourceAuthorNameStore(contentPool, sourceIntake),
+  sourceAuthorNames: new SourceAuthorNameStore(contentPool, sourceIntake, openLibraryFetch),
+  openLibraryFetch,
   recipeSourceConversions: new RecipeSourceConversionStore(contentPool, sourceIntake),
   sourceAcquisitions: sourceAcquisitionServices(contentPool,
     { reserve: () => sourceIntake.reserveOpenLibrarySlot(),
+      fetcher: openLibraryFetch,
       rawRetentionPermitted: (provider, namespace) => rightsStore.rawRetentionPermitted(provider, namespace) }),
   sourceConversions,
   sourceCorrespondences,

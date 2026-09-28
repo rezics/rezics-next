@@ -33,6 +33,8 @@ export const mainSpec = {
     desc: 'Consumer name for the Content public search projection.' }),
   CONTENT_PROJECTION_INTERVAL_MS: num({ default: 1000, desc: 'Content projection polling interval.' }),
   MAIN_OBJECT_DIRECTORY: str({ desc: 'Directory for immutable Main objects without S3.', example: '.temp/stack/rezics-dev/objects' }),
+  MAIN_OPEN_LIBRARY_FIXTURE_ROOT: str({ default: undefined,
+    desc: 'Local dev only: checkout whose locked Open Library fixtures replace provider requests.' }),
   MAIN_S3_ENDPOINT: url({ desc: 'S3 endpoint for immutable objects (RustFS locally).', example: 'http://127.0.0.1:9000' }),
   MAIN_S3_BUCKET: str({ desc: 'S3 bucket.', example: 'rezics-semantic' }),
   MAIN_S3_REGION: str({ desc: 'S3 region.', example: 'us-east-1' }),

@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import type { SeedApi, SeedEndpoints } from './api.ts';
 import type { LocalOperatorInput, operatorSeedSession } from './operator.ts';
 
-export interface Session { id: string; accountId: string; token: string; actingSubject: string }
+export interface Session { id: string; accountId: string; cookie: string; token: string;
+  issuedAt: number; actingSubject: string }
 export interface WorkReceipt { work: string; mainVersion: string; workRevision: string;
   mainRevision: string; replayed: boolean }
 export interface SpaceReceipt { space: string; realm: string; replayed: boolean }
@@ -34,6 +35,20 @@ export interface SeedState {
 }
 
 export type SeedStep = (state: SeedState) => Promise<void>;
+
+/** OAuth access tokens are short lived; long demo phases renew their own sessions. */
+export async function refreshSeedTokens(state: SeedState): Promise<void> {
+  for (const session of state.sessions) {
+    if (Date.now() - session.issuedAt > 120_000) {
+      session.token = await state.api.token(session.cookie);
+      session.issuedAt = Date.now();
+    }
+  }
+  if (state.operatorSession && Date.now() - state.operatorSession.issuedAt > 120_000) {
+    state.operatorSession.token = await state.operatorSession.api.token(state.operatorSession.cookie);
+    state.operatorSession.issuedAt = Date.now();
+  }
+}
 
 export function stableId(id: string): string {
   const hex = createHash('sha256').update(`rezics-dev-seed-v1:${id}`).digest('hex').slice(0, 32);

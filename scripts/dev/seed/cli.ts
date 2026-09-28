@@ -8,6 +8,7 @@ import { seedAccounts } from './accounts-step.ts';
 import { seedAdoptions } from './adoptions-step.ts';
 import { seedChapters } from './chapters-step.ts';
 import { checkPublicReads } from './checks-step.ts';
+import { seedClassics } from './classics-step.ts';
 import { seedContributions } from './contributions-step.ts';
 import { seedHomeFeed } from './feed-step.ts';
 import { seedLibrary } from './library-step.ts';
@@ -21,7 +22,7 @@ import { seedProfileShelves } from './profile-shelves-step.ts';
 import { seedRatings } from './ratings.ts';
 import { seedRealms } from './realms-step.ts';
 import { printSeedReport } from './report-step.ts';
-import type { SeedState, SeedStep } from './state.ts';
+import { refreshSeedTokens, type SeedState, type SeedStep } from './state.ts';
 import { seedWorks } from './works-step.ts';
 
 interface Options { dryRun: boolean; resetOwn: boolean }
@@ -64,7 +65,7 @@ function configuration(): { endpoints: SeedEndpoints; fixture: SeedState['fixtur
       operator?: { id: string; email: string; password: string } }
     : null;
   const account = env.ACCOUNT_ORIGIN ?? env.ACCOUNT_BASE_URL;
-  const main = env.MAIN_ORIGIN;
+  const main = Bun.env.REZICS_SEED_MAIN_ORIGIN ?? env.MAIN_ORIGIN;
   if (!account || !main || !publicConfig.redirectUris[0] || !publicConfig.scope) {
     throw new Error('Dev stack lacks its public OAuth client');
   }
@@ -97,7 +98,7 @@ function describe(error: unknown): string {
 
 // Each phase owns one file; this is the only ordering declaration.
 export const steps: readonly SeedStep[] = [
-  seedAccounts, seedWorks, seedContributions, seedRealms, seedAdoptions,
+  seedAccounts, seedClassics, seedWorks, seedContributions, seedRealms, seedAdoptions,
   seedRatings, seedLibrary, seedChapters, seedModeration, seedHomeFeed,
   seedProfileCredits, seedProfileBios, seedProfileShelves, seedProfileFollows, seedOfficialZones,
   checkPublicReads, printSeedReport,
@@ -133,7 +134,10 @@ async function run(options: Options): Promise<boolean> {
     created: new Map(), createdRealms: [], seededZones: [],
     publishedCount: 0, selectedCount: 0, publicForRealm: new Map(),
     commentCount: 0, replyCount: 0, profileCreditCount: 0, profileFollowCount: 0 };
-  for (const step of steps) await step(state);
+  for (const step of steps) {
+    await refreshSeedTokens(state);
+    await step(state);
+  }
   return findings.size === 0;
 }
 

@@ -1,10 +1,13 @@
 import { seedKey, semanticTypes, works } from './plan.ts';
+import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
 import type { SeedState, WorkReceipt } from './state.ts';
 
 export async function seedWorks(state: SeedState) {
   const { api, created } = state;
   const owner = state.sessions[0]!;
+  const imported = new Set<string>(demoClassics.map(classic => classic.id));
   for (const work of works) {
+    if (imported.has(work.id)) continue;
     const session = work.author && work.author !== 'moonlight'
       ? state.sessions.find(candidate => candidate.id === work.author) : owner;
     if (!session) throw new Error(`Work author ${work.author} has no seed session`);

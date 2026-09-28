@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 export type Profile = 'dev' | 'qa';
 export interface StackOptions { profile: Profile; runId?: string; persistent?: boolean;
@@ -204,6 +204,7 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
     MAIN_PORT: compose.MAIN_PORT, MAIN_DATA_EPOCH: compose.MAIN_DATA_EPOCH,
     MAIN_ROUTING_EPOCH: compose.MAIN_ROUTING_EPOCH,
     MAIN_OBJECT_DIRECTORY: join(dir, 'objects'),
+    MAIN_OPEN_LIBRARY_FIXTURE_ROOT: resolve(dir, '../../..'),
     MAIN_S3_ENDPOINT: `http://127.0.0.1:${compose.RUSTFS_PORT}`,
     MAIN_S3_BUCKET: 'rezics-semantic',
     MAIN_S3_REGION: 'us-east-1',

@@ -5,17 +5,6 @@ import type { ContributionReceipt, PublicationReceipt, SeedState } from './state
 export async function seedContributions(state: SeedState) {
   const { api, created, publicForRealm, sessions } = state;
   const owner = sessions[0]!;
-  const original = created.get('pride');
-  const translation = created.get('pride-zh');
-  if (original && translation) await state.optional('Translation link', () => api.post('/v1/translation-links', {
-    profile: 'translation-link-v1', targetWork: translation.work,
-    targetMainVersion: translation.mainVersion, targetMainRevision: translation.mainRevision,
-    sourceWork: original.work, sourceMainVersion: original.mainVersion,
-    sourceMainRevision: original.mainRevision, status: 'third-party', contentLanguage: 'zh-Hans',
-    translator: owner.actingSubject, publisher: owner.actingSubject,
-    evidence: 'https://www.gutenberg.org/ebooks/1342',
-    actingSubject: owner.actingSubject }, owner.token, seedKey('translation', 'pride-zh')));
-
   for (const excerpt of works.filter(work => work.excerpt)) {
     const target = created.get(excerpt.id)!;
     const writer = excerpt.author === 'moonlight' ? owner

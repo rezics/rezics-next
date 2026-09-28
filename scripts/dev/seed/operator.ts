@@ -35,7 +35,7 @@ export async function operatorSeedSession(input: LocalOperatorInput) {
   if (signed.id !== input.accountSubject) throw new Error('Seed fixture operator identity changed');
   const pool = new Pool({ connectionString: input.accountDatabaseUrl });
   try {
-    const scope = 'openid owner:operate zone:edit';
+    const scope = 'openid owner:operate zone:edit source:acquire source:convert source:propose source:adopt source:read work:create work:edit';
     let clientId = await reusableSeedClient(pool, signed.id, input.endpoints.redirectUri, scope);
     if (!clientId) {
       const auth = createAccountAuth({ baseURL: input.endpoints.account,
@@ -50,10 +50,74 @@ export async function operatorSeedSession(input: LocalOperatorInput) {
       clientId = client.client_id;
     }
     if (!clientId) throw new Error('Account did not register the seed operator client');
-    const api = new SeedApi({ ...input.endpoints, clientId,
-      scope: 'openid owner:operate zone:edit' });
-    return { api, token: await api.token(signed.cookie) };
+    const api = new SeedApi({ ...input.endpoints, clientId, scope });
+    return { api, token: await api.token(signed.cookie), cookie: signed.cookie,
+      issuedAt: Date.now() };
   } finally { await pool.end(); }
+}
+
+type ImportedGrant = { action: string; scope: string };
+
+async function grantImportedSeedScopes(input: LocalOperatorInput,
+  grants: readonly ImportedGrant[]): Promise<void> {
+  loopback(input.accessDatabaseUrl);
+  const pool = new Pool({ connectionString: input.accessDatabaseUrl });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
+    const operator = await principal(client, `${input.endpoints.account}/api/auth`, input.accountSubject);
+    const owner = await principal(client, `${input.endpoints.account}/api/auth`, input.ownerAccountSubject);
+    await client.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')
+      ON CONFLICT (id) DO NOTHING`, [input.actingSubject]);
+    for (const { action, scope } of grants) {
+      await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
+      const gate = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
+      if (gate.rows[0]?.open !== true) throw new Error(`Imported Work gate is closed: ${scope}`);
+      await ensureRepresentation(client, operator, input.actingSubject, action);
+      await ensureRepresentation(client, owner, input.actingSubject, action);
+      const found = await client.query(`SELECT id FROM access.permission_grant
+        WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
+          AND valid_until > now() FOR SHARE`, [input.actingSubject, scope, action]);
+      if (!found.rowCount) await client.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`,
+      [randomUUID(), input.actingSubject, scope, action]);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* preserve first error */ }
+    throw error;
+  } finally { client.release(); await pool.end(); }
+}
+
+const nativeSeedId = (value: string) => /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(value);
+
+/** Bound classic creation, editing and public text authority to imported resources. */
+export async function grantImportedWorkSeedAuthority(input: LocalOperatorInput,
+  work?: string, mainVersion?: string): Promise<void> {
+  if (!work && !mainVersion) return grantImportedSeedScopes(input,
+    [{ action: 'work.create', scope: 'work:create:root' }]);
+  if (!work || !mainVersion || !nativeSeedId(work) || !nativeSeedId(mainVersion)) {
+    throw new Error('Imported Work seed authority requires a Work and Main Version');
+  }
+  return grantImportedSeedScopes(input, [
+    { action: 'work.edit', scope: `work:edit:${work}` },
+    { action: 'contribution.create', scope: `contribution:create:${work}` },
+    { action: 'publication.select', scope: `publication:select:${mainVersion}` },
+  ]);
+}
+
+export async function grantImportedContributionSeedAuthority(input: LocalOperatorInput,
+  contribution: string): Promise<void> {
+  if (!nativeSeedId(contribution)) throw new Error('Imported Work contribution must be native');
+  return grantImportedSeedScopes(input,
+    [{ action: 'contribution.publish', scope: `contribution:publish:${contribution}` }]);
 }
 
 async function principal(client: PoolClient, issuer: string, accountSubject: string) {
@@ -167,7 +231,7 @@ export async function grantCuratedCollectionSeed(input: LocalOperatorInput, coll
 export async function grantHomeSeedAuthority(input: LocalOperatorInput,
   grants: readonly { action: 'work.edit' | 'work.read' | 'content.draft'
     | 'content.publish' | 'content.search-eligibility' | 'publication.adopt'
-    | 'rating.context.create'; scope: string }[]) {
+    | 'rating.context.create' | 'rating.observation.set'; scope: string }[]) {
   loopback(input.accessDatabaseUrl);
   const scopePrefix = { 'work.edit': 'work:edit:https://rezics.com/id/',
     'work.read': 'work:read:https://rezics.com/id/',
@@ -175,7 +239,8 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
     'content.publish': 'content:publish:https://rezics.com/id/',
     'content.search-eligibility': 'content:search-eligibility:https://rezics.com/id/',
     'publication.adopt': 'publication:adopt:https://rezics.com/id/',
-    'rating.context.create': 'rating:context:https://rezics.com/id/' } as const;
+    'rating.context.create': 'rating:context:https://rezics.com/id/',
+    'rating.observation.set': 'rating:observe:https://rezics.com/id/' } as const;
   if (grants.length > 10 || grants.some(({ action, scope }) =>
     !scope.startsWith(scopePrefix[action])
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(

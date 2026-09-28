@@ -4,7 +4,7 @@ import { seedKey } from './plan.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import type { SeedState } from './state.ts';
 
-interface Session { id: string; token: string; actingSubject: string }
+interface Session { id: string; accountId: string; token: string; actingSubject: string }
 interface Work { work: string; mainVersion: string }
 
 /** A standing five-star question gives readers a shared basis for Discover and Work pages. */
@@ -15,6 +15,11 @@ export async function seedGlobalRatings(api: SeedApi, owner: Session, readers: S
     profile: 'global-rating-standing-context-v1', question: 'How would you rate this work?',
     actingSubject: owner.actingSubject,
   }, owner.token, seedKey('global-rating-context', 'works'));
+  for (const reader of readers) {
+    await grantHomeSeedAuthority({ ...operator, ownerAccountSubject: reader.accountId,
+      actingSubject: reader.actingSubject },
+    [{ action: 'rating.observation.set', scope: `rating:observe:${context}` }]);
+  }
   let count = 0;
   for (const [workIndex, id] of ['pride', 'alice', 'serial', 'journey-west', 'red-chamber', 'bun'].entries()) {
     const work = created.get(id);

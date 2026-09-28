@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { dryRunLines, parseOptions, steps } from '../../../scripts/dev/seed/cli.ts';
 import { people, realms, seedKey, semanticTypes, works } from '../../../scripts/dev/seed/plan.ts';
 import type { SeedApi } from '../../../scripts/dev/seed/api.ts';
@@ -7,7 +9,11 @@ import { seedWorks } from '../../../scripts/dev/seed/works-step.ts';
 import { seedContributions } from '../../../scripts/dev/seed/contributions-step.ts';
 import { checkPublicReads } from '../../../scripts/dev/seed/checks-step.ts';
 import { seedChapterProgress } from '../../../scripts/dev/seed/progress.ts';
-import type { SeedState, WorkReceipt } from '../../../scripts/dev/seed/state.ts';
+import { refreshSeedTokens, type SeedState, type WorkReceipt }
+  from '../../../scripts/dev/seed/state.ts';
+import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
+import { demoClassics } from '../../fixtures/sources/open-library.ts';
+import { publicTexts } from '../../../scripts/dev/seed/official-plan.ts';
 
 describe('dev seed plan', () => {
   test('contains distinct stable Accounts, Works and Realms across both languages', () => {
@@ -43,6 +49,57 @@ describe('dev seed plan', () => {
     }
   });
 
+  test('locks a Work, linked edition and every referenced author for each imported classic', async () => {
+    const root = resolve(import.meta.dir, '../../..');
+    const lock = JSON.parse(readFileSync(`${root}/tests/fixtures/fixtures.lock.json`, 'utf8')) as {
+      entries: { id: string; requestUrl: string; sha256: string; fetchedAt: string;
+        reuseBasis: string }[] };
+    const entries = new Map(lock.entries.map(entry => [entry.id, entry]));
+    const fetcher = openLibraryFixtureFetch(root);
+    expect(demoClassics).toHaveLength(14);
+    for (const classic of demoClassics) {
+      expect(publicTexts[classic.id]?.text).toMatch(/^(Reading note|导读)\n/);
+      const workEntry = entries.get(`work-${classic.work}`)!;
+      const editionEntry = entries.get(`edition-${classic.edition}`)!;
+      expect(workEntry.requestUrl).toBe(`https://openlibrary.org/works/${classic.work}.json`);
+      expect(editionEntry.requestUrl).toBe(`https://openlibrary.org/books/${classic.edition}.json`);
+      expect(new Date(workEntry.fetchedAt).toISOString()).toBe(workEntry.fetchedAt);
+      expect(workEntry.reuseBasis).toContain('CC0');
+      const work = await (await fetcher(workEntry.requestUrl)).json() as {
+        authors: { author: { key: string } }[] };
+      const edition = await (await fetcher(editionEntry.requestUrl)).json() as {
+        works: { key: string }[] };
+      expect(edition.works).toContainEqual({ key: `/works/${classic.work}` });
+      expect(work.authors.length).toBeGreaterThan(0);
+      for (const author of work.authors) {
+        const id = author.author.key.slice('/authors/'.length);
+        const authorEntry = entries.get(`author-${id}`)!;
+        expect(authorEntry?.requestUrl).toBe(`https://openlibrary.org/authors/${id}.json`);
+        expect((await (await fetcher(authorEntry.requestUrl)).json() as { name: string }).name)
+          .toBeTruthy();
+      }
+    }
+    expect((await fetcher('https://openlibrary.org/works/OL1W.json')).status).toBe(404);
+  });
+
+  test('renews expired demo and operator tokens before a long seed phase', async () => {
+    const calls: string[] = [];
+    const state = { api: { token: async (cookie: string) => {
+      calls.push(cookie); return `new-${cookie}`;
+    } },
+    sessions: [
+      { cookie: 'expired', token: 'old', issuedAt: Date.now() - 121_000 },
+      { cookie: 'fresh', token: 'current', issuedAt: Date.now() },
+    ], operatorSession: { api: { token: async (cookie: string) => {
+      calls.push(cookie); return `new-${cookie}`;
+    } }, cookie: 'operator', token: 'old-operator', issuedAt: Date.now() - 121_000 },
+    } as unknown as SeedState;
+    await refreshSeedTokens(state);
+    expect(calls).toEqual(['expired', 'operator']);
+    expect(state.sessions.map(session => session.token)).toEqual(['new-expired', 'current']);
+    expect(state.operatorSession?.token).toBe('new-operator');
+  });
+
   test('creates every original Work under its author', async () => {
     const calls: Array<{ body: Record<string, unknown>; key: string }> = [];
     const api = { post: async (_path: string, body: Record<string, unknown>, token: string, key: string) => {
@@ -56,14 +113,14 @@ describe('dev seed plan', () => {
     penAgents: new Map([['moonlight', 'https://rezics.com/id/moonlight']]),
     created: new Map(), optional: async () => null } as unknown as SeedState;
     await seedWorks(state);
-    expect(calls.find(call => call.key === seedKey('work', 'pride'))?.body).not.toHaveProperty('authoring');
+    expect(calls.find(call => call.key === seedKey('work', 'pride'))).toBeUndefined();
     expect(calls.find(call => call.key === seedKey('work', 'moonlight-story'))?.body)
       .toMatchObject({ authoring: 'own-work', actingSubject: 'https://rezics.com/id/moonlight' });
     expect(calls.find(call => call.key === seedKey('work', 'bun'))?.body)
       .toMatchObject({ authoring: 'own-work', actingSubject: 'https://rezics.com/id/daniel' });
     expect(calls.filter(call => call.key === seedKey('work', 'serial')).map(call => call.body.authoring))
       .toEqual(['own-work']);
-    expect(state.created.size).toBe(works.length);
+    expect(state.created.size).toBe(works.length - demoClassics.length);
   });
 
   test('reset targets only the fixed dev project or this worktree and refuses displaced object paths', () => {
@@ -119,8 +176,7 @@ describe('dev seed plan', () => {
       .toMatchObject({ token: 'daniel', actor: 'https://rezics.com/id/daniel' });
     expect(calls.find(call => call.key === seedKey('contribution', 'moonlight-story')))
       .toMatchObject({ token: 'mei', actor: 'https://rezics.com/id/moonlight' });
-    expect(calls.find(call => call.key === seedKey('contribution', 'pride')))
-      .toMatchObject({ token: 'mei', actor: 'https://rezics.com/id/mei' });
+    expect(calls.find(call => call.key === seedKey('contribution', 'pride'))).toBeUndefined();
   });
 
   test('replaces the old parent-as-chapter placement with three child Works on rerun', async () => {
@@ -178,7 +234,7 @@ describe('dev seed plan', () => {
       expect(lines).toContain(`  ${person.name}: ${person.email} / ${person.password}`);
     }
     expect(steps.map(step => step.name)).toEqual([
-      'seedAccounts', 'seedWorks', 'seedContributions', 'seedRealms', 'seedAdoptions',
+      'seedAccounts', 'seedClassics', 'seedWorks', 'seedContributions', 'seedRealms', 'seedAdoptions',
       'seedRatings', 'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
       'seedProfileCredits', 'seedProfileBios', 'seedProfileShelves', 'seedProfileFollows', 'seedOfficialZones',
       'checkPublicReads', 'printSeedReport',

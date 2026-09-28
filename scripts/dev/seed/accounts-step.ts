@@ -14,7 +14,8 @@ export async function seedAccounts(state: SeedState) {
     await api.put(`/v1/agents/${agent.agent.slice(-36)}/handle`,
       { profile: 'agent-handle-v1', handle: person.handle, expectedHandle: null },
       token, seedKey('handle', person.id));
-    state.sessions.push({ id: person.id, accountId: signed.id, token, actingSubject: agent.agent });
+    state.sessions.push({ id: person.id, accountId: signed.id, cookie: signed.cookie,
+      token, issuedAt: Date.now(), actingSubject: agent.agent });
     state.agentCount++;
   }
   const owner = state.sessions[0]!;
