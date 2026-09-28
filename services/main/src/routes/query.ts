@@ -6,7 +6,7 @@ import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { readZoneBrowse } from '../modules/zone-modules/browse.ts';
 import { zoneBrowsePage } from '../modules/zone-modules/contract.ts';
 import { conceptWorksPage } from '../modules/concept-page/contract.ts';
-import { readConceptWorks } from '../modules/concept-page/read.ts';
+import { readConceptWorks, readFilteredWorks } from '../modules/concept-page/read.ts';
 import { discoveryError } from '../modules/discovery/management.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { WorkReadUnavailable } from '../modules/work/read-session.ts';
@@ -23,12 +23,14 @@ import { workReadError } from './work-reads.ts';
 const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const context = t.Union([t.Literal('global'), t.Object({ realm: nativeId }, { additionalProperties: false })]);
 const scope = t.Union([t.Object({ kind: t.Literal('all') }, { additionalProperties: false }),
-  t.Object({ kind: t.Literal('realm'), realm: nativeId }, { additionalProperties: false })]);
+  t.Object({ kind: t.Literal('realm'), realm: nativeId }, { additionalProperties: false }),
+  t.Object({ kind: t.Literal('mine') }, { additionalProperties: false })]);
 const text = t.Union([t.Object({ phrase: t.String({ minLength: 2, maxLength: 80 }) },
   { additionalProperties: false }), t.Object({ title: t.String({ minLength: 2, maxLength: 80 }),
   body: t.String({ minLength: 2, maxLength: 80 }) }, { additionalProperties: false })]);
 const body = t.Object({ context, scope, filter: t.Optional(t.Unknown()), text: t.Optional(text),
-  sort: t.Union([t.Literal('relevance'), t.Literal('newest'), t.Literal('updated')]),
+  sort: t.Union([t.Literal('relevance'), t.Literal('newest'), t.Literal('updated'), t.Literal('top-rated')]),
+  ratingContext: t.Optional(nativeId), actingSubject: t.Optional(nativeId),
   page: t.Object({ size: t.Integer({ minimum: 1, maximum: QUERY_COST.searchPageSize }),
     continuation: t.Optional(t.Unknown()) }, { additionalProperties: false }),
   sourcePolicy: t.Optional(t.Unknown()), asOf: t.Optional(t.Unknown()),
@@ -46,7 +48,7 @@ const conceptSetResult = t.Object({ profile: t.Literal('public-concept-set-phras
     nextOffset: t.Integer({ minimum: 1, maximum: 512 }), expiresAt: t.Integer({ minimum: 0 }) })),
 });
 const querySelection = t.Object({ context, scope, filter: t.Unknown(), text: t.Nullable(text),
-  sort: t.Union([t.Literal('relevance'), t.Literal('newest'), t.Literal('updated')]),
+  sort: t.Union([t.Literal('relevance'), t.Literal('newest'), t.Literal('updated'), t.Literal('top-rated')]),
   pageSize: t.Integer({ minimum: 1, maximum: QUERY_COST.searchPageSize }),
   facetRefs: t.Array(t.String(), { maxItems: QUERY_COST.nodes }),
   semanticRevisions: t.Array(nativeId, { maxItems: QUERY_COST.conceptReads }),
@@ -89,8 +91,9 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           const language = preferredLanguage && /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(preferredLanguage)
             ? preferredLanguage : undefined;
           const result = await workRead(work, new Request(request.url), { ...compiled.request,
-            language, retainedBasis: true }, session => readConceptWorks(session, work.discovery!,
-            compiled.concept, compiled.request));
+            language, retainedBasis: true }, session => 'role' in compiled.request
+            ? readFilteredWorks(session, work.discovery!, compiled.request)
+            : readConceptWorks(session, work.discovery!, compiled.concept, compiled.request));
           return Response.json({ profile: 'query-v1', template: 'concept-works-v1',
             selection: selection(input as ResourceQuery, compiled), result },
             { headers: { 'cache-control': 'no-store' } });

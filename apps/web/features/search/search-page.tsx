@@ -159,11 +159,12 @@ export function SearchPage({ parsed, realm, initial, fallback, signedIn, actingS
         <Link href={searchHref(state)} className={buttonVariants({ size: 'sm' })}>{t.seeGlobal}</Link>
       </Notice>
       : <>
-        {searching ? <SearchConditionBar state={state} locale={locale} values={initial?.ok
-          ? initial.page.hits.flatMap(hit => hit.reasons.classification?.concept
-            && hit.reasons.classification.conceptName ? [{ id: hit.reasons.classification.concept,
-              name: hit.reasons.classification.conceptName.value,
-              language: hit.reasons.classification.conceptName.language }] : []) : []} /> : null}
+        {searching ? <SearchConditionBar state={state} locale={locale} actingSubject={actingSubject}
+          values={initial?.ok ? [...(initial.page.concepts ?? []),
+            ...initial.page.hits.flatMap(hit => hit.reasons.classification?.concept
+              && hit.reasons.classification.conceptName ? [{ id: hit.reasons.classification.concept,
+                name: hit.reasons.classification.conceptName.value,
+                language: hit.reasons.classification.conceptName.language }] : [])] : []} /> : null}
         <div className={cn('grid gap-6', filters && 'lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start')}>
         {filters ? <aside aria-label={t.filters}>
           <div className="hidden lg:sticky lg:top-6 lg:block">

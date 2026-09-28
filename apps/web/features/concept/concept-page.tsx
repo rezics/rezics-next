@@ -171,7 +171,8 @@ export function ConceptPage({ concept, facet, state, realms, works, follow, read
         <SearchWithin concept={concept} state={state} locale={locale} t={t} />
       </div>
       <ConditionBar state={state} page={page} values={values} suggestions={alsoCarried(works)} maxValues={maxValues}
-        search={searchConcepts} locale={locale} messages={messages} />
+        search={searchConcepts} locale={locale} actingSubject={reader.actingSubject ?? undefined}
+        messages={messages} />
     </div>
     <ConceptWorks state={state} name={name} initial={works} avatarQuery={reader.avatarQuery} load={loadWorks}
       locale={locale} messages={messages} />

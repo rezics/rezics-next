@@ -47,6 +47,17 @@ async function rejectLegacy(state: SeedState, work: { work: string; mainVersion:
   }, steward.token, seedKey('book-legacy-concept-rejection', `${key}:${digest(current.decision ?? 'none')}`));
 }
 
+/** The English-only label G-425 stored. A bilingual label is the current scheme, not this one. */
+export function legacyPropositionLabel(id: string, definition: { en: string; zh: string }): string {
+  return `${definition.en}${definition.zh === '经典' || ['gothic', 'satire',
+    'comingOfAge', 'historical', 'adventure'].includes(id) ? '' : ` · ${definition.zh}`}`;
+}
+
+/** An existing isolated proposition with that exact label, never the current scheme's shorter one. */
+export function legacyConcept(items: readonly { concept: string; label: string }[], label: string) {
+  return items.find(item => item.label === label) ?? null;
+}
+
 /** Accept two to four Concepts on every demo Book, in Global and its editorial Realm. */
 export async function seedBookConcepts(state: SeedState) {
   if (!state.operatorInput) throw new Error('Book Concepts require the local fixture operator');
@@ -99,18 +110,23 @@ export async function seedBookConcepts(state: SeedState) {
       scheme = { id: created.scheme, expectedHead: created.schemeHead };
     }
   }
-  // Prior G-425 runs used isolated, English-only definitions. Replaying their
-  // keys recovers their Sense IDs; a rejected decision removes their chips.
+  // Prior G-425 runs used isolated, English-only definitions. A fresh stack must
+  // not create them again: suggestions come from the current scheme only. When
+  // one is already there, rejecting its decisions removes the old chips.
   const legacy = new Map<BookConcept, { sense: string }>();
   for (const [id, definition] of Object.entries({ ...genreConcepts, ...freeConcepts }) as
     [BookConcept, { en: string; zh: string }][]) {
     if (id === 'fiction') continue;
     await refreshSeedTokens(state);
-    const label = `${definition.en}${definition.zh === '经典' || ['gothic', 'satire',
-      'comingOfAge', 'historical', 'adventure'].includes(id) ? '' : ` · ${definition.zh}`}`;
-    legacy.set(id, await state.api.post<{ sense: string }>('/v1/classification-propositions', {
-      profile: 'classification-proposition-v1', label, actingSubject: owner.actingSubject }, owner.token,
-    seedKey('book-concept-v1', id)));
+    const label = legacyPropositionLabel(id, definition);
+    const found = await state.api.getPublic<{ items: { concept: string; label: string }[] }>(
+      `/v1/concepts?${new URLSearchParams({ q: label, language: 'en', limit: '8', isolated: 'true' })}`);
+    const match = legacyConcept(found.items, label);
+    if (!match) continue;
+    const page = await state.api.getPublic<{ interpretations: string[] }>(
+      `/v1/concepts/${match.concept.slice(-36)}`);
+    const sense = page.interpretations[0];
+    if (sense) legacy.set(id, { sense });
   }
   for (const id of seededBookIds) {
     await refreshSeedTokens(state);

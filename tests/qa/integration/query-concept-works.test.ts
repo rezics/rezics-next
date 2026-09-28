@@ -69,11 +69,13 @@ test('Query Concept Works and Concept page read the same all, any and exclusion 
       `/v1/concepts/${short(fantasy.concept)}/works?include=${encodeURIComponent(magic.concept)}`
       + `&match=any&exclude=${encodeURIComponent(romance.concept)}`));
     expect(any.result.items.map(item => item.id)).toEqual(legacy.items.map(item => item.id));
-    const unsupported = await call('POST', '/v1/query', { context: 'global', scope: { kind: 'all' },
-      sort: 'newest', page: { size: 20 }, filter: { all: [
-        { facet: 'concept', none: [romance.concept] },
-      ] } });
-    expect(unsupported.status).toBe(422);
-    expect(await unsupported.json()).toMatchObject({ code: 'unsupported_query_shape' });
+    const excludedResponse = await call('POST', '/v1/query', { context: 'global', scope: { kind: 'all' },
+      sort: 'newest', page: { size: 20 }, filter: { all: [{ facet: 'concept', none: [romance.concept] }] } });
+    expect(excludedResponse.status).toBe(200);
+    const excludedOnly = await json<{ result: { items: { id: string }[] } }>(excludedResponse);
+    const excludedIds = new Set(excludedOnly.result.items.map(item => item.id));
+    expect(excludedIds.has(works[0]!.work)).toBe(true);
+    expect(excludedIds.has(works[2]!.work)).toBe(true);
+    expect(excludedIds.has(works[1]!.work)).toBe(false);
   } finally { await home.stop(); }
 }, 120_000);

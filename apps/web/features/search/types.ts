@@ -56,6 +56,8 @@ export interface SearchResultPage {
   indexGeneration: string;
   next: SearchContinuation | null;
   hits: SearchHit[];
+  /** Labels of the Concepts in the Condition bar, in the reader's language when the scheme has one. */
+  concepts?: { id: string; name: string; language: string }[];
   facets?: SearchPage['facets'];
   /** False when Main answered but could not name the results; hits then show IDs. */
   titles: boolean;

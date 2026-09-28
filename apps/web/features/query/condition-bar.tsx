@@ -35,6 +35,11 @@ const copy = {
     includeName: (name: string) => `包含${name}`, excludeName: (name: string) => `排除${name}` },
 } as const;
 
+/** A Condition value may be a UUID or the native IRI of that UUID. */
+export function sameConcept(valueId: string, id: string): boolean {
+  return valueId === id || idOf(valueId) === id || idOf(valueId) === idOf(id);
+}
+
 const searchValues: ValueSearch = async (phrase, locale, realm) => {
   const languages = locale === 'en' ? ['en'] : [locale, 'en'];
   const results = await Promise.all(languages.map(language => browserMainApi().v1.concepts.get({ query: {
@@ -45,15 +50,17 @@ const searchValues: ValueSearch = async (phrase, locale, realm) => {
     .map(item => [item.concept, item] as const)).values()];
 };
 const EMPTY_VALUES: readonly NamedCondition[] = [];
+/** Set when a suggestion was just chosen, so the field keeps focus across the address change. */
+let refocusSearch = false;
 
 /** The admitted Concept Facet's reusable editor. Every change gets an address, so back and share preserve meaning. */
 export function ConditionBar({ selection, href, fixed, values = EMPTY_VALUES, suggestions = EMPTY_VALUES,
   maxValues: suppliedMax,
-  maxTotal, realm = null, locale, search = searchValues }: {
+  maxTotal, realm = null, locale, actingSubject, search = searchValues }: {
   selection: ConditionSelection; href: (next: ConditionSelection) => string; fixed?: string;
   values?: readonly NamedCondition[]; suggestions?: readonly NamedCondition[];
   maxValues?: number; maxTotal?: number;
-  realm?: string | null; locale: UiLocale;
+  realm?: string | null; locale: UiLocale; actingSubject?: string;
   search?: ValueSearch;
 }) {
   const t = locale === 'zh-Hans' ? copy['zh-Hans'] : copy.en;
@@ -68,6 +75,8 @@ export function ConditionBar({ selection, href, fixed, values = EMPTY_VALUES, su
     itemToValue: item => item.concept, itemToString: item => item.label });
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const request = useRef(0);
+  const root = useRef<HTMLElement>(null);
+  const [phrase, setPhrase] = useState('');
   const ids = [...selection.include, ...selection.exclude];
   const maxValues = Math.min(suppliedMax ?? admittedMax, admittedMax);
   useEffect(() => {
@@ -82,26 +91,48 @@ export function ConditionBar({ selection, href, fixed, values = EMPTY_VALUES, su
     return () => { active = false; };
   }, [locale]);
   useEffect(() => {
-    const missing = ids.filter(id => !values.some(value => idOf(value.id) === id));
+    const missing = ids.filter(id => !values.some(value => sameConcept(value.id, id)));
     if (!missing.length) return;
     let active = true;
     void browserMainApi().v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
-      resources: missing.map(iriOf), language: locale }).then(result => {
+      resources: missing.map(iriOf), language: locale,
+      ...(actingSubject ? { actingSubject } : {}) }).then(result => {
         if (!active) return;
         setNames((result.data?.summaries ?? []).flatMap(item => item.status === 'available'
           ? [{ id: item.reference, name: item.name.value, language: item.name.language }] : []));
       }).catch(() => {});
     return () => { active = false; };
   // The URL state is the lookup identity; names are only presentation.
-  }, [ids.join(','), values, locale]);
+  }, [ids.join(','), values, locale, actingSubject]);
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  const named = (id: string) => [...values, ...suggestions, ...names].find(value => idOf(value.id) === id);
+  const named = (id: string) => [...values, ...suggestions, ...names].find(value => sameConcept(value.id, id));
   const taken = new Set(ids);
   const totalRoom = maxTotal === undefined || ids.length < maxTotal;
   const room = { include: totalRoom && selection.include.length < maxValues,
     exclude: totalRoom && selection.exclude.length < maxValues };
-  const offered = suggestions.filter(value => !ids.includes(idOf(value.id) ?? '')).slice(0, 8);
+  const offered = suggestions.filter(value => !ids.some(id => sameConcept(value.id, id))).slice(0, 8);
+  function addConcept(concept: string) {
+    const id = idOf(concept);
+    if (!id || taken.has(id) || !room[operator]) return;
+    const next: ConditionSelection = { ...selection,
+      include: selection.include.filter(item => item !== id),
+      exclude: selection.exclude.filter(item => item !== id), match: selection.match };
+    next[operator] = [...next[operator], id];
+    setPhrase('');
+    set([]);
+    setStatus('idle');
+    refocusSearch = true;
+    router.push(localizedPath(href(next), locale), { scroll: false });
+  }
+  useEffect(() => {
+    if (!refocusSearch) return;
+    refocusSearch = false;
+    const focus = () => root.current?.querySelector<HTMLElement>('[role="combobox"]')?.focus();
+    focus();
+    const timer = window.setTimeout(focus, 50);
+    return () => window.clearTimeout(timer);
+  }, [ids.join(',')]);
   const change = (next: ConditionSelection) => href(next);
   const chip = (id: string, mode: 'include' | 'exclude') => {
     const value = named(id), label = value?.name ?? id.slice(-8), isFixed = id === fixed;
@@ -130,7 +161,7 @@ export function ConditionBar({ selection, href, fixed, values = EMPTY_VALUES, su
       }, () => { if (mine === request.current) { set([]); setStatus('failed'); } });
     }, 200);
   }
-  return <section aria-labelledby={heading} className="grid gap-3 rounded-2xl border border-border/60 bg-card/60 p-4">
+  return <section ref={root} aria-labelledby={heading} className="grid gap-3 rounded-2xl border border-border/60 bg-card/60 p-4">
     <h2 id={heading} className="font-semibold text-sm">{t.heading}</h2>
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <span className="text-muted-foreground">{facetLabel ?? t.facet}</span>
@@ -158,22 +189,22 @@ export function ConditionBar({ selection, href, fixed, values = EMPTY_VALUES, su
             <MinusIcon aria-hidden="true" /><SegmentGroupItemText>{t.exclude}</SegmentGroupItemText>
           </SegmentGroupItem>
         </SegmentGroup>
-        <Combobox collection={collection} openOnClick={false} className="w-full min-w-48 sm:w-64"
-          onInputValueChange={({ inputValue, reason }) => { if (reason === 'input-change') lookup(inputValue); }}
-          onValueChange={({ value }) => {
-            const id = idOf(value[0] ?? '');
-            if (!id || !room[operator]) return;
-            const next: ConditionSelection = { ...selection,
-              include: selection.include.filter(item => item !== id),
-              exclude: selection.exclude.filter(item => item !== id) };
-            next[operator].push(id);
-            router.push(localizedPath(change(next), locale), { scroll: false });
-          }}>
+        <Combobox collection={collection} openOnClick={false} selectionBehavior="clear" inputValue={phrase}
+          className="w-full min-w-48 sm:w-64"
+          onInputValueChange={({ inputValue, reason }) => {
+            setPhrase(inputValue);
+            // "script" is a controlled echo of the same keystrokes; still search it.
+            if (reason !== 'item-select' && reason !== 'clear-trigger' && reason !== 'interact-outside') {
+              lookup(inputValue);
+            }
+          }}
+          onSelect={({ itemValue }) => addConcept(itemValue)}>
           <ArkCombobox.Label className="sr-only">{t.search}</ArkCombobox.Label>
           <ComboboxInput placeholder={t.search} showTrigger={false} size="sm" />
           <ComboboxContent><ComboboxEmpty>{status === 'searching' ? t.searching
             : status === 'failed' ? t.failed : t.empty}</ComboboxEmpty>
-            <ComboboxList>{collection.items.map(item => <ComboboxItem key={item.concept} item={item}>
+            <ComboboxList>{collection.items.map(item => <ComboboxItem key={item.concept} item={item}
+              onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); addConcept(item.concept); }}>
               <span lang={item.language} className="truncate">{item.label}</span>
             </ComboboxItem>)}</ComboboxList></ComboboxContent>
         </Combobox>
@@ -198,21 +229,21 @@ export function ConditionBar({ selection, href, fixed, values = EMPTY_VALUES, su
 }
 
 /** Search keeps its first included Concept in `term` for shareable existing links. */
-export function SearchConditionBar({ state, locale, values = EMPTY_VALUES }: { state: SearchState;
-  locale: UiLocale; values?: readonly NamedCondition[] }) {
+export function SearchConditionBar({ state, locale, values = EMPTY_VALUES, actingSubject }: { state: SearchState;
+  locale: UiLocale; values?: readonly NamedCondition[]; actingSubject?: string }) {
   const selection: ConditionSelection = { include: [...(state.term ? [state.term] : []),
     ...(state.concepts?.include ?? [])], exclude: state.concepts?.exclude ?? [],
     match: state.concepts?.match ?? 'all' };
-  return <ConditionBar selection={selection} locale={locale} values={values} maxTotal={3}
+  return <ConditionBar selection={selection} locale={locale} values={values} actingSubject={actingSubject} maxTotal={3}
     realm={state.scope.kind === 'realm' ? state.scope.realm : null}
     href={next => searchHref({ ...state, term: next.include[0] ?? null,
       concepts: { include: next.include.slice(1), exclude: next.exclude, match: next.match } })} />;
 }
 
-export function DiscoverConditionBar({ state, locale, values = EMPTY_VALUES }: { state: DiscoverState;
-  locale: UiLocale; values?: readonly NamedCondition[] }) {
+export function DiscoverConditionBar({ state, locale, values = EMPTY_VALUES, actingSubject }: { state: DiscoverState;
+  locale: UiLocale; values?: readonly NamedCondition[]; actingSubject?: string }) {
   const selection: ConditionSelection = state.conditions ?? { include: [], exclude: [], match: 'all' };
-  return <ConditionBar selection={selection} locale={locale} values={values}
+  return <ConditionBar selection={selection} locale={locale} values={values} actingSubject={actingSubject}
     realm={state.scope.kind === 'realm' ? state.scope.realm : null}
     href={next => discoverHref({ ...state, conditions: next })} />;
 }

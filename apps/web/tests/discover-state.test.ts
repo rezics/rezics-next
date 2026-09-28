@@ -62,7 +62,11 @@ describe('discover shelves', () => {
     expect(shelvesFor({ ...global, scope: { kind: 'mine' } }, true).map(shelf => shelf.topic))
       .toEqual([{ kind: 'mine', type: null }]);
     expect(shelvesFor({ ...global, type: 'book', conditions: { include: [term, context], exclude: [],
-      match: 'all' } }, true).map(shelf => shelf.key)).toEqual(['recent-book']);
+      match: 'all' } }, true).map(shelf => shelf.key)).toEqual(['favorites-book', 'recent-book']);
+    expect(shelvesFor({ ...global, scope: { kind: 'mine' }, conditions: { include: [term], exclude: [context],
+      match: 'all' } }, true).map(shelf => shelf.topic)).toEqual([{ kind: 'mine', type: null }]);
+    expect(shelvesFor({ ...global, type: 'book', conditions: { include: [], exclude: [term],
+      match: 'all' } }).map(shelf => shelf.key)).toEqual(['recent-book']);
   });
 
   test('two Concept genres on Books keep their any Condition in the Query and page cursor', async () => {
@@ -83,6 +87,14 @@ describe('discover shelves', () => {
       { facet: 'concept', any: [iri(term), iri(context)] },
     ] }, page: { size: 12, continuation: 'next' } });
     expect(read).toMatchObject({ ok: true, data: { profile: 'discovery-works-v1', order: 'recent', items: [] } });
+    const excluded = { ...global, type: 'book' as const, conditions: { include: [] as string[], exclude: [term],
+      match: 'all' as const } };
+    const top = discoveryQuery(excluded, { ...shelvesFor(excluded, true)[0]!, sort: 'top-rated' },
+      { limit: 10, language: 'en', context });
+    await readQueryDiscovery(main, excluded, top);
+    expect(sent).toMatchObject({ sort: 'top-rated', ratingContext: iri(context),
+      filter: { all: [{ facet: 'type', any: ['https://schema.org/Book'] },
+        { facet: 'concept', none: [iri(term)] }] } });
   });
 
   test('genre shelves come from the terms most often on the overview’s books', () => {

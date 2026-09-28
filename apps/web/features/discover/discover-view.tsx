@@ -10,7 +10,7 @@ import { WorkShelf } from '../catalogue/work-shelf.tsx';
 import { RetryButton } from '../work-page/retry-button.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
-import { DiscoverConditionBar } from '../query/condition-bar.tsx';
+import { DiscoverConditionBar, type NamedCondition } from '../query/condition-bar.tsx';
 import type { DiscoverMessages } from './messages.ts';
 import { fills } from './fills.ts';
 import { failureNotice, Notice } from './notice.tsx';
@@ -36,6 +36,8 @@ export interface DiscoverPageProps {
   /** The Realm in the URL is not public or does not exist. */
   realmMissing?: boolean;
   shelves: readonly LoadedShelf[];
+  /** Names of the Concepts in the Condition bar, when the shelves do not already carry them. */
+  conceptNames?: readonly NamedCondition[];
   fallback?: DiscoverFallback;
   signedIn: boolean;
   signInHref: string;
@@ -162,8 +164,8 @@ function Overview({ shelves, fallback, realm, state, neighbour, seeAll, signInHr
  * shows sideways rows; choosing a kind or genre shows its full lists. Scope
  * appears only once the reader picks a community or their own ratings.
  */
-export function DiscoverView({ state, realm, realmMissing, shelves, fallback, signedIn, signInHref, avatarQuery, load,
-  actingSubject, readerSeed, readerActions, locale, messages }: DiscoverPageProps) {
+export function DiscoverView({ state, realm, realmMissing, shelves, conceptNames, fallback, signedIn, signInHref,
+  avatarQuery, load, actingSubject, readerSeed, readerActions, locale, messages }: DiscoverPageProps) {
   const t = materializeData(messages, { locale });
   if (!state) {
     return <PageContainer className="grid gap-8">
@@ -214,10 +216,10 @@ export function DiscoverView({ state, realm, realmMissing, shelves, fallback, si
           </p> : null}
         </div>
       </header>
-      {scope.kind !== 'mine' ? <DiscoverConditionBar state={state} locale={locale}
-        values={shelves.flatMap(shelf => shelf.initial.ok ? shelf.initial.data.items.flatMap(item =>
-          item.classifications.map(tag => ({ id: tag.concept, name: tag.name.value,
-            language: tag.name.language }))) : [])} /> : null}
+      <DiscoverConditionBar state={state} locale={locale} actingSubject={actingSubject}
+        values={[...(conceptNames ?? []), ...shelves.flatMap(shelf => shelf.initial.ok
+          ? shelf.initial.data.items.flatMap(item => item.classifications.map(tag => ({ id: tag.concept,
+            name: tag.name.value, language: tag.name.language }))) : [])]} />
       {realmMissing ? <Notice icon={CircleSlashIcon} headingLevel={2} title={t.realmMissingTitle}>
         <Link href={hrefIn(state, { kind: 'global' })} className={buttonVariants({ size: 'sm' })}>{t.browseEverything}</Link>
       </Notice> : !shelves.length ? <Notice icon={StarIcon} headingLevel={2} title={t.noRatingsYet}

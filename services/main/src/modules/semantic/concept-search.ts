@@ -8,6 +8,8 @@ export class ConceptSearchInvalid extends Error {}
 export class ConceptSearchUnavailable extends Error {}
 export const SKOS = 'http://www.w3.org/2004/02/skos/core#';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+/** Concepts of the shared scheme (classification-proposition-v2). Isolated v1 propositions are not in it. */
+const CURRENT_SCHEME_PROFILE = 'https://rezics.com/definition/classification-proposition-v2';
 
 export function conceptLabel(label: string, language: string) {
   const normalized = label.normalize('NFKC').trim();
@@ -46,8 +48,19 @@ export function conceptScopePattern(realm?: string, concept = '?concept') {
  * discovery cost is O(C) in the chosen language/scope, not an indexed text claim.
  * Above 512 labels fail explicitly instead of returning a misleading empty or
  * partial match. A future indexed owner can widen this ceiling independently. */
+/** Current-scheme Concepts, plus author tags. `isolated` also returns superseded v1 propositions for replay. */
+function currentScheme(isolated: boolean | undefined, concept = '?concept') {
+  if (isolated) return '';
+  return `FILTER (
+      EXISTS { ${concept} skos:inScheme ?scheme .
+        ?scheme a skos:ConceptScheme ; rv:schemeState rv:Active ;
+          rv:definitionProfile ${iri(CURRENT_SCHEME_PROFILE)} . }
+      || EXISTS { ${concept} a rv:AuthorTagConcept }
+    )`;
+}
+
 export async function searchConcepts(env: WorkActivationEnvironment,
-  input: { q: string; language: string; realm?: string; limit?: number }) {
+  input: { q: string; language: string; realm?: string; limit?: number; isolated?: boolean }) {
   const query = conceptLabel(input.q, input.language);
   const limit = input.limit ?? CONCEPT_SEARCH_COST.pageSize;
   if (!Number.isInteger(limit) || limit < 1 || limit > CONCEPT_SEARCH_COST.pageSize) {
@@ -62,6 +75,7 @@ export async function searchConcepts(env: WorkActivationEnvironment,
         VALUES ?conceptType { skos:Concept rv:AuthorTagConcept }
         FILTER(LCASE(LANG(?label)) = ${lit(query.language)})
         ${conceptScopePattern(input.realm)}
+        ${currentScheme(input.isolated)}
       } } LIMIT ${CONCEPT_SEARCH_COST.candidates + 1}`, CONCEPT_SEARCH_COST.bytes)).results?.bindings;
     if (!rows || rows.length > CONCEPT_SEARCH_COST.candidates) {
       throw new ConceptSearchUnavailable('Concept search candidate budget exceeded');

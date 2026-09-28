@@ -91,7 +91,12 @@ export function termShelf(term: string, type: WorkTypeKey | null, ranked: boolea
  */
 export function shelvesFor(state: DiscoverState, ranked = false): ShelfSpec[] {
   if (state.conditions?.include.length || state.conditions?.exclude.length) {
-    return state.type ? [recent(state.type)] : [recent('book'), recent('document'), recent('recipe')];
+    if (state.scope.kind === 'mine') {
+      return ranked ? [{ key: 'mine', topic: { kind: 'mine', type: state.type }, sort: 'top-rated', type: state.type,
+        term: null }] : [];
+    }
+    const types = state.type ? [state.type] : (['book', 'document', 'recipe'] as const);
+    return types.flatMap(type => [...(ranked ? [favorites(type)] : []), recent(type)]);
   }
   if (state.scope.kind === 'mine') {
     return ranked ? [{ key: 'mine', topic: { kind: 'mine', type: state.type }, sort: 'top-rated', type: state.type,

@@ -107,7 +107,7 @@ export const FilteredBooks: Story = {
     await expect(within(bar.getByRole('group', { name: 'Match' })).getByRole('link', { name: 'Any' }))
       .toHaveAttribute('aria-current', 'true');
     await expect(canvas.getByRole('region', { name: 'Recently added' })).toBeVisible();
-    await expect(canvas.queryByRole('region', { name: 'Readers’ favorites' })).toBeNull();
+    await expect(canvas.getByRole('region', { name: 'Readers’ favorites' })).toBeVisible();
   },
 };
 

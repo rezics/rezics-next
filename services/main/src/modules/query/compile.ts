@@ -4,7 +4,7 @@ import { checkedFilter, InvalidFilter } from '../facets/schema.ts';
 import { resolveFacet } from '../facets/registry.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { ZONE_BROWSE_COST } from '../zone-modules/contract.ts';
-import { CONCEPT_WORKS_COST, type ConceptWorksQuery } from '../concept-page/contract.ts';
+import { CONCEPT_WORKS_COST, type ConceptWorksQuery, type FilteredWorksQuery } from '../concept-page/contract.ts';
 
 export const QUERY_COST = {
   nodes: 32, depth: 4, graphReads: 7, candidateRows: 512,
@@ -24,7 +24,7 @@ type SearchRequest = { profile: string; phrase?: string; titleTerm?: string; bod
   includeTypes?: string[]; excludeTypes?: string[]; sense?: string;
   ratingContext?: string; minimumMeanTimes10?: number; pageSize?: number; continuation?: unknown };
 
-type ZoneRequest = { q?: string; sort: ResourceQuery['sort']; type?: string[];
+type ZoneRequest = { q?: string; sort: 'relevance' | 'newest' | 'updated'; type?: string[];
   concept?: string[]; language?: string; limit: number; cursor?: string };
 type ConceptSelection = { operator: 'include' | 'exclude'; value: string; revision?: string };
 
@@ -36,7 +36,7 @@ export type CompiledQuery =
     facets: string[]; graphReads: number }
   | { template: 'zone-browse'; realm: string; request: ZoneRequest;
     facets: string[]; graphReads: number }
-  | { template: 'concept-works'; concept: string; request: ConceptWorksQuery;
+  | { template: 'concept-works'; concept: string; request: ConceptWorksQuery | FilteredWorksQuery;
     facets: string[]; graphReads: number };
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -114,9 +114,10 @@ export function compileQuery(query: ResourceQuery): CompiledQuery {
     if (query.page.size > QUERY_COST.zonePageSize) {
       throw new QueryRejected('query_budget_exceeded', 'Zone page exceeds its bound');
     }
+    const zoneSort = query.sort === 'top-rated' ? fail('Zone browse has no top-rated template') : query.sort;
     const zoneText = query.text;
     if (zoneText && !('phrase' in zoneText)) fail('Zone browse admits one phrase');
-    const request: ZoneRequest = { sort: query.sort, limit: query.page.size };
+    const request: ZoneRequest = { sort: zoneSort, limit: query.page.size };
     if (zoneText && 'phrase' in zoneText) request.q = zoneText.phrase;
     const continuation = query.page.continuation;
     if (continuation !== undefined) {
@@ -146,16 +147,17 @@ export function compileQuery(query: ResourceQuery): CompiledQuery {
     if (query.sort === 'relevance' && !query.text) fail('Relevance needs text');
     return { template: 'zone-browse', realm: query.scope.realm, request, facets, graphReads };
   }
-  // The Concept page's bounded projection is the no-text, newest-first Query
-  // template. It executes the full all/any/none Concept Condition, including
-  // multiple values, and carries the projection's own count and cursor.
-  if (!query.text && query.sort === 'newest') {
+  // The Concept page's bounded projection is the no-text Query template.
+  // Newest is the Concept page; top-rated, Mine and exclude-only are Discover.
+  if (!query.text && (query.sort === 'newest' || query.sort === 'top-rated')) {
     if (query.page.size > CONCEPT_WORKS_COST.pageSize) {
       throw new QueryRejected('query_budget_exceeded', 'Concept Works page exceeds its bound');
     }
+    const mine = query.scope.kind === 'mine';
+    const top = query.sort === 'top-rated';
     const request: ConceptWorksQuery = { limit: query.page.size,
-      ...(query.context === 'global' ? { scope: 'global' } :
-        { scope: 'realm', realm: query.context.realm }) };
+      ...(mine || query.context === 'global' ? { scope: 'global' }
+        : { scope: 'realm', realm: query.context.realm }) };
     if (query.page.continuation !== undefined) {
       if (typeof query.page.continuation !== 'string') fail('Concept Works continuation has the wrong form');
       request.cursor = query.page.continuation as string;
@@ -178,15 +180,30 @@ export function compileQuery(query: ResourceQuery): CompiledQuery {
         request.match = condition.any ? 'any' : 'all';
       } else fail(`${facet.name} has no Concept Works template`);
     }
-    if (!included?.length || included.some(value => !nativeId.test(value))
-      || excluded?.some(value => !nativeId.test(value) || included?.includes(value))) {
+    if ((included ?? excluded)?.some(value => !nativeId.test(value))
+      || excluded?.some(value => included?.includes(value))
+      || (!included?.length && !excluded?.length)) {
       fail('Concept Works needs visible, distinct native Concept values');
+    }
+    if (mine || top || !included?.length) {
+      if (top && !query.ratingContext) fail('Top-rated needs a rating Context');
+      if (mine && (!query.actingSubject || !query.ratingContext)) fail('Mine needs the reader and a rating Context');
+      if ((top || mine) && !nativeId.test(query.ratingContext ?? '')) fail('Rating Context needs a native ID');
+      if (mine && !nativeId.test(query.actingSubject ?? '')) fail('Mine needs a native reader');
+      const filtered: FilteredWorksQuery = { ...request, role: 'filter', scope: mine ? 'mine' : request.scope,
+        sort: top ? 'top-rated' : 'recent',
+        ...(top || mine ? { context: query.ratingContext } : {}),
+        ...(mine ? { actingSubject: query.actingSubject } : {}),
+        ...(included?.length ? { include: included } : {}),
+        ...(excluded?.length ? { exclude: excluded } : {}) };
+      return { template: 'concept-works', concept: (included ?? excluded)![0]!, request: filtered, facets, graphReads };
     }
     const [concept, ...extra] = included!;
     if (extra.length) request.include = extra;
     if (excluded?.length) request.exclude = excluded;
     return { template: 'concept-works', concept: concept!, request, facets, graphReads };
   }
+  if (query.scope.kind === 'mine') fail('Mine has no phrase template');
   if (query.page.size > QUERY_COST.searchPageSize) {
     throw new QueryRejected('query_budget_exceeded', 'Search page exceeds its bound');
   }

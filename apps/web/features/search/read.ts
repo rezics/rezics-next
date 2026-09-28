@@ -72,7 +72,10 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
     return { ok: false, failure: 'unavailable' };
   }
   const matches = page.results.map(match => ({ match, reasons: reasonsOf(match) }));
-  const concepts = matches.flatMap(({ reasons }) => reasons.classification?.concept ?? []);
+  const selected = [...(state.term ? [iriOf(state.term)] : []), ...(state.concepts?.include ?? []).map(iriOf),
+    ...(state.concepts?.exclude ?? []).map(iriOf)];
+  const concepts = [...new Set([...matches.flatMap(({ reasons }) => reasons.classification?.concept ?? []),
+    ...selected])];
   // Main's cards carry a title in the Work's own language; summaries name it in the reader's, when there is one.
   const named = await readSummaries(clients.names, [...new Set([...matches.map(({ match }) => match.work),
     ...concepts])], options.language, options.actingSubject);
@@ -92,11 +95,16 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
       max: 'scale' in match.rating ? match.rating.scale.max : 5 } : null,
     tagline: match.tagline ?? null, completion: match.completionStatus ?? null,
     reasons: { ...reasons, classification: reasons.classification ? { ...reasons.classification,
-      conceptName: reasons.classification.concept
-        ? named?.get(reasons.classification.concept)?.name ?? null : null } : null } }));
+      concept: reasons.classification.concept ?? (selected.length === 1 ? selected[0]! : null),
+      conceptName: named?.get(reasons.classification.concept
+        ?? (selected.length === 1 ? selected[0]! : ''))?.name ?? null } : null } }));
   return { ok: true, page: { total: page.total, population: page.population, sequence: page.sourcePosition.sequence,
     indexGeneration: page.indexGeneration, next: page.next as SearchContinuation | null,
     facets: 'facets' in page ? page.facets : undefined,
+    concepts: selected.flatMap(id => {
+      const label = named?.get(id)?.name;
+      return label ? [{ id, name: label.value, language: label.language }] : [];
+    }),
     titles: hits.every(hit => hit.title !== null), hits } };
 }
 

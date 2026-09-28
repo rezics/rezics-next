@@ -38,26 +38,32 @@ export const DISCOVERY_CONDITION_COST = { driveTerms: 8, groups: 8, groupTerms: 
 /** Terms a Work's entries must and must not carry, beside the drive terms it is reached by. */
 export interface DiscoveryCondition { drive: string[]; groups: string[][]; excluded: string[] }
 
-/** Recent seeks per drive term, each Work checked by `(generation_id, work, work_type, term)` probes. */
-export function discoveryConditionSql(groups: number, excluded: boolean, continuation: boolean): string {
+/** Seeks per drive term, each Work checked by `(generation_id, work, work_type, term)` probes. */
+export function discoveryConditionSql(groups: number, excluded: boolean, continuation: boolean,
+  sort: 'recent' | 'top-rated' = 'recent'): string {
+  const order = sort === 'recent' ? 'recent_order' : 'rating_order';
+  const rated = sort === 'top-rated' ? ' AND e.rating_count > 0' : '';
   const probe = (parameter: number) => `EXISTS (SELECT 1 FROM access.discovery_entry x
     WHERE x.generation_id = $1 AND x.work = d.work AND x.work_type = $2 AND x.term = ANY($${parameter}::text[]))`;
   const first = continuation ? 7 : 5;
   const checks = [...Array.from({ length: groups }, (_, index) => probe(first + index)),
     ...excluded ? [`NOT ${probe(first + groups)}`] : []];
-  return `SELECT d.work, d.recent_order::text AS order_key, d.term, ${checks.join(' AND ') || 'true'} AS matched
+  return `SELECT d.work, d.${order}::text AS order_key, d.term, ${checks.join(' AND ') || 'true'} AS matched
     FROM unnest($3::text[]) AS drive(term) CROSS JOIN LATERAL (
-      SELECT e.work, e.recent_order, e.term FROM access.discovery_entry e
-      WHERE e.generation_id = $1 AND e.work_type = $2 AND e.term = drive.term
-        ${continuation ? 'AND (e.recent_order, e.work COLLATE "C") > ($5::numeric, $6::text COLLATE "C")' : ''}
-      ORDER BY e.recent_order, e.work COLLATE "C" LIMIT $4) d`;
+      SELECT e.work, e.${order}, e.term FROM access.discovery_entry e
+      WHERE e.generation_id = $1 AND e.work_type = $2 AND e.term = drive.term${rated}
+        ${continuation ? `AND (e.${order}, e.work COLLATE "C") > ($5::numeric, $6::text COLLATE "C")` : ''}
+      ORDER BY e.${order}, e.work COLLATE "C" LIMIT $4) d`;
 }
 export const discoveryConditionPayloadSql = `SELECT e.work, e.payload FROM access.discovery_entry e
   JOIN unnest($3::text[], $4::text[]) AS k(work, term) ON e.work = k.work AND e.term = k.term
   WHERE e.generation_id = $1 AND e.work_type = $2`;
 
 type SeekPosition = { key: string; work: string };
-const beyond = (a: SeekPosition, b: SeekPosition) => BigInt(a.key) > BigInt(b.key) || (a.key === b.key && a.work > b.work);
+const integerKey = /^-?\d+$/;
+const keyAfter = (left: string, right: string) => left !== right && (integerKey.test(left) && integerKey.test(right)
+  ? BigInt(left) > BigInt(right) : Number(left) > Number(right));
+const beyond = (a: SeekPosition, b: SeekPosition) => keyAfter(a.key, b.key) || (a.key === b.key && a.work > b.work);
 export interface ConditionRow { work: string; order_key: string; term: string; matched: boolean }
 
 /**
@@ -465,21 +471,24 @@ export class DiscoveryProjection {
    * when the seeks were exhausted.
    */
   async conditionPage(row: DiscoveryGeneration, type: string, condition: DiscoveryCondition, limit: number,
-    after?: SeekPosition) {
+    after?: SeekPosition, sort: 'recent' | 'top-rated' = 'recent') {
     const { drive, groups, excluded } = condition;
     const cost = DISCOVERY_CONDITION_COST;
+    const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+    const allWorks = drive.length === 1 && drive[0] === '';
     if (!Number.isInteger(limit) || limit < 1 || limit > cost.pageSize || !drive.length
       || drive.length > cost.driveTerms || new Set(drive).size !== drive.length || groups.length > cost.groups
       || groups.flat().length > cost.groupTerms || excluded.length > cost.excludedTerms
-      || [...drive, ...groups.flat(), ...excluded].some(term => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(term))) {
+      || (!allWorks && drive.some(term => !native.test(term)))
+      || [...groups.flat(), ...excluded].some(term => !native.test(term))) {
       throw new RecommendationUnavailable('Discovery Condition is out of bounds');
     }
     return inAccess(this.pool, async client => {
       const fence = await sourceFence(client);
       if (fence.generation !== row.recovery_generation) throw new RecommendationRestart('Discovery recovery basis expired');
-      const scanned = (await client.query<ConditionRow>(discoveryConditionSql(groups.length, excluded.length > 0, !!after),
-        [row.generation_id, type, drive, cost.window, ...after ? [after.key, after.work] : [], ...groups,
-          ...excluded.length ? [excluded] : []])).rows;
+      const scanned = (await client.query<ConditionRow>(discoveryConditionSql(groups.length, excluded.length > 0,
+        !!after, sort), [row.generation_id, type, drive, cost.window, ...after ? [after.key, after.work] : [],
+        ...groups, ...excluded.length ? [excluded] : []])).rows;
       const { page, next } = decideConditionPage(drive, scanned, cost.window, limit);
       const payloads = page.length ? new Map((await client.query<{ work: string; payload: DiscoveryRow['payload'] }>(
         discoveryConditionPayloadSql, [row.generation_id, type, page.map(item => item.work), page.map(item => item.term)]))
@@ -493,6 +502,24 @@ export class DiscoveryProjection {
         throw new RecommendationUnavailable('Discovery page exceeds its byte budget');
       }
       return { rows, next };
+    });
+  }
+
+  /** Which of `terms` the given Works carry on the wildcard type row. At most one primary-key probe batch. */
+  async termMembership(row: DiscoveryGeneration, works: readonly string[], terms: readonly string[]) {
+    const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+    if (works.length > 64 || terms.length > DISCOVERY_CONDITION_COST.groupTerms + DISCOVERY_CONDITION_COST.excludedTerms
+      || new Set(works).size !== works.length || new Set(terms).size !== terms.length
+      || [...works, ...terms].some(value => !native.test(value))) {
+      throw new RecommendationUnavailable('Discovery term membership is out of bounds');
+    }
+    if (!works.length || !terms.length) return [];
+    return inAccess(this.pool, async client => {
+      const fence = await sourceFence(client);
+      if (fence.generation !== row.recovery_generation) throw new RecommendationRestart('Discovery recovery basis expired');
+      return (await client.query<{ work: string; term: string }>(`SELECT work, term FROM access.discovery_entry
+        WHERE generation_id = $1 AND work = ANY($2::text[]) AND work_type = '' AND term = ANY($3::text[])`,
+      [row.generation_id, works, terms])).rows;
     });
   }
 

@@ -8,7 +8,8 @@ import type { DiscoverFallback, DiscoverPageProps, LoadedShelf } from './discove
 import { fills } from './fills.ts';
 import { readDiscovery, readRealm, readStandingContext, settle } from './read.ts';
 import { readQueryDiscovery } from './query-read.ts';
-import { type SearchParams, workHref } from './scope.ts';
+import { readSummaries } from '../search/read.ts';
+import { iriOf, type SearchParams, workHref } from './scope.ts';
 import { browseReader } from './server.ts';
 import { type DiscoverState, discoverHref, discoveryQuery, genreTerms, parseDiscoverState, type ShelfSpec, shelvesFor,
   termShelf } from './state.ts';
@@ -25,7 +26,7 @@ async function readShelf(reader: Reader, state: DiscoverState, spec: ShelfSpec, 
   const query = discoveryQuery(state, spec, { limit, language, context, actingSubject: reader.actingSubject });
   // Mine is this person's own population; without a session Agent there is nothing to read.
   const initial = mine && !reader.actingSubject ? { ok: false as const, failure: 'sign-in' as const }
-    : state.conditions ? await readQueryDiscovery(reader.anonymous, state, query)
+    : state.conditions ? await readQueryDiscovery(mine ? reader.personal : reader.anonymous, state, query)
       : await readDiscovery(mine ? reader.personal : reader.anonymous, query);
   return { spec, query, initial };
 }
@@ -90,7 +91,10 @@ export async function loadDiscoverState(state: DiscoverState | null, locale: UiL
   // community, everyone's lists; never a column of identical "being prepared" boxes.
   const fallback = overview && !state.conditions && !first.some(fills)
     ? await readFallback(reader, state, locale) : undefined;
-  return { state, realm: realmView, shelves, fallback, ...common,
+  const conceptNames = state.conditions ? [...(await readSummaries(reader.anonymous, [...state.conditions.include,
+    ...state.conditions.exclude].map(iriOf), locale) ?? new Map())].map(([id, item]) => ({ id,
+    name: item.name.value, language: item.name.language })) : [];
+  return { state, realm: realmView, shelves, conceptNames, fallback, ...common,
     ...await readerState(reader, [...shelves, ...fallback?.shelves ?? []]) };
 }
 

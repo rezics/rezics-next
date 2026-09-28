@@ -1,8 +1,10 @@
 import type { Static } from 'typebox';
+import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import type { OwnedDiscoveryBasis } from '../discovery/contract.ts';
 import { discoveryCards } from '../discovery/read.ts';
 import { admitDiscoveryBasis } from '../discovery/source.ts';
-import type { DiscoveryCondition, DiscoveryProjection } from '../discovery/store.ts';
+import { DISCOVERY_CONDITION_COST, type DiscoveryCondition, type DiscoveryProjection } from '../discovery/store.ts';
+import type { DiscoveryRow } from '../discovery/contract.ts';
 import { checkedFilter, InvalidFilter } from '../facets/schema.ts';
 import { type ResourceSummary, selectName } from '../media/summary.ts';
 import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
@@ -10,7 +12,7 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadLimit, WorkReadMissing,
   WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { CONCEPT_FACET, CONCEPT_PAGE_COST, CONCEPT_WORKS_COST, type conceptPage, conceptFilter,
-  type ConceptWorksQuery, conceptWorksFilter, type conceptWorksPage } from './contract.ts';
+  type ConceptWorksQuery, type FilteredWorksQuery, conceptWorksFilter, type conceptWorksPage } from './contract.ts';
 
 /**
  * A Concept a public page may show or filter by: active, unprotected and, when
@@ -187,6 +189,157 @@ export async function readConceptWorks(session: WorkReadSession, projection: Dis
     cursor?.expiresAt ?? Date.now() + READ_BASIS_RETENTION_MS) : null;
   return { profile: 'concept-works-v1', concept, scope: { kind: basis.scope, realm: basis.realm }, match, filter,
     values, generation: active.generation_id, stale,
+    projectionPosition: { dataEpoch: active.source_epoch, sequence: active.source_sequence },
+    ...pageResult(session, visibleItems, next),
+    matches: { value: seen, kind: next || stale ? 'lower-bound' : 'exact' } };
+}
+
+/** Whether a Work's Senses meet included groups and carry none of the excluded Senses. */
+export function conceptMembership(terms: ReadonlySet<string>, included: readonly (readonly string[])[],
+  excluded: readonly string[], match: 'all' | 'any'): boolean {
+  const present = (group: readonly string[]) => group.some(term => terms.has(term));
+  const includes = included.length === 0 || (match === 'all' ? included.every(present) : included.some(present));
+  return includes && excluded.every(term => !terms.has(term));
+}
+
+/**
+ * Discover's Condition on the Query: include, exclude-only, top-rated and Mine.
+ * Mine keeps the reader's rating order and checks Concepts on the public index.
+ */
+export async function readFilteredWorks(session: WorkReadSession, projection: DiscoveryProjection,
+  query: FilteredWorksQuery): Promise<Static<typeof conceptWorksPage>> {
+  const include = query.include ?? [], exclude = query.exclude ?? [], match = query.match ?? 'all';
+  const sort = query.sort ?? 'recent';
+  const mine = query.scope === 'mine';
+  if (sort === 'top-rated' && !query.context) throw new WorkReadInvalid('Top-rated requires a standing rating Context');
+  if (mine && !query.context) throw new WorkReadInvalid('Mine requires a standing rating Context');
+  if ((!include.length && !exclude.length) || include.some(value => exclude.includes(value))
+    || new Set([...include, ...exclude]).size !== include.length + exclude.length) {
+    throw new WorkReadInvalid('Concept filter needs distinct values');
+  }
+  const primary = include[0] ?? exclude[0]!;
+  const filter = { all: [
+    ...(include.length ? [match === 'all' ? { facet: CONCEPT_FACET, all: include }
+      : { facet: CONCEPT_FACET, any: include }] : []),
+    ...(exclude.length ? [{ facet: CONCEPT_FACET, none: exclude }] : []),
+  ] };
+  try { checkedFilter(filter); } catch (error) {
+    if (error instanceof InvalidFilter) throw new WorkReadInvalid(error.message);
+    throw error;
+  }
+  const listBasis: OwnedDiscoveryBasis = mine
+    ? { scope: 'mine', realm: null, context: query.context!, owner: null }
+    : { scope: query.scope === 'realm' ? 'realm' : 'global', realm: query.realm ?? null,
+      context: sort === 'top-rated' ? query.context! : null, owner: null };
+  await admitDiscoveryBasis(session, listBasis);
+  if (mine) {
+    listBasis.owner = session.principal ? await session.deps.access.activePrincipalId(session.principal) : null;
+    if (!listBasis.owner) throw new AccountAssertionDenied('Mine requires an active principal');
+  }
+  const resolved = await resolveConcepts(session, [...include, ...exclude]);
+  if ([...include, ...exclude].some(value => !resolved.has(value))) throw new WorkReadMissing('Concept is unavailable');
+  const summaries = new Map((await session.summaries([...include, ...exclude]))
+    .map(summary => [summary.reference, summary]));
+  const values = [...include, ...exclude].map(value => {
+    const name = nameOf(summaries.get(value));
+    if (!name) throw new WorkReadMissing('Concept is unavailable');
+    return { id: value, name, operator: exclude.includes(value) ? 'exclude' as const : 'include' as const };
+  });
+  const interpretations = (value: string) => resolved.get(value)!.interpretations;
+  const includedGroups = include.map(interpretations);
+  const excludedSenses = exclude.flatMap(interpretations);
+  const binding = ['concept-filter-v1', listBasis, sort, match, [...include].sort(), [...exclude].sort(),
+    query.type ?? '', session.options.language?.toLowerCase() ?? null];
+  const cursor = decodeReadCursor(query.cursor, binding, session.position, true);
+  let after: { generation: string; key: string; seen: number } | undefined;
+  if (cursor) {
+    try {
+      after = JSON.parse(cursor.order) as typeof after;
+      if (!after || !/^[0-9a-f-]{36}$/.test(after.generation) || !/^-?\d+(\.\d+)?$/.test(after.key)
+        || !Number.isSafeInteger(after.seen) || after.seen < 0) throw new Error('cursor');
+    } catch { throw new WorkReadInvalid('Concept Works cursor is invalid'); }
+  }
+  const active = await projection.active(listBasis, session.position, after?.generation);
+  const order = sort === 'top-rated' ? 'top-rated' as const : 'recent' as const;
+  const limit = query.limit ?? CONCEPT_WORKS_COST.pageSize;
+  const seek = after && cursor ? { key: after.key, work: cursor.after } : undefined;
+  let rows: DiscoveryRow[] = [];
+  let nextSeek: { key: string; work: string } | null = null;
+  let cardTerms: ReadonlySet<string> | null = null;
+  if (mine) {
+    const classBasis: OwnedDiscoveryBasis = { scope: 'global', realm: null, context: null, owner: null };
+    await admitDiscoveryBasis(session, classBasis);
+    const classified = await projection.active(classBasis, session.position);
+    const wanted = [...new Set([...includedGroups.flat(), ...excludedSenses])];
+    let scanned = 0;
+    let cursorKey = seek;
+    const cap = DISCOVERY_CONDITION_COST.window;
+    while (rows.length <= limit && scanned < cap) {
+      const ask = Math.min(CONCEPT_WORKS_COST.pageSize, cap - scanned);
+      const batch = await projection.page(active, order, query.type ?? '', '', ask, cursorKey);
+      const slice = batch.slice(0, ask);
+      if (!slice.length) break;
+      scanned += slice.length;
+      const membership = wanted.length ? await projection.termMembership(classified, slice.map(row => row.work), wanted) : [];
+      const byWork = new Map<string, Set<string>>();
+      for (const item of membership) {
+        const set = byWork.get(item.work) ?? new Set<string>();
+        set.add(item.term);
+        byWork.set(item.work, set);
+      }
+      for (const row of slice) {
+        if (conceptMembership(byWork.get(row.work) ?? new Set(), includedGroups, excludedSenses, match)) rows.push(row);
+      }
+      cursorKey = { key: slice.at(-1)!.order_key, work: slice.at(-1)!.work };
+      if (batch.length <= ask) break;
+      if (rows.length > limit) break;
+    }
+    nextSeek = rows.length > limit ? { key: rows[limit - 1]!.order_key, work: rows[limit - 1]!.work } : null;
+    // Continue after the last examined Work when the window filled before the page did.
+    if (!nextSeek && scanned >= cap && rows.length <= limit) {
+      nextSeek = cursorKey ?? null;
+    }
+    rows = rows.slice(0, limit);
+  } else if (!include.length) {
+    const page = await projection.conditionPage(active, query.type ?? '',
+      { drive: [''], groups: [], excluded: excludedSenses }, limit, seek, order);
+    rows = page.rows;
+    nextSeek = page.next;
+  } else if (match === 'any') {
+    const drive = includedGroups.flat();
+    cardTerms = new Set(drive);
+    const page = drive.length ? await projection.conditionPage(active, query.type ?? '',
+      { drive, groups: [], excluded: excludedSenses }, limit, seek, order) : { rows: [], next: null };
+    rows = page.rows;
+    nextSeek = page.next;
+  } else if (includedGroups.some(group => !group.length)) {
+    rows = [];
+  } else {
+    if (includedGroups.flat().length > CONCEPT_WORKS_COST.countedTerms) {
+      throw new WorkReadLimit('Included values have more interpretations than a page counts');
+    }
+    const counts = new Map((await projection.selectedTerms(active, includedGroups.flat()))
+      .map(row => [row.term, Number(row.work_count)]));
+    const size = (group: string[]) => group.reduce((sum, term) => sum + (counts.get(term) ?? 0), 0);
+    const rarest = includedGroups.reduce((best, group) => size(group) < size(best) ? group : best);
+    cardTerms = new Set(rarest);
+    const page = size(rarest) ? await projection.conditionPage(active, query.type ?? '',
+      { drive: rarest, groups: includedGroups.filter(group => group !== rarest), excluded: excludedSenses },
+      limit, seek, order) : { rows: [], next: null };
+    rows = page.rows;
+    nextSeek = page.next;
+  }
+  const items = await discoveryCards(session, rows, query.type ?? null, cardTerms);
+  const final = await projection.active(listBasis, session.position, active.generation_id);
+  const stale = active.stale || final.stale;
+  const visibleItems = stale ? [] : items;
+  const seen = (after?.seen ?? 0) + visibleItems.length;
+  if (!Number.isSafeInteger(seen)) throw new WorkReadLimit('Concept Works count exceeds its integer domain');
+  const next = nextSeek ? encodeReadCursor(binding, session.position, nextSeek.work,
+    JSON.stringify({ generation: active.generation_id, key: nextSeek.key, seen }),
+    cursor?.expiresAt ?? Date.now() + READ_BASIS_RETENTION_MS) : null;
+  return { profile: 'concept-works-v1', concept: primary, scope: { kind: listBasis.scope, realm: listBasis.realm },
+    match, filter, values, generation: active.generation_id, stale,
     projectionPosition: { dataEpoch: active.source_epoch, sequence: active.source_sequence },
     ...pageResult(session, visibleItems, next),
     matches: { value: seen, kind: next || stale ? 'lower-bound' : 'exact' } };

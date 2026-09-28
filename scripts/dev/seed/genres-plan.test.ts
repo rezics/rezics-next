@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { legacyConcept, legacyPropositionLabel } from './genres-step.ts';
 import { bookConcepts, freeConcepts, genreConcepts, seededBookIds } from './genres-plan.ts';
 
 test('G-426 bilingual genre vocabulary has ordered in-scheme parents and every seeded Book uses it', () => {
@@ -28,4 +29,10 @@ test('G-426 bilingual genre vocabulary has ordered in-scheme parents and every s
   }
   expect(genreConcepts.urban.zh).toBe('都市');
   expect(genreConcepts.mystery.zh).toBe('悬疑');
+  const legacy = legacyPropositionLabel('mystery', genreConcepts.mystery);
+  expect(legacy).toBe('Mystery · 悬疑');
+  expect(legacyConcept([{ concept: 'current', label: 'Mystery' }, { concept: 'old', label: legacy }], legacy)?.concept)
+    .toBe('old');
+  expect(legacyConcept([{ concept: 'current', label: 'Mystery' }], legacy)).toBeNull();
+  expect(legacyPropositionLabel('adventure', genreConcepts.adventure)).toBe('Adventure');
 });

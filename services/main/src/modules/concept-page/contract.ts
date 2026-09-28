@@ -74,6 +74,22 @@ export const conceptWorksQuery = t.Object({ ...publicPage,
   match: t.Optional(t.Union([t.Literal('all'), t.Literal('any')])),
   type: t.Optional(discoveryType) }, closed);
 export type ConceptWorksQuery = Static<typeof conceptWorksQuery>;
+/** Discover's Query. It does not anchor one page Concept, and it can rank or list Mine. */
+export interface FilteredWorksQuery {
+  limit?: number;
+  cursor?: string;
+  language?: string;
+  scope?: 'global' | 'realm' | 'mine';
+  realm?: string;
+  role: 'filter';
+  sort?: 'recent' | 'top-rated';
+  context?: string;
+  actingSubject?: string;
+  include?: string[];
+  exclude?: string[];
+  match?: 'all' | 'any';
+  type?: ConceptWorksQuery['type'];
+}
 
 export const conceptWorksPage = t.Object({ profile: t.Literal('concept-works-v1'), concept: readId,
   scope: readScope, match: t.Union([t.Literal('all'), t.Literal('any')]), filter: conceptFilterDocument,

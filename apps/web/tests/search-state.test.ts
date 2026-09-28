@@ -114,11 +114,13 @@ describe('search result hydration', () => {
     seen);
     const read = await readSearchPage({ search: main, names: main }, { ...global, scope: { kind: 'realm', realm }, term },
       { language: 'zh-Hans' });
-    expect(seen).toEqual([{ profile: 'resource-summary-batch-v1', resources: [work, concept], language: 'zh-Hans' }]);
+    expect(seen).toEqual([{ profile: 'resource-summary-batch-v1', resources: [work, concept, iri(term)],
+      language: 'zh-Hans' }]);
     expect(read.ok && read.page.titles).toBe(true);
     expect(read.ok && read.page.facets?.terms.precision).toBe('lower-bound');
     expect(read.ok && read.page.hits[0]).toMatchObject({ title: { value: '西游记' }, reasons: { language: 'zh-Hans',
       realm: 'realm-adoption', classification: { source: 'local', conceptName: { value: '神魔小说' } } } });
+    expect(read.ok && read.page.concepts).toEqual([]);
     const forged = await readSummaries(client([{ reference: work, status: 'available', name: name('x'),
       avatar: { kind: 'image', url: 'https://elsewhere.example/x.png', selection: 's', mediaType: 'image/png',
         width: 1, height: 1, crop: null, basis: { policy: 'p', context: 'c' } } }]), [work], 'en');
