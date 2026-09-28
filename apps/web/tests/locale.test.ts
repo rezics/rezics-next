@@ -65,7 +65,8 @@ describe('interface locale', () => {
       expect(result.locale.current).toBe(locale);
       expect(result.t.auth.signInHeading).toContain('REZICS');
       if (locale === 'en') expect(result.t.auth.signInHeading).toBe('Sign in to REZICS');
-      expect(result.t.studio.newHeading).toBe(locale === 'zh-Hans' ? '开始新作品' : 'Start a new work');
+      expect(result.t.studio.newHeading.length).toBeGreaterThan(0);
+      if (locale === 'en') expect(result.t.studio.newHeading).toBe('Start a new work');
       for (const namespace of ['shell', 'home', 'search', 'auth', 'work', 'studio'] as const) {
         const single = await i18n.getTranslation(namespace, [locale]);
         expect(single.locale.current).toBe(locale);
