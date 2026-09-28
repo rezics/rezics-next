@@ -11,7 +11,7 @@ import { EXPERIENCE_CONTEXT_ID, EXPERIENCE_OBSERVATION_ID } from '../../../servi
 import { EXPERIENCE_AGGREGATE_PROFILES, type ExperienceAggregateProfile } from '../../../services/main/src/modules/rating/experience-reduction.ts';
 import { EXPERIENCE_CONTEXT_DEFAULT_PROFILE } from '../../../services/main/src/modules/rating/experience-aggregate.ts';
 import { DATASET, GRAPHS, ID, RV, iri, type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
-import { accessStateCoverage } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
+import { accessStateCoverage, accessStateTables } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { ratingAggregateBackground } from './rating-aggregate-background.ts';
 
 interface Opinion { observation: string; observationRevision: string; context: string; value: number | null;
@@ -287,7 +287,14 @@ export async function exerciseRatingAggregates(f: Fixture) {
   writeFileSync(file, bytes);
   // Reverse faults: graph is current, while the independent private owner loses
   // or rolls back one head. Neither direction may silently shrink the population.
-  const inventoryCoverage = { before: await accessStateCoverage(accessPool),
+  const inventoryTablesBefore = await accessStateTables(accessPool);
+  const sourceFences = ['access.discovery_source_fence', 'access.also_enjoyed_source_fence'] as const;
+  const fenceRevisions = new Map<string, bigint>();
+  for (const table of sourceFences) {
+    fenceRevisions.set(table, BigInt((await accessPool.query<{ revision: string }>(
+      `SELECT revision::text FROM ${table} WHERE id`)).rows[0]!.revision));
+  }
+  const inventoryCoverage = { before: inventoryTablesBefore.state,
     missing: { count: '', digest: '' }, rolledBack: { count: '', digest: '' }, restored: { count: '', digest: '' } };
   const removed = (await accessPool.query('DELETE FROM access.rating_aggregate_head WHERE observation = $1 RETURNING *', [tied.observation])).rows[0]!;
   expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
@@ -303,8 +310,22 @@ export async function exerciseRatingAggregates(f: Fixture) {
   expect(inventoryCoverage.rolledBack.digest).not.toBe(inventoryCoverage.before.digest);
   await accessPool.query('UPDATE access.rating_aggregate_head SET revision = $2, admission_id = $3 WHERE observation = $1',
     [tied.observation, removed.revision, removed.admission_id]);
-  inventoryCoverage.restored = await accessStateCoverage(accessPool);
-  expect(inventoryCoverage.restored).toEqual(inventoryCoverage.before);
+  const inventoryTablesRestored = await accessStateTables(accessPool);
+  inventoryCoverage.restored = inventoryTablesRestored.state;
+  expect(inventoryCoverage.restored.count).toBe(inventoryCoverage.before.count);
+  expect(inventoryTablesRestored.catalogDigest).toBe(inventoryTablesBefore.catalogDigest);
+  // Delete, insert and both updates invalidate derived snapshots. Restoring
+  // the authoritative head must not roll those invalidation counters back.
+  for (const [table, coverage] of Object.entries(inventoryTablesBefore.tables)) {
+    if (fenceRevisions.has(table)) {
+      expect(BigInt((await accessPool.query<{ revision: string }>(
+        `SELECT revision::text FROM ${table} WHERE id`)).rows[0]!.revision))
+        .toBe(fenceRevisions.get(table)! + 4n);
+      expect(inventoryTablesRestored.tables[table]?.count).toBe(coverage.count);
+      expect(inventoryTablesRestored.tables[table]?.digest).not.toBe(coverage.digest);
+    } else expect(inventoryTablesRestored.tables[table]).toEqual(coverage);
+  }
+  expect(inventoryCoverage.restored.digest).not.toBe(inventoryCoverage.before.digest);
   await all('private-inventory-restored', finalMeans);
   await accessPool.query('UPDATE access.rating_aggregate_head SET principal_id = $2 WHERE observation = $1', [tied.observation, f.principalB]);
   expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
