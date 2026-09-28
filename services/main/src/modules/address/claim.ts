@@ -2,6 +2,7 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, IdempotencyConflict,
   PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
+import { RESERVED_WORK_SLUG } from './contract.ts';
 
 const WORK = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -43,13 +44,20 @@ export function normalizedWorkSlug(value: string): string {
   return normalized;
 }
 
+/** A slug a claim or rename may assign: normalized and not reserved. */
+export function assignableWorkSlug(value: string): string {
+  const slug = normalizedWorkSlug(value);
+  if (RESERVED_WORK_SLUG.test(slug)) throw new InvalidAddressClaim('reserved work slug');
+  return slug;
+}
+
 export function workAddressDigest(input: WorkAddressClaimInput): string {
   if (!WORK.test(input.work) || !WORK.test(input.actingSubject)) {
     throw new InvalidAddressClaim('invalid work address target or actor');
   }
   return hash(JSON.stringify({ family: 'work-address-claim-v1',
     namespace: 'work', normalization: 'ascii-lower-v1',
-    work: input.work, slug: normalizedWorkSlug(input.slug),
+    work: input.work, slug: assignableWorkSlug(input.slug),
     actingSubject: input.actingSubject }));
 }
 

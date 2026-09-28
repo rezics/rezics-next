@@ -2,9 +2,11 @@ import { DATASET, GRAPHS, RV, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { AddressClaimUnavailable, InvalidAddressClaim,
   normalizedWorkSlug } from './claim.ts';
+import { MAX_WORK_REDIRECT_HOPS } from './contract.ts';
+
+export { MAX_WORK_REDIRECT_HOPS };
 
 const WORK = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
-export const MAX_WORK_REDIRECT_HOPS = 32;
 
 export async function reverseWorkAddress(env: WorkActivationEnvironment, work: string) {
   if (!WORK.test(work)) throw new InvalidAddressClaim('invalid Work identity');

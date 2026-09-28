@@ -3,7 +3,7 @@ import { profileValidations } from '../../infrastructure/profile.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, IdempotencyConflict,
   PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim,
-  normalizedWorkSlug } from './claim.ts';
+  assignableWorkSlug, normalizedWorkSlug } from './claim.ts';
 
 const FAMILY = 'work-address-rename';
 const CLAIM = 'https://rezics.com/definition/work-address-claim-v1';
@@ -39,7 +39,7 @@ export interface WorkAddressRenameTerminal {
 
 export function workAddressRenameDigest(input: WorkAddressRenameInput): string {
   const slug = normalizedWorkSlug(input.slug);
-  const newSlug = normalizedWorkSlug(input.newSlug);
+  const newSlug = assignableWorkSlug(input.newSlug);
   if (!WORK.test(input.work) || !WORK.test(input.actingSubject)
     || !WORK.test(input.expectedRevision) || slug === newSlug) {
     throw new InvalidAddressClaim('invalid Work address rename');
@@ -175,7 +175,7 @@ export async function renameWorkAddress(env: WorkActivationEnvironment,
     throw new PendingActivation('address rename admission expired');
   }
   const oldSlug = normalizedWorkSlug(input.slug);
-  const newSlug = normalizedWorkSlug(input.newSlug);
+  const newSlug = assignableWorkSlug(input.newSlug);
   const source = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?address WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?address a rv:RouteBinding ;
       rv:routeNamespace "work" ; rv:normalizedSlug ${lit(oldSlug)} ;

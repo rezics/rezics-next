@@ -12,12 +12,14 @@ import { FusekiClient, type CommandEnvelope, type CommandHealth,
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { workAddressCostContract } from '../../../services/main/src/modules/address/contract.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+const ceiling = workAddressCostContract.fusekiRequests;
 
 class MeteredFusekiClient extends FusekiClient {
   calls = 0;
@@ -209,7 +211,7 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     }
     fuseki.calls = 0;
     expect((await claim(workA, 'Alpha-Work')).status).toBe(403);
-    expect(fuseki.calls).toBeLessThanOrEqual(8);
+    expect(fuseki.calls).toBeLessThanOrEqual(ceiling.claim);
     for (const work of [workA, workB, workC, workD, workE, workF, workG]) {
       const scope = `address:claim:${work}`;
       await accessPool.query(`INSERT INTO access.permission_grant
@@ -221,7 +223,7 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     fuseki.calls = 0;
     const first = await claim(workA, 'Alpha-Work', firstKey);
     expect(first.status).toBe(201);
-    expect(fuseki.calls).toBeLessThanOrEqual(8);
+    expect(fuseki.calls).toBeLessThanOrEqual(ceiling.claim);
     const firstBody = await first.json() as { address: string; revision: string;
       slug: string; work: string; replayed: boolean; sourcePosition: { sequence: string } };
     expect(firstBody).toMatchObject({ slug: 'alpha-work', work: workA, replayed: false });
@@ -242,7 +244,7 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     fuseki.calls = 0;
     const replay = await claim(workA, 'alpha-work', firstKey);
     expect(replay.status).toBe(200);
-    expect(fuseki.calls).toBeLessThanOrEqual(4);
+    expect(fuseki.calls).toBeLessThanOrEqual(ceiling.claimReplay);
     expect(await replay.json()).toMatchObject({ address: firstBody.address,
       revision: firstBody.revision, work: workA, replayed: true });
     expect((await claim(workA, 'changed-work', firstKey)).status).toBe(409);
@@ -251,10 +253,12 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     expect(await (await read('alpha-work')).json()).toMatchObject({
       address: firstBody.address, revision: firstBody.revision,
       work: workA, slug: 'alpha-work' });
-    expect(fuseki.calls).toBe(1);
+    expect(fuseki.calls).toBe(ceiling.resolve);
     fuseki.calls = 0;
     expect((await claim(workA, 'another-work-address')).status).toBe(409);
-    expect(fuseki.calls).toBeLessThanOrEqual(14);
+    expect(fuseki.calls).toBeLessThanOrEqual(ceiling.claimConflict);
+    // `/w/{uuid}` is always a Work ID on the web, so a UUID-shaped slug is never assigned.
+    expect((await claim(workB, randomUUID())).status).toBe(400);
     expect(await (await read('alpha-work')).json()).toMatchObject({
       address: firstBody.address, work: workA });
     expect((await read('missing-work')).status).toBe(404);
@@ -287,7 +291,7 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     fuseki.calls = 0;
     const renamed = await rename('Alpha-Work', 'Beta-Work', firstBody.revision, renameKey);
     expect(renamed.status).toBe(201);
-    expect(fuseki.calls).toBeLessThanOrEqual(10);
+    expect(fuseki.calls).toBeLessThanOrEqual(ceiling.rename);
     const renamedBody = await renamed.json() as { address: string; revision: string;
       sourceAddress: string; sourceRevision: string; slug: string; oldSlug: string;
       sourcePosition: { sequence: string } };
@@ -296,8 +300,10 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     fuseki.calls = 0;
     const old = await read('alpha-work');
     expect(old.status).toBe(308);
-    expect(fuseki.calls).toBe(2);
+    expect(fuseki.calls).toBe(ceiling.resolveRenamed);
     expect(old.headers.get('location')).toBe('/v1/addresses/work/beta-work');
+    // The canonical slug can change again, so no cache may keep the redirect.
+    expect(old.headers.get('cache-control')).toBe('no-store');
     expect(await old.json()).toMatchObject({ state: 'redirected',
       originalWork: workA, targetWork: workA,
       canonical: { address: renamedBody.address, slug: 'beta-work' } });
@@ -307,7 +313,7 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     const reverse = await app.handle(new Request(
       `http://main.local/v1/works/${workA.slice(ID.length)}/addresses`));
     expect(reverse.status).toBe(200);
-    expect(fuseki.calls).toBe(1);
+    expect(fuseki.calls).toBe(ceiling.reverse);
     expect(await reverse.json()).toMatchObject({ work: workA,
       canonical: { address: renamedBody.address, slug: 'beta-work' } });
     const exact = (slug: string, revision: string) => app.handle(new Request(
@@ -316,7 +322,7 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     expect(await (await exact('alpha-work', firstBody.revision)).json()).toMatchObject({
       address: firstBody.address, revision: firstBody.revision,
       state: 'current', work: workA });
-    expect(fuseki.calls).toBe(1);
+    expect(fuseki.calls).toBe(ceiling.exact);
     expect(await (await exact('alpha-work', renamedBody.sourceRevision)).json())
       .toMatchObject({ address: firstBody.address, state: 'redirected',
         redirectWork: workA });
@@ -365,9 +371,11 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
       [randomUUID(), actor, scope]);
     }
     const mergeKey = `merge-${randomUUID()}`;
+    fuseki.calls = 0;
     const merged = await dispose(workD, workDClaim.slug, workDClaim.revision,
       'merge', winner, mergeKey);
     expect(merged.status).toBe(201);
+    expect(fuseki.calls).toBeLessThanOrEqual(ceiling.disposition);
     const mergedBody = await merged.json() as { sourceAddress: string;
       revision: string; sourcePosition: { sequence: string } };
     expect(mergedBody).toMatchObject({ operation: 'merge',
@@ -401,6 +409,10 @@ test('VIEW01/VIEW02: Work address claims, renames and dispositions preserve exac
     expect(await (await app.handle(new Request(
       `http://main.local/v1/works/${workA.slice(ID.length)}/addresses`))).json())
       .toMatchObject({ work: workA, canonical: null });
+    // Former slugs stay reserved: not even their own Work, now without an address, can claim them again.
+    for (const former of ['alpha-work', canonicalA.slug]) {
+      expect((await claim(workA, former)).status).toBe(409);
+    }
     expect((await dispose(workA, canonicalA.slug, canonicalA.revision, 'retire')).status)
       .toBe(409);
     const workESlug = `disposition-${randomUUID().replaceAll('-', '')}`;
