@@ -12,6 +12,27 @@ Unknown correspondence stays unknown. An ISBN or other distribution identifier
 belongs to the evidenced publication grain; it does not automatically identify
 the Work. A release announcement is a separate utterance.
 
+## Closed records and open axes
+
+What REZICS records about the world is closed; what REZICS maintains is open. A
+Main Version and a [virtual release](distribution.md#release-kinds-and-status)
+accept new content versions. An external edition or physical release, each web
+snapshot and a fixed release record what was actually published. Evidence may
+correct such a record; a later translation or contribution is never added to it,
+but becomes a [new content version](content-languages.md#translations-are-new-content-versions)
+that names this record as its source. The number of languages does not matter: a
+bilingual edition is as closed as a monolingual one.
+
+A release is a statement of fact, so adding content published later would falsify
+it and let it imply coverage it never had. Keeping publisher and community work
+under separate identities also keeps their authority, rights and responsibility
+apart. The same split underlies [IFLA LRM](https://www.ifla.org/files/assets/cataloguing/frbr-lrm/ifla-lrm-august-2017.pdf)
+manifestations and expressions, and MusicBrainz places translations that appear
+on no actual release on a [Pseudo-Release](https://musicbrainz.org/doc/Style/Specific_types_of_releases/Pseudo-Releases)
+rather than on the official one.
+
+## Installed release and translation grain
+
 The first [fixed release](../../services/main/src/modules/work/fixed-release.ts)
 seals one published native text draft and its exact Main Version selection. Its
 manifest preserves the selected contribution, decision, language and body digest;
