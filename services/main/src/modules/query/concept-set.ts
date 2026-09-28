@@ -31,7 +31,8 @@ export function completeSearch(value: unknown): CompleteSearch {
 }
 
 /** Set operations run on the complete mainVersion grain, before final paging. */
-export function combineConcepts(base: CompleteSearch, conditions: readonly ConceptRelation[]) {
+export function combineConcepts(base: CompleteSearch, conditions: readonly ConceptRelation[],
+  includeMatch: 'all' | 'any' = 'all') {
   if (conditions.length < 1 || conditions.length > QUERY_COST.conceptReads) {
     throw new QueryRejected('query_budget_exceeded', 'Concept set exceeds its template bound');
   }
@@ -43,8 +44,12 @@ export function combineConcepts(base: CompleteSearch, conditions: readonly Conce
     }
     return { operator, members: new Set(relation.results.map(row => row.mainVersion)) };
   });
-  return base.results.filter(row => sets.every(({ operator, members }) =>
-    operator === 'include' ? members.has(row.mainVersion) : !members.has(row.mainVersion)));
+  const included = sets.filter(set => set.operator === 'include');
+  const excluded = sets.filter(set => set.operator === 'exclude');
+  return base.results.filter(row => (included.length === 0 || (includeMatch === 'all'
+    ? included.every(set => set.members.has(row.mainVersion))
+    : included.some(set => set.members.has(row.mainVersion))))
+    && excluded.every(set => !set.members.has(row.mainVersion)));
 }
 
 interface QueryCursor {

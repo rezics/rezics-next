@@ -3,26 +3,31 @@ import { QueryRejected } from './compile.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
-/** Resolve a Concept Condition's exact interpretation revision to the active legacy Sense. */
-export async function senseForConcept(env: WorkActivationEnvironment,
-  concept: { value: string; revision: string }): Promise<string> {
-  if (!nativeId.test(concept.value) || !nativeId.test(concept.revision)) {
+/** Resolve a Concept Condition's current or exact interpretation to the active Sense and revision. */
+export async function interpretationForConcept(env: WorkActivationEnvironment,
+  concept: { value: string; revision?: string }): Promise<{ sense: string; revision: string }> {
+  if (!nativeId.test(concept.value) || (concept.revision && !nativeId.test(concept.revision))) {
     throw new QueryRejected('unsupported_query_shape', 'Search needs native Concept and interpretation IDs');
   }
-  const response = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sense WHERE {
+  const response = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sense ?head WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ?sense a rv:ClassificationSense ; rv:senseState rv:Active ;
-        rv:head ${iri(concept.revision)} ; rv:expression ?expression .
+        rv:head ?head ; rv:expression ?expression .
       ?expression a rv:ClassificationExpression ; rv:expressionState rv:Active ;
         rv:assertedConcept ${iri(concept.value)} .
+      ${concept.revision ? `FILTER(?head = ${iri(concept.revision)})` : ''}
     }
     GRAPH ${iri(GRAPHS.revisions)} {
-      ${iri(concept.revision)} a rv:RevisionAnchor ; rv:component ?sense .
+      ?head a rv:RevisionAnchor ; rv:component ?sense .
     }
   } LIMIT 2`, 8192);
   const rows = response.results?.bindings ?? [];
-  if (rows.length !== 1 || !rows[0]?.sense || !nativeId.test(rows[0].sense.value)) {
+  if (rows.length > 1) {
+    throw new QueryRejected('unsupported_query_shape', 'Phrase search has no template for multiple active interpretations');
+  }
+  if (rows.length !== 1 || !rows[0]?.sense || !nativeId.test(rows[0].sense.value)
+    || !rows[0].head || !nativeId.test(rows[0].head.value)) {
     throw new QueryRejected('stale_query_meaning', 'Concept interpretation changed or is ambiguous');
   }
-  return rows[0].sense.value;
+  return { sense: rows[0].sense.value, revision: rows[0].head.value };
 }

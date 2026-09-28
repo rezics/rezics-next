@@ -170,6 +170,21 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     expect(positive.template).toBe('public-concept-set-phrase-v1');
     expect(positive.selection.semanticRevisions).toEqual([included.revision, excluded.revision]);
     expect(positive.result.results.map(row => row.work)).toContain(created.work);
+    const current = await send('/v1/query', { ...query, filter: { all: [
+      { facet: 'concept', any: [included.definitions!.concept] },
+      { facet: 'concept', none: [excluded.definitions!.concept] },
+    ] } });
+    expect(current.status).toBe(200);
+    const currentPage = await current.json() as { selection: { semanticRevisions: string[] };
+      result: { results: Array<{ work: string }> } };
+    expect(currentPage.selection.semanticRevisions).toEqual([included.revision, excluded.revision]);
+    expect(currentPage.result.results.map(row => row.work)).toContain(created.work);
+    const singleCurrent = await send('/v1/query', { ...query, filter: { all: [
+      { facet: 'concept', any: [included.definitions!.concept] },
+    ] } });
+    expect(singleCurrent.status).toBe(200);
+    expect((await singleCurrent.json() as { selection: { semanticRevisions: string[] } }).selection.semanticRevisions)
+      .toEqual([included.revision]);
     const legacyIncluded = await send('/v1/queries', { profile: 'public-main-classified-phrase-v1',
       phrase: token, language: 'en', sense: included.definitions!.sense });
     expect(legacyIncluded.status).toBe(200);
@@ -187,7 +202,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
       .toContain(created.work);
 
     const refused = await send('/v1/query', { ...query,
-      filter: { all: [{ facet: 'concept', none: [created.work] }] } });
+      filter: { any: [{ facet: 'type', any: [book] }, { facet: 'type', none: [book] }] } });
     expect(refused.status).toBe(422);
     expect(await refused.json()).toMatchObject({ status: 422, code: 'unsupported_query_shape' });
   } finally {

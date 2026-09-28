@@ -92,9 +92,8 @@ test('Query: Realm scope compiles onto the bounded Zone population, not the Real
     request: { q: 'Pride', sort: 'relevance', limit: 20, type: [book], concept: [id(2)] } });
 });
 
-test('Query: unsupported include/exclude and boolean combinations are typed refusals', () => {
+test('Query: unsupported boolean and type combinations are typed refusals', () => {
   const refusals: ResourceQuery['filter'][] = [
-    { all: [{ facet: 'concept', any: [id(2)] }, { facet: 'concept', none: [id(3)] }] },
     { any: [{ facet: 'type', any: [book] }, { facet: 'type', any: [recipe] }] },
     { all: [{ facet: 'type', all: [book, recipe] }] },
   ];
@@ -130,8 +129,40 @@ test('Query route: an unsupported shape returns a typed 422 before touching the 
   const app = queryRoutes({} as never, {} as never);
   const response = await app.handle(new Request('http://main.local/v1/query', { method: 'POST',
     headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...base,
-      filter: { all: [{ facet: 'concept', none: [id(2)] }] },
+      filter: { any: [{ facet: 'type', any: [book] }, { facet: 'type', any: [recipe] }] },
     }) }));
   expect(response.status).toBe(422);
   expect(await response.json()).toMatchObject({ code: 'unsupported_query_shape' });
+});
+
+test('Query: Concept page Conditions use the bounded Works template', () => {
+  const query: ResourceQuery = { context: 'global', scope: { kind: 'all' }, sort: 'newest',
+    page: { size: 20 }, filter: { all: [
+      { facet: 'concept', any: [id(2), id(3)] }, { facet: 'concept', none: [id(4)] },
+      { facet: 'type', any: [book] },
+    ] } };
+  expect(compileQuery(query)).toMatchObject({ template: 'concept-works', concept: id(2),
+    request: { scope: 'global', match: 'any', include: [id(3)], exclude: [id(4)], type: book } });
+  expect(() => compileQuery({ ...query, page: { size: 21 } })).toThrow(QueryRejected);
+  expect(() => compileQuery({ ...query, filter: { all: [{ facet: 'concept', none: [id(4)] }] } }))
+    .toThrow(QueryRejected);
+});
+
+test('Query: phrase Concept any and all retain their different set meanings', () => {
+  const all = compileQuery({ ...base, filter: { all: [
+    { facet: 'concept', all: [id(2), id(3)] }, { facet: 'concept', none: [id(4)] },
+  ] } });
+  const any = compileQuery({ ...base, filter: { all: [
+    { facet: 'concept', any: [id(2), id(3)] }, { facet: 'concept', none: [id(4)] },
+  ] } });
+  expect(all).toMatchObject({ template: 'search-concepts', includeMatch: 'all' });
+  expect(any).toMatchObject({ template: 'search-concepts', includeMatch: 'any' });
+  const relations = [
+    { operator: 'include' as const, relation: relation([1, 2]) },
+    { operator: 'include' as const, relation: relation([2, 3]) },
+    { operator: 'exclude' as const, relation: relation([3]) },
+  ];
+  expect(combineConcepts(relation([1, 2, 3, 4]), relations, 'all').map(row => row.work)).toEqual([id(2)]);
+  expect(combineConcepts(relation([1, 2, 3, 4]), relations, 'any').map(row => row.work))
+    .toEqual([id(1), id(2)]);
 });

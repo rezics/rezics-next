@@ -5,9 +5,13 @@ import type { ResourceQuery } from '../../../../model/definitions/filter-documen
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { readZoneBrowse } from '../modules/zone-modules/browse.ts';
 import { zoneBrowsePage } from '../modules/zone-modules/contract.ts';
+import { conceptWorksPage } from '../modules/concept-page/contract.ts';
+import { readConceptWorks } from '../modules/concept-page/read.ts';
+import { discoveryError } from '../modules/discovery/management.ts';
 import { workRead } from '../modules/work/read-session.ts';
+import { WorkReadUnavailable } from '../modules/work/read-session.ts';
 import { compileQuery, QUERY_COST, QueryRejected, type CompiledQuery } from '../modules/query/compile.ts';
-import { senseForConcept } from '../modules/query/concept.ts';
+import { interpretationForConcept } from '../modules/query/concept.ts';
 import { combineConcepts, completeSearch, pageConcepts, type ConceptRelation }
   from '../modules/query/concept-set.ts';
 import { enrichSearchCardPage } from '../modules/search/result-cards.ts';
@@ -48,13 +52,13 @@ const querySelection = t.Object({ context, scope, filter: t.Unknown(), text: t.N
   semanticRevisions: t.Array(nativeId, { maxItems: QUERY_COST.conceptReads }),
 });
 
-function selection(input: ResourceQuery, compiled: CompiledQuery) {
+function selection(input: ResourceQuery, compiled: CompiledQuery, resolvedRevisions?: string[]) {
   return { context: input.context, scope: input.scope, filter: input.filter ?? { all: [] },
     text: input.text ?? null, sort: input.sort, pageSize: input.page.size,
     facetRefs: compiled.facets,
-    semanticRevisions: compiled.template === 'search-concepts'
-      ? compiled.concepts.map(concept => concept.revision)
-      : compiled.template === 'search' && compiled.concept ? [compiled.concept.revision] : [] };
+    semanticRevisions: resolvedRevisions ?? (compiled.template === 'search-concepts'
+      ? compiled.concepts.flatMap(concept => concept.revision ? [concept.revision] : [])
+      : compiled.template === 'search' && compiled.concept?.revision ? [compiled.concept.revision] : []) };
 }
 
 export const openApiOperations = { '/v1/query': { post: { bearer: false } } } as const;
@@ -72,12 +76,26 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const search = searchRoutes(fuseki, work);
   return new Elysia().post('/v1/query', { body, response: {
     200: t.Object({ profile: t.Literal('query-v1'), template: t.String(), selection: querySelection,
-      result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult]) }),
+      result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage]) }),
     400: problemResult(400), 404: problemResult(404), 409: problemResult(409),
     422: problemResult(422), 500: problemResult(500), 503: problemResult(503),
   } }, async ({ body: input, request }) => {
     try {
       const compiled = compileQuery(input as ResourceQuery);
+      if (compiled.template === 'concept-works') {
+        try {
+          if (!work.discovery) throw new WorkReadUnavailable('Discovery owner is unavailable');
+          const preferredLanguage = request.headers.get('accept-language')?.split(',')[0]?.trim();
+          const language = preferredLanguage && /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(preferredLanguage)
+            ? preferredLanguage : undefined;
+          const result = await workRead(work, new Request(request.url), { ...compiled.request,
+            language, retainedBasis: true }, session => readConceptWorks(session, work.discovery!,
+            compiled.concept, compiled.request));
+          return Response.json({ profile: 'query-v1', template: 'concept-works-v1',
+            selection: selection(input as ResourceQuery, compiled), result },
+            { headers: { 'cache-control': 'no-store' } });
+        } catch (error) { return discoveryError(error); }
+      }
       if (compiled.template === 'zone-browse') {
         const url = new URL(`/v1/realms/${compiled.realm.slice(-36)}/modules/browse`, request.url);
         const result = await workRead(work, new Request(url), {
@@ -93,10 +111,12 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           if (Date.now() >= expiresAt) throw new QueryRejected('query_budget_exceeded', 'Query deadline exceeded');
         };
         const before = await presentationDigest(work, request);
-        const senses = [] as string[];
+        const senses = [] as string[], revisions = [] as string[];
         for (const concept of compiled.concepts) {
           withinBudget();
-          senses.push(await senseForConcept(work.environment, concept));
+          const resolved = await interpretationForConcept(work.environment, concept);
+          senses.push(resolved.sense);
+          revisions.push(resolved.revision);
         }
         const headers = new Headers({ 'content-type': 'application/json' });
         if (request.headers.has('authorization')) headers.set('authorization', request.headers.get('authorization')!);
@@ -119,14 +139,15 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         }
         for (const [index, concept] of compiled.concepts.entries()) {
           withinBudget();
-          if (await senseForConcept(work.environment, concept) !== senses[index]) {
+          const current = await interpretationForConcept(work.environment, concept);
+          if (current.sense !== senses[index] || current.revision !== revisions[index]) {
             throw new QueryRejected('stale_query_meaning', 'Concept interpretation changed during Query');
           }
         }
         const after = await presentationDigest(work, request);
         withinBudget();
         if (after !== before) throw new QueryRejected('stale_query_result', 'Presentation policy changed during Query');
-        const selected = combineConcepts(base, conditions);
+        const selected = combineConcepts(base, conditions, compiled.includeMatch);
         const page = pageConcepts(input as ResourceQuery, base, selected, senses, after);
         const hydrated = await enrichSearchCardPage(work, request, page, compiled.request.language);
         withinBudget();
@@ -134,10 +155,12 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           throw new QueryRejected('stale_query_result', 'Presentation policy changed during Query');
         }
         return Response.json({ profile: 'query-v1', template: 'public-concept-set-phrase-v1',
-          selection: selection(input as ResourceQuery, compiled), result: hydrated },
+          selection: selection(input as ResourceQuery, compiled, revisions), result: hydrated },
           { headers: { 'cache-control': 'no-store' } });
       }
-      if (compiled.concept) compiled.request.sense = await senseForConcept(work.environment, compiled.concept);
+      const interpretation = compiled.concept
+        ? await interpretationForConcept(work.environment, compiled.concept) : undefined;
+      if (interpretation) compiled.request.sense = interpretation.sense;
       const headers = new Headers({ 'content-type': 'application/json' });
       if (request.headers.has('authorization')) headers.set('authorization', request.headers.get('authorization')!);
       const legacy = new Request(new URL('/v1/queries/page', request.url), {
@@ -145,13 +168,19 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       });
       const response = await search.handle(legacy);
       if (!response.ok) return response;
-      if (compiled.concept) await senseForConcept(work.environment, compiled.concept);
+      if (compiled.concept) {
+        const current = await interpretationForConcept(work.environment, compiled.concept);
+        if (current.sense !== interpretation?.sense || current.revision !== interpretation.revision) {
+          throw new QueryRejected('stale_query_meaning', 'Concept interpretation changed during Query');
+        }
+      }
       const result: unknown = await response.json();
       if (Buffer.byteLength(JSON.stringify(result)) > QUERY_COST.responseBytes) {
         throw new QueryRejected('query_budget_exceeded', 'Query response exceeds its byte bound');
       }
       return Response.json({ profile: 'query-v1', template: compiled.request.profile,
-        selection: selection(input as ResourceQuery, compiled), result },
+        selection: selection(input as ResourceQuery, compiled,
+          interpretation ? [interpretation.revision] : []), result },
         { headers: { 'cache-control': 'no-store' } });
     } catch (error) {
       if (error instanceof QueryRejected) return problem(error.refusal.startsWith('stale_') ? 409 : 422,

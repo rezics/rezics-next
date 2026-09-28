@@ -4,10 +4,11 @@ import { checkedFilter, InvalidFilter } from '../facets/schema.ts';
 import { resolveFacet } from '../facets/registry.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { ZONE_BROWSE_COST } from '../zone-modules/contract.ts';
+import { CONCEPT_WORKS_COST, type ConceptWorksQuery } from '../concept-page/contract.ts';
 
 export const QUERY_COST = {
-  nodes: 32, depth: 4, graphReads: 6, candidateRows: 512,
-  searchExecutions: 3, conceptReads: 2, deadlineMs: 10_000, searchPageSize: 64,
+  nodes: 32, depth: 4, graphReads: 7, candidateRows: 512,
+  searchExecutions: 4, conceptReads: 3, deadlineMs: 10_000, searchPageSize: 64,
   zonePageSize: ZONE_BROWSE_COST.pageSize, responseBytes: 8 * 1024 * 1024,
 } as const;
 
@@ -25,14 +26,17 @@ type SearchRequest = { profile: string; phrase?: string; titleTerm?: string; bod
 
 type ZoneRequest = { q?: string; sort: ResourceQuery['sort']; type?: string[];
   concept?: string[]; language?: string; limit: number; cursor?: string };
+type ConceptSelection = { operator: 'include' | 'exclude'; value: string; revision?: string };
 
 export type CompiledQuery =
-  | { template: 'search'; request: SearchRequest; concept?: { value: string; revision: string };
+  | { template: 'search'; request: SearchRequest; concept?: { value: string; revision?: string };
     facets: string[]; graphReads: number }
   | { template: 'search-concepts'; request: SearchRequest;
-    concepts: { operator: 'include' | 'exclude'; value: string; revision: string }[];
+    concepts: ConceptSelection[]; includeMatch: 'all' | 'any';
     facets: string[]; graphReads: number }
   | { template: 'zone-browse'; realm: string; request: ZoneRequest;
+    facets: string[]; graphReads: number }
+  | { template: 'concept-works'; concept: string; request: ConceptWorksQuery;
     facets: string[]; graphReads: number };
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -142,6 +146,47 @@ export function compileQuery(query: ResourceQuery): CompiledQuery {
     if (query.sort === 'relevance' && !query.text) fail('Relevance needs text');
     return { template: 'zone-browse', realm: query.scope.realm, request, facets, graphReads };
   }
+  // The Concept page's bounded projection is the no-text, newest-first Query
+  // template. It executes the full all/any/none Concept Condition, including
+  // multiple values, and carries the projection's own count and cursor.
+  if (!query.text && query.sort === 'newest') {
+    if (query.page.size > CONCEPT_WORKS_COST.pageSize) {
+      throw new QueryRejected('query_budget_exceeded', 'Concept Works page exceeds its bound');
+    }
+    const request: ConceptWorksQuery = { limit: query.page.size,
+      ...(query.context === 'global' ? { scope: 'global' } :
+        { scope: 'realm', realm: query.context.realm }) };
+    if (query.page.continuation !== undefined) {
+      if (typeof query.page.continuation !== 'string') fail('Concept Works continuation has the wrong form');
+      request.cursor = query.page.continuation as string;
+    }
+    let included: string[] | undefined;
+    let excluded: string[] | undefined;
+    for (const condition of conditions) {
+      const facet = resolveFacet(condition.facet)!;
+      if (condition.interpretation || condition.applicability || condition.bind || condition.range) {
+        fail(`${facet.name} qualifiers have no Concept Works template`);
+      }
+      if (facet.name === 'type' && condition.any?.length === 1 && !request.type) {
+        const type = values(condition, 'any')[0]!;
+        if (!(WORK_SEMANTIC_TYPES as readonly string[]).includes(type)) fail('Concept Works does not admit this type');
+        request.type = type as NonNullable<ConceptWorksQuery['type']>;
+      } else if (facet.name === 'concept' && condition.none && !excluded) {
+        excluded = values(condition, 'none');
+      } else if (facet.name === 'concept' && (condition.any || condition.all) && !included) {
+        included = values(condition, condition.any ? 'any' : 'all');
+        request.match = condition.any ? 'any' : 'all';
+      } else fail(`${facet.name} has no Concept Works template`);
+    }
+    if (!included?.length || included.some(value => !nativeId.test(value))
+      || excluded?.some(value => !nativeId.test(value) || included?.includes(value))) {
+      fail('Concept Works needs visible, distinct native Concept values');
+    }
+    const [concept, ...extra] = included!;
+    if (extra.length) request.include = extra;
+    if (excluded?.length) request.exclude = excluded;
+    return { template: 'concept-works', concept: concept!, request, facets, graphReads };
+  }
   if (query.page.size > QUERY_COST.searchPageSize) {
     throw new QueryRejected('query_budget_exceeded', 'Search page exceeds its bound');
   }
@@ -157,7 +202,9 @@ export function compileQuery(query: ResourceQuery): CompiledQuery {
     ...query.page.continuation === undefined ? {} : { continuation: query.page.continuation } };
   if (searchText && 'phrase' in searchText) request.phrase = searchText.phrase;
   else if (searchText) { request.titleTerm = searchText.title; request.bodyTerm = searchText.body; }
-  const concepts: { operator: 'include' | 'exclude'; value: string; revision: string }[] = [];
+  const concepts: ConceptSelection[] = [];
+  let includeMatch: 'all' | 'any' = 'all';
+  let hasIncludedConcepts = false, hasExcludedConcepts = false;
   for (const condition of conditions) {
     const facet = resolveFacet(condition.facet)!;
     if (condition.applicability || condition.where) fail(`${facet.name} qualifiers have no search template`);
@@ -193,12 +240,21 @@ export function compileQuery(query: ResourceQuery): CompiledQuery {
         const interpretation = condition.interpretation;
         const operator = condition.none ? 'none' : condition.any ? 'any' : 'all';
         const chosen = condition[operator];
-        if (!chosen || chosen.length !== 1 || !interpretation || !('definition' in interpretation)) {
-          fail('Search needs one Concept per Condition and its exact interpretation revision');
+        if (!chosen?.length || (interpretation && !('definition' in interpretation))) {
+          fail('Search needs a Concept Condition with a supported interpretation');
         }
-        concepts.push({ operator: operator === 'none' ? 'exclude' : 'include',
-          value: values(condition, operator)[0]!,
-          revision: (interpretation as { definition: string }).definition });
+        if (operator === 'none' ? hasExcludedConcepts : hasIncludedConcepts) {
+          fail('Multiple Concept Conditions with the same operator have no search template');
+        }
+        if (operator === 'none') hasExcludedConcepts = true;
+        else { hasIncludedConcepts = true; includeMatch = operator; }
+        if (chosen!.length > 1 && interpretation) {
+          fail('One interpretation revision cannot describe several Concepts');
+        }
+        concepts.push(...values(condition, operator).map(value => ({
+          operator: operator === 'none' ? 'exclude' as const : 'include' as const, value,
+          ...interpretation && 'definition' in interpretation ? { revision: interpretation.definition } : {},
+        })));
         break;
       }
       case 'rating': {
@@ -224,14 +280,14 @@ export function compileQuery(query: ResourceQuery): CompiledQuery {
     fail('Title/body search has no Realm or Concept template');
   }
   if (concepts.length > QUERY_COST.conceptReads) {
-    throw new QueryRejected('query_budget_exceeded', 'Concept set exceeds three bounded reads');
+    throw new QueryRejected('query_budget_exceeded', 'Concept set exceeds its bounded reads');
   }
   if (concepts.length > 1 || concepts[0]?.operator === 'exclude') {
     if (request.ratingContext) fail('Concept set has no rated search template');
     request.profile = realm ? 'public-realm-phrase-v1' : 'public-main-phrase-v1';
     delete request.pageSize;
     delete request.continuation;
-    return { template: 'search-concepts', request, concepts, facets, graphReads };
+    return { template: 'search-concepts', request, concepts, includeMatch, facets, graphReads };
   }
   const concept = concepts[0];
   request.profile = !request.phrase ? 'public-main-title-body-page-v1'
