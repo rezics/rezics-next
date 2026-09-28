@@ -5,7 +5,7 @@ import { grantRealmProfileSeed, realmProfileClient } from './official-authority.
 import { editorList, extraWorks, fictionQuotes, fictionWorks, type OfficialRealmId, penNames, publicTexts,
   realmProfiles, zoneContent } from './official-plan.ts';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, type LocalOperatorInput } from './operator.ts';
-import { people, profilePlan, seedKey } from './plan.ts';
+import { people, profilePlan, seedKey, works } from './plan.ts';
 import { seedReply } from './replies.ts';
 import type { AgentReceipt, ContributionReceipt, PublicationReceipt, SeedState, Session, WorkReceipt }
   from './state.ts';
@@ -246,7 +246,7 @@ async function fictionSerials(o: Official) {
     await o.state.optional(`Fiction serial ${work.id}`, async () => {
       const author = o.agent(work.author), as = o.writer(work.author), name = work.seedName ?? work.id;
       const target = await o.api.post<WorkReceipt>('/v1/works', { profile: 'metadata-only-v1', title: work.title,
-        semanticTypes: [BOOK], actingSubject: author }, as.token, seedKey('official-work', name));
+        semanticTypes: [BOOK], authoring: 'own-work', actingSubject: author }, as.token, seedKey('official-work', name));
       o.works.set(work.id, { work: target, language: work.language, published: null });
       await describeWork(o, name, target, author, as, work.language, work.tagline, work.completionStatus);
       const published = await publish(o, name, target, author, as, work.language, work.opening);
@@ -268,24 +268,26 @@ async function fictionSerials(o: Official) {
 
 /** Classics, recipes and guides for the lighter Zones: public texts on base-plan Works, and a few new Works. */
 async function lighterTexts(o: Official) {
-  const owner = o.state.sessions[0]!;
   for (const [id, text] of Object.entries(publicTexts)) {
     const target = o.state.created.get(id);
     if (!target || o.state.publicForRealm.has(id)) continue;
     await o.state.optional(`Public text ${id}`, async () => {
+      const authorId = works.find(work => work.id === id)?.author;
+      const as = authorId ? o.writer(authorId) : o.person('mei');
+      const author = authorId ? o.agent(authorId) : as.actingSubject;
       if (text.tagline) {
-        await describeWork(o, id, target, owner.actingSubject, owner, text.language, text.tagline,
+        await describeWork(o, id, target, author, as, text.language, text.tagline,
           text.completionStatus ?? null);
       }
       o.works.set(id, { work: target, language: text.language,
-        published: await publish(o, id, target, owner.actingSubject, owner, text.language, text.text) });
+        published: await publish(o, id, target, author, as, text.language, text.text) });
     });
   }
   for (const extra of extraWorks) {
     await o.state.optional(`Zone work ${extra.id}`, async () => {
       const as = o.person(extra.owner);
       const target = await o.api.post<WorkReceipt>('/v1/works', { profile: 'metadata-only-v1', title: extra.title,
-        semanticTypes: [DOCUMENT], actingSubject: as.actingSubject }, as.token, seedKey('official-work', extra.id));
+        semanticTypes: [DOCUMENT], authoring: 'own-work', actingSubject: as.actingSubject }, as.token, seedKey('official-work', extra.id));
       await describeWork(o, extra.id, target, as.actingSubject, as, extra.language, extra.tagline, null);
       o.works.set(extra.id, { work: target, language: extra.language,
         published: await publish(o, extra.id, target, as.actingSubject, as, extra.language, extra.text) });

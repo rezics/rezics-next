@@ -14,6 +14,7 @@ import { assertWebInstallationReady, bootstrapWebAuth, upgradeWebClient } from '
 import { compatibleLoadStorage, loadCompatibility,
   type LoadCompatibility } from '../load/compatibility.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
+import { devResetPlan, devResetTarget } from './reset.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -520,6 +521,30 @@ function devStop(args: string[]): void {
   }
 }
 
+async function devReset(args: string[]): Promise<void> {
+  if (args.some(arg => arg !== '--yes') || args.length > 1) {
+    throw new Error('Usage: task dev:reset -- --yes');
+  }
+  const worktree = checkout().worktree;
+  const options = devResetTarget(root, worktree);
+  const dir = stackDirectory(root, options);
+  const apps = existsSync(join(dir, 'apps.env')) ? readEnv(join(dir, 'apps.env')) : undefined;
+  const plan = devResetPlan(root, options, apps);
+  console.log(`Dev reset target: ${plan.project}`);
+  console.log(`  Docker volumes: ${plan.volumes.join(', ')}`);
+  for (const file of plan.files) console.log(`  Local data: ${file}`);
+  console.log('  Other QA projects and fixture backups are outside this target.');
+  if (!args.includes('--yes')) throw new Error('Pass -- --yes to delete the listed dev data');
+  try { aspireCli(['stop']); }
+  catch (error) {
+    if (plan.saved) throw error;
+    // A first reset can run before this checkout has ever started Aspire.
+  }
+  if (plan.saved) compose(options, ['down', '--volumes', '--remove-orphans'], runtimeEnv());
+  for (const file of plan.files) rmSync(file, { recursive: true, force: true });
+  await devStart(worktree ? ['--backend'] : []);
+}
+
 /** Show where this checkout's application environment comes from, secrets masked. */
 function devEnv(args: string[]): void {
   const { mode, options } = devTarget(args);
@@ -539,6 +564,7 @@ async function main(): Promise<void> {
   if (command === 'toolchain:install') { if (args.length) throw new Error('Unexpected arguments'); await install(); return; }
   if (command === 'dev') { await devStart(args); return; }
   if (command === 'dev:stop') { devStop(args); return; }
+  if (command === 'dev:reset') { await devReset(args); return; }
   if (command === 'dev:urls') { devUrls(); return; }
   if (command === 'dev:env') { devEnv(args); return; }
   if (command === 'stack:up') { await stackUp(parseOptions(args)); return; }

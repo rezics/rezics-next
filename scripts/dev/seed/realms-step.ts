@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { grantCuratedCollectionSeed, grantOfficialZoneSeed } from './operator.ts';
+import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantOfficialZoneSeed } from './operator.ts';
 import { realms, seedKey } from './plan.ts';
 import { stableId, type SeedState, type SpaceReceipt } from './state.ts';
 import { officialPresentation, withoutTabLabels } from './official-plan.ts';
@@ -20,6 +20,11 @@ export async function seedRealms(state: SeedState) {
     if (!operatorInput || !operatorSession) break;
     const parent = createdRealms.find(item => item.id === realm.id);
     if (!parent) continue;
+    const readGrants = realm.featured.map(id => ({ action: 'work.read' as const,
+      scope: `work:read:${created.get(id)!.work}` }));
+    for (let offset = 0; offset < readGrants.length; offset += 9) {
+      await grantHomeSeedAuthority(operatorInput, readGrants.slice(offset, offset + 9));
+    }
     const collection = `https://rezics.com/id/${stableId(`curated:${realm.id}`)}`;
     const zone = `https://rezics.com/id/${stableId(`zone:${realm.id}`)}`;
     await grantCuratedCollectionSeed(operatorInput, collection);

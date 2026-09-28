@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { readEnv } from '../config.ts';
+import { readEnv, stackDirectory } from '../config.ts';
+import { devResetTarget } from '../reset.ts';
 import { SeedApi, SeedApiError, type SeedEndpoints } from './api.ts';
 import { seedAccounts } from './accounts-step.ts';
 import { seedAdoptions } from './adoptions-step.ts';
@@ -41,15 +42,21 @@ function commonRoot(): string {
 }
 
 function configuration(): { endpoints: SeedEndpoints; fixture: SeedState['fixture'] } {
+  const root = resolve(import.meta.dir, '../../..');
+  const isolated = stackDirectory(root, devResetTarget(root, true));
+  const worktree = commonRoot() !== root;
   const directory = Bun.env.REZICS_SEED_STACK_DIRECTORY
-    ? resolve(Bun.env.REZICS_SEED_STACK_DIRECTORY) : join(commonRoot(), '.temp/stack/rezics-dev');
+    ? resolve(Bun.env.REZICS_SEED_STACK_DIRECTORY)
+    : worktree ? isolated : join(root, '.temp/stack/rezics-dev');
   const envPath = join(directory, 'dev.env');
   const publicPath = join(directory, 'web-auth/public.json');
   const privatePath = join(directory, 'web-auth/private.json');
   if (![envPath, publicPath].every(existsSync)) {
-    throw new Error('Shared dev stack is absent; start it from the main checkout with task dev');
+    throw new Error(worktree ? 'Isolated dev backend is absent; run task dev -- --backend in this worktree'
+      : 'Shared dev stack is absent; start it from the main checkout with task dev');
   }
   const env = readEnv(envPath);
+  const compose = readEnv(join(directory, 'compose.env'));
   const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as {
     clientId: string; redirectUris: string[]; scope: string; resource: string };
   const privateConfig = existsSync(privatePath)
@@ -71,7 +78,7 @@ function configuration(): { endpoints: SeedEndpoints; fixture: SeedState['fixtur
     accountDatabaseUrl: env.ACCOUNT_DATABASE_URL ?? null,
     accessDatabaseUrl: env.ACCESS_DATABASE_URL ?? null, accountSecret: env.ACCOUNT_SECRET ?? null },
   endpoints: { account, main,
-    mailpit: `http://127.0.0.1:${env.MAILPIT_HTTP_PORT ?? '8025'}`,
+    mailpit: `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}`,
     clientId: publicConfig.clientId, redirectUri: publicConfig.redirectUris[0],
     resource: publicConfig.resource, scope: publicConfig.scope } };
 }
@@ -90,7 +97,7 @@ function describe(error: unknown): string {
 
 // Each phase owns one file; this is the only ordering declaration.
 export const steps: readonly SeedStep[] = [
-  seedAccounts, seedWorks, seedRealms, seedContributions, seedAdoptions,
+  seedAccounts, seedWorks, seedContributions, seedRealms, seedAdoptions,
   seedRatings, seedLibrary, seedChapters, seedModeration, seedHomeFeed,
   seedProfileCredits, seedProfileBios, seedProfileShelves, seedProfileFollows, seedOfficialZones,
   checkPublicReads, printSeedReport,

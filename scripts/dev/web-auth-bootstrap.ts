@@ -273,7 +273,8 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     }
     const actor = `https://rezics.com/id/${randomUUID()}`;
     const agent = { kind: 'person' as const, displayName: 'Local author' };
-    await createAgentGraph({ fuseki: new FusekiClient(apps.FUSEKI_URL!),
+    await createAgentGraph({ fuseki: new FusekiClient(apps.FUSEKI_URL!,
+      apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!),
       lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
       objectDirectory: join(outputDir, 'objects') },
     { id: randomUUID(), agent: actor, ...agent, digest: agentProvisionDigest(agent) });

@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { dryRunLines, parseOptions, steps } from '../../../scripts/dev/seed/cli.ts';
 import { people, realms, seedKey, semanticTypes, works } from '../../../scripts/dev/seed/plan.ts';
-import { SeedApiError, type SeedApi } from '../../../scripts/dev/seed/api.ts';
+import type { SeedApi } from '../../../scripts/dev/seed/api.ts';
+import { devResetPlan, devResetTarget } from '../../../scripts/dev/reset.ts';
 import { seedWorks } from '../../../scripts/dev/seed/works-step.ts';
+import { seedContributions } from '../../../scripts/dev/seed/contributions-step.ts';
 import { checkPublicReads } from '../../../scripts/dev/seed/checks-step.ts';
 import { seedChapterProgress } from '../../../scripts/dev/seed/progress.ts';
 import type { SeedState, WorkReceipt } from '../../../scripts/dev/seed/state.ts';
@@ -41,17 +43,13 @@ describe('dev seed plan', () => {
     }
   });
 
-  test('creates original Works as own-work and replays an older metadata-only receipt', async () => {
+  test('creates every original Work under its author', async () => {
     const calls: Array<{ body: Record<string, unknown>; key: string }> = [];
-    let legacySerial = true;
-    const api = { post: async (_path: string, body: Record<string, unknown>, _token: string, key: string) => {
+    const api = { post: async (_path: string, body: Record<string, unknown>, token: string, key: string) => {
       calls.push({ body, key });
-      if (key === seedKey('work', 'serial') && body.authoring && legacySerial) {
-        legacySerial = false;
-        throw new SeedApiError('Main /v1/works', 409, 'legacy receipt');
-      }
+      if (key === seedKey('work', 'bun')) expect(token).toBe('daniel');
       return { work: `https://rezics.com/id/${'1'.repeat(36)}`, mainVersion: 'v',
-        workRevision: 'r', mainRevision: 'm', replayed: !body.authoring } satisfies WorkReceipt;
+        workRevision: 'r', mainRevision: 'm', replayed: false } satisfies WorkReceipt;
     } } as unknown as SeedApi;
     const state = { api, sessions: people.map(person => ({ id: person.id, accountId: person.id,
       token: person.id, actingSubject: `https://rezics.com/id/${person.id}` })),
@@ -59,12 +57,27 @@ describe('dev seed plan', () => {
     created: new Map(), optional: async () => null } as unknown as SeedState;
     await seedWorks(state);
     expect(calls.find(call => call.key === seedKey('work', 'pride'))?.body).not.toHaveProperty('authoring');
-    expect(calls.find(call => call.key === seedKey('work', 'bun'))?.body).not.toHaveProperty('authoring');
     expect(calls.find(call => call.key === seedKey('work', 'moonlight-story'))?.body)
       .toMatchObject({ authoring: 'own-work', actingSubject: 'https://rezics.com/id/moonlight' });
+    expect(calls.find(call => call.key === seedKey('work', 'bun'))?.body)
+      .toMatchObject({ authoring: 'own-work', actingSubject: 'https://rezics.com/id/daniel' });
     expect(calls.filter(call => call.key === seedKey('work', 'serial')).map(call => call.body.authoring))
-      .toEqual(['own-work', undefined]);
+      .toEqual(['own-work']);
     expect(state.created.size).toBe(works.length);
+  });
+
+  test('reset targets only the fixed dev project or this worktree and refuses displaced object paths', () => {
+    const root = '/checkout/.temp/worktrees/g-341';
+    expect(devResetTarget(root, true)).toEqual({ profile: 'qa', runId: 'wt-g-341', accountsApp: true });
+    const plan = devResetPlan(root, devResetTarget(root, true));
+    expect(plan.volumes).toEqual(['rezics-qa-wt-g-341_postgres_data',
+      'rezics-qa-wt-g-341_fuseki_data', 'rezics-qa-wt-g-341_rustfs_data']);
+    expect(plan.files.every(file => file.startsWith(`${plan.dir}/`))).toBe(true);
+    expect(() => devResetPlan(root, { profile: 'qa', runId: 'other' })).toThrow('fixed dev project');
+    expect(() => devResetPlan(root, devResetTarget(root, true), {
+      MAIN_OBJECT_DIRECTORY: '/checkout/.temp/stack/rezics-dev/objects',
+      MAIN_CANDIDATE_DIRECTORY: `${plan.dir}/candidates`,
+    })).toThrow('Saved dev object paths differ');
   });
 
   test('reports a seeded Work with neither native nor retained source author', async () => {
@@ -85,6 +98,29 @@ describe('dev seed plan', () => {
       expect(findings).toContain('Work pride has no credited author');
       expect(findings).not.toContain('Work serial has no credited author');
     } finally { globalThis.fetch = originalFetch; }
+  });
+
+  test('original text contributions use the credited author session', async () => {
+    const calls: Array<{ key: string; actor: string; token: string }> = [];
+    const state = { api: { post: async (_path: string, body: { actingSubject: string }, token: string,
+      key: string) => {
+      calls.push({ key, actor: body.actingSubject, token });
+      return { contribution: 'contribution', draftRevision: 'revision' };
+    } },
+    sessions: people.map(person => ({ id: person.id, token: person.id,
+      actingSubject: `https://rezics.com/id/${person.id}` })),
+    penAgents: new Map([['moonlight', 'https://rezics.com/id/moonlight']]),
+    created: new Map(works.map(work => [work.id, { work: `https://rezics.com/id/${work.id}` }])),
+    publicForRealm: new Map(), optional: async (label: string, operation: () => Promise<unknown>) =>
+      label === 'Text contribution' ? operation() : null,
+    } as unknown as SeedState;
+    await seedContributions(state);
+    expect(calls.find(call => call.key === seedKey('contribution', 'bun')))
+      .toMatchObject({ token: 'daniel', actor: 'https://rezics.com/id/daniel' });
+    expect(calls.find(call => call.key === seedKey('contribution', 'moonlight-story')))
+      .toMatchObject({ token: 'mei', actor: 'https://rezics.com/id/moonlight' });
+    expect(calls.find(call => call.key === seedKey('contribution', 'pride')))
+      .toMatchObject({ token: 'mei', actor: 'https://rezics.com/id/mei' });
   });
 
   test('replaces the old parent-as-chapter placement with three child Works on rerun', async () => {
@@ -142,9 +178,9 @@ describe('dev seed plan', () => {
       expect(lines).toContain(`  ${person.name}: ${person.email} / ${person.password}`);
     }
     expect(steps.map(step => step.name)).toEqual([
-      'seedAccounts', 'seedWorks', 'seedRealms', 'seedContributions', 'seedAdoptions',
+      'seedAccounts', 'seedWorks', 'seedContributions', 'seedRealms', 'seedAdoptions',
       'seedRatings', 'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
-      'seedProfileCredits', 'seedProfileBios', 'seedProfileShelves', 'seedProfileFollows',
+      'seedProfileCredits', 'seedProfileBios', 'seedProfileShelves', 'seedProfileFollows', 'seedOfficialZones',
       'checkPublicReads', 'printSeedReport',
     ]);
   });

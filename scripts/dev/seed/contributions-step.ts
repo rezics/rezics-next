@@ -18,23 +18,27 @@ export async function seedContributions(state: SeedState) {
 
   for (const excerpt of works.filter(work => work.excerpt)) {
     const target = created.get(excerpt.id)!;
+    const writer = excerpt.author === 'moonlight' ? owner
+      : sessions.find(session => session.id === excerpt.author) ?? owner;
+    const author = excerpt.author === 'moonlight'
+      ? state.penAgents.get('moonlight')! : writer.actingSubject;
     const contribution = await state.optional('Text contribution', () => api.post<ContributionReceipt>(
       '/v1/contributions', { profile: 'text-contribution-v1', work: target.work,
-        language: excerpt.language, body: excerpt.excerpt!, actingSubject: owner.actingSubject },
-      owner.token, seedKey('contribution', excerpt.id)));
+        language: excerpt.language, body: excerpt.excerpt!, actingSubject: author },
+      writer.token, seedKey('contribution', excerpt.id)));
     if (!contribution) continue;
     if (excerpt.id === 'serial-ch3') continue; // Leave one draft in the review queue.
     const published = await state.optional('Contribution publication', () => api.post<PublicationReceipt>(
       '/v1/contribution-publications', { profile: 'text-publication-v1',
         contribution: contribution.contribution, expectedDraftHead: contribution.draftRevision,
         expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public',
-        actingSubject: owner.actingSubject }, owner.token, seedKey('publication', excerpt.id)));
+        actingSubject: author }, writer.token, seedKey('publication', excerpt.id)));
     const selected = published && await state.optional('Main selection', () => api.post('/v1/publication-selections', {
       profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: target.mainVersion },
       work: target.work, contribution: contribution.contribution,
       publicationDecision: published.publicationDecision, expectedSelectionHead: null,
-      selectionBasis: 'main-maintainer', actingSubject: owner.actingSubject },
-    owner.token, seedKey('selection', excerpt.id)));
+      selectionBasis: 'main-maintainer', actingSubject: author },
+    writer.token, seedKey('selection', excerpt.id)));
     if (published) state.publishedCount++;
     if (selected) state.selectedCount++;
     if (selected && published) publicForRealm.set(excerpt.id,

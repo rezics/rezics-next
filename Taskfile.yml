@@ -44,6 +44,12 @@ tasks:
     cmds:
       - bun scripts/dev/cli.ts dev:stop {{.CLI_ARGS}}
 
+  dev:reset:
+    desc: Print and, with -- --yes, recreate only this checkout's dev stack data.
+    deps: [aspire:restore]
+    cmds:
+      - bun scripts/dev/cli.ts dev:reset {{.CLI_ARGS}}
+
   urls:
     desc: Show this checkout's running resources with their URLs and health.
     cmds:
@@ -70,7 +76,7 @@ tasks:
       - bun scripts/dev/cli.ts dev:prepare {{.CLI_ARGS}}
 
   dev:seed:
-    desc: Seed the shared local demo through its public APIs.
+    desc: Seed this checkout's local demo through its public APIs.
     cmds:
       - bun scripts/dev/seed/cli.ts {{.CLI_ARGS}}
 
