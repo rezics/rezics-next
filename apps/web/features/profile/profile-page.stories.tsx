@@ -8,6 +8,9 @@ import zhHans from './messages/zh-Hans.ts';
 import { ProfilePage, ProfileShelfPage, ProfileUnavailable, ProfileWorksPage } from './profile-page.tsx';
 
 const zh = { ...messages, ...zhHans };
+/** A Work row's credit line as read aloud: its names are links, so the line is matched whole. */
+const creditLine = (text: string) => (_: string, element: Element | null) =>
+  element?.matches('p.text-muted-foreground') === true && element.textContent === text;
 const signedOut = { signedIn: false };
 const signedIn = { signedIn: true, actingSubject: storyId(77), seed: {} };
 
@@ -40,7 +43,7 @@ export const Author: Story = {
       .toHaveAttribute('href', `/en/w/${storyId(101).slice(-36)}`);
     await expect(works.getByText('Ongoing serial')).toBeVisible();
     // Generated covers print the credit too; the row's line is the one read out.
-    await expect(works.getByText('Lin Mei 林梅 (Translator)', { selector: 'p.text-muted-foreground' })).toBeVisible();
+    await expect(works.getByText(creditLine('Lin Mei 林梅 (Translator)'))).toBeVisible();
     // Shelves: every status with its count, and the Works on each.
     const summary = within(canvas.getByRole('navigation', { name: 'Bookshelves' }));
     await expect(summary.getByRole('link', { name: 'Read 48' })).toHaveAttribute('href', '/en/@lin_mei/shelves/read');
@@ -176,7 +179,7 @@ export const Organization: Story = {
     await expect(canvas.getByText('Organization', { selector: 'p' })).toBeVisible();
     await expect(canvas.getByText('1,000+ followers')).toBeVisible();
     await expect(canvas.getByText('4+ works')).toBeVisible();
-    await expect(canvas.getAllByText('North Star Editions · 北辰出版 (Editor)', { selector: 'p.text-muted-foreground' }))
+    await expect(canvas.getAllByText(creditLine('North Star Editions · 北辰出版 (Editor)')))
       .toHaveLength(4);
     await expect(canvas.getByRole('link', { name: 'All works' })).toHaveAttribute('href', '/en/@northstar/works');
   },
