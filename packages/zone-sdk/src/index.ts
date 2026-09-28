@@ -81,6 +81,10 @@ export interface ZoneWork {
   decision: string | null;
   /** What a game mod runs on, when its author bound a verified release to the Work. */
   mod?: ZoneModRelease | null;
+  /** Curator-supplied game facts when Main has fetched an admitted public record. */
+  game?: ZoneGameFacts | null;
+  /** Curator-supplied app facts when Main has fetched an admitted public record. */
+  software?: ZoneSoftwareFacts | null;
   /** A published prompt or Skill's card, when the Work is one. */
   hub?: ZoneHubItem | null;
 }
@@ -106,6 +110,28 @@ export interface ZoneModRelease {
     dependencies: { id: string; requirement: 'required' | 'optional' | 'incompatible' | 'embedded';
       range: string | null; side: 'client' | 'server' | null }[] | null;
     state: 'compatible' | 'stale' } | null;
+}
+
+export interface ZoneGameFacts {
+  status: 'released' | 'upcoming';
+  releaseDate: string | null;
+  platforms: string[];
+  languages: string[];
+  tags: string[];
+  screenshots: ZoneImage[];
+  review: { label: string; count: number; period: string } | null;
+  modsZone: boolean;
+}
+
+export interface ZoneSoftwareFacts {
+  maintainer: string;
+  license: string | null;
+  screenshots: ZoneImage[];
+  releases: { platform: string; architecture: string | null; version: string | null;
+    changes: string | null; destination: string }[];
+  alternatives: { work: string; reason: string; attributedTo: string }[];
+  project: string;
+  source: string;
 }
 
 /** A published prompt or Skill, as its author disclosed it. */

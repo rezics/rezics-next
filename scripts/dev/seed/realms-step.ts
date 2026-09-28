@@ -74,7 +74,7 @@ export async function seedRealms(state: SeedState) {
     const curated = await api.post<{ structure: string; revision: string }>('/v1/collections', {
       collection, name: `${realm.name} · Featured`, disclosure: 'public',
       actingSubject: owner.actingSubject }, owner.token, seedKey('curated-collection', realm.id));
-    await api.post(`/v1/collections/${collection.slice(-36)}/changes`, {
+    if (realm.featured.length) await api.post(`/v1/collections/${collection.slice(-36)}/changes`, {
       expectedHead: curated.revision, actingSubject: owner.actingSubject,
       operations: realm.featured.map(work => ({ op: 'insert', role: 'member',
         parent: curated.structure, position: 'last',

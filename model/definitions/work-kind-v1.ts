@@ -16,7 +16,7 @@ export const workKindProfile = {
   shapes: [{ iri: 'https://rezics.com/definition/work-kind-v1/work-shape', properties: [
     { path: 'rdf:type', minCount: 1, maxCount: 4, hasValue: 'schema:CreativeWork',
       in: ['schema:CreativeWork', 'schema:Book', 'schema:BookSeries', 'schema:DigitalDocument',
-        'schema:Recipe', 'schema:SoftwareApplication', 'schema:SoftwareSourceCode',
+        'schema:Recipe', 'schema:SoftwareApplication', 'schema:SoftwareSourceCode', 'schema:VideoGame',
         'rv:ModPackage', 'rv:SkillPackage', 'rv:PromptTemplate', 'schema:Movie',
         'schema:TVSeries', 'schema:VideoObject', 'schema:AudioObject',
         'schema:MusicRecording', 'schema:MusicAlbum'] },

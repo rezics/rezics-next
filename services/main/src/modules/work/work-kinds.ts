@@ -1,7 +1,7 @@
 import type { FeedKind } from '../feed/contract.ts';
 import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
 
-export type WorkPrimaryAction = 'read' | 'install' | 'copy' | 'watch';
+export type WorkPrimaryAction = 'read' | 'install' | 'copy' | 'watch' | 'play';
 type WorkKind = { interest: Exclude<HomeInterestKind, 'discussions'> | null;
   primaryAction: WorkPrimaryAction };
 
@@ -14,6 +14,7 @@ export const workKinds = {
   'https://schema.org/Recipe': { interest: 'recipes', primaryAction: 'read' },
   'https://schema.org/SoftwareApplication': { interest: 'software', primaryAction: 'install' },
   'https://schema.org/SoftwareSourceCode': { interest: 'software', primaryAction: 'install' },
+  'https://schema.org/VideoGame': { interest: 'media', primaryAction: 'play' },
   'https://rezics.com/vocab/ModPackage': { interest: 'software', primaryAction: 'install' },
   'https://rezics.com/vocab/SkillPackage': { interest: 'ai', primaryAction: 'install' },
   'https://rezics.com/vocab/PromptTemplate': { interest: 'ai', primaryAction: 'copy' },

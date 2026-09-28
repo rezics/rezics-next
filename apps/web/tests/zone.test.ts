@@ -250,8 +250,8 @@ const officialSlugs = readdirSync(join(web, 'zones/official')).filter(name =>
   statSync(join(web, 'zones/official', name)).isDirectory());
 
 describe('Official Zone packages', () => {
-  test('Fiction, Books, Mods and AI Workshop each ship a package', () => {
-    expect([...officialSlugs].sort()).toEqual(['ai-workshop', 'books', 'fiction', 'mods']);
+  test('every installed official vertical ships its own package', () => {
+    expect([...officialSlugs].sort()).toEqual(['ai-workshop', 'books', 'fiction', 'games', 'mods', 'software']);
   });
 
   test.each(officialSlugs)('%s imports only React, the SDK, Rezics UI, icons and its own files', slug => {

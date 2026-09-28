@@ -17,7 +17,7 @@ export const workTypeProfile = {
   shapes: [{ iri: 'https://rezics.com/definition/work-type-v1/work-shape', properties: [
     { path: 'rdf:type', minCount: 1, maxCount: 4, hasValue: 'schema:CreativeWork',
       in: ['schema:CreativeWork', 'schema:Book', 'schema:DigitalDocument',
-        'schema:Recipe', 'schema:SoftwareApplication', 'schema:SoftwareSourceCode',
+        'schema:Recipe', 'schema:SoftwareApplication', 'schema:SoftwareSourceCode', 'schema:VideoGame',
         'rv:ModPackage', 'rv:SkillPackage', 'rv:PromptTemplate'] },
     { path: 'rv:mainVersion', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI', class: 'rv:MainVersion' },
   ] }, { iri: 'https://rezics.com/definition/work-type-v1/work-revision-shape', properties: [

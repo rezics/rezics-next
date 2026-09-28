@@ -7,6 +7,7 @@ export class WorkTypeConflict extends Error {}
 export const WORK_TYPE_OPTIONS = [
   'https://schema.org/Book', 'https://schema.org/DigitalDocument', 'https://schema.org/Recipe',
   'https://schema.org/SoftwareApplication', 'https://schema.org/SoftwareSourceCode',
+  'https://schema.org/VideoGame',
   'https://rezics.com/vocab/ModPackage', 'https://rezics.com/vocab/SkillPackage',
   'https://rezics.com/vocab/PromptTemplate',
 ] as const;

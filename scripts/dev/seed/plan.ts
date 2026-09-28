@@ -15,6 +15,7 @@ export const people: readonly DemoPerson[] = [
   { id: 'jun', handle: 'jun_zhang', name: 'Jun Zhang 张俊', email: 'rezics-demo-jun@example.test', password: 'Rezics-demo-2026-jun' },
   { id: 'aria', handle: 'aria_wang', name: 'Aria Wang 王雅', email: 'rezics-demo-aria@example.test', password: 'Rezics-demo-2026-aria' },
   { id: 'leo', handle: 'leo_sun', name: 'Leo Sun 孙乐', email: 'rezics-demo-leo@example.test', password: 'Rezics-demo-2026-leo' },
+  { id: 'mira', handle: 'mira_park', name: 'Mira Park 朴美罗', email: 'rezics-demo-mira@example.test', password: 'Rezics-demo-2026-mira' },
 ];
 
 export const works: readonly DemoWork[] = [
@@ -84,6 +85,7 @@ export const realms = [
     featured: ['bun', 'elysia', 'react', 'typescript'] },
   { id: 'kitchen', name: 'Kitchen · 厨房', preset: 'editorial',
     featured: ['dumplings', 'noodles', 'pancakes', 'tea'] },
+  { id: 'games', name: 'Games · 游戏', preset: 'vibrant', featured: [] },
 ] as const;
 
 /** Agents the first demo person also controls: a pen name and an organization. */

@@ -1,4 +1,6 @@
 import { stableId } from './state.ts';
+import { gamesCatalogue } from './games-catalogue.ts';
+import { softwareCatalogue } from './software-catalogue.ts';
 import { ZONE_PRESETS, type ZonePresentation }
   from '../../../services/main/src/modules/zone/presentation-format.ts';
 
@@ -8,7 +10,7 @@ import { ZONE_PRESETS, type ZonePresentation }
 // never-empty front page for Books, Mods, AI Workshop, Software and Kitchen.
 // The stories in apps/web/features/zones/fixtures.ts show the same catalogue.
 
-export type OfficialRealmId = 'fiction' | 'books' | 'mods' | 'ai-workshop' | 'software' | 'kitchen';
+export type OfficialRealmId = 'fiction' | 'books' | 'mods' | 'ai-workshop' | 'software' | 'kitchen' | 'games';
 type Language = 'en' | 'zh-Hans';
 
 /** A pen name one demo person writes under. Works are created as the pen name, so it is their author. */
@@ -206,7 +208,7 @@ export const publicTexts: Readonly<Record<string, { language: Language; text: st
 
 /** New Works that give the smaller Zones more than one pick; created by a demo person, not a pen name. */
 export const extraWorks: readonly { id: string; realm: OfficialRealmId; owner: string; title: string;
-  type: 'document' | 'mod' | 'prompt' | 'skill-package'; language: Language; tagline: string; text: string }[] = [
+  type: 'document' | 'mod' | 'prompt' | 'skill-package' | 'game' | 'software'; language: Language; tagline: string; text: string }[] = [
   { id: 'stardew-farm', realm: 'mods', owner: 'jun', title: '星露谷物语 · 春季农场整合包', type: 'document',
     language: 'zh-Hans', tagline: '二十个模组，一个存档就能用的春季农场。',
     text: '安装顺序\n先装 SMAPI，再装内容补丁，最后放入农场地图。每一步都备份存档。' },
@@ -231,6 +233,12 @@ export const extraWorks: readonly { id: string; realm: OfficialRealmId; owner: s
   { id: 'quiet-forge', realm: 'mods', owner: 'jun', title: 'Quiet Villagers', type: 'mod', language: 'en',
     tagline: 'Quieter trading sounds for Minecraft 1.21.1 with Forge.',
     text: 'Quiet Villagers 1.0.2\nInstall on the client and test sound settings after updating.' },
+  ...gamesCatalogue.map(game => ({ id: game.id, realm: 'games' as const, owner: 'mira', title: game.title,
+    type: 'game' as const, language: 'en' as const, tagline: game.pitch,
+    text: `${game.title}\n${game.pitch}\nOfficial listing: ${game.source}` })),
+  ...softwareCatalogue.map(app => ({ id: app.id, realm: 'software' as const, owner: 'daniel', title: app.title,
+    type: 'software' as const, language: 'en' as const, tagline: app.pitch,
+    text: `${app.title}\n${app.pitch}\nProject website: ${app.project}` })),
   { id: 'club-prompt-v1', realm: 'ai-workshop', owner: 'aria', title: 'Book club discussion prompt',
     type: 'prompt', language: 'en', tagline: 'Find the questions readers actually disagree about.',
     text: 'Use the published prompt to turn notes into discussion questions.' },
@@ -316,11 +324,19 @@ export const zoneContent: Record<OfficialRealmId, { adopt: readonly string[];
       { id: 'writing-prompts', name: 'Writing and translation · 写作与翻译',
         works: ['glossary-prompt-v1', 'recipe-skill-v1'] },
     ] },
-  software: { adopt: ['bun', 'elysia', 'react', 'typescript'],
-    lists: [{ id: 'web-stack', name: 'A small web stack · 一套小而全的 Web 技术栈',
-      works: ['typescript', 'bun', 'elysia', 'react'] }] },
+  software: { adopt: softwareCatalogue.map(app => app.id),
+    lists: [{ id: 'creative', name: 'Creative tools · 创作工具',
+      works: ['app-blender', 'app-krita', 'app-gimp', 'app-inkscape', 'app-kdenlive'] },
+    { id: 'everyday', name: 'Everyday essentials · 日常工具',
+      works: ['app-firefox', 'app-libreoffice', 'app-vlc', 'app-obs'] }] },
   kitchen: { adopt: ['dumplings', 'noodles', 'pancakes', 'tea'],
     lists: [{ id: 'weeknight', name: 'Weeknight dinners · 下班后的晚饭', works: ['noodles', 'dumplings', 'pancakes', 'tea'] }] },
+  games: { adopt: gamesCatalogue.map(game => game.id),
+    lists: [{ id: 'recent', name: 'Newly picked · 新近推荐',
+      works: ['game-hades-2', 'game-minecraft', 'game-baldurs-gate-3'] },
+    { id: 'upcoming', name: 'Coming up · 即将推出', works: ['game-witchbrook', 'game-light-no-fire'] },
+    { id: 'explore', name: 'Worlds to explore · 探索世界',
+      works: ['game-outer-wilds', 'game-hollow-knight', 'game-terraria', 'game-stardew'] }] },
 };
 
 /** An editors' list Collection: a native IRI the seed chooses, so the presentation can name it up front. */
@@ -328,7 +344,8 @@ export const editorList = (realm: OfficialRealmId, list: string) =>
   `https://rezics.com/id/${stableId(`official-list:${realm}:${list}`)}`;
 
 export const packagedZone = (realm: OfficialRealmId) =>
-  realm === 'fiction' || realm === 'books' || realm === 'mods' || realm === 'ai-workshop';
+  realm === 'fiction' || realm === 'books' || realm === 'mods' || realm === 'ai-workshop'
+    || realm === 'games' || realm === 'software';
 
 export const officialTheme = (realm: OfficialRealmId) =>
   `https://rezics.com/id/${stableId(`official-theme:${realm}`)}`;
@@ -384,10 +401,11 @@ export const realmProfiles: Record<OfficialRealmId, { name: Bilingual; descripti
   },
   software: {
     name: { en: 'Software', 'zh-CN': '软件' },
-    description: { en: 'Runtimes, frameworks and libraries, explained with a small first step.',
-      'zh-CN': '运行时、框架和库，从一个小小的第一步讲起。' },
-    rules: [{ id: 'small-step', title: { en: 'Start with a small example', 'zh-CN': '从小例子开始' },
-      body: { en: 'Guides open with the smallest example that runs.', 'zh-CN': '指南以能运行的最小示例开头。' } }],
+    description: { en: 'Open-source apps, where to get them and which alternatives solve a similar task.',
+      'zh-CN': '开源应用：了解获取途径，以及能完成类似任务的替代选择。' },
+    rules: [{ id: 'source', title: { en: 'Link the project source', 'zh-CN': '链接项目源码' },
+      body: { en: 'App picks link to the project and its source. Version claims need a dated source.',
+        'zh-CN': '应用推荐要链接项目及其源码；版本信息要注明有日期的来源。' } }],
     moderators: ['aria'],
   },
   kitchen: {
@@ -397,6 +415,15 @@ export const realmProfiles: Record<OfficialRealmId, { name: Bilingual; descripti
     rules: [{ id: 'quantities', title: { en: 'Give quantities and times', 'zh-CN': '写清用量和时间' },
       body: { en: 'A recipe lists its quantities and how long each step takes.', 'zh-CN': '菜谱要写清用量和每一步的时间。' } }],
     moderators: ['leo'],
+  },
+  games: {
+    name: { en: 'Games', 'zh-CN': '游戏' },
+    description: { en: 'Games to discover, with release status and the reasons editors picked them.',
+      'zh-CN': '发现游戏，查看发行状态和编辑推荐的理由。' },
+    rules: [{ id: 'release', title: { en: 'Name the release status', 'zh-CN': '写明发行状态' },
+      body: { en: 'A forthcoming game stays marked upcoming until its publisher lists a release.',
+        'zh-CN': '发行商确认游戏上市前，标记为即将推出。' } }],
+    moderators: ['mira'],
   },
 };
 
@@ -431,6 +458,40 @@ export function officialPresentation(realm: OfficialRealmId, preset: ZonePresent
     source: feed('recent-decisions'), options: { rail: true, limit: 6 } };
   const base = { profile: 'zone-presentation-v1' as const, preset, tokens: ZONE_PRESETS[preset],
     navigation: [], banners: [], ...(packagedZone(realm) ? { official: { theme: officialTheme(realm) } } : {}) };
+  if (realm === 'games') {
+    const source = (index: number) => lists[index]!.source;
+    return { ...base, modules: [
+      { id: 'picks', type: 'hero-carousel', ...titled({ en: 'Featured games', 'zh-Hant': '精選遊戲',
+        'zh-Hans': '精选游戏', ja: '注目のゲーム', ko: '추천 게임', de: 'Spiele im Fokus',
+        fr: 'Jeux à la une', es: 'Juegos destacados' }), source: feed('new-adoptions'), options: { limit: 4 } },
+      { id: 'recent', type: 'shelf', ...titled({ en: 'Newly picked', 'zh-Hant': '新近推薦',
+        'zh-Hans': '新近推荐', ja: '新着おすすめ', ko: '새로운 추천', de: 'Neue Empfehlungen',
+        fr: 'Sélections récentes', es: 'Recomendaciones recientes' }), source: source(0), options: { limit: 8 } },
+      { id: 'upcoming', type: 'shelf', ...titled({ en: 'Coming up', 'zh-Hant': '即將推出',
+        'zh-Hans': '即将推出', ja: '近日登場', ko: '출시 예정', de: 'Demnächst',
+        fr: 'À venir', es: 'Próximamente' }), source: source(1), options: { limit: 8 } },
+      { id: 'explore', type: 'editorial-list', ...titled({ en: 'Worlds to explore', 'zh-Hant': '探索世界',
+        'zh-Hans': '探索世界', ja: '探索する世界', ko: '탐험할 세계', de: 'Welten entdecken',
+        fr: 'Des mondes à explorer', es: 'Mundos por explorar' }), source: source(2), options: { limit: 8 } },
+      decisions,
+    ] };
+  }
+  if (realm === 'software') {
+    return { ...base, modules: [
+      { id: 'picks', type: 'hero-carousel', ...titled({ en: 'Featured apps', 'zh-Hant': '精選應用',
+        'zh-Hans': '精选应用', ja: '注目のアプリ', ko: '추천 앱', de: 'Apps im Fokus',
+        fr: 'Applications à la une', es: 'Aplicaciones destacadas' }),
+        source: feed('new-adoptions'), options: { limit: 4 } },
+      { id: 'creative', type: 'shelf', ...titled({ en: 'Create something', 'zh-Hant': '開始創作',
+        'zh-Hans': '开始创作', ja: '制作を始める', ko: '창작 도구', de: 'Kreativ werden',
+        fr: 'Créer', es: 'Crear' }), source: lists[0]!.source, options: { limit: 8 } },
+      { id: 'everyday', type: 'shelf', ...titled({ en: 'Everyday tools', 'zh-Hant': '日常工具',
+        'zh-Hans': '日常工具', ja: '日常のツール', ko: '일상 도구', de: 'Alltagswerkzeuge',
+        fr: 'Outils du quotidien', es: 'Herramientas diarias' }),
+        source: lists[1]!.source, options: { limit: 8 } },
+      decisions,
+    ] };
+  }
   if (realm !== 'fiction') {
     const special = realm === 'mods' ? [
       ...modContext ? [{ id: 'games', type: 'chip-nav' as const,

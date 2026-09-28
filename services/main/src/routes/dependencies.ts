@@ -189,6 +189,8 @@ export interface MainWorkDependencies {
   packageNpmResolutions?: NpmResolutionStore;
   packageNixResolutions?: NixResolutionStore;
   packageModResolutions?: ModResolutionStore;
+  gameFacts?: import('../modules/game-facts/store.ts').RevisionedFactsStore<import('../modules/game-facts/contract.ts').GameFacts>;
+  softwareFacts?: import('../modules/game-facts/store.ts').RevisionedFactsStore<import('../modules/software-facts/contract.ts').SoftwareFacts>;
   packageLocks?: PackageLockStore;
   packageInstallations?: PackageInstallationStore;
   hub?: HubStore;

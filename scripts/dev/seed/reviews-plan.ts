@@ -69,6 +69,15 @@ export const reviews: readonly PlannedReview[] = [
     text: 'Villagers finally stop shouting. Turn on memory migration once for old worlds and it is flawless.' },
   { reader: 'max', work: 'mod-guide', rating: 5, language: 'en',
     text: 'Short and right. I send this to everyone who asks why their save stopped loading.' },
+  // Games: demo readers' own opinions, distinct from a publisher or Steam review aggregate.
+  { reader: 'daniel', work: 'game-stardew', rating: 5, language: 'en',
+    text: 'I came for the farming and stayed for the town. The daily rhythm makes it easy to return after a break.' },
+  { reader: 'sophie', work: 'game-stardew', rating: 4, language: 'en',
+    text: 'A gentle game with a surprising amount to plan. I like having a farm goal without a deadline.' },
+  { reader: 'leo', work: 'game-hades', rating: 5, language: 'en',
+    text: 'Each escape attempt taught me something new about a weapon or a character. The short runs fit my evenings.' },
+  { reader: 'mira', work: 'game-celeste', rating: 5, language: 'en',
+    text: 'The climb is demanding, but each room is small enough that trying again feels inviting.' },
   // Prompts, skills and guides
   { reader: 'priya', work: 'club-prompt-v1', rating: 5, language: 'en', helpful: ['nora', 'aria'],
     text: 'Turned our messiest discussion notes into three questions we argued about for an hour. Exactly what a book club needs.' },

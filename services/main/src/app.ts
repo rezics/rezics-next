@@ -37,6 +37,8 @@ import { packageLockRoutes } from './routes/package-locks.ts';
 import { packageInstallRequestRoutes } from './routes/package-install-requests.ts';
 import { packageNixRoutes } from './routes/package-nix.ts';
 import { packageModRoutes } from './routes/package-mods.ts';
+import { gameFactRoutes } from './routes/game-facts.ts';
+import { softwareFactRoutes } from './routes/software-facts.ts';
 import { pollRoutes } from './routes/polls.ts';
 import { proposalRoutes } from './routes/proposals.ts';
 import { judgmentRoutes } from './routes/judgments.ts';
@@ -222,6 +224,8 @@ function extraRoutes6(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(connectedAppRoutes(work))
     .use(ownerRoutes(work))
     .use(packageModRoutes(work))
+    .use(gameFactRoutes(work))
+    .use(softwareFactRoutes(work))
     .use(realmReplyRoutes(work))
     .use(pollRoutes(work))
     .use(semanticRoutes(fuseki, work))
