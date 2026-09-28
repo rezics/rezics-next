@@ -1,7 +1,8 @@
 // Browser calls to the Account operator API through this origin's proxy.
-import type { AccountErrorCode, ActionBody, ActivityPage, AdminMe, AppPage, AuditPage, AuditParams, BulkBody,
+import type { AccountErrorCode, ActionBody, ActivityPage, AdminMe, AppPage, AuditExportFormat, AuditPage, AuditParams, BulkBody,
   ClientActionBody, ClientPage, CommandResult, Directory, DirectoryParams, Installation, InstallationChange, Job,
-  OperatorRole, Operators, Overview, PreferenceChange, Preferences, SessionPage, UserDetail } from './types.ts';
+  OperatorRole, Operators, Overview, PreferenceChange, Preferences, ReviewBody, SessionPage, Signals, TimelineCategory,
+  TimelinePage, UserDetail } from './types.ts';
 
 /** `network`: the request never reached the service. */
 export type AdminFailure = { ok: false; code: AccountErrorCode | 'network'; status: number };
@@ -41,19 +42,23 @@ interface AuditExport { blob: Blob; rows: number; truncated: boolean }
 export interface AdminApi {
   me(): Promise<AdminResult<AdminMe>>;
   overview(): Promise<AdminResult<Overview>>;
+  signals(): Promise<AdminResult<Signals>>;
+  reviewSignal(body: ReviewBody): Promise<AdminResult<CommandResult>>;
   users(params: DirectoryParams, signal?: AbortSignal): Promise<AdminResult<Directory>>;
   user(userId: string): Promise<AdminResult<UserDetail>>;
   sessions(userId: string, cursor: string): Promise<AdminResult<SessionPage>>;
   apps(userId: string, cursor: string): Promise<AdminResult<AppPage>>;
   activity(userId: string, cursor: string): Promise<AdminResult<ActivityPage>>;
-  sanctions(userId: string, cursor?: string): Promise<AdminResult<AuditPage>>;
+  timeline(userId: string, query: { category?: TimelineCategory; cursor?: string }): Promise<AdminResult<TimelinePage>>;
   audit(params: AuditParams): Promise<AdminResult<AuditPage>>;
-  exportAudit(params: AuditParams): Promise<AdminResult<AuditExport>>;
+  exportAudit(params: AuditParams, format?: AuditExportFormat): Promise<AdminResult<AuditExport>>;
   operators(): Promise<AdminResult<Operators>>;
   clients(cursor?: string): Promise<AdminResult<ClientPage>>;
   job(jobId: string): Promise<AdminResult<Job>>;
   act(userId: string, body: ActionBody): Promise<AdminResult<CommandResult>>;
   bulk(body: BulkBody): Promise<AdminResult<{ jobId: string }>>;
+  /** Cancels what a job hasn't done yet: all of it inside its undo window. */
+  cancelJob(jobId: string): Promise<AdminResult<{ cancelled: number }>>;
   setRole(userId: string, role: OperatorRole | null, reason: string): Promise<AdminResult<CommandResult>>;
   setClient(clientId: string, body: ClientActionBody): Promise<AdminResult<CommandResult>>;
   changeInstallation(body: InstallationChange): Promise<AdminResult<Installation>>;
@@ -67,16 +72,18 @@ const path = (value: string) => encodeURIComponent(value);
 export const browserAdminApi: AdminApi = {
   me: () => call(`${admin}/me`),
   overview: () => call(`${admin}/overview`),
+  signals: () => call(`${admin}/signals`),
+  reviewSignal: body => call(`${admin}/signals/review`, body),
   users: (params, signal) => call(`${admin}/users${queryString(params)}`, undefined, signal),
   user: userId => call(`${admin}/users/${path(userId)}`),
   sessions: (userId, cursor) => call(`${admin}/users/${path(userId)}/sessions${queryString({ cursor, limit: 25 })}`),
   apps: (userId, cursor) => call(`${admin}/users/${path(userId)}/apps${queryString({ cursor, limit: 25 })}`),
   activity: (userId, cursor) => call(`${admin}/users/${path(userId)}/security-activity${queryString({ cursor, limit: 25 })}`),
-  sanctions: (userId, cursor) => call(`${admin}/users/${path(userId)}/sanctions${queryString({ cursor, limit: 25 })}`),
+  timeline: (userId, query) => call(`${admin}/users/${path(userId)}/timeline${queryString({ ...query, limit: 25 })}`),
   audit: params => call(`${admin}/audit${queryString(params)}`),
-  async exportAudit(params) {
+  async exportAudit(params, format = 'csv') {
     let response: Response;
-    try { response = await fetch(`${admin}/audit/export${queryString(params)}`, { credentials: 'same-origin' }); }
+    try { response = await fetch(`${admin}/audit/export${queryString({ ...params, format })}`, { credentials: 'same-origin' }); }
     catch { return { ok: false, code: 'network', status: 0 }; }
     if (!response.ok) {
       const data = await response.json().catch(() => null) as { error?: AccountErrorCode } | null;
@@ -90,6 +97,7 @@ export const browserAdminApi: AdminApi = {
   job: jobId => call(`${admin}/bulk-actions/${path(jobId)}`),
   act: (userId, body) => call(`${admin}/users/${path(userId)}/actions`, body),
   bulk: body => call(`${admin}/bulk-actions`, body),
+  cancelJob: jobId => call(`${admin}/bulk-actions/${path(jobId)}/cancel`, {}),
   setRole: (userId, role, reason) => call(`${admin}/operators/${path(userId)}`, { role, reason }),
   setClient: (clientId, body) => call(`${admin}/clients/${path(clientId)}/actions`, body),
   changeInstallation: body => call('/api/account/installation-changes', body),

@@ -130,7 +130,7 @@ export default {
     footerClose: 'zum Schließen',
   },
 
-  overviewIntro: 'Was Aufmerksamkeit erfordert. Die Zahlen umfassen alle Konten; jede Liste zeigt die ersten fünf.',
+  overviewIntro: 'Was jetzt Sie braucht: zuerst Auffälligkeiten zum Prüfen, dann Konten, die auf jemanden warten.',
   queues: {
     suspended: 'Gesperrt',
     suspendedBody: 'Konten, bei denen keine Anmeldung möglich ist. Zuerst werden Sperrungen angezeigt, die bald ablaufen.',
@@ -138,13 +138,10 @@ export default {
     resetBody: 'Konten, bei denen die Inhaber noch ein neues Passwort festlegen müssen.',
     unverified: 'E-Mail nicht bestätigt',
     unverifiedBody: 'Konten, deren E-Mail-Adresse noch nicht bestätigt wurde. Neueste zuerst.',
-    failed: 'Mehrere fehlgeschlagene Anmeldungen',
-    failedBody: 'Mindestens fünf fehlgeschlagene Anmeldungen in den letzten 24 Stunden.',
     viewAll: 'Alle ansehen',
     nothing: 'Nichts ausstehend',
     until: 'bis',
     indefinite: 'bis zur Aufhebung',
-    failedCount: plural({ one: '1 fehlgeschlagene Anmeldung', other: insert('{{value}} fehlgeschlagene Anmeldungen') }),
     capped: insert('{{count}}+', { count: String }),
   },
   recentActions: 'Letzte Admin-Aktionen',
@@ -155,7 +152,7 @@ export default {
   jobResult: insert('{{succeeded}} erledigt · {{skipped}} unverändert · {{failed}} fehlgeschlagen', { succeeded: Number, skipped: Number, failed: Number }),
 
   user: {
-    tabs: { overview: 'Übersicht', security: 'Sicherheit', roles: 'Rollen', sanctions: 'Maßnahmen', apps: 'Verknüpfte Apps', audit: 'Audit-Protokoll' },
+    tabs: { overview: 'Übersicht', security: 'Sicherheit', roles: 'Rollen', apps: 'Verknüpfte Apps', audit: 'Audit-Protokoll' },
     tabsLabel: 'Nutzerbereiche',
     copyId: 'Nutzer-ID kopieren',
     copyEmail: 'E-Mail-Adresse kopieren',
@@ -207,7 +204,6 @@ export default {
     rolePermissions: 'Diese Rolle kann',
     changeRole: 'Rolle ändern',
     rolesOwnerOnly: 'Nur Inhaber können Rollen ändern.',
-    sanctionsEmpty: 'Keine Maßnahmen. Dieses Konto wurde noch nie vom Team gesperrt, zum Zurücksetzen des Passworts aufgefordert oder abgemeldet.',
     appsEmpty: 'Für dieses Konto wurden keine Apps zugelassen.',
     granted: 'Zugelassen',
     lastUsed: 'Zuletzt verwendet',
@@ -297,7 +293,7 @@ export default {
   requestId: insert('Anfrage {{id}}', { id: String }),
   bulkClose: 'Schließen',
   bulkRunning: 'Die Liste wird bearbeitet…',
-  itemStates: { pending: 'Wartet', succeeded: 'Erledigt', skipped: 'Unverändert', failed: 'Fehlgeschlagen' },
+  itemStates: { pending: 'Wartet', succeeded: 'Erledigt', skipped: 'Unverändert', failed: 'Fehlgeschlagen', cancelled: 'Nicht geändert' },
   itemErrors: { forbidden: 'Nicht zulässig: Für Teamkonten ist ein Inhaber erforderlich oder Ihr Zugriff ist abgelaufen', not_found: 'Das Konto ist nicht mehr vorhanden',
     conflict: 'Es bliebe kein verfügbarer Inhaber übrig', other: 'Die Änderung war nicht möglich' },
   errors: {
@@ -411,7 +407,8 @@ export default {
     suspend: 'Gesperrt', unsuspend: 'Sperrung aufgehoben', 'revoke-sessions': 'Überall abgemeldet',
     'require-password-reset': 'Zurücksetzen des Passworts verlangt', 'resend-verification': 'Bestätigungs-E-Mail erneut gesendet', 'add-note': 'Notiz hinzugefügt',
     operator_role_changed: 'Admin-Rolle geändert', operator_bootstrapped: 'Erster Inhaber geworden', permission_denied: 'Abgelehnt',
-    bulk_action_started: 'Sammelaktion gestartet', audit_exported: 'Audit-Protokoll exportiert', client_disabled: 'Client deaktiviert',
+    bulk_action_started: 'Sammelaktion gestartet', bulk_action_cancelled: 'Sammelaktion gestoppt', signal_reviewed: 'Auffälligkeit geprüft',
+    audit_exported: 'Audit-Protokoll exportiert', client_disabled: 'Client deaktiviert',
     client_enabled: 'Client aktiviert', '/admin/oauth2/create-client': 'Client registriert', '/oauth2/create-client': 'Client registriert',
     '/admin/oauth2/update-client': 'Client aktualisiert', '/oauth2/update-client': 'Client aktualisiert',
     '/oauth2/delete-client': 'Client gelöscht', '/oauth2/client/rotate-secret': 'Client-Secret rotiert',

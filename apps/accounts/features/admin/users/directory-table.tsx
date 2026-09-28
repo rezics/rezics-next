@@ -120,3 +120,45 @@ export function DirectoryTable({ users, columns, loading, sort, direction, onSor
     </TableBody>
   </Table>;
 }
+
+/** The directory on a phone: one card per user with the same selection,
+ * link and quick actions as a table row, and nothing to scroll sideways. */
+export function DirectoryCards({ users, loading, selected, onSelect, active, onActive, onAction }: {
+  users: AdminUser[] | null; loading: boolean; selected: ReadonlySet<string>; onSelect(ids: string[], selected: boolean): void;
+  active: number; onActive(index: number): void; onAction(action: AdminAction, user: AdminUser): void }) {
+  const { t } = useTranslation('admin');
+  const { me } = useAdmin();
+  if (!users) return <ul aria-hidden="true" className="flex flex-col gap-2">{Array.from({ length: 6 }, (_, row) =>
+    <li key={row} className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3">
+      <Skeleton className="size-9 rounded-full" /><div className="flex flex-1 flex-col gap-1.5"><Skeleton className="h-4 w-32" />
+        <Skeleton className="h-3 w-44" /></div></li>)}</ul>;
+  return <ul aria-label={t.users} aria-busy={loading} className={cn('flex flex-col gap-2 transition-opacity', loading && 'opacity-60')}>
+    {users.map((user, index) => {
+      const actions = availableActions(toTarget(user), me);
+      const label = user.name || user.email;
+      return <li key={user.id} data-active={index === active || undefined} data-state={selected.has(user.id) ? 'selected' : undefined}
+        className="flex items-start gap-3 rounded-2xl border border-border/60 bg-card px-3 py-3 data-active:border-primary/40
+          data-[state=selected]:border-primary/30 data-[state=selected]:bg-primary/[0.04]">
+        <span className="pt-2.5"><SelectBox checked={selected.has(user.id)} label={t.selectUser({ name: label })}
+          onChange={value => onSelect([user.id], value)} /></span>
+        <UserAvatar user={user} size="sm" className="mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <a href={userHref(user.id)} data-row-link={index} onFocus={() => onActive(index)}
+            className="block truncate font-medium outline-none hover:underline focus-visible:underline">{label}</a>
+          <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+          <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <StatusBadge status={user.status} />{user.role ? <RoleBadge role={user.role} /> : null}
+            <span>{t.columns.lastSignIn}: {user.lastSignInAt ? <Time iso={user.lastSignInAt} /> : t.never}</span></span>
+        </div>
+        {actions.length ? <Menu positioning={{ placement: 'bottom-end' }} onSelect={({ value }) => onAction(value as AdminAction, user)}>
+          <MenuTrigger asChild><Button variant="ghost" size="icon-md" aria-label={t.rowActions({ name: label })}>
+            <EllipsisIcon aria-hidden="true" /></Button></MenuTrigger>
+          <MenuContent className="min-w-56">
+            {actions.map(action => <MenuItem key={action} value={action}
+              variant={action === 'suspend' || action === 'require-password-reset' ? 'destructive' : 'default'}>{t.actions[action]}</MenuItem>)}
+          </MenuContent>
+        </Menu> : null}
+      </li>;
+    })}
+  </ul>;
+}

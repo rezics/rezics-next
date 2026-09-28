@@ -7,14 +7,15 @@ import { toast } from '@rezics/ui/toast';
 import { ChevronRightIcon, ChevronsLeftIcon, CircleAlertIcon, Columns3Icon, SearchXIcon, UsersIcon, XIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAdminClient } from '../api/admin-client.tsx';
-import type { AccountErrorCode, AdminAction, Directory, DirectoryColumn, Preferences } from '../api/types.ts';
+import type { AccountErrorCode, AdminAction, AdminUser, Directory, DirectoryColumn, Preferences } from '../api/types.ts';
 import { ActionDialog, type ActionRequest } from '../actions/action-dialog.tsx';
 import { actionPermission, bulkActionOrder } from '../actions/actions.ts';
 import { userHref } from '../audit/entry.tsx';
 import { PageHeading } from '../shell/admin-states.tsx';
 import { useAdmin } from '../shell/admin-context.tsx';
 import { usePageKeys } from '../shell/keys.ts';
-import { DirectoryTable, toTarget } from './directory-table.tsx';
+import { useNarrow } from '../shell/media.ts';
+import { DirectoryCards, DirectoryTable, toTarget } from './directory-table.tsx';
 import { parseQuery } from './query.ts';
 import { SearchBox } from './search-box.tsx';
 import { columnOrder, defaultColumns, type DirectoryState, directoryParams, readState, type SortKey, stateHref } from './state.ts';
@@ -35,7 +36,10 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
   const [read, setRead] = useState<DirectoryRead | null>(initial);
   const [loading, setLoading] = useState(false);
   const [previous, setPrevious] = useState<(string | null)[]>([]);
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  // Selected users by ID, kept across pages and sorting (not a new search),
+  // with the rows they were chosen from for the bulk preview.
+  const [selection, setSelection] = useState<ReadonlyMap<string, AdminUser>>(new Map());
+  const selected = useMemo(() => new Set(selection.keys()), [selection]);
   const [active, setActive] = useState(-1);
   const [columns, setColumns] = useState<readonly DirectoryColumn[]>(preferences.columns ?? defaultColumns);
   const [views, setViews] = useState(preferences.views);
@@ -58,9 +62,11 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
     return () => controller.abort();
   }, [api, state, reload]);
 
+  const current = useRef(initialState);
   const go = useCallback((next: DirectoryState, push = false) => {
+    if (next.text !== current.current.text) setSelection(new Map());
+    current.current = next;
     setState(next);
-    setSelected(new Set());
     replaceUrl(stateHref(next), push);
   }, [replaceUrl]);
   // Typing waits 200 ms for a pause; Enter, chips and filters search at once.
@@ -72,6 +78,8 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
   useEffect(() => {
     const restore = () => {
       const next = readState(new URLSearchParams(window.location.search));
+      if (next.text !== current.current.text) setSelection(new Map());
+      current.current = next;
       setState(next); setText(next.text); setPrevious([]);
     };
     window.addEventListener('popstate', restore);
@@ -83,9 +91,10 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
   const data = read?.status === 'ok' ? read.data : null;
   const users = data?.items ?? null;
   const exact = data?.exact && text === state.text ? data.exact : null;
+  const phone = useNarrow(639);
   const focusRow = (index: number) => {
     const link = document.querySelector<HTMLAnchorElement>(`[data-row-link="${index}"]`);
-    if (link) { link.focus(); link.closest('tr')?.scrollIntoView({ block: 'nearest' }); }
+    if (link) { link.focus(); link.closest('tr, li')?.scrollIntoView({ block: 'nearest' }); }
     setActive(index);
   };
   usePageKeys(event => {
@@ -97,11 +106,18 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
     if (event.key === 'Enter' && active >= 0 && user) { navigate(userHref(user.id)); return true; }
     return false;
   });
-  const toggle = (ids: string[], value: boolean) => setSelected(current => {
-    const next = new Set(current);
-    for (const id of ids) { if (value) next.add(id); else next.delete(id); }
-    return next;
-  });
+  const toggle = (ids: string[], value: boolean) => {
+    const rows = (users ?? []).filter(user => ids.includes(user.id));
+    if (value && new Set([...selection.keys(), ...ids]).size > me.bulkLimit) {
+      toast.error({ title: t.undo.limit({ value: me.bulkLimit }) });
+      return;
+    }
+    setSelection(current => {
+      const next = new Map(current);
+      for (const user of rows) { if (value) next.set(user.id, user); else next.delete(user.id); }
+      return next;
+    });
+  };
   const sortBy = (sort: SortKey) => go({ ...state, cursor: null, sort,
     direction: sort === state.sort ? state.direction === 'asc' ? 'desc' : 'asc' : sort === 'createdAt' ? 'desc' : 'asc' });
   const saveColumns = (next: DirectoryColumn[]) => {
@@ -117,7 +133,8 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
       else { setViews(before); toast.error({ title: t.errors.temporarily_unavailable }); }
     });
   };
-  const selectedUsers = useMemo(() => (users ?? []).filter(user => selected.has(user.id)), [users, selected]);
+  const selectedUsers = [...selection.values()];
+  const elsewhere = selectedUsers.filter(user => !users?.some(row => row.id === user.id)).length;
   const bulk = bulkActionOrder.filter(action => me.bulkActions.includes(action) && can(actionPermission[action]));
   const hasSearch = !!state.text.trim();
   const hiddenFilters = parseQuery(state.text).problems.length > 0;
@@ -130,11 +147,13 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
           || 'view'}-${crypto.randomUUID().slice(0, 6)}`, name, query: state.text.trim() }], t.views.saved)}
         onRemove={id => saveViews(views.filter(view => view.id !== id), t.views.removed)} />
       {selected.size ? <div role="toolbar" aria-label={t.selected(selected.size)}
-        className="flex min-h-10 flex-wrap items-center gap-2 rounded-2xl border border-primary/25 bg-primary/5 px-3 py-2">
-        <span className="me-2 text-sm font-medium">{t.selected(selected.size)}</span>
+        className="flex min-h-10 flex-wrap items-center gap-2 rounded-2xl border border-primary/25 bg-primary/5 px-3 py-2
+          max-sm:sticky max-sm:bottom-3 max-sm:z-10 max-sm:order-last max-sm:shadow-(--aura-shadow-card) max-sm:bg-card">
+        <span className="me-2 text-sm font-medium">{t.selected(selected.size)}
+          {elsewhere ? <span className="block text-xs font-normal text-muted-foreground">{t.undo.elsewhere(elsewhere)}</span> : null}</span>
         {bulk.map(action => <Button key={action} size="sm" variant={action === 'suspend' ? 'destructive' : 'outline'}
           onClick={() => setRequest({ action, targets: selectedUsers.map(toTarget) })}>{t.actions[action]}</Button>)}
-        <Button size="sm" variant="ghost" className="ms-auto" onClick={() => setSelected(new Set())}>
+        <Button size="sm" variant="ghost" className="ms-auto" onClick={() => setSelection(new Map())}>
           <XIcon aria-hidden="true" />{t.clearSelection}</Button>
       </div> : <SearchBox value={text} inputRef={search} exact={exact} onType={setText}
         onComposing={setComposing} onApply={commit} onOpenExact={() => exact && navigate(userHref(exact.id))}
@@ -155,9 +174,11 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
         <h2 className="text-lg font-semibold">{hasSearch ? t.noMatchTitle : t.emptyTitle}</h2>
         <p className="max-w-md text-sm text-muted-foreground">{hasSearch ? t.noMatchBody : t.emptyBody}</p>
         {hasSearch || hiddenFilters ? <Button variant="outline" onClick={() => commit('')}>{t.clearFilters}</Button> : null}
-      </div> : <DirectoryTable users={users} columns={columns} loading={loading} sort={state.sort} direction={state.direction} onSort={sortBy}
-        selected={selected} onSelect={toggle} active={active} onActive={setActive}
-        onAction={(action: AdminAction, user) => setRequest({ action, targets: [toTarget(user)] })} />}
+      </div> : phone ? <DirectoryCards users={users} loading={loading} selected={selected} onSelect={toggle} active={active}
+        onActive={setActive} onAction={(action: AdminAction, user) => setRequest({ action, targets: [toTarget(user)] })} />
+        : <DirectoryTable users={users} columns={columns} loading={loading} sort={state.sort} direction={state.direction} onSort={sortBy}
+          selected={selected} onSelect={toggle} active={active} onActive={setActive}
+          onAction={(action: AdminAction, user) => setRequest({ action, targets: [toTarget(user)] })} />}
       {data && (data.nextCursor || state.cursor) ? <nav aria-label={t.pages} className="flex flex-wrap items-center justify-end gap-2">
         {data.nextCursor ? <span className="me-auto text-sm text-muted-foreground">{t.moreAvailable}</span> : null}
         {state.cursor ? <Button variant="ghost" size="sm" onClick={() => { setPrevious([]); go({ ...state, cursor: null }, true); }}>
@@ -171,7 +192,7 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
       </nav> : null}
     </div>
     <ActionDialog request={request} onClose={() => setRequest(null)}
-      onDone={() => { setRequest(null); setSelected(new Set()); setReload(value => value + 1); }} />
+      onDone={() => { setRequest(null); setSelection(new Map()); setReload(value => value + 1); }} />
   </>;
 }
 

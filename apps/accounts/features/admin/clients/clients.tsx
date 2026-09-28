@@ -9,7 +9,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { Textarea } from '@rezics/ui/textarea';
 import { toast } from '@rezics/ui/toast';
 import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useAdminClient } from '../api/admin-client.tsx';
 import type { AdminClientEntry, ClientPage } from '../api/types.ts';
 import { ErrorAlert, TypedConfirmation, useDismiss, useReauth } from '../actions/confirm.tsx';
@@ -25,10 +25,14 @@ function actionsFor(client: AdminClientEntry): ClientAction[] {
   return [client.disabled ? 'enable' : 'disable', client.installation?.state === 'active' ? 'revoke' : 'install'];
 }
 
-export function ClientsPage({ clients }: { clients: ClientPage }) {
+/** `focus` (from `?client=`, as a signal links it) opens that App's details and scrolls to it. */
+export function ClientsPage({ clients, focus }: { clients: ClientPage; focus?: string | null }) {
   const { t } = useTranslation('admin');
   const { refresh } = useAdminClient();
-  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(focus ? [focus] : []));
+  useEffect(() => {
+    if (focus) document.getElementById(`client-${focus}`)?.scrollIntoView({ block: 'center' });
+  }, [focus]);
   const [request, setRequest] = useState<{ action: ClientAction; client: AdminClientEntry } | null>(null);
   const toggle = (id: string) => setOpen(current => {
     const next = new Set(current);

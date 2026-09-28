@@ -47,3 +47,12 @@ export function count(value: number, locale: string): string {
 export function nameList(names: string[], locale: string): string {
   return new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(names);
 }
+
+const spans: [Intl.NumberFormatOptions['unit'] & string, number][] = [['day', 86_400_000], ['hour', 3_600_000], ['minute', 60_000]];
+/** A length of time in its largest whole unit (“3 hours”, “3 小时”), at least a minute. */
+export function duration(milliseconds: number, locale: string): string {
+  const size = Math.abs(milliseconds);
+  // Days from two, hours from one: “26 hours” reads better than “1 day”.
+  const [unit, length] = spans.find(([name, span]) => size >= span * (name === 'day' ? 2 : 1)) ?? spans.at(-1)!;
+  return new Intl.NumberFormat(locale, { style: 'unit', unit, unitDisplay: 'long' }).format(Math.max(1, Math.round(size / length)));
+}

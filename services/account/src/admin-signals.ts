@@ -221,7 +221,7 @@ export async function reviewSignal(auth: AccountAuth, pool: Pool, request: Reque
     const subject = await signalSubject(db, kind, rest.join(':'));
     const requestId = randomUUID();
     await writeAudit(db, { actorId: actor.userId, action: 'signal_reviewed', targetId: subject, reason: note ?? 'Reviewed',
-      before: null, after: { key: body.key, kind }, requestId });
+      before: null, after: { key: body.key, kind, noted: note !== null }, requestId });
     const response = { status: true, requestId };
     await db.query(`INSERT INTO rezics_account_operator_command (actor_id, command_id, digest, response)
       VALUES ($1, $2, $3, $4)`, [actor.userId, body.commandId, digest, JSON.stringify(response)]);

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { StaffPage } from './staff.tsx';
 import { openDialog, operators, support, typist, users, withAdmin } from '../story-support.tsx';
 import { chinese, dark } from '../../../.storybook/variants.ts';

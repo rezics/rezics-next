@@ -130,7 +130,7 @@ export default {
     footerClose: '閉じる',
   },
 
-  overviewIntro: '対応が必要な項目です。件数はすべてのアカウントを対象とし、各一覧には先頭の 5 件が表示されます。',
+  overviewIntro: '今対応が必要なこと：まず確認すべき兆候、次に対応待ちのアカウントです。',
   queues: {
     suspended: '停止中',
     suspendedBody: 'ログインできないアカウント。停止期限が近いものから表示されます。',
@@ -138,13 +138,10 @@ export default {
     resetBody: 'アカウント所有者が新しいパスワードを選ぶのを待っているアカウント。',
     unverified: 'メールアドレス未確認',
     unverifiedBody: 'メールアドレスがまだ確認されていないアカウント。新しいものから表示されます。',
-    failed: 'ログイン失敗が繰り返されています',
-    failedBody: '過去 24 時間に 5 回以上ログインに失敗したアカウント。',
     viewAll: 'すべて表示',
     nothing: '対応待ちの項目はありません',
     until: '期限：',
     indefinite: '解除されるまで',
-    failedCount: plural({ one: '失敗 1 回', other: insert('失敗 {{value}} 回') }),
     capped: insert('{{count}}+', { count: String }),
   },
   recentActions: '最近の管理操作',
@@ -155,7 +152,7 @@ export default {
   jobResult: insert('完了 {{succeeded}} 件 · 変更なし {{skipped}} 件 · 失敗 {{failed}} 件', { succeeded: Number, skipped: Number, failed: Number }),
 
   user: {
-    tabs: { overview: '概要', security: 'セキュリティ', roles: 'ロール', sanctions: '制限措置', apps: '接続済みアプリ', audit: '監査' },
+    tabs: { overview: '概要', security: 'セキュリティ', roles: 'ロール', apps: '接続済みアプリ', audit: '監査' },
     tabsLabel: 'ユーザーのセクション',
     copyId: 'ユーザー ID をコピー',
     copyEmail: 'メールアドレスをコピー',
@@ -207,7 +204,6 @@ export default {
     rolePermissions: 'このロールで許可される操作',
     changeRole: 'ロールを変更',
     rolesOwnerOnly: 'ロールを変更できるのはオーナーのみです。',
-    sanctionsEmpty: '制限措置はありません。このアカウントはスタッフによる停止、パスワード再設定の要求、ログアウトの対象になったことがありません。',
     appsEmpty: 'このアカウントはアプリを許可していません。',
     granted: '許可済み',
     lastUsed: '最終使用',
@@ -297,7 +293,7 @@ export default {
   requestId: insert('リクエスト {{id}}', { id: String }),
   bulkClose: '閉じる',
   bulkRunning: '一覧を処理しています…',
-  itemStates: { pending: '待機中', succeeded: '完了', skipped: '変更なし', failed: '失敗' },
+  itemStates: { pending: '待機中', succeeded: '完了', skipped: '変更なし', failed: '失敗', cancelled: '変更なし' },
   itemErrors: { forbidden: '許可されていません：スタッフ アカウントにはオーナーの操作が必要か、アクセス権が終了しています', not_found: 'アカウントが見つかりません',
     conflict: 'この操作を行うとオーナーがいなくなります', other: '変更できませんでした' },
   errors: {
@@ -411,7 +407,8 @@ export default {
     suspend: '停止', unsuspend: '停止解除', 'revoke-sessions': 'すべてからログアウト',
     'require-password-reset': 'パスワード再設定を要求', 'resend-verification': '確認メールを再送信', 'add-note': 'メモを追加',
     operator_role_changed: '運営者ロールを変更', operator_bootstrapped: '最初のオーナーに就任', permission_denied: '拒否',
-    bulk_action_started: '一括操作を開始', audit_exported: '監査ログをエクスポート', client_disabled: 'クライアントを無効化',
+    bulk_action_started: '一括操作を開始', bulk_action_cancelled: '一括操作を停止', signal_reviewed: '兆候を確認済みにした',
+    audit_exported: '監査ログをエクスポート', client_disabled: 'クライアントを無効化',
     client_enabled: 'クライアントを有効化', '/admin/oauth2/create-client': 'クライアントを登録', '/oauth2/create-client': 'クライアントを登録',
     '/admin/oauth2/update-client': 'クライアントを更新', '/oauth2/update-client': 'クライアントを更新',
     '/oauth2/delete-client': 'クライアントを削除', '/oauth2/client/rotate-secret': 'クライアント シークレットをローテーション',

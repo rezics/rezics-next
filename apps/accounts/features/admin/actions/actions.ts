@@ -45,3 +45,19 @@ export function suspensionEnd(duration: Duration, customDate: string, now = Date
   }
   return new Date(now + durations[duration] * 86_400_000).toISOString();
 }
+
+/** What a bulk action would do to one selected user, judged from the row the
+ * operator sees: change them, leave them as they are (already in that state;
+ * suspending again would replace a suspension's end), or refuse (staff need
+ * an owner). The job's per-user results remain the truth. */
+export type BulkOutcome = 'change' | 'unchanged' | 'staff';
+export function bulkOutcome(action: BulkAction, target: ActionTarget, me: Pick<AdminMe, 'role'>): BulkOutcome {
+  if (target.role && me.role !== 'owner') return 'staff';
+  const already = { suspend: target.status === 'suspended', unsuspend: target.status !== 'suspended',
+    'require-password-reset': target.status === 'password-reset-required', 'resend-verification': target.emailVerified,
+    'revoke-sessions': false }[action];
+  return already ? 'unchanged' : 'change';
+}
+
+/** Seconds a bulk action waits before its first change, so it can be undone whole. */
+export const bulkUndoSeconds = 10;

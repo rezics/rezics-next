@@ -4,12 +4,13 @@ import { createListCollection } from '@ark-ui/react/collection';
 import { Command, CommandContent, CommandDialog, CommandDialogContent, CommandEmpty, CommandFooter, CommandGroup,
   CommandGroupLabel, CommandInput, CommandItem, CommandList, CommandShortcut } from '@rezics/ui/command';
 import { Kbd } from '@rezics/ui/kbd';
-import { AppWindowIcon, KeyboardIcon, LayoutDashboardIcon, Rows3Icon, Rows4Icon, ScrollTextIcon, ShieldCheckIcon,
-  UserRoundIcon, UsersIcon, ZapIcon } from 'lucide-react';
+import { AppWindowIcon, HistoryIcon, KeyboardIcon, LayoutDashboardIcon, Rows3Icon, Rows4Icon, ScrollTextIcon, SearchCodeIcon,
+  ShieldCheckIcon, UserRoundIcon, UsersIcon, ZapIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useAdminClient } from '../api/admin-client.tsx';
 import type { AdminUser } from '../api/types.ts';
 import { useAdmin } from './admin-context.tsx';
+import { type RecentUser, recentUsers } from './recent.ts';
 import { useTranslation } from '../../../i18n/client.ts';
 
 interface Entry { value: string; label: string; group: string; hint?: string; icon: ReactNode; keywords?: string;
@@ -20,8 +21,12 @@ const matches = (entry: Entry, text: string) => {
   return !needle || `${entry.label} ${entry.hint ?? ''} ${entry.keywords ?? ''}`.toLocaleLowerCase().includes(needle);
 };
 
-/** ⌘K / Ctrl-K: sections, users found as you type, the current page's
- * actions (they open the same confirmations as their buttons) and preferences. */
+const requestId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** ⌘K / Ctrl-K: the users opened recently (two keystrokes back to them),
+ * sections, users found as you type, a pasted request ID's audit record, the
+ * current page's actions (they open the same confirmations as their buttons)
+ * and preferences. */
 export function CommandPalette() {
   const { t } = useTranslation('admin');
   const { api, navigate } = useAdminClient();
@@ -29,6 +34,8 @@ export function CommandPalette() {
   const [input, setInput] = useState('');
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [searching, setSearching] = useState(false);
+  // Read as the palette opens, so its first recent user is highlighted: ⌘K, Enter.
+  const recent = useMemo<RecentUser[]>(() => paletteOpen ? recentUsers() : [], [paletteOpen]);
 
   useEffect(() => {
     const text = input.trim();
@@ -60,6 +67,11 @@ export function CommandPalette() {
     const found: Entry[] = users.map(user => ({ value: `user:${user.id}`, label: user.name || user.email, hint: user.email,
       group: t.palette.users, icon: <UserRoundIcon />, keywords: `${user.email} ${user.id}`,
       run: go(`/admin/users/${encodeURIComponent(user.id)}`) }));
+    const recents: Entry[] = input.trim() ? [] : recent.map(user => ({ value: `recent:${user.id}`, label: user.name || user.email,
+      hint: user.email, group: t.recent.title, icon: <HistoryIcon />, run: go(`/admin/users/${encodeURIComponent(user.id)}`) }));
+    const lookup: Entry[] = requestId.test(input.trim()) && can('audit:read') ? [{ value: 'request', group: t.palette.navigate,
+      label: t.recent.findRequest({ id: input.trim().slice(0, 8) }), icon: <SearchCodeIcon />,
+      run: go(`/admin/audit?range=all&request=${input.trim().toLowerCase()}`) }] : [];
     const actions: Entry[] = pageActions.map(action => ({ value: `action:${action.id}`, label: action.label, hint: action.hint,
       group: t.palette.actions, icon: <ZapIcon />, run: action.run }));
     const preferences: Entry[] = [
@@ -70,15 +82,16 @@ export function CommandPalette() {
         run: () => setShortcutsOpen(true) },
     ];
     // Users come from the service already matched; the rest filter here.
-    return [...actions.filter(entry => matches(entry, input)), ...found,
+    return [...recents, ...lookup, ...actions.filter(entry => matches(entry, input)), ...found,
       ...sections.filter(entry => matches(entry, input)), ...preferences.filter(entry => matches(entry, input))];
-  }, [t, users, pageActions, density, input, can, navigate, setDensity, setShortcutsOpen]);
+  }, [t, users, recent, pageActions, density, input, can, navigate, setDensity, setShortcutsOpen]);
   const collection = useMemo(() => createListCollection({ items: entries, groupBy: entry => entry.group,
     itemToString: entry => entry.label, itemToValue: entry => entry.value }), [entries]);
 
   return <CommandDialog open={paletteOpen} onOpenChange={details => { if (!details.open) close(); }}>
     <CommandDialogContent title={t.palette.title} description={t.palette.description}>
-      <Command aria-label={t.palette.results} collection={collection} inputValue={input} onInputValueChange={details => setInput(details.inputValue)}
+      <Command aria-label={t.palette.results} collection={collection} inputValue={input}
+        defaultHighlightedValue={recent[0] ? `recent:${recent[0].id}` : undefined} onInputValueChange={details => setInput(details.inputValue)}
         onValueChange={details => {
           const entry = entries.find(item => item.value === details.value[0]);
           if (!entry) return;

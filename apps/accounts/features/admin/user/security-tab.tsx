@@ -1,12 +1,13 @@
 'use client';
 
 import { Badge } from '@rezics/ui/badge';
-import { KeyRoundIcon, LaptopIcon, ShieldCheckIcon, SmartphoneIcon } from 'lucide-react';
+import { KeyRoundIcon, ShieldCheckIcon } from 'lucide-react';
 import { useAdminClient } from '../api/admin-client.tsx';
 import type { ActivityPage, UserDetail } from '../api/types.ts';
 import { actionLabel } from '../audit/entry.tsx';
 import { DateOnly, Time } from '../format.tsx';
 import { Empty, Facts, Panel, usePages } from './parts.tsx';
+import { Devices } from './overview-tab.tsx';
 import { useTranslation } from '../../../i18n/client.ts';
 
 type Event = ActivityPage['items'][number];
@@ -40,23 +41,7 @@ export function SecurityTab({ detail }: { detail: UserDetail }) {
       [t.user.authenticator, methods.totp?.verified ? <span key="totp" className="inline-flex items-center gap-1.5">
         <ShieldCheckIcon className="size-4 text-success-foreground" aria-hidden="true" />{methods.totp.name}</span> : t.user.authenticatorOff],
     ]} /></Panel>
-    <Panel title={t.user.sessions}>
-      {sessions.items.length ? <ul className="divide-y divide-border/60 border-t border-border/60">
-        {sessions.items.map(session => {
-          const phone = /iOS|Android/.test(session.device.platform ?? '');
-          const Icon = phone ? SmartphoneIcon : LaptopIcon;
-          return <li key={session.id} className="flex items-start gap-3 px-5 py-3 text-sm group-data-[density=compact]/admin:py-2">
-            <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium">{session.device.label}</p>
-              <p className="text-xs text-muted-foreground">{session.network ? `${t.user.network} ${session.network} · ` : ''}
-                {t.user.lastActive} <Time iso={session.lastActiveAt} /> · {t.user.expires} <DateOnly iso={session.expiresAt} /></p>
-            </div>
-          </li>;
-        })}
-      </ul> : <Empty>{t.user.noSessions}</Empty>}
-      {sessions.button}
-    </Panel>
+    <Devices sessions={sessions.items} more={sessions.button} />
     <Panel title={t.user.activity} description={t.user.failedLastDay(failed.count)} className="lg:col-span-2">
       {activity.items.length ? <ol className="divide-y divide-border/60 border-t border-border/60">
         {activity.items.map(event => {

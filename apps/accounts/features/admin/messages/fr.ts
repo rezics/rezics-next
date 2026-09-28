@@ -130,7 +130,7 @@ export default {
     footerClose: 'pour fermer',
   },
 
-  overviewIntro: 'Les points qui nécessitent votre attention. Les totaux couvrent tous les comptes ; chaque liste affiche les cinq premiers.',
+  overviewIntro: 'Ce qui vous attend maintenant : d’abord les signaux à examiner, puis les comptes en attente.',
   queues: {
     suspended: 'Suspendus',
     suspendedBody: 'Comptes dont la connexion est bloquée. Les suspensions qui expirent apparaissent en premier.',
@@ -138,13 +138,10 @@ export default {
     resetBody: 'Comptes dont le titulaire doit choisir un nouveau mot de passe.',
     unverified: 'Adresse e-mail non confirmée',
     unverifiedBody: 'Comptes dont l’adresse e-mail n’a pas encore été confirmée. Les plus récents apparaissent en premier.',
-    failed: 'Échecs de connexion répétés',
-    failedBody: 'Au moins cinq tentatives de connexion infructueuses au cours des dernières 24 heures.',
     viewAll: 'Tout afficher',
     nothing: 'Aucun élément en attente',
     until: 'jusqu’au',
     indefinite: 'jusqu’à la levée de la suspension',
-    failedCount: plural({ one: '1 échec', other: insert('{{value}} échecs') }),
     capped: insert('{{count}}+', { count: String }),
   },
   recentActions: 'Actions récentes des administrateurs',
@@ -155,7 +152,7 @@ export default {
   jobResult: insert('{{succeeded}} terminées · {{skipped}} inchangées · {{failed}} échouées', { succeeded: Number, skipped: Number, failed: Number }),
 
   user: {
-    tabs: { overview: 'Vue d’ensemble', security: 'Sécurité', roles: 'Rôles', sanctions: 'Mesures', apps: 'Applications connectées', audit: 'Audit' },
+    tabs: { overview: 'Vue d’ensemble', security: 'Sécurité', roles: 'Rôles', apps: 'Applications connectées', audit: 'Audit' },
     tabsLabel: 'Rubriques utilisateur',
     copyId: 'Copier l’ID utilisateur',
     copyEmail: 'Copier l’adresse e-mail',
@@ -207,7 +204,6 @@ export default {
     rolePermissions: 'Autorisations de ce rôle',
     changeRole: 'Modifier le rôle',
     rolesOwnerOnly: 'Seuls les propriétaires peuvent modifier les rôles.',
-    sanctionsEmpty: 'Aucune mesure. Ce compte n’a jamais été suspendu, soumis à une réinitialisation ou déconnecté par l’équipe.',
     appsEmpty: 'Ce compte n’a autorisé aucune application.',
     granted: 'Autorisé',
     lastUsed: 'Dernière utilisation',
@@ -297,7 +293,7 @@ export default {
   requestId: insert('Demande {{id}}', { id: String }),
   bulkClose: 'Fermer',
   bulkRunning: 'Traitement de la liste…',
-  itemStates: { pending: 'En attente', succeeded: 'Terminé', skipped: 'Inchangé', failed: 'Échec' },
+  itemStates: { pending: 'En attente', succeeded: 'Terminé', skipped: 'Inchangé', failed: 'Échec', cancelled: 'Non modifié' },
   itemErrors: { forbidden: 'Action non autorisée : un propriétaire doit intervenir sur les comptes de l’équipe, ou votre accès a expiré', not_found: 'Le compte n’existe plus',
     conflict: 'Il ne resterait aucun propriétaire disponible', other: 'La modification a échoué' },
   errors: {
@@ -411,7 +407,8 @@ export default {
     suspend: 'Suspension', unsuspend: 'Suspension levée', 'revoke-sessions': 'Déconnexion de tous les appareils',
     'require-password-reset': 'Réinitialisation du mot de passe exigée', 'resend-verification': 'Confirmation renvoyée', 'add-note': 'Note ajoutée',
     operator_role_changed: 'Rôle d’opérateur modifié', operator_bootstrapped: 'Premier propriétaire désigné', permission_denied: 'Action refusée',
-    bulk_action_started: 'Action groupée lancée', audit_exported: 'Journal d’audit exporté', client_disabled: 'Client désactivé',
+    bulk_action_started: 'Action groupée lancée', bulk_action_cancelled: 'Action groupée arrêtée', signal_reviewed: 'Signal examiné',
+    audit_exported: 'Journal d’audit exporté', client_disabled: 'Client désactivé',
     client_enabled: 'Client activé', '/admin/oauth2/create-client': 'Client enregistré', '/oauth2/create-client': 'Client enregistré',
     '/admin/oauth2/update-client': 'Client modifié', '/oauth2/update-client': 'Client modifié',
     '/oauth2/delete-client': 'Client supprimé', '/oauth2/client/rotate-secret': 'Secret du client renouvelé',

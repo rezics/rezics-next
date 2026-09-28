@@ -130,7 +130,7 @@ export default {
     footerClose: 'para cerrar',
   },
 
-  overviewIntro: 'Lo que requiere atención. Los totales incluyen todas las cuentas; cada lista muestra las cinco primeras.',
+  overviewIntro: 'Lo que te necesita ahora: primero las señales que revisar y después las cuentas que esperan a alguien.',
   queues: {
     suspended: 'Suspendidos',
     suspendedBody: 'Cuentas que no pueden iniciar sesión. Primero aparecen las suspensiones que van a caducar.',
@@ -138,13 +138,10 @@ export default {
     resetBody: 'Cuentas cuyos titulares tienen que elegir una contraseña nueva.',
     unverified: 'Correo electrónico sin verificar',
     unverifiedBody: 'Cuentas cuyo correo electrónico aún no se ha confirmado. Primero aparecen las más recientes.',
-    failed: 'Varios inicios de sesión fallidos',
-    failedBody: 'Cinco o más intentos de inicio de sesión fallidos en las últimas 24 horas.',
     viewAll: 'Ver todo',
     nothing: 'No hay nada pendiente',
     until: 'hasta',
     indefinite: 'hasta que se levante la suspensión',
-    failedCount: plural({ one: '1 fallo', other: insert('{{value}} fallos') }),
     capped: insert('{{count}}+', { count: String }),
   },
   recentActions: 'Acciones recientes de administración',
@@ -155,7 +152,7 @@ export default {
   jobResult: insert('{{succeeded}} completadas · {{skipped}} sin cambios · {{failed}} fallidas', { succeeded: Number, skipped: Number, failed: Number }),
 
   user: {
-    tabs: { overview: 'Resumen', security: 'Seguridad', roles: 'Roles', sanctions: 'Sanciones', apps: 'Aplicaciones conectadas', audit: 'Auditoría' },
+    tabs: { overview: 'Resumen', security: 'Seguridad', roles: 'Roles', apps: 'Aplicaciones conectadas', audit: 'Auditoría' },
     tabsLabel: 'Secciones del usuario',
     copyId: 'Copiar ID de usuario',
     copyEmail: 'Copiar correo electrónico',
@@ -207,7 +204,6 @@ export default {
     rolePermissions: 'Este rol permite',
     changeRole: 'Cambiar rol',
     rolesOwnerOnly: 'Solo los propietarios pueden cambiar los roles.',
-    sanctionsEmpty: 'No hay sanciones. El personal nunca ha suspendido esta cuenta, exigido que restablezca la contraseña ni cerrado sus sesiones.',
     appsEmpty: 'Esta cuenta no ha dado acceso a ninguna aplicación.',
     granted: 'Permitido',
     lastUsed: 'Último uso',
@@ -297,7 +293,7 @@ export default {
   requestId: insert('Solicitud {{id}}', { id: String }),
   bulkClose: 'Cerrar',
   bulkRunning: 'Procesando la lista…',
-  itemStates: { pending: 'En espera', succeeded: 'Hecho', skipped: 'Sin cambios', failed: 'Error' },
+  itemStates: { pending: 'En espera', succeeded: 'Hecho', skipped: 'Sin cambios', failed: 'Error', cancelled: 'Sin cambiar' },
   itemErrors: { forbidden: 'No permitido: un propietario debe actuar en las cuentas del personal o tu acceso ha caducado', not_found: 'La cuenta ya no existe',
     conflict: 'No quedaría ningún propietario disponible', other: 'No se ha podido hacer el cambio' },
   errors: {
@@ -411,7 +407,8 @@ export default {
     suspend: 'Suspendido', unsuspend: 'Suspensión levantada', 'revoke-sessions': 'Sesión cerrada en todas partes',
     'require-password-reset': 'Restablecimiento de contraseña obligatorio', 'resend-verification': 'Verificación reenviada', 'add-note': 'Nota añadida',
     operator_role_changed: 'Rol de operador cambiado', operator_bootstrapped: 'Primer propietario asignado', permission_denied: 'Acción rechazada',
-    bulk_action_started: 'Acción en bloque iniciada', audit_exported: 'Registro de auditoría exportado', client_disabled: 'Cliente inhabilitado',
+    bulk_action_started: 'Acción en bloque iniciada', bulk_action_cancelled: 'Acción en bloque detenida', signal_reviewed: 'Señal revisada',
+    audit_exported: 'Registro de auditoría exportado', client_disabled: 'Cliente inhabilitado',
     client_enabled: 'Cliente habilitado', '/admin/oauth2/create-client': 'Cliente registrado', '/oauth2/create-client': 'Cliente registrado',
     '/admin/oauth2/update-client': 'Cliente actualizado', '/oauth2/update-client': 'Cliente actualizado',
     '/oauth2/delete-client': 'Cliente eliminado', '/oauth2/client/rotate-secret': 'Se ha cambiado el secreto del cliente',

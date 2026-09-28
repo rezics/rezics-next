@@ -51,5 +51,15 @@ export const Empty: Story = {
   },
 };
 
+/** An App signal links here with `?client=`: that App opens with its details. */
+export const FocusedFromSignal: Story = {
+  args: { focus: 'notes-app' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('button', { name: 'Details of Notes' })).toHaveAttribute('aria-expanded', 'true');
+    await expect(canvas.getByRole('button', { name: 'Details of REZICS' })).toHaveAttribute('aria-expanded', 'false');
+  },
+};
+
 export const Dark: Story = { ...Clients, globals: dark };
 export const Phone: Story = { globals: phone, play: Empty.play, args: Empty.args };

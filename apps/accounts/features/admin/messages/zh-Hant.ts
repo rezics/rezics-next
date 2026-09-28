@@ -130,7 +130,7 @@ export default {
     footerClose: '關閉',
   },
 
-  overviewIntro: '需要處理的事項。統計涵蓋所有帳戶，每份清單最多顯示前五項。',
+  overviewIntro: '現在需要你處理的事項：先看需要檢查的跡象，再看等待處理的帳戶。',
   queues: {
     suspended: '已停權',
     suspendedBody: '目前無法登入的帳戶，並優先顯示即將解除停權的帳戶。',
@@ -138,13 +138,10 @@ export default {
     resetBody: '等待帳戶持有人設定新密碼的帳戶。',
     unverified: '電子郵件未驗證',
     unverifiedBody: '尚未確認電子郵件地址的帳戶，依建立時間由新到舊排列。',
-    failed: '多次登入失敗',
-    failedBody: '過去 24 小時內登入失敗五次以上的帳戶。',
     viewAll: '查看全部',
     nothing: '目前沒有待處理事項',
     until: '至',
     indefinite: '直到解除停權',
-    failedCount: plural({ one: '失敗 1 次', other: insert('失敗 {{value}} 次') }),
     capped: insert('{{count}}+', { count: String }),
   },
   recentActions: '近期管理操作',
@@ -155,7 +152,7 @@ export default {
   jobResult: insert('已完成 {{succeeded}} 項 · 未變更 {{skipped}} 項 · 失敗 {{failed}} 項', { succeeded: Number, skipped: Number, failed: Number }),
 
   user: {
-    tabs: { overview: '總覽', security: '安全性', roles: '角色', sanctions: '處置記錄', apps: '已連結的應用程式', audit: '稽核記錄' },
+    tabs: { overview: '總覽', security: '安全性', roles: '角色', apps: '已連結的應用程式', audit: '稽核記錄' },
     tabsLabel: '使用者區段',
     copyId: '複製使用者 ID',
     copyEmail: '複製電子郵件地址',
@@ -207,7 +204,6 @@ export default {
     rolePermissions: '此角色可執行的操作',
     changeRole: '變更角色',
     rolesOwnerOnly: '只有擁有者可以變更角色。',
-    sanctionsEmpty: '沒有處置記錄。此帳戶從未被工作人員停權、要求重設密碼或登出。',
     appsEmpty: '此帳戶尚未允許任何應用程式存取。',
     granted: '已允許',
     lastUsed: '上次使用',
@@ -297,7 +293,7 @@ export default {
   requestId: insert('要求 {{id}}', { id: String }),
   bulkClose: '關閉',
   bulkRunning: '正在處理清單…',
-  itemStates: { pending: '等待中', succeeded: '完成', skipped: '未變更', failed: '失敗' },
+  itemStates: { pending: '等待中', succeeded: '完成', skipped: '未變更', failed: '失敗', cancelled: '未變更' },
   itemErrors: { forbidden: '不允許：工作人員帳戶需要擁有者操作，或你的存取權已失效', not_found: '找不到此帳戶',
     conflict: '這會導致沒有可用的擁有者', other: '無法變更' },
   errors: {
@@ -411,7 +407,8 @@ export default {
     suspend: '已停權', unsuspend: '已解除停權', 'revoke-sessions': '已在所有裝置上登出',
     'require-password-reset': '已要求重設密碼', 'resend-verification': '已重新寄送驗證郵件', 'add-note': '已新增備註',
     operator_role_changed: '已變更營運人員角色', operator_bootstrapped: '成為首位擁有者', permission_denied: '遭拒絕',
-    bulk_action_started: '已開始大量操作', audit_exported: '已匯出稽核記錄', client_disabled: '已停用用戶端',
+    bulk_action_started: '已開始大量操作', bulk_action_cancelled: '已停止大量操作', signal_reviewed: '已檢查風險跡象',
+    audit_exported: '已匯出稽核記錄', client_disabled: '已停用用戶端',
     client_enabled: '已啟用用戶端', '/admin/oauth2/create-client': '已註冊用戶端', '/oauth2/create-client': '已註冊用戶端',
     '/admin/oauth2/update-client': '已更新用戶端', '/oauth2/update-client': '已更新用戶端',
     '/oauth2/delete-client': '已刪除用戶端', '/oauth2/client/rotate-secret': '已輪替用戶端密鑰',

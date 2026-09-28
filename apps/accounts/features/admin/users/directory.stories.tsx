@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { UserDirectory } from './directory.tsx';
-import { ada, finishedJob, grace, radia, openDialog, users, withAdmin } from '../story-support.tsx';
+import { ada, ago, finishedJob, grace, hedy, radia, openDialog, users, withAdmin } from '../story-support.tsx';
 import { chinese, dark, phone } from '../../../.storybook/variants.ts';
 
 const initialState = { text: '', sort: 'createdAt' as const, direction: 'desc' as const, cursor: null };
@@ -99,7 +99,9 @@ export const ErrorAndRetry: Story = {
 
 const bulk = fn(async () => ({ ok: true as const, data: { jobId: finishedJob.id } }));
 const reauthenticate = fn(async () => ({ ok: true as const, data: { verifiedUntil: new Date().toISOString() } }));
-/** j/k move, x selects; the toolbar turns into bulk actions with count, sample, reason and progress. */
+/** j/k move, x selects; the toolbar turns into bulk actions. The dialog
+ * previews who would change and who is left out (already suspended), sends
+ * only those who change, then shows each user's result. */
 export const KeyboardAndBulk: Story = {
   parameters: { admin: { section: 'users', api: { bulk, reauthenticate } } },
   async play({ canvasElement }) {
@@ -110,19 +112,69 @@ export const KeyboardAndBulk: Story = {
     await expect(canvas.getByRole('link', { name: 'Radia Perlman' })).toHaveFocus();
     const toolbar = canvas.getByRole('toolbar', { name: '2 selected' });
     await userEvent.click(within(toolbar).getByRole('button', { name: 'Suspend…' }));
-    const dialog = await openDialog('alertdialog', 'Suspend 2 users?');
-    await expect(within(dialog).getByText(/Including Ada Lovelace and Radia Perlman/)).toBeVisible();
+    const dialog = await openDialog('alertdialog', 'Suspend 1 user?');
+    await expect(within(dialog).getByText('1 will change')).toBeVisible();
+    await expect(within(dialog).getByText(/— Ada Lovelace/)).toBeVisible();
+    await expect(within(dialog).getByText('1 is already in that state and is left out')).toBeVisible();
+    await expect(within(dialog).getByText(/Nothing changes for 10 seconds/)).toBeVisible();
     await userEvent.selectOptions(within(dialog).getByLabelText('Reason'), 'spam');
     await typist.type(within(dialog).getByLabelText('Details for the audit log'), 'Coordinated spam wave');
-    await typist.type(within(dialog).getByLabelText('Type 2 to confirm'), '2');
+    await typist.type(within(dialog).getByLabelText('Type 1 to confirm'), '1');
     await typist.type(within(dialog).getByLabelText('Your password'), 'correct horse');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Suspend' }));
     await waitFor(() => expect(reauthenticate).toHaveBeenCalledWith('correct horse', undefined), { timeout: 5_000 });
     await waitFor(() => expect(bulk).toHaveBeenCalledWith(expect.objectContaining({ action: 'suspend', reasonCode: 'spam', reason: 'Coordinated spam wave',
-      userIds: ['u-ada', 'u-radia'] })), { timeout: 5_000 });
+      userIds: ['u-ada'], undoSeconds: 10 })), { timeout: 5_000 });
     // The job's dialog replaces the form once the service has admitted it, then polls the job.
     await waitFor(() => expect(screen.getByText('1 done · 1 unchanged · 1 failed')).toBeVisible(), { timeout: 5_000 });
     await expect(screen.getByText(/staff accounts need an owner/)).toBeVisible();
+  },
+};
+
+let undone = false;
+const scheduledJob = fn(async () => ({ ok: true as const, data: undone
+  ? { ...finishedJob, total: 2, pending: 0, succeeded: 0, skipped: 0, failed: 0, cancelled: 2, finishedAt: ago(0), cancelledAt: ago(0),
+    items: finishedJob.items.slice(0, 2).map(item => ({ ...item, state: 'cancelled' as const, error: null })) }
+  : { ...finishedJob, total: 2, pending: 2, succeeded: 0, skipped: 0, failed: 0, startsAt: new Date(Date.now() + 9_000).toISOString(), finishedAt: null,
+    items: finishedJob.items.slice(0, 2).map(item => ({ ...item, state: 'pending' as const, error: null })) } }));
+const undo = fn(async () => { undone = true; return { ok: true as const, data: { cancelled: 2 } }; });
+const resend = fn(async () => ({ ok: true as const, data: { jobId: 'job-3' } }));
+/** A bulk action waits out its undo window with a countdown; Undo cancels all of it. */
+export const UndoWindow: Story = {
+  parameters: { admin: { section: 'users', api: { bulk: resend, job: scheduledJob, cancelJob: undo } } },
+  async play({ canvasElement }) {
+    undone = false;
+    const canvas = within(canvasElement);
+    const table = await canvas.findByRole('table');
+    await userEvent.click(within(table).getByRole('checkbox', { name: `Select ${ada.name}` }));
+    await userEvent.click(within(table).getByRole('checkbox', { name: `Select ${hedy.name}` }));
+    await userEvent.click(within(canvas.getByRole('toolbar')).getByRole('button', { name: 'Sign out everywhere…' }));
+    const form = await openDialog('alertdialog', 'Sign 2 users out everywhere?');
+    await userEvent.selectOptions(within(form).getByLabelText('Reason'), 'support');
+    await typist.type(within(form).getByLabelText('Details for the audit log'), 'Asked to sign out');
+    await userEvent.click(within(form).getByRole('button', { name: 'Sign out everywhere' }));
+    const job = await openDialog('dialog', 'Sign 2 users out everywhere?');
+    await expect(within(job).getByText(/Starts in \d+ seconds\. Nothing has changed yet\./)).toBeVisible();
+    await userEvent.click(within(job).getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(undo).toHaveBeenCalledWith('job-3'));
+    await waitFor(() => expect(within(job).getByText('Stopped: 0 done, 2 not changed')).toBeVisible());
+    await waitFor(() => expect(screen.getByText('Undone. Nothing was changed.')).toBeVisible());
+  },
+};
+
+const pages = fn(async (params: { cursor?: string }) => ({ ok: true as const, data: params.cursor
+  ? { items: users.slice(3), nextCursor: null, exact: null } : { items: users.slice(0, 3), nextCursor: 'next', exact: null } }));
+/** A selection survives paging: pick some here, some on the next page. */
+export const SelectionAcrossPages: Story = {
+  args: { initial: { status: 'ok', data: { items: users.slice(0, 3), nextCursor: 'next', exact: null } } },
+  parameters: { admin: { section: 'users', api: { users: pages } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(within(await canvas.findByRole('table')).getByRole('checkbox', { name: `Select ${ada.name}` }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Next page' }));
+    await userEvent.click(await within(canvas.getByRole('table')).findByRole('checkbox', { name: `Select ${grace.name}` }));
+    const toolbar = canvas.getByRole('toolbar', { name: '2 selected' });
+    await expect(within(toolbar).getByText('including 1 on another page')).toBeVisible();
   },
 };
 
@@ -141,10 +193,18 @@ export const StaffRowActions: Story = {
 
 export const Compact: Story = { parameters: { admin: { section: 'users', density: 'compact' } }, play: Directory.play };
 export const Dark: Story = { ...Directory, globals: dark };
+/** On a phone the directory is a list of cards, with the same selection and actions. */
 export const Phone: Story = {
   globals: phone,
   async play({ canvasElement }) {
-    await expect(await within(canvasElement).findByRole('searchbox', { name: 'Search users' })).toBeVisible();
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('searchbox', { name: 'Search users' })).toBeVisible();
+    await expect(canvas.queryByRole('table')).toBeNull();
+    const list = canvas.getByRole('list', { name: 'Users' });
+    await expect(within(list).getByRole('link', { name: 'Radia Perlman' })).toHaveAttribute('href', '/admin/users/u-radia');
+    await userEvent.click(within(list).getByRole('checkbox', { name: `Select ${radia.name}` }));
+    await expect(canvas.getByRole('toolbar', { name: '1 selected' })).toBeVisible();
+    await expect(canvasElement.ownerDocument.documentElement.scrollWidth).toBeLessThanOrEqual(canvasElement.ownerDocument.documentElement.clientWidth);
   },
 };
 export const Chinese: Story = {

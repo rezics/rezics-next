@@ -9,7 +9,7 @@ import { Toaster } from '@rezics/ui/toast';
 import { cn } from '@rezics/ui/utils';
 import { AppWindowIcon, ArrowUpLeftIcon, KeyboardIcon, LayoutDashboardIcon, LogOutIcon, MenuIcon, Rows3Icon, Rows4Icon,
   ScrollTextIcon, SearchIcon, ShieldCheckIcon, UsersIcon } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAccountClient } from '../../api/account-client.tsx';
 import { useAdminClient } from '../api/admin-client.tsx';
 import type { AdminMe } from '../api/types.ts';
@@ -25,6 +25,8 @@ import { useTranslation } from '../../../i18n/client.ts';
 export type AdminSection = 'overview' | 'users' | 'staff' | 'clients' | 'audit';
 const adminPaths: Record<AdminSection, string> = { overview: '/admin', users: '/admin/users', staff: '/admin/staff',
   clients: '/admin/clients', audit: '/admin/audit' };
+/** `g` then a letter goes to a section, as in Linear and Gmail. */
+export const goKeys: Record<string, AdminSection> = { o: 'overview', u: 'users', s: 'staff', c: 'clients', a: 'audit' };
 const sections = [
   { id: 'overview', icon: LayoutDashboardIcon },
   { id: 'users', icon: UsersIcon },
@@ -61,8 +63,9 @@ function Navigation({ section, onNavigate }: { section?: AdminSection; onNavigat
 function Frame({ user, section, children }: { user: AvatarUser; section?: AdminSection; children: ReactNode }) {
   const { t } = useTranslation('admin');
   const common = useTranslation('common').t;
-  const { me, density, setDensity, setPaletteOpen, setShortcutsOpen } = useAdmin();
+  const { me, can, density, setDensity, setPaletteOpen, setShortcutsOpen } = useAdmin();
   const { navigate } = useAdminClient();
+  const going = useRef(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mod, setMod] = useState('Ctrl');
   useEffect(() => { if (isMac()) setMod('⌘'); }, []);
@@ -77,6 +80,14 @@ function Frame({ user, section, children }: { user: AvatarUser; section?: AdminS
     return () => window.removeEventListener('keydown', listener);
   }, [setPaletteOpen]);
   usePageKeys(event => {
+    if (going.current > Date.now()) {
+      going.current = 0;
+      const target = sections.find(item => item.id === goKeys[event.key.toLowerCase()]);
+      if (!target || ('permission' in target && !can(target.permission))) return false;
+      navigate(adminPaths[target.id]);
+      return true;
+    }
+    if (event.key === 'g') { going.current = Date.now() + 1500; return true; }
     if (event.key === '?') { setShortcutsOpen(true); return true; }
     if (event.key !== '/') return false;
     const search = document.getElementById('admin-search');

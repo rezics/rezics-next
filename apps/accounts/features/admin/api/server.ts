@@ -4,7 +4,7 @@ import { cache } from 'react';
 import { accountsConfig, httpOrigin } from '../../config/env.ts';
 import { queryString } from './client.ts';
 import type { AdminMe, AuditPage, AuditParams, ClientPage, Directory, DirectoryParams, Operators, Overview,
-  Preferences, UserDetail } from './types.ts';
+  Preferences, TimelineCategory, TimelinePage, UserDetail } from './types.ts';
 
 /** `forbidden`: signed in, but not an operator with the permission this read needs. */
 export type AdminRead<T> = { status: 'ok'; data: T } | { status: 'signed-out' } | { status: 'forbidden' }
@@ -35,7 +35,8 @@ export const readPreferences = cache(() => read<Preferences>('/preferences'));
 export const readOverview = () => read<Overview>('/overview');
 export const readDirectory = (params: DirectoryParams) => read<Directory>(`/users${queryString(params)}`);
 export const readUser = (userId: string) => read<UserDetail>(`/users/${encodeURIComponent(userId)}`);
-export const readSanctions = (userId: string) => read<AuditPage>(`/users/${encodeURIComponent(userId)}/sanctions`);
+export const readTimeline = (userId: string, category: TimelineCategory) =>
+  read<TimelinePage>(`/users/${encodeURIComponent(userId)}/timeline${queryString({ category, limit: 20 })}`);
 export const readAudit = (params: AuditParams) => read<AuditPage>(`/audit${queryString(params)}`);
 export const readOperators = () => read<Operators>('/operators');
 export const readClients = () => read<ClientPage>(`/clients${queryString({ limit: 100 })}`);

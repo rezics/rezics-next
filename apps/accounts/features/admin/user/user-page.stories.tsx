@@ -1,16 +1,19 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { UserPage } from './user-page.tsx';
-import { auditPage, detail, openDialog, operators, radia, typist, withAdmin } from '../story-support.tsx';
+import { detail, openDialog, operators, radia, signalList, timeline, typist, withAdmin } from '../story-support.tsx';
 import { chinese, dark, phone } from '../../../.storybook/variants.ts';
 
 const meta = {
   title: 'Accounts/Admin/User', component: UserPage,
-  args: { initial: detail(radia), data: { tab: 'overview' } }, decorators: [withAdmin], parameters: { admin: { section: 'users' } },
+  args: { initial: detail(radia), data: { tab: 'overview', show: 'all' } }, decorators: [withAdmin], parameters: { admin: { section: 'users' } },
 } satisfies Meta<typeof UserPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** The whole story on one page: status and why, the timeline of security
+ * events, staff actions (with the message the user got) and notes, devices
+ * grouped by browser, sign-in methods and apps. */
 export const Suspended: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -20,10 +23,82 @@ export const Suspended: Story = {
     await expect(within(status).getByText('Harassment report #1182 under review')).toBeVisible();
     const tabs = canvas.getByRole('navigation', { name: 'User sections' });
     await expect(within(tabs).getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
-    await expect(within(tabs).getByRole('link', { name: 'Sanctions' })).toHaveAttribute('href', '?tab=sanctions');
+    await expect(within(tabs).getByRole('link', { name: 'Security' })).toHaveAttribute('href', '/admin/users/u-radia?tab=security');
+    await expect(within(tabs).queryByRole('link', { name: 'Sanctions' })).toBeNull();
     await expect(canvas.getByRole('button', { name: 'Lift suspension…' })).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Suspend…' })).toBeNull();
-    await expect(canvas.getByText('Reporter sent screenshots; waiting for the Realm moderators before lifting.')).toBeVisible();
+    const story = canvas.getByRole('region', { name: 'Timeline' });
+    await expect(within(story).getByText('Suspended')).toBeVisible();
+    await expect(within(story).getByText(/We received reports of harassment/)).toBeVisible();
+    await expect(within(story).getByText('Staff note')).toBeVisible();
+    await expect(within(story).getByText('Failed sign-in')).toBeVisible();
+    await expect(within(story).getByText('with a password')).toBeVisible();
+    await expect(within(story).getByText('App allowed')).toBeVisible();
+    await expect(within(story).getByText('Notes')).toBeVisible();
+    await expect(within(story).getAllByRole('heading', { level: 3 }).length).toBeGreaterThan(1);
+    const devices = canvas.getByRole('region', { name: 'Signed-in devices' });
+    await expect(within(devices).getByText('REZICS · Firefox · Linux')).toBeVisible();
+    await expect(within(devices).getByText('2 sessions')).toBeVisible();
+    await expect(within(devices).getByText('Safari · iOS')).toBeVisible();
+    await expect(within(canvas.getByRole('region', { name: 'Sign-in methods' })).getByText('1 passkey')).toBeVisible();
+    await expect(within(canvas.getByRole('region', { name: 'Notes' })).getByText('Reporter sent screenshots; waiting for the Realm moderators before lifting.')).toBeVisible();
+  },
+};
+
+const story = fn(async () => ({ ok: true as const, data: { items: timeline.items.slice(0, 2), nextCursor: null } }));
+const storyUrl = fn();
+/** The timeline filters to one kind of event, kept in the address. */
+export const TimelineFilter: Story = {
+  parameters: { admin: { section: 'users', api: { timeline: story }, client: { replaceUrl: storyUrl } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const panel = await canvas.findByRole('region', { name: 'Timeline' });
+    await expect(within(panel).getByRole('button', { name: 'Everything' })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(within(panel).getByRole('button', { name: 'Staff' }));
+    await waitFor(() => expect(story).toHaveBeenCalledWith('u-radia', { category: 'staff' }));
+    await waitFor(() => expect(storyUrl).toHaveBeenCalledWith('/admin/users/u-radia?show=staff'));
+    await waitFor(() => expect(within(panel).queryByText('Failed sign-in')).toBeNull());
+    await expect(within(panel).getByRole('button', { name: 'Staff' })).toHaveAttribute('aria-pressed', 'true');
+  },
+};
+
+const more = fn(async () => ({ ok: true as const, data: { items: [{ ...timeline.items[6]!, id: 't8', action: 'password_changed' }], nextCursor: null } }));
+export const TimelineMore: Story = {
+  parameters: { admin: { section: 'users', api: { timeline: more } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const panel = await canvas.findByRole('region', { name: 'Timeline' });
+    await userEvent.click(within(panel).getByRole('button', { name: 'Load more' }));
+    await waitFor(() => expect(more).toHaveBeenCalledWith('u-radia', { category: 'all', cursor: 'more' }));
+    await expect(await within(panel).findByText('Password changed')).toBeVisible();
+    await expect(within(panel).queryByRole('button', { name: 'Load more' })).toBeNull();
+  },
+};
+
+const reviewSignal = fn(async () => ({ ok: true as const, data: { status: true, requestId: 'req-user' } }));
+/** Open signals about this person sit above their story, with Review. */
+export const NeedsReview: Story = {
+  args: { initial: detail(radia, { signals: [{ ...signalList[3]!, subject: { kind: 'user', id: radia.id, name: radia.name, email: radia.email } }] }) },
+  parameters: { admin: { section: 'users', api: { reviewSignal } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const review = await canvas.findByRole('region', { name: 'Needs review' });
+    await expect(within(review).getByText('New passkey on an account 400 days old')).toBeVisible();
+    await userEvent.click(within(review).getByRole('button', { name: /^Review:/ }));
+    const dialog = await openDialog('dialog', 'Mark as reviewed');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark reviewed' }));
+    await waitFor(() => expect(reviewSignal).toHaveBeenCalledWith(expect.objectContaining({ key: 'new-passkey:3e1f' })));
+    await waitFor(() => expect(canvas.queryByRole('region', { name: 'Needs review' })).toBeNull());
+  },
+};
+
+/** n adds a note from anywhere on the story. */
+export const NoteByKeyboard: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('region', { name: 'Timeline' });
+    await userEvent.keyboard('n');
+    await waitFor(() => expect(canvas.getByRole('textbox', { name: 'Add a note about Radia Perlman' })).toHaveFocus());
   },
 };
 
@@ -107,19 +182,9 @@ export const Security: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('region', { name: 'Sign-in methods' })).toBeVisible();
     await expect(canvas.getByText('MacBook Touch ID')).toBeVisible();
-    await expect(canvas.getByText('Firefox · Linux', { selector: 'p' })).toBeVisible();
+    await expect(canvas.getByText('REZICS · Firefox · Linux')).toBeVisible();
     await expect(canvas.getByText('2 failed sign-ins in the last 24 hours')).toBeVisible();
     await expect(canvas.getByText('Failed sign-in')).toBeVisible();
-  },
-};
-
-export const Sanctions: Story = {
-  args: { data: { tab: 'sanctions', page: { items: auditPage.items.slice(0, 2), nextCursor: null } } },
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    const history = await canvas.findByRole('region', { name: 'Sanctions' });
-    await expect(within(history).getAllByRole('listitem')).toHaveLength(2);
-    await expect(within(history).getByText('Account compromised')).toBeVisible();
   },
 };
 
@@ -153,12 +218,24 @@ export const Apps: Story = {
 };
 
 export const Dark: Story = { ...Suspended, globals: dark };
-export const Phone: Story = { ...Suspended, globals: phone };
+/** On a phone: status first, then the story; nothing scrolls sideways. */
+export const Phone: Story = {
+  globals: phone,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const status = await canvas.findByRole('region', { name: 'Status' });
+    const story = canvas.getByRole('region', { name: 'Timeline' });
+    await expect(status.compareDocumentPosition(story) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(canvasElement.ownerDocument.documentElement.scrollWidth).toBeLessThanOrEqual(canvasElement.ownerDocument.documentElement.clientWidth);
+  },
+};
 export const Chinese: Story = {
   globals: chinese,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('button', { name: '解除暂停…' })).toBeVisible();
-    await expect(canvas.getByText('滥用或骚扰')).toBeVisible();
+    await expect(within(canvas.getByRole('region', { name: '状态' })).getByText('滥用或骚扰')).toBeVisible();
+    await expect(within(canvas.getByRole('region', { name: '时间线' })).getByText('员工备注')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: '员工' })).toBeVisible();
   },
 };

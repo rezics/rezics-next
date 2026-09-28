@@ -130,7 +130,7 @@ export default {
     footerClose: '닫기',
   },
 
-  overviewIntro: '확인이 필요한 항목입니다. 건수는 모든 계정을 포함하고 각 목록에는 처음 5개가 표시됩니다.',
+  overviewIntro: '지금 확인이 필요한 항목입니다. 먼저 검토할 징후를, 그다음 처리를 기다리는 계정을 보여 줍니다.',
   queues: {
     suspended: '정지됨',
     suspendedBody: '로그인할 수 없는 계정입니다. 정지 종료일이 가까운 계정부터 표시합니다.',
@@ -138,13 +138,10 @@ export default {
     resetBody: '계정 소유자가 새 비밀번호를 설정하기를 기다리는 계정입니다.',
     unverified: '인증되지 않은 이메일',
     unverifiedBody: '아직 이메일을 확인하지 않은 계정입니다. 최근 계정부터 표시합니다.',
-    failed: '로그인 실패 반복',
-    failedBody: '지난 24시간 동안 로그인에 5회 이상 실패했습니다.',
     viewAll: '모두 보기',
     nothing: '대기 중인 항목 없음',
     until: '종료일',
     indefinite: '해제될 때까지',
-    failedCount: plural({ one: '실패 1회', other: insert('실패 {{value}}회') }),
     capped: insert('{{count}}+', { count: String }),
   },
   recentActions: '최근 관리자 작업',
@@ -155,7 +152,7 @@ export default {
   jobResult: insert('{{succeeded}}개 완료 · {{skipped}}개 변경 없음 · {{failed}}개 실패', { succeeded: Number, skipped: Number, failed: Number }),
 
   user: {
-    tabs: { overview: '개요', security: '보안', roles: '역할', sanctions: '제한 조치', apps: '연결된 앱', audit: '감사 기록' },
+    tabs: { overview: '개요', security: '보안', roles: '역할', apps: '연결된 앱', audit: '감사 기록' },
     tabsLabel: '사용자 섹션',
     copyId: '사용자 ID 복사',
     copyEmail: '이메일 복사',
@@ -207,7 +204,6 @@ export default {
     rolePermissions: '이 역할의 권한',
     changeRole: '역할 변경',
     rolesOwnerOnly: '소유자만 역할을 변경할 수 있습니다.',
-    sanctionsEmpty: '제한 조치가 없습니다. 이 계정은 직원에 의해 정지되거나, 비밀번호 재설정 또는 로그아웃 처리된 적이 없습니다.',
     appsEmpty: '이 계정에서 허용한 앱이 없습니다.',
     granted: '허용됨',
     lastUsed: '최근 사용',
@@ -297,7 +293,7 @@ export default {
   requestId: insert('요청 {{id}}', { id: String }),
   bulkClose: '닫기',
   bulkRunning: '목록을 처리하는 중…',
-  itemStates: { pending: '대기 중', succeeded: '완료', skipped: '변경 없음', failed: '실패' },
+  itemStates: { pending: '대기 중', succeeded: '완료', skipped: '변경 없음', failed: '실패', cancelled: '변경 안 함' },
   itemErrors: { forbidden: '권한 없음: 직원 계정에는 소유자만 조치할 수 있거나 액세스 권한이 종료되었습니다', not_found: '계정이 더 이상 존재하지 않습니다',
     conflict: '사용 가능한 소유자가 남지 않게 됩니다', other: '변경하지 못했습니다' },
   errors: {
@@ -411,7 +407,8 @@ export default {
     suspend: '정지함', unsuspend: '정지 해제함', 'revoke-sessions': '모든 기기에서 로그아웃함',
     'require-password-reset': '비밀번호 재설정을 요구함', 'resend-verification': '인증 이메일을 다시 보냄', 'add-note': '메모를 추가함',
     operator_role_changed: '운영자 역할을 변경함', operator_bootstrapped: '첫 소유자가 됨', permission_denied: '거부됨',
-    bulk_action_started: '일괄 작업을 시작함', audit_exported: '감사 로그를 내보냄', client_disabled: '클라이언트를 사용 중지함',
+    bulk_action_started: '일괄 작업을 시작함', bulk_action_cancelled: '일괄 작업을 중지함', signal_reviewed: '징후를 검토함',
+    audit_exported: '감사 로그를 내보냄', client_disabled: '클라이언트를 사용 중지함',
     client_enabled: '클라이언트를 사용 설정함', '/admin/oauth2/create-client': '클라이언트를 등록함', '/oauth2/create-client': '클라이언트를 등록함',
     '/admin/oauth2/update-client': '클라이언트를 업데이트함', '/oauth2/update-client': '클라이언트를 업데이트함',
     '/oauth2/delete-client': '클라이언트를 삭제함', '/oauth2/client/rotate-secret': '클라이언트 보안 비밀을 교체함',

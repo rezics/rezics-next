@@ -43,14 +43,6 @@ function EntryList({ initial, next, empty, showOutcome }: { initial: AuditPage;
   {pages.button}</>;
 }
 
-export function SanctionsTab({ userId, initial }: { userId: string; initial: AuditPage }) {
-  const { t } = useTranslation('admin');
-  const { api } = useAdminClient();
-  return <Panel title={t.user.tabs.sanctions}>
-    <EntryList initial={initial} next={cursor => api.sanctions(userId, cursor)} empty={t.user.sanctionsEmpty} />
-  </Panel>;
-}
-
 export function AuditTab({ userId, initial }: { userId: string; initial: AuditPage }) {
   const { t } = useTranslation('admin');
   const { api } = useAdminClient();

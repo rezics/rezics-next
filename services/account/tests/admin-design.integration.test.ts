@@ -11,7 +11,7 @@ interface Signal { key: string; kind: string; severity: string; subject: { kind:
 interface Signals { items: Signal[]; counts: Record<string, { count: number; capped: boolean }>; reviewedLastDay: number }
 interface Line { id: string; source: string; action: string; detail: Record<string, unknown>; occurredAt: string;
   staff: { actorEmail: string | null; reason: string; reasonCode: string | null; userMessage: string | null } | null;
-  note: { body: string; authorEmail: string | null } | null }
+  note: { body: string; authorId: string; authorName: string | null; authorEmail: string | null } | null }
 interface Job { id: string; startsAt: string; finishedAt: string | null; cancelledAt: string | null; pending: number;
   succeeded: number; cancelled: number; items: { userId: string; state: string }[] }
 interface Entry { action: string; targetId: string; reason: string; reasonCode: string | null; requestId: string;
@@ -141,7 +141,7 @@ test('G356 admin signals: failure bursts, email after a password change, new pas
     expect(open.reviewedLastDay).toBe(3);
     const audit = await json<Page<Entry>>(f.request(`/api/account/admin/audit?action=signal_reviewed&targetId=${stuffed.id}`,
       undefined, owner.cookie));
-    expect(audit.items).toEqual([expect.objectContaining({ reason: 'Owner confirmed the sign-in', after: { key: burst, kind: 'failed-sign-ins' } })]);
+    expect(audit.items).toEqual([expect.objectContaining({ reason: 'Owner confirmed the sign-in', after: { key: burst, kind: 'failed-sign-ins', noted: true } })]);
     // A counting signal counts again from its review: a new burst reopens it.
     await fail(f, stuffed, 5);
     expect(find(await signals(), burst)).toMatchObject({ severity: 'medium', evidence: { failures: 5, signedInAfter: false } });
