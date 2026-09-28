@@ -1,4 +1,5 @@
-import type { FilterCondition, ResourceQuery } from '../../../../model/definitions/filter-document-v1.ts';
+import type { FilterCondition } from '../../../../model/definitions/filter-document-v1.ts';
+import type { ResourceQuery } from '../../../../model/definitions/filter-document-v2.ts';
 import { iriOf } from './scope.ts';
 import type { DiscoverState } from './state.ts';
 import { failureOf, type DiscoveryPage, type DiscoveryQuery, type Loaded, type MainClient, problemCode }
@@ -20,7 +21,8 @@ export async function readQueryDiscovery(main: MainClient, state: DiscoverState,
     : { facet: 'concept', all: conditions!.include.map(iriOf) });
   if (excluded) all.push({ facet: 'concept', none: conditions!.exclude.map(iriOf) });
   const filter: NonNullable<ResourceQuery['filter']> = { all };
-  const query: ResourceQuery = { context: state.scope.kind === 'realm' ? { realm: iriOf(state.scope.realm) }
+  const query: ResourceQuery = { profile: 'filter-document-v2',
+    context: state.scope.kind === 'realm' ? { realm: iriOf(state.scope.realm) }
     : 'global', scope: mine ? { kind: 'mine' } : { kind: 'all' }, filter,
     sort: top ? 'top-rated' : 'newest',
     ...(top || mine ? { ratingContext: shelf.context ?? undefined } : {}),

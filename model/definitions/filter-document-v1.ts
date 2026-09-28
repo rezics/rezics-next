@@ -28,14 +28,10 @@ export type FilterDocument = FilterGroup;
 
 export interface ResourceQuery {
   context: 'global' | { realm: string };
-  scope: { kind: 'all' } | { kind: 'realm'; realm: string } | { kind: 'mine' };
+  scope: { kind: 'all' } | { kind: 'realm'; realm: string };
   filter?: FilterDocument;
   text?: { phrase: string } | { title: string; body: string };
-  sort: 'relevance' | 'newest' | 'updated' | 'top-rated';
-  /** The standing rating Context a top-rated or Mine page ranks by. */
-  ratingContext?: string;
-  /** The reader a Mine page lists. Required with scope mine. */
-  actingSubject?: string;
+  sort: 'relevance' | 'newest' | 'updated';
   page: { size: number; continuation?: unknown };
   /** Explicit unsupported selectors are admitted as typed refusals. */
   sourcePolicy?: unknown;

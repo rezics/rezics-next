@@ -82,7 +82,7 @@ describe('discover shelves', () => {
         nextCursor: null, matches: { kind: 'exact', value: 0 } } }, error: null };
     } } } } as unknown as MainClient;
     const read = await readQueryDiscovery(main, state, shelf);
-    expect(sent).toMatchObject({ filter: { all: [
+    expect(sent).toMatchObject({ profile: 'filter-document-v2', filter: { all: [
       { facet: 'type', any: ['https://schema.org/Book'] },
       { facet: 'concept', any: [iri(term), iri(context)] },
     ] }, page: { size: 12, continuation: 'next' } });
@@ -92,7 +92,7 @@ describe('discover shelves', () => {
     const top = discoveryQuery(excluded, { ...shelvesFor(excluded, true)[0]!, sort: 'top-rated' },
       { limit: 10, language: 'en', context });
     await readQueryDiscovery(main, excluded, top);
-    expect(sent).toMatchObject({ sort: 'top-rated', ratingContext: iri(context),
+    expect(sent).toMatchObject({ profile: 'filter-document-v2', sort: 'top-rated', ratingContext: iri(context),
       filter: { all: [{ facet: 'type', any: ['https://schema.org/Book'] },
         { facet: 'concept', none: [iri(term)] }] } });
   });

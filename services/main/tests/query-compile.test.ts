@@ -1,9 +1,11 @@
 import { expect, test } from 'bun:test';
+import { Value } from 'typebox/value';
 import type { ResourceQuery } from '../../../model/definitions/filter-document-v1.ts';
+import type { ResourceQuery as ResourceQueryV2 } from '../../../model/definitions/filter-document-v2.ts';
 import { conceptMembership } from '../src/modules/concept-page/read.ts';
 import { compileQuery, QueryRejected } from '../src/modules/query/compile.ts';
 import { combineConcepts, pageConcepts, type CompleteSearch } from '../src/modules/query/concept-set.ts';
-import { queryRoutes } from '../src/routes/query.ts';
+import { queryRoutes, resourceQueryV1, resourceQueryV2 } from '../src/routes/query.ts';
 
 const id = (n: number) => `https://rezics.com/id/019d0000-0000-7000-8000-${String(n).padStart(12, '0')}`;
 const book = 'https://schema.org/Book', recipe = 'https://schema.org/Recipe';
@@ -148,12 +150,35 @@ test('Query: Concept page Conditions use the bounded Works template', () => {
   expect(compileQuery({ ...query, filter: { all: [{ facet: 'concept', none: [id(4)] }] } }))
     .toMatchObject({ template: 'concept-works', concept: id(4),
       request: { role: 'filter', exclude: [id(4)], sort: 'recent' } });
-  expect(compileQuery({ ...query, sort: 'top-rated', ratingContext: id(9),
-    filter: { all: [{ facet: 'concept', any: [id(2)] }] } })).toMatchObject({ template: 'concept-works',
+  const ranked: ResourceQueryV2 = { profile: 'filter-document-v2', context: 'global', scope: { kind: 'all' },
+    sort: 'top-rated', ratingContext: id(9), page: { size: 20 },
+    filter: { all: [{ facet: 'concept', any: [id(2)] }] } };
+  expect(compileQuery(ranked)).toMatchObject({ template: 'concept-works',
     request: { role: 'filter', sort: 'top-rated', context: id(9), include: [id(2)], match: 'any' } });
-  expect(compileQuery({ context: 'global', scope: { kind: 'mine' }, sort: 'top-rated', page: { size: 12 },
-    ratingContext: id(9), actingSubject: id(8), filter: { all: [{ facet: 'concept', all: [id(2)] }] } }))
-    .toMatchObject({ request: { scope: 'mine', role: 'filter', sort: 'top-rated', actingSubject: id(8) } });
+  const mine: ResourceQueryV2 = { profile: 'filter-document-v2', context: 'global', scope: { kind: 'mine' },
+    sort: 'top-rated', page: { size: 12 }, ratingContext: id(9), actingSubject: id(8),
+    filter: { all: [{ facet: 'concept', all: [id(2)] }] } };
+  expect(compileQuery(mine)).toMatchObject({ request: { scope: 'mine', role: 'filter', sort: 'top-rated',
+    actingSubject: id(8) } });
+});
+
+test('filter-document-v1 rejects top-rated, Mine, ratingContext and actingSubject; v2 admits them', () => {
+  const page = { size: 12 };
+  const v1 = { context: 'global' as const, scope: { kind: 'all' as const }, sort: 'newest' as const, page,
+    filter: { all: [{ facet: 'concept', any: [id(2)] }] } };
+  expect(Value.Check(resourceQueryV1, v1)).toBe(true);
+  expect(Value.Check(resourceQueryV2, v1)).toBe(false);
+  for (const extra of [
+    { sort: 'top-rated' }, { scope: { kind: 'mine' } }, { ratingContext: id(9) }, { actingSubject: id(8) },
+  ]) expect(Value.Check(resourceQueryV1, { ...v1, ...extra })).toBe(false);
+  const v2 = { profile: 'filter-document-v2' as const, ...v1, scope: { kind: 'mine' as const },
+    sort: 'top-rated' as const, ratingContext: id(9), actingSubject: id(8) };
+  expect(Value.Check(resourceQueryV1, v2)).toBe(false);
+  expect(Value.Check(resourceQueryV2, v2)).toBe(true);
+  expect(Value.Check(resourceQueryV2, { profile: 'filter-document-v2', ...v1, sort: 'top-rated',
+    ratingContext: id(9) })).toBe(true);
+  expect(Value.Check(resourceQueryV2, { profile: 'filter-document-v2', ...v1,
+    ratingContext: id(9), actingSubject: id(8) })).toBe(true);
 });
 
 test('Query: Concept membership is all or any, and exclusion removes a Work', () => {

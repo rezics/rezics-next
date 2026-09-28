@@ -1,7 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { createHash } from 'node:crypto';
 import { phraseMatch, problemResult, publicPhrasePageResult, sourcePosition } from '../api-contract.ts';
-import type { ResourceQuery } from '../../../../model/definitions/filter-document-v1.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { readZoneBrowse } from '../modules/zone-modules/browse.ts';
 import { zoneBrowsePage } from '../modules/zone-modules/contract.ts';
@@ -10,7 +9,8 @@ import { readConceptWorks, readFilteredWorks } from '../modules/concept-page/rea
 import { discoveryError } from '../modules/discovery/management.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { WorkReadUnavailable } from '../modules/work/read-session.ts';
-import { compileQuery, QUERY_COST, QueryRejected, type CompiledQuery } from '../modules/query/compile.ts';
+import { type AdmittedQuery, compileQuery, QUERY_COST, QueryRejected, type CompiledQuery }
+  from '../modules/query/compile.ts';
 import { interpretationForConcept } from '../modules/query/concept.ts';
 import { combineConcepts, completeSearch, pageConcepts, type ConceptRelation }
   from '../modules/query/concept-set.ts';
@@ -21,20 +21,29 @@ import { commandError, problem } from './problems.ts';
 import { workReadError } from './work-reads.ts';
 
 const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
-const context = t.Union([t.Literal('global'), t.Object({ realm: nativeId }, { additionalProperties: false })]);
-const scope = t.Union([t.Object({ kind: t.Literal('all') }, { additionalProperties: false }),
-  t.Object({ kind: t.Literal('realm'), realm: nativeId }, { additionalProperties: false }),
-  t.Object({ kind: t.Literal('mine') }, { additionalProperties: false })]);
-const text = t.Union([t.Object({ phrase: t.String({ minLength: 2, maxLength: 80 }) },
-  { additionalProperties: false }), t.Object({ title: t.String({ minLength: 2, maxLength: 80 }),
-  body: t.String({ minLength: 2, maxLength: 80 }) }, { additionalProperties: false })]);
-const body = t.Object({ context, scope, filter: t.Optional(t.Unknown()), text: t.Optional(text),
-  sort: t.Union([t.Literal('relevance'), t.Literal('newest'), t.Literal('updated'), t.Literal('top-rated')]),
-  ratingContext: t.Optional(nativeId), actingSubject: t.Optional(nativeId),
-  page: t.Object({ size: t.Integer({ minimum: 1, maximum: QUERY_COST.searchPageSize }),
-    continuation: t.Optional(t.Unknown()) }, { additionalProperties: false }),
-  sourcePolicy: t.Optional(t.Unknown()), asOf: t.Optional(t.Unknown()),
-}, { additionalProperties: false });
+const closed = { additionalProperties: false } as const;
+const context = t.Union([t.Literal('global'), t.Object({ realm: nativeId }, closed)]);
+const scopeAll = t.Object({ kind: t.Literal('all') }, closed);
+const scopeRealm = t.Object({ kind: t.Literal('realm'), realm: nativeId }, closed);
+const scopeMine = t.Object({ kind: t.Literal('mine') }, closed);
+const scopeV1 = t.Union([scopeAll, scopeRealm]);
+const scope = t.Union([scopeAll, scopeRealm, scopeMine]);
+const text = t.Union([t.Object({ phrase: t.String({ minLength: 2, maxLength: 80 }) }, closed),
+  t.Object({ title: t.String({ minLength: 2, maxLength: 80 }),
+    body: t.String({ minLength: 2, maxLength: 80 }) }, closed)]);
+const page = t.Object({ size: t.Integer({ minimum: 1, maximum: QUERY_COST.searchPageSize }),
+  continuation: t.Optional(t.Unknown()) }, closed);
+const sortV1 = t.Union([t.Literal('relevance'), t.Literal('newest'), t.Literal('updated')]);
+const sort = t.Union([t.Literal('relevance'), t.Literal('newest'), t.Literal('updated'),
+  t.Literal('top-rated')]);
+const documentFields = { context, filter: t.Optional(t.Unknown()), text: t.Optional(text), page,
+  sourcePolicy: t.Optional(t.Unknown()), asOf: t.Optional(t.Unknown()) };
+/** filter-document-v1 keeps the fields and values from before this revision. */
+export const resourceQueryV1 = t.Object({ ...documentFields, scope: scopeV1, sort: sortV1 }, closed);
+/** filter-document-v2 admits top-rated, Mine, and the rating Context and reader. */
+export const resourceQueryV2 = t.Object({ profile: t.Literal('filter-document-v2'), ...documentFields,
+  scope, sort, ratingContext: t.Optional(nativeId), actingSubject: t.Optional(nativeId) }, closed);
+const body = t.Union([resourceQueryV1, resourceQueryV2]);
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const conceptSetResult = t.Object({ profile: t.Literal('public-concept-set-phrase-v1'),
   resultGrain: t.Literal('mainVersion'),
@@ -47,14 +56,13 @@ const conceptSetResult = t.Object({ profile: t.Literal('public-concept-set-phras
     indexGeneration: t.String(), presentationDigest: digest,
     nextOffset: t.Integer({ minimum: 1, maximum: 512 }), expiresAt: t.Integer({ minimum: 0 }) })),
 });
-const querySelection = t.Object({ context, scope, filter: t.Unknown(), text: t.Nullable(text),
-  sort: t.Union([t.Literal('relevance'), t.Literal('newest'), t.Literal('updated'), t.Literal('top-rated')]),
+const querySelection = t.Object({ context, scope, filter: t.Unknown(), text: t.Nullable(text), sort,
   pageSize: t.Integer({ minimum: 1, maximum: QUERY_COST.searchPageSize }),
   facetRefs: t.Array(t.String(), { maxItems: QUERY_COST.nodes }),
   semanticRevisions: t.Array(nativeId, { maxItems: QUERY_COST.conceptReads }),
 });
 
-function selection(input: ResourceQuery, compiled: CompiledQuery, resolvedRevisions?: string[]) {
+function selection(input: AdmittedQuery, compiled: CompiledQuery, resolvedRevisions?: string[]) {
   return { context: input.context, scope: input.scope, filter: input.filter ?? { all: [] },
     text: input.text ?? null, sort: input.sort, pageSize: input.page.size,
     facetRefs: compiled.facets,
@@ -83,7 +91,7 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     422: problemResult(422), 500: problemResult(500), 503: problemResult(503),
   } }, async ({ body: input, request }) => {
     try {
-      const compiled = compileQuery(input as ResourceQuery);
+      const compiled = compileQuery(input as AdmittedQuery);
       if (compiled.template === 'concept-works') {
         try {
           if (!work.discovery) throw new WorkReadUnavailable('Discovery owner is unavailable');
@@ -95,7 +103,7 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             ? readFilteredWorks(session, work.discovery!, compiled.request)
             : readConceptWorks(session, work.discovery!, compiled.concept, compiled.request));
           return Response.json({ profile: 'query-v1', template: 'concept-works-v1',
-            selection: selection(input as ResourceQuery, compiled), result },
+            selection: selection(input as AdmittedQuery, compiled), result },
             { headers: { 'cache-control': 'no-store' } });
         } catch (error) { return discoveryError(error); }
       }
@@ -105,7 +113,7 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           language: compiled.request.language, limit: compiled.request.limit, cursor: compiled.request.cursor,
         }, session => readZoneBrowse(session, compiled.realm, compiled.request));
         return Response.json({ profile: 'query-v1', template: 'zone-browse-v1',
-          selection: selection(input as ResourceQuery, compiled), result },
+          selection: selection(input as AdmittedQuery, compiled), result },
           { headers: { 'cache-control': 'no-store' } });
       }
       if (compiled.template === 'search-concepts') {
@@ -151,14 +159,14 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         withinBudget();
         if (after !== before) throw new QueryRejected('stale_query_result', 'Presentation policy changed during Query');
         const selected = combineConcepts(base, conditions, compiled.includeMatch);
-        const page = pageConcepts(input as ResourceQuery, base, selected, senses, after);
+        const page = pageConcepts(input as AdmittedQuery, base, selected, senses, after);
         const hydrated = await enrichSearchCardPage(work, request, page, compiled.request.language);
         withinBudget();
         if (await presentationDigest(work, request) !== before) {
           throw new QueryRejected('stale_query_result', 'Presentation policy changed during Query');
         }
         return Response.json({ profile: 'query-v1', template: 'public-concept-set-phrase-v1',
-          selection: selection(input as ResourceQuery, compiled, revisions), result: hydrated },
+          selection: selection(input as AdmittedQuery, compiled, revisions), result: hydrated },
           { headers: { 'cache-control': 'no-store' } });
       }
       const interpretation = compiled.concept
@@ -182,7 +190,7 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         throw new QueryRejected('query_budget_exceeded', 'Query response exceeds its byte bound');
       }
       return Response.json({ profile: 'query-v1', template: compiled.request.profile,
-        selection: selection(input as ResourceQuery, compiled,
+        selection: selection(input as AdmittedQuery, compiled,
           interpretation ? [interpretation.revision] : []), result },
         { headers: { 'cache-control': 'no-store' } });
     } catch (error) {

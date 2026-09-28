@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ResourceQuery } from '../../../../../model/definitions/filter-document-v1.ts';
-import { QUERY_COST, QueryRejected } from './compile.ts';
+import { type AdmittedQuery, QUERY_COST, QueryRejected } from './compile.ts';
 
 type Position = { datasetId: 'product'; dataEpoch: string; sequence: string };
 export interface CompleteSearch {
@@ -58,7 +57,7 @@ interface QueryCursor {
 }
 
 /** A continuation binds the exact Filter and all visible selection generations. */
-export function pageConcepts(query: ResourceQuery, base: CompleteSearch,
+export function pageConcepts(query: AdmittedQuery, base: CompleteSearch,
   selected: CompleteSearch['results'], senses: readonly string[], presentationDigest: string,
   now = Date.now()) {
   const queryDigest = digest([{ ...query, page: { size: query.page.size } }, senses]);

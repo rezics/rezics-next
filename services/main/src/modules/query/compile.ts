@@ -1,5 +1,7 @@
 import type { FilterCondition, FilterDocument, FilterNode, ResourceQuery }
   from '../../../../../model/definitions/filter-document-v1.ts';
+import type { ResourceQuery as ResourceQueryV2 }
+  from '../../../../../model/definitions/filter-document-v2.ts';
 import { checkedFilter, InvalidFilter } from '../facets/schema.ts';
 import { resolveFacet } from '../facets/registry.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
@@ -92,13 +94,16 @@ function values(condition: FilterCondition, operator: 'any' | 'all' | 'none'): s
   return found as string[];
 }
 
+/** A Query body is filter-document-v1 or filter-document-v2. v1 cannot name the revision fields. */
+export type AdmittedQuery = ResourceQuery | ResourceQueryV2;
+
 /**
  * Compile only combinations whose existing template executes their full meaning.
  * Unsupported shapes fail before a graph or index read, never as zero matches.
  * Search delegates its complete-result budget (512 Works and a stable graph/text
  * snapshot); Zone browse delegates its 60-candidate window and 20-item page.
  */
-export function compileQuery(query: ResourceQuery): CompiledQuery {
+export function compileQuery(query: AdmittedQuery): CompiledQuery {
   if (query.sourcePolicy !== undefined || query.asOf !== undefined) {
     throw new QueryRejected('unsupported_query_source', 'Only the current product source is admitted');
   }
@@ -153,8 +158,11 @@ export function compileQuery(query: ResourceQuery): CompiledQuery {
     if (query.page.size > CONCEPT_WORKS_COST.pageSize) {
       throw new QueryRejected('query_budget_exceeded', 'Concept Works page exceeds its bound');
     }
+    const revised = 'profile' in query ? query : undefined;
     const mine = query.scope.kind === 'mine';
     const top = query.sort === 'top-rated';
+    const ratingContext = revised?.ratingContext;
+    const actingSubject = revised?.actingSubject;
     const request: ConceptWorksQuery = { limit: query.page.size,
       ...(mine || query.context === 'global' ? { scope: 'global' }
         : { scope: 'realm', realm: query.context.realm }) };
@@ -186,14 +194,14 @@ export function compileQuery(query: ResourceQuery): CompiledQuery {
       fail('Concept Works needs visible, distinct native Concept values');
     }
     if (mine || top || !included?.length) {
-      if (top && !query.ratingContext) fail('Top-rated needs a rating Context');
-      if (mine && (!query.actingSubject || !query.ratingContext)) fail('Mine needs the reader and a rating Context');
-      if ((top || mine) && !nativeId.test(query.ratingContext ?? '')) fail('Rating Context needs a native ID');
-      if (mine && !nativeId.test(query.actingSubject ?? '')) fail('Mine needs a native reader');
+      if (top && !ratingContext) fail('Top-rated needs a rating Context');
+      if (mine && (!actingSubject || !ratingContext)) fail('Mine needs the reader and a rating Context');
+      if ((top || mine) && !nativeId.test(ratingContext ?? '')) fail('Rating Context needs a native ID');
+      if (mine && !nativeId.test(actingSubject ?? '')) fail('Mine needs a native reader');
       const filtered: FilteredWorksQuery = { ...request, role: 'filter', scope: mine ? 'mine' : request.scope,
         sort: top ? 'top-rated' : 'recent',
-        ...(top || mine ? { context: query.ratingContext } : {}),
-        ...(mine ? { actingSubject: query.actingSubject } : {}),
+        ...(top || mine ? { context: ratingContext } : {}),
+        ...(mine ? { actingSubject } : {}),
         ...(included?.length ? { include: included } : {}),
         ...(excluded?.length ? { exclude: excluded } : {}) };
       return { template: 'concept-works', concept: (included ?? excluded)![0]!, request: filtered, facets, graphReads };
