@@ -20,6 +20,7 @@ import { StructureProgressStore } from '../../../services/main/src/modules/progr
 import type { FollowResult } from '../../../services/main/src/modules/follows/contract.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
+import { SavedFilterStore } from '../../../services/main/src/modules/saved-filter/store.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
 import { RealmReplyThreadStore } from '../../../services/main/src/modules/realm-reply/thread-store.ts';
@@ -77,6 +78,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
         new PackageArtifactStore(stack.contentPool, prefix => stack.objects(prefix))),
       content: stack.content, contentAuthoring: stack.content, media: stack.media, structureObjects,
       profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
+      savedFilters: new SavedFilterStore(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       relayPosition: new RelayHandoffPositions(relay, consumer) };
     const app = createMainApp(stack.fuseki, deps);
@@ -287,32 +289,55 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     const zoneNav = await json<{ items: { id: string; newSince?: { state: string; count: { value: number } } }[] }>(
       await call('GET', `/v1/me/follows?${authQuery}&kind=zone&include=newSince`, undefined, b.token));
     expect(zoneNav.items.find(item => item.id === zone)?.newSince).toMatchObject({ state: 'none', count: { value: 0 } });
-    const interests = await json<{ kinds: { id: string; available: boolean }[];
-      topicsStatus: string; topics: unknown[] }>(await call('GET', '/v1/onboarding/interests?locale=en'));
-    expect(interests.kinds.map(item => item.id)).toEqual(['books', 'software', 'ai', 'recipes', 'media', 'discussions']);
-    expect(interests.kinds.map(item => item.available)).toEqual([true, true, true, true, false, true]);
-    expect(interests).toMatchObject({ topicsStatus: 'empty', topics: [] });
+    // Onboarding offers the shared scheme's Concepts grouped by their Works' type: a Concept on a media Work
+    // becomes a choice once that Work is one, and following it pins a Home tab whose feed is filtered to it.
+    for (const [scope, action] of [['classification:define:global', 'classification.proposition.define'],
+      ['classification:decide:global', 'classification.decision.set']] as const) await grant(scope, action);
+    const clips = await json<{ concept: string; sense: string }>(await call('POST', '/v1/classification-vocabulary', {
+      profile: 'classification-proposition-v2', scheme: null, labels: [{ language: 'en', value: 'Feed clips' }],
+      alternativeLabels: [], broader: [], narrower: [], actingSubject: author }, a.token), 201);
+    await json(await call('POST', '/v1/classification-decisions', { profile: 'classification-direct-decision-v1',
+      work: first.work, mainVersion: first.mainVersion, sense: clips.sense, context: { kind: 'global' },
+      outcome: 'accepted', expectedDecisionHead: null, actingSubject: author }, a.token), 201);
+    type Choices = { groups: { type: string; concepts: { id: string; samples: { id: string }[] }[] }[] };
+    const choices = async () => json<Choices>(await call('GET', '/v1/onboarding/choices?locale=en'));
+    const offered = (read: Choices) => read.groups.filter(group => group.concepts.some(concept =>
+      concept.id === clips.concept)).map(group => group.type);
+    expect(offered(await choices())).toEqual([]);
     await stack.fuseki.update(`PREFIX schema: <https://schema.org/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(first.work)} a schema:VideoObject } }`);
-    const mediaInterests = await json<typeof interests>(await call('GET', '/v1/onboarding/interests?locale=en'));
-    expect(mediaInterests.kinds.find(item => item.id === 'media')?.available).toBe(true);
-    const mediaFeed = await json<Page>(await call('GET', '/v1/feed?interests=media'));
-    expect(mediaFeed.items.find(item => item.target.work === first.work)?.card.kind).toBe('activity');
+    const media = await choices();
+    expect(offered(media)).toEqual(['https://schema.org/VideoObject']);
+    expect(media.groups.find(group => group.type === 'https://schema.org/VideoObject')!.concepts
+      .find(concept => concept.id === clips.concept)!.samples.map(sample => sample.id)).toEqual([first.work]);
+    const clipsFollow = await json<FollowResult>(await call('POST', '/v1/follows', follow(clips.concept, 'concept'), b.token));
+    type Tabs = { items: { id: string; concept: { id: string } | null; position: number | null }[] };
+    const tabs = async () => json<Tabs>(await call('GET', `/v1/me/saved-filters?${authQuery}`, undefined, b.token));
+    const clipsTab = (await tabs()).items.find(item => item.concept?.id === clips.concept)!;
+    expect(clipsTab.position).toBe(0);
+    // A Concept filter reads few candidates a page, so the tab is read to its end.
+    const tabPosts: FeedItem[] = [];
+    for (let cursor: string | null = null, page = 0; page === 0 || cursor; page++) {
+      if (page === 30) throw new Error('Saved Filter feed did not terminate');
+      const read: Page = await json(await call('GET', `/v1/feed?scope=all&sort=new&savedFilter=${clipsTab.id}&${
+        authQuery}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, undefined, b.token));
+      tabPosts.push(...read.items); cursor = read.nextCursor;
+    }
+    expect(tabPosts.find(item => item.target.work === first.work)?.card.kind).toBe('activity');
+    expect(tabPosts.every(item => item.target.work === first.work)).toBe(true);
     await stack.fuseki.update(`PREFIX schema: <https://schema.org/> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(first.work)} a schema:VideoObject } }`);
     const suggested = await json<{ items: { id: string; realm: string; sampleWorks: { id: string }[] }[] }>(
       await call('GET', '/v1/onboarding/suggested-follows?locale=en'));
     expect(suggested.items.find(item => item.realm === realm.realm)?.sampleWorks.some(item => item.id === first.work)).toBe(true);
-    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(first.work)} a rv:SkillPackage } }`);
-    const aiSuggested = await json<{ items: { realm: string; reason: { kind: string; interest: string | null } }[] }>(
-      await call('GET', '/v1/onboarding/suggested-follows?interests=ai'));
-    expect(aiSuggested.items.find(item => item.realm === realm.realm)?.reason)
-      .toEqual({ kind: 'matching-kind', interest: 'ai' });
-    expect((await json<Page>(await call('GET', '/v1/feed?interests=ai'))).items
-      .some(item => item.target.work === first.work)).toBe(true);
-    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(first.work)} a rv:SkillPackage } }`);
+    // A Realm whose Works carry a chosen Concept is suggested for it, and unfollowing the Concept removes its tab.
+    const conceptSuggested = await json<{ items: { realm: string; reason: { kind: string; concept?: { id: string } } }[] }>(
+      await call('GET', `/v1/onboarding/suggested-follows?concepts=${encodeURIComponent(clips.concept)}&locale=en`));
+    expect(conceptSuggested.items.find(item => item.realm === realm.realm)?.reason)
+      .toMatchObject({ kind: 'matching-concept', concept: { id: clips.concept } });
+    await json(await call('POST', '/v1/follows', follow(clips.concept, 'concept', reader, false, clipsFollow.revision),
+      b.token));
+    expect((await tabs()).items.some(item => item.concept?.id === clips.concept)).toBe(false);
     const topWeek = await json<Page>(await call('GET', '/v1/feed?sort=top&window=week'));
     expect(topWeek.window).toBe('week');
     expect(topWeek.caughtUp).toBeNull();

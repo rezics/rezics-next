@@ -22,10 +22,12 @@ export async function readConceptMatches(session: WorkReadSession, works: readon
   chosen: readonly string[]): Promise<Map<string, string[]>> {
   const matches = new Map<string, string[]>(works.map(work => [work, []]));
   if (!works.length || !chosen.length) return matches;
+  // ?chosen is bound inside the graph group, where its FILTER is evaluated;
+  // bound outside, the FILTER would see it unbound and match any broader Concept.
   const rows = await session.query(`SELECT DISTINCT ?work ?chosen WHERE {
     VALUES ?work { ${works.map(iri).join(' ')} }
-    VALUES ?chosen { ${chosen.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} {
+      VALUES ?chosen { ${chosen.map(iri).join(' ')} }
       ?work rv:mainVersion ?main .
       ?application a rv:ClassificationApplication ; rv:targetMainVersion ?main ;
         rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:applicationState rv:Active ;

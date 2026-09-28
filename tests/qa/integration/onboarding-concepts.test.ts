@@ -76,6 +76,10 @@ test('G-431 onboarding offers the shared scheme\'s Concepts by type with covers,
         name: expect.objectContaining({ value: 'Onboarding fiction' }) } },
       sampleWorks: [expect.objectContaining({ id: novel.work })] }));
     expect(suggested.items.some(item => item.realm === empty.realm)).toBe(false);
+    // Its Works carry Fantasy, which is neither Cooking nor narrower than it.
+    const unrelated = await json<Suggestions>(await call('GET',
+      `/v1/onboarding/suggested-follows?concepts=${encodeURIComponent(cooking.concept)}`));
+    expect(unrelated.items.find(item => item.realm === realm.realm)?.reason.kind).not.toBe('matching-concept');
     // Without choices every suggestion is popular.
     const popular = await json<Suggestions>(await call('GET', '/v1/onboarding/suggested-follows'));
     expect(popular.items.every(item => item.reason.kind === 'popular')).toBe(true);
