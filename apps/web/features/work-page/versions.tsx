@@ -1,7 +1,7 @@
 import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { FileTextIcon, SearchXIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import Link from '../shell/localized-link.tsx';
@@ -20,14 +20,12 @@ function VersionFilters({ workRef, query, languages, locale, messages }: {
   const filtered = Boolean(query.kind || query.language);
   return <form aria-label={t.versionFilters} method="get" action={workHref(workRef, 'versions')}
     className="flex flex-wrap items-end gap-3">
-    <label className="grid gap-1.5 text-sm">
+    <div className="grid gap-1.5 text-sm">
       <span className="font-medium">{t.kind}</span>
-      <NativeSelect name="kind" defaultValue={query.kind ?? ''} className="w-44">
-        <NativeSelectOption value="">{t.anyKind}</NativeSelectOption>
-        <NativeSelectOption value="text-variant">{t.textVariant}</NativeSelectOption>
-        <NativeSelectOption value="release">{t.release}</NativeSelectOption>
-      </NativeSelect>
-    </label>
+      <ChoiceSelect name="kind" defaultValue={query.kind ?? ''} className="w-44" label={t.kind}
+        options={[{ value: '', label: t.anyKind }, { value: 'text-variant', label: t.textVariant },
+          { value: 'release', label: t.release }]} />
+    </div>
     <label className="grid gap-1.5 text-sm">
       <span className="font-medium">{t.language}</span>
       <Input name="language" defaultValue={query.language ?? ''} list="work-version-languages" placeholder={t.anyLanguage}

@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, buttonVariants } from '@rezics/ui/button';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { Textarea } from '@rezics/ui/textarea';
 import { cn } from '@rezics/ui/utils';
 import { EyeIcon, MessageSquareTextIcon, PencilIcon, ThumbsUpIcon, TriangleAlertIcon } from 'lucide-react';
@@ -172,12 +172,11 @@ function ReviewEditor({ work, own, api, onSaved, onCancel, locale, t }: {
     <Textarea id={`${id}-text`} value={text} onChange={event => setText(event.target.value)} required maxLength={8000}
       placeholder={t.reviewPlaceholder} lang={language} className="min-h-36 text-base" />
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
-      <label className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <span>{t.reviewLanguage}</span>
-        <NativeSelect size="sm" value={language} onChange={event => setLanguage(event.target.value)} className="w-40">
-          {languages.map(tag => <NativeSelectOption key={tag} value={tag}>{languageName(tag, locale)}</NativeSelectOption>)}
-        </NativeSelect>
-      </label>
+        <ChoiceSelect size="sm" value={language} onValueChange={setLanguage} className="w-40" label={t.reviewLanguage}
+          options={languages.map(tag => ({ value: tag, label: languageName(tag, locale) }))} />
+      </div>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={spoiler} onChange={event => setSpoiler(event.target.checked)}
           className="size-4 accent-primary" />
@@ -308,24 +307,15 @@ export function ReviewsSection({ work, context, scale, initial, reviewers: named
             hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-foreground
             aria-pressed:text-background">{sort === 'helpful' ? t.sortHelpful : t.sortNew}</button>)}
       </div>
-      <label className="flex items-center gap-2">
-        <span className="sr-only">{t.reviewLanguage}</span>
-        <NativeSelect size="sm" value={filter.language ?? ''} className="w-44"
-          onChange={event => setFilter(current => ({ ...current, language: event.target.value || undefined }))}>
-          <NativeSelectOption value="">{t.anyReviewLanguage}</NativeSelectOption>
-          {reviewLanguages.map(tag => <NativeSelectOption key={tag} value={tag}>{languageName(tag, locale)}
-          </NativeSelectOption>)}
-        </NativeSelect>
-      </label>
-      <label className="flex items-center gap-2">
-        <span className="sr-only">{t.ratingFilter}</span>
-        <NativeSelect size="sm" value={filter.rating ? String(filter.rating) : ''} className="w-36"
-          onChange={event => setFilter(current => ({ ...current,
-            rating: event.target.value ? Number(event.target.value) : undefined }))}>
-          <NativeSelectOption value="">{t.anyRating}</NativeSelectOption>
-          {ratings.map(value => <NativeSelectOption key={value} value={String(value)}>{t.stars(value)}</NativeSelectOption>)}
-        </NativeSelect>
-      </label>
+      <ChoiceSelect size="sm" value={filter.language ?? ''} className="w-44" label={t.reviewLanguage}
+        onValueChange={language => setFilter(current => ({ ...current, language: language || undefined }))}
+        options={[{ value: '', label: t.anyReviewLanguage }, ...reviewLanguages.map(tag =>
+          ({ value: tag, label: languageName(tag, locale) }))]} />
+      <ChoiceSelect size="sm" value={filter.rating ? String(filter.rating) : ''} className="w-36" label={t.ratingFilter}
+        onValueChange={rating => setFilter(current => ({ ...current,
+          rating: rating ? Number(rating) : undefined }))}
+        options={[{ value: '', label: t.anyRating }, ...ratings.map(value =>
+          ({ value: String(value), label: t.stars(value) }))]} />
     </div> : null}
     {!page.ok ? <p role="alert" className="flex flex-wrap items-center gap-3 rounded-xl bg-muted/60 px-4 py-3 text-sm">
       <TriangleAlertIcon aria-hidden="true" className="size-4 text-destructive-foreground" />

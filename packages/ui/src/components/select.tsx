@@ -2,7 +2,7 @@
 
 import { Portal } from '@ark-ui/react';
 import { ark } from '@ark-ui/react/factory';
-import { Select as ArkSelect, useSelectContext } from '@ark-ui/react/select';
+import { Select as ArkSelect, createListCollection, useSelectContext } from '@ark-ui/react/select';
 import { CheckIcon, ChevronDownIcon, XIcon } from 'lucide-react';
 import type React from 'react';
 import type { VariantProps } from 'tailwind-variants';
@@ -30,6 +30,28 @@ export const Select: ArkSelect.RootComponent = (props) => {
     </ArkSelect.Root>
   );
 };
+
+/** A single choice from a short list, backed by the styled Ark Select. */
+export function ChoiceSelect({ options, value, defaultValue, onValueChange, className, size, placeholder, label,
+  portalled = true, ...props }: {
+  options: readonly { value: string; label: string; lang?: string }[];
+  value?: string; defaultValue?: string; onValueChange?: (value: string) => void;
+  className?: string; size?: 'sm' | 'md' | 'lg'; placeholder?: string; label?: string;
+  name?: string; required?: boolean; disabled?: boolean; id?: string; portalled?: boolean;
+}) {
+  const collection = createListCollection({ items: [...options] });
+  return <Select collection={collection} value={value === undefined ? undefined : value ? [value] : []}
+    defaultValue={defaultValue === undefined ? undefined : defaultValue ? [defaultValue] : []}
+    onValueChange={details => onValueChange?.(details.value[0] ?? '')} {...props}>
+    <SelectTrigger className={cn('w-full', className)} size={size} aria-label={label}>
+      <SelectValue placeholder={placeholder ?? options.find(option => option.value === '')?.label} />
+    </SelectTrigger>
+    <SelectContent portalled={portalled}>
+      {options.map(option => <SelectItem key={option.value} item={option}
+        lang={option.lang}>{option.label}</SelectItem>)}
+    </SelectContent>
+  </Select>;
+}
 
 interface SelectTriggerProps
   extends React.ComponentProps<typeof ArkSelect.Trigger>,
@@ -113,11 +135,10 @@ export const SelectValue = (props: React.ComponentProps<typeof ArkSelect.ValueTe
   );
 };
 
-export const SelectContent = (props: React.ComponentProps<typeof ArkSelect.Content>) => {
-  const { className, ...rest } = props;
+export const SelectContent = (props: React.ComponentProps<typeof ArkSelect.Content> & { portalled?: boolean }) => {
+  const { className, portalled = true, ...rest } = props;
 
-  return (
-    <Portal>
+  const content = (
       <ArkSelect.Positioner data-slot="select-positioner">
         <ArkSelect.Content
           className={cn(
@@ -146,8 +167,8 @@ export const SelectContent = (props: React.ComponentProps<typeof ArkSelect.Conte
           {...rest}
         />
       </ArkSelect.Positioner>
-    </Portal>
   );
+  return portalled ? <Portal>{content}</Portal> : content;
 };
 
 interface SelectGroupProps extends React.ComponentProps<typeof ArkSelect.ItemGroup> {

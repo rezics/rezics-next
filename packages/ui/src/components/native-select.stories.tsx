@@ -21,7 +21,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A styled browser `<select>`. It is the lightest choice list and uses the platform picker on phones, so in REZICS prefer it for short, plain option lists in forms: the shelf for a Work, a Work’s original language, a report category, or items per page. Use Select when options need icons, descriptions or custom rendering, and Combobox when readers should search.',
+          'A styled browser `<select>` for the Accounts app. It uses the platform picker on phones. The main web app uses the Ark UI Select or Menu so choice controls look consistent across browsers and themes.',
       },
     },
   },

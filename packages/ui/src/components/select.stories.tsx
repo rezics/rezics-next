@@ -1,10 +1,11 @@
 import { createListCollection } from '@ark-ui/react/select';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookCheckIcon, BookMarkedIcon, BookOpenIcon, BookXIcon } from 'lucide-react';
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { Field, FieldError, FieldHelper, FieldLabel } from './field.tsx';
 import {
+  ChoiceSelect,
   Select,
   SelectContent,
   SelectEmpty,
@@ -75,7 +76,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A custom listbox for picking one or more values from a short, known list, with icons, groups and full keyboard support. In REZICS use it for the shelf picker on a Work, genre and content-rating fields in the Work editor, and sort orders on Realm feeds. Pass a `createListCollection` collection; use Native Select for plain lists in forms and Combobox when the list is long enough to search.',
+          'A styled listbox for picking one or more values from a short, known list, with full keyboard support. The main web app uses it for choice lists in forms, including language, search scope and management durations. Pass a `createListCollection` collection or use `ChoiceSelect` for a plain single choice. Use Combobox when readers need to search the choices.',
       },
     },
   },
@@ -109,6 +110,41 @@ const meta = {
 } satisfies Meta<typeof Select<(typeof shelves.items)[number]>>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+function PlainChoiceForm() {
+  const [submitted, setSubmitted] = useState('');
+  return <form onSubmit={event => { event.preventDefault();
+    setSubmitted(String(new FormData(event.currentTarget).get('language') ?? '')); }}>
+    <Field>
+      <FieldLabel>Language</FieldLabel>
+      <ChoiceSelect name="language" required options={[{ value: '', label: 'Choose a language' },
+        { value: 'und', label: 'Undetermined' }]} />
+    </Field>
+    <button type="submit">Continue</button>
+    <output>{submitted}</output>
+  </form>;
+}
+
+export const PlainChoice: Story = {
+  render: () => <PlainChoiceForm />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    const trigger = canvas.getByRole('combobox', { name: 'Language' });
+    const hidden = canvasElement.querySelector<HTMLSelectElement>('select[name="language"]')!;
+    await expect(hidden.checkValidity()).toBe(false);
+    await userEvent.click(trigger);
+    await userEvent.click(page.getByRole('option', { name: 'Undetermined' }));
+    await waitFor(() => expect(hidden).toHaveValue('und'));
+    await expect(hidden.checkValidity()).toBe(true);
+    await userEvent.click(canvas.getByRole('button', { name: 'Continue' }));
+    await expect(canvas.getByRole('status')).toHaveTextContent('und');
+    await userEvent.click(trigger);
+    await userEvent.click(page.getByRole('option', { name: 'Choose a language' }));
+    await waitFor(() => expect(hidden).toHaveValue(''));
+    await expect(hidden.checkValidity()).toBe(false);
+  },
+};
 
 export const Default: Story = {
   async play({ canvasElement }) {

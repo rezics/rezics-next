@@ -1,11 +1,11 @@
 'use client';
 
 import { Button } from '@rezics/ui/button';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { SearchIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, type KeyboardEvent, useId, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { SearchMessages } from './messages.ts';
@@ -29,7 +29,6 @@ export function SearchForm({ state, realm, load, locale, messages }: {
 }) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
-  const scopeId = useId();
   const input = useRef<HTMLInputElement>(null);
   const composing = useRef(false);
   const [scope, setScope] = useState<'global' | 'realm'>(state.scope.kind);
@@ -55,18 +54,15 @@ export function SearchForm({ state, realm, load, locale, messages }: {
 
   return <form role="search" aria-label={t.form} action={localizedPath('/search', locale)} method="get" onSubmit={submit}
     className="flex flex-col gap-2 sm:flex-row">
-    <label htmlFor={scopeId} className="sr-only">{t.scopeLabel}</label>
-    {/* Without JavaScript the form submits natively; everyone's scope is the default, so it adds nothing. */}
-    <NativeSelect id={scopeId} name={scope === 'realm' ? 'scope' : undefined} size="lg" value={scope} className="w-full sm:w-auto sm:max-w-80 [&_select]:h-12
-      [&_select]:rounded-2xl [&_select]:bg-card" onChange={event => {
-      const value = event.target.value === 'realm' ? 'realm' : 'global';
+    <ChoiceSelect name={scope === 'realm' ? 'scope' : undefined} size="lg" value={scope} label={t.scopeLabel}
+      className="h-12 w-full rounded-2xl bg-card sm:w-auto sm:max-w-80"
+      options={[{ value: 'global', label: t.global }, ...(realm ? [{ value: 'realm', label: realm.label,
+        lang: realm.lang }] : [])]} onValueChange={choice => {
+      const value = choice === 'realm' ? 'realm' : 'global';
       setScope(value);
       const phrase = normalizePhrase(input.current?.value ?? '');
       if (phraseStatus(phrase) === 'ok') go(phrase, value);
-    }}>
-      <NativeSelectOption value="global">{t.global}</NativeSelectOption>
-      {realm ? <NativeSelectOption value="realm" lang={realm.lang}>{realm.label}</NativeSelectOption> : null}
-    </NativeSelect>
+    }} />
     {realm && scope === 'realm' ? <input type="hidden" name="realm" value={realm.id} /> : null}
     {state.language ? <input type="hidden" name="lang" value={state.language} /> : null}
     {state.term ? <input type="hidden" name="term" value={state.term} /> : null}

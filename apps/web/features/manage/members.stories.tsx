@@ -49,6 +49,13 @@ async function openMenu(canvas: ReturnType<typeof within>, name: string, item: s
   await expect(choice).toHaveAttribute('data-highlighted');
   await userEvent.keyboard('{Enter}');
 }
+async function choose(dialog: ReturnType<typeof within>, label: string, option: string) {
+  const trigger = dialog.getByRole('combobox', { name: label });
+  await userEvent.click(trigger);
+  await userEvent.click(body().getByRole('option', { name: option }));
+  await waitFor(() => expect(body().queryByRole('listbox')).toBeNull());
+  await waitFor(() => expect(trigger).toHaveFocus());
+}
 
 export const Roster: Story = {
   async play({ canvasElement }) {
@@ -85,7 +92,7 @@ export const Invite: Story = {
     const dialog = await openDialog('Invite someone to join');
     await expect(dialog.queryByRole('textbox', { name: 'Reason' })).toBeNull();
     await userEvent.type(dialog.getByRole('textbox', { name: 'Who' }), '@lin_mei');
-    await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'Invitation stays open for' }), '3 days');
+    await choose(dialog, 'Invitation stays open for', '3 days');
     await userEvent.click(dialog.getByRole('button', { name: 'Send invitation' }));
     await expect(await canvas.findByText(/Lin Mei 林梅 is invited until .+\. They join when they accept\./)).toBeVisible();
     await expect(record.members).toEqual([expect.objectContaining({ actingSubject: acting.iri, member: people.mei,
@@ -101,8 +108,10 @@ export const BanForThirtyDays: Story = {
     await openMenu(canvas, 'Sophie Li 李素菲', 'Ban…');
     const dialog = await openDialog('Ban Sophie Li 李素菲');
     await expect(dialog.getByText(/aren’t given back when the ban ends/)).toBeInTheDocument();
-    await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'For how long' }), '30 days');
+    await choose(dialog, 'For how long', '30 days');
+    await expect(dialog.getByRole('combobox', { name: 'For how long' })).toHaveTextContent('30 days');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Spoilers in three titles after a warning.');
+    await expect(dialog.getByRole('textbox', { name: 'Reason' })).toHaveValue('Spoilers in three titles after a warning.');
     await userEvent.click(dialog.getByRole('button', { name: 'Ban' }));
     await expect(await canvas.findByText('Sophie Li 李素菲 is banned.')).toBeVisible();
     await expect(record.members).toEqual([expect.objectContaining({ action: 'ban', member: people.sophie,
@@ -188,7 +197,7 @@ export const GiveRoleWithImpact: Story = {
     const impact = await dialog.findByRole('region', { name: 'Who this affects' });
     await expect(await within(impact).findByText('1 member gains: Moderate the queue')).toBeInTheDocument();
     await expect(impact).toHaveTextContent('Sophie Li 李素菲');
-    await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'Role' }), 'Rules editors');
+    await choose(dialog, 'Role', 'Rules editors');
     await expect(await within(impact).findByText('1 member gains: Publish rules')).toBeInTheDocument();
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Drafting the spoiler policy.');
     await userEvent.click(dialog.getByRole('button', { name: 'Give role' }));

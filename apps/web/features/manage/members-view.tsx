@@ -5,7 +5,7 @@ import { Button } from '@rezics/ui/button';
 import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@rezics/ui/menu';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { Textarea } from '@rezics/ui/textarea';
 import { BanIcon, EllipsisIcon, SearchIcon, UserPlusIcon, UsersIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -332,15 +332,13 @@ function MemberDialog({ open, generation, api, actingSubject, nameOf, locale, me
     </Field> : null}
     {kind === 'invite' ? <Field>
       <FieldLabel>{t.inviteExpiresLabel}</FieldLabel>
-      <NativeSelect value={duration} onChange={event => setDuration(event.currentTarget.value)}>
-        {inviteDurations.map(([label]) => <NativeSelectOption key={label} value={label}>{t[label]}</NativeSelectOption>)}
-      </NativeSelect>
+      <ChoiceSelect portalled={false} value={duration} onValueChange={setDuration} options={inviteDurations.map(([label]) =>
+        ({ value: label, label: t[label] }))} />
     </Field> : null}
     {kind === 'ban' ? <Field>
       <FieldLabel>{t.durationLabel}</FieldLabel>
-      <NativeSelect value={duration} onChange={event => setDuration(event.currentTarget.value)}>
-        {banDurations.map(([label]) => <NativeSelectOption key={label} value={label}>{t[label]}</NativeSelectOption>)}
-      </NativeSelect>
+      <ChoiceSelect portalled={false} value={duration} onValueChange={setDuration} options={banDurations.map(([label]) =>
+        ({ value: label, label: t[label] }))} />
     </Field> : null}
     {kind === 'invite' ? null : <Field invalid={field === 'reason'}>
       <FieldLabel>{kind === 'ban' ? t.banReasonLabel : t.changeReasonLabel}</FieldLabel>
@@ -392,16 +390,13 @@ function RoleDialog({ open, generation, roles, api, actingSubject, agents, name,
     {open.kind === 'give' ? <div className="grid gap-4 sm:grid-cols-2">
       <Field>
         <FieldLabel>{t.roleLabel}</FieldLabel>
-        <NativeSelect value={roleId} onChange={event => setRoleId(event.currentTarget.value)} className="w-full">
-          {choices.map(role => <NativeSelectOption key={role.id} value={role.id}>{role.name}</NativeSelectOption>)}
-        </NativeSelect>
+        <ChoiceSelect portalled={false} value={roleId} onValueChange={setRoleId} className="w-full"
+          options={choices.map(role => ({ value: role.id, label: role.name }))} />
       </Field>
       <Field>
         <FieldLabel>{t.validForLabel}</FieldLabel>
-        <NativeSelect value={String(days)} onChange={event => setDays(Number(event.currentTarget.value))} className="w-full">
-          {roleDurations.map(([label, value]) => <NativeSelectOption key={label} value={String(value)}>{t[label]}
-          </NativeSelectOption>)}
-        </NativeSelect>
+        <ChoiceSelect portalled={false} value={String(days)} onValueChange={value => setDays(Number(value))} className="w-full"
+          options={roleDurations.map(([label, value]) => ({ value: String(value), label: t[label] }))} />
       </Field>
     </div> : null}
     <ImpactPreview state={state} agents={mergeAgents(agents, names)} actingSubject={actingSubject} locale={locale}

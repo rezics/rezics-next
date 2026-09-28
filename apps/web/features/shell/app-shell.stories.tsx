@@ -76,7 +76,7 @@ export const SignedOut: Story = {
     await expect(search).toHaveFocus();
     const navigation = canvas.getByRole('navigation', { name: 'Main navigation' });
     await expect(within(navigation).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
-    await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
+    await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveTextContent('English');
     await expect(canvas.getByRole('button', { name: 'Display mode' })).toBeVisible();
   },
 };

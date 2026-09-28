@@ -56,7 +56,7 @@ export const Versions: Story = {
       .toHaveAttribute('href', `/en/w/${fixture.workRef}/versions?cursor=next-page-cursor`);
     const filters = within(region).getByRole('form', { name: 'Filter versions' });
     await expect(filters).toHaveAttribute('action', `/w/${fixture.workRef}/versions`);
-    await expect(within(filters).getByRole('combobox', { name: 'Kind' })).toHaveValue('');
+    await expect(within(filters).getByRole('combobox', { name: 'Kind' })).toHaveTextContent('All kinds');
   },
 };
 
@@ -67,7 +67,7 @@ export const VersionsFiltered: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'No versions match these filters' })).toBeVisible();
-    await expect(canvas.getByRole('combobox', { name: 'Kind' })).toHaveValue('release');
+    await expect(canvas.getByRole('combobox', { name: 'Kind' })).toHaveTextContent('Fixed release');
     await expect(canvas.getAllByRole('link', { name: 'Clear filters' })[0]).toHaveAttribute('href', `/en/w/${fixture.workRef}/versions`);
   },
 };

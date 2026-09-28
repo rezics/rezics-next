@@ -228,7 +228,8 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
 
   await shoot(page, context, `/en/w/${id}`, 'overview-en', info);
   await shoot(page, context, `/en/w/${id}?scope=realm&realm=${realm}`, 'realm-en', info);
-  await page.getByRole('banner').getByRole('combobox', { name: 'Language' }).selectOption('zh-Hans');
+  await page.getByRole('banner').getByRole('combobox', { name: 'Language' }).click();
+  await page.getByRole('option', { name: '简体中文' }).click();
   await expect(page).toHaveURL(`/zh-Hans/w/${id}?scope=realm&realm=${realm}`);
   await page.goto(`/zh-Hans/w/${id}`);
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans');

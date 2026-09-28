@@ -65,7 +65,7 @@ export const Populated: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('combobox', { name: 'Search phrase' })).toHaveValue('Pride');
-    await expect(canvas.getByRole('combobox', { name: 'Search in' })).toHaveValue('global');
+    await expect(canvas.getByRole('combobox', { name: 'Search in' })).toHaveTextContent('All of REZICS');
     await expect(canvas.getByText('Results for “Pride”')).toBeVisible();
     const completeness = canvas.getByTestId('search-completeness');
     await expect(within(completeness).getByText('5 works')).toBeVisible();
@@ -123,7 +123,7 @@ export const RealmClassified: Story = {
     source: 'global', conceptName: null } })]), signedIn: true },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('combobox', { name: 'Search in' })).toHaveValue('realm');
+    await expect(canvas.getByRole('combobox', { name: 'Search in' })).toHaveTextContent('Classic Literature · 经典文学');
     const reasons = canvas.getAllByRole('list', { name: 'Why this matched' });
     await expect(canvas.getByText('Results for “西游记” in Classic Literature · 经典文学')).toBeVisible();
     await expect(reasons[0]).toHaveTextContent('The version Classic Literature · 经典文学 chose');
@@ -136,6 +136,10 @@ export const RealmClassified: Story = {
     await expect(completeness).toHaveTextContent('Works you muted are left out');
     await expect(canvas.getAllByRole('link', { name: 'Remove filter: Only this genre' })[0])
       .toHaveAttribute('href', `/en/search?q=${encodeURIComponent('西游记')}&scope=realm&realm=${realm}&lang=zh-Hans`);
+    await userEvent.click(canvas.getByRole('combobox', { name: 'Search in' }));
+    await expect(within(document.body).getByRole('option', { name: 'All of REZICS' })).toBeVisible();
+    await userEvent.click(within(document.body).getByRole('option', { name: 'All of REZICS' }));
+    await waitFor(() => expect(canvas.getByRole('combobox', { name: 'Search in' })).toHaveTextContent('All of REZICS'));
   },
 };
 

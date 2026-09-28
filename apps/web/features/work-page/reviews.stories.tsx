@@ -62,7 +62,8 @@ export const SortAndFilter: Story = {
     await waitFor(() => expect(api.calls).toContain('page:new:::'));
     await expect(canvas.getByRole('button', { name: 'Newest' })).toHaveAttribute('aria-pressed', 'true');
     await waitFor(() => expect(canvas.getAllByRole('article')[0]).toHaveTextContent('林梅'));
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Rating' }), '1 star');
+    await userEvent.click(canvas.getByRole('combobox', { name: 'Rating' }));
+    await userEvent.click(within(document.body).getByRole('option', { name: '1 star' }));
     await waitFor(() => expect(canvas.getByText('No reviews match these filters')).toBeVisible());
     await userEvent.click(canvas.getByRole('button', { name: 'Clear filters' }));
     await waitFor(() => expect(canvas.getAllByRole('article')).toHaveLength(3));

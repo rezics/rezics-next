@@ -22,8 +22,9 @@ test('eight canonical locale routes expose native picker names and English key f
       .toHaveAttribute('href', `${origin}/${locale}/search`);
   }
   const picker = page.getByRole('combobox', { name: 'Language' });
-  await expect(picker.locator('option')).toHaveText(uiLocales.map(locale => localeNames[locale]));
-  await picker.selectOption('de');
+  await picker.click();
+  await expect(page.getByRole('listbox').getByRole('option')).toHaveText(uiLocales.map(locale => localeNames[locale]));
+  await page.getByRole('option', { name: localeNames.de }).click();
   await expect(page).toHaveURL(`${origin}/de/search`);
   await expect(page.getByRole('heading', { name: 'Search works' })).toBeVisible();
 });
@@ -42,7 +43,8 @@ test('interface locale persists without changing public search language or anoth
     await expect(page.locator('link[rel="alternate"][hreflang="zh-Hans"]'))
       .toHaveAttribute('href', `${origin}/zh-Hans/search`);
 
-    await page.getByRole('banner').getByRole('combobox', { name: 'Language' }).selectOption('zh-Hans');
+    await page.getByRole('banner').getByRole('combobox', { name: 'Language' }).click();
+    await page.getByRole('option', { name: localeNames['zh-Hans'] }).click();
     await expect(page).toHaveURL(/\/zh-Hans\/search\?q=river$/);
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans');
     await expect(page.getByRole('heading', { name: '搜索作品' })).toBeVisible();
