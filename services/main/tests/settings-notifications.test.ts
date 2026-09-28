@@ -48,6 +48,32 @@ test('a disabled reply preference prevents the producer from adding an inbox ite
   expect(statements.some(sql => sql.includes('INSERT INTO access.notification_item'))).toBe(false);
 });
 
+test('registered email and push endpoints both receive a social item unless their channel is disabled', async () => {
+  const statements: string[] = [];
+  const client = { query: async (sql: string) => {
+    statements.push(sql);
+    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
+    if (sql.includes('INSERT INTO access.notification_seen')) return { rows: [{ principal_id: principalId }], rowCount: 1 };
+    if (sql.includes('AS inbox') && sql.includes('access.notification_preference')) {
+      return { rows: [{ inbox: true, email: false }] };
+    }
+    if (sql.includes('SELECT generation::text, head_sequence::text')) {
+      return { rows: [{ generation: '1', head_sequence: '0' }] };
+    }
+    if (sql.includes('INSERT INTO access.notification_delivery')) return { rows: [], rowCount: 2 };
+    return { rows: [] };
+  }, release: () => {} };
+  const store = new NotificationStore({ connect: async () => client } as unknown as Pool);
+  const result = await store.enqueue({ sourceOwner: 'graph', sourceEvent: 'reply:direct',
+    purpose: 'social', topic: 'reply', subject: { owner: 'graph', ref: 'reply:direct', revision: null },
+    disclosureBasis: 'realm-reply-v1', recipients: [principalId] });
+  expect(result[0]?.deliveries).toBe(2);
+  const delivery = statements.find(sql => sql.includes('INSERT INTO access.notification_delivery'))!;
+  expect(delivery).toContain("e.channel, e.generation");
+  expect(delivery).toContain('p.channel = e.channel AND p.state = \'disabled\'');
+  expect(delivery).not.toContain("e.channel <> 'email'");
+});
+
 test('email opt-in records a digest candidate when the inbox is disabled', async () => {
   const statements: string[] = [];
   const client = { query: async (sql: string) => {

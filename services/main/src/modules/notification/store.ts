@@ -321,10 +321,10 @@ export class NotificationStore {
             clock_timestamp() + ($5::bigint * interval '1 millisecond')
           FROM (SELECT * FROM access.notification_endpoint
             WHERE principal_id = $2 AND state = 'active' ORDER BY id LIMIT $6) e
-          WHERE $3 IN ('security', 'account') OR (e.channel <> 'email' AND NOT EXISTS (
+          WHERE $3 IN ('security', 'account') OR NOT EXISTS (
             SELECT 1 FROM access.notification_preference p
             WHERE p.principal_id = e.principal_id AND p.purpose = $3 AND p.topic = $4
-              AND p.channel = e.channel AND p.state = 'disabled'))`,
+              AND p.channel = e.channel AND p.state = 'disabled')`,
         [itemId, principalId, event.purpose, event.topic, NOTIFICATION_LIMITS.deliveryTtlMs,
           NOTIFICATION_LIMITS.endpointsPerRecipient]);
         results.push({ principalId, itemId, generation: stream.generation, sequence,

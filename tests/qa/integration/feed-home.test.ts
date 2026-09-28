@@ -19,6 +19,7 @@ import { ReaderReviews } from '../../../services/main/src/modules/review/store.t
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import type { FollowResult } from '../../../services/main/src/modules/follows/contract.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
 import { RealmReplyThreadStore } from '../../../services/main/src/modules/realm-reply/thread-store.ts';
@@ -75,7 +76,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       hub: new HubStore(stack.contentPool, stack.content, stack.access, stack.env,
         new PackageArtifactStore(stack.contentPool, prefix => stack.objects(prefix))),
       content: stack.content, contentAuthoring: stack.content, media: stack.media, structureObjects,
-      profiles: new ProfilesAccess(stack.accessPool), agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
+      profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
+      agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       relayPosition: new RelayHandoffPositions(relay, consumer) };
     const app = createMainApp(stack.fuseki, deps);
     const call = (method: string, path: string, body?: unknown, token?: string, key = randomUUID()) => app.handle(

@@ -100,6 +100,23 @@ test('a person who accepts nobody cannot acquire a new follower', async () => {
   expect(statements).toContain('ROLLBACK');
 });
 
+test('a new pen-name person with default follow policy accepts a follower through Access', async () => {
+  const statements: string[] = [];
+  let disclosed = 0;
+  const store = new FollowsStore(pool(sql => {
+    if (sql.includes('UPDATE access.follow_inventory')) return { rowCount: 1 };
+    return {};
+  }, statements));
+  const result = await store.set(principal, { profile: 'follow-command-v1', actingSubject: agent,
+    target, kind: 'agent', following: true, expectedRevision: null }, 'follow:default', async () => {
+      disclosed++;
+    });
+  expect(result.following).toBe(true);
+  expect(disclosed).toBe(1);
+  expect(statements).toContain('SELECT follow_policy FROM access.person_preferences WHERE agent_id = $1');
+  expect(statements.some(sql => sql.includes('INSERT INTO access.follow ('))).toBe(true);
+});
+
 test('adult-content opt-in is denied until a source classification can enforce it', async () => {
   const store = new PersonPreferencesStore({} as Pool);
   await expect(store.write(principal, agent, { ...DEFAULT_PERSON_CHOICES, adultContent: true },
