@@ -31,6 +31,10 @@ export const Suspended: Story = {
     await expect(within(story).getByText('Suspended')).toBeVisible();
     await expect(within(story).getByText(/We received reports of harassment/)).toBeVisible();
     await expect(within(story).getByText('Staff note')).toBeVisible();
+    // The suspension's two signed-out devices read as one line until opened.
+    await expect(within(story).getAllByText('Device signed out')).toHaveLength(1);
+    await userEvent.click(within(story).getByRole('button', { name: '2 times' }));
+    await expect(within(story).getAllByText('Device signed out')).toHaveLength(2);
     await expect(within(story).getByText('Failed sign-in')).toBeVisible();
     await expect(within(story).getByText('with a password')).toBeVisible();
     await expect(within(story).getByText('App allowed')).toBeVisible();

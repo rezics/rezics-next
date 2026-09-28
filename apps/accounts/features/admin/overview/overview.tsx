@@ -161,7 +161,7 @@ export function Overview({ data }: { data: OverviewData }) {
             detail={user => <Time iso={user.since} />} />
         </div>
       </section>
-      {(data.recentActions && can('audit:read')) || data.jobs.length ? <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      {(data.recentActions && can('audit:read')) || data.jobs.length ? <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         {data.recentActions && can('audit:read') ? <section aria-labelledby="recent-actions" className={card}>
           <header className="flex items-center justify-between gap-3 px-5 pt-5 pb-2">
             <h2 id="recent-actions" className="font-semibold">{t.recentActions}</h2>

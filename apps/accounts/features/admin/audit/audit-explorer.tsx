@@ -170,7 +170,6 @@ export function AuditExplorer({ initialState, initial, names }: { initialState: 
     state.target ? { label: `${t.target}: ${labels.target ?? state.target}`, remove: t.removeTarget, change: { target: null } } : null,
     state.request ? { label: t.auditSearch.requestChip({ id: state.request.slice(0, 8) }), remove: t.auditSearch.removeRequest,
       change: { request: null } } : null,
-    state.text ? { label: `“${state.text}”`, remove: t.auditSearch.removeText, change: { text: null } } : null,
   ].filter(chip => chip !== null);
   // Newest first, one heading per UTC day (as the service's records are kept).
   const days = items.reduce<{ day: string; entries: { entry: AuditEntry; index: number }[] }[]>((groups, entry, index) => {

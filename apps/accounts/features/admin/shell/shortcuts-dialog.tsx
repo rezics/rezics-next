@@ -33,7 +33,7 @@ export function ShortcutsDialog() {
       <DialogBody className="flex flex-col gap-5">
         {groups.map(([heading, rows]) => <section key={heading}>
           <h3 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{heading}</h3>
-          <dl className="grid grid-cols-[auto_1fr] items-center gap-x-6 gap-y-2.5 text-sm">
+          <dl className="grid grid-cols-[7.5rem_1fr] items-center gap-x-4 gap-y-2.5 text-sm">
             {rows.map(([keys, label]) => <div key={label} className="contents">
               <dt><KbdGroup>{keys.map((chord, index) => <Fragment key={chord.join('+')}>
                 {index && keys[0]![0] === 'G' ? <span className="text-xs text-muted-foreground">{t.keys.then}</span> : null}

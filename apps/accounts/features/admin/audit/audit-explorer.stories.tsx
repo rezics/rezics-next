@@ -50,11 +50,12 @@ export const SearchTheLog: Story = {
     const box = await canvas.findByRole('searchbox', { name: 'Search the audit log' });
     await typist.type(box, 'actor:olive@rezics.test #1182{Enter}');
     await waitFor(() => expect(searched).toHaveBeenCalledWith(expect.objectContaining({ actorId: 'olive@rezics.test', q: '#1182' })));
+    // People and requests become chips with their names; words stay in the box.
     await expect(canvas.getByText('Staff member: olive@rezics.test')).toBeVisible();
-    await expect(canvas.getByText('“#1182”')).toBeVisible();
     await waitFor(() => expect(searchUrl).toHaveBeenLastCalledWith('/admin/audit?actor=olive%40rezics.test&q=%231182'));
-    await userEvent.click(canvas.getByRole('button', { name: 'Clear the words' }));
-    await waitFor(() => expect(searched).toHaveBeenLastCalledWith(expect.not.objectContaining({ q: expect.anything() })));
+    await userEvent.click(canvas.getByRole('button', { name: 'Any staff member' }));
+    await waitFor(() => expect(searched).toHaveBeenLastCalledWith(expect.not.objectContaining({ actorId: expect.anything() })));
+    await expect(box).toHaveValue('#1182');
     await userEvent.clear(box);
     await typist.type(box, '6d1f3c1e-3b7a-4f5e-9a51-2f6c0a1d7e11{Enter}');
     await waitFor(() => expect(searched).toHaveBeenLastCalledWith(expect.objectContaining({ requestId: '6d1f3c1e-3b7a-4f5e-9a51-2f6c0a1d7e11' })));
@@ -82,16 +83,20 @@ export const CustomDates: Story = {
   },
 };
 
-/** Opens the Export menu and picks an item from that menu, not from one still closing. */
+/** Picks an Export menu item by keyboard, as an operator can: Enter opens the
+ * menu on its first item, arrows move, Enter chooses. */
 async function exportAs(canvasElement: HTMLElement, item: string) {
   const trigger = await within(canvasElement).findByRole('button', { name: 'Export' });
-  await userEvent.click(trigger);
+  trigger.focus();
+  await userEvent.keyboard('{Enter}');
   const menu = await waitFor(() => {
-    const content = document.getElementById(trigger.getAttribute('aria-controls') ?? '');
-    if (content?.getAttribute('data-state') !== 'open') throw new Error('The Export menu is not open');
+    const content = [...document.querySelectorAll<HTMLElement>('[role="menu"][data-state="open"]')].at(-1);
+    if (!content?.contains(document.activeElement)) throw new Error('The Export menu is not open');
     return content;
   });
-  await userEvent.click(within(menu).getByRole('menuitem', { name: item }));
+  const index = within(menu).getAllByRole('menuitem').findIndex(element => element.textContent === item);
+  for (let step = 0; step < index; step++) await userEvent.keyboard('{ArrowDown}');
+  await userEvent.keyboard('{Enter}');
 }
 
 const download = fn();

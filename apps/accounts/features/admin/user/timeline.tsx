@@ -63,7 +63,30 @@ function days(items: TimelineEntry[], zone: string | undefined) {
   return groups;
 }
 
-function Line({ entry, appName }: { entry: TimelineEntry; appName(clientId: string): string }) {
+/** Consecutive security events alike in kind and detail (a suspension's
+ * eight signed-out devices) read as one line with a count. */
+function runs(entries: TimelineEntry[], t: AdminText, appName: (clientId: string) => string) {
+  const groups: TimelineEntry[][] = [];
+  for (const entry of entries) {
+    const last = groups.at(-1)?.[0];
+    const alike = last && last.source === 'security' && entry.source === 'security' && last.action === entry.action
+      && describe(last, t, appName).line === describe(entry, t, appName).line;
+    if (alike) groups.at(-1)!.push(entry); else groups.push([entry]);
+  }
+  return groups;
+}
+
+function Run({ entries, appName }: { entries: TimelineEntry[]; appName(clientId: string): string }) {
+  const [open, setOpen] = useState(false);
+  if (entries.length === 1 || open) {
+    return entries.map((entry, index) => <Line key={entry.id} entry={entry} appName={appName}
+      repeat={index === 0 && entries.length > 1 ? { count: entries.length, open, toggle: () => setOpen(false) } : undefined} />);
+  }
+  return <Line entry={entries[0]!} appName={appName} repeat={{ count: entries.length, open, toggle: () => setOpen(true) }} />;
+}
+
+function Line({ entry, appName, repeat }: { entry: TimelineEntry; appName(clientId: string): string;
+  repeat?: { count: number; open: boolean; toggle(): void } }) {
   const { t } = useTranslation('admin');
   const { title, line } = describe(entry, t, appName);
   const Icon = icons[entry.source === 'note' ? 'note' : entry.action] ?? ShieldCheckIcon;
@@ -79,6 +102,9 @@ function Line({ entry, appName }: { entry: TimelineEntry; appName(clientId: stri
     <div className="min-w-0 flex-1">
       <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className={cn('font-medium', alarm && entry.source === 'security' && 'text-destructive-foreground')}>{title}</span>
+        {repeat ? <button type="button" aria-expanded={repeat.open} onClick={repeat.toggle}
+          className="rounded-full border border-border px-2 text-xs font-medium text-muted-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/32">
+          {t.timeline.times(repeat.count)}</button> : null}
         {entry.staff?.reasonCode ? <Badge variant="outline" size="sm">{reasonLabel(entry.staff.reasonCode, t)}</Badge> : null}
         {entry.staff && entry.staff.outcome !== 'succeeded' ? <Badge variant="warning" size="sm">
           {(t.outcomes as Record<string, string>)[entry.staff.outcome] ?? entry.staff.outcome}</Badge> : null}
@@ -146,7 +172,7 @@ export function Timeline({ userId, initial, initialCategory, appName }: { userId
       {days(items, zone).map(day => <li key={day.key}>
         <h3 className="sticky top-14 z-[1] bg-card/95 px-5 pt-3 pb-1 text-xs font-medium text-muted-foreground backdrop-blur">
           <span suppressHydrationWarning>{dayLabel(day.key, day.entries[0]!.occurredAt)}</span></h3>
-        <ol>{day.entries.map(entry => <Line key={entry.id} entry={entry} appName={appName} />)}</ol>
+        <ol>{runs(day.entries, t, appName).map(run => <Run key={run[0]!.id} entries={run} appName={appName} />)}</ol>
       </li>)}
     </ol> : <p className="border-t border-border/60 px-5 py-8 text-center text-sm text-muted-foreground">
       {loading ? t.timeline.loading : category === 'all' ? t.timeline.empty : t.timeline.emptyFiltered}</p>}

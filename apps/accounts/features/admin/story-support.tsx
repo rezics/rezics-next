@@ -89,6 +89,7 @@ export const timeline: TimelinePage = { nextCursor: 'more', items: [
   line('t2', 120, { source: 'staff', action: 'suspend', staff: staff('Harassment report #1182 under review', { reasonCode: 'abuse',
     userMessage: 'We received reports of harassment and paused your account while we look into them.' }) }),
   line('t3', 121, { action: 'session_revoked', detail: { sessionId: 's1' } }),
+  line('t3b', 121.2, { action: 'session_revoked', detail: { sessionId: 's2' } }),
   line('t4', 200, { action: 'sign_in_failed', detail: { method: 'email' } }),
   line('t5', 60 * 24, { detail: { method: 'email', device: { label: 'Firefox · Linux' }, network: '203.0.113.0/24' } }),
   line('t6', 60 * 24 * 2, { action: 'consent_granted', detail: { clientId: 'notes-app' } }),
