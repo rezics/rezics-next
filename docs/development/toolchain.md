@@ -121,7 +121,6 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | axe-core | 4.13.0 | apps/web |
 | better-auth | 1.7.5 | services/account, services/main |
 | better-call | 1.4.0 | services/account |
-| clsx | 2.1.1 | packages/ui |
 | dependency-cruiser | 18.4.0 | . |
 | drizzle-orm | 0.45.3 | services/content |
 | elysia | 2.0.0-beta.16 | apps/web, services/account, services/main |
@@ -148,7 +147,6 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | react-server-dom-webpack | 19.3.0 | apps/accounts, apps/web |
 | recharts | 3.10.1 | packages/ui |
 | storybook | 11.0.0-alpha.1 | apps/accounts, apps/web |
-| tailwind-merge | 3.7.0 | packages/ui |
 | tailwind-variants | 3.3.1 | packages/ui |
 | tailwindcss | 4.3.3 | apps/accounts, apps/web |
 | tsx | 4.23.13 | apphost |

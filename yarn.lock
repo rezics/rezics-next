@@ -2955,13 +2955,11 @@ __metadata:
     "@ark-ui/react": "npm:5.39.2"
     "@types/react": "npm:19.2.18"
     "@types/react-dom": "npm:19.2.7"
-    clsx: "npm:2.1.1"
     lucide-react: "npm:1.47.0"
     react: "npm:19.3.0"
     react-dom: "npm:19.3.0"
     react-is: "npm:19.3.0"
     recharts: "npm:3.10.1"
-    tailwind-merge: "npm:3.7.0"
     tailwind-variants: "npm:3.3.1"
     tw-animate-css: "npm:1.4.0"
     typescript: "npm:7.0.2"
@@ -5850,7 +5848,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"clsx@npm:2.1.1, clsx@npm:^2.1.1":
+"clsx@npm:^2.1.1":
   version: 2.1.1
   resolution: "clsx@npm:2.1.1"
   checksum: 10c0/c4c8eb865f8c82baab07e71bfa8897c73454881c4f99d6bc81585aecd7c441746c1399d08363dc096c550cceaf97bd4ce1e8854e1771e9998d9f94c4fe075839
@@ -9238,13 +9236,6 @@ __metadata:
   version: 1.0.0
   resolution: "tagged-tag@npm:1.0.0"
   checksum: 10c0/91d25c9ffb86a91f20522cefb2cbec9b64caa1febe27ad0df52f08993ff60888022d771e868e6416cf2e72dab68449d2139e8709ba009b74c6c7ecd4000048d1
-  languageName: node
-  linkType: hard
-
-"tailwind-merge@npm:3.7.0":
-  version: 3.7.0
-  resolution: "tailwind-merge@npm:3.7.0"
-  checksum: 10c0/1b1439fe30b6ee63fc3abc1c985bf9beb8529eb2db21cc321bd8c7cf73f36cd4ec80846ea10af8ae09175810f385336c22a6ce355a0b5cce69432d49672f90c1
   languageName: node
   linkType: hard
 

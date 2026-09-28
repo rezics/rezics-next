@@ -32,7 +32,7 @@ const config: StorybookConfig = {
     ];
     config.optimizeDeps ??= {};
     config.optimizeDeps.include = [...new Set([...(config.optimizeDeps.include ?? []), ...arkEntries,
-      'clsx', 'tailwind-merge', 'tailwind-variants', 'lucide-react', 'native-i18n',
+      'tailwind-variants', 'lucide-react', 'native-i18n',
       '@tanstack/react-query', '@storybook/react-dom-shim'])];
     return config;
   },
