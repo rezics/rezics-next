@@ -13,7 +13,9 @@ const releaseHome = join(root, '.temp/releases');
 const migrationDirectories = ['services/main/migrations/access',
   'services/main/migrations/relay', 'services/content/migrations'] as const;
 const inputs = ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml', 'package.json',
-  '.yarnrc.yml', 'yarn.lock'] as const;
+  '.yarnrc.yml', 'yarn.lock',
+  // Main imports this adapter even when local fixture fetching is disabled.
+  'scripts/dev/seed/open-library-fixtures.ts'] as const;
 
 interface ArtifactManifest {
   schema: 'rezics-release-artifact-v1';
