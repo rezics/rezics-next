@@ -42,7 +42,8 @@ export interface AccountUsage {
 // Worker engines and the efforts each CLI and model accepts. Which engine and effort a task gets is
 // the manager's decision from the need and the remaining usage (docs/goals/manager.md), not a rule here.
 export const MODEL = 'claude-opus-5-5';
-// Fable runs through Claude Code on its own usage allowance, so the Opus 5h/7d gate does not apply to it.
+// Fable runs through Claude Code. Its weekly allowance may be its own, but it shares the Claude 5h session
+// limit (both hit 'session limit' together on 2026-09-28), so the 5h gate applies to it as to Opus.
 export const FABLE_MODEL = 'claude-fable-5-1';
 export const CODEX_MODEL = 'gpt-6-sol';
 export const LUNA_MODEL = 'gpt-6-luna';
@@ -616,7 +617,7 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     const engine = brief.engine ?? DEFAULT_ENGINE;
     const account = codexAccounts().find(candidate => candidate.engines.includes(engine));
     if (!flags.has('--force-usage')) {
-      if (engine === 'claude' && ['restricted', 'critical'].includes(usage.level)) {
+      if (isClaudeCode(engine) && ['restricted', 'critical'].includes(usage.level)) {
         throw new Error(`Claude usage is ${usage.level} (${usage.reason}); let running workers finish, `
           + 'use another engine or pass --force-usage');
       }
