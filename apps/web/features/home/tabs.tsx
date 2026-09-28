@@ -62,9 +62,14 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
 
   // Main's list is the truth once it answers.
   useEffect(() => setOrder(null), [serverKey]);
-  // The current tab stays in view on a narrow strip.
+  // The current tab, with its menu, stays in view on a narrow strip; the page itself never scrolls for it.
   useEffect(() => {
-    strip.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const list = strip.current;
+    const tab = list?.querySelector('[aria-current="page"]')?.closest('li');
+    if (!list || !tab) return;
+    const end = tab.offsetLeft + tab.offsetWidth;
+    if (tab.offsetLeft < list.scrollLeft) list.scrollLeft = tab.offsetLeft;
+    else if (end > list.scrollLeft + list.clientWidth) list.scrollLeft = end - list.clientWidth;
   }, [state.tab, state.filter]);
 
   async function settle<R>(result: Promise<CommandResult<R>>, after?: () => void) {
@@ -93,7 +98,7 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
   }
 
   return <><nav aria-label={feed.views} className="flex min-w-0 items-stretch border-border/60 border-b">
-    <ul ref={strip} className="flex min-w-0 flex-1 snap-x overflow-x-auto [scrollbar-width:none]
+    <ul ref={strip} className="relative flex min-w-0 flex-1 snap-x overflow-x-auto [scrollbar-width:none]
       [&::-webkit-scrollbar]:hidden">
       {(['following', 'all'] as const).map(tab => <li key={tab} className="flex shrink-0 snap-start">
         <Link href={href(withChange(state, { tab }))} aria-current={state.tab === tab ? 'page' : undefined}

@@ -19,6 +19,8 @@ import type { FeedHead, FeedItem, FeedPage, FeedQuery, Loaded, ReadFailure } fro
 const HEAD_INTERVAL_MS = 60_000;
 /** Pages read in a row without a new post before the list waits for the reader to ask for more. */
 const SPARSE_PAGES = 4;
+/** A pinned topic's feed checks two candidates a page (Main's Concept filter bound), so it keeps looking longer. */
+const PINNED_SPARSE_PAGES = 24;
 
 interface ListState {
   items: FeedItem[];
@@ -134,6 +136,7 @@ function FeedPages({ page, query, empty, allHref, headInterval }: { page: FeedPa
   const sentinel = useRef<HTMLDivElement>(null);
   // A pinned tab is only part of All: its new posts and what was seen are not All's.
   const scope = query.savedFilter ? null : query.scope ?? 'all';
+  const sparseLimit = query.savedFilter ? PINNED_SPARSE_PAGES : SPARSE_PAGES;
   const fresh = useNewPosts(page, scope, headInterval);
   useWatermark(page, scope);
 
@@ -154,13 +157,13 @@ function FeedPages({ page, query, empty, allHref, headInterval }: { page: FeedPa
   // Near the end, the next page loads by itself; the button below stays for keyboards and screen readers.
   useEffect(() => {
     const target = sentinel.current;
-    if (!target || !state.cursor || state.loading || state.failure || state.sparse >= SPARSE_PAGES) return;
+    if (!target || !state.cursor || state.loading || state.failure || state.sparse >= sparseLimit) return;
     const observer = new IntersectionObserver(entries => {
       if (entries.some(entry => entry.isIntersecting)) void loadMore();
     }, { rootMargin: '600px 0px' });
     observer.observe(target);
     return () => observer.disconnect();
-  }, [loadMore, state.cursor, state.loading, state.failure, state.sparse]);
+  }, [loadMore, state.cursor, state.loading, state.failure, state.sparse, sparseLimit]);
 
   function showNewest() {
     window.scrollTo({ top: 0, behavior: scrollBehavior() });

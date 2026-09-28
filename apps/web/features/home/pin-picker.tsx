@@ -115,6 +115,7 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
           text-destructive-foreground text-sm">{failure === 'full' ? t.tabsFull : failure === 'unsupported'
             ? t.tabUnsupported : t.pinFailed}</p> : null}
         <TopicSearch t={t} locale={locale} api={client} disabled={full} busy={busy}
+          pinned={filters.pinned.flatMap(filter => filter.concept ? [filter.concept.id] : [])}
           unpinned={filters.unpinned} onPin={topic => void pinConcept(topic)} onPinFilter={filter => void pinFilter(filter)} />
         {current ? <SaveCurrent t={t} labels={current.labels} disabled={full} busy={busy === 'current'}
           onSave={name => void saveCurrent(name)} /> : null}
@@ -128,8 +129,11 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
  * unpinned topics and popular ones before a search, and one Concept's broader
  * and narrower neighbours to refine a choice before pinning it.
  */
-function TopicSearch({ t, locale, api, disabled, busy, unpinned, onPin, onPinFilter }: { t: T; locale: UiLocale;
-  api: () => SavedFilterApi; disabled: boolean; busy: string | null; unpinned: readonly SavedFilter[];
+function TopicSearch({ t, locale, api, disabled, busy, pinned, unpinned, onPin, onPinFilter }: { t: T; locale: UiLocale;
+  api: () => SavedFilterApi; disabled: boolean; busy: string | null;
+  /** Concepts already pinned as tabs: not offered again, and opened rather than pinned. */
+  pinned: readonly string[];
+  unpinned: readonly SavedFilter[];
   onPin: (topic: Topic) => void; onPinFilter: (filter: SavedFilter) => void }) {
   const [phrase, setPhrase] = useState('');
   const [results, setResults] = useState<Loaded<Topic[]> | null>(null);
@@ -188,9 +192,11 @@ function TopicSearch({ t, locale, api, disabled, busy, unpinned, onPin, onPinFil
         {neighbours(t.broader, detail.data.broader)}
         {neighbours(t.narrower, detail.data.narrower)}
       </> : null}
-      <Button className="justify-self-start" disabled={disabled} isLoading={busy === selected.id}
-        onClick={() => onPin({ id: selected.id, name })}><PinIcon aria-hidden="true" />
-        {t.pinThis({ topic: name.value })}</Button>
+      {pinned.includes(selected.id) ? <Button className="justify-self-start" variant="soft" isLoading={busy === selected.id}
+        onClick={() => onPin({ id: selected.id, name })}>{t.openTab}</Button>
+        : <Button className="justify-self-start" disabled={disabled} isLoading={busy === selected.id}
+          onClick={() => onPin({ id: selected.id, name })}><PinIcon aria-hidden="true" />
+          {t.pinThis({ topic: name.value })}</Button>}
     </div>;
   }
 
@@ -230,10 +236,10 @@ function TopicSearch({ t, locale, api, disabled, busy, unpinned, onPin, onPinFil
             })}
           </ul>
         </section> : null}
-        {popular?.length ? <section aria-label={t.popularTopics} className="grid gap-2">
+        {popular?.some(topic => !pinned.includes(topic.id)) ? <section aria-label={t.popularTopics} className="grid gap-2">
           <h3 className="font-medium text-muted-foreground text-xs">{t.popularTopics}</h3>
           <ul className="flex flex-wrap gap-2">
-            {popular.map(topic => <li key={topic.id}><button type="button" className={chip} lang={topic.name.language}
+            {popular.filter(topic => !pinned.includes(topic.id)).map(topic => <li key={topic.id}><button type="button" className={chip} lang={topic.name.language}
               onClick={() => setSelected(topic)}>{topic.name.value}</button></li>)}
           </ul>
         </section> : null}

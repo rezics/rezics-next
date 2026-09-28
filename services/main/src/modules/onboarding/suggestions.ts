@@ -9,7 +9,7 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { readWorkClassifications } from '../work/read-classifications.ts';
 import { WorkReadInvalid, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { listOfficialZones } from '../zone/publication.ts';
-import { contentLanguages, SUGGESTION_COST, type suggestedFollow, type SuggestionReason } from './contract.ts';
+import { SUGGESTION_COST, type suggestedFollow, type SuggestionReason } from './contract.ts';
 
 type Suggestion = Static<typeof suggestedFollow>;
 
@@ -45,11 +45,11 @@ export async function readConceptMatches(session: WorkReadSession, works: readon
   return matches;
 }
 
+/** Any BCP 47 content languages the reader reads, first choice first; the schema checks each tag's form. */
 export function parseLanguages(values: readonly string[] | undefined): string[] {
   if (!values) return [];
-  if (new Set(values).size !== values.length
-    || values.some(value => !(contentLanguages as readonly string[]).includes(value))) {
-    throw new WorkReadInvalid('Invalid onboarding languages');
+  if (new Set(values.map(value => value.toLowerCase())).size !== values.length) {
+    throw new WorkReadInvalid('Repeated onboarding languages');
   }
   return [...values];
 }

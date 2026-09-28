@@ -13,13 +13,14 @@ test('G-431: a Work is grouped by its most specific type: a mod before software,
   expect(primaryType(['https://example.com/Other'])).toBeNull();
 });
 
-test('G-431: content languages start with the reader\'s locale or its language', () => {
+test('G-431: suggested content languages start with the reader\'s locale; any other language can be chosen', () => {
   expect(offeredLanguages('zh-Hans')).toEqual(['zh-Hans', 'en', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es']);
   expect(offeredLanguages('fr-CA')[0]).toBe('fr');
   expect(offeredLanguages(undefined)[0]).toBe('en');
-  expect(parseLanguages(['ja', 'en'])).toEqual(['ja', 'en']);
+  // Any language the reader reads, in their order of preference.
+  expect(parseLanguages(['ja', 'en', 'pt-BR', 'yue'])).toEqual(['ja', 'en', 'pt-BR', 'yue']);
   expect(() => parseLanguages(['en', 'en'])).toThrow();
-  expect(() => parseLanguages(['tlh'])).toThrow();
+  expect(() => parseLanguages(['zh-Hans', 'zh-hans'])).toThrow();
 });
 
 test('G-431: Concepts group under their Works\' types, with examples, broader before narrower', () => {

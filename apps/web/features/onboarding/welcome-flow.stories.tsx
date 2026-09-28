@@ -32,8 +32,15 @@ export const ChooseEverything: Story = {
     const api = args.api as ReturnType<typeof memoryWelcome>;
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Step 1 of 3')).toBeVisible();
-    await expect(canvas.getByRole('button', { name: /English/ })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(canvas.getByRole('button', { name: /日本語/ }));
+    // Languages are an ordered list, the locale's first; any language can join it by name or code.
+    const chosen = canvas.getByRole('region', { name: 'Your languages, first choice first' });
+    await expect(within(chosen).getAllByRole('listitem').map(item => item.textContent)).toEqual(['1English']);
+    await userEvent.click(canvas.getByRole('button', { name: 'Add Japanese' }));
+    await userEvent.type(canvas.getByRole('searchbox', { name: 'Add another language' }), 'brazil');
+    await userEvent.click(await canvas.findByRole('button', { name: 'Add Brazilian Portuguese' }));
+    await userEvent.click(within(chosen).getByRole('button', { name: 'Move Brazilian Portuguese up' }));
+    await expect(within(chosen).getAllByRole('listitem').map(item => item.textContent?.slice(0, 1))).toEqual(['1', '2', '3']);
+    await expect(within(chosen).getAllByRole('listitem')[1]).toHaveTextContent('português');
     await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
 
     await expect(canvas.getByRole('heading', { level: 2, name: 'Pick a few topics' })).toBeVisible();
@@ -48,13 +55,13 @@ export const ChooseEverything: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
 
     const communities = await canvas.findByRole('list', { name: 'Follow a few communities' });
-    await expect(api.calls).toContain('suggestions:2:en,ja');
+    await expect(api.calls).toContain('suggestions:2:en,pt-BR,ja');
     // Every suggestion starts ticked, with its reason; the reader unticks what they do not want.
     await expect(within(communities).getByText(/For Farming sims · 12,480 members/)).toBeVisible();
     await userEvent.click(within(communities).getByRole('button', { name: /Classic Literature/ }));
     await userEvent.click(canvas.getByRole('button', { name: 'Follow 2 and finish' }));
     await waitFor(() => expect(api.calls).toContain('follow:concept,concept,realm,zone'));
-    await expect(api.calls).toContain('languages:en,ja');
+    await expect(api.calls).toContain('languages:en,pt-BR,ja');
   },
 };
 

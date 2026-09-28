@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { added, earlier, languageTag, matchingLanguages, MAX_LANGUAGES } from '../features/onboarding/languages.ts';
 import { broaderName, MAX_TOPICS, startingLanguages, toggled, topicGroups } from '../features/onboarding/topics.ts';
 import { choices } from '../features/onboarding/welcome-fixtures.ts';
 
@@ -26,10 +27,38 @@ describe('G-431 the setup\'s topics', () => {
     expect(toggled([], 'a')).toEqual(['a']);
   });
 
-  test('languages start from the reader\'s settings, else the page\'s locale', () => {
+  test('languages start from the reader\'s settings in their order, else the page\'s locale', () => {
     const offered = ['zh-Hans', 'en', 'ja'];
-    expect(startingLanguages(['ja', 'tlh'], offered, 'zh-Hans')).toEqual(['ja']);
+    expect(startingLanguages(['yue', 'ja'], offered, 'zh-Hans')).toEqual(['yue', 'ja']);
     expect(startingLanguages([], offered, 'zh-Hans')).toEqual(['zh-Hans']);
     expect(startingLanguages(null, offered, 'fr')).toEqual(['zh-Hans']);
+  });
+});
+
+describe('G-431 the setup\'s languages', () => {
+  test('any BCP 47 language joins in canonical form; a malformed one does not', () => {
+    expect(languageTag('zh-hans')).toBe('zh-Hans');
+    expect(languageTag(' pt-br ')).toBe('pt-BR');
+    expect(languageTag('yue')).toBe('yue');
+    expect(languageTag('not a tag')).toBeNull();
+    expect(languageTag('')).toBeNull();
+  });
+
+  test('the list keeps its order: added last, moved one place up, never repeated or past eight', () => {
+    expect(added(['en'], 'ja')).toEqual(['en', 'ja']);
+    expect(added(['en', 'ja'], 'en')).toEqual(['en', 'ja']);
+    const eight = Array.from({ length: MAX_LANGUAGES }, (_, index) => `x${index}`);
+    expect(added(eight, 'ja')).toEqual(eight);
+    expect(earlier(['en', 'ja', 'ko'], 'ko')).toEqual(['en', 'ko', 'ja']);
+    expect(earlier(['en', 'ja'], 'en')).toEqual(['en', 'ja']);
+  });
+
+  test('a language is found by its name here, its own name or its code; a typed tag is offered too', () => {
+    expect(matchingLanguages('brazil', 'en', [])).toEqual(['pt-BR']);
+    expect(matchingLanguages('日本', 'en', [])).toEqual(['ja']);
+    expect(matchingLanguages('葡萄牙', 'zh-Hans', [])).toContain('pt');
+    expect(matchingLanguages('gsw', 'en', [])).toEqual(['gsw']);
+    expect(matchingLanguages('japanese', 'en', ['ja'])).toEqual([]);
+    expect(matchingLanguages('', 'en', [])).toEqual([]);
   });
 });

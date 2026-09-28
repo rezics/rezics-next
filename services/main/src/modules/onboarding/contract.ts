@@ -23,7 +23,7 @@ export const choiceConcept = t.Object({ id: readId, name: readName,
   broader: t.Nullable(readId),
   samples: t.Array(sampleWork, { maxItems: CHOICES_COST.shownSamples }) });
 export const onboardingChoices = t.Object({ profile: t.Literal('onboarding-choices-v1'),
-  /** Content languages a reader can choose, the requested locale's first. */
+  /** Content languages to suggest, the requested locale's first; a reader may add any BCP 47 language. */
   languages: t.Array(readLanguage, { maxItems: 8 }),
   /** One group per Work type, in the order a reader meets them: the type with most Concepts first. */
   groups: t.Array(t.Object({ type: t.String(), concepts: t.Array(choiceConcept, { maxItems: CHOICES_COST.groupConcepts }) }),
@@ -31,7 +31,7 @@ export const onboardingChoices = t.Object({ profile: t.Literal('onboarding-choic
   sourcePosition: readPosition });
 export type OnboardingChoices = Static<typeof onboardingChoices>;
 
-/** Concepts and languages the reader chose; with neither, the suggestions are popular Realms. */
+/** Concepts and BCP 47 content languages the reader chose, first choice first; with neither, the suggestions are popular Realms. */
 export const suggestionsQuery = t.Object({
   concepts: t.Optional(t.Array(readId, { minItems: 1, maxItems: 8, uniqueItems: true })),
   languages: t.Optional(t.Array(readLanguage, { minItems: 1, maxItems: 8, uniqueItems: true })),
@@ -56,5 +56,5 @@ export const suggestionsResult = t.Object({ profile: t.Literal('home-suggested-f
 export const SUGGESTION_COST = { realms: 8, nonOfficialRealms: 4, officialRealms: 8, workScan: 8,
   samples: 3, suggestions: 3, conceptRows: 128 } as const;
 
-/** The content languages Home filters by: the interface locales' writing systems. */
+/** The content languages onboarding suggests first: the interface locales' writing systems. Readers may add any other. */
 export const contentLanguages = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;

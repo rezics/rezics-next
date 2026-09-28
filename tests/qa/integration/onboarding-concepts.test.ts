@@ -80,8 +80,10 @@ test('G-431 onboarding offers the shared scheme\'s Concepts by type with covers,
     const popular = await json<Suggestions>(await call('GET', '/v1/onboarding/suggested-follows'));
     expect(popular.items.every(item => item.reason.kind === 'popular')).toBe(true);
 
-    // Invalid: languages outside the offered set, repeated or foreign Concept IDs.
-    expect((await call('GET', '/v1/onboarding/suggested-follows?languages=tlh')).status).toBe(400);
+    // Any BCP 47 language the reader reads is accepted; a malformed or repeated one is not, nor a foreign Concept ID.
+    expect((await call('GET', '/v1/onboarding/suggested-follows?languages=yue&languages=pt-BR')).status).toBe(200);
+    expect((await call('GET', '/v1/onboarding/suggested-follows?languages=en&languages=en')).status).toBe(400);
+    expect((await call('GET', '/v1/onboarding/suggested-follows?languages=Not_a_tag')).status).toBe(400);
     expect((await call('GET', `/v1/onboarding/suggested-follows?concepts=urn:example:${randomUUID()}`)).status).toBe(400);
   } finally { await home.stop(); }
 }, 300_000);

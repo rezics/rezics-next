@@ -70,9 +70,9 @@ export function toggled(chosen: readonly string[], topic: string): string[] {
 
 /**
  * The languages to start the language step from: the reader's saved content
- * languages, else the page's locale when it is one Main offers.
+ * languages in their order, else Main's first suggestion (the page's locale).
  */
 export function startingLanguages(saved: readonly string[] | null, offered: readonly string[], locale: string): string[] {
-  if (saved?.length) return saved.filter(language => offered.includes(language));
+  if (saved?.length) return [...saved];
   return offered.includes(locale) ? [locale] : offered.slice(0, 1);
 }

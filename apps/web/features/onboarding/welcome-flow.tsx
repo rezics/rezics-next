@@ -14,6 +14,7 @@ import { PICKER_COOKIE } from '../home/cookies.ts';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import { preferenceCookie } from '../shell/preferences.ts';
 import type { OnboardingMessages } from './messages.ts';
+import { LanguagePicker } from './language-picker.tsx';
 import { broaderName, MAX_TOPICS, startingLanguages, toggled, topicGroups } from './topics.ts';
 import { mainWelcomeApi, type WelcomeApi } from './welcome-api.ts';
 
@@ -130,21 +131,8 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
       </div>
     </header>
 
-    {step === 1 ? <ul aria-label={title} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      {offered.map(language => {
-        const on = languages.includes(language);
-        return <li key={language}><button type="button" aria-pressed={on} className={cn(tile,
-          'min-h-14 items-center justify-between gap-3 px-4 font-medium')}
-          onClick={() => setLanguages(current => on ? current.filter(item => item !== language) : [...current, language])}>
-          <span className="grid min-w-0">
-            <span lang={language} className="truncate">{new Intl.DisplayNames([language], { type: 'language' })
-              .of(language) ?? language}</span>
-            <span className="truncate font-normal text-muted-foreground text-xs">{names.of(language)}</span>
-          </span>
-          <Check on={on} />
-        </button></li>;
-      })}
-    </ul> : null}
+    {step === 1 ? <LanguagePicker t={t} locale={locale} suggested={offered} value={languages}
+      onChange={setLanguages} /> : null}
 
     {step === 2 ? groups.length ? <div className="grid gap-6">
       <p role="status" className="font-medium text-muted-foreground text-sm">
