@@ -145,6 +145,11 @@
       "file": "shapes/content-search-eligibility-v1.ttl"
     },
     {
+      "id": "content-search-eligibility-v2",
+      "sha256": "a5c815048b2d021e85d03bcd041b2c5bd26a655daff4ff4476f5cc82402351da",
+      "file": "shapes/content-search-eligibility-v2.ttl"
+    },
+    {
       "id": "context-definition-equivalence-v1",
       "sha256": "d70b454077f96a64b4c994ba987d95aeb58ba60071f8d2bbf8963d3e1b6c9daf",
       "file": "shapes/context-definition-equivalence-v1.ttl"
@@ -918,7 +923,22 @@
         {
           "profile": "content-search-eligibility-v1",
           "shape": "https://rezics.com/definition/content-search-eligibility-v1/decision-shape",
-          "when": []
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/content-search-eligibility-v1"
+            }
+          ]
+        },
+        {
+          "profile": "content-search-eligibility-v2",
+          "shape": "https://rezics.com/definition/content-search-eligibility-v2/decision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/content-search-eligibility-v2"
+            }
+          ]
         }
       ]
     },
@@ -2691,6 +2711,7 @@
     "contexts/content-private-match-unit-v1.jsonld": "05e9e12365b96c24f6bc2e201db8f4e80953031a3318d83f8b3083d49054c12c",
     "contexts/content-publication-v1.jsonld": "82eed979cbf46281029903d58d8b3ff51a1e58f989d861cedeb8ce7a5a0c2e0c",
     "contexts/content-search-eligibility-v1.jsonld": "a0ddcafdaad7f73ea5b7881817f9d2739bedb403eb3863fd716173f457c42dd5",
+    "contexts/content-search-eligibility-v2.jsonld": "e3df722887c21f3ceffd11ba5ccc15516b7fc35f031f22791ffb065ab005ffcc",
     "contexts/context-definition-equivalence-v1.jsonld": "9f03657d02a1ec24c37de3aca31af2a14fda3d6e889cea81820db2b89b4da0c4",
     "contexts/context-definition-state-v1.jsonld": "14aa723bf75690ab8a0ba87ad3d20c914a8e9d630b60c84a2fbc3d350652615c",
     "contexts/context-selection-v1.jsonld": "645aaf7d6789bcbf69d14516cd3a03248c47342c4a6b05f50cf24b9d6c699dcc",
@@ -2781,6 +2802,7 @@
     "shapes/content-private-match-unit-v1.ttl": "4842523abc660d6edd620947dc2c0e8fdf85031268bff6c71d8de6f5599c7288",
     "shapes/content-publication-v1.ttl": "19f83eac251b0e11dcae8cfe4d69a02f311133d979bf4fabb4f92f4dc0b5736f",
     "shapes/content-search-eligibility-v1.ttl": "b8d630d9b5206bbdff3b979f815ac41a537d6569667b4859198896d56a22d3c1",
+    "shapes/content-search-eligibility-v2.ttl": "a5c815048b2d021e85d03bcd041b2c5bd26a655daff4ff4476f5cc82402351da",
     "shapes/context-definition-equivalence-v1.ttl": "d70b454077f96a64b4c994ba987d95aeb58ba60071f8d2bbf8963d3e1b6c9daf",
     "shapes/context-definition-state-v1.ttl": "d6c25bc9f0dd2face7a57a997babc888ecd0f7931af5066634d5aeafb85f8948",
     "shapes/context-selection-v1.ttl": "4f8db2ae8afffc2e935afcac0fad2047c37474a3b3efb69b0a0d32e5d87efdc4",
@@ -2854,9 +2876,9 @@
     "shapes/work-title-control-v1.ttl": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "2c03a38c830ef047faa025deb634536f2b46862b7bbbbcced12df488e2ded643",
-    "packages/model/src/generated/profiles.ts": "011f982dd86572deda8b343760dbe8e4d6159fc0c1ce2d65d1a4a119d625b496",
-    "packages/model/src/generated/schemas.ts": "cf7fc683cf549d3f18124b57e89760898d74127024ebe40392a19de6e50cc282",
-    "packages/model/src/generated/vocabulary.ts": "56719f75b458eed0e0ef8616ccf2a31a8cbb5c74b5e3ea0006374abe6c3a8d8a"
+    "packages/model/src/generated/arbitraries.ts": "ce5cba21faffb100dfba1aeb1b4fcefe92fffdc0a1c462be796ee38c8d739ee6",
+    "packages/model/src/generated/profiles.ts": "d609ec145a05d0f03679cd5466aa6d72e50721de41b6f11db73be5107cbc79e1",
+    "packages/model/src/generated/schemas.ts": "fe967a6a64bb8dec575ea9d10bc34f8974d01dba875bd91329a6ccb62806e200",
+    "packages/model/src/generated/vocabulary.ts": "13562515f40c770ba38456148badfd5961877a53c467f3f18947801e620daf9b"
   }
 }

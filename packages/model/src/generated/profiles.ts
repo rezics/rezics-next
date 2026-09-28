@@ -226,6 +226,16 @@ export const profileRegistry = {
       "decision"
     ]
   },
+  "content-search-eligibility-v2": {
+    "sha256": "a5c815048b2d021e85d03bcd041b2c5bd26a655daff4ff4476f5cc82402351da",
+    "file": "shapes/content-search-eligibility-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/content-search-eligibility-v2/decision-shape"
+    ],
+    "focusRoles": [
+      "decision"
+    ]
+  },
   "context-definition-equivalence-v1": {
     "sha256": "d70b454077f96a64b4c994ba987d95aeb58ba60071f8d2bbf8963d3e1b6c9daf",
     "file": "shapes/context-definition-equivalence-v1.ttl",
