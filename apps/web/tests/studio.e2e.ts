@@ -232,6 +232,8 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
         await page.keyboard.press('ArrowDown');
       }
       await expect(item).toHaveAttribute('data-highlighted', '');
+      // A submenu highlights its first item before it takes focus; Enter goes to whichever menu has it.
+      await expect(item.locator('xpath=ancestor::*[@role="menu"][1]')).toBeFocused();
     };
     await expect(async () => {
       await page.keyboard.press('Escape');
