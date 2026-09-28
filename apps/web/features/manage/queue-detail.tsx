@@ -18,7 +18,7 @@ import type { ManageMessages } from './messages.ts';
 import type { QueueNames } from './queue-api.ts';
 import { HubText, ModFacts, PersonCard, RealmRules, RuleNote, SpoilerText, SubjectHeader } from './queue-context.tsx';
 import { isReport, type QueueAction, type QueueAuthority } from './queue-state.ts';
-import { reviewedAs, subjectOf } from './queue-subject.ts';
+import { inChapters, reviewedAs, subjectOf } from './queue-subject.ts';
 import type { AgentSummary, DecisionBasis, Loaded, ModerationItem, PublishedRule } from './types.ts';
 
 /** The order decisions are offered in, everywhere: yes, no, back to the author, then to the owners. */
@@ -124,7 +124,8 @@ export function QueueDetail({ item, names, draft, basis, allowed, authority, rul
         {t.reasonLabel}</dt><dd className="font-medium" dir="auto">{reason}</dd></div> : null}
     </dl> : null}
     {cited ? <RuleNote rule={cited.rule} number={cited.number} t={t} /> : null}
-    {item.kind === 'work_submission' ? <p className="text-sm">{t.wholeWorkSubmission}</p> : null}
+    {item.kind === 'work_submission' ? <p className="text-sm">
+      {inChapters(subject.work) ? t.wholeBookSubmission : t.wholeWorkSubmission}</p> : null}
     {item.kind === 'content-publication_submission' ? <p className="text-sm">{t.publicationSubmission}</p> : null}
     {item.submission?.contribution ? <div className="grid gap-2">
       <SpoilerText heading={t.submittedText} spoils={spoils} loading={draft === 'loading' || draft === undefined}

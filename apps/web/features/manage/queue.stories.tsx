@@ -328,7 +328,7 @@ export const WorkSubmission: Story = {
     const detail = within(detailTitle(canvas).closest('section')!);
     await expect(detail.getByText('Book · Ongoing · 3 chapters · by Lin Mei 林梅')).toBeVisible();
     await expect(detail.getByText('一封没有地址的信，把雨夜书店带向二十年前的秘密。')).toHaveAttribute('lang', 'zh-Hans');
-    await expect(detail.getByText(/Adds the whole Work to this Realm/)).toBeVisible();
+    await expect(detail.getByText('Adds the whole Book to this Realm. Its chapters follow as they’re published.')).toBeVisible();
     await expect(detail.getByText('12 accepted · 1 sent back · 2 waiting')).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Works' })).toHaveAttribute('aria-current', 'page');
   },
@@ -359,6 +359,8 @@ export const ModSubmission: Story = {
     const compatibility = detail.getByRole('region', { name: 'Compatibility' });
     for (const text of ['Minecraft', '1.21.1', 'Fabric', '2.3.0']) await expect(compatibility).toHaveTextContent(text);
     await expect(detail.getByText(/^Banned until/)).toBeVisible();
+    // A mod has no chapters to follow.
+    await expect(detail.getByText('Adds the whole Work to this Realm.')).toBeVisible();
     await expect(detail.getByText('3 rejected · 2 waiting · 1 withdrawn')).toBeVisible();
   },
 };

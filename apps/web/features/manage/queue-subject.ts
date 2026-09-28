@@ -57,3 +57,7 @@ export function reviewedAs(work: WorkSummary | undefined): 'mod' | 'prompt' | 's
   if (types.includes(`${vocabulary}SkillPackage`)) return 'skill';
   return types.includes(`${vocabulary}ModPackage`) ? 'mod' : null;
 }
+
+/** Whether a Work is read in chapters, so accepting it whole also takes the chapters still to come. */
+export const inChapters = (work: WorkSummary | undefined) => !!work && (work.types.includes('https://schema.org/Book')
+  || work.types.includes('https://schema.org/BookSeries') || !!work.chapterCount);

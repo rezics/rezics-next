@@ -182,7 +182,7 @@ export function PersonCard({ iri, agents, record, label, time, now, locale, mess
         {handle ? <span className="ms-1.5 text-muted-foreground">{handle}</span> : null}
         <span className="block text-muted-foreground text-xs"><time dateTime={isoTime(time)} title={dateTime(time, locale)}
           suppressHydrationWarning>{relativeTime(time, now, locale)}</time>
-          {facts ? <> · {facts.banned ? null : facts.standing}</> : null}</span>
+          {facts && !facts.banned ? <> · {facts.standing}</> : null}</span>
       </p>
     </div>
     {facts ? <dl className="grid gap-1.5 ps-10.5 text-sm">
