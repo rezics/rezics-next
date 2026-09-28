@@ -270,10 +270,21 @@ test.each(['initial context', 'retained context'])(
         expectedRevisionHead: null, value: 5, actingSubject: person.agent }) }));
     expect(observation.status).toBe(201);
     const observed = await observation.json() as { observation: string; observationRevision: string };
+    // A preceding test or ordinary erasure may leave unrelated tombstones.
+    // The current-head erasure check must correlate to this observation.
+    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(id())} a rv:ErasedRevision } }`);
     const withRating = await view();
     expect(withRating.status).toBe(200);
     expect(await withRating.json()).toMatchObject({ rating: { global: { value: 5,
       availability: 'available' } } });
+    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(observed.observationRevision)} a rv:ErasedRevision } }`);
+    try { expect((await view()).status).toBe(503); }
+    finally {
+      await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(observed.observationRevision)} a rv:ErasedRevision } }`);
+    }
     ratingConsent = false;
     expect((await view()).status).toBe(401);
     ratingConsent = true;

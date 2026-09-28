@@ -86,8 +86,8 @@ export class ReaderLibraryRatings {
             rv:component ${iri(head.observation)} ; rv:ratingAvailability ?availability ; rv:manifest ?manifest .
           OPTIONAL { ${iri(head.revision)} rv:ratingValue ?value }
           FILTER NOT EXISTS { ${iri(head.revision)} a rv:ErasedRevision }
-          FILTER NOT EXISTS { ?currentHead a rv:ErasedRevision }
         }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?currentHead a rv:ErasedRevision } }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(head.receipt)} rv:outcome rv:Succeeded ; rv:ratingObservation ${iri(head.observation)} ;
             rv:observationRevision ${iri(head.revision)} ; rv:requestDigest ${lit(head.digest)} .
