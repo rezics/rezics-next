@@ -349,6 +349,7 @@ export default {
   installation: 'Installation',
   installationStates: { active: 'Installed', revoked: 'Revoked', none: 'Not installed' },
   scopes: 'Scopes',
+  scopeCount: plural({ one: '1 scope', other: insert('{{value}} scopes') }),
   redirectUris: 'Redirect URIs',
   grantTypes: 'Grant types',
   firstParty: 'First-party',

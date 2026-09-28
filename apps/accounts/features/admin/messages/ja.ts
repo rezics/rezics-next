@@ -349,6 +349,7 @@ export default {
   installation: 'インストール',
   installationStates: { active: 'インストール済み', revoked: '取り消し済み', none: '未インストール' },
   scopes: 'スコープ',
+  scopeCount: plural({ one: '1 件のスコープ', other: insert('{{value}} 件のスコープ') }),
   redirectUris: 'リダイレクト URI',
   grantTypes: '許可タイプ',
   firstParty: 'ファーストパーティ',

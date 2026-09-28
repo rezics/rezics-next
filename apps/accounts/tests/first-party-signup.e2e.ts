@@ -14,9 +14,16 @@ test('joining from home verifies email, resumes REZICS authorization and keeps t
   await expect(join).toBeVisible();
   const returnTo = new URL((await join.getAttribute('href'))!, web).searchParams.get('next')!;
   await join.click();
+  await page.waitForURL(url => /^\/sign-(in|up)$/.test(url.pathname));
+  // The shared web app links to the canonical Accounts origin. A worktree
+  // checks its own frontend while retaining the signed OAuth request unchanged.
+  const destination = new URL(page.url());
+  if (destination.origin !== new URL(accounts).origin) {
+    await page.goto(new URL(destination.pathname + destination.search, accounts).toString());
+  }
   await expect(page.getByRole('heading', { name: 'Create your REZICS Account' })).toBeVisible();
   await page.locator('html[data-hydrated]').waitFor();
-  await expect(page.getByText('starting with REZICS', { exact: false })).toBeVisible();
+  await expect(page.getByText('One account for REZICS and everything that comes next')).toBeVisible();
   await page.getByRole('textbox', { name: 'Name' }).fill(`First Party ${id}`);
   await page.getByRole('textbox', { name: 'Email' }).fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);

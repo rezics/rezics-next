@@ -71,8 +71,9 @@ export function ClientsPage({ clients, focus }: { clients: ClientPage; focus?: s
             <TableCell className={cell}>{client.installation ? <Badge variant={client.installation.state === 'active' ? 'outline' : 'warning'} size="sm">
               {(t.installationStates as Record<string, string>)[client.installation.state] ?? client.installation.state}</Badge>
               : <Badge variant="warning" size="sm">{t.installationStates.none}</Badge>}</TableCell>
-            <TableCell className={`${cell} max-w-72 whitespace-normal`}><span className="line-clamp-2 font-mono text-xs text-muted-foreground">
-              {(client.scopes ?? []).join(' ')}</span></TableCell>
+            <TableCell className={cell}><Button variant="link" size="sm" className="h-auto p-0"
+              aria-expanded={expanded} aria-controls={detailsId} onClick={() => toggle(client.clientId)}>
+              {t.scopeCount(client.scopes?.length ?? 0)}</Button></TableCell>
             <TableCell className={`${cell} text-muted-foreground`}>{client.createdAt ? <DateOnly iso={client.createdAt} /> : '—'}</TableCell>
             <TableCell className={`${cell} text-end`}>
               <Menu positioning={{ placement: 'bottom-end' }} onSelect={({ value }) => setRequest({ action: value as ClientAction, client })}>
@@ -86,7 +87,7 @@ export function ClientsPage({ clients, focus }: { clients: ClientPage; focus?: s
           </TableRow>
           {expanded ? <TableRow id={detailsId} className="bg-muted/30 hover:bg-muted/30">
             <TableCell colSpan={7} className="px-6 py-4 whitespace-normal">
-              <dl className="grid gap-x-8 gap-y-3 text-sm md:grid-cols-2">
+              <dl className="grid gap-x-8 gap-y-3 text-sm max-md:max-w-[calc(100vw-5rem)] md:grid-cols-2">
                 <div><dt className="text-muted-foreground">{t.redirectUris}</dt><dd><ul className="font-mono text-xs">
                   {client.redirectUris.map(uri => <li key={uri} className="break-all">{uri}</li>)}</ul></dd></div>
                 <div><dt className="text-muted-foreground">{t.grantTypes}</dt><dd className="font-mono text-xs">{(client.grantTypes ?? []).join(', ')}</dd></div>

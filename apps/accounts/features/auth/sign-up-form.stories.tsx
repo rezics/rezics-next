@@ -70,13 +70,20 @@ export const ForAnApp: Story = {
   parameters: { account: { api: { signUp: signedUp } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText('One account for every REZICS product, starting with Reader')).toBeVisible();
+    await expect(await canvas.findByText('Create your REZICS Account to continue to Reader')).toBeVisible();
     await fill(canvasElement);
     // The account keeps the page's language; verification returns to the app's request.
     await expect(signedUp).toHaveBeenCalledWith(expect.objectContaining({ locale: 'en',
       carry: 'client_id=reader&sig=abc&ba_param=client_id' }));
     await expect(await canvas.findByRole('link', { name: 'Back to sign in' }))
       .toHaveAttribute('href', '/sign-in?client_id=reader&sig=abc&ba_param=client_id&sign_in=1');
+  },
+};
+
+export const ForRezics: Story = {
+  args: { appName: 'REZICS' },
+  async play({ canvasElement }) {
+    await expect(await within(canvasElement).findByText('One account for REZICS and everything that comes next')).toBeVisible();
   },
 };
 

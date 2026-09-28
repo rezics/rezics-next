@@ -349,6 +349,7 @@ export default {
   installation: '설치',
   installationStates: { active: '설치됨', revoked: '취소됨', none: '설치되지 않음' },
   scopes: '범위',
+  scopeCount: plural({ one: '권한 1개', other: insert('권한 {{value}}개') }),
   redirectUris: '리디렉션 URI',
   grantTypes: '허가 유형',
   firstParty: '자사 앱',

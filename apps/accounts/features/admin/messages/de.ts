@@ -349,6 +349,7 @@ export default {
   installation: 'Installation',
   installationStates: { active: 'Installiert', revoked: 'Widerrufen', none: 'Nicht installiert' },
   scopes: 'Berechtigungsbereiche',
+  scopeCount: plural({ one: '1 Berechtigungsbereich', other: insert('{{value}} Berechtigungsbereiche') }),
   redirectUris: 'Redirect-URIs',
   grantTypes: 'Grant-Typen',
   firstParty: 'Eigene App',

@@ -1,14 +1,11 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/avatar';
+import { initials } from '@rezics/ui/avatar-initials';
 
 export interface AvatarUser { name: string; email: string; image: string | null }
 
-function initials(value: string): string {
-  return [...value.trim()][0]?.toUpperCase() ?? '?';
-}
-
-/** The account picture, or its initial on the accent surface until one is set. */
+/** The account picture, or the same initials shown on the main site. */
 export function UserAvatar({ user, className, size = 'md' }: { user: AvatarUser; className?: string;
   size?: 'sm' | 'md' | 'lg' }) {
   return <Avatar size={size} className={className}>

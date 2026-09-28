@@ -18,7 +18,7 @@ const withAccountsApp: Decorator = (Story, context) => {
   }, [theme, locale]);
   const account = context.parameters.account as FakeAccount | undefined;
   const { snapshot } = context.loaded.i18n as Awaited<ReturnType<typeof seed>>;
-  return <TranslationProvider key={locale} initial={snapshot} tags={[locale]}>
+  return <TranslationProvider key={locale} initial={snapshot}>
     <AccountClientProvider value={fakeAccountClient(account)}>
       <Suspense fallback={null}><Story /></Suspense>
     </AccountClientProvider>

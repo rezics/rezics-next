@@ -13,6 +13,30 @@ function operator(): Operator | undefined {
 }
 const hydrated = (page: Page) => page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
 
+test('G373 every admin section hydrates with seeded translations and client scopes open from their count', async ({ page, baseURL }) => {
+  const admin = operator();
+  test.skip(!admin, 'REZICS_WEB_AUTH_PRIVATE_PATH must name the stack’s web-auth private.json');
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  expect((await page.request.post('/api/auth/sign-in/email', {
+    headers: { origin: new URL(baseURL!).origin }, data: admin })).ok()).toBe(true);
+  for (const path of ['/admin?hl=en', '/admin/users', '/admin/clients', '/admin/audit', '/admin/staff', '/admin?hl=ja']) {
+    await page.goto(path);
+    await hydrated(page);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    if (path === '/admin/clients') {
+      const count = page.getByRole('button', { name: /^\d+ scopes?$/ }).first();
+      await expect(count).toHaveAttribute('aria-expanded', 'false');
+      await count.click();
+      await expect(count).toHaveAttribute('aria-expanded', 'true');
+      const detailsId = await count.getAttribute('aria-controls');
+      await expect(page.locator(`[id="${detailsId}"]`)).toBeVisible();
+    }
+    expect(errors).toEqual([]);
+  }
+});
+
 /** Someone new signs up; the operator signs in (a fresh sign-in admits staff changes). */
 async function setUp(page: Page, origin: string, admin: Operator, count = 1) {
   const id = randomBytes(5).toString('hex');

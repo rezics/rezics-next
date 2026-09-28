@@ -348,6 +348,7 @@ export default {
   installation: '安装',
   installationStates: { active: '已安装', revoked: '已撤销', none: '未安装' },
   scopes: '权限范围',
+  scopeCount: plural({ one: '1 项权限', other: insert('{{value}} 项权限') }),
   redirectUris: '重定向 URI',
   grantTypes: '授权类型',
   firstParty: '官方应用',

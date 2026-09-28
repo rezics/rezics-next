@@ -1,6 +1,9 @@
 'use client';
 
 import { create } from 'native-i18n/react/client';
-import { resources } from './resources.ts';
+import type { resources } from './resources.ts';
 
-export const { TranslationProvider, useTranslation, useLocale } = create(resources);
+// The server chooses the locale and supplies every namespace used by the page.
+// Hydration must use that snapshot, including in nested admin providers, without
+// resolving browser languages or suspending on a second catalog load.
+export const { TranslationProvider, useTranslation, useLocale } = create<typeof resources>();

@@ -19,6 +19,6 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <meta name="robots" content="noindex" />
     <title>{t.common.productName}</title>
     <script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
-    <body className="min-h-dvh bg-background"><TranslationProvider initial={snapshot} tags={[locale]}>
+    <body className="min-h-dvh bg-background"><TranslationProvider initial={snapshot}>
       <ClientProviders>{children}</ClientProviders></TranslationProvider></body></html>;
 }

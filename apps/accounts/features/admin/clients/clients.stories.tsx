@@ -24,6 +24,19 @@ export const Clients: Story = {
   },
 };
 
+const manyScopes = Array.from({ length: 76 }, (_, index) => `permission:${index}`);
+export const ManyScopes: Story = {
+  args: { clients: { nextCursor: null, items: [{ ...clients.items[0]!, scopes: manyScopes }] } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const count = await canvas.findByRole('button', { name: '76 scopes' });
+    await expect(canvas.queryByText(manyScopes.join(' '))).not.toBeInTheDocument();
+    await userEvent.click(count);
+    await expect(canvas.getByText(manyScopes.join(' '))).toBeVisible();
+    await expect(count).toHaveAttribute('aria-expanded', 'true');
+  },
+};
+
 const setClient = fn(async () => ({ ok: true as const, data: { status: true, requestId: 'req-6' } }));
 const refresh = fn();
 /** Disabling breaks the App for everyone: type its name and confirm with a password. */
@@ -62,4 +75,4 @@ export const FocusedFromSignal: Story = {
 };
 
 export const Dark: Story = { ...Clients, globals: dark };
-export const Phone: Story = { globals: phone, play: Empty.play, args: Empty.args };
+export const Phone: Story = { ...ManyScopes, globals: phone };

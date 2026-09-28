@@ -15,7 +15,7 @@ export const Footer: Story = {
     const picker = within(footer).getByRole('combobox', { name: 'Language' });
     await expect(picker).toHaveValue('en');
     const options = await within(picker).findAllByRole('option');
-    expect(options.map(option => option.textContent?.trim()))
+    await expect(options.map(option => option.textContent?.trim()))
       .toEqual(['English', '繁體中文', '简体中文', '日本語', '한국어', 'Deutsch', 'Français', 'Español']);
   },
 };

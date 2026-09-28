@@ -349,6 +349,7 @@ export default {
   installation: '安裝狀態',
   installationStates: { active: '已安裝', revoked: '已撤銷', none: '未安裝' },
   scopes: '範圍',
+  scopeCount: plural({ one: '1 項權限', other: insert('{{value}} 項權限') }),
   redirectUris: '重新導向 URI',
   grantTypes: '授權類型',
   firstParty: '第一方',

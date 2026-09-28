@@ -66,7 +66,8 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName }: { next: st
     : failure === 'expired-request' ? t.requestExpired
       : failure === 'unavailable' || failure === 'not-enabled' ? t.unavailable : t.signUpFailed;
   return <>
-    <AuthHeading title={t.signUpTitle} subtitle={appName ? t.signUpForApp({ app: appName }) : t.signUpSubtitle} />
+    <AuthHeading title={t.signUpTitle} subtitle={appName && appName !== 'REZICS'
+      ? t.signUpForApp({ app: appName }) : t.signUpSubtitle} />
     {failure ? <Alert role="alert" variant="destructive" className="mb-6">
       <AlertDescription>{failureMessage}</AlertDescription></Alert> : null}
     <form method="post" noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-5">

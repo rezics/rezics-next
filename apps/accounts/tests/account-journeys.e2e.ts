@@ -5,6 +5,13 @@ import { expect, type Page, test } from '@playwright/test';
 // Dev-mode pages hydrate after load; forms are typed into only once React owns them.
 const hydrated = (page: Page) => page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
 
+function consoleErrors(page: Page) {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  return errors;
+}
+
 async function open(page: Page, path: string) {
   await page.goto(path);
   await hydrated(page);
@@ -19,14 +26,50 @@ type Person = ReturnType<typeof newPerson>;
 // The stack's Mailpit (`task urls`); Account delivers its queue every second.
 const mailpit = process.env.MAILPIT_URL ?? 'http://127.0.0.1:8025';
 
-test('G288 Accounts Japanese locale query keeps English fallback strings', async ({ page }) => {
+test('G288 Accounts Japanese locale query renders the translated signed-out page', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.goto('/?hl=ja');
   await hydrated(page);
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja');
-  await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '続行するにはログインしてください' })).toBeVisible();
   expect(pageErrors).toEqual([]);
+});
+
+test('G373 locale snapshots match server HTML through hydration and navigation', async ({ page, browser, baseURL }) => {
+  const errors = consoleErrors(page);
+  for (const path of ['/sign-in?hl=ja', '/sign-up?hl=zh-Hans']) {
+    const server = await browser.newContext({ baseURL, javaScriptEnabled: false, locale: 'en-US' });
+    try {
+      const html = await server.newPage();
+      await html.goto(path);
+      // Streaming HTML holds resolved Suspense content in a hidden container
+      // until its reveal script runs; JavaScript is deliberately off here.
+      const heading = await html.locator('h1').textContent();
+      await open(page, path);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading!);
+      await expect(page.locator('html')).toHaveAttribute('lang', new URL(path, baseURL).searchParams.get('hl')!);
+      expect(errors).toEqual([]);
+    } finally { await server.close(); }
+  }
+  await page.context().clearCookies();
+  const person = await newAccount(page, { ...newPerson(), name: 'Daniel Chen 陈丹尼' });
+  await signIn(page, person);
+  await expect(page).toHaveURL(/\/$/);
+  const state = await page.context().storageState();
+  for (const locale of ['zh-Hans', 'ja']) {
+    const server = await browser.newContext({ baseURL, javaScriptEnabled: false, locale: 'en-US', storageState: state });
+    try {
+      const html = await server.newPage();
+      await html.goto(`/?hl=${locale}`);
+      const heading = await html.locator('h1').textContent();
+      await open(page, `/?hl=${locale}`);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading!);
+      await expect(page.locator('html')).toHaveAttribute('lang', locale);
+      await expect(page.getByText('DC', { exact: true }).first()).toBeVisible();
+      expect(errors).toEqual([]);
+    } finally { await server.close(); }
+  }
 });
 
 /** The newest link in the newest email to `to` whose subject matches. */
@@ -318,28 +361,22 @@ test('an app’s OAuth request continues through sign-up, verification and conse
 
   await page.goto(authorize.toString());
   await expect(page).toHaveURL(/\/sign-in\?/);
+  const arrival = new URL(page.url());
+  if (arrival.origin !== origin) await page.goto(new URL(arrival.pathname + arrival.search, origin).toString());
   await hydrated(page);
   // The signed request names the App before anyone signs in.
   await expect(page.getByText(`to continue to ${appName}`)).toBeVisible();
   await page.getByRole('link', { name: 'Create account' }).click();
   await expect(page).toHaveURL(/\/sign-up\?.*sig=/);
   await hydrated(page);
+  await expect(page.getByText(`Create your REZICS Account to continue to ${appName}`)).toBeVisible();
   const person = newPerson();
   await fillSignUp(page, person);
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   await page.goto(await emailLink(person.email, /^Verify your email address$/));
-  await expect(page.getByRole('heading', { name: 'Your email is verified' })).toBeVisible();
-  // Email links use the issuer's origin; the person continues, and stays signed in, there.
-  const accountOrigin = new URL(page.url()).origin;
-  await page.getByRole('link', { name: 'Sign in to continue' }).click();
-  await hydrated(page);
-  await expect(page.getByText(`to continue to ${appName}`)).toBeVisible();
-  await page.getByRole('textbox', { name: 'Email' }).fill(person.email);
-  await page.getByRole('button', { name: 'Next' }).click();
-  await page.getByLabel('Enter your password').fill(person.password);
-  await page.getByRole('button', { name: 'Next' }).click();
-
+  // Verification signs the person in and resumes the signed request at the issuer.
   await expect(page).toHaveURL(/\/consent\?/);
+  const accountOrigin = new URL(page.url()).origin;
   await hydrated(page);
   await expect(page.getByRole('heading', { level: 1 }))
     .toHaveText(`${appName} wants to access your REZICS Account`);

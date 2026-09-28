@@ -349,6 +349,7 @@ export default {
   installation: 'Installation',
   installationStates: { active: 'Installée', revoked: 'Révoquée', none: 'Non installée' },
   scopes: 'Autorisations',
+  scopeCount: plural({ one: '1 autorisation', other: insert('{{value}} autorisations') }),
   redirectUris: 'URI de redirection',
   grantTypes: 'Types d’autorisation',
   firstParty: 'Interne',
