@@ -133277,7 +133277,8 @@
                                   "follow",
                                   "claim_correction",
                                   "review",
-                                  "review_helpful"
+                                  "review_helpful",
+                                  "realm_invitation"
                                 ],
                                 "type": "string"
                               },
@@ -133299,6 +133300,18 @@
                               },
                               "realmRouteSegment": {
                                 "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "roleChange": {
+                                "~elyTyp": 7,
+                                "enum": [
+                                  "given",
+                                  "taken"
+                                ],
                                 "nullable": true,
                                 "type": [
                                   "string",
@@ -133339,6 +133352,14 @@
                                       "null"
                                     ]
                                   },
+                                  "reviewId": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
                                   "title": {
                                     "~elyTyp": 7,
                                     "nullable": true,
@@ -133352,7 +133373,8 @@
                                   "title",
                                   "excerpt",
                                   "language",
-                                  "linkTarget"
+                                  "linkTarget",
+                                  "reviewId"
                                 ],
                                 "type": "object"
                               }
@@ -133364,6 +133386,7 @@
                               "realmName",
                               "realmRouteSegment",
                               "roleName",
+                              "roleChange",
                               "groupKey",
                               "target"
                             ],
@@ -136822,6 +136845,9 @@
                     "items": {
                       "items": {
                         "properties": {
+                          "createdAt": {
+                            "type": "string"
+                          },
                           "expiresAt": {
                             "type": "string"
                           },
@@ -136869,6 +136895,7 @@
                           "member",
                           "inviter",
                           "state",
+                          "createdAt",
                           "expiresAt",
                           "policyRevision",
                           "termsRevision",
@@ -145557,6 +145584,8 @@
                   "outcome": {
                     "enum": [
                       "restrict",
+                      "interim_restrict",
+                      "final_restrict",
                       "dismiss",
                       "restore",
                       "reverse"
@@ -145774,6 +145803,8 @@
                   "outcome": {
                     "enum": [
                       "restrict",
+                      "interim_restrict",
+                      "final_restrict",
                       "dismiss",
                       "restore",
                       "reverse"
@@ -145991,6 +146022,8 @@
                   "outcome": {
                     "enum": [
                       "restrict",
+                      "interim_restrict",
+                      "final_restrict",
                       "dismiss",
                       "restore",
                       "reverse"
@@ -275862,6 +275895,101 @@
                           "decidedAt": {
                             "type": "string"
                           },
+                          "detail": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "assigned": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "boolean",
+                                  "null"
+                                ]
+                              },
+                              "changes": {
+                                "items": {
+                                  "properties": {
+                                    "gained": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "lost": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "member": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "member",
+                                    "gained",
+                                    "lost"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "role",
+                                  "assignment"
+                                ],
+                                "type": "string"
+                              },
+                              "member": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "role": {
+                                "properties": {
+                                  "id": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "name"
+                                ],
+                                "type": "object"
+                              },
+                              "validUntil": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "role",
+                              "member",
+                              "assigned",
+                              "validUntil",
+                              "changes"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "id": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
@@ -275892,6 +276020,7 @@
                           "caseId",
                           "kind",
                           "reason",
+                          "detail",
                           "outcome",
                           "actingSubject",
                           "decidedAt",
@@ -278803,6 +278932,456 @@
       }
     },
     "/v1/realms/{realm}/invitations": {
+      "get": {
+        "operationId": "getV1RealmsByRealmInvitations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "realm",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "inviter": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "member": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "membershipGeneration": {
+                            "pattern": "^(0|[1-9][0-9]{0,17})$",
+                            "type": "string"
+                          },
+                          "policyRevision": {
+                            "pattern": "^(0|[1-9][0-9]{0,17})$",
+                            "type": "string"
+                          },
+                          "realm": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "state": {
+                            "enum": [
+                              "pending",
+                              "expired",
+                              "accepted",
+                              "declined",
+                              "revoked"
+                            ],
+                            "type": "string"
+                          },
+                          "termsRevision": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "realm",
+                          "member",
+                          "inviter",
+                          "state",
+                          "createdAt",
+                          "expiresAt",
+                          "policyRevision",
+                          "termsRevision",
+                          "membershipGeneration"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 50,
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
       "post": {
         "operationId": "postV1RealmsByRealmInvitations",
         "parameters": [
@@ -278918,6 +279497,9 @@
                   "properties": {
                     "invitation": {
                       "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
                         "expiresAt": {
                           "type": "string"
                         },
@@ -278965,6 +279547,7 @@
                         "member",
                         "inviter",
                         "state",
+                        "createdAt",
                         "expiresAt",
                         "policyRevision",
                         "termsRevision",
@@ -279395,6 +279978,9 @@
                   "properties": {
                     "invitation": {
                       "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
                         "expiresAt": {
                           "type": "string"
                         },
@@ -279442,6 +280028,7 @@
                         "member",
                         "inviter",
                         "state",
+                        "createdAt",
                         "expiresAt",
                         "policyRevision",
                         "termsRevision",
@@ -279836,6 +280423,9 @@
                   "properties": {
                     "invitation": {
                       "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
                         "expiresAt": {
                           "type": "string"
                         },
@@ -279883,6 +280473,7 @@
                         "member",
                         "inviter",
                         "state",
+                        "createdAt",
                         "expiresAt",
                         "policyRevision",
                         "termsRevision",
@@ -282632,7 +283223,8 @@
                           "state": {
                             "enum": [
                               "joined",
-                              "left"
+                              "left",
+                              "not_joined"
                             ],
                             "type": "string"
                           }
