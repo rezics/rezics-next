@@ -78,6 +78,15 @@ class Official {
   }
 }
 
+/** Main requires a new Work's language. Stacks seeded before that recorded these intents without one, which Main
+ * digests as English, so a conflicting replay repeats that. A clean `task dev:reset` gives every Work its own. */
+async function createWork(o: Official, body: { language: string } & Record<string, unknown>, token: string, key: string) {
+  return o.api.post<WorkReceipt>('/v1/works', body, token, key).catch((error: unknown) => {
+    if (!(error instanceof SeedApiError) || error.status !== 409 || body.language === 'en') throw error;
+    return o.api.post<WorkReceipt>('/v1/works', { ...body, language: 'en' }, token, key);
+  });
+}
+
 /** Runs `write`; when Main refuses it for want of authority, grants the exact fixture scopes and runs it once more. */
 async function granted<T>(write: () => Promise<T>, grant: () => Promise<void>): Promise<T> {
   try { return await write(); }
@@ -255,8 +264,8 @@ async function fictionSerials(o: Official) {
     await refreshSeedTokens(o.state);
     await o.state.optional(`Fiction serial ${work.id}`, async () => {
       const author = o.agent(work.author), as = o.writer(work.author), name = work.seedName ?? work.id;
-      const target = await o.api.post<WorkReceipt>('/v1/works', { profile: 'metadata-only-v1', title: work.title,
-        semanticTypes: [BOOK], authoring: 'own-work', actingSubject: author }, as.token, seedKey('official-work', name));
+      const target = await createWork(o, { profile: 'metadata-only-v1', title: work.title, semanticTypes: [BOOK],
+        language: work.language, authoring: 'own-work', actingSubject: author }, as.token, seedKey('official-work', name));
       o.works.set(work.id, { work: target, language: work.language, published: null });
       await describeWork(o, name, target, author, as, work.language, work.tagline, work.completionStatus);
       const published = await publish(o, name, target, author, as, work.language, work.opening);
@@ -298,9 +307,9 @@ async function lighterTexts(o: Official) {
     await refreshSeedTokens(o.state);
     await o.state.optional(`Zone work ${extra.id}`, async () => {
       const as = o.person(extra.owner);
-      const target = await o.api.post<WorkReceipt>('/v1/works', { profile: 'metadata-only-v1', title: extra.title,
-        semanticTypes: [kinds[extra.type]], authoring: 'own-work', actingSubject: as.actingSubject },
-      as.token, seedKey('official-work', extra.id));
+      const target = await createWork(o, { profile: 'metadata-only-v1', title: extra.title,
+        semanticTypes: [kinds[extra.type]], language: extra.language, authoring: 'own-work',
+        actingSubject: as.actingSubject }, as.token, seedKey('official-work', extra.id));
       await describeWork(o, extra.id, target, as.actingSubject, as, extra.language, extra.tagline, null);
       o.works.set(extra.id, { work: target, language: extra.language,
         published: await publish(o, extra.id, target, as.actingSubject, as, extra.language, extra.text) });

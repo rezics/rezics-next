@@ -21,11 +21,11 @@ export async function seedWorks(state: SeedState) {
       ...(author ? { authoring: 'own-work' } : {}) };
     const receipt: WorkReceipt = await api.post<WorkReceipt>('/v1/works', body, session.token, seedKey('work', work.id))
       .catch((error: unknown) => {
-        // Stacks seeded before Works named their language and kind recorded these intents without them;
-        // replay that exact body to reuse them. A clean `task dev:reset` gives every Work both.
+        // Stacks seeded before Works named their language and kind recorded these intents without them. Main
+        // now requires the language and digests a missing one as English, so the replay states that.
+        // A clean `task dev:reset` gives every Work both.
         if (!(error instanceof SeedApiError) || error.status !== 409) throw error;
-        const { language: _language, ...first } = body;
-        return api.post<WorkReceipt>('/v1/works', { ...first, semanticTypes: firstSeedTypes(work.type) },
+        return api.post<WorkReceipt>('/v1/works', { ...body, language: 'en', semanticTypes: firstSeedTypes(work.type) },
           session.token, seedKey('work', work.id));
       });
     created.set(work.id, receipt);
