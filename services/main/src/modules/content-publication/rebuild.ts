@@ -6,6 +6,7 @@ import { DATASET, GRAPHS, PUBLIC_SEARCH_ANCHOR, RV, TEXT_INDEX_PROBE,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { relayContentProjectionOnce } from './relay.ts';
+import { extractProjectionText, projectionRecipeFor } from './projection-recipes.ts';
 
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
@@ -416,6 +417,12 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
       const [variant, head] = batch[i]!;
       const unit = contentUnits.get(variant);
       const body = exact[i];
+      const recipe = body?.status === 'available' ? projectionRecipeFor(body.reference.model) : null;
+      if (recipe?.kind === 'skip') {
+        throw new ContentRebuildUnavailable('eligible Content model has no text projection');
+      }
+      const projected = recipe?.kind === 'text' && body?.status === 'available'
+        ? extractProjectionText(recipe, body.body, body.reference) : null;
       if (!unit || body?.status !== 'available'
         || body.reference.variantId !== variant
         || body.reference.resourceId !== value(head, 'resource')
@@ -423,9 +430,8 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
         || value(unit, 'revision') !== value(head, 'revision')
         || value(unit, 'decision') !== value(head, 'decision')
         || value(unit, 'eligibility') !== value(head, 'eligibility')
-        || value(unit, 'body') !== body.body.body
-        || unit.body?.['xml:lang'] !== (body.reference.language.kind === 'tag'
-          ? body.reference.language.tag : undefined)) {
+        || value(unit, 'body') !== projected?.text
+        || unit.body?.['xml:lang'] !== projected?.language) {
         throw new ContentRebuildUnavailable('Content MatchUnit differs from exact approved source');
       }
     }

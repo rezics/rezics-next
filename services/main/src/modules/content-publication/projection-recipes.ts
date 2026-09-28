@@ -1,5 +1,5 @@
 import { join, resolve } from 'node:path';
-import type { ProjectionPublication } from '../../../../content/src/core.ts';
+import type { ExactContentReference } from '../../../../content/src/core.ts';
 import { summarizeJudgments, type JudgmentCounts } from '../judgment/policy.ts';
 import type { ConceptHint } from '../judgment/schema.ts';
 import { publicTitleProjectionRecipe } from './title-projection.ts';
@@ -12,13 +12,14 @@ const MAX_BODY_BYTES = 65_536;
 
 export class ContentProjectionUnavailable extends Error {}
 
+/** A text recipe depends only on exact retained Content, so rebuild can recompute it. */
 export type ProjectionRecipe =
   | { model: string; kind: 'skip' }
   | { model: string; kind: 'text'; extract: (body: Record<string, unknown>,
-    publication: ProjectionPublication) => { text: string; language: string } };
+    reference: ExactContentReference) => { text: string; language: string } };
 
-function extractContentBody(body: Record<string, unknown>, publication: ProjectionPublication) {
-  const language = publication.reference.language;
+function extractContentBody(body: Record<string, unknown>, reference: ExactContentReference) {
+  const language = reference.language;
   if (language.kind !== 'tag' || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(language.tag)) {
     throw new ContentProjectionUnavailable('Content language has no admitted search tag');
   }
@@ -65,14 +66,14 @@ export function projectionRecipeFor(model: string): ProjectionRecipe {
 }
 
 export function extractProjectionText(recipe: Extract<ProjectionRecipe, { kind: 'text' }>,
-  body: Record<string, unknown>, publication: ProjectionPublication) {
-  const extracted = recipe.extract(body, publication);
+  body: Record<string, unknown>, reference: ExactContentReference) {
+  const extracted = recipe.extract(body, reference);
   if (typeof extracted.text !== 'string' || !extracted.text
     || Buffer.byteLength(extracted.text, 'utf8') > MAX_BODY_BYTES
     || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(extracted.text)
     || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(extracted.language)
-    || publication.reference.language.kind !== 'tag'
-    || extracted.language !== publication.reference.language.tag) {
+    || reference.language.kind !== 'tag'
+    || extracted.language !== reference.language.tag) {
     throw new ContentProjectionUnavailable('Projection recipe returned invalid search text');
   }
   return extracted;

@@ -10,12 +10,12 @@ function text(body: Record<string, unknown>, language: string, field: string) {
 
 /** Published Hub content is searchable as literal data, never an execution request. */
 export const projectionRecipes: readonly ProjectionRecipe[] = [
-  { model: 'rezics-skill-package-v1', kind: 'text', extract: (body, publication) => {
-    if (publication.reference.language.kind !== 'tag') throw new Error('Hub text language is unavailable');
-    return text(body, publication.reference.language.tag, 'instructions');
+  { model: 'rezics-skill-package-v1', kind: 'text', extract: (body, reference) => {
+    if (reference.language.kind !== 'tag') throw new Error('Hub text language is unavailable');
+    return text(body, reference.language.tag, 'instructions');
   } },
-  { model: 'rezics-prompt-v1', kind: 'text', extract: (body, publication) => {
-    if (publication.reference.language.kind !== 'tag') throw new Error('Hub text language is unavailable');
-    return text(body, publication.reference.language.tag, 'content');
+  { model: 'rezics-prompt-v1', kind: 'text', extract: (body, reference) => {
+    if (reference.language.kind !== 'tag') throw new Error('Hub text language is unavailable');
+    return text(body, reference.language.tag, 'content');
   } },
 ];

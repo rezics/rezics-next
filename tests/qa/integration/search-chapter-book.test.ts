@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { startMediaStack } from './media-support.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV }
@@ -8,6 +9,10 @@ import { mainSelectionDigest, PUBLIC_SEARCH_GRAPH, selectMainDefault }
   from '../../../services/main/src/modules/work/select-main.ts';
 import { backfillChapterSearchIndex }
   from '../../../services/main/src/modules/work/search-index-backfill.ts';
+import { clearQuarantinedContentUnits, quarantinePublicContentSearch,
+  replayQuarantinedContentCut, verifyQuarantinedContentIndex }
+  from '../../../services/main/src/modules/content-publication/rebuild.ts';
+import { seedContent } from '../load/corpus.ts';
 
 const short = (id: string) => id.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -16,7 +21,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
   return JSON.parse(body) as T;
 }
 
-test('chapter text and title find one public Book; Realm and Zone lists keep one Book within search budget', async () => {
+test('chapter Book and single-text Work survive Content rebuild verification alongside search and lists', async () => {
   const stack = await startMediaStack('search-chapter-book');
   try {
     const actor = await stack.member('chapter-owner');
@@ -111,5 +116,30 @@ test('chapter text and title find one public Book; Realm and Zone lists keep one
     const zone = await json<{ items: Array<{ id: string }> }>(await stack.call('GET',
       `/v1/realms/${short(realm.realm)}/modules/new-adoptions`));
     expect(zone.items.map(item => item.id)).toEqual([book.work]);
+
+    // Rebuild with both the chaptered Book and a separate one-text Work in the
+    // same graph. The Book's Content source exercises exact replay checks.
+    const single = await stack.publicWork(actor.actor, ['en'], `Single text ${randomUUID()}`);
+    const source = await seedContent(stack.env, stack.contentPool, stack.accessPool,
+      book.work, 'Book exact rebuild text');
+    const cursor = new ContentProjectionCursor(stack.contentPool);
+    const maintenanceEnv = { ...stack.env, fuseki: maintenance };
+    const job = await quarantinePublicContentSearch(maintenanceEnv, stack.content, randomUUID());
+    expect(await clearQuarantinedContentUnits(maintenanceEnv, job)).toBe(0);
+    expect(await replayQuarantinedContentCut(maintenanceEnv, stack.content, cursor, job)).toBeGreaterThan(0);
+    const snapshot = await verifyQuarantinedContentIndex(maintenanceEnv, stack.content, cursor, job);
+    expect(snapshot.contentUnitCount).toBe(1);
+    const preserved = await maintenance.query(`PREFIX rv: <${RV}> SELECT ?book ?chapter WHERE {
+      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:work ${iri(chapter.work)} ;
+        rv:searchResultWork ?book ; rv:searchChapterTitle ?chapter . } }`);
+    expect(preserved.results?.bindings.length).toBeGreaterThan(0);
+    expect(preserved.results?.bindings.every(row => row.book?.value === book.work
+      && row.chapter?.value === chapterTitle)).toBe(true);
+    const singleBody = await maintenance.query(`PREFIX rv: <${RV}> SELECT ?unit WHERE {
+      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:work ${iri(single.work)} ; rv:field rv:Body . } }`);
+    expect(singleBody.results?.bindings).toHaveLength(1);
+    const exact = (await stack.content.readExactBatch([source.revisionId],
+      async ids => new Set(ids)))[0];
+    expect(exact?.status).toBe('available');
   } finally { await stack.stop(); }
-}, 180_000);
+}, 240_000);

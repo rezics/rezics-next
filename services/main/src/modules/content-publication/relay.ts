@@ -270,7 +270,7 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
         if (exact?.status !== 'available' || exact.reference.byteDigest !== publication.reference.byteDigest) {
           throw new ContentProjectionUnavailable('exact Content body is unavailable');
         }
-        const extracted = extractProjectionText(recipe, exact.body, publication);
+        const extracted = extractProjectionText(recipe, exact.body, exact.reference);
         const update = projectionUpdate(env, event, publication, graph.decision!, graph.eligibility!,
           extracted.text, extracted.language, identity);
         const digest = hash(JSON.stringify({ event: event.id, source: event.position,
