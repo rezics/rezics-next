@@ -19,3 +19,21 @@ scope, locale, exact selection and acting subject where results depend on them.
 Studio's writes ([`features/studio`](../../apps/web/features/studio/)) show
 pending, stale, partial, denied, offline and recoverable outcomes in their
 stories; receipt-aware query invalidation remains a feature task.
+
+## Performance and accessibility
+
+Measure the production build, not the dev server: `vinext build`, then serve
+`dist/` with `wrangler dev --config dist/server/wrangler.json` (or
+`task web:preview` on a QA stack). The [performance report](../../apps/web/tests/perf-report.ts)
+loads each page type cold on a desktop and on Lighthouse's throttled phone
+through a local stand-in for the edge, because `wrangler dev` serves HTTP/1.1
+and buffers gzip until a streamed page ends, which the edge does not. The
+[accessibility audit](../../apps/web/tests/a11y-audit.ts) runs axe on every
+page type signed out and as a writer and moderator, in both themes and widths.
+The [budgets](../../apps/web/tests/perf.e2e.ts) and [accessibility checks](../../apps/web/tests/a11y.e2e.ts)
+run in the QA browser tier.
+
+Stream what Main is slow to answer behind a Suspense boundary rather than
+holding the page for it, as Home does with its posts. Keep server-only modules
+(the translator in `i18n/instance.ts`, `features/config/env.ts`) out of
+anything a client component imports; the page's script budget catches a leak.

@@ -42,20 +42,28 @@ const targets: PerfTarget[] = [
 const browser = await chromium.launch();
 const edge = await startPerfEdge(values.base);
 try {
-  let storageState: Awaited<ReturnType<import('@playwright/test').BrowserContext['storageState']>> | undefined;
+  // Account rotates refresh tokens and revokes the session when a rotated one is reused, so every signed-in load
+  // gets a session of its own rather than a shared copy of one.
+  type State = Awaited<ReturnType<import('@playwright/test').BrowserContext['storageState']>>;
+  let session: (() => Promise<State>) | undefined;
   if (values.author) {
     const [email, password] = [values.author.slice(0, values.author.indexOf(':')),
       values.author.slice(values.author.indexOf(':') + 1)];
-    const context = await browser.newContext({ baseURL: values.base });
-    const page = await context.newPage();
-    await signIn(page, '/en', { email, password });
+    session = async () => {
+      const context = await browser.newContext({ baseURL: values.base });
+      try {
+        await signIn(await context.newPage(), '/en', { email, password });
+        return await context.storageState();
+      } finally { await context.close(); }
+    };
     // Studio redirects to the signed-in person's own desk; measure the desk, not the redirect.
+    const context = await browser.newContext({ baseURL: values.base, storageState: await session() });
+    const page = await context.newPage();
     await page.goto('/en/studio');
     await page.waitForURL(/\/studio\/@/);
     if (!values.only || values.only.split(',').includes('studio')) {
       targets.push({ name: 'studio', path: new URL(page.url()).pathname, interact: typeSearch });
     }
-    storageState = await context.storageState();
     await context.close();
   }
   const samples: PerfSample[] = [];
@@ -64,7 +72,7 @@ try {
       const runs: PerfSample[] = [];
       for (let run = 0; run < Number(values.runs); run += 1) {
         runs.push(await measure(browser, edge.origin, target, profile,
-          target.name === 'studio' ? { storageState } : {}));
+          target.name === 'studio' && session ? { storageState: await session() } : {}));
       }
       samples.push(median(runs));
       console.error(`${target.name} ${profile.name} done`);

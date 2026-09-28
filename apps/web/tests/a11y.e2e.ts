@@ -47,23 +47,26 @@ const signedIn = {
   studio: desk(), 'studio-new': desk('/new'), manage: '/en/manage',
 };
 
+/** axe on each page in light on a desktop and dark on a phone. One context carries the session throughout, so
+ * a token refresh on one page is what the next page uses (Account revokes a reused refresh token). */
 async function sweep(browser: Browser, pages: Record<string, string | ((page: Page) => Promise<string>)>,
   storageState?: BrowserContextOptions['storageState']) {
   const failures: string[] = [];
-  for (const [name, target] of Object.entries(pages)) {
-    for (const [theme, viewport] of [['light', desktop], ['dark', phone]] as const) {
-      const context = await browser.newContext({ baseURL: upstream, viewport, storageState });
-      await context.addCookies([{ name: 'rezics_theme', value: theme, url: upstream }]);
-      const page = await context.newPage();
-      try {
+  const context = await browser.newContext({ baseURL: upstream, storageState });
+  const page = await context.newPage();
+  try {
+    for (const [name, target] of Object.entries(pages)) {
+      for (const [theme, viewport] of [['light', desktop], ['dark', phone]] as const) {
+        await context.addCookies([{ name: 'rezics_theme', value: theme, url: upstream }]);
+        await page.setViewportSize(viewport);
         const path = typeof target === 'string' ? target : await target(page);
         await page.goto(path);
         await page.waitForLoadState('networkidle');
         const violations = await axeViolations(page);
         if (violations.length) failures.push(`${name} (${path}, ${theme}, ${viewport.width}px)\n${formatViolations(violations)}`);
-      } finally { await context.close(); }
+      }
     }
-  }
+  } finally { await context.close(); }
   return failures;
 }
 

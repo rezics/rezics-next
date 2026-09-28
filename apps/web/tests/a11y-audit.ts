@@ -48,7 +48,7 @@ const firstLink = (from: string, pattern: RegExp) => async (page: Page) => {
 
 const signedIn: Target[] = [
   { name: 'home-signed-in', path: '/en' }, { name: 'notifications', path: '/en/notifications' },
-  { name: 'settings', path: '/en/settings' }, { name: 'settings-profile', path: '/en/settings/profile' },
+  { name: 'library', path: '/en/library' }, { name: 'settings', path: '/en/settings' },
   { name: 'studio', path: async page => { await page.goto('/en/studio'); return new URL(page.url()).pathname; } },
   { name: 'studio-new', path: async page => `${await studioDesk(page)}/new` },
   { name: 'studio-work', path: async page => firstLink(await studioDesk(page), /\/works\/[^/?]+$/)(page) },
@@ -74,31 +74,36 @@ async function studioDesk(page: Page) {
 const selected = (targets: Target[]) => targets.filter(target => !values.only
   || values.only.split(',').includes(target.name));
 
+/** axe on every target in both themes at both widths. One context carries a session throughout, so a token
+ * refresh on one page is what the next page uses (Account revokes a reused refresh token). */
 async function audit(browser: Browser, targets: Target[], storageState?: string) {
   let failures = 0;
-  for (const target of selected(targets)) {
-    for (const theme of ['light', 'dark'] as const) {
-      for (const viewport of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
-        const context = await browser.newContext({ baseURL: values.base, viewport, storageState });
-        await context.addCookies([{ name: 'rezics_theme', value: theme, url: values.base! }]);
-        const page = await context.newPage();
-        try {
-          const path = typeof target.path === 'string' ? target.path : await target.path(page);
-          await page.goto(path);
-          await page.waitForLoadState('networkidle');
-          const violations = await axeViolations(page);
-          const label = `${target.name} ${theme} ${viewport.width} (${path})`;
-          if (violations.length) {
+  const context = await browser.newContext({ baseURL: values.base, storageState });
+  const page = await context.newPage();
+  try {
+    for (const target of selected(targets)) {
+      for (const theme of ['light', 'dark'] as const) {
+        for (const viewport of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
+          try {
+            await context.addCookies([{ name: 'rezics_theme', value: theme, url: values.base! }]);
+            await page.setViewportSize(viewport);
+            const path = typeof target.path === 'string' ? target.path : await target.path(page);
+            await page.goto(path);
+            await page.waitForLoadState('networkidle');
+            const violations = await axeViolations(page);
+            const label = `${target.name} ${theme} ${viewport.width} (${path})`;
+            if (violations.length) {
+              failures += 1;
+              console.log(`\n## ${label}\n${formatViolations(violations)}`);
+            } else console.error(`ok ${label}`);
+          } catch (error) {
             failures += 1;
-            console.log(`\n## ${label}\n${formatViolations(violations)}`);
-          } else console.error(`ok ${label}`);
-        } catch (error) {
-          failures += 1;
-          console.log(`\n## ${target.name} ${theme} ${viewport.width}: ${String(error)}`);
-        } finally { await context.close(); }
+            console.log(`\n## ${target.name} ${theme} ${viewport.width}: ${String(error)}`);
+          }
+        }
       }
     }
-  }
+  } finally { await context.close(); }
   return failures;
 }
 
