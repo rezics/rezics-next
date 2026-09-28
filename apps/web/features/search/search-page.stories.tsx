@@ -137,7 +137,7 @@ export const RealmClassified: Story = {
     await expect(canvas.getAllByRole('link', { name: 'Remove filter: Only this genre' })[0])
       .toHaveAttribute('href', `/en/search?q=${encodeURIComponent('西游记')}&scope=realm&realm=${realm}&lang=zh-Hans`);
     await userEvent.click(canvas.getByRole('combobox', { name: 'Search in' }));
-    await expect(within(document.body).getByRole('option', { name: 'All of REZICS' })).toBeVisible();
+    await waitFor(() => expect(within(document.body).getByRole('option', { name: 'All of REZICS' })).toBeVisible());
     await userEvent.click(within(document.body).getByRole('option', { name: 'All of REZICS' }));
     await waitFor(() => expect(canvas.getByRole('combobox', { name: 'Search in' })).toHaveTextContent('All of REZICS'));
   },
