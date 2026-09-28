@@ -1,16 +1,12 @@
-import { createHash } from 'node:crypto';
 import { SeedApi, SeedApiError } from './api.ts';
+import { derivedId } from '../../../services/main/src/modules/structure/graph.ts';
 import { seedKey, works } from './plan.ts';
-import { grantHomeSeedAuthority } from './operator.ts';
+import type { grantHomeSeedAuthority } from './operator.ts';
 
 interface Session { id: string; token: string; actingSubject: string }
 interface Work { work: string; mainVersion: string }
 interface Realm { id: string; receipt: { realm: string } }
 const short = (id: string) => id.slice(-36);
-function stableId(value: string) {
-  const hex = createHash('sha256').update(`dev-seed:home-v2:${value}`).digest('hex').slice(0, 32);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
-}
 
 async function exactDigest(api: SeedApi, revision: string, session: Session): Promise<string> {
   const response = await fetch(`${api.endpoints.main}/v1/content-revisions/${revision}?actingSubject=${
@@ -21,67 +17,127 @@ async function exactDigest(api: SeedApi, revision: string, session: Session): Pr
   return exact.reference.byteDigest;
 }
 
-async function selectedChapterRevisions(api: SeedApi, serial: string): Promise<Map<string, string>> {
-  const response = await fetch(`${api.endpoints.main}/v1/works/${short(serial)}/contents?language=zh-Hans&limit=20`);
-  if (response.status === 404) return new Map();
-  if (!response.ok) throw new SeedApiError('Home chapter public contents', response.status,
-    (await response.text()).slice(0, 500));
-  const page = await response.json() as { items: { target: string | null; selectedRevision: string | null }[] };
-  return new Map(page.items.flatMap(item => item.target && item.selectedRevision
-    ? [[item.target, item.selectedRevision] as const] : []));
+interface Contents { compositionRevision: string | null; items: { occurrence: string; role: string;
+  label: { value: string } | null; target: string | null; selectedRevision: string | null }[] }
+interface Chapter { title: string; body: string }
+const LANGUAGE = 'zh-Hans';
+
+/** The serial's first level as its author reads it. A new composition may not be projected yet, and reads empty. */
+async function authorContents(api: SeedApi, serial: string, author: Session): Promise<Contents> {
+  try {
+    return await api.get<Contents>(`/v1/works/${short(serial)}/contents?language=${LANGUAGE}&limit=20&actingSubject=${
+      encodeURIComponent(author.actingSubject)}`, author.token);
+  } catch (error) {
+    if (error instanceof SeedApiError && error.status === 404) return { compositionRevision: null, items: [] };
+    throw error;
+  }
 }
 
-/** Prepare exact public chapter Content before the shared progress step inserts
- * the Book composition. The local operator only provisions fixture authority. */
+/** Fixture authority for exact seed targets; the seed CLI grants it through the local operator. */
+export type SeedGrant = (grants: Parameters<typeof grantHomeSeedAuthority>[1]) => Promise<void>;
+
+/** A chapter's own Content: drafted, published and made public, as Studio's editor does it. */
+async function publishChapter(api: SeedApi, author: Session, key: string, work: string, variantId: string,
+  body: string, grant: SeedGrant) {
+  await grant([
+    { action: 'work.read', scope: `work:read:${work}` },
+    { action: 'content.draft', scope: `content:draft:${work}` },
+    { action: 'content.publish', scope: `content:publish:${work}` },
+    { action: 'content.search-eligibility', scope: `content:search-eligibility:${work}` }]);
+  const saved = await api.post<{ revisionId: string; sourcePosition: { dataEpoch: string } }>(
+    '/v1/content-drafts', { profile: 'content-text-v1', resourceId: work, variantId,
+      language: { kind: 'tag', tag: LANGUAGE, originalTag: LANGUAGE }, direction: 'ltr',
+      expectedHead: null, body, actingSubject: author.actingSubject },
+    author.token, seedKey('home-chapter-draft', key));
+  const published = await api.post<{ decision: string; status: string }>('/v1/content-publications', {
+    profile: 'content-publication-v1', preparationId: seedKey('home-chapter', key),
+    revisionId: saved.revisionId, expectedDigest: await exactDigest(api, saved.revisionId, author),
+    expectedContentEpoch: saved.sourcePosition.dataEpoch, resourceId: work, variantId,
+    expectedPublicationHead: null, actingSubject: author.actingSubject },
+  author.token, seedKey('home-chapter-publication', key));
+  if (published.status !== 'active' || !published.decision) throw new Error(`Home chapter ${key} is not published`);
+  await api.post('/v1/content-search-eligibility', { profile: 'content-search-eligibility-v1',
+    resourceId: work, variantId, publicationDecision: published.decision,
+    expectedEligibilityHead: null, actingSubject: author.actingSubject,
+    rightsBasis: 'original-contribution', disclosure: 'public' },
+  author.token, seedKey('home-chapter-eligibility', key));
+}
+
+/**
+ * The occurrences of `planned` in `contents`, in the plan's order: a chapter this seed made has the identity
+ * Studio's command derives from its key; one an earlier seed placed is known by its title.
+ */
+export function plannedOccurrences(contents: Contents, planned: readonly { title: string; work: string }[]) {
+  return planned.map(chapter => contents.items.find(item => item.role === 'chapter'
+    && (item.target === chapter.work || item.label?.value === chapter.title)) ?? null);
+}
+
+/** One change moving `order` to the head of the Book's first level, in that order. */
+export function reorderOperations(structure: string, order: readonly string[]) {
+  return order.map((occurrence, index) => ({ op: 'move' as const, occurrence, parent: structure,
+    position: index === 0 ? 'first' as const : { after: order[index - 1]! } }));
+}
+
+/**
+ * The serial's chapters, in reading order and each readable. A chapter is a part of the Book made by
+ * Studio's chapter command, never a Work of its own in the plan. Stacks seeded before that command kept
+ * chapter Works placed in the wrong order (2, 1, 3): those are recognised by title, left in place and
+ * moved into the plan's order, so the shared stack reads 1, 2, 3 without a reset. Returns the chapter
+ * occurrences in order.
+ */
 export async function prepareHomeV2Chapters(api: SeedApi, author: Session, created: Map<string, Work>,
-  operatorInput: Parameters<typeof grantHomeSeedAuthority>[0]) {
+  grant: SeedGrant) {
   const serial = created.get('serial');
-  if (!serial) throw new Error('Home seed needs the serial');
-  const targets = ['serial-ch1', 'serial-ch2', 'serial-ch3'].map(id => {
-    const chapter = created.get(id);
-    if (!chapter) throw new Error(`Home seed needs ${id}`);
-    return { id, work: chapter.work };
+  const chapters: readonly Chapter[] = works.find(work => work.id === 'serial')?.chapters ?? [];
+  if (!serial || !chapters.length) throw new Error('Home seed needs the serial and its chapters');
+  await grant([{ action: 'work.edit', scope: `work:edit:${serial.work}` },
+    { action: 'work.read', scope: `work:read:${serial.work}` }]);
+  const composition = await api.post<{ structure: string; revision: string }>('/v1/compositions', {
+    profile: 'book-composition', work: serial.work, mainVersion: serial.mainVersion,
+    actingSubject: author.actingSubject }, author.token, seedKey('composition', 'serial'));
+  const planned = chapters.map((chapter, index) => {
+    const key = seedKey('home-chapter-create', `serial:${index}`);
+    const seed = `${serial.work}\0${author.actingSubject}\0${key}\0chapter`;
+    return { ...chapter, key, index, work: derivedId(`${seed}\0work`),
+      variantId: `urn:rezics:variant:${derivedId(`${seed}\0variant`).slice(-36)}` };
   });
-  const grants = [
-    { action: 'work.edit' as const, scope: `work:edit:${serial.work}` },
-    { action: 'work.read' as const, scope: `work:read:${serial.work}` },
-    ...targets.flatMap(target => [
-      { action: 'work.read' as const, scope: `work:read:${target.work}` },
-      { action: 'content.draft' as const, scope: `content:draft:${target.work}` },
-      { action: 'content.publish' as const, scope: `content:publish:${target.work}` },
-      { action: 'content.search-eligibility' as const,
-        scope: `content:search-eligibility:${target.work}` },
-    ]),
-  ] as const;
-  for (let offset = 0; offset < grants.length; offset += 9) {
-    await grantHomeSeedAuthority(operatorInput, grants.slice(offset, offset + 9));
+  let contents = await authorContents(api, serial.work, author);
+  for (const [index, chapter] of plannedOccurrences(contents, planned).entries()) {
+    const plan = planned[index]!;
+    if (chapter?.selectedRevision) continue;
+    if (chapter && chapter.target !== plan.work) {
+      throw new Error(`Home chapter ${plan.title} has no public text and was not made by this seed`);
+    }
+    if (!chapter) {
+      const made = await api.post<{ work: string; compositionRevision: string }>(`/v1/works/${short(serial.work)}/chapters`, {
+        profile: 'book-chapter-create-v1', title: plan.title, language: LANGUAGE, direction: 'ltr',
+        parent: composition.structure, position: 'last',
+        expectedCompositionHead: contents.compositionRevision ?? composition.revision,
+        actingSubject: author.actingSubject }, author.token, plan.key);
+      if (made.work !== plan.work) throw new Error(`Home chapter ${plan.title} has another identity`);
+      contents = { ...contents, compositionRevision: made.compositionRevision };
+    }
+    await publishChapter(api, author, `serial:${plan.index}`, plan.work, plan.variantId,
+      `${plan.title}\n${plan.body}`, grant);
   }
-  const selected = await selectedChapterRevisions(api, serial.work);
-  for (const { id, work } of targets) {
-    const child = created.get(id);
-    const text = works.find(work => work.id === id);
-    if (!child || !text) throw new Error(`Home chapter ${id} is unavailable`);
-    const variantId = `urn:rezics:variant:${stableId(id)}`;
-    const saved = await api.post<{ revisionId: string; sourcePosition: { dataEpoch: string } }>(
-      '/v1/content-drafts', { profile: 'content-text-v1', resourceId: work, variantId,
-        language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-Hans' }, direction: 'ltr',
-        expectedHead: null, body: text.excerpt ?? text.title, actingSubject: author.actingSubject },
-    author.token, seedKey('home-chapter-draft', id));
-    if (selected.get(work) === `urn:rezics:content:revision:${saved.revisionId}`) continue;
-    const published = await api.post<{ decision: string; status: string }>('/v1/content-publications', {
-      profile: 'content-publication-v1', preparationId: seedKey('home-chapter', id),
-      revisionId: saved.revisionId, expectedDigest: await exactDigest(api, saved.revisionId, author),
-      expectedContentEpoch: saved.sourcePosition.dataEpoch, resourceId: work, variantId,
-      expectedPublicationHead: null, actingSubject: author.actingSubject },
-    author.token, seedKey('home-chapter-publication', id));
-    if (published.status !== 'active' || !published.decision) throw new Error(`Home chapter ${id} is not published`);
-    await api.post('/v1/content-search-eligibility', { profile: 'content-search-eligibility-v1',
-      resourceId: work, variantId, publicationDecision: published.decision,
-      expectedEligibilityHead: null, actingSubject: author.actingSubject,
-      rightsBasis: 'original-contribution', disclosure: 'public' },
-    author.token, seedKey('home-chapter-eligibility', id));
+  // Main projects a new publication shortly after the command; read until every chapter has its text.
+  let placed = plannedOccurrences(contents, planned);
+  for (let attempt = 0; attempt < 30; attempt++) {
+    contents = await authorContents(api, serial.work, author);
+    placed = plannedOccurrences(contents, planned);
+    if (placed.every(item => item?.selectedRevision)) break;
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  return { chapters: targets.length };
+  if (placed.some(item => !item?.selectedRevision)) throw new Error('Home serial has an unreadable chapter');
+  const order = placed.map(item => item!.occurrence);
+  const current = contents.items.filter(item => item.role === 'chapter').map(item => item.occurrence);
+  if (order.some((occurrence, index) => current[index] !== occurrence)) {
+    await api.post(`/v1/compositions/${short(composition.structure)}/changes`, {
+      profile: 'book-composition', expectedHead: contents.compositionRevision, actingSubject: author.actingSubject,
+      operations: reorderOperations(composition.structure, order) },
+    author.token, seedKey('composition-order', `serial:${contents.compositionRevision?.slice(-12)}`));
+  }
+  return { structure: composition.structure, occurrences: order };
 }
 
 /** Reader commands replay without replacing progress saved after the seed. */

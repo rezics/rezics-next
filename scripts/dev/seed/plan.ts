@@ -2,7 +2,10 @@ export interface DemoPerson { id: string; name: string; handle: string; email: s
 export interface DemoWork { id: string; title: string; type: 'book' | 'document' | 'recipe';
   language: 'en' | 'zh-Hans'; excerpt?: string; tagline?: string;
   completionStatus?: 'ongoing' | 'completed' | 'hiatus';
-  author?: 'mei' | 'daniel' | 'an' | 'sophie' | 'jun' | 'aria' | 'leo' | 'moonlight' }
+  author?: 'mei' | 'daniel' | 'an' | 'sophie' | 'jun' | 'aria' | 'leo' | 'moonlight';
+  /** A Book's chapters in reading order. Each is made by Studio's chapter command as a part of the Book, never
+   * as a Work of its own in this list: catalogues, search and shelves show the Book. */
+  chapters?: readonly { title: string; body: string }[] }
 
 export const people: readonly DemoPerson[] = [
   { id: 'mei', handle: 'lin_mei', name: 'Lin Mei 林梅', email: 'rezics-demo-mei@example.test', password: 'Rezics-demo-2026-mei' },
@@ -34,13 +37,12 @@ export const works: readonly DemoWork[] = [
   { id: 'water-margin', title: '水浒传', type: 'book', language: 'zh-Hans' },
   { id: 'serial', title: '雨夜书店 · 连载小说', type: 'book', language: 'zh-Hans', author: 'mei',
     tagline: '一封没有地址的信，把雨夜书店带向二十年前的秘密。', completionStatus: 'ongoing',
-    excerpt: '第一章 雨夜\n雨停在书店打烊前。林梅在门口发现一封没有地址的信。' },
-  { id: 'serial-ch1', title: '雨夜书店 · 第一章 雨夜', type: 'document', language: 'zh-Hans', author: 'mei',
-    excerpt: '第一章 雨夜\n雨停在书店打烊前。林梅在门口发现一封没有地址的信。' },
-  { id: 'serial-ch2', title: '雨夜书店 · 第二章 未寄出的信', type: 'document', language: 'zh-Hans', author: 'mei',
-    excerpt: '第二章 未寄出的信\n信封里只有一张旧车票，日期是二十年前。' },
-  { id: 'serial-ch3', title: '雨夜书店 · 第三章 最后一班车', type: 'document', language: 'zh-Hans', author: 'mei',
-    excerpt: '第三章 最后一班车\n末班车到站时，整座站台只有她一个人。' },
+    excerpt: '第一章 雨夜\n雨停在书店打烊前。林梅在门口发现一封没有地址的信。',
+    chapters: [
+      { title: '第一章 雨夜', body: '雨停在书店打烊前。林梅在门口发现一封没有地址的信。' },
+      { title: '第二章 未寄出的信', body: '信封里只有一张旧车票，日期是二十年前。' },
+      { title: '第三章 最后一班车', body: '末班车到站时，整座站台只有她一个人。' },
+    ] },
   { id: 'moonlight-story', title: '月下书生 · 夜归人', type: 'book', language: 'zh-Hans', author: 'moonlight',
     tagline: '雨停以后，归来的人敲开了旧书店的门。', completionStatus: 'ongoing',
     excerpt: '第一章 夜归人\n雨停以后，有人敲响了旧书店的门。' },

@@ -16,7 +16,6 @@ export async function seedContributions(state: SeedState) {
         language: excerpt.language, body: excerpt.excerpt!, actingSubject: author },
       writer.token, seedKey('contribution', excerpt.id)));
     if (!contribution) continue;
-    if (excerpt.id === 'serial-ch3') continue; // Leave one draft in the review queue.
     const published = await state.optional('Contribution publication', () => api.post<PublicationReceipt>(
       '/v1/contribution-publications', { profile: 'text-publication-v1',
         contribution: contribution.contribution, expectedDraftHead: contribution.draftRevision,

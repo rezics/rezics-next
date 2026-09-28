@@ -39,6 +39,7 @@ export async function seedRealmManagement(api: SeedApi, realm: string, owner: Se
     validUntil: new Date(Date.now() + 30 * 86_400_000).toISOString() }, moderator.id, true);
   for (const [index, work] of works.slice(0, 8).entries()) {
     const idempotencyKey = seedKey('realm-report', `${realm.slice(-36)}:${index}`);
+    // A stack seeded under an earlier plan holds this slot with another Work's report; it keeps that one.
     await api.post('/v1/reports', { profile: 'content-report-v1', actingSubject: owner.actingSubject,
       authority: { kind: 'realm', scopeId: `governance:realm:${realm}` }, context: realm,
       target: { owner: 'graph', resource: work.work, component: 'title' }, disclosure: 'private',
@@ -46,6 +47,7 @@ export async function seedRealmManagement(api: SeedApi, realm: string, owner: Se
       statement: index % 2 ? 'Check whether the title identifies the edition clearly.'
         : 'Review the edition details before adding this work to the community reading list.',
       evidence: [{ owner: 'graph', resource: work.work, component: 'title',
-        revision: work.workRevision, locator: null }], idempotencyKey }, owner.token, idempotencyKey);
+        revision: work.workRevision, locator: null }], idempotencyKey }, owner.token, idempotencyKey)
+      .catch((error: unknown) => { if (!(error instanceof SeedApiError) || error.status !== 409) throw error; });
   }
 }

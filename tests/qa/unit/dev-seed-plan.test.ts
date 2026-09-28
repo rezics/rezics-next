@@ -3,12 +3,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { dryRunLines, parseOptions, steps } from '../../../scripts/dev/seed/cli.ts';
 import { people, realms, seedKey, semanticTypes, works } from '../../../scripts/dev/seed/plan.ts';
-import type { SeedApi } from '../../../scripts/dev/seed/api.ts';
+import { type SeedApi, SeedApiError } from '../../../scripts/dev/seed/api.ts';
 import { devResetPlan, devResetTarget } from '../../../scripts/dev/reset.ts';
 import { seedWorks } from '../../../scripts/dev/seed/works-step.ts';
 import { seedContributions } from '../../../scripts/dev/seed/contributions-step.ts';
 import { checkPublicReads } from '../../../scripts/dev/seed/checks-step.ts';
 import { seedChapterProgress } from '../../../scripts/dev/seed/progress.ts';
+import { prepareHomeV2Chapters } from '../../../scripts/dev/seed/home-v2.ts';
+import { derivedId } from '../../../services/main/src/modules/structure/graph.ts';
 import { refreshSeedTokens, type SeedState, type WorkReceipt }
   from '../../../scripts/dev/seed/state.ts';
 import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
@@ -196,47 +198,100 @@ describe('dev seed plan', () => {
     expect(calls.find(call => call.key === seedKey('contribution', 'pride'))).toBeUndefined();
   });
 
-  test('replaces the old parent-as-chapter placement with three child Works on rerun', async () => {
+  describe('the home serial reads in order', () => {
     const ref = (digit: string) => `https://rezics.com/id/${digit.repeat(36)}`;
-    const receipt = (digit: string) => ({ work: ref(digit), mainVersion: ref('9') });
-    const created = new Map([['serial', receipt('1')], ['serial-ch1', receipt('2')],
-      ['serial-ch2', receipt('3')], ['serial-ch3', receipt('4')]]);
+    const serial = { work: ref('1'), mainVersion: ref('9') };
+    const author = { id: 'mei', token: 'mei', actingSubject: ref('c') };
     const structure = ref('5');
-    let children = [
-      { occurrence: ref('6'), state: 'active', role: 'chapter', target: ref('1') },
-      { occurrence: ref('7'), state: 'active', role: 'chapter', target: ref('3') },
-    ];
-    const migrations: Array<{ operations: Array<{ op: string; target?: string }> }> = [];
-    const progress: string[] = [];
-    const api = {
-      post: async (_path: string, body: { operations?: Array<{ op: string; target?: string }> },
-        _token: string, key: string) => {
-        if (key === seedKey('composition', 'serial')) return { structure, revision: ref('8') };
-        if (key === seedKey('composition-remove-parent-chapter', 'serial')) {
-          migrations.push({ operations: body.operations! });
-          children = [children[1]!];
-        }
-        if (key === seedKey('composition-add-real-chapters', 'serial')) {
-          migrations.push({ operations: body.operations! });
-          children = [children[0]!,
-            { occurrence: ref('a'), state: 'active', role: 'chapter', target: ref('2') },
-            { occurrence: ref('b'), state: 'active', role: 'chapter', target: ref('4') }];
-        }
-        return { revision: ref('8'), occurrences: [] };
-      },
-      get: async () => ({ revision: ref('8'), occurrences: children }),
-      put: async (path: string) => { progress.push(path); return {}; },
-    } as unknown as SeedApi;
-    const owner = { token: 'token', actingSubject: ref('c') };
-    const readers = ['a', 'b', 'c'].map(id => ({ id, token: id, actingSubject: ref(id) }));
-    await seedChapterProgress(api, owner, readers, created);
-    await seedChapterProgress(api, owner, readers, created);
-    expect(migrations).toHaveLength(2);
-    expect(migrations.flatMap(migration => migration.operations.map(operation => operation.op)))
-      .toEqual(['remove', 'insert', 'insert']);
-    expect(migrations[1]!.operations
-      .map(operation => operation.target)).toEqual([ref('2'), ref('4')]);
-    expect(progress).toHaveLength(6);
+    const titles = works.find(work => work.id === 'serial')!.chapters!.map(chapter => chapter.title);
+    type Item = { occurrence: string; role: string; label: { value: string } | null; target: string | null;
+      selectedRevision: string | null };
+    /** Main as the seed sees it: the serial's contents, and the commands it sends. */
+    function main(initial: Item[] | null) {
+      let items = initial;
+      let head = ref('8');
+      const posts: Array<{ path: string; key: string; body: { operations?: Array<Record<string, unknown>> } }> = [];
+      const api = {
+        get: async () => {
+          if (!items) throw new SeedApiError('Main contents', 404, '{}');
+          return { compositionRevision: head, items };
+        },
+        post: async (path: string, body: { title?: string; operations?: Array<{ op: string; occurrence: string }> },
+          _token: string, key: string) => {
+          posts.push({ path, key, body });
+          if (path === '/v1/compositions') return { structure, revision: head };
+          if (path.endsWith('/chapters')) {
+            const seed = `${serial.work}\0${author.actingSubject}\0${key}\0chapter`;
+            const work = derivedId(`${seed}\0work`);
+            items = [...items ?? [], { occurrence: ref(String(items?.length ?? 0)), role: 'chapter',
+              label: { value: body.title! }, target: work, selectedRevision: `urn:rezics:content:revision:${work.slice(-36)}` }];
+            return { work, compositionRevision: head };
+          }
+          if (path.endsWith('/changes')) {
+            const moved = body.operations!.map(operation => items!.find(item => item.occurrence === operation.occurrence)!);
+            items = [...moved, ...items!.filter(item => !moved.includes(item))];
+            head = ref('7');
+            return { revision: head };
+          }
+          if (path === '/v1/content-drafts') return { revisionId: 'revision', sourcePosition: { dataEpoch: 'epoch' } };
+          if (path === '/v1/content-publications') return { decision: 'decision', status: 'active' };
+          return {};
+        },
+        endpoints: { main: 'http://main.test' },
+      } as unknown as SeedApi;
+      return { api, posts, items: () => items };
+    }
+    const grants: string[] = [];
+    const grant = async (list: readonly { scope: string }[]) => { grants.push(...list.map(item => item.scope)); };
+
+    test('a clean stack makes each chapter a part of the Book, in plan order', async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async () => Response.json({ reference: { byteDigest: 'digest' } })) as unknown as typeof fetch;
+      try {
+        const stack = main(null);
+        const arranged = await prepareHomeV2Chapters(stack.api, author, new Map([['serial', serial]]), grant);
+        const made = stack.posts.filter(post => post.path.endsWith('/chapters'));
+        expect(made.map(post => (post.body as { title: string }).title)).toEqual(titles);
+        expect(made.every(post => (post.body as { position: string }).position === 'last')).toBe(true);
+        expect(stack.posts.filter(post => post.path.endsWith('/changes'))).toEqual([]);
+        expect(stack.items()!.map(item => item.label?.value)).toEqual(titles);
+        expect(arranged.occurrences).toEqual(stack.items()!.map(item => item.occurrence));
+        // No standalone Work stands for a chapter.
+        expect(works.some(work => work.id.startsWith('serial-ch'))).toBe(false);
+      } finally { globalThis.fetch = originalFetch; }
+    });
+
+    test('an existing stack keeps its chapters and moves them into order once', async () => {
+      const chapter = (index: number, digit: string) => ({ occurrence: ref(digit), role: 'chapter',
+        label: { value: titles[index]! }, target: ref(String(index + 2)), selectedRevision: 'urn:rezics:content:revision:x' });
+      const stack = main([chapter(1, 'a'), chapter(0, 'b'), chapter(2, 'd')]);
+      const arranged = await prepareHomeV2Chapters(stack.api, author, new Map([['serial', serial]]), grant);
+      const changes = stack.posts.filter(post => post.path.endsWith('/changes'));
+      expect(changes).toHaveLength(1);
+      expect(changes[0]!.body.operations).toEqual([
+        { op: 'move', occurrence: ref('b'), parent: structure, position: 'first' },
+        { op: 'move', occurrence: ref('a'), parent: structure, position: { after: ref('b') } },
+        { op: 'move', occurrence: ref('d'), parent: structure, position: { after: ref('a') } }]);
+      expect(stack.posts.some(post => post.path.endsWith('/chapters') || post.path === '/v1/content-drafts')).toBe(false);
+      expect(arranged.occurrences).toEqual([ref('b'), ref('a'), ref('d')]);
+      await prepareHomeV2Chapters(stack.api, author, new Map([['serial', serial]]), grant);
+      expect(stack.posts.filter(post => post.path.endsWith('/changes'))).toHaveLength(1);
+    });
+
+    test('each reader is in one chapter, having finished the ones before it', async () => {
+      const writes: Array<{ path: string; completed: boolean }> = [];
+      const api = { put: async (path: string, body: { completed: boolean }) => {
+        writes.push({ path, completed: body.completed });
+        return {};
+      } } as unknown as SeedApi;
+      const readers = ['a', 'b', 'c'].map(id => ({ id, token: id, actingSubject: ref(id) }));
+      await seedChapterProgress(api, readers, { structure, occurrences: [ref('b'), ref('a'), ref('d')] });
+      const at = (digit: string) => `/occurrences/${digit.repeat(36)}/progress`;
+      expect(writes.map(write => [write.path.slice(write.path.indexOf('/occurrences')), write.completed])).toEqual([
+        [at('b'), true],
+        [at('b'), true], [at('a'), false],
+        [at('b'), true], [at('a'), true], [at('d'), false]]);
+    });
   });
 
   test('accepts only the documented CLI switches', () => {
