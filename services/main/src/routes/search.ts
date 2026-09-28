@@ -430,13 +430,13 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
               ? await queryPublicRealmPhrase(work.environment, { ...body, publicFields })
               : body.profile === 'public-main-phrase-v1'
                 ? await queryPublicMainPhrase(work.environment,
-                  { ...body, publicFields, contentProjection: work.contentProjection })
+                  { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store })
                 : body.profile === 'public-realm-classified-phrase-v1'
                   ? await protectClassifiedResults(work,
                     await queryPublicRealmClassifiedPhrase(work.environment, { ...body, publicFields }), body.context.id)
                   : await protectClassifiedResults(work,
                     await queryPublicMainClassifiedPhrase(work.environment,
-                      { ...body, publicFields, contentProjection: work.contentProjection }));
+                      { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store }));
             const complete = await decoratePhraseRelation(work.environment, await present(selection, relation), body);
             const window = searchCardWindow(body, complete, selection?.generation);
             const hydrated = await enrichSearchCardPage(work, request, window.page, body.language);
@@ -484,7 +484,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             if (body.profile === 'public-main-phrase-page-v1') {
               const relation = await decoratePhraseRelation(work.environment,
                 await present(selection, await queryPublicMainPhrase(work.environment,
-                  { ...body, publicFields, contentProjection: work.contentProjection })), body);
+                  { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store })), body);
               return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
                 facets: relation.facets };
             }
@@ -504,7 +504,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
               const relation = await decoratePhraseRelation(work.environment,
                 await present(selection, await protectClassifiedResults(work,
                   await queryPublicMainClassifiedPhrase(work.environment,
-                    { ...body, publicFields, contentProjection: work.contentProjection }))), body);
+                    { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store }))), body);
               return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
                 classificationSense: relation.classificationSense, facets: relation.facets };
             }

@@ -17,6 +17,8 @@ import { exactDecisionSupports, readSearchDecisionSupports } from './search-supp
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 import { querySearchFields, rankedSearchMatches, type SearchFieldOwners } from '../search/fields.ts';
 import { publicWork } from './public-patterns.ts';
+import { visibleContentSearchRights } from '../content-publication/search.ts';
+import type { RightsStore } from '../rights/store.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import type { ContentProjectionCursor } from '../../../../content/src/projection-cursor.ts';
 
@@ -33,6 +35,7 @@ export interface PublicMainPhraseQuery {
   publicFields?: SearchFieldOwners;
   /** A joined Content chapter must cover the current owner cut before a complete result is returned. */
   contentProjection?: { content: ContentCore; cursor: ContentProjectionCursor; consumer: string };
+  rights?: Pick<RightsStore, 'currentPublicDomainAssessments'>;
 }
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -63,7 +66,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
     SELECT ?candidateCount ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
-      ?revision ?selection ?language ?resultWork ?resultMain ?chapterTitle ?contentProjection WHERE {
+      ?revision ?selection ?language ?resultWork ?resultMain ?chapterTitle ?contentProjection ?rightsBasis ?assessment WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
           rv:textIndexGeneration ?indexGeneration .
@@ -117,7 +120,8 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
           GRAPH ${iri(GRAPHS.revisions)} {
             ?contentEligibility a rv:ContentSearchEligibilityDecision ;
               rv:variant ?variant ; rv:publicationDecision ?contentDecision ;
-              rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public .
+              rv:rightsBasis ?rightsBasis ; rv:disclosure rv:Public .
+            OPTIONAL { ?contentEligibility rv:rightsAssessment ?assessment }
             FILTER NOT EXISTS { ?contentRevision a rv:ErasedRevision }
           }
           ${publicWork('?resultWork', '?resultMain')}
@@ -155,8 +159,14 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   if (candidateCount >= PHRASE_HIT_PROBE) {
     throw new PublicQueryBudgetExceeded('public phrase exceeds complete candidate budget');
   }
+  const contentRows = rows.filter(row => row.contentProjection).map(row => {
+    if (!row.work) throw new PublicQueryUnavailable('Content chapter resource is missing');
+    return { row, resource: row.work.value, rightsBasis: row.rightsBasis?.value,
+      assessment: row.assessment?.value };
+  });
+  const visibleContent = new Set((await visibleContentSearchRights(contentRows, input.rights)).map(item => item.row));
   const sourceHeads = new Set<string>();
-  const matches = rows.filter(row => row.unit).map(row => {
+  const matches = rows.filter(row => row.unit && (!row.contentProjection || visibleContent.has(row))).map(row => {
     if (!row.unit || !row.score || !row.work || !row.main || !row.contribution
       || !row.revision || !row.selection || !row.language) {
       throw new PublicQueryUnavailable('public query result is incomplete');

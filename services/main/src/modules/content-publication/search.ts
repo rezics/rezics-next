@@ -14,6 +14,34 @@ import type { RightsStore } from '../rights/store.ts';
 export class InvalidContentPhrase extends Error {}
 export class ContentSearchBudgetExceeded extends Error {}
 
+/** Main's chapter search and direct Content search apply the same live, batched Rights check. */
+export async function visibleContentSearchRights<T extends {
+  resource: string; rightsBasis: string | undefined; assessment: string | undefined;
+}>(matches: readonly T[], rights?: Pick<RightsStore, 'currentPublicDomainAssessments'>): Promise<T[]> {
+  const publicDomain = matches.filter(match => match.rightsBasis === `${RV}PublicDomain`);
+  if (publicDomain.length && !rights) {
+    throw new ContentProjectionUnavailable('public-domain rights owner is unavailable');
+  }
+  const refs = publicDomain.map(match => {
+    const assessment = /^urn:rezics:rights:assessment:([0-9a-f-]{36})$/i.exec(match.assessment ?? '');
+    if (!assessment) throw new ContentProjectionUnavailable('public-domain assessment is missing');
+    return { work: match.resource, assessmentId: assessment[1]! };
+  });
+  let accepted = new Set<string>();
+  if (rights && refs.length) {
+    try { accepted = await rights.currentPublicDomainAssessments(refs); }
+    catch { throw new ContentProjectionUnavailable('current public-domain search rights are unavailable'); }
+  }
+  return matches.filter(match => {
+    if (match.rightsBasis === `${RV}OriginalContribution`) return !match.assessment;
+    if (match.rightsBasis !== `${RV}PublicDomain`) {
+      throw new ContentProjectionUnavailable('Content search rights basis is unknown');
+    }
+    const assessmentId = match.assessment!.slice('urn:rezics:rights:assessment:'.length);
+    return accepted.has(`${match.resource}\0${assessmentId}`);
+  });
+}
+
 type SourcePosition = Awaited<ReturnType<ContentCore['ownerPosition']>>;
 interface ContentQualification { population: number; sequence: string }
 const qualified = new WeakMap<FusekiClient, Map<string, Promise<ContentQualification>>>();
@@ -222,28 +250,8 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
   if (new Set(matches.map(match => match.matchUnit)).size !== matches.length) {
     throw new ContentProjectionUnavailable('Content phrase result has duplicate units');
   }
-  const publicDomain = matches.filter(match => match.rightsBasis === `${RV}PublicDomain`);
-  if (publicDomain.length && !rights) {
-    throw new ContentProjectionUnavailable('public-domain rights owner is unavailable');
-  }
-  const refs = publicDomain.map(match => {
-    const assessment = /^urn:rezics:rights:assessment:([0-9a-f-]{36})$/i.exec(match.assessment ?? '');
-    if (!assessment) throw new ContentProjectionUnavailable('public-domain assessment is missing');
-    return { work: match.resource, assessmentId: assessment[1]! };
-  });
-  let accepted = new Set<string>();
-  if (rights && refs.length) {
-    try { accepted = await rights.currentPublicDomainAssessments(refs); }
-    catch { throw new ContentProjectionUnavailable('current public-domain search rights are unavailable'); }
-  }
-  const visible = matches.filter(match => {
-    if (match.rightsBasis === `${RV}OriginalContribution`) return !match.assessment;
-    if (match.rightsBasis !== `${RV}PublicDomain`) {
-      throw new ContentProjectionUnavailable('Content search rights basis is unknown');
-    }
-    const assessmentId = match.assessment!.slice('urn:rezics:rights:assessment:'.length);
-    return accepted.has(`${match.resource}\0${assessmentId}`);
-  }).map(({ rightsBasis: _rightsBasis, assessment: _assessment, ...match }) => match);
+  const visible = (await visibleContentSearchRights(matches, rights))
+    .map(({ rightsBasis: _rightsBasis, assessment: _assessment, ...match }) => match);
   const [sourceAfter, checkpointAfter] = await Promise.all([
     content.ownerPosition(), cursor.read(consumer),
   ]);
