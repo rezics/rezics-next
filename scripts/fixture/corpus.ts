@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { CONTINUITY, ID, WORK_SEMANTIC_TYPES } from '../../services/main/src/modules/work/activate.ts';
+import { CONTINUITY, ID } from '../../services/main/src/modules/work/activate.ts';
 
 /** Changing what any owner stores for the same entity requires a new fixture format. */
 export const FIXTURE_FORMAT = 'rezics-fixture-v2';
@@ -9,6 +9,10 @@ export const IMPORT_SEQUENCE = '0';
 /** Fixed timestamps keep physical rows identical for the same seed and profile. */
 export const IMPORTED_AT = '2026-01-01T00:00:00.000Z';
 export const BACKGROUND_GRANTS_UNTIL = '2100-01-01T00:00:00.000Z';
+// A live catalogue expansion must not change the bytes of an existing fixture format.
+const FIXTURE_SEMANTIC_TYPES = [
+  'https://schema.org/Book', 'https://schema.org/DigitalDocument', 'https://schema.org/Recipe',
+] as const;
 
 /** Sized by entities; each owner derives its rows, triples and objects from these. */
 export const PROFILES = {
@@ -112,7 +116,7 @@ export function workAt(corpus: Corpus, index: number): FixtureWork {
   const id = (kind: string) => fixtureUuid(corpus.seed, `${kind}:${index}`);
   const pick = sha256(`${corpus.seed}\0words\0${index}`);
   const token = workToken(index);
-  const types = WORK_SEMANTIC_TYPES.filter((_, type) => (index + type) % (type + 3) === 0);
+  const types = FIXTURE_SEMANTIC_TYPES.filter((_, type) => (index + type) % (type + 3) === 0);
   const language = index % 7 === 3 ? 'zh' : index % 11 === 5 ? 'ja' : 'en';
   return { index, work: ID + id('work'), mainVersion: ID + id('main'),
     workRevision: ID + id('work-revision'), mainRevision: ID + id('main-revision'),

@@ -50,6 +50,17 @@ test('fixture: identities are deterministic version-8 UUIDs and never collide ac
   }
 });
 
+test('fixture: v2 keeps its original semantic types when the live catalogue expands', () => {
+  const corpus = fixtureCorpus('small');
+  const types = new Set<string>();
+  for (let index = 0; index < corpus.works; index++) {
+    for (const type of workAt(corpus, index).semanticTypes) types.add(type);
+  }
+  expect([...types].sort()).toEqual([
+    'https://schema.org/Book', 'https://schema.org/DigitalDocument', 'https://schema.org/Recipe',
+  ]);
+});
+
 test('fixture: imported component objects are byte-identical to the Work command layout', () => {
   const directory = mkdtempSync(join(root, '.temp', 'fixture-objects-'));
   try {
