@@ -6,8 +6,12 @@ import { HubConflict, HubInvalid, HubUnavailable } from '../modules/hub/store.ts
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
+import { readHubWorkPage } from '../modules/hub/work-page.ts';
+import { workRead } from '../modules/work/read-session.ts';
+import { workReadError, workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
+  '/v1/hub/works/{id}': { get: { bearer: false } },
   '/v1/hub/imports': { post: { bearer: true, idempotencyKey: true } },
   '/v1/hub/imports/{import}': { get: { bearer: true } },
   '/v1/prompts/revisions': { post: { bearer: true, idempotencyKey: true } },
@@ -59,6 +63,23 @@ export function hubRoutes(work: MainWorkDependencies) {
     return value && /^[A-Za-z0-9:_./-]{1,128}$/.test(value) ? value : null;
   };
   return new Elysia()
+    .get('/v1/hub/works/:id', { params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
+      detail: { security: [{}, { bearerAuth: [] }] },
+      response: { 200: t.Nullable(t.Object({ profile: t.Literal('hub-work-page-v1'),
+        kind: t.Union([t.Literal('prompt'), t.Literal('skill')]), revision: groupUuid,
+        content: t.String({ maxLength: 65_536 }), parameterSchema: t.Record(t.String(), t.Unknown()),
+        examples: t.Array(t.Object({ parameters: t.Record(t.String(), t.Unknown()), output: t.String() })),
+        declaredModels: t.Array(t.String()), testedModels: t.Array(t.String()),
+        versions: t.Array(t.Object({ revision: groupUuid, createdAt: t.Nullable(t.String()) })),
+        moreVersions: t.Boolean(), createdAt: t.String() })), ...workReadProblems } },
+    async ({ request, params, query }) => {
+      try {
+        return Response.json(await workRead(work, request, { actingSubject: query.actingSubject },
+          session => readHubWorkPage(session, `https://rezics.com/id/${params.id}`)),
+        { headers: { 'cache-control': 'private, no-store' } });
+      } catch (error) { return workReadError(error); }
+    })
     .post('/v1/hub/imports', { body: t.Object({ ...identity,
       profile: t.Literal('agent-skills-directory-import-v1'),
       sourceFormat: t.Literal('agent-skills-directory-v1'),

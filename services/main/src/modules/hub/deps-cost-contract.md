@@ -22,6 +22,15 @@ mapping. Application work is bounded by `O(sum(N) + R*P + S + A + C)`, where
 calls are bounded by `O(S + A + C + R)`. Request and response bytes are
 bounded by the route schema, exact receipt snapshots and shared lock contract.
 
+The Work page read pins the current public publication and eligibility in one
+bounded graph query. It checks the exact Content digest and Hub subtype before
+returning at most 65,536 bytes of prompt or SKILL.md text. Skill verification
+reads at most 128 files and 1 MiB of retained artifact bytes. Version history
+uses one graph query for at most 11 publication decisions and one indexed SQL
+lookup for dates of at most 10 displayed revisions. Complexity is O(F + B + V),
+with F files, B retained bytes and V published versions; Work visibility is
+checked before and after the read.
+
 Each ecosystem profile remains the resolver/adapter authority. The Hub operation
 does not compare versions or merge package identities across segments. The
 revision UUID and requirement mappings are included in the lock's canonical

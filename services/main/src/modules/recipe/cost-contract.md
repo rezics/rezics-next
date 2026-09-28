@@ -31,6 +31,15 @@ over 1 MiB or section depth over 16. It returns pages, object-page reads and
 visited occurrences. The RECIPE03 integration test checks these counters while
 comparing retained source bytes, native occurrences and export output.
 
+The Work page read resolves the selected Main Version and Recipe Structure in
+bounded graph queries, then pins one revision. It walks at most 4,096 occurrences
+in pages of 100, reads at most 64 measures, and rejects a response above 1 MiB.
+The optional whole-number servings request is limited to 1–100 and scales the
+same pinned occurrence set with exact rational arithmetic. Its reported cost
+includes occurrence pages, object-page reads and visited occurrences. Complexity
+is O(P + N) for P pages and N visited occurrences; the read repeats Work
+visibility checks after hydration.
+
 The recipe operation unit tests cover rational bounds, exact aggregation and
 ambiguous-unit lexical retention. The integration test exercises a real Jena
 write/read, denied admission, idempotent replay, stale idempotency conflict,

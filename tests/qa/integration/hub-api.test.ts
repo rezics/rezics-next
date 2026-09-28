@@ -14,6 +14,7 @@ import { HubStore } from '../../../services/main/src/modules/hub/store.ts';
 import { PackageArtifactStore } from '../../../services/main/src/modules/package/lock-artifacts.ts';
 import { activateMetadataWork, metadataWorkRequestDigest }
   from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const issuer = 'https://qa-hub.test';
@@ -84,7 +85,7 @@ async function fixture(store = hub) {
     if (who === 'other') return { issuer, subject: other.subject };
     throw new AccountAssertionDenied('unknown Hub token');
   } };
-  const app = createMainApp(environment.fuseki, { environment, account, access, hub: store });
+  const app = createMainApp(environment.fuseki, { environment, account, access, content, hub: store });
   const call = (method: string, path: string, who: string, scope: string,
     body?: unknown, key?: string) => app.handle(new Request(`http://main.local${path}`, { method,
     headers: { authorization: `Bearer ${who} ${scope}`, 'content-type': 'application/json',
@@ -198,6 +199,49 @@ test('HUB02: Prompt parameter schemas and examples retain exact revisions and st
     `prompt-${randomUUID()}`)).status).toBe(422);
   expect((await f.call('GET', `/v1/prompts/revisions/${first.revision}?actingSubject=${encodeURIComponent(f.actor)}`,
     'other', 'work:read')).status).toBe(404);
+});
+
+test('G-415: Hub Work read copies only the currently eligible exact Prompt revision', async () => {
+  const f = await fixture();
+  const variantId = `urn:rezics:variant:${randomUUID()}`;
+  const path = `/v1/hub/works/${f.created.work.slice(-36)}?actingSubject=${encodeURIComponent(f.actor)}`;
+  expect(await json(await f.call('GET', path, 'owner', 'work:read'), 200)).toBeNull();
+  const body = { profile: 'rezics-prompt-revision-v1', resourceId: f.created.work, variantId,
+    language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', expectedHead: null,
+    actingSubject: f.actor, content: 'Discuss {{notes}} exactly.',
+    parameterSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+      properties: { notes: { type: 'string' } }, required: ['notes'], additionalProperties: false },
+    examples: [{ parameters: { notes: 'The ending' }, output: 'Two readings' }],
+    applicability: { models: ['model-a'], tools: [] } };
+  const prompt = await json(await f.call('POST', '/v1/prompts/revisions', 'owner', 'work:edit', body,
+    `prompt-${randomUUID()}`), 201);
+  const exact = (await content.readExactBatch([prompt.revision], async ids => new Set(ids)))[0];
+  if (exact?.status !== 'available') throw new Error('Prompt exact revision missing');
+  const publication = `urn:rezics:publication:${randomUUID()}`;
+  const eligibility = `urn:rezics:eligibility:${randomUUID()}`;
+  const revision = `urn:rezics:content:revision:${prompt.revision}`;
+  await environment.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
+    GRAPH <${GRAPHS.current}> {
+      <${f.created.work}> a rv:PromptTemplate .
+      <${variantId}> a rv:ContentVariant ; rv:resource <${f.created.work}> ;
+        rv:contentPublicationHead <${publication}> ; rv:publicSearchEligibilityHead <${eligibility}> . }
+    GRAPH <${GRAPHS.revisions}> {
+      <${publication}> a rv:ContentPublicationDecision ; rv:component <${variantId}> ;
+        rv:resource <${f.created.work}> ; rv:contentRevision <${revision}> ;
+        rv:byteDigest ${JSON.stringify(exact.reference.byteDigest)} ; rv:sequence 1 .
+      <${eligibility}> a rv:ContentSearchEligibilityDecision ; rv:variant <${variantId}> ;
+        rv:resource <${f.created.work}> ; rv:publicationDecision <${publication}> ;
+        rv:disclosure rv:Public . } }`);
+  const page = await json(await f.call('GET', path, 'owner', 'work:read'), 200);
+  expect(page).toMatchObject({ profile: 'hub-work-page-v1', kind: 'prompt',
+    content: body.content, examples: body.examples, declaredModels: ['model-a'],
+    versions: [{ revision: prompt.revision }] });
+  expect((await f.call('GET', path, 'other', 'work:read')).status).toBe(404);
+  await environment.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA {
+    GRAPH <${GRAPHS.revisions}> { <${publication}> rv:byteDigest ${JSON.stringify(exact.reference.byteDigest)} . } } ;
+    INSERT DATA { GRAPH <${GRAPHS.revisions}> {
+      <${publication}> rv:byteDigest ${JSON.stringify('f'.repeat(64))} . } }`);
+  expect((await f.call('GET', path, 'owner', 'work:read')).status).toBe(503);
 });
 
 test('HUB01: a lost subtype write repairs from the existing Content receipt on the same key', async () => {

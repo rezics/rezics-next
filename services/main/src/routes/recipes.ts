@@ -11,7 +11,7 @@ import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, readCompositionH
 import { readCompositionPage, readStructureMeasures } from '../modules/structure/read.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable }
   from '../modules/structure/tree.ts';
-import { RecipeMeasure, STRUCTURE_LIMITS, type OccurrenceRecord }
+import { RecipeMeasure, STRUCTURE_LIMITS, OccurrenceRecord }
   from '../modules/structure/format.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { calculateNutrition, scaleIngredients } from '../modules/recipe/operations.ts';
@@ -24,6 +24,9 @@ import { sourceFieldOccurrence } from '../modules/source/support-attach.ts';
 import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalUnavailable }
   from '../modules/source/withdrawal.ts';
 import { exportRecipe, RecipeExportLimit } from '../modules/recipe/export.ts';
+import { readRecipeWorkPage } from '../modules/recipe/work-page.ts';
+import { workRead } from '../modules/work/read-session.ts';
+import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { problemResult } from '../api-contract.ts';
@@ -99,6 +102,7 @@ const importBody = t.Object({ sourceObservation: ref, expectedHead: ref, actingS
   { additionalProperties: false });
 
 export const openApiOperations = {
+  '/v1/recipes/works/{id}': { get: { bearer: false } },
   '/v1/recipes': { post: { bearer: true, idempotencyKey: true } },
   '/v1/recipes/{id}/changes': { post: { bearer: true, idempotencyKey: true } },
   '/v1/recipes/{id}/measures': { post: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
@@ -182,6 +186,25 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   if (work.structureObjects) (work.environment as typeof work.environment
     & { structureObjects?: typeof work.structureObjects }).structureObjects = work.structureObjects;
   return new Elysia()
+    .get('/v1/recipes/works/:id', { params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: t.Optional(ref),
+        servings: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) }, { additionalProperties: false }),
+      detail: { security: [{}, { bearerAuth: [] }] },
+      response: { 200: t.Nullable(t.Object({ profile: t.Literal('recipe-work-page-v1'), structure: ref,
+        revision: ref, occurrences: t.Array(OccurrenceRecord), measures: t.Array(RecipeMeasure),
+        ingredients: t.Array(t.Object({ occurrence: ref, originalText: t.String(),
+          sourceLexical: t.Optional(t.String()), amount: t.Optional(rational),
+          amountUpper: t.Optional(rational), unitText: t.Optional(t.String()), scaled: t.Boolean(),
+          reason: t.Optional(t.Union([t.Literal('unparsed'), t.Literal('non-linear'),
+            t.Literal('not-scalable')])) })),
+        cost: t.Object({ pages: t.Integer(), pagesRead: t.Integer(), occurrences: t.Integer() }) })),
+      ...workReadProblems } }, async ({ request, params, query }) => {
+      try {
+        return Response.json(await workRead(work, request, { actingSubject: query.actingSubject },
+          session => readRecipeWorkPage(session, `https://rezics.com/id/${params.id}`, query.servings)),
+        { headers: { 'cache-control': 'private, no-store' } });
+      } catch (error) { return workReadError(error); }
+    })
     .post('/v1/recipes', { body: t.Object({ owner: ref, mainVersion: ref, actingSubject: ref },
       { additionalProperties: false }), response: { 200: write, 201: write, ...problems } },
     async ({ request, body }) => {

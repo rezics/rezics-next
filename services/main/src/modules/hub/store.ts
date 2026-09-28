@@ -367,6 +367,28 @@ export class HubStore {
       residuals: (body.residuals as string[]) ?? [], createdAt: row.created_at.toISOString() };
   }
 
+  /** Resolve only the revision already selected and authorized by the public graph. */
+  async readSkillRevision(revision: string): Promise<HubImportView | null> {
+    if (!UUID.test(revision)) return null;
+    const rows = (await this.pool.query<Pick<HubImportRow, 'id' | 'principal_id'>>(`SELECT id, principal_id
+      FROM hub.import WHERE revision_id = $1 AND outcome = 'imported' LIMIT 2`, [revision])).rows;
+    if (rows.length > 1) throw new HubUnavailable('Skill revision has ambiguous imports');
+    return rows[0] ? this.readImport(rows[0].principal_id, rows[0].id) : null;
+  }
+
+  /** Dates for at most ten graph-proven published Hub revisions. */
+  async revisionDates(revisions: readonly string[]): Promise<Map<string, string>> {
+    if (revisions.length > 10 || revisions.some(id => !UUID.test(id))) {
+      throw new HubInvalid('Hub history exceeds ten revisions');
+    }
+    if (!revisions.length) return new Map();
+    const rows = (await this.pool.query<Pick<HubRevisionRow, 'revision_id' | 'created_at'>>(
+      `SELECT revision_id, created_at FROM hub.revision WHERE revision_id = ANY($1::uuid[]) LIMIT 11`,
+      [revisions])).rows;
+    if (rows.length > 10) throw new HubUnavailable('Hub history exceeds ten revisions');
+    return new Map(rows.map(row => [row.revision_id, row.created_at.toISOString()]));
+  }
+
   async importResource(principalId: string, id: string): Promise<string | null> {
     if (!UUID.test(id)) return null;
     return (await this.pool.query<{ resource_id: string }>(`SELECT v.resource_id FROM hub.import i
