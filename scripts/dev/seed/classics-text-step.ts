@@ -39,6 +39,8 @@ export async function publishClassicChapters(input: {
   api: Pick<SeedApi, 'post'>; target: WorkReceipt; book: string; actor: string; token: string;
   chapters: readonly ClassicChapter[]; source: ClassicSource; fixtureDigest: string;
   grant: (work: string) => Promise<void>;
+  /** Chapters an earlier seed already published: their creation replays, the rest of their steps don't. */
+  published?: ReadonlySet<string>;
 }): Promise<void> {
   const { api, target, book, actor, token, chapters, source } = input;
   const composition = await api.post<{ structure: string; revision: string }>('/v1/compositions', {
@@ -59,6 +61,7 @@ export async function publishClassicChapters(input: {
         position: 'last', expectedCompositionHead: head, actingSubject: actor }, token, identity.key);
     if (made.work !== identity.work) throw new Error(`Classic ${book}:${index} has another chapter identity`);
     head = made.compositionRevision;
+    if (input.published?.has(made.work)) continue;
     await input.grant(made.work);
     const assessmentKey = seedKey('classic-rights', `${book}:${index}`);
     const assessment = await api.post<{ assessmentId: string }>('/v1/rights/use-assessments', {
@@ -120,6 +123,7 @@ async function seedTexts(state: SeedState): Promise<void> {
     if (!complete) {
       await publishClassicChapters({ api: state.api, target, book: book.id, actor: author, token: writer.token,
         chapters, fixtureDigest: entry.sha256,
+        published: new Set(contents?.items.flatMap(item => item.selectedRevision && item.target ? [item.target] : []) ?? []),
         source: { provider: 'project-gutenberg', identifier: `ebook/${book.edition}`, url: entry.requestUrl,
           byteDigest: fixture.sourceSha256, retrievedAt: entry.fetchedAt },
         grant: work => grantHomeSeedAuthority(operator, [

@@ -71,15 +71,24 @@ export async function seedRealms(state: SeedState) {
     const collection = `https://rezics.com/id/${stableId(`curated:${realm.id}`)}`;
     const zone = `https://rezics.com/id/${stableId(`zone:${realm.id}`)}`;
     await grantCuratedCollectionSeed(operatorInput, collection);
+    // An earlier seed created this Collection under an older name; replay reads it instead of recreating it.
     const curated = await api.post<{ structure: string; revision: string }>('/v1/collections', {
       collection, name: `${realm.name} · Featured`, disclosure: 'public',
-      actingSubject: owner.actingSubject }, owner.token, seedKey('curated-collection', realm.id));
+      actingSubject: owner.actingSubject }, owner.token, seedKey('curated-collection', realm.id))
+      .catch(async (error: unknown) => {
+        if (!(error instanceof SeedApiError) || error.status !== 409) throw error;
+        return api.get<{ structure: string; revision: string }>(`/v1/collections/${collection.slice(-36)}?actingSubject=${
+          encodeURIComponent(owner.actingSubject)}&limit=1`, owner.token);
+      });
     if (realm.featured.length) await api.post(`/v1/collections/${collection.slice(-36)}/changes`, {
       expectedHead: curated.revision, actingSubject: owner.actingSubject,
       operations: realm.featured.map(work => ({ op: 'insert', role: 'member',
         parent: curated.structure, position: 'last',
         target: created.get(work)!.work, selection: { mode: 'follow-context' } })),
-    }, owner.token, seedKey('curated-members', realm.id));
+    }, owner.token, seedKey('curated-members', realm.id)).catch((error: unknown) => {
+      // The earlier seed already placed these members; the Collection has moved on since.
+      if (!(error instanceof SeedApiError) || error.status !== 409) throw error;
+    });
     const stewardInput = { ...operatorInput, ownerAccountSubject: parent.steward.accountId,
       actingSubject: parent.steward.actingSubject };
     await grantOfficialZoneSeed(stewardInput, zone);
