@@ -6,27 +6,45 @@ const en = {
   official: 'Official REZICS Zone',
   podium: 'Top of the chart',
   more: 'Full chart',
+  moreWorks: 'All stories',
   footerTitle: 'Fiction on REZICS',
   footerNote: 'Every pick in this Zone is a public decision. Follow the stamp on any work to see why it is here.',
   decisions: 'Decision log',
   about: 'About and rules',
   works: 'Every work',
+  reads: 'Ranked by reads',
+  finishedChapters: 'Ranked by finished chapters',
+  ongoing: 'Ongoing',
+  completed: 'Completed',
+  hiatus: 'On hiatus',
+  chapters: (count: string) => `${count} chapters`,
+  words: (count: string) => `${count} words`,
+  latestChapter: 'Latest chapter',
 };
 
 type Strings = typeof en;
 
-const translations: Record<string, Strings> = {
+const translations: Record<string, Partial<Strings>> = {
   en,
   'zh-Hans': {
     tagline: '网络连载、轻小说与原创作品，由小说编辑部公开甄选。',
     official: 'REZICS 官方专区',
     podium: '榜单前三',
     more: '完整榜单',
+    moreWorks: '全部作品',
     footerTitle: 'REZICS 小说',
     footerNote: '本专区的每一部推荐都来自一项公开决定。点开作品旁的印章，就能看到它为什么在这里。',
     decisions: '决定记录',
     about: '关于与规则',
     works: '全部作品',
+    reads: '按阅读次数排名',
+    finishedChapters: '按读完章节次数排名',
+    ongoing: '连载中',
+    completed: '已完结',
+    hiatus: '暂停更新',
+    chapters: (count: string) => `${count} 章`,
+    words: (count: string) => `${count} 词`,
+    latestChapter: '最新章节',
   },
   'zh-Hant': {
     tagline: '網路連載、輕小說與原創作品，由小說編輯部公開甄選。',
@@ -97,5 +115,5 @@ const translations: Record<string, Strings> = {
 };
 
 export function strings(locale: string): Strings {
-  return translations[locale] ?? en;
+  return { ...en, ...translations[locale] };
 }

@@ -20,11 +20,22 @@ const en = {
   works: 'Every book',
   decisions: 'Decision log',
   about: 'About and rules',
+  reads: 'Ranked by reads',
+  finishedChapters: 'Ranked by finished chapters',
+  ongoing: 'Ongoing',
+  completed: 'Completed',
+  hiatus: 'On hiatus',
+  chapters: (count: string) => `${count} chapters`,
+  words: (count: string) => `${count} words`,
+  latestChapter: 'Latest chapter',
+  day: 'Today',
+  week: 'This week',
+  month: 'This month',
 };
 
 type Strings = typeof en;
 
-const translations: Record<string, Strings> = {
+const translations: Record<string, Partial<Strings>> = {
   en,
   'zh-Hans': {
     official: 'REZICS 官方专区',
@@ -45,6 +56,17 @@ const translations: Record<string, Strings> = {
     works: '全部图书',
     decisions: '决定记录',
     about: '关于与规则',
+    reads: '按阅读次数排名',
+    finishedChapters: '按读完章节次数排名',
+    ongoing: '连载中',
+    completed: '已完结',
+    hiatus: '暂停更新',
+    chapters: (count: string) => `${count} 章`,
+    words: (count: string) => `${count} 词`,
+    latestChapter: '最新章节',
+    day: '今日',
+    week: '本周',
+    month: '本月',
   },
   'zh-Hant': {
     official: 'REZICS 官方 Zone',
@@ -169,5 +191,5 @@ const translations: Record<string, Strings> = {
 };
 
 export function strings(locale: string): Strings {
-  return translations[locale] ?? en;
+  return { ...en, ...translations[locale] };
 }

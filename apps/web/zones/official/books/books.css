@@ -1,9 +1,5 @@
 /*
- * The Books Zone's art direction: a literary magazine on warm paper. Serif
- * nameplate and headlines, hairline and double rules instead of panels,
- * small-caps kickers in the Zone accent and numbered columns. Everything is
- * scoped to the Zone's content box and reads the theme variables the platform
- * derives from the Zone tokens, so light, dark and contrast stay the platform's.
+ * Books arranges a cover-first library in REZICS's shared color and type system.
  */
 @layer zone {
   @scope ([data-zone="books"]) {
@@ -11,9 +7,8 @@
       --bz-rule: color-mix(in oklab, var(--foreground) 30%, transparent);
       --bz-hair: color-mix(in oklab, var(--foreground) 13%, transparent);
       /* Warm paper in light; in dark the card itself, the surface the accent is made readable on. */
-      --bz-paper: light-dark(color-mix(in oklab, var(--zone-accent) 5%, var(--card)), var(--card));
-      /* A magazine is one paper: modules sit on it between rules, not on panels. */
-      background: light-dark(var(--bz-paper), var(--zone-page));
+      --bz-paper: var(--zone-page);
+      background: var(--zone-page);
     }
 
     .bz-page {
@@ -586,6 +581,117 @@
       .bz-pages {
         display: none;
       }
+    }
+
+    /* Keep the host's type and surfaces while using a library's cover layout. */
+    .bz-nameplate {
+      padding-block: 1rem 1.25rem;
+      background: var(--zone-page);
+    }
+
+    .bz-wordmark,
+    .bz-lead-title,
+    .bz-contents-title,
+    .bz-section-title,
+    .bz-column-title,
+    .bz-monogram {
+      font-family: var(--zone-heading-font);
+      font-style: normal;
+    }
+
+    .bz-wordmark {
+      margin-block: 0.75rem 0.5rem;
+      font-size: clamp(2rem, 1.5rem + 2vw, 3rem);
+      line-height: 1.1;
+      text-align: start;
+    }
+
+    .bz-wordmark::after {
+      display: none;
+    }
+
+    .bz-motto,
+    .bz-byline,
+    .bz-dek,
+    .bz-standfirst,
+    .bz-colophon-note {
+      font-family: inherit;
+      font-style: normal;
+    }
+
+    .bz-motto {
+      margin-inline: 0;
+      text-align: start;
+    }
+
+    .bz-lead-cover {
+      rotate: none;
+    }
+
+    .zone-module {
+      border-block-start: 1px solid var(--border);
+    }
+
+    .bz-column-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+      gap: 1.5rem 1rem;
+      columns: auto;
+      column-rule: 0;
+    }
+
+    .bz-column-list > li {
+      display: block;
+      min-inline-size: 0;
+      padding: 0;
+    }
+
+    .bz-column-list > li::before {
+      display: none;
+    }
+
+    .bz-colophon {
+      border-block-start: 1px solid var(--border);
+      background: var(--zone-page);
+    }
+
+    .bz-facts {
+      margin-block-start: 0.375rem;
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+      line-height: 1.5;
+    }
+
+    .bz-work-card[data-layout="row"] > :is(.bz-facts, .bz-latest) {
+      margin-inline-start: 5.75rem;
+    }
+
+    .bz-work-card[data-layout="row"][data-ranked] > :is(.bz-facts, .bz-latest) {
+      margin-inline-start: 8rem;
+    }
+
+    .bz-work-card[data-layout="rail"] > :is(.bz-facts, .bz-latest) {
+      margin-inline-start: 5.25rem;
+    }
+
+    .bz-latest {
+      margin-block-start: 0.375rem;
+      color: var(--muted-foreground);
+      font-size: 0.8125rem;
+    }
+
+    .bz-latest a {
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .bz-ranking-list > li {
+      padding-block: 0.875rem;
+      border-block-end: 1px solid var(--border);
+    }
+
+    .bz-ranking-list > li:last-child {
+      border-block-end: 0;
     }
   }
 }

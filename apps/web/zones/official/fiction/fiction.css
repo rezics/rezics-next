@@ -1,196 +1,201 @@
-/*
- * The Fiction Zone's art direction: a web-fiction publication on manuscript
- * paper (稿纸), with a seal for its mark and the Zone accent as its one warm
- * color. Everything is scoped to the Zone's content box and reads the theme
- * variables the platform derives from the Zone tokens, so light, dark and
- * contrast stay the platform's.
- */
+/* Fiction changes the information layout while keeping REZICS colors and type. */
 @layer zone {
   @scope ([data-zone="fiction"]) {
-    :scope {
-      --fz-rule: color-mix(in oklab, var(--zone-accent) 22%, transparent);
-      --fz-paper: color-mix(in oklab, var(--zone-accent) 6%, var(--card));
-    }
-
     .fz-masthead {
-      position: relative;
-      isolation: isolate;
-      background: var(--fz-paper);
-      border-block-end: 1px solid color-mix(in oklab, var(--zone-accent) 20%, var(--border));
-    }
-
-    /* Manuscript-paper squares, fading out behind the wordmark. */
-    .fz-masthead::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      background-image:
-        linear-gradient(to right, var(--fz-rule) 1px, transparent 1px),
-        linear-gradient(to bottom, var(--fz-rule) 1px, transparent 1px);
-      background-size: 1.75rem 1.75rem;
-      background-position: -1px -1px;
-      mask-image: linear-gradient(100deg, transparent 18%, rgb(0 0 0 / 0.55) 55%, #000 90%);
-    }
-
-    .fz-seal {
-      display: grid;
-      place-items: center;
-      inline-size: 4.25rem;
-      block-size: 4.25rem;
-      flex: none;
-      border-radius: 0.5rem;
-      background: var(--primary);
-      color: var(--primary-foreground);
-      font-family: var(--font-work-serif);
-      font-size: 2.25rem;
-      font-weight: 700;
-      line-height: 1;
-      rotate: -4deg;
-      box-shadow:
-        inset 0 0 0 0.25rem var(--primary),
-        inset 0 0 0 0.3125rem color-mix(in oklab, var(--primary-foreground) 75%, transparent),
-        0 0.5rem 1.25rem -0.75rem color-mix(in oklab, var(--primary) 70%, transparent);
-    }
-
-    .fz-seal-small {
-      inline-size: 3rem;
-      block-size: 3rem;
-      font-size: 1.5rem;
+      border-block-end: 1px solid var(--border);
+      background: var(--zone-page);
     }
 
     .fz-kicker {
       color: var(--primary);
       font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      font-weight: 650;
     }
 
     .fz-wordmark {
-      margin-block: 0.125rem 0.25rem;
-      font-family: var(--font-work-serif);
-      font-size: clamp(2rem, 1.4rem + 2.6vw, 3.1rem);
+      margin-block: 0.2rem;
+      font-family: var(--zone-heading-font);
+      font-size: clamp(2rem, 1.5rem + 2vw, 3rem);
       font-weight: 700;
-      letter-spacing: -0.01em;
-      line-height: 1.08;
-      text-wrap: balance;
+      line-height: 1.1;
     }
 
-    .fz-tagline {
-      max-inline-size: 40rem;
+    .fz-tagline,
+    .fz-members {
       color: var(--muted-foreground);
-      text-wrap: pretty;
     }
 
     .fz-members {
       margin-block-start: 0.25rem;
-      color: var(--muted-foreground);
       font-size: 0.875rem;
     }
 
-    /* The hero sits on a band of the Zone's paper that fades into the page. */
     .fz-hero {
-      position: relative;
-      isolation: isolate;
-      padding-block: 0.25rem 0;
+      min-inline-size: 0;
     }
 
-    .fz-hero::before {
-      content: "";
-      position: absolute;
-      inset: -1.5rem 0 30%;
-      z-index: -1;
-      background: linear-gradient(var(--fz-paper), transparent);
-    }
-
-    /* A short accent rule before every module title, as a section mark. */
-    .zone-module > header h2::before,
-    .fz-module-title::before {
-      content: "";
-      display: inline-block;
-      inline-size: 0.25rem;
-      block-size: 0.95em;
-      margin-inline-end: 0.5rem;
-      border-radius: 1px;
-      background: var(--primary);
-      vertical-align: -0.1em;
-    }
-
-    .fz-module-title {
-      font-family: var(--zone-heading-font);
-      font-size: calc(1.125rem * var(--zone-heading-scale, 1));
-      font-weight: 600;
-      letter-spacing: -0.01em;
-    }
-
-    .fz-ranking {
+    .fz-ranking,
+    .fz-shelf {
       border-radius: var(--zone-radius-card);
       background: var(--zone-panel);
       padding: var(--zone-panel-pad);
     }
 
+    .fz-module-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-block-end: 0.5rem;
+    }
+
+    .fz-module-title {
+      font-family: var(--zone-heading-font);
+      font-size: calc(1.125rem * var(--zone-heading-scale, 1));
+      font-weight: 650;
+    }
+
     .fz-more {
+      flex: none;
       color: var(--primary);
       font-size: 0.875rem;
-      font-weight: 500;
+      font-weight: 600;
     }
 
     .fz-more:hover,
+    .fz-latest a:hover,
+    .fz-update a:hover,
     .fz-footer a:hover {
       text-decoration: underline;
       text-underline-offset: 0.2em;
     }
 
-    .fz-podium {
+    .fz-ranking-measure {
+      color: var(--muted-foreground);
+      font-size: 0.8125rem;
+    }
+
+    .fz-podium,
+    .fz-chart,
+    .fz-updates {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 10.5rem));
-      gap: 1rem clamp(1rem, 4vw, 2.5rem);
     }
 
-    .fz-podium-place {
-      position: relative;
-      padding-block-start: 2.6rem;
-      padding-inline-start: 0.75rem;
+    .fz-podium > li,
+    .fz-chart > li,
+    .fz-update {
+      min-inline-size: 0;
+      padding-block: 0.875rem;
+      border-block-end: 1px solid var(--border);
     }
 
-    /* The chart position in a large italic serif numeral. */
-    .fz-podium-place::before {
-      content: attr(data-rank);
-      position: absolute;
-      inset-block-start: -0.35rem;
-      inset-inline-start: -0.1rem;
+    .fz-podium > li:last-child,
+    .fz-chart > li:last-child,
+    .fz-updates > li:last-child {
+      border-block-end: 0;
+    }
+
+    .fz-work-card {
+      min-inline-size: 0;
+    }
+
+    .fz-work-card[data-layout="row"] > :is(.fz-facts, .fz-latest) {
+      margin-inline-start: 5.75rem;
+    }
+
+    .fz-work-card[data-layout="row"][data-ranked] > :is(.fz-facts, .fz-latest) {
+      margin-inline-start: 8rem;
+    }
+
+    .fz-work-card[data-layout="rail"] > :is(.fz-facts, .fz-latest) {
+      margin-inline-start: 5.25rem;
+    }
+
+    .fz-facts {
+      margin-block-start: 0.375rem;
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+      line-height: 1.5;
+      text-wrap: pretty;
+    }
+
+    .fz-latest {
+      margin-block-start: 0.375rem;
+      color: var(--muted-foreground);
+      font-size: 0.8125rem;
+    }
+
+    .fz-latest a,
+    .fz-update-chapter a {
       color: var(--primary);
-      font-family: var(--font-work-serif);
-      font-size: 3.4rem;
-      font-style: italic;
-      font-weight: 700;
-      line-height: 1;
+      font-weight: 600;
     }
 
-    .fz-chart {
+    .fz-latest time {
+      display: block;
+      font-size: 0.75rem;
+    }
+
+    .fz-arrivals {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
-      gap: 0.875rem 1.75rem;
-      border-block-start: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
-      padding-block-start: 1rem;
+      grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+      gap: 1.5rem 1rem;
+    }
+
+    .fz-update {
+      display: grid;
+      grid-template-columns: 3.5rem minmax(0, 1fr);
+      gap: 0.75rem;
+    }
+
+    .fz-update-cover {
+      grid-row: span 2;
+      min-inline-size: 0;
+    }
+
+    .fz-update-copy {
+      min-inline-size: 0;
+    }
+
+    .fz-update-title {
+      margin-block-start: 0.25rem;
+      font-family: var(--zone-heading-font);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    .fz-update-author,
+    .fz-update-side {
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+    }
+
+    .fz-update-side {
+      grid-column: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
     }
 
     .fz-footer {
       margin-block-start: 1rem;
-      background: light-dark(#1f2630, #070a0e);
-      color: #ece7df;
+      border-block-start: 1px solid var(--border);
+      background: var(--zone-page);
+      color: var(--foreground);
     }
 
-    .fz-footer a {
-      color: inherit;
-    }
+    @media (min-width: 40rem) {
+      .fz-update {
+        grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+        align-items: start;
+      }
 
-    @media print {
-      .fz-masthead::before,
-      .fz-hero::before,
-      .fz-footer {
-        display: none;
+      .fz-update-side {
+        grid-column: 3;
+        flex-direction: column;
+        align-items: end;
       }
     }
   }

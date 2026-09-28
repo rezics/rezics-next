@@ -1,8 +1,8 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@rezics/ui/tabs';
 import { WorkCover, workCoverRatio } from '@rezics/ui/work-cover';
-import { type HeaderSlotProps, type HeroSlotProps, type ModuleSlotProps, workCoverProps, type ZoneSlotProps,
-  type ZoneWork } from '@rezics/zone-sdk';
+import { type HeaderSlotProps, type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps,
+  workCoverProps, type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
 import { BookOpenIcon } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 import { ShelfCarousel } from './carousel.tsx';
@@ -14,6 +14,28 @@ import { strings } from './strings.ts';
 
 /** The tallest cover in a row, so titles line up under covers of mixed kinds. */
 const slotOf = (works: readonly ZoneWork[]) => Math.min(...works.map(work => workCoverRatio[work.kind]));
+
+function facts(work: ZoneWork, locale: string, includeStatus = true) {
+  const t = strings(locale);
+  const number = (value: number) => new Intl.NumberFormat(locale).format(value);
+  return [includeStatus && work.status ? t[work.status] : null,
+    work.words === null ? null : t.words(number(work.words)),
+    work.chapters === null ? null : t.chapters(number(work.chapters))].filter(Boolean);
+}
+
+/** Library cards keep the shared cover and add verified length and serial facts. */
+export function BooksWorkCard({ zone, work, layout, rank, fallback, Link }: WorkCardSlotProps) {
+  const t = strings(zone.locale);
+  const details = facts(work, zone.locale, layout !== 'cover' || work.status === 'completed');
+  return <div className="bz-work-card" data-layout={layout} data-ranked={rank ? '' : undefined}>
+    {fallback}
+    {details.length ? <p className="bz-facts">{details.join(' · ')}</p> : null}
+    {(layout === 'cover' || !work.latestChapter?.title) && work.latestChapter ? <p className="bz-latest">
+      {work.latestChapter.title ? `${t.latestChapter}: ` : null}<Link href={work.latestChapter.href}
+        lang={work.latestChapter.title?.lang}>
+        {work.latestChapter.title?.value ?? t.latestChapter}</Link></p> : null}
+  </div>;
+}
 
 /** The nameplate: the Zone's name set large between rules, under a dateline with the platform controls. */
 export function BooksHeader({ zone, actions, members }: HeaderSlotProps) {
@@ -56,6 +78,7 @@ export function BooksHero({ zone, banners, card, whyHere, Link, fallback }: Hero
             {t.byline('\u2063').split('\u2063')[1]}</p> : null}
           {lead.tagline ? <p lang={lead.tagline.lang} dir={lead.tagline.dir} className="bz-dek">
             {lead.tagline.value}</p> : null}
+          {facts(lead, zone.locale).length ? <p className="bz-facts">{facts(lead, zone.locale).join(' · ')}</p> : null}
           <div className="bz-lead-actions">
             <Link href={lead.href} className={buttonVariants({ size: 'md', pill: true })}>
               <BookOpenIcon aria-hidden="true" />{t.startReading}</Link>
@@ -99,7 +122,7 @@ export function BooksShelf({ zone, module, data, card, Link }: ModuleSlotProps<'
   </section>;
 }
 
-/** Editors' lists as magazine columns: a headline, its standfirst, then numbered picks in two columns. */
+/** Curated lists lead with covers and preserve each Work's Decision stamp. */
 export function BooksColumns({ zone, module, data, card, Link }: ModuleSlotProps<'editorial-list'>) {
   const t = strings(zone.locale);
   const heading = `bz-columns-${module.id}`;
@@ -114,10 +137,34 @@ export function BooksColumns({ zone, module, data, card, Link }: ModuleSlotProps
         {list.title.value}</h3>
       {list.blurb ? <p lang={list.blurb.lang} className="bz-standfirst">{list.blurb.value}</p> : null}
       <ol className="bz-column-list">
-        {list.items.map(work => <li key={work.id}>{card(work, { layout: 'row' })}</li>)}
+        {list.items.map(work => <li key={work.id}>{card(work)}</li>)}
       </ol>
       {list.href ? <Link href={list.href} className="bz-more">{t.more}</Link> : null}
     </article>)}
+  </section>;
+}
+
+/** Period tabs rank by the named Main signal, with facts visible in every row. */
+export function BooksRanking({ zone, module, data, card, Link }: ModuleSlotProps<'ranking'>) {
+  const t = strings(zone.locale);
+  const heading = `bz-ranking-${module.id}`;
+  const tabs = data.tabs.filter(tab => tab.items.length);
+  return <section aria-labelledby={heading} data-zone-module="ranking" className="zone-module bz-ranking">
+    <header className="bz-shelf-title">
+      <h2 id={heading} className="bz-section-title">{module.title}</h2>
+      {module.more ? <Link href={module.more} className="bz-more">{t.more}</Link> : null}
+    </header>
+    <p className="bz-facts">{data.metric === 'reads' ? t.reads : t.finishedChapters}</p>
+    <Tabs defaultValue={tabs[0]?.interval} className="gap-4">
+      <TabsList variant="underline" aria-label={module.title} className="justify-start">
+        {tabs.map(tab => <TabsTrigger key={tab.interval} value={tab.interval} className="grow-0 px-3">
+          {t[tab.interval]}</TabsTrigger>)}
+      </TabsList>
+      {tabs.map(tab => <TabsContent key={tab.interval} value={tab.interval}>
+        <ol className="bz-ranking-list">{tab.items.map(item => <li key={item.work.id}>
+          {card(item.work, { layout: 'row', rank: item.rank })}</li>)}</ol>
+      </TabsContent>)}
+    </Tabs>
   </section>;
 }
 
