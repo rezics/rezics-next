@@ -17,8 +17,9 @@
  *   can change again.
  * - An exact revision read reports that revision's state and never follows
  *   the present head.
- * - Routes and 308 follow RFC 9110 §15.4.9; persistent route identity and the
- *   direct Work lookup follow W3C's "Cool URIs don't change".
+ * - 308 and `Location` are RFC 9110 §15.4.9's; persistent route identity and
+ *   the direct Work lookup are REZICS choices informed by W3C's "Cool URIs
+ *   don't change".
  */
 export const MAX_WORK_REDIRECT_HOPS = 32;
 
