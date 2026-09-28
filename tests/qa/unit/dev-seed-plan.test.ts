@@ -31,8 +31,9 @@ describe('dev seed plan', () => {
       expect(new Set(concepts).size).toBe(concepts.length);
       for (const concept of concepts) expect(labels[concept]).toBeTruthy();
     }
-    expect(Object.values(genreConcepts).some(label => label.includes('玄幻'))).toBe(true);
-    expect(Object.values(genreConcepts).some(label => label.includes('悬疑'))).toBe(true);
+    expect(Object.values(genreConcepts).some(label => label.zh.includes('玄幻'))).toBe(true);
+    expect(Object.values(genreConcepts).some(label => label.zh.includes('悬疑'))).toBe(true);
+    expect(Object.values(genreConcepts).every(label => label.en && label.zh)).toBe(true);
   });
 
   test('official mod and Hub cards have typed public Works and bounded distinct native seeds', () => {
@@ -52,15 +53,16 @@ describe('dev seed plan', () => {
       .toBe(officialMods.length + officialHubItems.length);
   });
   test('contains distinct stable Accounts, Works and Realms across both languages', () => {
-    expect(people).toHaveLength(7);
+    expect(people).toHaveLength(8);
     expect(new Set(people.map(person => person.email)).size).toBe(people.length);
     expect(works.length).toBeGreaterThanOrEqual(25);
     expect(works.length).toBeLessThanOrEqual(40);
     expect(new Set(works.map(work => work.id)).size).toBe(works.length);
     expect(realms.map(realm => realm.id)).toEqual([
-      'fiction', 'books', 'mods', 'ai-workshop', 'software', 'kitchen',
+      'fiction', 'books', 'mods', 'ai-workshop', 'software', 'kitchen', 'games',
     ]);
-    expect(realms.every(realm => realm.featured.length > 0
+    // Games features its own catalogue (games-catalogue.ts), not base demo Works.
+    expect(realms.filter(realm => realm.id !== 'games').every(realm => realm.featured.length > 0
       && realm.featured.every(id => works.some(work => work.id === id)))).toBe(true);
     expect(new Set(works.map(work => work.language))).toEqual(new Set(['en', 'zh-Hans']));
     expect(new Set(works.map(work => work.type))).toEqual(new Set(['book', 'document', 'recipe', 'prompt', 'skill', 'mod']));
@@ -346,8 +348,9 @@ describe('dev seed plan', () => {
   });
 
   test('accepts only the documented CLI switches', () => {
-    expect(parseOptions([])).toEqual({ dryRun: false, resetOwn: false });
-    expect(parseOptions(['--dry-run', '--reset-own'])).toEqual({ dryRun: true, resetOwn: true });
+    expect(parseOptions([])).toEqual({ dryRun: false, resetOwn: false, themesOnly: false, zonesOnly: false });
+    expect(parseOptions(['--dry-run', '--reset-own'])).toMatchObject({ dryRun: true, resetOwn: true });
+    expect(parseOptions(['--zones-only'])).toMatchObject({ zonesOnly: true, themesOnly: false });
     expect(() => parseOptions(['--remove-all'])).toThrow('Usage:');
   });
 
