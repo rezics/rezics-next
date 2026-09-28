@@ -122,7 +122,9 @@ export const detail = (user: AdminUser = radia, extra: Partial<UserDetail> = {})
   { id: 's3', createdAt: ago(60 * 24 * 6), lastActiveAt: ago(60 * 26), expiresAt: ahead(1),
     device: { browser: 'Safari', platform: 'iOS', label: 'Safari · iOS' }, network: null, thisDevice: false, clientName: null, groupKey: 'g-ios' }] },
   apps: { nextCursor: null, items: [{ clientId: 'notes-app', name: 'Notes', uri: null, icon: null, trusted: false,
-    scopes: [{ scope: 'work:read', description: { en: 'Read your Works', 'zh-CN': '读取你的作品' } }], grantedAt: ago(60 * 24 * 20),
+    scopes: [{ scope: 'work:read', description: { en: 'Read your Works', 'zh-Hant': '讀取你的作品',
+      'zh-Hans': '读取你的作品', ja: '作品を読み取る', ko: '작품 읽기', de: 'Werke lesen',
+      fr: 'Lire des œuvres', es: 'Leer obras' } }], grantedAt: ago(60 * 24 * 20),
     lastUsedAt: ago(60 * 3), installationId: 'i1', installationState: 'active' }] },
   activity: { nextCursor: null, failedAttemptsLast24Hours: { count: 2, capped: false }, items: [
     { id: 'e1', action: 'admin_action', detail: { action: 'suspend', requestId: 'r1' }, occurredAt: ago(120) },

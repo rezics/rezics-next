@@ -12,8 +12,8 @@ import { signingKeyOptions } from './signing-keys.ts';
 import { providerScopes, resourceScopes } from './oauth-scopes.ts';
 import { currentRecoveryGeneration, RECOVERY_GENERATION_CLAIM } from './recovery-claim.ts';
 import type { AccountEmail } from './email.ts';
-import { afterPasskeyAssertion, emailLocale, localeField, markEmailChangeStep,
-  passkeyRelyingParty } from './account-settings.ts';
+import { afterPasskeyAssertion, languageForSignupEmail, localeField, markEmailChangeStep,
+  passkeyRelyingParty, recipientLocale, takeSignupRequestLocale } from './account-settings.ts';
 import { deviceLabel } from './security-activity.ts';
 import { ACCOUNT_GENERATION_CLAIM, GRANT_GENERATION_CLAIM, currentAccountGenerations } from './account-fence.ts';
 import { bootstrapOperators, operatorRole, rolePermits } from './operators.ts';
@@ -49,7 +49,10 @@ export function accountAuthOptions(config: AccountConfig) {
     // provider's age-only check cannot recognize that proof after step-up.
     session: { freshAge: 0 },
     hooks: operatorAuthHooks(config.pool, config.operatorUserIds),
-    databaseHooks: { session: { create: { before: async (session: { userId: string }) => {
+    databaseHooks: { user: { create: { after: async (user: { id: string }, context: { request?: Request } | null) => {
+      const locale = takeSignupRequestLocale(user.id, context?.request);
+      await config.pool.query(`UPDATE "user" SET signup_locale = $2 WHERE id = $1 AND signup_locale IS NULL`, [user.id, locale]);
+    } } }, session: { create: { before: async (session: { userId: string }) => {
       const blocked = await config.pool.query(`SELECT 1 FROM rezics_account_security WHERE user_id = $1
         AND (deletion_started_at IS NOT NULL OR password_reset_required OR (suspended_at IS NOT NULL AND (suspended_until IS NULL OR suspended_until > now())))`, [session.userId]);
       if (blocked.rowCount) {
@@ -65,7 +68,7 @@ export function accountAuthOptions(config: AccountConfig) {
       sendResetPassword: async ({ user, url }: { user: EmailUser; url: string }, request?: Request) => {
         if (!config.email) throw new Error('Account email delivery is not configured');
         await config.email.enqueue({ userId: user.id, to: user.email, url,
-          purpose: 'reset', locale: emailLocale(user, request) })
+          purpose: 'reset', locale: await recipientLocale(config.pool, user.id) })
           .catch(() => console.error('Account email intent unavailable'));
       },
     },
@@ -74,7 +77,7 @@ export function accountAuthOptions(config: AccountConfig) {
         if (!config.email && !requireEmailVerification) return;
         if (!config.email) throw new Error('Account email delivery is not configured');
         await config.email.enqueue({ userId: user.id, to: user.email, url: markEmailChangeStep(url, 'verified'),
-          purpose: 'verify', locale: emailLocale(user, request) })
+          purpose: 'verify', locale: await languageForSignupEmail(config.pool, user, request) })
           .catch(() => console.error('Account email intent unavailable'));
       },
     },
@@ -122,8 +125,10 @@ export function accountAuthOptions(config: AccountConfig) {
           if (count.rows[0]!.count >= 32) throw new APIError('CONFLICT', { message: 'Passkey limit reached' });
           // Unnamed passkeys are called after their provider, else the device
           // that created them; a name the person typed always wins.
-          return { name: getAuthenticatorName(verification.registrationInfo.aaguid)
-            ?? deviceLabel(ctx.headers?.get('user-agent')).label };
+          const device = deviceLabel(ctx.headers?.get('user-agent'));
+          const name = getAuthenticatorName(verification.registrationInfo.aaguid)
+            ?? (device.browser === 'unknown' ? undefined : device.label);
+          return name ? { name } : {};
         } },
         authentication: { afterVerification: async ({ verification, clientData }) => {
           if (!verification.authenticationInfo.userVerified) {

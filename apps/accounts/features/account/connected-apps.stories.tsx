@@ -84,6 +84,20 @@ export const Unavailable: Story = {
   },
 };
 
+export const LongPermissions: Story = {
+  args: { apps: [{ clientId: 'reader', name: 'Reader', icon: null, uri: null, trusted: false, firstParty: false,
+    permissionGroups: [], withdrawn: false, granted: '27. Sept. 2026', lastUsed: 'vor 3 Stunden',
+    permissions: [
+      'Community-Meldungen und Entscheidungen lesen und über Community-Beiträge entscheiden',
+      'コミュニティの報告と決定を読み取り、コミュニティの投稿について決定する',
+    ] }] },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(/Community-Meldungen/)).toBeVisible();
+    await expect(canvas.getByText(/コミュニティの報告/)).toBeVisible();
+  },
+};
+
 export const Dark: Story = { globals: dark };
 export const Phone: Story = { globals: phone,
   async play({ canvasElement }) {

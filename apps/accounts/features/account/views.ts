@@ -64,8 +64,7 @@ export function connectedAppViews(apps: ConnectedApp[], now: Date, locale: Accou
   return apps.map(app => ({ clientId: app.clientId, name: app.name, uri: app.uri, icon: app.icon,
     trusted: app.trusted, firstParty: app.firstParty === true, withdrawn: app.withdrawn,
     permissionGroups: app.firstParty ? firstPartyPermissionGroups(app.scopes.map(scope => scope.scope)) : [],
-    permissions: [...new Set(app.scopes.map(scope => scope.description[
-      locale === 'zh-Hans' || locale === 'zh-Hant' ? 'zh-CN' : 'en']))],
+    permissions: [...new Set(app.scopes.map(scope => scope.description[locale] ?? scope.description.en))],
     granted: calendarDate(app.grantedAt, locale),
     lastUsed: app.lastUsedAt ? relativeTime(app.lastUsedAt, now, locale) : null }));
 }

@@ -30,7 +30,7 @@ test('G205 consent: authenticated signed preview, localization, denial, tamperin
     const preview = await f.request(read, undefined, owner.cookie);
     expect(preview.status).toBe(200);
     expect(await preview.json()).toMatchObject({ client: { id: client.client_id, name: 'Notes' },
-      scopes: [{ scope: 'openid', description: { en: 'Identify your REZICS account', 'zh-CN': '识别你的 REZICS 账号' } },
+      scopes: [{ scope: 'openid', description: { en: 'Identify your REZICS account', 'zh-Hans': '识别你的 REZICS 账号', ja: 'REZICS アカウントを識別する' } },
         { scope: 'work:read' }, { scope: 'offline_access' }], resources: [f.config.resource] });
     expect((await f.request(read, undefined, peer.cookie)).status).toBe(409);
     expect((await f.request(`/api/account/consent?${new URLSearchParams({ oauth_query: `${signed}&scope=work:edit` })}`,
@@ -50,6 +50,6 @@ test('G205 consent: authenticated signed preview, localization, denial, tamperin
     await f.pool.query(`UPDATE rezics_account_pending_consent SET expires_at = now() - interval '1 second' WHERE decided_at IS NULL`);
     expect((await f.request('/api/account/consent', { oauth_query: stale, accept: true }, owner.cookie)).status).toBe(409);
     expect(scopeDescriptions.map(item => item.scope)).toEqual([...providerScopes]);
-    expect(scopeDescriptions.every(item => item.description.en && item.description['zh-CN'])).toBe(true);
+    expect(scopeDescriptions.every(item => item.description.en && item.description['zh-Hans'] && item.description.ja)).toBe(true);
   } finally { await f.close(); }
 }, 60_000);

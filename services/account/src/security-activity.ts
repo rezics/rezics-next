@@ -12,10 +12,11 @@ import { accountResponses, activityView, pageView, sessionView } from './views.t
 export function deviceLabel(userAgent?: string | null) {
   const ua = userAgent ?? '';
   const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox'
-    : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Unknown browser';
+    : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'unknown';
   const platform = /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS'
     : /Windows/.test(ua) ? 'Windows' : /Macintosh/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : null;
-  return { browser, platform, label: platform ? `${browser} · ${platform}` : browser };
+  const label = browser === 'unknown' ? platform ?? 'unknown' : platform ? `${browser} · ${platform}` : browser;
+  return { browser, platform, label };
 }
 export function coarseNetwork(ip?: string | null) {
   if (!ip) return null;

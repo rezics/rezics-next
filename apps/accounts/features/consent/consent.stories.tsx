@@ -103,6 +103,42 @@ export const Phone: Story = { globals: phone,
     await expect(await within(canvasElement).findByRole('button', { name: 'Allow' })).toBeVisible();
   },
 };
+const japanese = { locale: 'ja' } as const;
+const german = { locale: 'de' } as const;
+const adopt = {
+  ja: 'コミュニティの投稿を採用する',
+  de: 'Community-Beiträge übernehmen',
+};
+
+export const Japanese: Story = {
+  globals: japanese,
+  args: { descriptions: { 'realm:adopt': adopt.ja } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { level: 1,
+      name: 'Reader が REZICS アカウントへのアクセスを求めています' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: '許可' })).toBeVisible();
+    await expect(canvas.getByText(adopt.ja)).toBeVisible();
+    await expect(canvas.queryByText('realm:adopt')).toBeNull();
+  },
+};
+
+export const JapanesePhone: Story = { ...Japanese, globals: { ...japanese, ...phone } };
+
+export const German: Story = {
+  globals: german,
+  args: { descriptions: { 'realm:adopt': adopt.de } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { level: 1,
+      name: 'Reader möchte auf Ihren REZICS Account zugreifen' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Zulassen' })).toBeVisible();
+    await expect(canvas.getByText(adopt.de)).toBeVisible();
+  },
+};
+
+export const GermanPhone: Story = { ...German, globals: { ...german, ...phone } };
+
 export const Chinese: Story = {
   globals: chinese,
   async play({ canvasElement }) {

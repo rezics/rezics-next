@@ -1,7 +1,7 @@
 // Server Component reads from the Account service with the visitor's cookies.
 import { headers } from 'next/headers';
 import { cache } from 'react';
-import { parseActivity, parseConnectedApps, parseDisplayPreferences, parseMethods, parsePublicClient, parseSession,
+import { parseActivity, parseConnectedApps, parseConsentPreview, parseDisplayPreferences, parseMethods, parsePublicClient, parseSession,
   parseSessions, record } from './account-data.ts';
 import { accountsConfig, httpOrigin } from '../config/env.ts';
 
@@ -52,6 +52,8 @@ export const readSessions = cache((cursor?: string) => read(`/api/account/sessio
 export const readSecurityActivity = cache((cursor?: string) => read(`/api/account/security-activity?limit=50${
   cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, parseActivity));
 export const readConnectedApps = cache(() => read('/api/account/connected-apps?limit=100', parseConnectedApps));
+export const readConsent = cache((oauthQuery: string) =>
+  read(`/api/account/consent?${new URLSearchParams({ oauth_query: oauthQuery })}`, parseConsentPreview));
 export const readPublicClient = cache((clientId: string) =>
   read(`/api/auth/oauth2/public-client?client_id=${encodeURIComponent(clientId)}`, parsePublicClient));
 /** The App behind a signed authorization request, before anyone signs in. */

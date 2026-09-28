@@ -24,9 +24,52 @@ export const localeField = {
       : { issues: [{ message: `locale must be one of ${accountLocales.join(', ')}` }] } } } },
 } as const;
 
-/** The account's chosen language, else the requesting browser's. */
-export function emailLocale(user: { locale?: unknown }, request?: Request): AccountLocale {
-  return isAccountLocale(user.locale) ? user.locale : accountLocale(request);
+/** The language the person chose. `null` means none is stored; mail then uses
+ * the language recorded at sign-up, never the request in front of an operator. */
+export function emailLocale(user: { locale?: unknown } | null): AccountLocale | null {
+  return isAccountLocale(user?.locale) ? user.locale : null;
+}
+
+type LocaleRow = { locale: string | null; signup_locale: string | null };
+type LocaleDb = { query(sql: string, params?: unknown[]): Promise<{ rows: LocaleRow[] }> };
+
+function chosenLocale(row: LocaleRow | undefined): AccountLocale | null {
+  if (isAccountLocale(row?.locale)) return row.locale;
+  if (isAccountLocale(row?.signup_locale)) return row.signup_locale;
+  return null;
+}
+
+/** The sign-up request's language, remembered until the user row is visible.
+ * Verification mail is sent while that insert is still uncommitted on another
+ * connection, so the write happens in the user create-after hook. */
+const signupRequestLocales = new Map<string, AccountLocale>();
+
+export function rememberSignupRequestLocale(userId: string, request?: Request): AccountLocale {
+  const resolved = accountLocale(request);
+  signupRequestLocales.set(userId, resolved);
+  return resolved;
+}
+
+export function takeSignupRequestLocale(userId: string, request?: Request): AccountLocale {
+  const remembered = signupRequestLocales.get(userId);
+  signupRequestLocales.delete(userId);
+  return remembered ?? accountLocale(request);
+}
+
+/** Returns the language of this sign-up email: the language the person chose,
+ * otherwise the language of the sign-up request. */
+export async function languageForSignupEmail(db: LocaleDb, user: { id: string; locale?: unknown }, request?: Request): Promise<AccountLocale> {
+  const resolved = rememberSignupRequestLocale(user.id, request);
+  await db.query(`UPDATE "user" SET signup_locale = $2 WHERE id = $1 AND signup_locale IS NULL`, [user.id, resolved]);
+  return emailLocale(user) ?? resolved;
+}
+
+/** The recipient's language. Mail is not sent in a language the account never had. */
+export async function recipientLocale(db: LocaleDb, userId: string): Promise<AccountLocale> {
+  const { rows } = await db.query(`SELECT locale, signup_locale FROM "user" WHERE id = $1`, [userId]);
+  const locale = chosenLocale(rows[0]);
+  if (!locale) throw new Error('Account language is not recorded');
+  return locale;
 }
 
 /** Better Auth sends both links of an email change back to the same callback.

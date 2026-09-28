@@ -19,8 +19,8 @@ const groupTitles = { identity: 'groupIdentity', works: 'groupWorks', other: 'gr
   offline: 'groupOffline' } as const;
 
 /** The OAuth consent step: who is asking, as which account, for what. */
-export function ConsentCard({ app, user, scopes, oauthQuery }: { app: ConsentApp | null;
-  user: AvatarUser; scopes: string[]; oauthQuery: string }) {
+export function ConsentCard({ app, user, scopes, oauthQuery, descriptions }: { app: ConsentApp | null;
+  user: AvatarUser; scopes: string[]; oauthQuery: string; descriptions?: Readonly<Record<string, string>> }) {
   const { t } = useTranslation('consent');
   const { api, navigate } = useAccountClient();
   const [busy, setBusy] = useState<'allow' | 'deny' | 'switch'>();
@@ -69,7 +69,7 @@ export function ConsentCard({ app, user, scopes, oauthQuery }: { app: ConsentApp
               <h3 className="font-medium">{t[groupTitles[group]]}</h3>
               <ul className="mt-1 flex flex-col gap-1 text-sm text-muted-foreground">
                 {lines.map(line => <li key={line.scope}>{line.message ? t[line.message]
-                  : <>{t.scopeOtherPrefix} <code className="font-mono text-foreground">{line.scope}</code></>}</li>)}
+                  : descriptions?.[line.scope] ?? <>{t.scopeOtherPrefix} <code className="font-mono text-foreground">{line.scope}</code></>}</li>)}
               </ul>
             </div>
           </li>;

@@ -64,12 +64,13 @@ test('G282: feed, follows and votes expose concrete card and receipt types to we
   expect(consume).toBeFunction();
 });
 
-test('G282: each home OAuth ceiling explains its concrete consent in both Account languages', () => {
-  expect(describeScope('follow:read').description).toEqual({
-    en: 'See the communities, works and people you follow', 'zh-CN': '查看你关注的社区、作品和用户' });
+test('G282: each home OAuth ceiling explains its concrete consent in every Account language', () => {
+  expect(describeScope('follow:read').description).toMatchObject({
+    en: 'See the communities, works and people you follow', 'zh-Hans': '查看你关注的社区、作品和用户' });
   expect(describeScope('follow:write').description.en).toContain('Follow or unfollow');
   expect(describeScope('feed:vote').description.en).toContain('Cast, change or remove');
-  expect(describeScope('feed:vote').description['zh-CN']).toContain('撤回');
+  expect(describeScope('feed:vote').description['zh-Hans']).toContain('撤回');
+  expect(describeScope('feed:vote').description.ja.length).toBeGreaterThan(0);
 });
 
 test('G282: versioned Best normalizes Realm engagement, uses 24h decay and Top preserves net votes', () => {

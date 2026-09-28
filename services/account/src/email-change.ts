@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Elysia, t } from 'elysia';
 import type { Pool, PoolClient } from 'pg';
-import { emailLocale, markEmailChangeStep } from './account-settings.ts';
+import { markEmailChangeStep, recipientLocale } from './account-settings.ts';
 import { enqueueAccountEmail } from './email.ts';
 import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
 import { requireStepUp } from './methods.ts';
@@ -92,7 +92,7 @@ export function emailChangeApi(auth: AccountAuth, pool: Pool) {
               callback_path = EXCLUDED.callback_path, session_id = EXCLUDED.session_id, expires_at = EXCLUDED.expires_at`,
           [session.user.id, digest(token), user.email, newEmail, generation.security, generation.recovery, callback, session.session.id]);
           await enqueueAccountEmail(db, secret, { userId: session.user.id, to: user.email,
-            url: link(auth, token, callback, 'confirm'), purpose: 'change-email', locale: emailLocale(user, request) });
+            url: link(auth, token, callback, 'confirm'), purpose: 'change-email', locale: await recipientLocale(db, session.user.id) });
         });
         return accountJson({ status: true });
       } catch (error) { return accountFailure(error); }
@@ -125,7 +125,7 @@ export function emailChangeApi(auth: AccountAuth, pool: Pool) {
             await db.query(`UPDATE rezics_account_email_change SET stage = 'verify', token_hash = $2
               WHERE user_id = $1`, [userId, digest(token)]);
             await enqueueAccountEmail(db, secret, { userId, to: intent.new_email,
-              url: link(auth, token, intent.callback_path, 'verify'), purpose: 'verify', locale: emailLocale(user, request) });
+              url: link(auth, token, intent.callback_path, 'verify'), purpose: 'verify', locale: await recipientLocale(db, userId) });
           } else {
             const changed = await db.query(`UPDATE "user" SET email = $2, "emailVerified" = true, "updatedAt" = now()
               WHERE id = $1 AND email = $3 RETURNING id`, [userId, intent.new_email, intent.old_email]);

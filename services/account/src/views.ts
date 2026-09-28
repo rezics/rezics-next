@@ -5,7 +5,9 @@ export const pageView = <S extends ReturnType<typeof t.Object>>(item: S) =>
   t.Object({ items: t.Array(item), nextCursor: t.Nullable(t.String()) });
 export const statusView = t.Object({ status: t.Boolean() });
 export const commandView = t.Object({ status: t.Boolean(), requestId: t.String() });
-export const descriptionView = t.Object({ scope: t.String(), description: t.Object({ en: t.String(), 'zh-CN': t.String() }) });
+export const descriptionView = t.Object({ scope: t.String(), description: t.Object({
+  en: t.String(), 'zh-Hant': t.String(), 'zh-Hans': t.String(), ja: t.String(),
+  ko: t.String(), de: t.String(), fr: t.String(), es: t.String() }) });
 export const consentView = t.Object({ client: t.Object({ id: t.String(), name: t.String(),
   uri: t.Nullable(t.String()), icon: t.Nullable(t.String()) }), scopes: t.Array(descriptionView),
 resources: t.Array(t.String()), expiresAt: t.String() });

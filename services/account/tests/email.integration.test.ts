@@ -30,7 +30,7 @@ test('G205 email: verification, localized delivery, reset replay/concurrency and
     expect(existing.status).toBe(absent.status);
     expect(await existing.json()).toEqual(await absent.json());
     await f.email.drain();
-    const reset = [...f.messages].reverse().find(message => message.subject === 'Reset your password')!;
+    const reset = [...f.messages].reverse().find(message => message.subject === '重置密码')!;
     const link = /https?:\/\/\S+/.exec(reset.text)![0];
     const callback = await f.request(link);
     const token = new URL(callback.headers.get('location')!).searchParams.get('token');

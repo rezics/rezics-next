@@ -49,9 +49,14 @@ describe('Account responses', () => {
     const app = { clientId: 'reader', name: '', uri: 'https://reader.example', icon: 'javascript:x', trusted: true,
       scopes: [{ scope: 'openid', description: { en: 'Identify your REZICS account', 'zh-CN': '识别你的 REZICS 账号' } }],
       grantedAt: at, lastUsedAt: null, installationId: 'i1', installationState: 'revoked' };
+    const described = { en: 'Identify your REZICS account', 'zh-Hans': '识别你的 REZICS 账号',
+      'zh-Hant': '识别你的 REZICS 账号', ja: 'Identify your REZICS account', ko: 'Identify your REZICS account',
+      de: 'Identify your REZICS account', fr: 'Identify your REZICS account', es: 'Identify your REZICS account' };
     expect(parseConnectedApps({ items: [app], nextCursor: null })?.items[0]).toEqual({ clientId: 'reader',
       name: 'reader', uri: 'https://reader.example', icon: null, trusted: true, withdrawn: true, grantedAt: at,
-      lastUsedAt: null, scopes: app.scopes });
+      lastUsedAt: null, scopes: [{ scope: 'openid', description: described }] });
+    expect(parseSessions({ items: [{ ...device, device: { browser: 'unknown', platform: null, label: 'unknown' } }],
+      nextCursor: null })?.items[0]?.browser).toBeNull();
   });
 
   test('a public client links only to web pages', () => {

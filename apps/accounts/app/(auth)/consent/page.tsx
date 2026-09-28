@@ -1,9 +1,10 @@
 import { pendingAuthorization, signedOAuthQuery } from '../../../features/api/oauth-query.ts';
-import { readPublicClient, readSession } from '../../../features/api/server.ts';
+import { readConsent, readPublicClient, readSession } from '../../../features/api/server.ts';
 import { ConsentCard } from '../../../features/consent/consent-card.tsx';
 import { ConsentProblem } from '../../../features/consent/consent-problem.tsx';
 import { AuthFrame } from '../../../features/shell/auth-frame.tsx';
 import { type PageSearchParams, pageQuery } from '../../../features/shell/search-params.ts';
+import { requestLocale } from '../../../i18n/server.ts';
 
 export default async function ConsentPage({ searchParams }: { searchParams: PageSearchParams }) {
   const search = (await pageQuery(searchParams)).toString();
@@ -15,7 +16,9 @@ export default async function ConsentPage({ searchParams }: { searchParams: Page
     return <AuthFrame><ConsentProblem kind="signed-out" signIn={`/sign-in?${oauthQuery}`} /></AuthFrame>;
   }
   if (session.status !== 'ok') return <AuthFrame><ConsentProblem kind="unavailable" /></AuthFrame>;
-  const client = await readPublicClient(pending.clientId);
+  const [client, consent, locale] = await Promise.all([readPublicClient(pending.clientId), readConsent(oauthQuery), requestLocale()]);
+  const descriptions = consent.status === 'ok' ? Object.fromEntries(consent.data.scopes.map(scope =>
+    [scope.scope, scope.description[locale] ?? scope.description.en])) : undefined;
   return <AuthFrame><ConsentCard app={client.status === 'ok' ? client.data : null}
-    user={session.data.user} scopes={pending.scopes} oauthQuery={oauthQuery} /></AuthFrame>;
+    user={session.data.user} scopes={pending.scopes} oauthQuery={oauthQuery} descriptions={descriptions} /></AuthFrame>;
 }

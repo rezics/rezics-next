@@ -1,28 +1,15 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Elysia, t } from 'elysia';
 import type { Pool } from 'pg';
-import { emailLocale } from './account-settings.ts';
-import { enqueueAccountEmail } from './email.ts';
+import { accountLocales, emailLocale } from './account-settings.ts';
+import { enqueueAccountEmail, type AccountLocale } from './email.ts';
+import { formatDigest } from './email-copy/index.ts';
 
 const body = t.Object({ userId: t.String({ minLength: 1, maxLength: 128 }),
   day: t.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$' }),
   more: t.Boolean(),
   counts: t.Array(t.Object({ topic: t.String({ maxLength: 64 }),
     count: t.Integer({ minimum: 1, maximum: 200 }) }), { minItems: 1, maxItems: 12 }) });
-const labels: Record<string, { en: string; zh: string }> = {
-  reply: { en: 'Replies', zh: '回复' }, mention: { en: 'Mentions', zh: '提及' },
-  'post-vote': { en: 'Votes on your posts', zh: '帖子获赞' },
-  'followed-chapter': { en: 'New chapters', zh: '新章节' },
-  'review-helpful': { en: 'Helpful review votes', zh: '书评获赞' },
-  review: { en: 'Reviews', zh: '书评' },
-  'submission-decision': { en: 'Submission decisions', zh: '提交决定' },
-  'moderation-outcome': { en: 'Moderation outcomes', zh: '处理结果' },
-  'realm-role-change': { en: 'Role changes', zh: '角色变更' },
-  'realm-membership-change': { en: 'Membership changes', zh: '成员变更' },
-  'realm-invitation': { en: 'Realm invitations', zh: 'Realm 邀请' },
-  'claim-correction': { en: 'Claim corrections', zh: '声明更正' },
-};
-
 function authorized(value: string | null, secret: string): boolean {
   if (!secret || !value?.startsWith('Bearer ')) return false;
   const received = Buffer.from(value.slice(7));
@@ -51,15 +38,16 @@ export function notificationDigestApi(pool: Pool, accountSecret: string, mainSec
       || new Set(input.counts.map(item => item.topic)).size !== input.counts.length) {
       return Response.json({ error: 'invalid_request' }, { status: 400 });
     }
-    const user = (await pool.query<{ email: string; emailVerified: boolean; locale: string | null }>(
-      'SELECT email, "emailVerified", locale FROM "user" WHERE id = $1', [input.userId])).rows[0];
+    const user = (await pool.query<{ email: string; emailVerified: boolean; locale: string | null; signup_locale: string | null }>(
+      'SELECT email, "emailVerified", locale, signup_locale FROM "user" WHERE id = $1', [input.userId])).rows[0];
     if (!user?.emailVerified) return new Response(null, { status: 204 });
-    const locale = emailLocale(user);
-    const message = input.counts.map(item => locale === 'zh-Hans'
-      ? `${labels[item.topic]?.zh ?? '通知'}：${item.count}`
-      : `${labels[item.topic]?.en ?? 'Notifications'}: ${item.count}`).join('\n')
-      + (input.more ? locale === 'zh-Hans' ? '\n还有更多通知，可在 REZICS 中查看。'
-        : '\nMore notifications are waiting in REZICS.' : '');
+    const signup = accountLocales.includes(user.signup_locale as AccountLocale) ? user.signup_locale as AccountLocale : null;
+    const locale = emailLocale(user) ?? signup;
+    if (!locale) {
+      console.error('Account digest skipped: language is not recorded');
+      return new Response(null, { status: 204 });
+    }
+    const message = formatDigest(locale, input.counts, input.more);
     await enqueueAccountEmail(pool, accountSecret, { userId: input.userId, to: user.email,
       url: accountBaseUrl, purpose: 'digest', locale, message },
     digestId(accountSecret, input.userId, input.day));

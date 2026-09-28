@@ -76,7 +76,8 @@ describe('view models', () => {
   });
 
   test('describe an app’s permissions in the page’s language', () => {
-    const scope = (scope: string, en: string, zh: string) => ({ scope, description: { en, 'zh-CN': zh } });
+    const scope = (scope: string, en: string, zh: string) => ({ scope, description: {
+      en, 'zh-Hans': zh, 'zh-Hant': zh, ja: en, ko: en, de: en, fr: en, es: en } });
     const [app] = connectedAppViews([{ clientId: 'r', name: 'Reader', uri: null, icon: null, trusted: false,
       withdrawn: false, grantedAt: '2026-09-01T00:00:00Z', lastUsedAt: at(3_600),
       scopes: [scope('openid', 'Identify your REZICS account', '识别你的 REZICS 账号'),

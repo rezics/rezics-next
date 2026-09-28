@@ -97,7 +97,8 @@ test('G261 contract: the Accounts site reads every account-centre response the s
     expect(activity?.failedLast24Hours).toEqual({ count: 1, capped: false });
     expect(parseConnectedApps(await read('/api/account/connected-apps'))?.items).toEqual([expect.objectContaining({
       clientId: client.client_id, name: 'Notes', trusted: false, withdrawn: false, lastUsedAt: null,
-      scopes: expect.arrayContaining([{ scope: 'work:read', description: { en: 'Read works', 'zh-CN': '读取作品' } }]) })]);
+      scopes: expect.arrayContaining([expect.objectContaining({ scope: 'work:read',
+        description: expect.objectContaining({ en: 'Read works', 'zh-Hans': '读取作品', de: 'Werke lesen' }) })]) })]);
   } finally { await f.close(); }
 }, 60_000);
 

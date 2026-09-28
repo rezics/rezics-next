@@ -55,8 +55,6 @@ export function AuditTab({ userId, initial }: { userId: string; initial: AuditPa
 export function AppsTab({ detail }: { detail: UserDetail }) {
   const { t } = useTranslation('admin');
   const current = useLocale().current;
-  // Account scope descriptions are keyed en and zh-CN.
-  const locale = current === 'zh-Hans' || current === 'zh-Hant' ? 'zh-CN' : 'en';
   const { api } = useAdminClient();
   const apps = usePages(detail.apps, cursor => api.apps(detail.profile.id, cursor));
   return <Panel title={t.user.tabs.apps}>
@@ -67,7 +65,7 @@ export function AppsTab({ detail }: { detail: UserDetail }) {
           <span className="ms-auto text-xs text-muted-foreground">{t.user.granted} <DateOnly iso={app.grantedAt} />
             {' · '}{t.user.lastUsed} {app.lastUsedAt ? <Time iso={app.lastUsedAt} /> : t.never}</span></p>
         <ul className="flex flex-wrap gap-1.5">{app.scopes.map(scope => <li key={scope.scope}>
-          <Badge variant="outline" size="sm" title={scope.scope}>{scope.description[locale]}</Badge></li>)}</ul>
+          <Badge variant="outline" size="sm" title={scope.scope}>{scope.description[current] ?? scope.description.en}</Badge></li>)}</ul>
       </li>)}
     </ul> : <Empty>{t.user.appsEmpty}</Empty>}
     {apps.button}

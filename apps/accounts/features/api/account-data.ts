@@ -21,7 +21,8 @@ export interface SecurityEvent { id: string; action: string; occurredAt: string;
   browser: string | null; platform: string | null; network: string | null; clientId: string | null }
 export interface SecurityActivity { items: SecurityEvent[]; nextCursor: string | null;
   failedLast24Hours: { count: number; capped: boolean } }
-interface ScopeDescription { scope: string; description: { en: string; 'zh-CN': string } }
+interface ScopeDescription { scope: string; description: Record<AccountLocale, string> }
+const descriptionLocales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const satisfies readonly AccountLocale[];
 export interface ConnectedApp { clientId: string; name: string; uri: string | null; icon: string | null;
   trusted: boolean; firstParty?: boolean; scopes: ScopeDescription[]; grantedAt: string; lastUsedAt: string | null;
   /** The App was withdrawn from REZICS; its access can still be removed. */
@@ -103,9 +104,8 @@ function parseDevice(value: unknown): DeviceSession | null {
   const createdAt = date(item?.createdAt);
   const lastActiveAt = date(item?.lastActiveAt) ?? createdAt;
   if (!id || !createdAt || !lastActiveAt) return null;
-  // The service names a browser it can't recognise "Unknown browser".
-  const browser = text(device?.browser);
-  return { id, createdAt, lastActiveAt, browser: browser === 'Unknown browser' ? null : browser,
+  const browser = unnamedBrowser(text(device?.browser));
+  return { id, createdAt, lastActiveAt, browser,
     platform: text(device?.platform), network: text(item?.network), thisDevice: item?.thisDevice === true,
     ...(item?.clientName !== undefined ? { clientName: text(item.clientName) } : {}),
     ...(text(item?.groupKey) ? { groupKey: text(item?.groupKey)! } : {}) };
@@ -121,9 +121,8 @@ function parseEvent(value: unknown): SecurityEvent | null {
   const action = text(item?.action);
   const occurredAt = date(item?.occurredAt);
   if (!id || !action || !occurredAt) return null;
-  const browser = text(device?.browser);
   return { id, action, occurredAt, method: text(detail.method),
-    browser: browser === 'Unknown browser' ? null : browser, platform: text(device?.platform),
+    browser: unnamedBrowser(text(device?.browser)), platform: text(device?.platform),
     network: text(detail.network), clientId: text(detail.clientId) };
 }
 
@@ -135,12 +134,23 @@ export function parseActivity(value: unknown): SecurityActivity | null {
     capped: failed?.capped === true } };
 }
 
+/** A browser the service could not name. `unknown` is the code; the older
+ * English label is still accepted from a service one release behind. */
+function unnamedBrowser(value: string | null): string | null {
+  return value === 'unknown' || value === 'Unknown browser' ? null : value;
+}
+
 function parseScope(value: unknown): ScopeDescription | null {
   const item = record(value);
   const description = record(item?.description);
   const scope = text(item?.scope);
   const en = text(description?.en);
-  return scope && en ? { scope, description: { en, 'zh-CN': text(description?.['zh-CN']) ?? en } } : null;
+  if (!scope || !en) return null;
+  const hans = text(description?.['zh-Hans']) ?? text(description?.['zh-CN']) ?? en;
+  const hant = text(description?.['zh-Hant']) ?? hans;
+  const filled = Object.fromEntries(descriptionLocales.map(code => [code,
+    code === 'zh-Hans' ? hans : code === 'zh-Hant' ? hant : text(description?.[code]) ?? en])) as Record<AccountLocale, string>;
+  return { scope, description: filled };
 }
 
 function parseConnectedApp(value: unknown): ConnectedApp | null {
@@ -157,6 +167,11 @@ function parseConnectedApp(value: unknown): ConnectedApp | null {
 }
 
 export const parseConnectedApps = (value: unknown) => page(value, parseConnectedApp);
+
+export function parseConsentPreview(value: unknown): { scopes: ScopeDescription[] } | null {
+  const scopes = list(record(value)?.scopes, parseScope);
+  return scopes ? { scopes } : null;
+}
 
 export function parsePublicClient(value: unknown): PublicClient | null {
   const item = record(value);

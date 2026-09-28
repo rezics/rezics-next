@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createEmailVerificationToken } from 'better-auth/api';
 import type { Pool, PoolClient } from 'pg';
+import { recipientLocale } from './account-settings.ts';
 import { AccountProblem, accountSession, type AccountAuth } from './http.ts';
 import { operatorRole, requireOperator, rolePermits, writeAudit, type OperatorPermission, type OperatorRole } from './operators.ts';
 import { accountLocale, enqueueAccountEmail, type AccountLocale } from './email.ts';
@@ -84,7 +85,7 @@ export async function checkActor(db: PoolClient, actor: Actor, permission: Opera
  * took the operator-roles lock and checked the actor's current role. `skipNoop`
  * (bulk) leaves an already-satisfied user untouched and unaudited. */
 async function performUserAction(db: PoolClient, auth: AccountAuth, actorId: string, role: OperatorRole,
-  userId: string, body: ActionInput, locale: AccountLocale, skipNoop = false): Promise<{ requestId: string | null }> {
+  userId: string, body: ActionInput, skipNoop = false): Promise<{ requestId: string | null }> {
   const targetRole = await db.query<{ role: OperatorRole }>('SELECT role FROM rezics_account_operator WHERE user_id = $1 FOR SHARE', [userId]);
   if (targetRole.rows[0] && role !== 'owner') throw new AccountProblem('forbidden', 403);
   if (targetRole.rows[0]?.role === 'owner' && ['suspend', 'require-password-reset'].includes(body.action)) {
@@ -114,7 +115,7 @@ async function performUserAction(db: PoolClient, auth: AccountAuth, actorId: str
     const url = new URL('/api/auth/verify-email', String(auth.options.baseURL));
     url.searchParams.set('token', token); url.searchParams.set('callbackURL', '/');
     await enqueueAccountEmail(db, String(auth.options.secret), { userId, to: before.email,
-      purpose: 'verify', locale, url: url.toString() });
+      purpose: 'verify', locale: await recipientLocale(db, userId), url: url.toString() });
   }
   if (['suspend', 'require-password-reset', 'revoke-sessions'].includes(body.action)) {
     if (body.action === 'revoke-sessions') await db.query('UPDATE rezics_account_security SET generation = generation + 1 WHERE user_id = $1', [userId]);
@@ -126,7 +127,7 @@ async function performUserAction(db: PoolClient, auth: AccountAuth, actorId: str
   if (userMessage) {
     // Queued with the change: the user hears about a sanction only if it commits.
     await enqueueAccountEmail(db, String(auth.options.secret), { userId, to: before.email, purpose: 'notice',
-      locale, url: new URL('/', String(auth.options.baseURL)).toString(), message: userMessage });
+      locale: await recipientLocale(db, userId), url: new URL('/', String(auth.options.baseURL)).toString(), message: userMessage });
   }
   const after = await profile(db, userId);
   const requestId = randomUUID();
@@ -160,7 +161,7 @@ export async function administerUser(auth: AccountAuth, pool: Pool, request: Req
       if (existing.rows[0].digest !== digest) throw new AccountProblem('conflict', 409);
       await db.query('COMMIT'); return existing.rows[0].response;
     }
-    const { requestId } = await performUserAction(db, auth, actor.userId, role, userId, body, accountLocale(request));
+    const { requestId } = await performUserAction(db, auth, actor.userId, role, userId, body);
     const response = { status: true, requestId: requestId! };
     await db.query(`INSERT INTO rezics_account_operator_command (actor_id, command_id, digest, response)
       VALUES ($1, $2, $3, $4)`, [actor.userId, body.commandId, digest, JSON.stringify(response)]);
@@ -196,7 +197,9 @@ export async function createBulkJob(auth: AccountAuth, pool: Pool, request: Requ
       digest, action, reason_code, reason, user_message, expires_at, locale, starts_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, clock_timestamp() + make_interval(secs => $11)) RETURNING id`,
     [actor.userId, actor.sessionId, body.commandId, digest, body.action, body.reasonCode, body.reason.trim(),
-      body.userMessage?.trim() || null, body.expiresAt ?? null, accountLocale(request), undoSeconds]);
+      body.userMessage?.trim() || null, body.expiresAt ?? null,
+      // The column stores the operator's interface language. Each recipient's mail uses their own.
+      accountLocale(request), undoSeconds]);
     const jobId = job.rows[0]!.id;
     await db.query(`INSERT INTO rezics_account_operator_job_item (job_id, position, user_id)
       SELECT $1, ordinality - 1, user_id FROM unnest($2::text[]) WITH ORDINALITY AS item(user_id, ordinality)`, [jobId, userIds]);
@@ -246,7 +249,7 @@ export async function runBulkItem(auth: AccountAuth, pool: Pool, jobId: string):
     try {
       const { requestId } = await performUserAction(db, auth, current.actor_id, role, next.user_id, {
         action: current.action, reason: current.reason, reasonCode: current.reason_code,
-        userMessage: current.user_message ?? undefined, expiresAt: current.expires_at?.toISOString() }, current.locale, true);
+        userMessage: current.user_message ?? undefined, expiresAt: current.expires_at?.toISOString() }, true);
       await db.query('RELEASE SAVEPOINT item');
       result = { state: requestId ? 'succeeded' : 'skipped', error: null, requestId };
     } catch (error) {

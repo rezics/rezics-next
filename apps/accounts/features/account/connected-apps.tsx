@@ -91,8 +91,9 @@ export function ConnectedApps({ apps }: { apps: ConnectedAppView[] }) {
               <p className="mt-3 text-sm font-medium">{t.hasAccessTo({ app: app.name })}</p>
               <ul className="mt-1.5 flex flex-col gap-1 text-sm">
                 {(app.firstParty ? app.permissionGroups.map(group => t.firstPartyPermissions[group])
-                  : app.permissions).map(permission => <li key={permission} className="flex gap-2">
-                  <CheckIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />{permission}</li>)}
+                  : app.permissions).map(permission => <li key={permission} className="flex min-w-0 gap-2">
+                  <CheckIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                  <span className="min-w-0 break-words">{permission}</span></li>)}
               </ul>
               {app.firstParty ? <details className="mt-3 text-sm">
                 <summary className="cursor-pointer font-medium text-primary">{t.allPermissions}</summary>

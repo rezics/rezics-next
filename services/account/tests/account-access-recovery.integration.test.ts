@@ -95,7 +95,7 @@ async function seedCurrentAccountCoverage(pool: Pool): Promise<void> {
     ["UPDATE public.\"user\" SET locale = 'zh-Hans' WHERE id = $1", user],
     ["UPDATE public.rezics_account_operator_preference SET density = 'compact' WHERE user_id = $1", user],
     ['UPDATE public.passkey SET "rezicsLastUsedAt" = now() WHERE id = $1', passkey],
-    ["UPDATE public.rezics_account_operator_job SET locale = 'zh-CN' WHERE id = $1", job],
+    ["UPDATE public.rezics_account_operator_job SET locale = 'ja' WHERE id = $1", job],
     ["UPDATE public.rezics_account_operator_job_item SET state = 'failed' WHERE job_id = $1 AND position = 1000", job],
   ]) {
     const retained = await accountRecoveryCoverage(pool);
