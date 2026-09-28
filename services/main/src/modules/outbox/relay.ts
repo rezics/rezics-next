@@ -11,6 +11,10 @@ const SOURCE = 'https://rezics.com/services/main';
 
 export class OutboxGap extends Error {}
 export class OutboxIncomplete extends Error {}
+
+/** Search eligibility is recorded for original contributions (v1) and assessed public-domain texts (v2). */
+export const eligibleRightsBasis = (basis: string | undefined) =>
+  basis === `${RV}OriginalContribution` || basis === `${RV}PublicDomain`;
 export class OutboxEpochChanged extends Error {}
 export class OutboxRecoveryHold extends Error {}
 export class RelayCheckpointConflict extends Error {}
@@ -502,7 +506,7 @@ export function mapContentOutboxEvent(batch: MainOutboxBatch, eventId: string,
       : type === 'com.rezics.content.search-eligible.v1'
         ? action !== 'content.search-eligibility' || outcome !== `${RV}Succeeded`
           || !publicationDecision || !eligibilityDecision || !value('actingSubject')
-          || value('rightsBasis') !== `${RV}OriginalContribution`
+          || !eligibleRightsBasis(value('rightsBasis'))
           || value('disclosure') !== `${RV}Public` || reason
           || value('eventVariant') !== variant
           || value('eventPublicationDecision') !== publicationDecision
@@ -510,7 +514,7 @@ export function mapContentOutboxEvent(batch: MainOutboxBatch, eventId: string,
           ? action !== 'content.search-eligibility' || outcome !== `${RV}Cancelled`
             || reason !== `${RV}StaleHead` || !publicationDecision || eligibilityDecision
             || !value('actingSubject')
-            || value('rightsBasis') !== `${RV}OriginalContribution`
+            || !eligibleRightsBasis(value('rightsBasis'))
             || value('disclosure') !== `${RV}Public`
             || value('eventVariant') !== variant
           : action !== 'content.project' || outcome !== `${RV}Succeeded`
