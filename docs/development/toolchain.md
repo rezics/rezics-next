@@ -306,9 +306,13 @@ measurements.
 - Host installation: v0.50.5 AppImage at `~/.local/opt/browseros/` (checksum
   verified against the GitHub release), launched by `browseros` or the desktop
   entry. It must be running for its MCP server to answer.
-- MCP: `http://127.0.0.1:9200/mcp`, registered for Claude Code at user scope as
-  `browseros`. Other engines register the same URL in their own MCP settings.
-  New sessions load it; a running session needs a restart or `/mcp`.
+- MCP: `http://127.0.0.1:9200/mcp`, registered as `browseros` in every engine.
+  The host keeps its shared MCP servers in one list, `~/.agents/mcp.json`, and
+  `~/.agents/bin/mcp-sync` writes it through each engine's own configuration:
+  Claude Code (user scope), Codex (`~/.codex` and `~/.codex-1`), Grok and
+  Cursor. It touches only the servers it lists and leaves each engine's own
+  servers alone; `mcp-sync --check` reports drift. New sessions load it; a
+  running session needs a restart or `/mcp`.
 - Ports: CDP 9100, MCP and agent server 9200, proxy 9002 and 9003, recorded in
   `~/.config/browser-os/.browseros/config.json`, clear of the shared ports
   above. BrowserOS binds 9002, 9003 and 9200 on every interface and answers MCP
