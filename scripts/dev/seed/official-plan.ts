@@ -239,8 +239,12 @@ export const zoneContent: Record<OfficialRealmId, { adopt: readonly string[];
   mods: { adopt: ['mod-guide', 'stardew-farm', 'shader-guide'],
     lists: [{ id: 'first-mods', name: 'First mods · 第一次装模组', works: ['mod-guide', 'stardew-farm', 'shader-guide'] }] },
   'ai-workshop': { adopt: ['prompt', 'skill', 'glossary-prompt', 'club-notes'],
-    lists: [{ id: 'reading-prompts', name: 'Prompts for readers · 读书人的提示词',
-      works: ['prompt', 'glossary-prompt', 'club-notes', 'skill'] }] },
+    lists: [
+      { id: 'reading-prompts', name: 'Prompts for readers · 读书人的提示词',
+        works: ['prompt', 'club-notes'] },
+      { id: 'writing-prompts', name: 'Writing and translation · 写作与翻译',
+        works: ['glossary-prompt', 'skill'] },
+    ] },
   software: { adopt: ['bun', 'elysia', 'react', 'typescript'],
     lists: [{ id: 'web-stack', name: 'A small web stack · 一套小而全的 Web 技术栈',
       works: ['typescript', 'bun', 'elysia', 'react'] }] },
@@ -251,6 +255,12 @@ export const zoneContent: Record<OfficialRealmId, { adopt: readonly string[];
 /** An editors' list Collection: a native IRI the seed chooses, so the presentation can name it up front. */
 export const editorList = (realm: OfficialRealmId, list: string) =>
   `https://rezics.com/id/${stableId(`official-list:${realm}:${list}`)}`;
+
+export const packagedZone = (realm: OfficialRealmId) =>
+  realm === 'fiction' || realm === 'books' || realm === 'mods' || realm === 'ai-workshop';
+
+export const officialTheme = (realm: OfficialRealmId) =>
+  `https://rezics.com/id/${stableId(`official-theme:${realm}`)}`;
 
 type Bilingual = { en: string; 'zh-CN': string };
 /** Each official Realm's public profile: what it is, its rules and who moderates it (demo person ids). */
@@ -344,11 +354,25 @@ export function officialPresentation(realm: OfficialRealmId, preset: ZonePresent
     ...titled({ en: 'Recent decisions', 'zh-Hans': '最近的决定', 'zh-Hant': '最近的決定' }),
     source: feed('recent-decisions'), options: { rail: true, limit: 6 } };
   const base = { profile: 'zone-presentation-v1' as const, preset, tokens: ZONE_PRESETS[preset],
-    navigation: [], banners: [] };
+    navigation: [], banners: [], ...(packagedZone(realm) ? { official: { theme: officialTheme(realm) } } : {}) };
   if (realm !== 'fiction') {
+    const special = realm === 'mods' ? [
+      { id: 'games', type: 'chip-nav' as const,
+        ...titled({ en: 'Games and loaders', 'zh-Hans': '游戏与加载器', 'zh-Hant': '遊戲與載入器' }),
+        source: { kind: 'context' as const,
+          context: `https://rezics.com/id/${stableId('official-context:mods-games')}` } },
+      { id: 'trending', type: 'ranking' as const,
+        ...titled({ en: 'Trending', 'zh-Hans': '热门趋势', 'zh-Hant': '熱門趨勢' }),
+        source: feed('rankings'), options: { metric: 'reads' as const, interval: 'week' as const } },
+    ] : realm === 'books' ? [
+      { id: 'authors', type: 'people' as const,
+        ...titled({ en: 'Authors to follow', 'zh-Hans': '值得关注的作者', 'zh-Hant': '值得關注的作者' }),
+        source: feed('new-adoptions') },
+    ] : [];
     return { ...base, modules: [
       { id: 'picks', type: 'hero-carousel', ...titled({ en: 'Featured', 'zh-Hans': '精选', 'zh-Hant': '精選' }),
         source: feed('new-adoptions'), options: { limit: 4 } },
+      ...special,
       { id: 'latest', type: 'shelf', ...titled({ en: 'Latest', 'zh-Hans': '最新收录', 'zh-Hant': '最新收錄' }),
         source: feed('new-adoptions'), tabs: [
           { id: 'adopted', ...labelled(newlyAdded), source: feed('new-adoptions') },

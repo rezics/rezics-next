@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { checkZonePresentation } from '../../../services/main/src/modules/zone/presentation-format.ts';
+import { checkFirstPartyBundle } from '../../../services/main/src/modules/theme/first-party-bundle.ts';
 import { editorList, extraWorks, fictionQuotes, fictionWorks, officialPresentation, type OfficialRealmId, penNames,
-  publicTexts, realmProfiles, zoneContent } from './official-plan.ts';
+  officialTheme, packagedZone, publicTexts, realmProfiles, zoneContent } from './official-plan.ts';
+import { officialBuildBundle, officialSourceDigest, themeNeedsActivation, themeNeedsRevision }
+  from './official-theme-step.ts';
 import { people, penNames as basePenNames, realms, works } from './plan.ts';
 
 const official = Object.keys(zoneContent) as OfficialRealmId[];
@@ -33,6 +36,52 @@ describe('Official Zone presentations', () => {
     const editors = fiction.modules.find(module => module.type === 'editorial-list')!;
     expect([editors.source, ...editors.tabs!.map(tab => tab.source)]).toEqual(zoneContent.fiction.lists
       .map(list => ({ kind: 'collection', collection: editorList('fiction', list.id) })));
+  });
+
+  test('package placements point at stable theme IDs and the data sources their slots need', () => {
+    for (const realm of official) {
+      const layout = officialPresentation(realm, realms.find(item => item.id === realm)!.preset);
+      expect(layout.official?.theme ?? null).toBe(packagedZone(realm) ? officialTheme(realm) : null);
+    }
+    const mods = officialPresentation('mods', 'vibrant').modules;
+    expect(mods.map(module => module.id)).toContain('games');
+    expect(mods.find(module => module.id === 'games')?.type).toBe('chip-nav');
+    expect(mods.find(module => module.id === 'trending')).toMatchObject({ type: 'ranking',
+      options: { metric: 'reads', interval: 'week' } });
+    expect(officialPresentation('books', 'editorial').modules.find(module => module.id === 'authors')?.type)
+      .toBe('people');
+    expect(zoneContent['ai-workshop'].lists.map(list => list.id))
+      .toEqual(['reading-prompts', 'writing-prompts']);
+  });
+});
+
+describe('Official package approval plan', () => {
+  test('manifest records built bytes and only the package slots', async () => {
+    const digest = await officialSourceDigest('mods');
+    expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    const bundle = await officialBuildBundle('mods', digest, officialTheme('mods'), {
+      entry: { src: 'zones/official/mods/index.tsx', file: '_next/static/mods.js' },
+      style: { src: 'zones/official/mods/mods.css?raw', file: '_next/static/mods-css.js' },
+      unrelated: { src: 'zones/official/books/index.tsx', file: '_next/static/books.js' },
+    }, async path => new TextEncoder().encode(path));
+    expect(checkFirstPartyBundle(bundle).bundle).toEqual({ ...bundle,
+      files: [...bundle.files].sort((a, b) => a.path.localeCompare(b.path)),
+      slots: [...bundle.slots].sort() });
+    expect(bundle.files).toHaveLength(2);
+  });
+
+  test('changed bytes require a new review; expiry and revocation require a new activation', () => {
+    const now = Date.parse('2026-09-28T00:00:00.000Z');
+    const view = { revision: officialTheme('mods'), bundle: { packageDigest: 'sha256:old' },
+      activation: officialTheme('fiction'), activationRevision: officialTheme('mods'),
+      approvalExpiresAt: '2026-12-01T00:00:00.000Z', decision: 'approved' as const,
+      revoked: false, globallyDisabled: false };
+    expect(themeNeedsRevision(view, 'sha256:new')).toBe(true);
+    expect(themeNeedsRevision(view, 'sha256:old')).toBe(false);
+    expect(themeNeedsActivation(view, now)).toBe(false);
+    expect(themeNeedsActivation({ ...view, revoked: true }, now)).toBe(true);
+    expect(themeNeedsActivation({ ...view, approvalExpiresAt: '2026-09-30T00:00:00.000Z' }, now)).toBe(true);
+    expect(themeNeedsActivation({ ...view, activationRevision: officialTheme('books') }, now)).toBe(true);
   });
 });
 

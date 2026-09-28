@@ -35,7 +35,7 @@ export async function operatorSeedSession(input: LocalOperatorInput) {
   if (signed.id !== input.accountSubject) throw new Error('Seed fixture operator identity changed');
   const pool = new Pool({ connectionString: input.accountDatabaseUrl });
   try {
-    const scope = 'openid owner:operate zone:edit source:acquire source:convert source:propose source:adopt source:read work:create work:edit';
+    const scope = 'openid owner:operate zone:edit theme:approve theme:read source:acquire source:convert source:propose source:adopt source:read work:create work:edit';
     let clientId = await reusableSeedClient(pool, signed.id, input.endpoints.redirectUri, scope);
     if (!clientId) {
       const auth = createAccountAuth({ baseURL: input.endpoints.account,
@@ -180,6 +180,57 @@ export async function grantOfficialZoneSeed(input: LocalOperatorInput, zone: str
         (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
         VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`,
       [randomUUID(), input.actingSubject, scope, action]);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* preserve first error */ }
+    throw error;
+  } finally { client.release(); await pool.end(); }
+}
+
+/** Fixture-only authority for a theme owner and an independent demo-account reviewer. */
+export async function grantOfficialThemeSeed(input: LocalOperatorInput, theme: string,
+  reviewer: { accountId: string; actingSubject: string }) {
+  loopback(input.accessDatabaseUrl);
+  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(theme)
+    || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(reviewer.actingSubject)
+    || reviewer.accountId === input.accountSubject) {
+    throw new Error('Official theme grant requires a native theme and a separate reviewer account');
+  }
+  const pool = new Pool({ connectionString: input.accessDatabaseUrl });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    const fence = await client.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+    if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
+    const issuer = `${input.endpoints.account}/api/auth`;
+    const operator = await principal(client, issuer, input.accountSubject);
+    const reviewerPrincipal = await principal(client, issuer, reviewer.accountId);
+    for (const actor of [input.actingSubject, reviewer.actingSubject]) {
+      await client.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')
+        ON CONFLICT (id) DO NOTHING`, [actor]);
+    }
+    for (const [action, scope, actor, principalId] of [
+      ['theme.create', 'theme:create:root', input.actingSubject, operator],
+      ['theme.revise', `theme:revise:${theme.slice(-36)}`, input.actingSubject, operator],
+      ['theme.activate', `theme:activate:${theme.slice(-36)}`, input.actingSubject, operator],
+      ['theme.review', `theme:review:${theme.slice(-36)}`, reviewer.actingSubject, reviewerPrincipal],
+    ]) {
+      await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
+      const gate = await client.query<{ open: boolean }>(
+        'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
+      if (gate.rows[0]?.open !== true) throw new Error(`Official theme gate is closed: ${scope}`);
+      await ensureRepresentation(client, principalId, actor, action);
+      const grant = await client.query(`SELECT id FROM access.permission_grant
+        WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
+          AND valid_until > now() FOR SHARE`, [actor, scope, action]);
+      if (!grant.rowCount) await client.query(`INSERT INTO access.permission_grant
+        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+        VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`,
+      [randomUUID(), actor, scope, action]);
     }
     await client.query('COMMIT');
   } catch (error) {

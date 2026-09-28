@@ -237,6 +237,7 @@ describe('dev seed plan', () => {
       'seedAccounts', 'seedClassics', 'seedWorks', 'seedContributions', 'seedRealms', 'seedAdoptions',
       'seedRatings', 'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
       'seedProfileCredits', 'seedProfileBios', 'seedProfileShelves', 'seedProfileFollows', 'seedOfficialZones',
+      'seedOfficialThemes',
       'checkPublicReads', 'printSeedReport',
     ]);
   });

@@ -14,6 +14,7 @@ import { seedHomeFeed } from './feed-step.ts';
 import { seedLibrary } from './library-step.ts';
 import { seedModeration } from './moderation-step.ts';
 import { seedOfficialZones } from './official-zones-step.ts';
+import { seedOfficialThemes } from './official-theme-step.ts';
 import { people, realms, works } from './plan.ts';
 import { seedProfileBios } from './profile-bios-step.ts';
 import { seedProfileCredits } from './profile-credits-step.ts';
@@ -101,6 +102,7 @@ export const steps: readonly SeedStep[] = [
   seedAccounts, seedClassics, seedWorks, seedContributions, seedRealms, seedAdoptions,
   seedRatings, seedLibrary, seedChapters, seedModeration, seedHomeFeed,
   seedProfileCredits, seedProfileBios, seedProfileShelves, seedProfileFollows, seedOfficialZones,
+  seedOfficialThemes,
   checkPublicReads, printSeedReport,
 ];
 
