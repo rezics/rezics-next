@@ -23,7 +23,8 @@ test('Facets: GET /v1/facets serves every admitted Facet with labels, operators 
     'rating', 'role']));
   expect(byName.get('type')).toMatchObject({ id: 'https://rezics.com/definition/facet-type-v1', current: true,
     labels: { en: 'Type', 'zh-Hans': '种类', ja: '種類' }, operators: ['any', 'all', 'none'], source: 'global' });
-  expect(byName.get('concept')).toMatchObject({ labels: { en: 'Concept', 'zh-Hans': '概念', ja: '概念' },
+  // The free Concept Facet reads as Tags (docs/contracts/queries.md).
+  expect(byName.get('concept')).toMatchObject({ labels: { en: 'Tags', 'zh-Hans': '标签', ja: 'タグ' },
     source: 'context' });
   expect(byName.get('rating')).toMatchObject({ labels: { en: 'Rating', 'zh-Hans': '评分', ja: '評価' },
     operators: ['range'] });
