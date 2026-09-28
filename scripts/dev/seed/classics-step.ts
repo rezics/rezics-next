@@ -110,9 +110,17 @@ export async function seedClassics(state: SeedState): Promise<void> {
         baseSupport: null, correspondence: null, confirmedUse: 'factual-reference-only',
       }, token, seedKey('source-author-credit', `${classic.id}-${ordinal}`));
     }
-    // The operator's token is not a reader assertion; the public read carries the head and types.
-    await ensureClassicBookType({ read: () => state.api.getPublic(`/v1/works/${shortId(receipt.work)}`),
-    api, book: classic.id, work: receipt.work, actor, token });
+    // A newly adopted Work is private until publication. Use its adoption
+    // receipt as the write basis; a replay of the type command is idempotent.
+    await ensureClassicBookType({ read: () => state.api.getPublic<{
+      revision: string; types: string[] }>(`/v1/works/${shortId(receipt.work)}`)
+      .catch(error => {
+        if (error instanceof SeedApiError && error.status === 404) {
+          return { revision: receipt.workRevision, types: [] };
+        }
+        throw error;
+      }),
+      api, book: classic.id, work: receipt.work, actor, token });
     console.log(`Classic ${classic.id}: ${receipt.work} via ${classic.work}; acquisition ${
       shortId(observation.observation)}${capture.replayed ? ' (replayed)' : ''}`);
   }
