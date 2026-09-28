@@ -147,6 +147,11 @@
       "file": "shapes/collection-curation-v1.ttl"
     },
     {
+      "id": "collection-public-name-v1",
+      "sha256": "62e499bd577ea08182da6ac7b4694807568932445b6bbb464e1699d53cc08832",
+      "file": "shapes/collection-public-name-v1.ttl"
+    },
+    {
       "id": "concept-scheme-revision-v1",
       "sha256": "d09696e2138aff8599880e1f445b8342679f1d6736a90596de97d881dd5801ff",
       "file": "shapes/concept-scheme-revision-v1.ttl"
@@ -472,6 +477,11 @@
       "id": "realm-public-profile-v1",
       "sha256": "d03364027f8b706441ed9433b26360599f9b531f1a255bd1a49526d08f62ca24",
       "file": "shapes/realm-public-profile-v1.ttl"
+    },
+    {
+      "id": "realm-public-profile-v2",
+      "sha256": "2c5bdf0a1d434d2ddf5566a0ad56e8ea84290599a76e729837677d03c4f8b852",
+      "file": "shapes/realm-public-profile-v2.ttl"
     },
     {
       "id": "realm-release-rating-context-v1",
@@ -1609,6 +1619,21 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/CollectionNameRevision",
+      "routes": [
+        {
+          "profile": "collection-public-name-v1",
+          "shape": "https://rezics.com/definition/collection-public-name-v1/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/collection-public-name-v1"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/CollectionRevision",
       "routes": [
         {
@@ -2262,6 +2287,16 @@
       "type": "https://rezics.com/vocab/RealmPublicProfileRevision",
       "routes": [
         {
+          "profile": "realm-public-profile-v2",
+          "shape": "https://rezics.com/definition/realm-public-profile-v2/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/realm-public-profile-v2"
+            }
+          ]
+        },
+        {
           "profile": "realm-public-profile-v1",
           "shape": "https://rezics.com/definition/realm-public-profile-v1/revision-shape",
           "when": []
@@ -2844,6 +2879,7 @@
     "contexts/classification-proposition-v1.jsonld": "7ab9c49c7ef448e67b8f4b76ba43a74437d60ef7953ed82b02b5c0057e7b75e9",
     "contexts/classification-proposition-v2.jsonld": "0b02354fd28beaeb492c28e844e721816c2d7199f7ddaf1436476b0186f4a335",
     "contexts/collection-curation-v1.jsonld": "94386b01056b31206b3bc6c68dd1e964fa457c0b40d67f5910e56986951a25ef",
+    "contexts/collection-public-name-v1.jsonld": "f195208fbeb53917778d651f9e3ad4652eb240013d3592d118b6c909c7b699f1",
     "contexts/concept-scheme-revision-v1.jsonld": "076512dfe78d1ac90d4abd223348ac7c10ebdc5c5bee666dff6c5260800784fa",
     "contexts/content-match-unit-v1.jsonld": "b44765b92ad6ce55a282bdb5aea5fceffa4543d079f53726ebe3a691af0055fd",
     "contexts/content-private-match-unit-v1.jsonld": "05e9e12365b96c24f6bc2e201db8f4e80953031a3318d83f8b3083d49054c12c",
@@ -2880,6 +2916,7 @@
     "contexts/realm-local-selection-v1.jsonld": "720dfeb8c7c39eddd9fa6c19d90cdba5f2490516039151575827c095834c0f27",
     "contexts/realm-policy-selection-v1.jsonld": "d4ac036c2458ffffea5e324129d229e7ff522d0dd56b10dfe6bf7d948e8ae8c5",
     "contexts/realm-public-profile-v1.jsonld": "2bd8add71ce29bf135d3502e255d56decc2aab83ebadb3513ebbf2aa1dce7860",
+    "contexts/realm-public-profile-v2.jsonld": "f195208fbeb53917778d651f9e3ad4652eb240013d3592d118b6c909c7b699f1",
     "contexts/realm-release-rating-context-v1.jsonld": "4fc40fca2efe60bafc880649eea0c609679800c9aaa70b4bb6068a8d38937e9c",
     "contexts/realm-release-rating-observation-v1.jsonld": "760d7eaa189c387c4a88401d7967671efe136086ffef15b7cdb27fc7217033dc",
     "contexts/realm-reply-placement-v1.jsonld": "8b60db1c14332a888f96264c301e4c9e4d4024fb8bdef15151814abd1681eeae",
@@ -2942,6 +2979,7 @@
     "shapes/classification-proposition-v1.ttl": "8bc799783d7d2c43da737b01d2b1f10bba4dc643716f1ac09524d1ef0e86dbd0",
     "shapes/classification-proposition-v2.ttl": "22b3c0f677296e5c268514d0f87cb0dabdd2ae9900873e28b1540e27a87e01a6",
     "shapes/collection-curation-v1.ttl": "f89da51e411b4d1dc4f402ba2059b63a123bd3093f865b527d751a3dfa3468fe",
+    "shapes/collection-public-name-v1.ttl": "62e499bd577ea08182da6ac7b4694807568932445b6bbb464e1699d53cc08832",
     "shapes/concept-scheme-revision-v1.ttl": "d09696e2138aff8599880e1f445b8342679f1d6736a90596de97d881dd5801ff",
     "shapes/content-match-unit-v1.ttl": "c21cad7776103f50a982a1820fd5719da156d97edf07e8c856dd00bcd2f18478",
     "shapes/content-private-match-unit-v1.ttl": "4842523abc660d6edd620947dc2c0e8fdf85031268bff6c71d8de6f5599c7288",
@@ -2978,6 +3016,7 @@
     "shapes/realm-local-selection-v1.ttl": "065cee2ee14324f92989a206e106a538a243621f3c54c55c9519cfcadf22def4",
     "shapes/realm-policy-selection-v1.ttl": "c695375f402934a868fc603ce59fb228640bf7d640000a6a3c5514693b57b472",
     "shapes/realm-public-profile-v1.ttl": "d03364027f8b706441ed9433b26360599f9b531f1a255bd1a49526d08f62ca24",
+    "shapes/realm-public-profile-v2.ttl": "2c5bdf0a1d434d2ddf5566a0ad56e8ea84290599a76e729837677d03c4f8b852",
     "shapes/realm-release-rating-context-v1.ttl": "7520c99bb9669d866e67b4929ee624b1dafb3f2c6d616e67fca32bbd4a679c17",
     "shapes/realm-release-rating-observation-v1.ttl": "451a60e884d8c09b3f3e0c91742be3044f2067054479ad4f662b9abe9ba02f2f",
     "shapes/realm-reply-placement-v1.ttl": "b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511",
@@ -3026,9 +3065,9 @@
     "shapes/work-type-v2.ttl": "94ef660d31ca8af44f51d5ecc6ad767ea97c6c39d1dcbf7db4321b1152632b2f",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "69a8a3a5ad85eb87ca000ba7ec751f2603bd7649899e91dd912c6885e8452ca5",
-    "packages/model/src/generated/profiles.ts": "39b67ece1b02a176d1b275d7a9de9eca1494c319f48f8335e0f92c08364e73ec",
-    "packages/model/src/generated/schemas.ts": "fc28a1a3f336c8bd0fd5c7c275945fb1c4777092dd0df3ff1debb37d072fe2fa",
-    "packages/model/src/generated/vocabulary.ts": "33853dc7afddb7f2e2c0bc315984a0f30e4c67b91e60746ebb79efbf2ee2f98f"
+    "packages/model/src/generated/arbitraries.ts": "14f7ab6ccb6c7860db4dd94d0707b3fee4667d9c95eaeeea4aa2a08fac169db2",
+    "packages/model/src/generated/profiles.ts": "fc24731b6091c65780c75fa6fade80f895f9bf2d673f407f8c756ec7d03b7016",
+    "packages/model/src/generated/schemas.ts": "b8d460f59aab492e6a6d0e6326ba42d9d69c38e0398d1e8542f9966672a317b1",
+    "packages/model/src/generated/vocabulary.ts": "19ee3af5d6376c511c71f6656bf60ba9b520e638a450a9733faa361003d11bdb"
   }
 }

@@ -170,6 +170,10 @@ export const CollectionCurationV1DefinitionRevisionShapeSchema = Type.Object({ "
 
 export type CollectionCurationV1DefinitionRevisionShape = Static<typeof CollectionCurationV1DefinitionRevisionShapeSchema>;
 
+export const CollectionPublicNameV1RevisionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/CollectionNameRevision"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { minItems: 2, maxItems: 2 }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:predecessor": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:operation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:profilePayload": Type.Array(Type.String({"minLength":2,"maxLength":8000}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/collection-public-name-v1"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/collection-public-name-v1"), { maxItems: 1, minItems: 1 }), "rv:datasetId": Type.Array(Type.Literal("urn:rezics:dataset:product"), { maxItems: 1, minItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type CollectionPublicNameV1RevisionShape = Static<typeof CollectionPublicNameV1RevisionShapeSchema>;
+
 export const ConceptSchemeRevisionV1AnchorShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/RevisionAnchor") }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:operation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:recordedBy": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:manifest": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/classification-proposition-v2"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/classification-proposition-v2"), { maxItems: 1, minItems: 1 }) }, { additionalProperties: true });
 
 export type ConceptSchemeRevisionV1AnchorShape = Static<typeof ConceptSchemeRevisionV1AnchorShapeSchema>;
@@ -509,6 +513,10 @@ export type RealmPublicProfileV1RevisionShape = Static<typeof RealmPublicProfile
 export const RealmPublicProfileV1ModeratorChoiceShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/RealmModeratorChoiceRevision"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { minItems: 2, maxItems: 2 }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:predecessor": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:operation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:publicChoice": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/Accepted"), Type.Literal("https://rezics.com/vocab/Declined")]), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/realm-public-profile-v1"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/realm-public-profile-v1"), { maxItems: 1, minItems: 1 }), "rv:datasetId": Type.Array(Type.Literal("urn:rezics:dataset:product"), { maxItems: 1, minItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type RealmPublicProfileV1ModeratorChoiceShape = Static<typeof RealmPublicProfileV1ModeratorChoiceShapeSchema>;
+
+export const RealmPublicProfileV2RevisionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/RealmPublicProfileRevision"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { minItems: 2, maxItems: 2 }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:predecessor": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:operation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:profilePayload": Type.Array(Type.String({"minLength":2,"maxLength":16000}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/realm-public-profile-v2"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/realm-public-profile-v2"), { maxItems: 1, minItems: 1 }), "rv:datasetId": Type.Array(Type.Literal("urn:rezics:dataset:product"), { maxItems: 1, minItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type RealmPublicProfileV2RevisionShape = Static<typeof RealmPublicProfileV2RevisionShapeSchema>;
 
 export const RealmReleaseRatingContextV1RealmShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Realm") }), "rv:realmState": Type.Array(Type.Literal("https://rezics.com/vocab/Active"), { maxItems: 1, minItems: 1 }), "rv:ratingContext": Type.Array(Type.String({}), { minItems: 1 }) }, { additionalProperties: true });
 
@@ -1045,6 +1053,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/collection-curation-v1/revision-shape": CollectionCurationV1RevisionShapeSchema,
   "https://rezics.com/definition/collection-curation-v1/definition-shape": CollectionCurationV1DefinitionShapeSchema,
   "https://rezics.com/definition/collection-curation-v1/definition-revision-shape": CollectionCurationV1DefinitionRevisionShapeSchema,
+  "https://rezics.com/definition/collection-public-name-v1/revision-shape": CollectionPublicNameV1RevisionShapeSchema,
   "https://rezics.com/definition/concept-scheme-revision-v1/anchor-shape": ConceptSchemeRevisionV1AnchorShapeSchema,
   "https://rezics.com/definition/content-match-unit-v1/projection-shape": ContentMatchUnitV1ProjectionShapeSchema,
   "https://rezics.com/definition/content-match-unit-v1/unit-shape": ContentMatchUnitV1UnitShapeSchema,
@@ -1130,6 +1139,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/realm-public-profile-v1/moderator-slot-shape": RealmPublicProfileV1ModeratorSlotShapeSchema,
   "https://rezics.com/definition/realm-public-profile-v1/revision-shape": RealmPublicProfileV1RevisionShapeSchema,
   "https://rezics.com/definition/realm-public-profile-v1/moderator-choice-shape": RealmPublicProfileV1ModeratorChoiceShapeSchema,
+  "https://rezics.com/definition/realm-public-profile-v2/revision-shape": RealmPublicProfileV2RevisionShapeSchema,
   "https://rezics.com/definition/realm-release-rating-context-v1/realm-shape": RealmReleaseRatingContextV1RealmShapeSchema,
   "https://rezics.com/definition/realm-release-rating-context-v1/context-shape": RealmReleaseRatingContextV1ContextShapeSchema,
   "https://rezics.com/definition/realm-release-rating-observation-v1/realm-shape": RealmReleaseRatingObservationV1RealmShapeSchema,

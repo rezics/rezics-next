@@ -196,6 +196,16 @@ export const profileRegistry = {
       "definition-revision"
     ]
   },
+  "collection-public-name-v1": {
+    "sha256": "62e499bd577ea08182da6ac7b4694807568932445b6bbb464e1699d53cc08832",
+    "file": "shapes/collection-public-name-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/collection-public-name-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "revision"
+    ]
+  },
   "concept-scheme-revision-v1": {
     "sha256": "d09696e2138aff8599880e1f445b8342679f1d6736a90596de97d881dd5801ff",
     "file": "shapes/concept-scheme-revision-v1.ttl",
@@ -654,6 +664,16 @@ export const profileRegistry = {
       "moderator-slot",
       "revision",
       "moderator-choice"
+    ]
+  },
+  "realm-public-profile-v2": {
+    "sha256": "2c5bdf0a1d434d2ddf5566a0ad56e8ea84290599a76e729837677d03c4f8b852",
+    "file": "shapes/realm-public-profile-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/realm-public-profile-v2/revision-shape"
+    ],
+    "focusRoles": [
+      "revision"
     ]
   },
   "realm-release-rating-context-v1": {

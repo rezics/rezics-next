@@ -32847,6 +32847,42 @@
                       "minLength": 1,
                       "type": "string"
                     },
+                    "displayNameInfo": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "basis": {
+                          "enum": [
+                            "requested",
+                            "fallback"
+                          ],
+                          "type": "string"
+                        },
+                        "direction": {
+                          "enum": [
+                            "ltr",
+                            "rtl"
+                          ],
+                          "type": "string"
+                        },
+                        "language": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "language",
+                        "direction",
+                        "basis"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "handle": {
                       "pattern": "^(?:agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9_]{3,30})$",
                       "type": "string"
@@ -32904,6 +32940,36 @@
                         "collections"
                       ],
                       "type": "object"
+                    },
+                    "localizedNames": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "labels": {
+                          "patternProperties": {
+                            "^.*$": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "original": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "original",
+                        "labels"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "originalDisplayName": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
                     },
                     "profile": {
                       "const": "agent-read-v1",
@@ -35102,182 +35168,443 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "avatarSelection": {
-                    "~elyTyp": 7,
-                    "nullable": true,
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "bio": {
-                    "~elyTyp": 7,
+                "anyOf": [
+                  {
                     "additionalProperties": false,
-                    "nullable": true,
                     "properties": {
-                      "language": {
-                        "maxLength": 35,
-                        "minLength": 2,
+                      "avatarSelection": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "bio": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "text": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text",
+                          "language"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "displayName": {
+                        "maxLength": 200,
+                        "minLength": 1,
                         "type": "string"
                       },
-                      "text": {
-                        "maxLength": 500,
-                        "minLength": 1,
+                      "expectedHead": {
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "agent-public-profile-v1",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "text",
-                      "language"
+                      "profile",
+                      "expectedHead",
+                      "displayName",
+                      "avatarSelection",
+                      "bio"
                     ],
-                    "type": [
-                      "object",
-                      "null"
-                    ]
+                    "type": "object"
                   },
-                  "displayName": {
-                    "maxLength": 200,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "expectedHead": {
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "agent-public-profile-v1",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "avatarSelection": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "bio": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "text": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text",
+                          "language"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "displayName": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "expectedHead": {
+                        "type": "string"
+                      },
+                      "localizedName": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "labels": {
+                            "patternProperties": {
+                              "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "original": {
+                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "original",
+                          "labels"
+                        ],
+                        "type": "object"
+                      },
+                      "profile": {
+                        "const": "agent-public-profile-v2",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "expectedHead",
+                      "displayName",
+                      "avatarSelection",
+                      "bio",
+                      "localizedName"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "expectedHead",
-                  "displayName",
-                  "avatarSelection",
-                  "bio"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "avatarSelection": {
-                    "~elyTyp": 7,
-                    "nullable": true,
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "bio": {
-                    "~elyTyp": 7,
+                "anyOf": [
+                  {
                     "additionalProperties": false,
-                    "nullable": true,
                     "properties": {
-                      "language": {
-                        "maxLength": 35,
-                        "minLength": 2,
+                      "avatarSelection": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "bio": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "text": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text",
+                          "language"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "displayName": {
+                        "maxLength": 200,
+                        "minLength": 1,
                         "type": "string"
                       },
-                      "text": {
-                        "maxLength": 500,
-                        "minLength": 1,
+                      "expectedHead": {
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "agent-public-profile-v1",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "text",
-                      "language"
+                      "profile",
+                      "expectedHead",
+                      "displayName",
+                      "avatarSelection",
+                      "bio"
                     ],
-                    "type": [
-                      "object",
-                      "null"
-                    ]
+                    "type": "object"
                   },
-                  "displayName": {
-                    "maxLength": 200,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "expectedHead": {
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "agent-public-profile-v1",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "avatarSelection": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "bio": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "text": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text",
+                          "language"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "displayName": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "expectedHead": {
+                        "type": "string"
+                      },
+                      "localizedName": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "labels": {
+                            "patternProperties": {
+                              "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "original": {
+                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "original",
+                          "labels"
+                        ],
+                        "type": "object"
+                      },
+                      "profile": {
+                        "const": "agent-public-profile-v2",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "expectedHead",
+                      "displayName",
+                      "avatarSelection",
+                      "bio",
+                      "localizedName"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "expectedHead",
-                  "displayName",
-                  "avatarSelection",
-                  "bio"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "avatarSelection": {
-                    "~elyTyp": 7,
-                    "nullable": true,
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "bio": {
-                    "~elyTyp": 7,
+                "anyOf": [
+                  {
                     "additionalProperties": false,
-                    "nullable": true,
                     "properties": {
-                      "language": {
-                        "maxLength": 35,
-                        "minLength": 2,
+                      "avatarSelection": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "bio": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "text": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text",
+                          "language"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "displayName": {
+                        "maxLength": 200,
+                        "minLength": 1,
                         "type": "string"
                       },
-                      "text": {
-                        "maxLength": 500,
-                        "minLength": 1,
+                      "expectedHead": {
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "agent-public-profile-v1",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "text",
-                      "language"
+                      "profile",
+                      "expectedHead",
+                      "displayName",
+                      "avatarSelection",
+                      "bio"
                     ],
-                    "type": [
-                      "object",
-                      "null"
-                    ]
+                    "type": "object"
                   },
-                  "displayName": {
-                    "maxLength": 200,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "expectedHead": {
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "agent-public-profile-v1",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "avatarSelection": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "bio": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "text": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text",
+                          "language"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "displayName": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "expectedHead": {
+                        "type": "string"
+                      },
+                      "localizedName": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "labels": {
+                            "patternProperties": {
+                              "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "original": {
+                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "original",
+                          "labels"
+                        ],
+                        "type": "object"
+                      },
+                      "profile": {
+                        "const": "agent-public-profile-v2",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "expectedHead",
+                      "displayName",
+                      "avatarSelection",
+                      "bio",
+                      "localizedName"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "expectedHead",
-                  "displayName",
-                  "avatarSelection",
-                  "bio"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -35293,7 +35620,10 @@
                       "type": "string"
                     },
                     "profile": {
-                      "const": "agent-public-profile-v1",
+                      "enum": [
+                        "agent-public-profile-v1",
+                        "agent-public-profile-v2"
+                      ],
                       "type": "string"
                     },
                     "receipt": {
@@ -35344,7 +35674,10 @@
                       "type": "string"
                     },
                     "profile": {
-                      "const": "agent-public-profile-v1",
+                      "enum": [
+                        "agent-public-profile-v1",
+                        "agent-public-profile-v2"
+                      ],
                       "type": "string"
                     },
                     "receipt": {
@@ -60235,6 +60568,847 @@
               }
             },
             "description": "Response for status 200"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "null"
+                    },
+                    "retry": {
+                      "properties": {
+                        "afterMs": {
+                          "type": "number"
+                        },
+                        "allowed": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "allowed",
+                        "afterMs"
+                      ],
+                      "type": "object"
+                    },
+                    "status": {
+                      "const": "reconciling",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "operationId",
+                    "status",
+                    "phase",
+                    "result",
+                    "retry"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/collections/{id}/name": {
+      "get": {
+        "operationId": "getV1CollectionsByIdName",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        }
+      },
+      "put": {
+        "operationId": "putV1CollectionsByIdName",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "name": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "labels": {
+                        "patternProperties": {
+                          "^.*$": {
+                            "maxLength": 300,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "original": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "original",
+                      "labels"
+                    ],
+                    "type": "object"
+                  },
+                  "profile": {
+                    "const": "collection-public-name-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "expectedHead",
+                  "actingSubject",
+                  "name"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "name": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "labels": {
+                        "patternProperties": {
+                          "^.*$": {
+                            "maxLength": 300,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "original": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "original",
+                      "labels"
+                    ],
+                    "type": "object"
+                  },
+                  "profile": {
+                    "const": "collection-public-name-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "expectedHead",
+                  "actingSubject",
+                  "name"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "name": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "labels": {
+                        "patternProperties": {
+                          "^.*$": {
+                            "maxLength": 300,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "original": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "original",
+                      "labels"
+                    ],
+                    "type": "object"
+                  },
+                  "profile": {
+                    "const": "collection-public-name-v1",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "expectedHead",
+                  "actingSubject",
+                  "name"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Response for status 201"
           },
           "202": {
             "content": {
@@ -122396,6 +123570,42 @@
                       "minLength": 1,
                       "type": "string"
                     },
+                    "displayNameInfo": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "basis": {
+                          "enum": [
+                            "requested",
+                            "fallback"
+                          ],
+                          "type": "string"
+                        },
+                        "direction": {
+                          "enum": [
+                            "ltr",
+                            "rtl"
+                          ],
+                          "type": "string"
+                        },
+                        "language": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "language",
+                        "direction",
+                        "basis"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "handle": {
                       "pattern": "^(?:agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9_]{3,30})$",
                       "type": "string"
@@ -122453,6 +123663,36 @@
                         "collections"
                       ],
                       "type": "object"
+                    },
+                    "localizedNames": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "labels": {
+                          "patternProperties": {
+                            "^.*$": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "original": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "original",
+                        "labels"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "originalDisplayName": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
                     },
                     "profile": {
                       "const": "agent-read-v1",
@@ -309042,6 +310282,15 @@
               "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "languages",
+            "required": false,
+            "schema": {
+              "maxLength": 720,
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -309409,6 +310658,37 @@
                       ],
                       "type": "object"
                     },
+                    "originalName": {
+                      "properties": {
+                        "basis": {
+                          "enum": [
+                            "requested",
+                            "fallback"
+                          ],
+                          "type": "string"
+                        },
+                        "direction": {
+                          "enum": [
+                            "ltr",
+                            "rtl"
+                          ],
+                          "type": "string"
+                        },
+                        "language": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "language",
+                        "direction",
+                        "basis"
+                      ],
+                      "type": "object"
+                    },
                     "policyRevision": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -309420,6 +310700,18 @@
                     "profile": {
                       "const": "realm-read-v1",
                       "type": "string"
+                    },
+                    "profileContract": {
+                      "~elyTyp": 7,
+                      "enum": [
+                        "realm-public-profile-v1",
+                        "realm-public-profile-v2"
+                      ],
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "profileRevision": {
                       "~elyTyp": 7,
@@ -329349,7 +330641,7 @@
                     ]
                   },
                   "profile": {
-                    "const": "realm-public-profile-v1",
+                    "const": "realm-public-profile-v2",
                     "type": "string"
                   },
                   "publication": {
@@ -329424,20 +330716,25 @@
                       "description": {
                         "additionalProperties": false,
                         "properties": {
-                          "en": {
-                            "maxLength": 2000,
-                            "minLength": 1,
-                            "type": "string"
+                          "labels": {
+                            "patternProperties": {
+                              "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                "maxLength": 2000,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
                           },
-                          "zh-CN": {
-                            "maxLength": 2000,
-                            "minLength": 1,
+                          "original": {
+                            "maxLength": 35,
+                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                             "type": "string"
                           }
                         },
                         "required": [
-                          "en",
-                          "zh-CN"
+                          "original",
+                          "labels"
                         ],
                         "type": "object"
                       },
@@ -329461,20 +330758,25 @@
                       "name": {
                         "additionalProperties": false,
                         "properties": {
-                          "en": {
-                            "maxLength": 120,
-                            "minLength": 1,
-                            "type": "string"
+                          "labels": {
+                            "patternProperties": {
+                              "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                "maxLength": 120,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
                           },
-                          "zh-CN": {
-                            "maxLength": 120,
-                            "minLength": 1,
+                          "original": {
+                            "maxLength": 35,
+                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                             "type": "string"
                           }
                         },
                         "required": [
-                          "en",
-                          "zh-CN"
+                          "original",
+                          "labels"
                         ],
                         "type": "object"
                       },
@@ -329492,20 +330794,25 @@
                             "body": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 1000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             },
@@ -329541,20 +330848,25 @@
                             "title": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 100,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             }
@@ -329610,7 +330922,7 @@
                     ]
                   },
                   "profile": {
-                    "const": "realm-public-profile-v1",
+                    "const": "realm-public-profile-v2",
                     "type": "string"
                   },
                   "publication": {
@@ -329685,20 +330997,25 @@
                       "description": {
                         "additionalProperties": false,
                         "properties": {
-                          "en": {
-                            "maxLength": 2000,
-                            "minLength": 1,
-                            "type": "string"
+                          "labels": {
+                            "patternProperties": {
+                              "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                "maxLength": 2000,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
                           },
-                          "zh-CN": {
-                            "maxLength": 2000,
-                            "minLength": 1,
+                          "original": {
+                            "maxLength": 35,
+                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                             "type": "string"
                           }
                         },
                         "required": [
-                          "en",
-                          "zh-CN"
+                          "original",
+                          "labels"
                         ],
                         "type": "object"
                       },
@@ -329722,20 +331039,25 @@
                       "name": {
                         "additionalProperties": false,
                         "properties": {
-                          "en": {
-                            "maxLength": 120,
-                            "minLength": 1,
-                            "type": "string"
+                          "labels": {
+                            "patternProperties": {
+                              "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                "maxLength": 120,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
                           },
-                          "zh-CN": {
-                            "maxLength": 120,
-                            "minLength": 1,
+                          "original": {
+                            "maxLength": 35,
+                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                             "type": "string"
                           }
                         },
                         "required": [
-                          "en",
-                          "zh-CN"
+                          "original",
+                          "labels"
                         ],
                         "type": "object"
                       },
@@ -329753,20 +331075,25 @@
                             "body": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 1000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             },
@@ -329802,20 +331129,25 @@
                             "title": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 100,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             }
@@ -329871,7 +331203,7 @@
                     ]
                   },
                   "profile": {
-                    "const": "realm-public-profile-v1",
+                    "const": "realm-public-profile-v2",
                     "type": "string"
                   },
                   "publication": {
@@ -329946,20 +331278,25 @@
                       "description": {
                         "additionalProperties": false,
                         "properties": {
-                          "en": {
-                            "maxLength": 2000,
-                            "minLength": 1,
-                            "type": "string"
+                          "labels": {
+                            "patternProperties": {
+                              "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                "maxLength": 2000,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
                           },
-                          "zh-CN": {
-                            "maxLength": 2000,
-                            "minLength": 1,
+                          "original": {
+                            "maxLength": 35,
+                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                             "type": "string"
                           }
                         },
                         "required": [
-                          "en",
-                          "zh-CN"
+                          "original",
+                          "labels"
                         ],
                         "type": "object"
                       },
@@ -329983,20 +331320,25 @@
                       "name": {
                         "additionalProperties": false,
                         "properties": {
-                          "en": {
-                            "maxLength": 120,
-                            "minLength": 1,
-                            "type": "string"
+                          "labels": {
+                            "patternProperties": {
+                              "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                "maxLength": 120,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
                           },
-                          "zh-CN": {
-                            "maxLength": 120,
-                            "minLength": 1,
+                          "original": {
+                            "maxLength": 35,
+                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                             "type": "string"
                           }
                         },
                         "required": [
-                          "en",
-                          "zh-CN"
+                          "original",
+                          "labels"
                         ],
                         "type": "object"
                       },
@@ -330014,20 +331356,25 @@
                             "body": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 1000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             },
@@ -330063,20 +331410,25 @@
                             "title": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 100,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             }
