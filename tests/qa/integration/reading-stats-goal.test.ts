@@ -19,6 +19,20 @@ test('G414: yearly goal counts dated finishes and preserves idempotent, concurre
         expectedVersion: 0, idempotencyKey: randomUUID() });
     }
     expect((await status.goal(agent, 2026)).completed).toBe(2);
+    const reader = await stack.member('reading-stats');
+    const structure = id(), january = id(), december = id();
+    for (const [occurrence, completedAt, first] of [[january, '2026-01-08', true],
+      [january, '2026-02-08', false], [december, '2026-12-29', true]] as const) {
+      await stack.contentPool.query(`INSERT INTO structure.progress_command
+        (principal_issuer, principal_subject, idempotency_key, request_digest, structure, occurrence, selection_key,
+          result_version, result_completed, first_finish, created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,'',1,true,$7,$8)`, [reader.principal.issuer, reader.principal.subject,
+        randomUUID(), 'a'.repeat(64), structure, occurrence, first, completedAt]);
+    }
+    const stats = await status.readingYear(agent, reader.principal, 2026);
+    expect(stats).toMatchObject({ year: 2026, books: 2, chapters: 2 });
+    expect(stats.months[0]).toEqual({ month: 1, books: 1, chapters: 1 });
+    expect(stats.months[11]).toEqual({ month: 12, books: 1, chapters: 1 });
     const input = { agent, year: 2026, target: 24, expectedVersion: 0, idempotencyKey: randomUUID() };
     const first = await status.setGoal(input);
     expect(first).toMatchObject({ target: 24, completed: 2, version: 1, replayed: false });

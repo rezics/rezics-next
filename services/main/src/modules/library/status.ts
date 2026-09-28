@@ -17,6 +17,10 @@ export class StaleLibraryStatus extends Error {}
 export class LibraryStatusConflict extends Error {}
 export interface YearlyGoal { year: number; target: number | null; completed: number;
   version: number; changedAt: string | null; replayed?: boolean }
+export const READING_STATS_COST = { finishedWorks: 240, completedOccurrences: 2400,
+  sqlStatements: 2 } as const;
+export interface ReadingMonth { month: number; books: number; chapters: number }
+export interface ReadingYear { year: number; books: number; chapters: number; months: ReadingMonth[] }
 
 const columns = `work, status, started_on::text AS started_on, finished_on::text AS finished_on,
   version::text AS version, changed_at::text AS changed_at`;
@@ -38,6 +42,40 @@ function validDate(value: string | null) {
  * Reads use one indexed batch; writes serialize the key and exact status row. */
 export class ReaderLibraryStatusStore {
   constructor(private readonly pool: Pool) {}
+
+  /** Dated Read statuses and first completed chapter commands are distinct counters.
+   * Both inputs have explicit ceilings; the read fails instead of presenting a partial year. */
+  async readingYear(agent: string, principal: VerifiedPrincipal, year: number): Promise<ReadingYear> {
+    if (!ID.test(agent) || !Number.isInteger(year) || year < 1900 || year > 2100) {
+      throw new InvalidLibraryStatus('invalid reading stats year');
+    }
+    const [books, chapters] = await Promise.all([
+      this.pool.query<{ finished_on: string }>(`
+        SELECT finished_on::text AS finished_on FROM reader.library_status
+        WHERE agent = $1 AND status = 'read' AND finished_on >= make_date($2,1,1)
+          AND finished_on < make_date($2 + 1,1,1)
+        ORDER BY finished_on, work LIMIT ${READING_STATS_COST.finishedWorks + 1}`, [agent, year]),
+      this.pool.query<{ completed_at: string }>(`
+        SELECT created_at::text AS completed_at FROM structure.progress_command
+        WHERE principal_issuer = $1 AND principal_subject = $2 AND first_finish
+          AND created_at >= make_date($3,1,1) AND created_at < make_date($3 + 1,1,1)
+        ORDER BY created_at, structure, occurrence
+        LIMIT ${READING_STATS_COST.completedOccurrences + 1}`, [principal.issuer, principal.subject, year]),
+    ]);
+    if (books.rows.length > READING_STATS_COST.finishedWorks
+      || chapters.rows.length > READING_STATS_COST.completedOccurrences) {
+      throw new WorkReadLimit('Reading stats exceed the yearly read budget');
+    }
+    const months: ReadingMonth[] = Array.from({ length: 12 }, (_, index) =>
+      ({ month: index + 1, books: 0, chapters: 0 }));
+    for (const row of books.rows) months[Number(row.finished_on.slice(5, 7)) - 1]!.books++;
+    for (const row of chapters.rows) {
+      const completed = new Date(row.completed_at);
+      if (completed.getUTCFullYear() === year) months[completed.getUTCMonth()]!.chapters++;
+    }
+    return { year, books: books.rows.length, chapters: months.reduce((total, month) => total + month.chapters, 0),
+      months };
+  }
 
   async goal(agent: string, year: number): Promise<YearlyGoal> {
     if (!ID.test(agent) || !Number.isInteger(year) || year < 1900 || year > 2100) {

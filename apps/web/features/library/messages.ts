@@ -16,6 +16,11 @@ export const messages = {
   goalSaveFailed: 'Couldn’t save your goal. Try again.',
   goalChanged: 'Your goal changed elsewhere. Reload to see the latest target.',
   clearGoal: 'Remove goal',
+  readingStats: insert('Reading in {{year}}', { year: String }),
+  booksFinished: insert('{{count}} books finished', { count: String }),
+  chaptersFinished: insert('{{count}} chapters completed', { count: String }),
+  monthStats: insert('{{month}}: {{books}} books, {{chapters}} chapters',
+    { month: String, books: String, chapters: String }),
 
   shelves: 'Shelves',
   all: 'All',

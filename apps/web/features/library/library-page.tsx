@@ -21,12 +21,13 @@ import { LibraryProvider } from './library-context.tsx';
 import { statusLabel } from './labels.ts';
 import { LibraryList } from './library-list.tsx';
 import { ReadingGoal } from './reading-goal.tsx';
+import { ReadingStats } from './reading-stats.tsx';
 import type { LibraryMessages } from './messages.ts';
 import type { ShelfView } from './read.ts';
 import { ReadingProgress } from './row-parts.tsx';
 import { type LibraryShelf, type LibraryState, libraryHref, shelfKey, statusShelves } from './state.ts';
 import type { CustomShelf, FollowedAuthor, FollowedAuthors, LibraryOverview, LibraryRow, Loaded,
-  ShelfStatus, YearlyGoal } from './types.ts';
+  ReadingYear, ShelfStatus, YearlyGoal } from './types.ts';
 
 type T = ReturnType<typeof materializeData<LibraryMessages>>;
 
@@ -306,6 +307,7 @@ export interface LibraryPageProps {
   /** Authors the reader follows, on the first page of All; absent elsewhere. */
   authors?: Loaded<FollowedAuthors> | null;
   goal?: Loaded<YearlyGoal>;
+  stats?: Loaded<ReadingYear>;
   /** The server's clock, so relative times print the same on both sides. */
   now: number;
   avatarQuery?: string;
@@ -321,7 +323,8 @@ export interface LibraryPageProps {
  * progress. Shelves beside the list, Currently reading first, and every
  * shelf sortable, as a list or a grid, with several Works moved at once.
  */
-export function LibraryPage({ state, overview, view, reading, authors, goal, now, avatarQuery, api, readerActions, locale,
+export function LibraryPage({ state, overview, view, reading, authors, goal, stats, now, avatarQuery, api,
+  readerActions, locale,
   messages }: LibraryPageProps) {
   const t = materializeData(messages, { locale });
   if (!overview.ok) return <LibraryUnavailable failure={overview.failure} locale={locale} messages={messages} />;
@@ -344,6 +347,7 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, now
         <VisibilityControl initial={data.visibility} locale={locale} messages={messages} />
       </header>
       {goal ? <ReadingGoal agent={data.agent} initial={goal} locale={locale} messages={messages} /> : null}
+      {stats ? <ReadingStats stats={stats} locale={locale} messages={messages} /> : null}
       {firstUse ? <>
         <FirstUse locale={locale} messages={messages} />
         {authors ? <FollowedAuthorsSection authors={authors} avatarQuery={avatarQuery} locale={locale}

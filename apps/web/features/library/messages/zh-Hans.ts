@@ -14,6 +14,11 @@ export default {
   goalSaveFailed: '未能保存目标，请重试。',
   goalChanged: '目标已在其他地方修改，请刷新查看最新目标。',
   clearGoal: '移除目标',
+  readingStats: insert('{{year}} 年阅读统计', { year: String }),
+  booksFinished: insert('读完 {{count}} 本', { count: String }),
+  chaptersFinished: insert('读完 {{count}} 章', { count: String }),
+  monthStats: insert('{{month}}：读完 {{books}} 本、{{chapters}} 章',
+    { month: String, books: String, chapters: String }),
 
   shelves: '书架',
   all: '全部',
