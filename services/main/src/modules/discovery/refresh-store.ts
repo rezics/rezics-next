@@ -6,14 +6,18 @@ import { WORK_READ_COST } from '../work/read-contract.ts';
 import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
 import { DISCOVERY_COST, type OwnedDiscoveryBasis } from './contract.ts';
 import { discoveryScopeKey, generation, sourceFence, type DiscoveryGeneration } from './store.ts';
+import { DISCOVERY_SOURCE_PROFILE } from './profile.ts';
 
 export const DISCOVERY_REFRESH_COST = { intervalMs: 100, idleMs: 100, retryMs: 30_000,
   leaseMs: 30_000, catalogSize: 20, jobsPerTick: 1, worksPerTick: DISCOVERY_COST.buildWorks, purgeEntries: 1000,
   graphCalls: WORK_READ_COST.graphCalls + 3 } as const;
 export interface RefreshJob { scope_key: string; basis: OwnedDiscoveryBasis; generation_id: string | null; lease_epoch: string }
-const current = (row: DiscoveryGeneration, position: ReadPosition, fence: { revision: string; generation: string }) =>
+export const discoveryGenerationCurrent = (row: Pick<DiscoveryGeneration, 'source_epoch' | 'source_sequence'
+  | 'access_revision' | 'recovery_generation' | 'source_profile'>,
+position: ReadPosition, fence: { revision: string; generation: string }) =>
   row.source_epoch === position.dataEpoch && row.source_sequence === position.sequence
-  && row.access_revision === fence.revision && row.recovery_generation === fence.generation;
+  && row.access_revision === fence.revision && row.recovery_generation === fence.generation
+  && row.source_profile === DISCOVERY_SOURCE_PROFILE;
 
 /** A due-index claim serializes each population, not the graph or other jobs.
  * SKIP LOCKED is queue-only: https://www.postgresql.org/docs/18/sql-select.html
@@ -91,7 +95,7 @@ export class DiscoveryRefreshStore {
       const active = (await client.query<{ active_generation: string }>(`SELECT active_generation
         FROM access.derived_generation_head WHERE family = 'discovery' AND scope_key = $1`, [job.scope_key])).rows[0];
       const prior = active ? await generation(client, active.active_generation) : null;
-      if (prior && current(prior, position, fence)) {
+      if (prior && discoveryGenerationCurrent(prior, position, fence)) {
         return { fresh: true, row: null, principal: null };
       }
       let principal: VerifiedPrincipal | null = null;
@@ -105,10 +109,12 @@ export class DiscoveryRefreshStore {
           (state = 'building' OR (id = $2 AND state = 'ready'))
         ORDER BY created_at, id LIMIT 1 FOR UPDATE`, [job.scope_key, job.generation_id])).rows[0];
       const reuse = prior?.state === 'ready' && prior.source_epoch === position.dataEpoch
-        && prior.access_revision === fence.revision && prior.recovery_generation === fence.generation ? prior : null;
+        && prior.access_revision === fence.revision && prior.recovery_generation === fence.generation
+        && prior.source_profile === DISCOVERY_SOURCE_PROFILE ? prior : null;
       if (!pending) return { fresh: false, row: null, principal, reuse };
       const row = await generation(client, pending.id);
       if (row.source_epoch === position.dataEpoch && row.recovery_generation === fence.generation
+        && row.source_profile === DISCOVERY_SOURCE_PROFILE
         && (row.complete || row.access_revision === fence.revision)) return { fresh: false, row, principal, reuse };
       // Obsolete work can never activate. Closing it releases the one-building
       // constraint and fences a delayed manager/worker commit through its state.

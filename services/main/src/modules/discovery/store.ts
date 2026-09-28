@@ -9,6 +9,7 @@ import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
 import { DISCOVERY_COST, type DiscoveryBasis, type DiscoveryRow, type OwnedDiscoveryBasis,
   type ProjectedWork } from './contract.ts';
 import { discoveryAutomation, DISCOVERY_SERVICE_PRINCIPAL, type DiscoveryAutomation } from './automation.ts';
+import { DISCOVERY_SOURCE_PROFILE } from './profile.ts';
 
 type DiscoveryOperator = ManageContext | DiscoveryAutomation;
 
@@ -18,6 +19,7 @@ export interface DiscoveryGeneration {
   access_revision: string; recovery_generation: string; checkpoint: string; complete: boolean;
   state: string; work_count: string; active_head: string | null;
   changed_works: string[] | null;
+  source_profile?: string | null;
 }
 export interface DiscoveryReadGeneration extends DiscoveryGeneration { stale: boolean }
 const basisOf = (row: DiscoveryGeneration): OwnedDiscoveryBasis => ({ scope: row.scope,
@@ -54,7 +56,8 @@ async function assertFence(client: PoolClient, row: DiscoveryGeneration) {
 }
 export async function generation(client: PoolClient, id: string): Promise<DiscoveryGeneration> {
   const row = (await client.query<DiscoveryGeneration>(`SELECT d.*, g.state, h.revision::text AS active_head,
-    d.source_sequence::text, d.access_revision::text, d.work_count::text
+    d.source_sequence::text, d.access_revision::text, d.work_count::text,
+    g.input_manifest->>'sourceProfile' AS source_profile
     FROM access.discovery_generation d JOIN access.derived_generation g ON g.id = d.generation_id
     LEFT JOIN access.derived_generation_head h ON h.family = 'discovery' AND h.scope_key = g.scope_key
     WHERE d.generation_id = $1`, [id])).rows[0];
@@ -112,7 +115,7 @@ export class DiscoveryProjection {
         WHERE family = 'discovery' AND scope_key = $1 AND state = 'building' LIMIT 1`, [scope])).rows[0];
       if (pending) throw new RecommendationConflict('A discovery build already exists for this basis');
       const id = randomUUID();
-      const manifest = { basis: owned, position, access: fence };
+      const manifest = { basis: owned, position, access: fence, sourceProfile: DISCOVERY_SOURCE_PROFILE };
       await client.query(`INSERT INTO access.derived_generation
         (id, family, scope_key, input_digest, input_manifest, lease_expires_at)
         VALUES ($1, 'discovery', $2, $3, $4, clock_timestamp())`, [id, scope, digest(manifest), manifest]);
@@ -130,6 +133,7 @@ export class DiscoveryProjection {
         const prior = await generation(client, reuse.generation);
         if (prior.state !== 'ready' || prior.source_epoch !== position.dataEpoch
           || prior.access_revision !== fence.revision || prior.recovery_generation !== fence.generation
+          || prior.source_profile !== DISCOVERY_SOURCE_PROFILE
           || digest(basisOf(prior)) !== digest(owned) || reuse.works.length > 2000
           || BigInt(prior.source_sequence) > BigInt(position.sequence)) {
           throw new RecommendationRestart('Discovery reuse basis changed');
@@ -281,6 +285,9 @@ export class DiscoveryProjection {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
       const row = await generation(client, id);
+      if (row.source_profile !== DISCOVERY_SOURCE_PROFILE) {
+        throw new RecommendationRestart('Discovery source profile changed');
+      }
       const principal = await manager(client, context, row);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         [`discovery-receipt:${principal}:${key.idempotencyKey}`]);
@@ -326,7 +333,8 @@ export class DiscoveryProjection {
         if (pinned) throw new RecommendationRestart('Discovery recovery basis expired');
         throw new RecommendationUnavailable('Discovery recovery basis is unavailable');
       }
-      return { ...row, stale: row.source_sequence !== position.sequence
+      return { ...row, stale: row.source_profile !== DISCOVERY_SOURCE_PROFILE
+        || row.source_sequence !== position.sequence
         || row.access_revision !== fence.revision || row.state !== 'ready'
         || head.active_generation !== row.generation_id };
     });

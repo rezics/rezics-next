@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { DiscoveryRefreshWorker } from '../src/modules/discovery/refresh.ts';
-import type { DiscoveryRefreshStore } from '../src/modules/discovery/refresh-store.ts';
+import { discoveryGenerationCurrent, type DiscoveryRefreshStore } from '../src/modules/discovery/refresh-store.ts';
+import { DISCOVERY_SOURCE_PROFILE } from '../src/modules/discovery/profile.ts';
 import type { DiscoveryProjection } from '../src/modules/discovery/store.ts';
 import { WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
@@ -15,4 +16,14 @@ test('a slow catalog read defers enrollment while the refresh tick still claims 
   };
   expect(await worker.tick()).toBe('idle');
   expect(calls).toEqual(['purge', 'claim']);
+});
+
+test('a saved discovery generation from the old source query rebuilds at the same relay position', () => {
+  const position = { dataEpoch: 'epoch', sequence: '806' };
+  const fence = { revision: '54', generation: '0' };
+  const prior = { source_epoch: 'epoch', source_sequence: '806', access_revision: '54',
+    recovery_generation: '0', source_profile: null };
+  expect(discoveryGenerationCurrent(prior, position, fence)).toBe(false);
+  expect(discoveryGenerationCurrent({ ...prior, source_profile: DISCOVERY_SOURCE_PROFILE },
+    position, fence)).toBe(true);
 });
