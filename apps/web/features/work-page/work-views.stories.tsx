@@ -351,8 +351,9 @@ export const ContentsPart: Story = {
     query={{ parent: 'b5c7d9e1-f3a5-4b7c-9d1e-000000000001' }} locale="en" messages={messages.en} /></Framed>,
   async play({ canvasElement }) {
     const region = within(canvasElement).getByRole('region', { name: 'Contents' });
+    // All contents open again at the part the reader came from.
     await expect(within(region).getByRole('link', { name: 'Back to all contents' }))
-      .toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/contents?open=b5c7d9e1-f3a5-4b7c-9d1e-000000000001`);
     await expect(within(region).queryByRole('link', { name: 'Start reading' })).toBeNull();
   },
 };

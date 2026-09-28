@@ -255,6 +255,8 @@ const occurrence = (n: number) => iri(`b5c7d9e1-f3a5-4b7c-9d1e-${n.toString().pa
 const contentRevision = (n: number) => `urn:rezics:content:revision:c6d8e0f2-a4b6-4c8d-9e0f-${n.toString().padStart(12, '0')}` as const;
 const entry = (n: number, role: 'group' | 'chapter', label: string | null, available = true) => ({
   occurrence: occurrence(n), parent: structure, role, label: label ? { value: label, language: 'en' } : null,
+  division: role === 'group' ? 'part' as const : null, number: role === 'chapter' ? n - 1 : null,
+  childCount: role === 'group' ? 0 : null,
   target: role === 'chapter' ? iri(`d7e9f1a3-b5c7-4d9e-8f1a-${n.toString().padStart(12, '0')}`) : null,
   selectedRevision: role === 'chapter' && available ? contentRevision(n) : null,
   progress: role === 'chapter' && available ? { composition: structure, occurrence: occurrence(n),
@@ -289,7 +291,7 @@ const chapterText = ['The tide went out at four and took the eastern bank with i
     + 'ledger, but the city was where people lived.'].join('\n');
 export const chapter: ChapterRead = { profile: 'work-chapter-v1', work: workId, version: mainVersion,
   composition: structure, compositionRevision: iri('e8f0a2b4-c6d8-4e0f-9a1b-3c5d7e9f1a2b'), occurrence: occurrence(3),
-  parent: structure, parentPath: [], ordinal: 2, label: { value: 'The Surveyor’s Chain', language: 'en' },
+  parent: structure, parentPath: [], ordinal: 2, number: 2, label: { value: 'The Surveyor’s Chain', language: 'en' },
   language: 'en', selectedRevision: contentRevision(3),
   progress: { composition: structure, occurrence: occurrence(3), selectedRevision: contentRevision(3) },
   previous: occurrence(2), next: occurrence(4), sourcePosition,

@@ -210,6 +210,13 @@ const en = {
   chapterNumber: plural({ one: insert('Chapter {{count}}'), other: insert('Chapter {{count}}') },
     { count: asValue(number()) }),
   chapterNotInLanguage: 'Not available to read yet', unavailableChapter: 'Unavailable chapter',
+  // A Book's volumes, parts and extras (番外): the number is already formatted for the interface language.
+  volumeNumber: insert('Volume {{number}}', { number: String }), extras: 'Extras',
+  groupChapters: plural({ one: insert('{{count}} chapter'), other: insert('{{count}} chapters') },
+    { count: asValue(number()) }),
+  noGroupChapters: 'No chapters yet', loadingGroup: 'Loading the chapters…',
+  groupChaptersFailed: 'Couldn’t load these chapters.',
+  allGroupChapters: insert('All chapters of {{group}}', { group: String }),
 
   workLink: 'Work', chapterNavigation: 'Chapters', previousChapter: 'Previous chapter',
   nextChapter: 'Next chapter', firstChapter: 'This is the first chapter', lastChapter: 'This is the last chapter',

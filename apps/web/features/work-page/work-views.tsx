@@ -361,6 +361,14 @@ export async function WorkContents({ workRef, id, work, query, locale, messages 
   const language = none ? await oneTextLanguage(id, locale, work.selectedLanguage) : null;
   // Called a book as its cover draws it: a Work with no type, such as an imported classic, is shown as one.
   const oneText = language ? { title: work.title, language, book: coverKindOf(work.types) === 'book' } : null;
-  return <ContentsRegion contents={contents} workRef={workRef} query={query ?? {}} oneText={oneText} locale={locale}
-    messages={messages} />;
+  // The top level opens one volume with its chapters: the one asked for (the reader's), else the first story volume.
+  const groups = contents.ok && query && !query.parent ? contents.data.items.filter(item => item.role === 'group') : [];
+  const open = groups.find(item => idOf(item.occurrence) === query?.open)
+    ?? groups.find(item => item.division !== 'extras' && item.childCount) ?? groups[0];
+  const openPage = open && query ? await readContents(id, { parent: idOf(open.occurrence) ?? undefined,
+    language: query.language }) : null;
+  const { actingSubject } = await readingAgent();
+  return <ContentsRegion contents={contents} workRef={workRef} id={id} query={query ?? {}} oneText={oneText}
+    opened={open && openPage?.ok ? { occurrence: open.occurrence, page: openPage.data } : null}
+    actingSubject={actingSubject} locale={locale} messages={messages} />;
 }

@@ -102,3 +102,38 @@ export function titleNeedsLanguageNote(title: { value: string; language: string;
   const script = scripts[wanted];
   return script ? !script.test(title.value) : true;
 }
+
+const chineseDigits = '零一二三四五六七八九';
+/** Chinese numerals as volumes are counted (1 → 一, 10 → 十, 21 → 二十一, 105 → 一百零五); past 9999, digits. */
+export function chineseNumeral(value: number): string {
+  if (!Number.isInteger(value) || value < 0 || value > 9999) return String(value);
+  if (value < 10) return chineseDigits[value]!;
+  const units = ['', '十', '百', '千'];
+  const digits = String(value).split('').map(Number);
+  let out = '';
+  let zero = false;
+  for (const [index, digit] of digits.entries()) {
+    const unit = units[digits.length - 1 - index]!;
+    if (digit === 0) { zero = out !== ''; continue; }
+    if (zero) out += '零';
+    zero = false;
+    out += (digit === 1 && unit === '十' && index === 0 ? '' : chineseDigits[digit]!) + unit;
+  }
+  return out;
+}
+
+/** "Volume 2" in the interface language; Chinese counts volumes in Chinese numerals (第二卷). */
+export function volumeName(number: number, locale: UiLocale,
+  t: { volumeNumber: (values: { number: string }) => string }): string {
+  return t.volumeNumber({ number: locale.startsWith('zh') ? chineseNumeral(number)
+    : new Intl.NumberFormat(locale).format(number) });
+}
+
+/**
+ * Whether a title already says its place ("Chapter 24", "Letter 3", "第三章 最后一班车", "番外一"):
+ * then no generated number is set beside it, so a reader never meets two numbers for one chapter.
+ */
+export function numberedTitle(title: string | null | undefined): boolean {
+  return !!title && /^(?:(?:chapter|letter|part|book|volume|vol\.|episode|extra)\s*[0-9ivxlcdm]+\b|[0-9]+\s*[.、:：]|第\s*[0-9一二三四五六七八九十百千万零〇两]+\s*[章节回卷部集篇话幕]|番外\s*[0-9一二三四五六七八九十]+)/iu
+    .test(title.trim());
+}

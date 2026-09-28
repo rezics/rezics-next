@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
+import { ContentsRegion } from './contents.tsx';
+import type { ContentsPage } from './types.ts';
 import { ChapterNotFound, ChapterReader, ChapterUnavailable, TextNotFound, TextReader } from './reader.tsx';
 import { defaultReaderSettings } from './reader-settings.ts';
 import { ChapterSkeleton } from './work-states.tsx';
@@ -215,5 +217,107 @@ export const Loading: Story = {
   render: () => <ChapterSkeleton label={messages.en.loading} />,
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('status', { name: 'Loading the Work…' })).toBeInTheDocument();
+  },
+};
+
+// A Book in volumes, as 雨夜书店 is seeded: two volumes and its extras (番外).
+const volumeIri = (n: number) => `https://rezics.com/id/b5c7d9e1-f3a5-4b7c-9d1e-0000000009${String(n).padStart(2, '0')}`;
+const volumeOne = volumeIri(1), volumeTwo = volumeIri(2), extras = volumeIri(3);
+type ContentsItem = ContentsPage['items'][number];
+const baseContents = (fixture.contents as { ok: true; data: ContentsPage }).data;
+const group = (occurrence: string, value: string, division: 'volume' | 'extras', number: number | null,
+  childCount: number): ContentsItem => ({ occurrence, parent: baseContents.composition, role: 'group',
+  label: { value, language: 'zh-Hans' }, division, number, childCount, target: null, selectedRevision: null,
+  progress: null, availability: 'available' });
+const inGroup = (parent: string, n: number, value: string, number: number | null): ContentsItem => ({
+  ...baseContents.items[1]!, occurrence: `https://rezics.com/id/b5c7d9e1-f3a5-4b7c-9d1e-0000000008${String(n).padStart(2, '0')}`,
+  parent, label: { value, language: 'zh-Hans' }, number });
+const levels: Record<string, ContentsItem[]> = {
+  [volumeOne]: [inGroup(volumeOne, 1, '第一章 雨夜', 1), inGroup(volumeOne, 2, '第二章 未寄出的信', 2)],
+  [volumeTwo]: [inGroup(volumeTwo, 3, '第三章 最后一班车', 3)],
+  [extras]: [inGroup(extras, 4, '番外 书店的猫', null)],
+};
+const volumes = { ok: true as const, data: { ...baseContents, language: 'zh-hans', nextCursor: null, items: [
+  group(volumeOne, '第一卷 雨夜', 'volume', 1, 2), group(volumeTwo, '第二卷 雨停之后', 'volume', 2, 1),
+  group(extras, '番外', 'extras', null, 1)] } };
+const levelOf = (parent: string) => ({ ...baseContents, nextCursor: null, items: levels[parent] ?? [] });
+
+/** Contents by volume: the current volume open with its chapters; another reads its chapters when it opens. */
+export const ContentsByVolume: Story = {
+  render: () => <ContentsRegion contents={volumes} workRef={fixture.workRef} query={{ language: 'zh-Hans' }}
+    opened={{ occurrence: volumeTwo, page: levelOf(volumeTwo) }} locale="en" messages={messages.en}
+    loadGroup={async parent => { await new Promise(resolve => setTimeout(resolve, 30)); return levelOf(parent); }} />,
+  async play({ canvasElement }) {
+    const region = within(canvasElement).getByRole('region', { name: 'Contents' });
+    const current = within(region).getByRole('button', { name: /第二卷 雨停之后/ });
+    await expect(current).toHaveAttribute('aria-expanded', 'true');
+    await expect(current).toHaveTextContent('1 chapter');
+    await expect(within(region).getByRole('link', { name: /第三章 最后一班车/ }))
+      .toHaveAttribute('href', expect.stringContaining('/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000803'));
+    const first = within(region).getByRole('button', { name: /第一卷 雨夜/ });
+    await expect(first).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(first);
+    await expect(await within(region).findByRole('link', { name: /第二章 未寄出的信/ })).toBeVisible();
+    await expect(first).toHaveAttribute('aria-expanded', 'true');
+    // Extras are named as such and never numbered as a volume.
+    await expect(within(region).getByRole('button', { name: /番外/ })).toHaveTextContent('1 chapter');
+    await expect(region).not.toHaveTextContent('Volume 3');
+  },
+};
+
+/** The same contents in Chinese: volumes counted 第一卷, 第二卷; chapter counts as 共 N 章. */
+export const ContentsByVolumeChinese: Story = {
+  render: () => <ContentsRegion contents={{ ...volumes, data: { ...volumes.data, items: volumes.data.items.map(item =>
+    ({ ...item, label: null })) } }} workRef={fixture.workRef} query={{ language: 'zh-Hans' }}
+  opened={{ occurrence: volumeOne, page: levelOf(volumeOne) }} locale="zh-Hans" messages={messages['zh-Hans']}
+  loadGroup={async parent => levelOf(parent)} />,
+  async play({ canvasElement }) {
+    const region = within(canvasElement).getByRole('region', { name: '目录' });
+    await expect(within(region).getByRole('button', { name: /第一卷/ })).toHaveTextContent('共 2 章');
+    await expect(within(region).getByRole('button', { name: /第二卷/ })).toHaveAttribute('aria-expanded', 'false');
+    await expect(within(region).getByRole('button', { name: /番外/ })).toBeVisible();
+  },
+};
+
+const inVolume = { ...fixture.chapter, parent: volumeTwo, number: 3, ordinal: 1,
+  parentPath: [{ occurrence: volumeTwo, label: { value: 'After the Rain', language: 'en' }, division: 'volume' as const,
+    number: 2 }] };
+
+/** A chapter in a volume says where it stands: "Volume 2 · Chapter 3", the volume opening Contents at itself. */
+export const InAVolume: Story = {
+  args: { chapter: inVolume },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const header = canvas.getByRole('article').querySelector('header')!;
+    await expect(header).toHaveTextContent('Volume 2·Chapter 3');
+    await expect(within(header).getByRole('link', { name: 'Volume 2' })).toHaveAttribute('href',
+      `/en/w/${fixture.workRef}/contents?open=b5c7d9e1-f3a5-4b7c-9d1e-000000000902`);
+    await expect(canvas.getByRole('heading', { level: 1 })).toHaveTextContent('The Surveyor’s Chain');
+    await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href',
+      `/en/w/${fixture.workRef}/contents?open=b5c7d9e1-f3a5-4b7c-9d1e-000000000902`);
+  },
+};
+
+/** In Chinese the volume is 第二卷; a title that says 第三章 keeps its own number and gets no second one. */
+export const InAVolumeChinese: Story = {
+  args: { chapter: { ...fixture.headedChapter, parent: volumeTwo, number: 3, parentPath: inVolume.parentPath,
+    label: { value: '第三章 最后一班车', language: 'zh-Hans' } }, locale: 'zh-Hans', messages: messages['zh-Hans'] },
+  async play({ canvasElement }) {
+    const header = within(canvasElement).getByRole('article').querySelector('header')!;
+    await expect(within(header).getByRole('link', { name: '第二卷' })).toBeVisible();
+    await expect(header).not.toHaveTextContent('第3章');
+    await expect(within(canvasElement).getByRole('heading', { level: 1 })).toHaveTextContent('第三章 最后一班车');
+  },
+};
+
+/** An extra (番外) is named by its group and never numbered. */
+export const InExtras: Story = {
+  args: { chapter: { ...fixture.cjkChapter, parent: extras, number: null, label: { value: '书店的猫', language: 'zh-Hans' },
+    parentPath: [{ occurrence: extras, label: { value: '番外', language: 'zh-Hans' }, division: 'extras', number: null }] },
+  locale: 'zh-Hans', messages: messages['zh-Hans'] },
+  async play({ canvasElement }) {
+    const header = within(canvasElement).getByRole('article').querySelector('header')!;
+    await expect(within(header).getByRole('link', { name: '番外' })).toBeVisible();
+    await expect(header).not.toHaveTextContent('章');
   },
 };

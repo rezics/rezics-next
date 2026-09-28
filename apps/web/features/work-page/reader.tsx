@@ -10,7 +10,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
-import { paragraphs } from './format.ts';
+import { numberedTitle, paragraphs, volumeName } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { ChapterKeys, ReaderChrome, ReaderSurface, ReadingProgress } from './reader-client.tsx';
 import { parsePosition, type ReaderSettings } from './reader-settings.ts';
@@ -22,6 +22,21 @@ import type { ChapterRead, Loaded, Progress, WorkHeader, WorkText } from './type
 export function chapterTitle(label: { value: string } | null, ordinal: number,
   t: Pick<ReturnType<typeof materializeData<WorkPageMessages>>, 'chapterNumber'>): string {
   return label?.value.trim() || t.chapterNumber(ordinal);
+}
+
+/**
+ * Where a chapter stands, above its title: "Volume 2 · Chapter 3" (第二卷 · 第3章)
+ * in a volume, the part's own name in a part, the extras' name alone for 番外.
+ * A title that already says its number keeps it; the line never repeats it.
+ */
+export function chapterContext(chapter: Pick<ChapterRead, 'parentPath' | 'number' | 'label'>, locale: UiLocale,
+  t: ReturnType<typeof materializeData<WorkPageMessages>>): { group: string | null; chapter: string | null } {
+  const group = chapter.parentPath.at(-1);
+  const name = !group ? null : group.division === 'volume' && group.number ? volumeName(group.number, locale, t)
+    : group.label?.value ?? (group.division === 'extras' ? t.extras : t.untitledPart);
+  const number = chapter.number && group?.division !== 'extras' && !numberedTitle(chapter.label?.value)
+    ? t.chapterNumber(chapter.number) : null;
+  return { group: name, chapter: number };
 }
 
 const folded = (text: string) => text.normalize('NFKC').replace(/[\s\p{P}]+/gu, '').toLowerCase();
@@ -63,15 +78,16 @@ function ProgressPanel({ progress, chapter, actingSubject, here, locale, message
 
 type Translated = ReturnType<typeof materializeData<WorkPageMessages>>;
 
-/** The way back: the Work by its title, and its Contents in the language being read. */
-function ReaderToolbar({ workRef, work, language, t }: {
-  workRef: string; work: WorkHeader; language: string | undefined; t: Translated;
+/** The way back: the Work by its title, and its Contents in the language being read, the chapter's volume open. */
+function ReaderToolbar({ workRef, work, language, open, t }: {
+  workRef: string; work: WorkHeader; language: string | undefined; open?: string; t: Translated;
 }) {
   return <nav aria-label={t.workLink} className="flex flex-wrap items-center gap-1">
     <Link href={workHref(workRef)} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'max-w-72')}>
       <ArrowLeftIcon aria-hidden="true" />
       <span lang={work.title.language} className="truncate">{work.title.value}</span></Link>
-    <Link href={workHref(workRef, 'contents', null, { language })} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+    <Link href={workHref(workRef, 'contents', null, { language, open })}
+      className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
       <ListTreeIcon aria-hidden="true" />{t.contents}</Link>
   </nav>;
 }
@@ -129,7 +145,10 @@ export function ChapterReader({ workRef, work, chapter, language, settings, prog
 }) {
   const t = materializeData(messages, { locale });
   const body: unknown = chapter.content.body.body;
-  const title = chapterTitle(chapter.label, chapter.ordinal, t);
+  const title = chapterTitle(chapter.label, chapter.number ?? chapter.ordinal, t);
+  const context = chapterContext(chapter, locale, t);
+  const group = chapter.parentPath.at(-1);
+  const volume = group ? idOf(group.occurrence) ?? undefined : undefined;
   const lines = typeof body === 'string' ? bodyAfterTitle(paragraphs(body), chapter.label?.value) : null;
   const direction = chapter.content.reference.direction;
   const neighbour = (occurrence: string | null) => {
@@ -149,14 +168,20 @@ export function ChapterReader({ workRef, work, chapter, language, settings, prog
         'pointer-events-none opacity-50', forward && 'ms-auto')}>{content}</span>;
   };
   return <ReaderPage settings={settings} actingSubject={actingSubject} t={t}
-    toolbar={<ReaderToolbar workRef={workRef} work={work} language={language} t={t} />}
+    toolbar={<ReaderToolbar workRef={workRef} work={work} language={language} open={volume} t={t} />}
     after={<ChapterKeys previous={previous && localizedPath(previous, locale)} next={next && localizedPath(next, locale)}
       direction={direction} />}>
     <article lang={chapter.language} dir={direction === 'none' ? undefined : direction}
       className="mx-auto grid w-full max-w-(--reader-width) gap-6">
       <header className="grid gap-2 border-border/60 border-b pb-4">
-        {chapter.parentPath.map(item => <span key={item.occurrence} lang={item.label?.language}
-          className="text-muted-foreground text-sm">{item.label?.value ?? t.untitledPart}</span>)}
+        {context.group || context.chapter ? <p className="flex flex-wrap items-center gap-x-1.5 text-muted-foreground
+          text-sm">
+          {context.group ? <Link href={workHref(workRef, 'contents', null, { language, open: volume })}
+            lang={group?.division === 'volume' ? locale : group?.label?.language}
+            className="rounded-sm underline-offset-4 hover:text-foreground hover:underline">{context.group}</Link> : null}
+          {context.group && context.chapter ? <span aria-hidden="true">·</span> : null}
+          {context.chapter ? <span lang={locale}>{context.chapter}</span> : null}
+        </p> : null}
         <h1 lang={chapter.label?.language ?? locale}
           className="text-balance font-semibold font-work-title text-2xl/tight sm:text-3xl/tight">{title}</h1>
         {resume ? <a href={`#p-${resume}`} className={cn(buttonVariants({ size: 'sm', variant: 'soft' }),

@@ -115,6 +115,7 @@ export const story: StudioWork = {
 
 const chapter = (n: number, title: string | null, available: boolean): ContentsPage['items'][number] => ({
   occurrence: id(1100 + n), parent: id(1000), role: 'chapter', label: title ? { value: title, language: 'zh-Hans' } : null,
+  division: null, number: n, childCount: null,
   target: title ? ids.chapters[n - 1]! : null, selectedRevision: null, progress: null,
   availability: available ? 'available' : 'unavailable' });
 

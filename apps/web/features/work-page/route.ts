@@ -175,16 +175,18 @@ export function chapterPlaceHref(partOf: { work: string; occurrence: string | nu
 }
 
 /** The Contents tab's level, language and page. */
-export interface ContentsQuery { parent?: string; language?: string; cursor?: string }
+/** `open` names the volume (a top-level group) Contents shows open, such as the one being read. */
+export interface ContentsQuery { parent?: string; language?: string; cursor?: string; open?: string }
 
 export function parseContentsQuery(params: SearchParams): ContentsQuery | null {
-  if ([params.parent, params.language, params.cursor].some(Array.isArray)) return null;
+  if ([params.parent, params.language, params.cursor, params.open].some(Array.isArray)) return null;
   const parent = single(params.parent) || undefined;
   const language = contentLanguage(single(params.language));
   const cursor = single(params.cursor) || undefined;
+  const open = single(params.open) || undefined;
   if ((parent !== undefined && !uuid.test(parent)) || language === null
-    || (cursor !== undefined && cursor.length > 2048)) return null;
-  return { parent, language, cursor };
+    || (cursor !== undefined && cursor.length > 2048) || (open !== undefined && !uuid.test(open))) return null;
+  return { parent, language, cursor, ...(open ? { open } : {}) };
 }
 
 /** The reader's optional content language; a malformed one is refused. */
