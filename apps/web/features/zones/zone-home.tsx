@@ -1,9 +1,10 @@
 import type { ComponentType } from 'react';
 import type { ModuleSlotProps, ZoneCardOptions, ZoneContext, ZoneModule, ZoneModuleData, ZoneModuleType, ZonePackage,
-  ZoneWork } from '@rezics/zone-sdk';
+  ZoneWork, ZoneWorkRenderers } from '@rezics/zone-sdk';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { WhyHere, ZoneWorkCard, ZoneWorkRow } from './card.tsx';
 import type { ZoneMessages } from './messages.ts';
@@ -56,11 +57,17 @@ export function cardRenderer(zone: ZoneContext, pkg: ZonePackage | null, locale:
     const fallback = platform(work, options, false);
     return <div className="relative">
       <SlotBoundary slot="workCard" fallback={fallback}>
-        <Slot zone={zone} work={work} layout={options.layout ?? 'cover'} rank={options.rank} fallback={fallback} />
+        <Slot zone={zone} work={work} layout={options.layout ?? 'cover'} rank={options.rank} fallback={fallback}
+          Link={LocalizedLink} />
       </SlotBoundary>
       <WhyHere work={work} locale={locale} messages={messages} className="absolute end-1 top-1 bg-card/90 shadow-sm" />
     </div>;
   };
+}
+
+/** What a package's hero and module slots set Works out with: the platform card and "Why here?" stamp. */
+function workRenderers(card: CardRenderer, locale: UiLocale, messages: ZoneMessages): ZoneWorkRenderers {
+  return { card, whyHere: work => <WhyHere work={work} locale={locale} messages={messages} /> };
 }
 
 function renderModule(placed: PlacedModule, zone: ZoneContext, pkg: ZonePackage | null, card: CardRenderer,
@@ -77,7 +84,8 @@ function renderModule(placed: PlacedModule, zone: ZoneContext, pkg: ZonePackage 
   const Slot = pkg?.slots.modules?.[placed.module.type] as ComponentType<ModuleSlotProps<ZoneModuleType>> | undefined;
   if (!Slot) return <div key={placed.module.id} className="contents">{fallback}</div>;
   return <SlotBoundary key={placed.module.id} slot={`module:${placed.module.type}`} fallback={fallback}>
-    <Slot zone={zone} module={placed.module} data={placed.state.data} fallback={fallback} card={card} />
+    <Slot zone={zone} module={placed.module} data={placed.state.data} fallback={fallback} Link={LocalizedLink}
+      {...workRenderers(card, locale, messages)} />
   </SlotBoundary>;
 }
 
@@ -103,7 +111,8 @@ export function ZoneHome({ modules, zone, pkg, locale, messages, avatarQuery, em
   const heroBanners = hero && isType(hero, 'hero-carousel') && hero.state.state === 'ready' ? hero.state.data.banners : [];
   return <div className="grid grid-cols-1 gap-(--zone-gap) pt-4 pb-10 sm:pt-6">
     {HeroSlot && heroNode ? <SlotBoundary slot="hero" fallback={heroNode}>
-      <HeroSlot zone={zone} banners={heroBanners} fallback={heroNode} /></SlotBoundary> : heroNode}
+      <HeroSlot zone={zone} banners={heroBanners} fallback={heroNode} Link={LocalizedLink}
+        {...workRenderers(card, locale, messages)} /></SlotBoundary> : heroNode}
     <PageContainer className="grid grid-cols-1 gap-(--zone-gap) py-0 sm:py-0 lg:grid-cols-[minmax(0,1fr)_18.5rem] lg:items-start
       lg:py-0">
       {visible.length ? null : <div className="lg:col-span-2">{empty}</div>}

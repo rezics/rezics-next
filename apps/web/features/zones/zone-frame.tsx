@@ -77,10 +77,12 @@ export function ZoneFrame({ zone, dataZone, theme, pkg, nonce, masthead, actions
       '[text-autospace:normal]')} style={theme.style}>
     {pkg ? <style nonce={nonce} data-zone-css={pkg.slug}>{pkg.css}</style> : null}
     {Header ? <SlotBoundary slot="header" fallback={masthead}>
-      <Header zone={zone} fallback={masthead} actions={actions} members={members} /></SlotBoundary> : masthead}
+      <Header zone={zone} fallback={masthead} actions={actions} members={members} Link={LocalizedLink} />
+    </SlotBoundary> : masthead}
     {tabs}
     {notice}
     {children}
-    {Footer ? <SlotBoundary slot="footer" fallback={null}><Footer zone={zone} fallback={null} /></SlotBoundary> : null}
+    {Footer ? <SlotBoundary slot="footer" fallback={null}>
+      <Footer zone={zone} fallback={null} Link={LocalizedLink} /></SlotBoundary> : null}
   </div>;
 }

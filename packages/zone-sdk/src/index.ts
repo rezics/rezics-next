@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from 'react';
+import type { AnchorHTMLAttributes, ComponentType, ReactNode } from 'react';
 
 /*
  * The contract between the REZICS web app and a Zone's presentation: the
@@ -8,9 +8,10 @@ import type { ComponentType, ReactNode } from 'react';
  *
  * A package receives data the platform already fetched and renders into
  * slots; it fetches nothing, reads no cookies, storage or credentials and never hides
- * platform chrome (the account menu, the Zone menu, "Why here?" links, report
- * and age gates stay outside the slots). Every slot also receives `fallback`,
- * the platform's own rendering, which a package may wrap or replace.
+ * platform chrome (the account menu, the Zone menu, report and age gates stay
+ * outside the slots, and every Work keeps its "Why here?" stamp, which the
+ * platform renders). Every slot also receives `fallback`, the platform's own
+ * rendering, which a package may wrap or replace.
  */
 
 /** Presets a Zone starts from; choosing one copies its tokens into the Zone. */
@@ -148,13 +149,24 @@ export interface ZoneContext {
   links: { home: string; works: string; discussions: string; decisions: string; about: string };
 }
 
-export interface ZoneSlotProps { zone: ZoneContext; fallback: ReactNode }
+/** What the platform's link takes: an anchor whose `href` is a path or URL. */
+export type ZoneLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> & { href: string };
+
+export interface ZoneSlotProps {
+  zone: ZoneContext;
+  fallback: ReactNode;
+  /**
+   * The platform's page link. Paths the platform passes (`work.href`,
+   * `chip.href`) may lack the interface locale; this link keeps the reader
+   * in it and navigates within the app. Use it for every link to a page.
+   */
+  Link: ComponentType<ZoneLinkProps>;
+}
 export interface HeaderSlotProps extends ZoneSlotProps {
   /** Platform controls (follow, the Zone menu) the header must show. */
   actions: ReactNode;
   members: string | null;
 }
-export interface HeroSlotProps extends ZoneSlotProps { banners: ZoneBanner[] }
 /** A cover tile, a row with a small cover, or a one-line rail row. */
 export type ZoneCardLayout = 'cover' | 'row' | 'rail';
 
@@ -166,11 +178,22 @@ export interface WorkCardSlotProps extends ZoneSlotProps {
   layout: ZoneCardLayout;
   rank?: number;
 }
-export interface ModuleSlotProps<Type extends ZoneModuleType> extends ZoneSlotProps {
-  module: ZoneModule<Type>;
-  data: ZoneModuleData[Type];
+/** How a slot that sets out Works shows them, so every pick keeps its author and "Why here?" stamp. */
+export interface ZoneWorkRenderers {
   /** Renders a Work with the platform card (and the package's `workCard` slot). */
   card: (work: ZoneWork, options?: ZoneCardOptions) => ReactNode;
+  /**
+   * The platform's "Why here?" stamp, for a Work the slot sets out itself
+   * instead of through `card`; nothing when the Work has no Decision. Show it
+   * beside every such Work: a Zone design may restyle a pick but never hide
+   * why it is in the Zone.
+   */
+  whyHere: (work: Pick<ZoneWork, 'title' | 'decision'>) => ReactNode;
+}
+export interface HeroSlotProps extends ZoneSlotProps, ZoneWorkRenderers { banners: ZoneBanner[] }
+export interface ModuleSlotProps<Type extends ZoneModuleType> extends ZoneSlotProps, ZoneWorkRenderers {
+  module: ZoneModule<Type>;
+  data: ZoneModuleData[Type];
 }
 
 /** The slots a package may fill; an empty slot keeps the platform rendering. */
@@ -195,6 +218,17 @@ export interface ZonePackage {
 
 export function defineZonePackage<const Package extends ZonePackage>(pkg: Package): Package {
   return pkg;
+}
+
+/**
+ * The props `WorkCover` (`@rezics/ui/work-cover`) takes for a Work, as the
+ * platform card sets them: its image when it has one, otherwise the cover
+ * generated from its title, author and kind.
+ */
+export function workCoverProps(work: ZoneWork) {
+  return { title: work.title?.value ?? '', lang: work.title?.lang, dir: work.title?.dir,
+    authors: work.author ? [work.author.value] : [], kind: work.kind, seed: work.id,
+    image: work.cover ? { src: work.cover.url, width: work.cover.width, height: work.cover.height } : null };
 }
 
 /** Gzipped size limits per package (docs/plan/frontend.md, "Zones"). */
