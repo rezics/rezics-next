@@ -7,35 +7,31 @@ import { expect, type Page, test } from '@playwright/test';
 const form = (page: Page) => page.getByRole('search', { name: 'Search published works' });
 const results = (page: Page) => page.getByRole('region', { name: 'Search results' });
 
-test('search keeps phrase, scope and filters in the URL and states what it searched', async ({ page }) => {
+test('search keeps phrase, scope and filters in the URL, and an empty search offers ways out', async ({ page }) => {
   await page.goto('/en/search');
   await expect(results(page)).toContainText('Enter at least two characters to search.');
   await expect(form(page).getByRole('combobox', { name: 'Search in' })).toHaveValue('global');
   // Once React owns the form it normalizes the phrase; a press before hydration submits natively, so try again.
   await expect(async () => {
     await page.goto('/en/search');
-    await form(page).getByRole('searchbox', { name: 'Search phrase' }).fill('  river  ');
+    await form(page).getByRole('combobox', { name: 'Search phrase' }).fill('  river  ');
     await form(page).getByRole('button', { name: 'Search', exact: true }).click();
     await expect(page).toHaveURL(/\/en\/search\?q=river$/, { timeout: 3_000 });
   }).toPass({ timeout: 30_000 });
   await expect(page.getByText('Results for “river”', { exact: true })).toBeVisible();
   await expect(results(page)).toContainText('Nothing matches “river”');
-  const completeness = page.getByTestId('search-completeness');
-  await expect(completeness).toContainText('0 works');
-  // What was searched is one click away rather than in the way.
-  await completeness.getByText('About these results').click();
-  await expect(completeness).toContainText(/Searched [0-9]+ published texts? in All of REZICS/);
-  await expect(completeness).toContainText(/Search index as of change [0-9]+/);
+  await expect(results(page)).toContainText('Try another spelling or fewer words, or search for a title or an author.');
+  // No wall of zeros: with nothing found, no language or kind is offered as a filter.
+  await expect(page.getByRole('link', { name: /^English\b/ })).toHaveCount(0);
+  await expect(page.getByTestId('search-completeness')).toHaveCount(0);
 
-  await page.getByRole('link', { name: /^English\b/ }).click();
-  await expect(page).toHaveURL(/\/en\/search\?q=river&lang=en$/);
-  await completeness.getByText('About these results').click();
-  await expect(completeness).toContainText('Only English text');
+  // A filter the address applies stays visible so it can be removed.
+  await page.goto('/en/search?q=river&lang=en');
+  await expect(page.getByRole('link', { name: /^English\b/ }).first()).toHaveAttribute('aria-current', 'true');
   await expect(results(page).getByRole('link', { name: 'Search any language' }))
     .toHaveAttribute('href', '/en/search?q=river');
   await page.reload();
-  await expect(form(page).getByRole('searchbox', { name: 'Search phrase' })).toHaveValue('river');
-  await expect(page.getByRole('link', { name: /^English\b/ })).toHaveAttribute('aria-current', 'true');
+  await expect(form(page).getByRole('combobox', { name: 'Search phrase' })).toHaveValue('river');
 });
 
 test('a community scope is named and never falls back to everyone; Mine is not searchable', async ({ page }) => {
@@ -53,7 +49,7 @@ test('a community scope is named and never falls back to everyone; Mine is not s
 
 test('Enter that commits an IME composition does not submit', async ({ page }) => {
   await page.goto('/en/search?q=river');
-  const box = form(page).getByRole('searchbox', { name: 'Search phrase' });
+  const box = form(page).getByRole('combobox', { name: 'Search phrase' });
   await expect(box).toHaveValue('river');
   // Wait for hydration: the form navigates client-side only once React owns it.
   await expect(async () => {
@@ -72,10 +68,10 @@ test('Enter that commits an IME composition does not submit', async ({ page }) =
 
 test('mobile search filters disclose without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/en/search?q=river');
+  await page.goto('/en/search?q=river&lang=ja');
   await page.getByText('Filter results').click();
-  await expect(page.getByRole('link', { name: 'Any language' })).toHaveAttribute('aria-current', 'true');
-  await expect(page.getByRole('link', { name: 'Japanese' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Japanese' }).last()).toHaveAttribute('aria-current', 'true');
+  await expect(page.getByRole('link', { name: 'Any language' }).last()).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
   expect(overflow).toBe(false);
 });

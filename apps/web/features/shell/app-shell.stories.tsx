@@ -66,7 +66,7 @@ type Story = StoryObj<typeof meta>;
 export const SignedOut: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const search = canvas.getByRole('searchbox', { name: 'Search works' });
+    const search = canvas.getByRole('combobox', { name: 'Search works' });
     await expect(canvas.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main-content');
     await expect(canvas.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/auth/start?next=%2F');
     await userEvent.keyboard('/');
@@ -102,7 +102,7 @@ export const LongNames: Story = {
   parameters: { route: { pathname: '/en/search', search: 'q=A+very+long+search+phrase+about+rivers+and+cities+across+centuries' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('searchbox', { name: 'Search works' }))
+    await expect(canvas.getByRole('combobox', { name: 'Search works' }))
       .toHaveValue('A very long search phrase about rivers and cities across centuries');
     await userEvent.click(canvas.getByRole('button', { name: 'Account menu' }));
     const menu = within(await within(document.body).findByRole('menu'));
@@ -170,7 +170,7 @@ export const Chinese: Story = {
     await userEvent.click(within(document.body).getByRole('menuitem', { name: '语言' }));
     await waitFor(() => expect(within(document.body).getByRole('menuitemradio', { name: '简体中文' }))
       .toHaveAttribute('aria-checked', 'true'));
-    await expect(canvas.getByRole('searchbox', { name: '搜索作品' })).toBeVisible();
+    await expect(canvas.getByRole('combobox', { name: '搜索作品' })).toBeVisible();
   },
 };
 

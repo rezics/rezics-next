@@ -15,7 +15,7 @@ async function captureVariants(page: Page, info: TestInfo, screen: 'onboarding' 
         await page.goto(`/${locale}/${screen}${screen === 'onboarding' ? '?next=%2Fen' : ''}`);
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
         await expect(page.locator('html')).toHaveAttribute('lang', locale);
-        await expect(page.getByRole('searchbox', { name: locale === 'en' ? 'Search works' : '搜索作品' }))
+        await expect(page.getByRole('combobox', { name: locale === 'en' ? 'Search works' : '搜索作品' }))
           .toBeVisible();
         await expect(page.getByRole('textbox', { name: locale === 'en' ? 'Your handle' : '您的用户名' }))
           .toHaveAttribute('data-hydrated', 'true', { timeout: 20_000 });

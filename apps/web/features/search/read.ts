@@ -68,14 +68,25 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
   }
   const matches = page.results.map(match => ({ match, reasons: reasonsOf(match) }));
   const concepts = matches.flatMap(({ reasons }) => reasons.classification?.concept ?? []);
+  // Main's cards carry a title in the Work's own language; summaries name it in the reader's, when there is one.
   const named = await readSummaries(clients.names, [...new Set([...matches.map(({ match }) => match.work),
     ...concepts])], options.language, options.actingSubject);
+  const hits = matches.map(({ match, reasons }) => ({ matchUnit: match.matchUnit, work: match.work,
+    mainVersion: match.mainVersion, types: match.types,
+    title: named?.get(match.work)?.name ?? match.title ?? null,
+    cover: named?.get(match.work)?.avatar ?? (mediaCover(match.cover) ? match.cover! : null),
+    authors: (match.primaryCredits ?? []).flatMap(credit => credit.displayName ? [credit.displayName] : []),
+    rating: match.rating ? { mean: match.rating.mean, count: match.rating.count,
+      max: 'scale' in match.rating ? match.rating.scale.max : 5 } : null,
+    tagline: match.tagline ?? null, completion: match.completionStatus ?? null,
+    reasons: { ...reasons, classification: reasons.classification ? { ...reasons.classification,
+      conceptName: reasons.classification.concept
+        ? named?.get(reasons.classification.concept)?.name ?? null : null } : null } }));
   return { ok: true, page: { total: page.total, population: page.population, sequence: page.sourcePosition.sequence,
-    indexGeneration: page.indexGeneration, next: page.next, titles: named !== null, facets: page.facets,
-    hits: matches.map(({ match, reasons }) => ({ matchUnit: match.matchUnit, work: match.work,
-      mainVersion: match.mainVersion, types: match.types, title: named?.get(match.work)?.name ?? null,
-      cover: named?.get(match.work)?.avatar ?? null,
-      reasons: { ...reasons, classification: reasons.classification ? { ...reasons.classification,
-        conceptName: reasons.classification.concept
-          ? named?.get(reasons.classification.concept)?.name ?? null : null } : null } })) } };
+    indexGeneration: page.indexGeneration, next: page.next, facets: page.facets,
+    titles: hits.every(hit => hit.title !== null), hits } };
 }
+
+/** A cover Main may show: its generated fallback, or an image served from Main's media paths. */
+const mediaCover = (cover: WorkCover | undefined) =>
+  cover !== undefined && (cover.kind === 'fallback' || cover.url.startsWith('/v1/media/'));

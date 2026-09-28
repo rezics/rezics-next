@@ -1,10 +1,17 @@
 import { asValue, insert, number, plural } from 'native-i18n';
 import { defineMessages } from '../../i18n/define.ts';
+import de from './messages/de.ts';
+import es from './messages/es.ts';
+import fr from './messages/fr.ts';
+import ja from './messages/ja.ts';
+import ko from './messages/ko.ts';
 import zhHans from './messages/zh-Hans.ts';
+import zhHant from './messages/zh-Hant.ts';
 
 // Strings for the cover-first cards, shelves and reader actions that Discover,
 // Search, the Work page and the home feed share. Components read them by UI
-// locale, so each page does not have to load and pass them.
+// locale, so each page does not have to load and pass them; every locale is
+// therefore registered here, not only in the lazy catalogs.
 const en = {
   untitled: insert('Work {{id}}', { id: String }),
   fallbackTitle: 'Title shown in another language',
@@ -29,6 +36,6 @@ const en = {
 
 export const englishMessages = en;
 
-export const messages = defineMessages({ en, 'zh-Hans': zhHans });
+export const messages = defineMessages({ en, 'zh-Hans': zhHans, 'zh-Hant': zhHant, ja, ko, de, fr, es });
 
 export type CatalogueMessages = typeof en;

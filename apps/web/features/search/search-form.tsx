@@ -1,7 +1,6 @@
 'use client';
 
 import { Button } from '@rezics/ui/button';
-import { Input } from '@rezics/ui/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
 import { SearchIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -11,17 +10,22 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { SearchMessages } from './messages.ts';
 import { normalizePhrase, PHRASE, phraseStatus, type SearchScope, type SearchState, searchHref } from './state.ts';
+import { TypeaheadInput, type TypeaheadLoader } from './typeahead.tsx';
 
 /** A Realm the selector offers: the one in the URL, named when Main could name it. */
 export interface RealmOption { id: string; label: string; lang?: string }
 
 /**
- * The query box with its scope beside it. Submitting or changing the scope
- * moves the URL, which the server renders. Enter that commits an IME
- * composition (Chinese, Japanese, Korean input) never submits.
+ * The query box with its scope beside it and title suggestions under it.
+ * Submitting or changing the scope moves the URL, which the server renders.
+ * Enter that commits an IME composition (Chinese, Japanese, Korean input)
+ * never submits.
  */
-export function SearchForm({ state, realm, locale, messages }: {
-  state: SearchState; realm: RealmOption | null; locale: UiLocale; messages: SearchMessages;
+export function SearchForm({ state, realm, load, locale, messages }: {
+  state: SearchState; realm: RealmOption | null;
+  /** Title suggestions; Main's typeahead through the BFF by default, a fixture in stories. */
+  load?: TypeaheadLoader;
+  locale: UiLocale; messages: SearchMessages;
 }) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
@@ -71,9 +75,9 @@ export function SearchForm({ state, realm, locale, messages }: {
     <div className="relative flex-1">
       <SearchIcon aria-hidden="true" className="pointer-events-none absolute start-4 top-1/2 size-5 -translate-y-1/2
         text-muted-foreground" />
-      <Input ref={input} key={state.phrase} name="q" type="search" defaultValue={state.phrase} required
-        minLength={PHRASE.min} maxLength={PHRASE.max} aria-label={t.phraseLabel} placeholder={t.placeholder}
-        autoComplete="off" enterKeyHint="search" onKeyDown={keyDown}
+      <TypeaheadInput ref={input} key={state.phrase} locale={locale} load={load} name="q" type="search"
+        defaultValue={state.phrase} required minLength={PHRASE.min} maxLength={PHRASE.max} aria-label={t.phraseLabel}
+        placeholder={t.placeholder} autoComplete="off" enterKeyHint="search" onKeyDown={keyDown}
         onCompositionStart={() => { composing.current = true; }}
         onCompositionEnd={() => { composing.current = false; }}
         className="h-12 rounded-2xl bg-card ps-12 text-base md:text-base" />

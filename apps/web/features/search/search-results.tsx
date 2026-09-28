@@ -2,9 +2,10 @@
 
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button, buttonVariants } from '@rezics/ui/button';
+import { cn } from '@rezics/ui/utils';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { BanIcon, CircleSlashIcon, FileTextIcon, LibraryIcon, RefreshCwIcon, RotateCwIcon, SearchIcon, SearchXIcon,
-  TagIcon, TriangleAlertIcon, UsersRoundIcon } from 'lucide-react';
+import { BanIcon, BookTextIcon, CircleSlashIcon, FileTextIcon, LibraryIcon, QuoteIcon, RefreshCwIcon, RotateCwIcon,
+  SearchIcon, SearchXIcon, TagIcon, TriangleAlertIcon, UserRoundIcon, UsersRoundIcon } from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
 import Link from '../shell/localized-link.tsx';
 import { useRouter } from 'next/navigation';
@@ -12,12 +13,15 @@ import { type ReactNode, useEffect, useRef } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type CatalogueWork, coverKindOf } from '../catalogue/work.ts';
 import { WorkRow } from '../catalogue/work-row.tsx';
+import { WorkShelf } from '../catalogue/work-shelf.tsx';
 import { Notice } from '../discover/notice.tsx';
 import { workHref } from '../discover/scope.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
+import type { SearchFallback } from './fallback.ts';
 import type { SearchMessages } from './messages.ts';
 import { bffSearch, SearchError, type SearchLoader, searchPagesOptions } from './query.ts';
 import { phraseStatus, type SearchState, searchHref } from './state.ts';
+import type { Suggestion } from './suggest.ts';
 import type { SearchFailure, SearchHit, SearchLoaded, SearchResultPage } from './types.ts';
 
 type Text = ContractOf<SearchMessages>;
@@ -34,6 +38,8 @@ export interface SearchResultsProps {
   avatarQuery?: string;
   /** Reads later pages; the BFF by default, a fixture in stories. */
   load?: SearchLoader;
+  /** Near matches and popular Works, read when page one found nothing. */
+  fallback?: SearchFallback | null;
   locale: UiLocale;
   messages: SearchMessages;
 }
@@ -64,17 +70,39 @@ function Completeness({ page, state, scopeLabel, signedIn, locale, t }: {
   </div>;
 }
 
-/** A result as a catalogue card. Phrase results carry no credits or ratings yet, so the row shows none. */
-function hitWork(hit: SearchHit, state: SearchState): CatalogueWork {
+/** A result as a catalogue card: cover, title, credited authors, rating and tagline, as Main's card gives them. */
+export function hitWork(hit: SearchHit, state: SearchState): CatalogueWork {
   return { id: hit.work, href: workHref(hit.work, state.scope), title: hit.title, cover: hit.cover,
-    kind: coverKindOf(hit.types), authors: [], rating: null };
+    kind: coverKindOf(hit.types), authors: hit.authors, rating: hit.rating, tagline: hit.tagline,
+    completion: hit.completion };
+}
+
+const SLOT = '\u0000';
+
+/** A message with one value set in place, in the value's own language, wherever the message puts it. */
+export function withValue(message: (value: string) => string, value: string, lang: string | null): ReactNode {
+  const [before = '', after = ''] = message(SLOT).split(SLOT);
+  return <span>{before}<span lang={lang ?? undefined}>{value}</span>{after}</span>;
+}
+
+/** Where the phrase was found, in words: the title (or another of its titles), an author, the tagline or the text. */
+function matchReason(hit: SearchHit, locale: UiLocale, t: Text): { icon: typeof FileTextIcon; text: ReactNode } {
+  const { field, matchedText, matchedLanguage, language } = hit.reasons;
+  switch (field) {
+    case 'title': return { icon: BookTextIcon, text: matchedText && matchedText !== hit.title?.value
+      ? withValue(title => t.matchOtherTitle({ title }), matchedText, matchedLanguage) : t.matchTitle };
+    case 'credit': return { icon: UserRoundIcon, text: matchedText
+      ? withValue(name => t.matchCredit({ name }), matchedText, matchedLanguage) : t.matchCreditUnnamed };
+    case 'tagline': return { icon: QuoteIcon, text: t.matchTagline };
+    case 'body': return { icon: FileTextIcon, text: t.textMatch({ language: languageName(language, locale) }) };
+  }
 }
 
 function Reasons({ hit, scopeLabel, locale, t }: { hit: SearchHit; scopeLabel: string; locale: UiLocale; t: Text }) {
   const { reasons } = hit;
   const term = reasons.classification?.conceptName;
   const items: { icon: typeof FileTextIcon; text: ReactNode }[] = [
-    { icon: FileTextIcon, text: t.textMatch({ language: languageName(reasons.language, locale) }) },
+    matchReason(hit, locale, t),
     ...(reasons.realm ? [{ icon: UsersRoundIcon, text: reasons.realm === 'realm-adoption'
       ? t.realmAdopted({ realm: scopeLabel }) : t.realmFallback({ realm: scopeLabel }) }] : []),
     ...(reasons.classification ? [{ icon: TagIcon, text: <span lang={term?.language}>
@@ -104,6 +132,22 @@ function FailureNotice({ failure, state, t, onRetry, onRestart }: {
       <Button size="sm" variant="outline" onClick={onRetry}><RotateCwIcon aria-hidden="true" />{t.retry}</Button>
     </Notice>;
   }
+}
+
+/** Close titles and names for a search that found nothing, each one step away. */
+function DidYouMean({ suggestions, state, t }: { suggestions: readonly Suggestion[]; state: SearchState; t: Text }) {
+  const link = 'font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 '
+    + 'focus-visible:ring-ring rounded-sm';
+  return <span className="text-base text-foreground">{t.didYouMean}{' '}
+    {suggestions.map((suggestion, index) => <span key={suggestion.kind === 'work' ? suggestion.item.work : suggestion.name}>
+      {index ? t.listSeparator : null}
+      {suggestion.kind === 'work'
+        ? <Link href={workHref(suggestion.item.work, state.scope)} lang={suggestion.item.title.language}
+          className={cn(link, 'font-work-title')}>{suggestion.item.title.value}</Link>
+        : <Link href={searchHref({ ...state, phrase: suggestion.name, language: null, term: null })}
+          lang={suggestion.language ?? undefined} className={link}>{suggestion.name}</Link>}
+    </span>)}
+    {t.didYouMeanEnd}</span>;
 }
 
 /** Where an empty search can look instead: the neighbouring scope and each filter removed. */
@@ -151,11 +195,14 @@ function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResu
   }
 
   if (!current.total) {
+    const { suggestions = [], popular = [] } = props.fallback ?? {};
     return <>
-      <Completeness page={current} state={state} scopeLabel={scopeLabel} signedIn={signedIn} locale={locale} t={t} />
       <EmptyState icon={SearchXIcon} title={state.scope.kind === 'realm'
         ? t.emptyIn({ scope: scopeLabel, phrase: state.phrase }) : t.empty({ phrase: state.phrase })}
-        description={t.emptyHelp}><Widen state={state} t={t} /></EmptyState>
+        description={suggestions.length ? <DidYouMean suggestions={suggestions} state={state} t={t} /> : t.emptyHelp}
+        className="py-10 sm:py-12"><Widen state={state} t={t} /></EmptyState>
+      {popular.length ? <WorkShelf heading={{ title: t.popularTitle, seeAll: { href: '/discover' } }} works={popular}
+        avatarQuery={avatarQuery} locale={locale} /> : null}
     </>;
   }
   return <>

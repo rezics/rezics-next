@@ -12,10 +12,17 @@ export type SearchPage = Exclude<Ok<PagePost>, { profile: 'public-content-phrase
 export type SearchContinuation = NonNullable<SearchPage['next']>;
 type Match = SearchPage['results'][number];
 
+/** Where the phrase was found: Main ranks title matches first, then credited names, taglines and text. */
+export type MatchField = 'title' | 'credit' | 'tagline' | 'body';
+
 /** Why a Work matched, as Main states it. */
 export interface MatchReasons {
   /** The published text's language. */
   language: string;
+  /** The field that matched and its text, such as an original title or the author's name; body text has none. */
+  field: MatchField;
+  matchedText: string | null;
+  matchedLanguage: string | null;
   /** Realm results: adopted by the Realm, or its Main Version because the Realm selected none. */
   realm: 'realm-adoption' | 'main-fallback' | null;
   /** Classified results: the accepted concept and whose decision placed it. */
@@ -30,6 +37,11 @@ export interface SearchHit {
   title: WorkName | null;
   cover: WorkCover | null;
   types: string[];
+  /** Credited authors' display names in credit order; empty when Main names none. */
+  authors: string[];
+  rating: { mean: number; count: number; max: number } | null;
+  tagline: WorkName | null;
+  completion: 'ongoing' | 'completed' | 'hiatus' | null;
   reasons: MatchReasons;
 }
 
@@ -68,7 +80,9 @@ export function searchFailureOf(status: number, code: string | undefined): Searc
 export function reasonsOf(match: Match): Omit<MatchReasons, 'classification'>
   & { classification: { concept: string | null; source: 'local' | 'global' } | null } {
   const classification = 'classification' in match ? match.classification : null;
-  return { language: match.language,
+  return { language: match.language, field: match.matchedField ?? 'body',
+    matchedText: match.matchedField && match.matchedField !== 'body' ? match.matchedText ?? null : null,
+    matchedLanguage: match.matchedLanguage ?? null,
     realm: 'reason' in match && (match.reason === 'realm-adoption' || match.reason === 'main-fallback')
       ? match.reason : null,
     classification: classification ? { concept: classification.concept ?? null,

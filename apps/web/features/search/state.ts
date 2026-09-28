@@ -81,7 +81,3 @@ export function searchHref(state: SearchState): string {
     include: state.includeTypes?.join(','), exclude: state.excludeTypes?.join(',') });
 }
 
-/**
- * Languages initially offered when no search has supplied facet counts.
- */
-export const searchLanguages = ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'es', 'fr', 'de'] as const;

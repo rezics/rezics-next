@@ -3,6 +3,7 @@ import { materializeData } from 'native-i18n';
 import { readRealm } from '../../../features/discover/read.ts';
 import { type SearchParams, shortId } from '../../../features/discover/scope.ts';
 import { browseReader } from '../../../features/discover/server.ts';
+import { readSearchFallback } from '../../../features/search/fallback.ts';
 import { readSearchPage } from '../../../features/search/read.ts';
 import { SearchPage } from '../../../features/search/search-page.tsx';
 import { parseSearchState, phraseStatus } from '../../../features/search/state.ts';
@@ -33,12 +34,15 @@ export default async function SearchRoute({ searchParams }: Props) {
       ? readSearchPage({ search: reader.personal, names: reader.anonymous }, state, { language: locale })
       : null,
   ]);
+  // A search that found nothing offers close titles and popular Works instead of an empty page.
+  const fallback = state && initial?.ok && !initial.page.total
+    ? await readSearchFallback(reader.anonymous, state.phrase, locale) : null;
   const option = state?.scope.kind === 'realm' ? { id: state.scope.realm,
     label: realm?.ok ? realm.data.name.value
       : materializeData(discoverMessages, { locale }).realmFallback({ id: shortId(state.scope.realm) }),
     lang: realm?.ok ? realm.data.name.language : undefined } : null;
   return <Providers>
-    <SearchPage parsed={parsed} realm={option} initial={initial} signedIn={reader.signedIn}
+    <SearchPage parsed={parsed} realm={option} initial={initial} fallback={fallback} signedIn={reader.signedIn}
       actingSubject={reader.actingSubject} avatarQuery={reader.avatarQuery} locale={locale} messages={messages}
       discoverMessages={discoverMessages} />
   </Providers>;

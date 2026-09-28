@@ -11,11 +11,13 @@ import type { DiscoverMessages } from '../discover/messages.ts';
 import { Notice } from '../discover/notice.tsx';
 import { workTypes } from '../discover/state.ts';
 import { PageContainer } from '../shell/page.tsx';
+import type { SearchFallback } from './fallback.ts';
 import type { SearchMessages } from './messages.ts';
 import type { SearchLoader } from './query.ts';
 import { type RealmOption, SearchForm } from './search-form.tsx';
 import { SearchResults } from './search-results.tsx';
-import { type ParsedSearch, phraseStatus, type SearchState, searchHref, searchLanguages } from './state.ts';
+import type { TypeaheadLoader } from './typeahead.tsx';
+import { type ParsedSearch, phraseStatus, type SearchState, searchHref } from './state.ts';
 import type { SearchLoaded, SearchResultPage } from './types.ts';
 
 type Text = ContractOf<SearchMessages>;
@@ -25,10 +27,14 @@ export interface SearchPageProps {
   /** The Realm in the URL, offered beside Global in the scope selector. */
   realm: RealmOption | null;
   initial: SearchLoaded | null;
+  /** Near matches and popular Works when page one found nothing. */
+  fallback?: SearchFallback | null;
   signedIn: boolean;
   actingSubject?: string;
   avatarQuery?: string;
   load?: SearchLoader;
+  /** Title suggestions under the query box; stories supply their own. */
+  suggest?: TypeaheadLoader;
   /** Stories supply reader actions; pages derive them from the session. */
   readerActions?: ReaderActions;
   locale: UiLocale;
@@ -41,12 +47,24 @@ function languageName(tag: string, locale: UiLocale): string {
   try { return new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag; } catch { return tag; }
 }
 
+/**
+ * Filters that can change the results: languages and kinds Main counted in
+ * this search, and whatever the URL already selects so it can be removed.
+ * A zero count would only narrow to nothing, so it is not offered.
+ */
+export function offeredFilters(state: SearchState, facets: SearchResultPage['facets'] | undefined) {
+  const counted = (facets?.languages.values ?? []).filter(item => item.count > 0).map(item => item.value);
+  const languages = [...new Set([...counted, ...(state.language ? [state.language] : [])])];
+  const types = workTypes.filter(type => state.includeTypes?.includes(type.key) || state.excludeTypes?.includes(type.key)
+    || (facets?.types.values.find(item => item.value === type.iri)?.count ?? 0) > 0);
+  return { languages, types };
+}
+
 /** The complete relation supplies Work-grain counts for its current filter basis. */
 function Filters({ state, facets, idPrefix, locale, t }: { state: SearchState;
   facets?: SearchResultPage['facets']; idPrefix: string; locale: UiLocale; t: Text }) {
-  const offered = [...new Set([...searchLanguages, ...(facets?.languages.values.map(item => item.value) ?? [])])];
-  const languages = [null, ...offered, ...(state.language && !offered.includes(state.language)
-    ? [state.language] : [])];
+  const offered = offeredFilters(state, facets);
+  const languages = [null, ...offered.languages];
   return <div className="grid gap-5">
     <nav aria-labelledby={`${idPrefix}-language`} className="grid gap-1">
       <h2 id={`${idPrefix}-language`} className="mb-1 font-semibold text-sm">{t.language}</h2>
@@ -69,10 +87,10 @@ function Filters({ state, facets, idPrefix, locale, t }: { state: SearchState;
       </ul>
       <p className="mt-1 px-2 text-muted-foreground text-xs">{t.languageHelp}</p>
     </nav>
-    <section aria-labelledby={`${idPrefix}-type`} className="grid gap-2">
+    {offered.types.length ? <section aria-labelledby={`${idPrefix}-type`} className="grid gap-2">
       <h2 id={`${idPrefix}-type`} className="font-semibold text-sm">{t.workType}</h2>
       <ul className="grid gap-2">
-        {workTypes.map(type => {
+        {offered.types.map(type => {
           const included = state.includeTypes?.includes(type.key) ?? false;
           const excluded = state.excludeTypes?.includes(type.key) ?? false;
           const label = t[`${type.key}Type`];
@@ -102,18 +120,17 @@ function Filters({ state, facets, idPrefix, locale, t }: { state: SearchState;
         })}
       </ul>
       <p className="px-2 text-muted-foreground text-xs">{t.typeHelp}</p>
-    </section>
-    <section aria-labelledby={`${idPrefix}-term`} className="grid gap-2">
+    </section> : null}
+    {state.term ? <section aria-labelledby={`${idPrefix}-term`} className="grid gap-2">
       <h2 id={`${idPrefix}-term`} className="font-semibold text-sm">{t.classification}</h2>
-      {state.term ? <p className="inline-flex h-8 w-fit items-center gap-1 rounded-full bg-secondary ps-3.5 pe-1
-        text-sm">
+      <p className="inline-flex h-8 w-fit items-center gap-1 rounded-full bg-secondary ps-3.5 pe-1 text-sm">
         {t.classificationActive}{facets?.terms.values[0]
           ? <span className="tabular-nums">{t.atLeast({ count: String(facets.terms.values[0].count) })}</span> : null}
         <Link href={searchHref({ ...state, term: null })} aria-label={t.removeFilter({ filter: t.classificationActive })}
           className="grid size-6 place-items-center rounded-full outline-none hover:bg-background/70
             focus-visible:ring-2 focus-visible:ring-ring"><XIcon aria-hidden="true" className="size-3.5" /></Link>
-      </p> : <p className="px-2 text-muted-foreground text-xs">{t.classificationHelp}</p>}
-    </section>
+      </p>
+    </section> : null}
   </div>;
 }
 
@@ -121,19 +138,22 @@ function Filters({ state, facets, idPrefix, locale, t }: { state: SearchState;
  * `/search`: the phrase, its scope and include filters are URL state; the
  * server renders page one and the browser continues with "Show more".
  */
-export function SearchPage({ parsed, realm, initial, signedIn, actingSubject, avatarQuery, load, readerActions, locale,
-  messages }: SearchPageProps) {
+export function SearchPage({ parsed, realm, initial, fallback, signedIn, actingSubject, avatarQuery, load, suggest,
+  readerActions, locale, messages }: SearchPageProps) {
   const t = materializeData(messages, { locale });
   const state: SearchState = parsed.ok ? parsed.state
     : { phrase: parsed.phrase, scope: { kind: 'global' }, language: null, term: null };
   const scopeLabel = state.scope.kind === 'realm' && realm ? realm.label : t.global;
   const searching = parsed.ok && phraseStatus(state.phrase) === 'ok';
+  // Filters appear once a search has results to narrow, or to remove ones the URL already applies.
+  const filtered = Boolean(state.language || state.term || state.includeTypes?.length || state.excludeTypes?.length);
+  const filters = searching && initial?.ok && (initial.page.total > 0 || filtered);
   // Result cards read the reader's shelf state in the browser, one batch per page of results.
   return <ReaderActionsProvider signedIn={signedIn} signInHref={signInPath(localizedPath(searchHref(state), locale))}
     actingSubject={actingSubject} actions={readerActions}><PageContainer className="grid gap-6">
     <header className="grid gap-4">
       <h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">{t.title}</h1>
-      <SearchForm state={state} realm={realm} locale={locale} messages={messages} />
+      <SearchForm state={state} realm={realm} load={suggest} locale={locale} messages={messages} />
       {searching ? <p className="text-pretty break-words text-lg">{state.scope.kind === 'realm'
         ? t.resultsForIn({ phrase: state.phrase, scope: scopeLabel }) : t.resultsFor({ phrase: state.phrase })}</p> : null}
     </header>
@@ -146,8 +166,8 @@ export function SearchPage({ parsed, realm, initial, signedIn, actingSubject, av
       : <Notice icon={LinkIcon} headingLevel={2} title={t.badLinkTitle} description={t.badLinkHelp}>
         <Link href={searchHref(state)} className={buttonVariants({ size: 'sm' })}>{t.seeGlobal}</Link>
       </Notice>
-      : <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
-        <aside aria-label={t.filters}>
+      : <div className={cn('grid gap-6', filters && 'lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start')}>
+        {filters ? <aside aria-label={t.filters}>
           <div className="hidden lg:sticky lg:top-6 lg:block">
             <Filters state={state} facets={initial?.ok ? initial.page.facets : undefined}
               idPrefix="filters-wide" locale={locale} t={t} />
@@ -165,9 +185,10 @@ export function SearchPage({ parsed, realm, initial, signedIn, actingSubject, av
                 idPrefix="filters-narrow" locale={locale} t={t} />
             </div>
           </details>
-        </aside>
+        </aside> : null}
         <SearchResults state={state} initial={initial} scopeLabel={scopeLabel} signedIn={signedIn}
-          actingSubject={actingSubject} avatarQuery={avatarQuery} load={load} locale={locale} messages={messages} />
+          actingSubject={actingSubject} avatarQuery={avatarQuery} load={load} fallback={fallback} locale={locale}
+          messages={messages} />
       </div>}
   </PageContainer></ReaderActionsProvider>;
 }

@@ -1,10 +1,10 @@
 'use client';
 
-import { Input } from '@rezics/ui/input';
 import { Kbd } from '@rezics/ui/kbd';
 import { SearchIcon } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useRef } from 'react';
+import { TypeaheadInput } from '../search/typeahead.tsx';
 import { useShell } from './shell-provider.tsx';
 import { localizedPath } from '../../i18n/locale.ts';
 
@@ -13,7 +13,7 @@ function isEditable(target: EventTarget | null): boolean {
     && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
-/** The global search. `/` (outside text fields) or Cmd/Ctrl-K focuses it. */
+/** The global search with title suggestions. `/` (outside text fields) or Cmd/Ctrl-K focuses it. */
 export function SearchField() {
   const { t, locale } = useShell();
   const input = useRef<HTMLInputElement>(null);
@@ -37,7 +37,7 @@ export function SearchField() {
   }, []);
 
   return <form role="search" aria-label={t.searchRegion} action={localizedPath('/search', locale)} method="get" className="relative w-full">
-    <Input ref={input} key={current} defaultValue={current} name="q" type="search" size="lg"
+    <TypeaheadInput ref={input} key={current} locale={locale} defaultValue={current} name="q" type="search" size="lg"
       aria-label={t.searchLabel} placeholder={t.searchPlaceholder} minLength={2} maxLength={80}
       autoComplete="off" enterKeyHint="search"
       className="rounded-full ps-11 md:pe-12 [&::-webkit-search-cancel-button]:hidden" />
