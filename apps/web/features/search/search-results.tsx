@@ -147,7 +147,8 @@ function DidYouMean({ suggestions, state, t }: { suggestions: readonly Suggestio
       {suggestion.kind === 'work'
         ? <Link href={workHref(suggestion.item.work, state.scope)} lang={suggestion.item.title.language}
           className={cn(link, 'font-work-title')}>{suggestion.item.title.value}</Link>
-        : <Link href={searchHref({ ...state, phrase: suggestion.name, language: null, term: null })}
+        : <Link href={searchHref({ ...state, phrase: suggestion.name, language: null, term: null,
+          concepts: undefined })}
           lang={suggestion.language ?? undefined} className={link}>{suggestion.name}</Link>}
     </span>)}
     {t.didYouMeanEnd}</span>;
@@ -159,7 +160,8 @@ function Widen({ state, t }: { state: SearchState; t: Text }) {
     ...(state.scope.kind === 'realm'
       ? [{ label: t.seeGlobal, href: searchHref({ ...state, scope: { kind: 'global' } }) }] : []),
     ...(state.language ? [{ label: t.anyLanguageAction, href: searchHref({ ...state, language: null }) }] : []),
-    ...(state.term ? [{ label: t.removeClassification, href: searchHref({ ...state, term: null }) }] : []),
+    ...(state.term || state.concepts?.include.length || state.concepts?.exclude.length
+      ? [{ label: t.removeClassification, href: searchHref({ ...state, term: null, concepts: undefined }) }] : []),
   ];
   return links.map(link => <Link key={link.href} href={link.href}
     className={buttonVariants({ size: 'sm', variant: 'outline' })}>{link.label}</Link>);
