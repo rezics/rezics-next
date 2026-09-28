@@ -128,6 +128,7 @@ export const iri = {
   "<https://rezics.com/definition/work-derivation-v1>": "https://rezics.com/definition/work-derivation-v1",
   "<https://rezics.com/definition/work-editorial-field-v1>": "https://rezics.com/definition/work-editorial-field-v1",
   "<https://rezics.com/definition/work-metadata-details-v1>": "https://rezics.com/definition/work-metadata-details-v1",
+  "<https://rezics.com/definition/work-metadata-v1>": "https://rezics.com/definition/work-metadata-v1",
   "<https://rezics.com/definition/work-native-child-v1>": "https://rezics.com/definition/work-native-child-v1",
   "<https://rezics.com/definition/work-synopsis-v1>": "https://rezics.com/definition/work-synopsis-v1",
   "<https://rezics.com/definition/work-title-control-v1>": "https://rezics.com/definition/work-title-control-v1",

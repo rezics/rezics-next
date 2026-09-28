@@ -1174,6 +1174,18 @@ export const profileRegistry = {
       "control"
     ]
   },
+  "work-type-v1": {
+    "sha256": "e8ad5bd6e3e4bb4754e530c53f4caa5b60ec6e064e0d7b4a66bcdd23c7d7c6a4",
+    "file": "shapes/work-type-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-type-v1/work-shape",
+      "https://rezics.com/definition/work-type-v1/work-revision-shape"
+    ],
+    "focusRoles": [
+      "work",
+      "work-revision"
+    ]
+  },
   "zone-capability-v1": {
     "sha256": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "file": "shapes/zone-capability-v1.ttl",

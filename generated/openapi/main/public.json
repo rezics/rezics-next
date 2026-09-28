@@ -346207,11 +346207,19 @@
                           "const": "undetermined",
                           "type": "string"
                         },
+                        "semanticTypeBasis": {
+                          "const": "source-record-type",
+                          "type": "string"
+                        },
                         "semanticTypes": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "maxItems": 0,
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
+                            {
+                              "const": "https://schema.org/Book",
+                              "type": "string"
+                            }
+                          ],
                           "type": "array"
                         },
                         "sourceDigest": {
@@ -346256,6 +346264,7 @@
                         "sourceDigest",
                         "candidateTitle",
                         "semanticTypes",
+                        "semanticTypeBasis",
                         "sourceOnlyFields",
                         "rightsEvidence",
                         "rightsStatus",
@@ -346360,11 +346369,19 @@
                           "const": "undetermined",
                           "type": "string"
                         },
+                        "semanticTypeBasis": {
+                          "const": "source-record-type",
+                          "type": "string"
+                        },
                         "semanticTypes": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "maxItems": 0,
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
+                            {
+                              "const": "https://schema.org/Book",
+                              "type": "string"
+                            }
+                          ],
                           "type": "array"
                         },
                         "sourceDigest": {
@@ -346409,6 +346426,7 @@
                         "sourceDigest",
                         "candidateTitle",
                         "semanticTypes",
+                        "semanticTypeBasis",
                         "sourceOnlyFields",
                         "rightsEvidence",
                         "rightsStatus",
@@ -360664,11 +360682,19 @@
                       "const": "undetermined",
                       "type": "string"
                     },
+                    "semanticTypeBasis": {
+                      "const": "source-record-type",
+                      "type": "string"
+                    },
                     "semanticTypes": {
-                      "items": {
-                        "type": "string"
-                      },
-                      "maxItems": 0,
+                      "items": false,
+                      "minItems": 1,
+                      "prefixItems": [
+                        {
+                          "const": "https://schema.org/Book",
+                          "type": "string"
+                        }
+                      ],
                       "type": "array"
                     },
                     "sourceDigest": {
@@ -360713,6 +360739,7 @@
                     "sourceDigest",
                     "candidateTitle",
                     "semanticTypes",
+                    "semanticTypeBasis",
                     "sourceOnlyFields",
                     "rightsEvidence",
                     "rightsStatus",
@@ -361028,15 +361055,34 @@
                 "schema": {
                   "properties": {
                     "adoptedFields": {
-                      "items": false,
-                      "minItems": 1,
-                      "prefixItems": [
+                      "anyOf": [
                         {
-                          "const": "title",
-                          "type": "string"
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
+                            {
+                              "const": "title",
+                              "type": "string"
+                            }
+                          ],
+                          "type": "array"
+                        },
+                        {
+                          "items": false,
+                          "minItems": 2,
+                          "prefixItems": [
+                            {
+                              "const": "title",
+                              "type": "string"
+                            },
+                            {
+                              "const": "semanticTypes",
+                              "type": "string"
+                            }
+                          ],
+                          "type": "array"
                         }
-                      ],
-                      "type": "array"
+                      ]
                     },
                     "binding": {
                       "type": "string"
@@ -361063,6 +361109,36 @@
                     "rightsStatus": {
                       "const": "undetermined",
                       "type": "string"
+                    },
+                    "semanticTypeBasis": {
+                      "~elyTyp": 7,
+                      "const": "source-record-type",
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "semanticTypes": {
+                      "anyOf": [
+                        {
+                          "items": false,
+                          "minItems": 0,
+                          "prefixItems": [],
+                          "type": "array"
+                        },
+                        {
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
+                            {
+                              "const": "https://schema.org/Book",
+                              "type": "string"
+                            }
+                          ],
+                          "type": "array"
+                        }
+                      ]
                     },
                     "sourceConversion": {
                       "type": "string"
@@ -361135,6 +361211,8 @@
                     "sourceRecord",
                     "sourceConversion",
                     "adoptedFields",
+                    "semanticTypes",
+                    "semanticTypeBasis",
                     "title",
                     "titleLanguage",
                     "titleLanguageAtActivation",
@@ -361540,15 +361618,34 @@
                     "adoption": {
                       "properties": {
                         "adoptedFields": {
-                          "items": false,
-                          "minItems": 1,
-                          "prefixItems": [
+                          "anyOf": [
                             {
-                              "const": "title",
-                              "type": "string"
+                              "items": false,
+                              "minItems": 1,
+                              "prefixItems": [
+                                {
+                                  "const": "title",
+                                  "type": "string"
+                                }
+                              ],
+                              "type": "array"
+                            },
+                            {
+                              "items": false,
+                              "minItems": 2,
+                              "prefixItems": [
+                                {
+                                  "const": "title",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "semanticTypes",
+                                  "type": "string"
+                                }
+                              ],
+                              "type": "array"
                             }
-                          ],
-                          "type": "array"
+                          ]
                         },
                         "binding": {
                           "type": "string"
@@ -361575,6 +361672,36 @@
                         "rightsStatus": {
                           "const": "undetermined",
                           "type": "string"
+                        },
+                        "semanticTypeBasis": {
+                          "~elyTyp": 7,
+                          "const": "source-record-type",
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "semanticTypes": {
+                          "anyOf": [
+                            {
+                              "items": false,
+                              "minItems": 0,
+                              "prefixItems": [],
+                              "type": "array"
+                            },
+                            {
+                              "items": false,
+                              "minItems": 1,
+                              "prefixItems": [
+                                {
+                                  "const": "https://schema.org/Book",
+                                  "type": "string"
+                                }
+                              ],
+                              "type": "array"
+                            }
+                          ]
                         },
                         "sourceConversion": {
                           "type": "string"
@@ -361647,6 +361774,8 @@
                         "sourceRecord",
                         "sourceConversion",
                         "adoptedFields",
+                        "semanticTypes",
+                        "semanticTypeBasis",
                         "title",
                         "titleLanguage",
                         "titleLanguageAtActivation",
@@ -361685,15 +361814,34 @@
                     "adoption": {
                       "properties": {
                         "adoptedFields": {
-                          "items": false,
-                          "minItems": 1,
-                          "prefixItems": [
+                          "anyOf": [
                             {
-                              "const": "title",
-                              "type": "string"
+                              "items": false,
+                              "minItems": 1,
+                              "prefixItems": [
+                                {
+                                  "const": "title",
+                                  "type": "string"
+                                }
+                              ],
+                              "type": "array"
+                            },
+                            {
+                              "items": false,
+                              "minItems": 2,
+                              "prefixItems": [
+                                {
+                                  "const": "title",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "semanticTypes",
+                                  "type": "string"
+                                }
+                              ],
+                              "type": "array"
                             }
-                          ],
-                          "type": "array"
+                          ]
                         },
                         "binding": {
                           "type": "string"
@@ -361720,6 +361868,36 @@
                         "rightsStatus": {
                           "const": "undetermined",
                           "type": "string"
+                        },
+                        "semanticTypeBasis": {
+                          "~elyTyp": 7,
+                          "const": "source-record-type",
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "semanticTypes": {
+                          "anyOf": [
+                            {
+                              "items": false,
+                              "minItems": 0,
+                              "prefixItems": [],
+                              "type": "array"
+                            },
+                            {
+                              "items": false,
+                              "minItems": 1,
+                              "prefixItems": [
+                                {
+                                  "const": "https://schema.org/Book",
+                                  "type": "string"
+                                }
+                              ],
+                              "type": "array"
+                            }
+                          ]
                         },
                         "sourceConversion": {
                           "type": "string"
@@ -361792,6 +361970,8 @@
                         "sourceRecord",
                         "sourceConversion",
                         "adoptedFields",
+                        "semanticTypes",
+                        "semanticTypeBasis",
                         "title",
                         "titleLanguage",
                         "titleLanguageAtActivation",
@@ -418530,6 +418710,535 @@
               }
             },
             "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/works/{id}/type": {
+      "put": {
+        "operationId": "putV1WorksByIdType",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "work-type-v1",
+                    "type": "string"
+                  },
+                  "types": {
+                    "items": {
+                      "enum": [
+                        "https://schema.org/Book",
+                        "https://schema.org/DigitalDocument",
+                        "https://schema.org/Recipe",
+                        "https://schema.org/SoftwareApplication",
+                        "https://schema.org/SoftwareSourceCode",
+                        "https://rezics.com/vocab/ModPackage",
+                        "https://rezics.com/vocab/SkillPackage",
+                        "https://rezics.com/vocab/PromptTemplate"
+                      ],
+                      "type": "string"
+                    },
+                    "maxItems": 3,
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "profile",
+                  "expectedHead",
+                  "types",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "work-type-v1",
+                    "type": "string"
+                  },
+                  "types": {
+                    "items": {
+                      "enum": [
+                        "https://schema.org/Book",
+                        "https://schema.org/DigitalDocument",
+                        "https://schema.org/Recipe",
+                        "https://schema.org/SoftwareApplication",
+                        "https://schema.org/SoftwareSourceCode",
+                        "https://rezics.com/vocab/ModPackage",
+                        "https://rezics.com/vocab/SkillPackage",
+                        "https://rezics.com/vocab/PromptTemplate"
+                      ],
+                      "type": "string"
+                    },
+                    "maxItems": 3,
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "profile",
+                  "expectedHead",
+                  "types",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "work-type-v1",
+                    "type": "string"
+                  },
+                  "types": {
+                    "items": {
+                      "enum": [
+                        "https://schema.org/Book",
+                        "https://schema.org/DigitalDocument",
+                        "https://schema.org/Recipe",
+                        "https://schema.org/SoftwareApplication",
+                        "https://schema.org/SoftwareSourceCode",
+                        "https://rezics.com/vocab/ModPackage",
+                        "https://rezics.com/vocab/SkillPackage",
+                        "https://rezics.com/vocab/PromptTemplate"
+                      ],
+                      "type": "string"
+                    },
+                    "maxItems": 3,
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "profile",
+                  "expectedHead",
+                  "types",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "predecessor": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "work-type-v1",
+                      "type": "string"
+                    },
+                    "receipt": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "types": {
+                      "items": {
+                        "enum": [
+                          "https://schema.org/Book",
+                          "https://schema.org/DigitalDocument",
+                          "https://schema.org/Recipe",
+                          "https://schema.org/SoftwareApplication",
+                          "https://schema.org/SoftwareSourceCode",
+                          "https://rezics.com/vocab/ModPackage",
+                          "https://rezics.com/vocab/SkillPackage",
+                          "https://rezics.com/vocab/PromptTemplate"
+                        ],
+                        "type": "string"
+                      },
+                      "maxItems": 3,
+                      "type": "array"
+                    },
+                    "work": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "work",
+                    "revision",
+                    "predecessor",
+                    "types",
+                    "receipt",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "null"
+                    },
+                    "retry": {
+                      "properties": {
+                        "afterMs": {
+                          "type": "number"
+                        },
+                        "allowed": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "allowed",
+                        "afterMs"
+                      ],
+                      "type": "object"
+                    },
+                    "status": {
+                      "const": "reconciling",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "operationId",
+                    "status",
+                    "phase",
+                    "result",
+                    "retry"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
           },
           "409": {
             "content": {

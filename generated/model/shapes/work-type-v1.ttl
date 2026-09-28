@@ -1,0 +1,25 @@
+# A Work type selects an admitted shape or operation, not genre, form or topic.
+# A Book with a composition remains a Book; the owning command guards that dependency.
+# Work revision payloads keep their work-metadata-v1 model identity.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix schema: <https://schema.org/> .
+@prefix rv: <https://rezics.com/vocab/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://rezics.com/definition/work-type-v1/work-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 1 ; sh:maxCount 4 ; sh:in ( schema:CreativeWork schema:Book schema:DigitalDocument schema:Recipe schema:SoftwareApplication schema:SoftwareSourceCode rv:ModPackage rv:SkillPackage rv:PromptTemplate ) ; sh:hasValue schema:CreativeWork ] ;
+    sh:property [ sh:path rv:mainVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class rv:MainVersion ] .
+
+<https://rezics.com/definition/work-type-v1/work-revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/work-metadata-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/work-metadata-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .
