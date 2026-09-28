@@ -1,18 +1,25 @@
 # Disposable QA state. Recovery drills use the base compose.yaml with an isolated project.
 services:
   postgres:
+    healthcheck:
+      start_period: 15s
+      start_interval: 500ms
     tmpfs:
       - /var/lib/postgresql:mode=0777
     volumes: !override
       - ./postgres/00-owners.sh:/docker-entrypoint-initdb.d/00-owners.sh:ro,Z
 
   fuseki:
+    healthcheck:
+      start_interval: 500ms
     command: ["/opt/apache-jena-fuseki-6.2.0/fuseki-server", "--port=3030", "--no-cors", "--timeout=10000", "--config=/fuseki/fuseki-text-qa.ttl"]
     volumes: !reset []
     tmpfs:
       - /fuseki/databases:mode=0777
 
   rustfs:
+    healthcheck:
+      start_interval: 500ms
     volumes: !reset []
     tmpfs:
       - /data:mode=0777

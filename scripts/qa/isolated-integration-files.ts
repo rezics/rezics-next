@@ -62,4 +62,38 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/discovery-refresh.test.ts',
   // Incremental discovery pins the exact initial Work population before appending writers.
   'tests/qa/integration/discovery-incremental.test.ts',
+  // These readers bind whole-dataset populations or require matching graph/SQL owner histories.
+  'tests/qa/integration/also-enjoyed.test.ts',
+  'tests/qa/integration/authenticated-api-journey.test.ts',
+  'tests/qa/integration/content-public-domain.test.ts',
+  'tests/qa/integration/home-list-cards.test.ts',
+  'tests/qa/integration/organization-publication-moderation.test.ts',
+  'tests/qa/integration/public-search-cjk.test.ts',
+  'tests/qa/integration/public-selection-oracle.test.ts',
+  'tests/qa/integration/ranking-progress.test.ts',
+  'tests/qa/integration/review-api.test.ts',
+  'tests/qa/integration/search-chapter-book.test.ts',
+  'tests/qa/integration/search-source-title.test.ts',
+  'tests/qa/integration/wiki-realm-selection.test.ts',
+  'tests/qa/integration/work-serial-projection.test.ts',
+  // Previously qualified only on automatic retry; declare their fresh owner requirement up front.
+  'tests/qa/integration/structure-relay.test.ts',
+  'tests/qa/integration/main-selection-languages.test.ts',
+  'tests/qa/integration/search-studio-chapter-content.test.ts',
+  // The scale probe uses this bootstrapped project instead of provisioning a nested stack.
+  'tests/qa/integration/growth-search-refresh.test.ts',
+  // Global standing-rating cards must share their graph and Access population.
+  'tests/qa/integration/search-card-fields.test.ts',
+  // Confirmed fresh-project passes after shared graph/SQL history failures (G-408).
+  'tests/qa/integration/search-card-rich.test.ts',
+  'tests/qa/integration/search-title-body-native.test.ts',
+  'tests/qa/integration/content-eligibility-order.test.ts',
+  'tests/qa/integration/feed-reviews.test.ts',
+  // G-401's assertions stay unchanged; the budget's population belongs to this file.
+  'tests/qa/integration/feed-read-budget.test.ts',
 ] as const;
+
+/** Delta proofs require the product assembler, whose raw update endpoint is closed. */
+export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
+  'tests/qa/integration/growth-search-refresh.test.ts',
+]);

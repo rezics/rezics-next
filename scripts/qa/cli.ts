@@ -16,6 +16,7 @@ import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
 import { readEnv } from '../dev/config.ts';
 import { browserBudgets, browserFileCounts } from './browser-budget.ts';
 import { cleanupQaStacks, QA_STACK_REGISTRY } from './stack-ownership.ts';
+import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const options = parseArgs(process.argv.slice(2));
@@ -72,17 +73,21 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
   budget: number, isolated = false,
   startStack?: <T>(work: () => Promise<T>) => Promise<T>): Promise<ShardRun> {
   const needsStack = tier !== 'fault/recovery' || !files.every(file => selfManagedFaultFiles.has(file));
+  const persistent = tier === 'integration' && files.some(file => commandOnlyIntegrationFiles.has(file));
+  const stackArgs = ['--profile', 'qa', '--run-id', projectRunId, ...(persistent ? ['--persistent'] : [])];
+  const started = persistent ? startedFixtureProjects : startedProjects;
   const label = `${tierArtifactName(tier)}-${projectRunId.slice(runId.length + 1)}`;
   const record: ShardRecord = { project: projectRunId, files, status: 'failed', stage: 'stack',
     ...(isolated ? { isolation: true } : {}) };
   const finish = async (run: Omit<ShardRun, 'record'>): Promise<ShardRun> => {
     if (!run.ok && needsStack) {
-      const stackLogs = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
+      const stackLogs = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', ...stackArgs], 20_000);
       writeFileSync(join(logs, `${label}-stack.log`), stackLogs.output);
     }
     if (!options.keep && needsStack) {
-      const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
-      if (down.ok) startedProjects.splice(startedProjects.indexOf(projectRunId), 1);
+      const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs], 120_000);
+      record.cleanupMs = down.elapsedMs;
+      if (down.ok) started.splice(started.indexOf(projectRunId), 1);
     }
     record.status = run.ok ? 'passed' : 'failed';
     return { record, ...run };
@@ -90,10 +95,11 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
   let apps: Record<string, string> = {};
   let compose: Record<string, string> = {};
   if (needsStack) {
-    startedProjects.push(projectRunId);
+    started.push(projectRunId);
     const upCommand = () => commandAsync(root, 'bun',
-      ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
+      ['scripts/dev/cli.ts', 'stack:up', ...stackArgs], 180_000);
     const up = await (startStack ? startStack(upCommand) : upCommand());
+    record.startupMs = up.elapsedMs;
     if (!up.ok) {
       writeFileSync(join(logs, `${label}-startup.log`), up.output);
       errors.push(`${tier} stack startup failed: ${projectRunId} (see logs/${label}-startup.log)`);
@@ -109,6 +115,7 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
     writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
     record.stage = 'bootstrap';
     const bootstrap = await commandAsync(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
+    record.bootstrapMs = bootstrap.elapsedMs;
     if (!bootstrap.ok) {
       errors.push(`${tier} shared bootstrap failed: ${projectRunId} (see logs/${label}-bootstrap.log)`);
       writeFileSync(join(logs, `${label}-bootstrap.log`), bootstrap.output);
@@ -183,9 +190,9 @@ async function runStackTier(tier: StackTier): Promise<void> {
     const runs = new Array<ShardRun>(projects.length);
     let project = 0;
     // QA projects have separate ports and stack:up retries an allocation race.
-    // Bound Docker setup pressure while letting short isolated projects start
-    // alongside the shared shards.
-    const startInitialStack = concurrencyGate(Math.min(slots.count, 3));
+    // Integration already holds one global slot per live project. Let those
+    // slots start together; a second three-start gate serializes their turnover.
+    const startInitialStack = concurrencyGate(tier === 'integration' ? slots.count : Math.min(slots.count, 3));
     await Promise.all(Array.from({ length: Math.min(slots.count, projects.length) }, async () => {
       while (project < projects.length) {
         const index = project++;

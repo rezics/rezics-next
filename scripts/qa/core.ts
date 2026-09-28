@@ -197,7 +197,8 @@ export function writeSummary(directory: string, report: {
 // Stack tiers run their files in parallel QA projects ("shards"). Each shard
 // owns one disposable project; results merge into the tier's single JUnit file.
 export interface ShardRecord { project: string; files: string[]; status: 'passed' | 'failed';
-  stage: 'stack' | 'bootstrap' | 'test'; elapsedMs?: number; isolation?: boolean }
+  stage: 'stack' | 'bootstrap' | 'test'; elapsedMs?: number; isolation?: boolean;
+  startupMs?: number; bootstrapMs?: number; cleanupMs?: number }
 export interface IsolationRecord { tier: Tier; file: string; afterProject: string; afterFiles: number;
   project?: string; shardFailures: string[];
   status: 'order-dependent' | 'infrastructure-dependent' | 'failed-alone' | 'not-run' }
@@ -496,7 +497,12 @@ export function planStackProjects(estimates: ReadonlyMap<string, number>, count:
     // their full stack until a long drill ends would extend the tier wall time.
     return [...harnessPlans, ...selfPlans, ...isolated.map(file => [file])];
   }
-  const sharedSlots = Math.max(1, count - Number(isolated.length > 0 && shared.size > 0));
+  // Reserve up to half the workers for fresh projects from the start. Otherwise
+  // short files queue behind long shared shards and stack turnover becomes the tail.
+  const sharedSlots = Math.max(1, count - Math.min(Math.floor(count / 2), isolated.length));
+  // Long isolated files must not become the tail after the shared shards finish.
+  // Keep deterministic lexical ordering for equal observations.
+  isolated.sort((a, b) => estimates.get(b)! - estimates.get(a)! || a.localeCompare(b));
   return [...(shared.size ? planShards(shared, sharedSlots) : []), ...isolated.map(file => [file])];
 }
 

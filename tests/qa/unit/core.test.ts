@@ -269,6 +269,27 @@ test('QA shards: graph reset, outbox gap and fresh-graph files get singleton int
     .toEqual([['tests/qa/integration/validation-command.test.ts']]);
 });
 
+test('QA shards: long isolated integration files start before the short tail', () => {
+  const short = 'tests/qa/integration/also-enjoyed.test.ts';
+  const long = 'tests/qa/integration/public-search-scale.test.ts';
+  const estimates = new Map([[short, 1_000], [long, 90_000], ['shared.test.ts', 100_000]]);
+  const plan = planStackProjects(estimates, 2, 'integration');
+  expect(plan).toEqual([['shared.test.ts'], [long], [short]]);
+  expect(planStackProjects(new Map([...estimates].reverse()), 2, 'integration')).toEqual(plan);
+});
+
+test('QA shards: fresh integration projects share the initial worker slots', () => {
+  const isolated = [...isolatedIntegrationFiles].slice(0, 6);
+  const files = new Map([
+    ...Array.from({ length: 9 }, (_, index) => [`shared-${index}.test.ts`, 30_000] as const),
+    ...isolated.map(file => [file, 10_000] as const),
+  ]);
+  const plan = planStackProjects(files, 6, 'integration');
+  expect(plan.slice(0, 6).filter(project => project.some(file => isolatedIntegrationFiles.has(file))))
+    .toHaveLength(3);
+  expect(plan.flat().sort()).toEqual([...files.keys()].sort());
+});
+
 test('QA shards: stack startup gate releases a permit before the next setup', async () => {
   expect(() => concurrencyGate(0)).toThrow('concurrency limit');
   const start = concurrencyGate(2);
