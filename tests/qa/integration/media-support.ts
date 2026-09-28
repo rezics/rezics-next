@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
+import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, type SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -64,7 +65,7 @@ export type MediaStack = Awaited<ReturnType<typeof startMediaStack>>;
 
 /** Real Access, Content PostgreSQL, Jena and RustFS behind one Main app; Account is a
  * bearer-to-principal table so several isolated members can act concurrently. */
-export async function startMediaStack(label: string) {
+export async function startMediaStack(label: string, options: { contentProjection?: boolean } = {}) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCOUNT_RELAY_DATABASE_URL || !Bun.env.MAIN_S3_ENDPOINT) {
@@ -80,6 +81,8 @@ export async function startMediaStack(label: string) {
   const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   await migrateContent(contentPool);
   const content = new ContentCore(contentPool);
+  const contentCursor = new ContentProjectionCursor(contentPool);
+  const contentConsumer = `${label}-content-public-search-v1`;
   const store = new MediaStore(contentPool, content);
   const objects = (prefix: string) => new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
     bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
@@ -100,6 +103,8 @@ export async function startMediaStack(label: string) {
   const erasures = new ErasureService(relayPool, contentPool);
   const main = createMainApp(fuseki, { environment: env, access, grants, downloadLeases, accessPolicy,
     content, contentAuthoring: content, media, votes, erasures,
+    ...(options.contentProjection ? { contentProjection: { content, cursor: contentCursor,
+      consumer: contentConsumer } } : {}),
     mediaAccess, actingContexts, managedOrganizations, contextSelections,
     account: { verify: async request => {
       const token = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
@@ -210,6 +215,7 @@ export async function startMediaStack(label: string) {
     await Promise.all([accessPool.end(), contentPool.end(), relayPool.end()]);
     rmSync(directory, { recursive: true, force: true });
   };
-  return { env, fuseki, main, call, member, access, mediaAccess, accessPool, contentPool, content, store, objects,
+  return { env, fuseki, main, call, member, access, mediaAccess, accessPool, contentPool, content,
+    contentCursor, contentConsumer, store, objects,
     media, admission, privateWork, publicWork, contribution, stop };
 }

@@ -34,6 +34,7 @@ test('SEARCH20 rebuild verifies each Content MatchUnit with its exact model reci
     digest: bind(record.reference.byteDigest), decision: bind(record.decision),
     eligibility: bind(record.eligibility) }));
   const rdf = () => records.map(record => ({ unit: bind(record.unit), body: bind(record.text, 'en'),
+    resource: bind(record.reference.resourceId),
     variant: bind(record.reference.variantId), revision: bind(record.revision),
     decision: bind(record.decision), eligibility: bind(record.eligibility) }));
   const env = { lineage: { dataEpoch: epoch, routingEpoch: epoch }, fuseki: {

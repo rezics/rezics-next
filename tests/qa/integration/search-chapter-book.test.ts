@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { startMediaStack } from './media-support.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV }
+import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, PUBLIC_SEARCH_ANCHOR, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, PUBLIC_SEARCH_GRAPH, selectMainDefault }
   from '../../../services/main/src/modules/work/select-main.ts';
@@ -141,5 +141,11 @@ test('chapter Book and single-text Work survive Content rebuild verification alo
     const exact = (await stack.content.readExactBatch([source.revisionId],
       async ids => new Set(ids)))[0];
     expect(exact?.status).toBe('available');
-  } finally { await stack.stop(); }
+  } finally {
+    // This integration tier shares one QA graph across files. Restore its live
+    // anchor after verifying the quarantined state, using the raw fault alias.
+    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
+      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`);
+    await stack.stop();
+  }
 }, 240_000);

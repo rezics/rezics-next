@@ -313,14 +313,25 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
           rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?eligibilitySequence . }
       FILTER(?rightsBasis IN (rv:OriginalContribution, rv:PublicDomain))
     } LIMIT ${MAX_REBUILD_UNITS + 1}`),
-    env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?unit ?body ?variant ?revision
-      ?decision ?eligibility WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+    env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      SELECT ?unit ?body ?variant ?revision ?decision ?eligibility ?resource
+        ?resultWork ?resultMain ?chapterTitle ?book ?bookMain ?bookTitle WHERE {
+      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
       ?unit a rv:MatchUnit .
       OPTIONAL { ?unit rv:searchBody ?body . }
+      OPTIONAL { ?unit rv:resource ?resource . }
       OPTIONAL { ?unit rv:projection ?projection ; rv:variant ?variant ;
         rv:revision ?revision ; rv:publicationDecision ?decision ;
         rv:eligibility ?eligibility . }
-    } } LIMIT ${MAX_REBUILD_UNITS + 1}`),
+      OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
+        rv:searchChapterTitle ?chapterTitle . }
+    }
+    OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:resource ?resource . }
+      GRAPH ${iri(GRAPHS.current)} {
+      ?resource schema:isPartOf ?book ; rdfs:label ?bookTitle .
+      ?book a schema:Book ; rv:mainVersion ?bookMain . } }
+    } LIMIT ${MAX_REBUILD_UNITS + 1}`),
     env.fuseki.query(`PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
       SELECT ?unit ?literal ?graph WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
       (?unit ?score ?literal ?graph) text:query (rv:searchBody "body:*" ${MAX_REBUILD_UNITS + 1}) .
@@ -426,12 +437,18 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
       if (!unit || body?.status !== 'available'
         || body.reference.variantId !== variant
         || body.reference.resourceId !== value(head, 'resource')
+        || value(unit, 'resource') !== body.reference.resourceId
         || body.reference.byteDigest !== value(head, 'digest')
         || value(unit, 'revision') !== value(head, 'revision')
         || value(unit, 'decision') !== value(head, 'decision')
         || value(unit, 'eligibility') !== value(head, 'eligibility')
         || value(unit, 'body') !== projected?.text
-        || unit.body?.['xml:lang'] !== projected?.language) {
+        || unit.body?.['xml:lang'] !== projected?.language
+        || (value(unit, 'book') ? value(unit, 'resultWork') !== value(unit, 'book')
+          || value(unit, 'resultMain') !== value(unit, 'bookMain')
+          || value(unit, 'chapterTitle') !== value(unit, 'bookTitle')
+          || unit.chapterTitle?.['xml:lang'] !== unit.bookTitle?.['xml:lang']
+          : !!unit.resultWork || !!unit.resultMain || !!unit.chapterTitle)) {
         throw new ContentRebuildUnavailable('Content MatchUnit differs from exact approved source');
       }
     }

@@ -134,7 +134,8 @@ function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEv
     text: hash(text), language, recipe: PROFILE_ID }));
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0batch`)}`;
   const projectionEvent = `urn:rezics:event:${hash(`${receipt}\0projection`)}`;
-  return `PREFIX rv: <${RV}> DELETE {
+  return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> DELETE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
     GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?oldUnit ?oldPredicate ?oldValue }
   } INSERT {
@@ -155,7 +156,9 @@ function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEv
       rv:publicationDecision ${iri(decision)} ; rv:eligibility ${iri(eligibility)} ;
       rv:projection ${iri(anchor)} ;
       rv:language ${lit(language)} ; rv:field rv:Body ; rv:disclosure rv:Public ;
-      rv:searchBody ${lit(text)}@${language} . }
+      rv:searchBody ${lit(text)}@${language} .
+      ${iri(unit)} rv:searchResultWork ?parentWork ; rv:searchResultMain ?parentMain ;
+        rv:searchChapterTitle ?chapterTitle . }
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
       rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ;
       rv:ownerDataEpoch ${lit(event.position.dataEpoch)} ;
@@ -179,6 +182,9 @@ function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEv
     GRAPH ${iri(GRAPHS.current)} { ${iri(reference.variantId)} a rv:ContentVariant ;
       rv:resource ${iri(reference.resourceId)} ; rv:contentPublicationHead ${iri(decision)} ;
       rv:publicSearchEligibilityHead ${iri(eligibility)} . }
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(reference.resourceId)} schema:isPartOf ?parentWork ; rdfs:label ?chapterTitle .
+      ?parentWork a schema:Book ; rv:mainVersion ?parentMain . } }
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} a rv:ContentPublicationDecision ;
       rv:contentRevision ${iri(`${CONTENT_REVISION}${reference.revisionId}`)} ;
       rv:byteDigest ${lit(reference.byteDigest)} ;

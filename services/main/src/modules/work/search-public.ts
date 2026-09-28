@@ -17,6 +17,8 @@ import { exactDecisionSupports, readSearchDecisionSupports } from './search-supp
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 import { querySearchFields, rankedSearchMatches, type SearchFieldOwners } from '../search/fields.ts';
 import { publicWork } from './public-patterns.ts';
+import type { ContentCore } from '../../../../content/src/core.ts';
+import type { ContentProjectionCursor } from '../../../../content/src/projection-cursor.ts';
 
 export class InvalidPublicQuery extends Error {}
 export { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
@@ -29,6 +31,8 @@ export interface PublicMainPhraseQuery {
   author?: string;
   /** API discovery also matches current titles, taglines and credited names. */
   publicFields?: SearchFieldOwners;
+  /** A joined Content chapter must cover the current owner cut before a complete result is returned. */
+  contentProjection?: { content: ContentCore; cursor: ContentProjectionCursor; consumer: string };
 }
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -46,13 +50,20 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   }
   // Quotes force a literal phrase; backslashes and quotes cannot add Lucene operators.
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
+  const content = input.contentProjection;
+  const contentPosition = content ? await Promise.all([
+    content.content.ownerPosition(), content.cursor.read(content.consumer) ]) : null;
+  if (contentPosition && (contentPosition[0].dataEpoch !== contentPosition[1].dataEpoch
+    || contentPosition[0].sequence !== contentPosition[1].sequence)) {
+    throw new PublicQueryUnavailable('Content chapter projection is behind its source');
+  }
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
     SELECT ?candidateCount ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
-      ?revision ?selection ?language ?resultWork ?resultMain ?chapterTitle WHERE {
+      ?revision ?selection ?language ?resultWork ?resultMain ?chapterTitle ?contentProjection WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
           rv:textIndexGeneration ?indexGeneration .
@@ -68,7 +79,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
         } } LIMIT ${PHRASE_HIT_PROBE} }
       } }
       OPTIONAL {
-        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+        { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
           (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
           ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
             rv:work ?work ; rv:mainVersion ?main ; rv:contribution ?contribution ;
@@ -85,6 +96,40 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
         FILTER(BOUND(?resultWork) || NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
           ?work schema:isPartOf ?parentWork } })
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
+        }
+        ${content ? `UNION {
+          GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+            (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
+            ?unit a rv:MatchUnit ; rv:disclosure rv:Public ; rv:field rv:Body ;
+              rv:resource ?work ; rv:variant ?variant ; rv:revision ?contentRevision ;
+              rv:publicationDecision ?contentDecision ; rv:eligibility ?contentEligibility ;
+              rv:projection ?contentProjection ; rv:language ?language ;
+              rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
+              rv:searchChapterTitle ?chapterTitle .
+          }
+          GRAPH ${iri(GRAPHS.current)} {
+            ?variant a rv:ContentVariant ; rv:resource ?work ;
+              rv:contentPublicationHead ?contentDecision ;
+              rv:publicSearchEligibilityHead ?contentEligibility .
+            ?work schema:isPartOf ?resultWork ; rv:mainVersion ?chapterMain .
+            ?resultWork a schema:Book ; rv:mainVersion ?resultMain .
+          }
+          GRAPH ${iri(GRAPHS.revisions)} {
+            ?contentEligibility a rv:ContentSearchEligibilityDecision ;
+              rv:variant ?variant ; rv:publicationDecision ?contentDecision ;
+              rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public .
+            FILTER NOT EXISTS { ?contentRevision a rv:ErasedRevision }
+          }
+          ${publicWork('?resultWork', '?resultMain')}
+          GRAPH ${iri(GRAPHS.revisions)} { ?publicSelection rv:language ?language . }
+          ${input.author ? `GRAPH ${iri(GRAPHS.current)} {
+            ?publicContribution rv:author ${iri(input.author)} . }` : ''}
+          BIND(?resultMain AS ?main)
+          BIND(?publicContribution AS ?contribution)
+          BIND(?publicDraft AS ?revision)
+          BIND(?publicSelection AS ?selection)
+          ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
+        }` : ''}
       }
     }`, MAX_SEARCH_RESPONSE_BYTES);
   await assertSameTextInstance(env.fuseki, index);
@@ -122,8 +167,10 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
     const score = Number(row.score.value);
     if (!Number.isFinite(score)) throw new PublicQueryUnavailable('public query score is invalid');
     const head = `${row.main.value}\0${row.language.value.toLowerCase()}`;
-    if (sourceHeads.has(head)) throw new PublicQueryUnavailable('Main language search heads are ambiguous');
-    sourceHeads.add(head);
+    if (!row.contentProjection) {
+      if (sourceHeads.has(head)) throw new PublicQueryUnavailable('Main language search heads are ambiguous');
+      sourceHeads.add(head);
+    }
     return { matchUnit: row.unit.value, work: row.resultWork?.value ?? row.work.value,
       mainVersion: row.resultMain?.value ?? row.main.value,
       contribution: row.contribution.value, revision: row.revision.value,
@@ -137,6 +184,16 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
     { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, input.publicFields) : [];
   const results = rankedSearchMatches([...matches, ...fields]);
   if (results.length > 512) throw new PublicQueryBudgetExceeded('Combined search candidates exceed their bound');
+  if (contentPosition && content) {
+    const [sourceAfter, checkpointAfter] = await Promise.all([
+      content.content.ownerPosition(), content.cursor.read(content.consumer) ]);
+    if (sourceAfter.dataEpoch !== contentPosition[0].dataEpoch
+      || sourceAfter.sequence !== contentPosition[0].sequence
+      || checkpointAfter.dataEpoch !== contentPosition[1].dataEpoch
+      || checkpointAfter.sequence !== contentPosition[1].sequence) {
+      throw new SearchSnapshotMoved('Content chapter source moved during public search');
+    }
+  }
   return { contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: 'main-version-default' as const, complete: true as const, population: index.population,
     indexGeneration: index.generation,
