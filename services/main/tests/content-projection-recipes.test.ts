@@ -31,6 +31,7 @@ test('G-087: media-set publication is proven and acknowledged without text proje
   let acknowledgements = 0;
   const content = { ownerPosition: async () => position('3'), readOutbox: async () => [event],
     readProjectionPublication: async () => { reads++; return publication; },
+    readPublicationErasureSupersession: async () => null,
     readExactBatch: async () => { throw new Error('non-text body was read'); },
   } as unknown as ContentCore;
   const cursor = { read: async () => position('2'), acknowledge: async () => { acknowledgements++; } } as unknown as ContentProjectionCursor;
