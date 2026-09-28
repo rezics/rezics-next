@@ -697,7 +697,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
           { value: 'volume', label: t.divisionVolume }, { value: 'part', label: t.divisionPart },
           { value: 'extras', label: t.divisionExtras }]} /></div>
       <div className="flex gap-2">
-        <Button type="submit" isLoading={busy === 'group'}>{busy === 'group' ? t.creatingVolume : t.createVolume}</Button>
+        <Button type="submit" disabled={busy !== null} isLoading={busy === 'group'}>{busy === 'group' ? t.creatingVolume : t.createVolume}</Button>
         <Button type="button" variant="ghost" onClick={() => setCreating(false)}>{t.cancel}</Button>
       </div>
     </form> : null}

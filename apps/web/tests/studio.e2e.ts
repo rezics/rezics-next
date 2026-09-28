@@ -243,7 +243,8 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     await highlight('第一卷 雨夜');
     await page.keyboard.press('Enter');
     await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('1 chapter', { timeout: 30_000 });
-    // A pointer drags the grip beside the Move button.
+    // A pointer drags the grip beside the Move button, once the list has settled and its controls are enabled.
+    await expect(page.getByRole('button', { name: 'Move “第二章 未寄出的信”', exact: true })).toBeEnabled({ timeout: 30_000 });
     await chapters.getByRole('listitem').filter({ hasText: '第二章 未寄出的信' }).last().locator('[data-drag-handle]')
       .dragTo(chapters.getByRole('button', { name: /^第一卷 雨夜/ }));
     await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('2 chapters', { timeout: 30_000 });
