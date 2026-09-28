@@ -8,7 +8,7 @@ import feedZhHans from '../feed/messages/zh-Hans.ts';
 import { type FeedDefaults, type FeedState, feedQuery } from '../feed/state.ts';
 import type { FeedPage, Loaded } from '../feed/types.ts';
 import { continueItems, followedCommunities, officialZones, railData, suggestions } from './fixtures.ts';
-import { HomePage, type HomePageProps } from './home-page.tsx';
+import { HomePage, type HomePageProps, HomePosts } from './home-page.tsx';
 import { messages as home } from './messages.ts';
 import homeZhHans from './messages/zh-Hans.ts';
 import { Rail } from './rail.tsx';
@@ -29,23 +29,27 @@ const state = (change: Partial<FeedState> = {}): FeedState =>
 
 type Args = HomePageProps & { withRail?: boolean };
 
-function props(options: { signedIn?: boolean; state?: FeedState; page?: Loaded<FeedPage>; locale?: UiLocale }
-  & Partial<HomePageProps> = {}): Args {
-  const { signedIn = true, locale = 'en' } = options;
+/** A Home over the in-memory Main; `page` and `personalRefused` shape the posts, as the route's read does. */
+function props(options: { signedIn?: boolean; state?: FeedState; page?: Loaded<FeedPage>; locale?: UiLocale;
+  personalRefused?: boolean } & Partial<Args> = {}): Args {
+  const { signedIn = true, locale = 'en', page: shown, personalRefused, ...rest } = options;
   const view = options.state ?? state(signedIn ? {} : { tab: 'all' });
   const zh = locale === 'zh-Hans';
+  const messages = { home: zh ? { ...home, ...homeZhHans } : home, feed: zh ? { ...feed, ...feedZhHans } : feed };
+  const defaults: FeedDefaults = signedIn ? following : { tab: 'all', sort: 'best' };
   return {
-    locale, now: NOW, signedIn, actingSubject: signedIn ? reader : null, avatarQuery: '',
-    messages: { home: zh ? { ...home, ...homeZhHans } : home, feed: zh ? { ...feed, ...feedZhHans } : feed },
-    state: view, defaults: signedIn ? following : { tab: 'all', sort: 'best' },
-    query: feedQuery(view, { language: locale, ...(signedIn ? { actingSubject: reader } : {}) }),
-    page: options.page ?? { ok: true, data: page(signedIn ? [everyKind[0]!, suggestion, ...everyKind.slice(1, 4)]
-      : everyKind.slice(2, 6), { scope: view.tab }) },
+    locale, now: NOW, signedIn, actingSubject: signedIn ? reader : null, avatarQuery: '', messages,
+    state: view, defaults,
+    posts: <HomePosts locale={locale} messages={messages.feed} signedIn={signedIn} actingSubject={signedIn ? reader : null}
+      signInHref={signInHref} state={view} defaults={defaults} personalRefused={personalRefused}
+      query={feedQuery(view, { language: locale, ...(signedIn ? { actingSubject: reader } : {}) })}
+      page={shown ?? { ok: true, data: page(signedIn ? [everyKind[0]!, suggestion, ...everyKind.slice(1, 4)]
+        : everyKind.slice(2, 6), { scope: view.tab }) }}
+      readerActions={signedIn ? memoryReaderActions({}) : undefined} />,
     newPerson: false, followed: signedIn ? followedCommunities : null, continueItems: null, official: officialZones,
     interests: { kinds: [], languages: [locale] }, pickerSkipped: false, welcomeDismissed: false,
     signInHref, signUpHref: `${signInHref}&create=1`, api: memoryFeed({ suggestions }),
-    readerActions: signedIn ? memoryReaderActions({}) : undefined,
-    ...options,
+    ...rest,
   };
 }
 

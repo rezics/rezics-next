@@ -75,3 +75,10 @@ export function FeedProvider({ children, messages, api, followedRealms, realmSeg
   };
   return <FeedContext value={value}>{children}</FeedContext>;
 }
+
+/** Posts from another view than the page's, such as All shown when Main refused the personal feed. Joins stay
+ * shared with the rest of the page. */
+export function FeedView({ tab, children }: { tab: FeedTab; children: ReactNode }) {
+  const value = useFeed();
+  return <FeedContext value={value.tab === tab ? value : { ...value, tab }}>{children}</FeedContext>;
+}

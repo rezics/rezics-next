@@ -42,7 +42,8 @@ async function readFeedPage(query: FeedQuery): Promise<Loaded<FeedPage>> {
   return !first.ok && first.failure === 'moved' ? settle(() => client.v1.feed.get({ query })) : first;
 }
 
-interface HomeFeed {
+/** Who is reading and which view they asked for: quick reads the page frame and its controls need. */
+export interface HomeView {
   signedIn: boolean;
   /** The Agent the reader acts as; null signed out, or signed in before an Agent is chosen. */
   actingSubject: string | null;
@@ -50,17 +51,23 @@ interface HomeFeed {
   state: FeedState;
   defaults: FeedDefaults;
   query: FeedQuery;
-  page: Loaded<FeedPage>;
   /** Null signed out; true for a person who follows nothing yet. */
   newPerson: boolean | null;
   followed: { realms: Community[]; zones: Community[]; complete: boolean } | null;
+}
+
+/** The first page of posts: Main's slowest read on Home, so the route streams it in behind the frame. */
+export interface HomePosts {
+  /** The query that produced `page`: the public All feed when the personal one was refused. */
+  query: FeedQuery;
+  page: Loaded<FeedPage>;
   readerSeed: ReaderSeed | null;
   /** Main could not serve the personal read, so the page shows the public All feed instead and says so. */
   personalRefused: boolean;
 }
 
-export async function readHomeFeed(params: Record<string, string | string[] | undefined>,
-  locale: UiLocale): Promise<HomeFeed> {
+export async function readHomeView(params: Record<string, string | string[] | undefined>,
+  locale: UiLocale): Promise<HomeView> {
   const reader = await shellReader();
   const actingSubject = reader.actingSubject ?? null;
   const [realms, zones, any, saved] = await Promise.all([readFollowed('realm'), readFollowed('zone'), followsAnything(),
@@ -69,23 +76,27 @@ export async function readHomeFeed(params: Record<string, string | string[] | un
   // Without an Agent to act as, Main can only show the public feed.
   const state = parseFeedState(params, Boolean(actingSubject), defaults);
   const query = feedQuery(state, { language: locale, ...(actingSubject ? { actingSubject } : {}) });
-  let page = await readFeedPage(query);
-  let shown = query;
+  return { signedIn: reader.signedIn, actingSubject, avatarQuery: reader.avatarQuery, state, defaults, query,
+    newPerson: any === null ? null : !any,
+    followed: realms && zones ? { realms: realms.items, zones: zones.items, complete: realms.complete && zones.complete }
+      : null };
+}
+
+export async function readHomePosts(view: HomeView, locale: UiLocale): Promise<HomePosts> {
+  const reader = await shellReader();
+  let page = await readFeedPage(view.query);
+  let shown = view.query;
   // A personal view Main cannot serve still leaves the reader something to read: the public feed, with a note.
-  const personalRefused = Boolean(actingSubject) && !page.ok;
+  const personalRefused = Boolean(view.actingSubject) && !page.ok;
   if (personalRefused) {
-    shown = feedQuery({ ...state, tab: 'all' }, { language: locale });
+    shown = feedQuery({ ...view.state, tab: 'all' }, { language: locale });
     page = await readFeedPage(shown);
   }
   const works = page.ok ? page.data.items.flatMap(item => item.primaryAction.kind === 'want-to-read'
     ? [item.primaryAction.work] : []) : [];
-  const readerSeed = actingSubject && works.length ? await readReaderSeed(reader.main, actingSubject, works) : null;
-  return { signedIn: reader.signedIn, actingSubject, avatarQuery: reader.avatarQuery, state, defaults, query: shown, page,
-    personalRefused,
-    newPerson: any === null ? null : !any,
-    followed: realms && zones ? { realms: realms.items, zones: zones.items, complete: realms.complete && zones.complete }
-      : null,
-    readerSeed };
+  const readerSeed = view.actingSubject && works.length
+    ? await readReaderSeed(reader.main, view.actingSubject, works) : null;
+  return { query: shown, page, personalRefused, readerSeed };
 }
 
 /** Works in progress and followed Works with unread chapters, newest first; null when there are none. */

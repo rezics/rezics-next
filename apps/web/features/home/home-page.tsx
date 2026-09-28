@@ -9,7 +9,7 @@ import { type ReaderActions, ReaderActionsProvider } from '../catalogue/reader-a
 import type { ReaderSeed } from '../catalogue/reader-store.ts';
 import type { FeedApi } from '../feed/api.ts';
 import { FeedControls } from '../feed/controls.tsx';
-import { FeedProvider } from '../feed/feed-context.tsx';
+import { FeedProvider, FeedView } from '../feed/feed-context.tsx';
 import { FeedList } from '../feed/feed-list.tsx';
 import type { FeedMessages } from '../feed/messages.ts';
 import type { ContinueItem, InterestsResult } from '../feed/types.ts';
@@ -32,8 +32,6 @@ export interface HomePageProps {
   avatarQuery: string;
   state: FeedState;
   defaults: FeedDefaults;
-  query: FeedQuery;
-  page: Loaded<FeedPage>;
   /** True for a signed-in person who follows nothing yet. */
   newPerson: boolean;
   followed: { realms: Community[]; zones: Community[]; complete: boolean } | null;
@@ -45,14 +43,47 @@ export interface HomePageProps {
   welcomeDismissed: boolean;
   signInHref: string;
   signUpHref: string;
+  /** The posts under the sort, normally <HomePosts>; the route streams them in behind the rest of the page. */
+  posts: ReactNode;
+  /** The right rail, streamed in by the route (or drawn directly in stories). */
+  rail?: ReactNode;
+  /** Stories: an in-memory Main. */
+  api?: FeedApi;
+}
+
+export interface HomePostsProps {
+  locale: UiLocale;
+  messages: FeedMessages;
+  signedIn: boolean;
+  actingSubject: string | null;
+  signInHref: string;
+  state: FeedState;
+  defaults: FeedDefaults;
+  /** The query that produced `page`, without a cursor. */
+  query: FeedQuery;
+  page: Loaded<FeedPage>;
   readerSeed?: ReaderSeed | null;
   /** Main refused the reader's personal feed; the public one shows with a note. */
   personalRefused?: boolean;
-  /** The right rail, streamed in by the route (or drawn directly in stories). */
-  rail?: ReactNode;
-  /** Stories: an in-memory Main and reader shelf. */
-  api?: FeedApi;
+  /** Stories: an in-memory reader shelf. */
   readerActions?: ReaderActions;
+}
+
+/** The first page of posts and what follows it, with the shelf state for their Works. */
+export function HomePosts({ locale, messages, signedIn, actingSubject, signInHref, state, defaults, query, page,
+  readerSeed, personalRefused = false, readerActions }: HomePostsProps) {
+  const feed = materializeData(messages, { locale });
+  const allHref = localizedPath(`/${feedSearch(withChange(state, { tab: 'all' }), defaults)}`, locale);
+  return <FeedView tab={personalRefused ? 'all' : state.tab}>
+    <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref} actingSubject={actingSubject}
+      seed={readerSeed ?? undefined} actions={readerActions}>
+      {personalRefused ? <p role="status" className="flex items-start gap-2 border-border/60 border-b
+        bg-warning/10 px-4 py-2.5 text-sm text-warning-foreground">
+        <TriangleAlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{feed.personalRefused}</p> : null}
+      <FeedList initial={page} query={query} allHref={allHref}
+        empty={<EmptyFeed state={state} defaults={defaults} locale={locale} messages={messages} />} />
+    </ReaderActionsProvider>
+  </FeedView>;
 }
 
 /** What an empty view says, naming its cause and offering the fixes that fit (never switching views silently). */
@@ -97,40 +128,32 @@ export function HomePage(props: HomePageProps) {
   const kindNames = Object.fromEntries(interestKinds.map(kind => [kind, feed[kind]])) as Record<
     (typeof interestKinds)[number], string>;
   const realms = props.followed?.realms.map(realm => ({ id: realm.id, name: realm.name, language: realm.language })) ?? [];
-  const allHref = localizedPath(`/${feedSearch(withChange(state, { tab: 'all' }), defaults)}`, locale);
   return <FeedProvider locale={locale} messages={messages.feed} now={props.now} signedIn={signedIn}
-    actingSubject={actingSubject} signInHref={props.signInHref} avatarQuery={props.avatarQuery} tab={props.personalRefused ? 'all' : state.tab}
+    actingSubject={actingSubject} signInHref={props.signInHref} avatarQuery={props.avatarQuery} tab={state.tab}
     followedRealms={props.followed?.complete ? followedRealmIds(props.followed) : null} api={props.api}
     realmSegments={segmentsOf(props.official)}>
-    <ReaderActionsProvider signedIn={signedIn} signInHref={props.signInHref} actingSubject={actingSubject}
-      seed={props.readerSeed ?? undefined} actions={props.readerActions}>
-      <div className="mx-auto grid w-full max-w-[72rem] items-start gap-6 py-4 sm:px-6 sm:py-6 lg:px-8
-        xl:grid-cols-[minmax(0,46rem)_20rem] xl:justify-center">
-        <div className="grid min-w-0 gap-5">
-          <h1 className="sr-only">{t.title}</h1>
-          {!signedIn ? <>
-            <OfficialZoneTiles zones={props.official} locale={locale} messages={messages.home} />
-            <WelcomeCard locale={locale} messages={messages.home} signInHref={props.signInHref}
-              signUpHref={props.signUpHref} dismissed={props.welcomeDismissed} />
-          </> : null}
-          {props.newPerson && actingSubject ? <InterestPicker locale={locale} messages={messages.home}
-            kindNames={kindNames} initial={props.interests} collapsed={props.pickerSkipped} /> : null}
-          {props.continueItems?.length ? <ContinueStrip items={props.continueItems} locale={locale}
-            messages={messages.home} /> : null}
-          <section aria-labelledby="home-posts" className="min-w-0 border-border/60 border-y bg-card sm:rounded-2xl
-            sm:border sm:shadow-(--aura-shadow-card)">
-            <h2 id="home-posts" className="sr-only">{feed.posts}</h2>
-            <FeedControls state={state} defaults={defaults} signedIn={Boolean(actingSubject)} locale={locale}
-              messages={messages.feed} realms={realms} />
-            {props.personalRefused ? <p role="status" className="flex items-start gap-2 border-border/60 border-b
-              bg-warning/10 px-4 py-2.5 text-sm text-warning-foreground">
-              <TriangleAlertIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{feed.personalRefused}</p> : null}
-            <FeedList initial={props.page} query={props.query} allHref={allHref}
-              empty={<EmptyFeed state={state} defaults={defaults} locale={locale} messages={messages.feed} />} />
-          </section>
-        </div>
-        {props.rail ? <aside aria-label={t.sidebar} className="sticky top-20 hidden xl:block">{props.rail}</aside> : null}
+    <div className="mx-auto grid w-full max-w-[72rem] items-start gap-6 py-4 sm:px-6 sm:py-6 lg:px-8
+      xl:grid-cols-[minmax(0,46rem)_20rem] xl:justify-center">
+      <div className="grid min-w-0 gap-5">
+        <h1 className="sr-only">{t.title}</h1>
+        {!signedIn ? <>
+          <OfficialZoneTiles zones={props.official} locale={locale} messages={messages.home} />
+          <WelcomeCard locale={locale} messages={messages.home} signInHref={props.signInHref}
+            signUpHref={props.signUpHref} dismissed={props.welcomeDismissed} />
+        </> : null}
+        {props.newPerson && actingSubject ? <InterestPicker locale={locale} messages={messages.home}
+          kindNames={kindNames} initial={props.interests} collapsed={props.pickerSkipped} /> : null}
+        {props.continueItems?.length ? <ContinueStrip items={props.continueItems} locale={locale}
+          messages={messages.home} /> : null}
+        <section aria-labelledby="home-posts" className="min-w-0 border-border/60 border-y bg-card sm:rounded-2xl
+          sm:border sm:shadow-(--aura-shadow-card)">
+          <h2 id="home-posts" className="sr-only">{feed.posts}</h2>
+          <FeedControls state={state} defaults={defaults} signedIn={Boolean(actingSubject)} locale={locale}
+            messages={messages.feed} realms={realms} />
+          {props.posts}
+        </section>
       </div>
-    </ReaderActionsProvider>
+      {props.rail ? <aside aria-label={t.sidebar} className="sticky top-20 hidden xl:block">{props.rail}</aside> : null}
+    </div>
   </FeedProvider>;
 }

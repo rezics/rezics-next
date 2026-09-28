@@ -35,7 +35,7 @@ function initialState(initial: FeedPage): ListState {
 }
 
 /** A card-shaped placeholder, so loading keeps the page's rhythm. */
-function FeedSkeleton({ count = 3 }: { count?: number }) {
+export function FeedSkeleton({ count = 3 }: { count?: number }) {
   return <div aria-hidden="true">
     {Array.from({ length: count }, (_, index) => <div key={index} className="grid gap-3 border-border/60 border-b
       px-4 py-4">
