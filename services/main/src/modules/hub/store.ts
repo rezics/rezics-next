@@ -216,7 +216,7 @@ export class HubStore {
     input: SkillImportInput): Promise<{ value: HubImportView; replayed: boolean }> {
     const variant = checkIdentity(input);
     if (input.profile !== 'agent-skills-directory-import-v1'
-      || input.sourceFormat !== 'agent-skills-directory-v1' || input.expectedHead !== null
+      || input.sourceFormat !== 'agent-skills-directory-v1'
       || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)
       || !input.sourceLocator?.label || input.sourceLocator.label.length > 256
       || !Array.isArray(input.files) || input.files.length < 1 || input.files.length > MAX_FILES) {
@@ -260,11 +260,13 @@ export class HubStore {
     if (Buffer.byteLength(body, 'utf8') > MAX_IMPORT_BYTES) {
       throw new HubInvalid('Skill revision exceeds the retained Content byte budget');
     }
-    const requestDigest = sha(stableJson({ key, body, variant, actingSubject: input.actingSubject }));
+    // Keep first-import keys replayable; subsequent revisions bind their exact predecessor.
+    const requestDigest = sha(stableJson({ key, body, variant, actingSubject: input.actingSubject,
+      ...(input.expectedHead === null ? {} : { expectedHead: input.expectedHead }) }));
     const previous = await this.importByKey(principalId, key);
     if (previous && previous.request_digest !== requestDigest) throw new HubConflict('import key belongs to another request');
     const { saved, operationId } = await saveAdmittedHubDraft(this.environment, this.content,
-      this.access, principal, { resourceId: input.resourceId, variant, expectedHead: null,
+      this.access, principal, { resourceId: input.resourceId, variant, expectedHead: input.expectedHead,
         model: 'rezics-skill-package-v1', serializedJson: body,
         actingSubject: input.actingSubject, idempotencyKey: key });
     if (!saved.revisionId) throw new HubUnavailable('Content saved no Skill revision');

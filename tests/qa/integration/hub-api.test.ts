@@ -138,6 +138,36 @@ test('HUB01/HUB04: inert Skill import retains files and missing requirements thr
   expect(rows.rows[0]).toEqual({ model: 'rezics-skill-package-v1', kind: 'skill-package', files: 2 });
 });
 
+test('G-380: Skill directory successors retain the old revision, replay and reject stale heads', async () => {
+  const f = await fixture();
+  const manifest = (description: string) => ({ path: 'SKILL.md', executable: false,
+    bytesBase64: Buffer.from(`---\nname: recipe-scaling\ndescription: ${description}\n---\nScale ingredients by serving count.\n`).toString('base64') });
+  const description = 'Scale recipe ingredients for a new serving count, with separate checks for seasoning and cooking time.';
+  const body = { profile: 'agent-skills-directory-import-v1', resourceId: f.created.work,
+    variantId: `urn:rezics:variant:${randomUUID()}`, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
+    direction: 'ltr', expectedHead: null, actingSubject: f.actor,
+    sourceFormat: 'agent-skills-directory-v1', sourceLocator: { label: 'recipe-scaling' },
+    files: [manifest('Legacy truncated description')] };
+  const firstKey = `hub-v2-${randomUUID()}`;
+  const first = await json(await f.call('POST', '/v1/hub/imports', 'owner', 'work:edit', body, firstKey), 201);
+  const nextBody = { ...body, expectedHead: first.revision, files: [manifest(description)] };
+  const nextKey = `hub-v3-${randomUUID()}`;
+  const next = await json(await f.call('POST', '/v1/hub/imports', 'owner', 'work:edit', nextBody, nextKey), 201);
+  expect(next.description).toBe(description);
+  expect(next.revision).not.toBe(first.revision);
+  expect(await json(await f.call('POST', '/v1/hub/imports', 'owner', 'work:edit', nextBody, nextKey), 200)).toEqual(next);
+  expect(await json(await f.call('POST', '/v1/hub/imports', 'owner', 'work:edit', body, firstKey), 200)).toEqual(first);
+  expect((await f.call('POST', '/v1/hub/imports', 'owner', 'work:edit',
+    { ...nextBody, expectedHead: next.revision }, nextKey)).status).toBe(409);
+  expect((await f.call('POST', '/v1/hub/imports', 'owner', 'work:edit', nextBody, `stale-${randomUUID()}`)).status).toBe(409);
+  const retained = await json(await f.call('GET', `/v1/hub/imports/${first.import}?actingSubject=${encodeURIComponent(f.actor)}`,
+    'owner', 'work:read'), 200);
+  expect(retained.description).toBe('Legacy truncated description');
+  const race = await Promise.all(['first', 'second'].map(suffix => f.call('POST', '/v1/hub/imports', 'owner', 'work:edit',
+    { ...body, expectedHead: next.revision, files: [manifest(`Concurrent ${suffix} description`)] }, `race-${randomUUID()}`)));
+  expect(race.map(response => response.status).sort()).toEqual([201, 409]);
+});
+
 test('HUB02: Prompt parameter schemas and examples retain exact revisions and stale edits', async () => {
   const f = await fixture();
   const variantId = `urn:rezics:variant:${randomUUID()}`;

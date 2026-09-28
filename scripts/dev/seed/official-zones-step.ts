@@ -336,6 +336,11 @@ async function mods(o: Official) {
 }
 
 /** Content publication and public eligibility make exact Hub revisions available to Zone cards. */
+const officialSkillDescriptions = {
+  'recipe-skill-v1': 'Scale recipe ingredients for a new serving count, with separate checks for seasoning and cooking time.',
+  'reading-skill-v1': 'Organize reading notes by theme, summarize them, and collect open questions without adding unsupported details.',
+} as const;
+
 async function hubItems(o: Official) {
   const as = o.person('aria');
   const schema = { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
@@ -378,10 +383,39 @@ async function hubItems(o: Official) {
         expectedPublicationHead: null, actingSubject: as.actingSubject },
       as.token, seedKey('official-hub-publication', item.id));
       if (published.status !== 'active') throw new Error(`Hub revision ${item.id} is not published`);
-      await o.api.post('/v1/content-search-eligibility', { profile: 'content-search-eligibility-v1',
+      const eligibility = await o.api.post<{ decision: string; outcome: string }>('/v1/content-search-eligibility', { profile: 'content-search-eligibility-v1',
         resourceId, variantId, publicationDecision: published.decision, expectedEligibilityHead: null,
         actingSubject: as.actingSubject, rightsBasis: 'original-contribution', disclosure: 'public' },
       as.token, seedKey('official-hub-eligibility', item.id));
+      if (eligibility.outcome !== 'succeeded' || !eligibility.decision) {
+        throw new Error(`Hub revision ${item.id} is not public`);
+      }
+      if (item.kind === 'skill-package') {
+        // Keep the v2 inputs above exact for idempotent replay on existing stacks.
+        // Move all three heads together through their APIs, with independent retry keys.
+        const next = await o.api.post<{ revision: string; contentEpoch: string }>('/v1/hub/imports', {
+          ...identity, expectedHead: revision.revision,
+          profile: 'agent-skills-directory-import-v1', sourceFormat: 'agent-skills-directory-v1',
+          sourceLocator: { label: item.name }, files: [{ path: 'SKILL.md', executable: false,
+            bytesBase64: Buffer.from(`---\nname: ${item.name}\ndescription: ${officialSkillDescriptions[item.id]}\n---\n# ${item.name}\n${item.content}\n`).toString('base64') }] },
+        as.token, seedKey('official-hub-revision-v3', item.id));
+        const bytes = await o.read<{ reference: { byteDigest: string } }>(
+          `/v1/content-revisions/${next.revision}?actingSubject=${encodeURIComponent(as.actingSubject)}`, as.token);
+        if (!bytes) throw new Error(`Hub revision ${item.id} v3 is unreadable`);
+        const publication = await o.api.post<{ decision: string; status: string }>('/v1/content-publications', {
+          profile: 'content-publication-v1', preparationId: seedKey('official-hub-v3', item.id),
+          revisionId: next.revision, expectedDigest: bytes.reference.byteDigest,
+          expectedContentEpoch: next.contentEpoch, resourceId, variantId,
+          expectedPublicationHead: published.decision, actingSubject: as.actingSubject },
+        as.token, seedKey('official-hub-publication-v3', item.id));
+        if (publication.status !== 'active') throw new Error(`Hub revision ${item.id} v3 is not published`);
+        const selected = await o.api.post<{ outcome: string }>('/v1/content-search-eligibility', {
+          profile: 'content-search-eligibility-v1', resourceId, variantId,
+          publicationDecision: publication.decision, expectedEligibilityHead: eligibility.decision,
+          actingSubject: as.actingSubject, rightsBasis: 'original-contribution', disclosure: 'public' },
+        as.token, seedKey('official-hub-eligibility-v3', item.id));
+        if (selected.outcome !== 'succeeded') throw new Error(`Hub revision ${item.id} v3 is not public`);
+      }
     });
   }
 }
