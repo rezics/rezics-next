@@ -1,11 +1,9 @@
 import { headers } from 'next/headers';
-import { buttonVariants } from '@rezics/ui/button';
 import { materializeData } from 'native-i18n';
 import { type ReactNode, Suspense } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
-import Link from '../shell/localized-link.tsx';
 import { browseReader } from '../discover/server.ts';
 import { lifespan } from '../author/facts.ts';
 import { authorHref } from '../author/route.ts';
@@ -40,6 +38,7 @@ import { VersionsRegion } from './versions.tsx';
 import { InvalidScope, OverviewLayout, ReadButton, WorkFrame, WorkPageCover } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 import { WorkTypeSections } from '../zones/work-sections.tsx';
+import { WorkKindActions } from './types/actions.tsx';
 import { workPageKind } from './types/kind.ts';
 import { RecipeExperience } from './types/recipe.tsx';
 import { HubExperience } from './types/hub.tsx';
@@ -102,12 +101,9 @@ async function ReadSlot({ workRef, id, work, locale, messages }: Common & { work
   work: Header }) {
   const kind = workPageKind(work.types);
   if (kind !== 'book') {
-    const href = kind === 'recipe' ? '#recipe-experience'
-      : kind === 'guide' ? '#guide-experience' : '#hub-experience';
-    const label = kind === 'recipe' ? messages.viewRecipe
-      : kind === 'prompt' ? messages.viewPrompt
-        : kind === 'skill' ? messages.viewSkill : messages.viewGuide;
-    return <Link href={href} className={buttonVariants({ size: 'lg', pill: true })}>{label}</Link>;
+    const hub = kind === 'prompt' || kind === 'skill' ? await readHubWorkPage(id) : null;
+    return <WorkKindActions kind={kind} workId={work.id} title={work.title.value} locale={locale}
+      messages={messages} hubText={hub?.ok ? hub.data?.content ?? null : null} />;
   }
   return <ReadButton workRef={workRef} start={await readStart(id, work.id, locale, work.selectedLanguage)}
     messages={messages} />;

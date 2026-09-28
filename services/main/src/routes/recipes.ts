@@ -196,7 +196,13 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           sourceLexical: t.Optional(t.String()), amount: t.Optional(rational),
           amountUpper: t.Optional(rational), unitText: t.Optional(t.String()), scaled: t.Boolean(),
           reason: t.Optional(t.Union([t.Literal('unparsed'), t.Literal('non-linear'),
-            t.Literal('not-scalable')])) })),
+            t.Literal('not-scalable')])),
+          line: t.String({ maxLength: 2000 }),
+          alternateLine: t.Optional(t.String({ maxLength: 2000 })),
+          alternateSystem: t.Optional(t.Union([t.Literal('us'), t.Literal('metric')])),
+          hint: t.Optional(t.String({ maxLength: 1000 })),
+          judgment: t.Optional(t.Union([t.Literal('seasoning'), t.Literal('leavening')])) },
+        { additionalProperties: false })),
         cost: t.Object({ pages: t.Integer(), pagesRead: t.Integer(), occurrences: t.Integer() }) })),
       ...workReadProblems } }, async ({ request, params, query }) => {
       try {

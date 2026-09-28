@@ -2,6 +2,7 @@
 
 import { Button } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
+import { cn } from '@rezics/ui/utils';
 import { Clock3Icon, CookingPotIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
@@ -12,13 +13,6 @@ import type { RecipeWorkPage } from '../types.ts';
 
 type Ingredient = RecipeWorkPage['ingredients'][number];
 type Occurrence = RecipeWorkPage['occurrences'][number];
-
-function fraction(value: { numerator: number; denominator: number }, locale: UiLocale): string {
-  const whole = Math.floor(value.numerator / value.denominator);
-  const rest = value.numerator % value.denominator;
-  if (!rest) return new Intl.NumberFormat(locale).format(whole);
-  return `${whole ? `${new Intl.NumberFormat(locale).format(whole)} ` : ''}${rest}/${value.denominator}`;
-}
 
 function duration(value: { numerator: number; denominator: number }, unit: string | undefined): string {
   const amount = value.numerator / value.denominator;
@@ -50,18 +44,38 @@ function StepTimer({ seconds, messages: t }: { seconds: number; messages: WorkPa
   </div>;
 }
 
-function IngredientList({ items, scaled, locale, messages: t }: {
-  items: Ingredient[]; scaled: boolean; locale: UiLocale; messages: WorkPageMessages;
+function shownLine(item: Ingredient, system: 'us' | 'metric'): string {
+  if (item.alternateSystem === system && item.alternateLine) return item.alternateLine;
+  return item.line ?? item.originalText;
+}
+
+function IngredientList({ items, system, written, messages: t }: {
+  items: Ingredient[]; system: 'us' | 'metric'; written: 'us' | 'metric'; messages: WorkPageMessages;
 }) {
-  return <ul className="grid gap-2">{items.map(item => <li key={item.occurrence}
-    className="border-border/60 flex flex-col gap-0.5 border-b py-2 last:border-0">
-    {scaled && item.scaled && item.amount ? <>
-      <span><strong>{fraction(item.amount, locale)}{item.amountUpper
-        ? `–${fraction(item.amountUpper, locale)}` : ''} {item.unitText ?? ''}</strong></span>
-      <span className="text-muted-foreground text-sm">{item.originalText}</span>
-    </> : <span>{item.originalText}</span>}
-    {scaled && item.reason ? <span className="text-muted-foreground text-xs">{t.scaleByTaste}</span> : null}
-  </li>)}</ul>;
+  return <ul className="grid gap-2">{items.map(item => {
+    const text = shownLine(item, system);
+    const quiet = text !== item.originalText && (system !== written || item.hint) ? item.originalText : null;
+    const note = item.judgment ? t.scaleByTaste
+      : item.reason === 'unparsed' ? t.scaleUnparsed
+        : item.reason ? t.scaleHeld : null;
+    return <li key={item.occurrence} className="border-border/60 flex flex-col gap-0.5 border-b py-2 last:border-0">
+      <span className="font-medium text-pretty">{text}</span>
+      {quiet ? <span className="text-muted-foreground text-sm">{quiet}</span> : null}
+      {note ? <span className="text-muted-foreground text-xs">{note}</span> : null}
+    </li>;
+  })}</ul>;
+}
+
+function UnitToggle({ value, onChange, messages: t }: {
+  value: 'us' | 'metric'; onChange: (value: 'us' | 'metric') => void; messages: WorkPageMessages;
+}) {
+  return <div role="radiogroup" aria-label={t.unitSystem} className="flex rounded-full border border-border/60 p-0.5">
+    {(['us', 'metric'] as const).map(option => <button key={option} type="button" role="radio"
+      aria-checked={value === option} onClick={() => onChange(option)}
+      className={cn('rounded-full px-3 py-1 text-sm', value === option
+        ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}>
+      {option === 'us' ? t.unitUs : t.unitMetric}</button>)}
+  </div>;
 }
 
 function Steps({ items, messages: t }: { items: Occurrence[]; messages: WorkPageMessages }) {
@@ -79,8 +93,9 @@ function Steps({ items, messages: t }: { items: Occurrence[]; messages: WorkPage
 }
 
 /** A focused recipe task keeps the display awake while its steps are open. */
-function CookMode({ page, locale, messages: t, scaled, onClose }: {
-  page: RecipeWorkPage; locale: UiLocale; messages: WorkPageMessages; scaled: boolean; onClose: () => void;
+function CookMode({ page, messages: t, system, written, onClose }: {
+  page: RecipeWorkPage; messages: WorkPageMessages; system: 'us' | 'metric'; written: 'us' | 'metric';
+  onClose: () => void;
 }) {
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -131,7 +146,7 @@ function CookMode({ page, locale, messages: t, scaled, onClose }: {
       </div>
       <div className="grid gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.ingredients}</h3>
-          <IngredientList items={page.ingredients} scaled={scaled} locale={locale} messages={t} /></section>
+          <IngredientList items={page.ingredients} system={system} written={written} messages={t} /></section>
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.method}</h3>
           <Steps items={page.occurrences} messages={t} /></section>
       </div>
@@ -139,7 +154,7 @@ function CookMode({ page, locale, messages: t, scaled, onClose }: {
   </div>;
 }
 
-export function RecipeExperience({ initial, workId, actingSubject, text, locale, messages: t }: {
+export function RecipeExperience({ initial, workId, actingSubject, text, messages: t }: {
   initial: RecipeWorkPage | null; workId: string; actingSubject: string | null;
   text: string | null; locale: UiLocale; messages: WorkPageMessages;
 }) {
@@ -148,10 +163,20 @@ export function RecipeExperience({ initial, workId, actingSubject, text, locale,
     const value = initial?.measures.find(item => item.kind === 'servings')?.value;
     return value ? value.numerator / value.denominator : 1;
   });
-  const [scaled, setScaled] = useState(false);
+  const writtenOf = (items: Ingredient[] | undefined): 'us' | 'metric' =>
+    items?.some(item => item.alternateSystem === 'us') && !items.some(item => item.alternateSystem === 'metric')
+      ? 'metric' : 'us';
+  const [system, setSystem] = useState<'us' | 'metric'>(() => writtenOf(initial?.ingredients));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [cooking, setCooking] = useState(false);
+  useEffect(() => {
+    const open = () => setCooking(true);
+    window.addEventListener('rezics-cook', open);
+    return () => window.removeEventListener('rezics-cook', open);
+  }, []);
+  const written = writtenOf(page?.ingredients);
+  const convertible = page?.ingredients.some(item => item.alternateLine) ?? false;
   const base = initial?.measures.find(item => item.kind === 'servings');
   const measures = page?.measures ?? [];
   const total = measures.find(item => item.kind === 'total-duration');
@@ -165,7 +190,7 @@ export function RecipeExperience({ initial, workId, actingSubject, text, locale,
       const answer = await browserMainApi().v1.recipes.works({ id: workId }).get({ query: {
         actingSubject: actingSubject ?? undefined, servings } });
       if (answer.error || !answer.data) throw new Error('scale');
-      setPage(answer.data); setScaled(true);
+      setPage(answer.data);
     } catch { setError(true); }
     finally { setBusy(false); }
   };
@@ -177,27 +202,30 @@ export function RecipeExperience({ initial, workId, actingSubject, text, locale,
         {active ? <span><strong>{t.activeTime}</strong> {duration(active.value, active.unitText)}</span> : null}
       </div>
       <div className="flex flex-wrap items-end justify-between gap-4">
-        {base && base.value.numerator > 0 ? <form onSubmit={event => void scale(event)} className="flex items-end gap-2">
-          <label className="grid gap-1 text-sm" htmlFor="recipe-servings">{t.servings}
-            <Input id="recipe-servings" type="number" min={1} max={100} step="any" value={servings}
-              onChange={event => setServings(Number(event.target.value))} className="w-24" /></label>
-          <Button type="submit" variant="outline" disabled={busy || !Number.isInteger(servings)
-            || servings < 1 || servings > 100}>
-            {busy ? t.scaling : t.scaleRecipe}</Button>
-        </form> : null}
+        <div className="flex flex-wrap items-end gap-4">
+          {base && base.value.numerator > 0 ? <form onSubmit={event => void scale(event)} className="flex items-end gap-2">
+            <label className="grid gap-1 text-sm" htmlFor="recipe-servings">{t.servings}
+              <Input id="recipe-servings" type="number" min={1} max={100} step="any" value={servings}
+                onChange={event => setServings(Number(event.target.value))} className="w-24" /></label>
+            <Button type="submit" variant="outline" disabled={busy || !Number.isInteger(servings)
+              || servings < 1 || servings > 100}>
+              {busy ? t.scaling : t.scaleRecipe}</Button>
+          </form> : null}
+          {convertible ? <UnitToggle value={system} onChange={setSystem} messages={t} /> : null}
+        </div>
         <Button type="button" onClick={() => setCooking(true)}><CookingPotIcon aria-hidden="true" />
           {t.cookThis}</Button>
       </div>
       {error ? <p role="alert" className="text-destructive text-sm">{t.scaleFailed}</p> : null}
       <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.ingredients}</h3>
-          <IngredientList items={page.ingredients} scaled={scaled} locale={locale} messages={t} /></section>
+          <IngredientList items={page.ingredients} system={system} written={written} messages={t} /></section>
         <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.method}</h3>
           <Steps items={page.occurrences} messages={t} /></section>
       </div>
       {text ? <section className="grid gap-2"><h3 className="font-semibold">{t.recipeNotes}</h3>
         <p className="whitespace-pre-wrap leading-7">{text}</p></section> : null}
-      {cooking ? <CookMode page={page} locale={locale} messages={t} scaled={scaled}
+      {cooking ? <CookMode page={page} messages={t} system={system} written={written}
         onClose={() => setCooking(false)} /> : null}
     </> : <>
       <p className="text-muted-foreground text-sm">{t.recipeUnstructured}</p>

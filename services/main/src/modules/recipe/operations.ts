@@ -1,3 +1,4 @@
+import { ingredientName, judgmentOf, largeRatio, presentQuantity, recognizeUnit } from './display.ts';
 import { exactRational, scaleExact, type ExactRational } from './quantity.ts';
 import type { OccurrenceRecord } from '../structure/format.ts';
 
@@ -10,30 +11,58 @@ export interface ScaledIngredient {
   unitText?: string;
   scaled: boolean;
   reason?: 'unparsed' | 'non-linear' | 'not-scalable';
+  /** Full ingredient in the written unit system, with a kitchen-friendly amount. */
+  line: string;
+  alternateLine?: string;
+  alternateSystem?: 'us' | 'metric';
+  /** Written line, when `line` is a different amount. */
+  hint?: string;
+  judgment?: 'seasoning' | 'leavening';
 }
 
-/** Exact scaling changes only numeric amounts; source text and uncertain units survive verbatim. */
+function rational(value: { numerator: number; denominator: number }): ExactRational {
+  return exactRational(BigInt(value.numerator), BigInt(value.denominator));
+}
+
+/**
+ * Exact scaling of numeric amounts. A count such as an egg scales even when the
+ * line was marked not-scalable. Salt, spices and leavening scale through a
+ * doubling or a halving; a larger change keeps the written amount and says so.
+ * The kitchen line is display only — `amount` stays the exact rational.
+ */
 export function scaleIngredients(records: readonly OccurrenceRecord[], factor: ExactRational): ScaledIngredient[] {
   const checkedFactor = exactRational(factor.numerator, factor.denominator);
   return records.flatMap(record => {
     if (record.state !== 'active' || record.role !== 'ingredient'
       || record.qualifier?.type !== 'ingredient-line') return [];
     const line = record.qualifier;
-    const reason = line.parseStatus === 'unparsed' ? 'unparsed'
-      : line.scaling === 'non-linear' ? 'non-linear'
-        : line.scaling === 'not-scalable' ? 'not-scalable' : undefined;
+    const sourceAmount = line.amount ? rational(line.amount) : undefined;
+    const sourceUpper = line.amountUpper ? rational(line.amountUpper) : undefined;
+    const unit = recognizeUnit(line.unitText);
+    const name = ingredientName(line.originalText.value, line.amountLexical, line.unitText);
+    const judgment = judgmentOf(name);
+    const countOverride = line.scaling === 'not-scalable' && unit?.kind === 'count'
+      && line.parseStatus !== 'unparsed' && sourceAmount !== undefined;
+    const holdJudgment = Boolean(judgment) && line.scaling === 'linear' && line.parseStatus !== 'unparsed'
+      && sourceAmount !== undefined && largeRatio(checkedFactor);
+    const reason = line.parseStatus === 'unparsed' ? 'unparsed' as const
+      : line.scaling === 'non-linear' ? 'non-linear' as const
+        : line.scaling === 'not-scalable' && !countOverride ? 'not-scalable' as const
+          : undefined;
+    const apply = !reason && !holdJudgment && sourceAmount !== undefined;
+    const amount = sourceAmount ? (apply ? scaleExact(sourceAmount, checkedFactor) : sourceAmount) : undefined;
+    const amountUpper = sourceUpper ? (apply ? scaleExact(sourceUpper, checkedFactor) : sourceUpper) : undefined;
     return [{ occurrence: record.occurrence, originalText: line.originalText.value,
       ...(line.amountLexical ? { sourceLexical: line.amountLexical } : {}),
-      ...(line.amount ? { amount: reason
-        ? exactRational(BigInt(line.amount.numerator), BigInt(line.amount.denominator))
-        : scaleExact({ numerator: BigInt(line.amount.numerator), denominator: BigInt(line.amount.denominator) },
-          checkedFactor) } : {}),
-      ...(line.amountUpper ? { amountUpper: reason
-        ? exactRational(BigInt(line.amountUpper.numerator), BigInt(line.amountUpper.denominator))
-        : scaleExact({ numerator: BigInt(line.amountUpper.numerator),
-          denominator: BigInt(line.amountUpper.denominator) }, checkedFactor) } : {}),
-      ...(line.unitText ? { unitText: line.unitText } : {}), scaled: !reason && line.amount !== undefined,
-      ...(reason ? { reason } : {}) }];
+      ...(amount ? { amount } : {}),
+      ...(amountUpper ? { amountUpper } : {}),
+      ...(line.unitText ? { unitText: line.unitText } : {}),
+      scaled: apply,
+      ...(reason ? { reason } : {}),
+      ...presentQuantity({ original: line.originalText.value, name, ...(line.unitText ? { unitText: line.unitText } : {}),
+        ...(unit ? { unit } : {}), ...(amount ? { amount } : {}), ...(amountUpper ? { amountUpper } : {}),
+        changed: apply && checkedFactor.numerator !== checkedFactor.denominator,
+        ...(holdJudgment && judgment ? { judgment } : {}) }) }];
   });
 }
 

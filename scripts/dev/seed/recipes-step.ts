@@ -29,7 +29,7 @@ export function pancakeOperations(structure: string) {
     line('baking-powder', '2 teaspoons baking powder', 2, 1, 'teaspoons'),
     line('salt', '1/4 teaspoon salt', 1, 4, 'teaspoon'),
     line('buttermilk', '1 cup buttermilk', 1, 1, 'cup'),
-    line('egg', '1 egg', 1, 1, 'egg', 'not-scalable'),
+    line('egg', '1 egg', 1, 1, 'egg'),
     line('butter', '2 tablespoons melted butter', 2, 1, 'tablespoons'),
     step('mix-dry', 'Whisk flour, sugar, baking powder and salt.'),
     step('mix-wet', 'Whisk buttermilk, egg and melted butter into the dry ingredients; rest for 10 minutes.'),

@@ -12,6 +12,9 @@ test('G-415: Kitchen pancake seed has an exact quantity that visibly scales from
   const scaled = scaleExact({ numerator: BigInt(flour.qualifier.amount.numerator),
     denominator: BigInt(flour.qualifier.amount.denominator) }, { numerator: 3n, denominator: 2n });
   expect(scaled).toEqual({ numerator: 9n, denominator: 4n });
+  const egg = operations.find(item => item.sourceKey === 'egg');
+  if (egg?.qualifier.type !== 'ingredient-line') throw new Error('Egg ingredient missing');
+  expect(egg.qualifier.scaling).toBe('linear');
   expect(operations.filter(item => item.role === 'step')).toHaveLength(3);
   expect(new Set(operations.map(item => item.sourceKey)).size).toBe(operations.length);
   expect(steps.indexOf(seedRecipes)).toBe(steps.indexOf(seedOfficialZones) + 1);

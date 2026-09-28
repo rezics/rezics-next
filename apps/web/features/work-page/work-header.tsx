@@ -8,6 +8,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { formatCompact } from '../catalogue/work.ts';
 import { formatNumber, isoTime, languageName, paragraphs, sinceWhen, titleNeedsLanguageNote, typeNames }
   from './format.ts';
+import { workPageKind } from './types/kind.ts';
 import type { WorkPageMessages } from './messages.ts';
 import type { WorkHeader as Header } from './types.ts';
 
@@ -63,9 +64,12 @@ export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale
 }) {
   const t = materializeData(messages, { locale });
   const types = typeNames(work.types, t);
+  const kind = workPageKind(work.types);
+  const kindLabel = kind === 'prompt' ? t.prompt : kind === 'skill' ? t.skill
+    : kind === 'recipe' ? t.recipe : kind === 'guide' ? t.digitalDocument : types[0];
   // What it is, in words a reader uses: "Book · English", and a lone serial fact ("Completed") with it.
   const single = serialStats(work, now, locale, t);
-  const facts = [types[0], work.selectedLanguage ? languageName(work.selectedLanguage, locale) : null,
+  const facts = [kindLabel, work.selectedLanguage ? languageName(work.selectedLanguage, locale) : null,
     single.length === 1 ? single[0]!.text : null].filter(fact => fact !== undefined && fact !== null);
   return <header className={cn('grid min-w-0 content-start gap-3',
     compact ? 'justify-items-start text-start' : 'justify-items-center text-center lg:justify-items-start lg:text-start')}>

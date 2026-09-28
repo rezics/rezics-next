@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { buttonVariants } from '@rezics/ui/button';
 import type { ReactNode } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -15,6 +14,7 @@ import type { WorkHeader } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
 import { WorkFrame } from './work-frame.tsx';
 import { WorkNotFound, WorkSkeleton, WorkUnavailable, WorkViewSkeleton } from './work-states.tsx';
+import { WorkKindActions } from './types/actions.tsx';
 import { RecipeExperience } from './types/recipe.tsx';
 import { HubExperience } from './types/hub.tsx';
 import { GuideExperience } from './types/guide.tsx';
@@ -22,17 +22,13 @@ import { workPageKind } from './types/kind.ts';
 import type { RecipeWorkPage, HubWorkPage } from './types.ts';
 
 /** A Work view inside the header and tabs, as the `/w/[ref]` layout renders it. */
-function Framed({ work = fixture.work, locale = 'en', children }: {
-  work?: WorkHeader; locale?: UiLocale; children: ReactNode;
+function Framed({ work = fixture.work, locale = 'en', hubText, children }: {
+  work?: WorkHeader; locale?: UiLocale; hubText?: string | null; children: ReactNode;
 }) {
   const kind = workPageKind(work.types);
-  const action = kind === 'recipe' ? ['#recipe-experience', messages[locale].viewRecipe]
-    : kind === 'prompt' || kind === 'skill' ? ['#hub-experience', kind === 'prompt'
-      ? messages[locale].viewPrompt : messages[locale].viewSkill]
-      : kind === 'guide' ? ['#guide-experience', messages[locale].viewGuide] : null;
   return <WorkFrame workRef={fixture.workRef} work={work} locale={locale} messages={messages[locale]}
-    readAction={action ? <a className={buttonVariants({ size: 'lg', pill: true })} href={action[0]}>{action[1]}</a>
-      : undefined}
+    readAction={kind === 'book' ? undefined : <WorkKindActions kind={kind} workId={work.id} title={work.title.value}
+      locale={locale} messages={messages[locale]} hubText={hubText} />}
     credits={kind === 'book' ? <WorkCredits agentCredits={fixture.agentCredits} credits={fixture.credits}
       locale={locale} messages={messages[locale]} /> : null}>
     {children}</WorkFrame>;
@@ -71,13 +67,15 @@ const recipeStory: RecipeWorkPage = {
   { kind: 'total-duration', value: { numerator: 25, denominator: 1 }, unitText: 'min',
     basis: 'whole-recipe', coverage: 'complete', provenance: 'declared' }],
   ingredients: [{ occurrence: 'https://rezics.com/id/00000000-0000-0000-0000-000000000091',
-    originalText: '2 cups flour', amount: { numerator: 2, denominator: 1 }, unitText: 'cups', scaled: true }],
+    originalText: '2 cups flour', line: '2 cups flour', amount: { numerator: 2, denominator: 1 },
+    unitText: 'cups', scaled: true }],
   cost: { pages: 1, pagesRead: 2, occurrences: 2 },
 };
 
 const promptStory: HubWorkPage = { profile: 'hub-work-page-v1', kind: 'prompt',
   revision: '00000000-0000-0000-0000-000000000093', content: 'Discuss {{notes}}.\nAsk for two views.',
-  parameterSchema: { properties: { notes: { type: 'string' } } },
+  parameterSchema: { properties: { notes: { type: 'string', description: 'What the group said' } },
+    required: ['notes'] },
   examples: [{ parameters: { notes: 'The ending divided readers.' }, output: 'What did each reader mean?' }],
   declaredModels: [], testedModels: [], versions: [
     { revision: '00000000-0000-0000-0000-000000000093', createdAt: '2026-09-27T10:00:00.000Z' }],
@@ -93,8 +91,10 @@ export const RecipeCooking: Story = { parameters: at('overview'),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('spinbutton', { name: 'Servings' })).toHaveValue(4);
+    await expect(canvas.getByText(/Recipe · English/)).toBeVisible();
     await expect(canvas.getByText('2 cups flour')).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: 'Cook this' }));
+    await expect(canvas.getAllByRole('button', { name: 'Cook this' })).toHaveLength(2);
+    await userEvent.click(canvas.getAllByRole('button', { name: 'Cook this' })[1]!);
     const dialog = screen.getByRole('dialog', { name: 'Cooking mode' });
     await expect(within(dialog).getByText('Cook for 5 minutes until golden.')).toBeVisible();
     await expect(within(dialog).getByRole('timer')).toHaveTextContent('5:00');
@@ -103,28 +103,70 @@ export const RecipeCooking: Story = { parameters: at('overview'),
   },
 };
 
+const scaledRecipe: RecipeWorkPage = { ...recipeStory,
+  ingredients: [
+    { occurrence: 'https://rezics.com/id/00000000-0000-0000-0000-000000000091',
+      originalText: '1 1/2 cups flour', line: '3 cups flour', hint: '1 1/2 cups flour',
+      alternateLine: '720 ml flour', alternateSystem: 'metric', unitText: 'cups',
+      amount: { numerator: 3, denominator: 1 }, scaled: true },
+    { occurrence: 'https://rezics.com/id/00000000-0000-0000-0000-000000000093',
+      originalText: '1 egg', line: '2 eggs', hint: '1 egg', unitText: 'egg',
+      amount: { numerator: 2, denominator: 1 }, scaled: true },
+    { occurrence: 'https://rezics.com/id/00000000-0000-0000-0000-000000000094',
+      originalText: '1/4 teaspoon salt', line: '¼ teaspoon salt', judgment: 'seasoning',
+      unitText: 'teaspoon', amount: { numerator: 1, denominator: 4 }, scaled: false },
+  ] };
+
+export const ScaledIngredients: Story = { parameters: at('overview'),
+  render: () => <Framed work={typedWork('https://schema.org/Recipe', 'Weekend pancakes')}>
+    <RecipeExperience initial={scaledRecipe} workId={fixture.workRef} actingSubject={null}
+      text="Rest the batter overnight. If the middle is wet when the top is brown, lower the heat."
+      locale="en" messages={messages.en} /></Framed>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('3 cups flour')).toBeVisible();
+    await expect(canvas.getByText('1 1/2 cups flour')).toBeVisible();
+    await expect(canvas.getByText('2 eggs')).toBeVisible();
+    await expect(canvas.getByText(/Salt, spices and leavening/)).toBeVisible();
+    await userEvent.click(canvas.getByRole('radio', { name: 'Metric' }));
+    await expect(canvas.getByText('720 ml flour')).toBeVisible();
+    await expect(canvas.getByText('2 eggs')).toBeVisible();
+  },
+};
+
 export const PromptCopy: Story = { parameters: at('overview'),
   render: (_args, context) => {
     const locale = context.globals.locale as UiLocale;
     return <Framed work={typedWork('https://rezics.com/vocab/PromptTemplate', 'Book club prompt')}
-      locale={locale}><HubExperience page={promptStory} locale={locale} messages={messages[locale]} /></Framed>;
+      locale={locale} hubText={promptStory.content}><HubExperience page={promptStory} locale={locale}
+      messages={messages[locale]} /></Framed>;
   },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await expect(canvas.getByText(/Prompt · English/)).toBeVisible();
     await expect(canvas.getByText('{{notes}}')).toBeVisible();
-    await expect(canvas.getByRole('button', { name: 'Copy prompt' })).toBeEnabled();
-    await expect(canvas.getByText('No tested models have been reported.')).toBeVisible();
+    await expect(canvas.getAllByRole('button', { name: 'Copy prompt' }).length).toBeGreaterThan(1);
+    await expect(canvas.getByText('Claude')).toBeVisible();
+    await expect(canvas.getByText(/Required/)).toBeVisible();
+    await expect(canvas.getByText(/What the group said/)).toBeVisible();
+    await expect(canvas.getByText('What did each reader mean?')).toBeVisible();
+    await expect(canvas.getByText('No tested model is listed. Name the models you tried when you publish a revision.')).toBeVisible();
   },
 };
 
 export const SkillChinesePhone: Story = { parameters: at('overview'),
   globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
-  render: () => <Framed work={typedWork('https://rezics.com/vocab/SkillPackage', '食谱换算技能')}
-    locale="zh-Hans"><HubExperience page={{ ...promptStory, kind: 'skill',
-      content: '---\nname: recipe-scaling\n---\n# Recipe scaling\nCheck servings.' }}
-    locale="zh-Hans" messages={messages['zh-Hans']} /></Framed>,
+  render: () => {
+    const content = '---\nname: recipe-scaling\n---\n# Recipe scaling\nCheck servings.';
+    return <Framed work={typedWork('https://rezics.com/vocab/SkillPackage', '食谱换算技能')}
+      locale="zh-Hans" hubText={content}><HubExperience page={{ ...promptStory, kind: 'skill', content,
+        examples: [] }} locale="zh-Hans" messages={messages['zh-Hans']} /></Framed>;
+  },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await expect(canvas.getByText(/技能 · 英语/)).toBeVisible();
+    await expect(canvas.getAllByRole('button', { name: '安装' }).length).toBeGreaterThan(1);
+    await expect(canvas.getByText('.cursor/skills/recipe-scaling/SKILL.md')).toBeVisible();
     await expect(canvas.getByRole('button', { name: '复制 SKILL.md' })).toBeEnabled();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
