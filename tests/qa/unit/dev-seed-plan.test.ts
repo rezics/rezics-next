@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { dryRunLines, parseOptions, steps } from '../../../scripts/dev/seed/cli.ts';
+import { bookConcepts, freeConcepts, genreConcepts, seededBookIds }
+  from '../../../scripts/dev/seed/genres-plan.ts';
 import { firstSeedTypes, people, realms, seedKey, semanticTypes, works } from '../../../scripts/dev/seed/plan.ts';
 import { type SeedApi, SeedApiError } from '../../../scripts/dev/seed/api.ts';
 import { devResetPlan, devResetTarget } from '../../../scripts/dev/reset.ts';
@@ -19,6 +21,20 @@ import { officialHubItems, officialMods, publicTexts, zoneContent, extraWorks }
   from '../../../scripts/dev/seed/official-plan.ts';
 
 describe('dev seed plan', () => {
+  test('every demo Book has two to four usable Concepts and the genre vocabulary covers both languages', () => {
+    const assigned = new Set(Object.keys(bookConcepts));
+    expect(assigned).toEqual(new Set(seededBookIds));
+    const labels = { ...genreConcepts, ...freeConcepts };
+    for (const concepts of Object.values(bookConcepts)) {
+      expect(concepts.length).toBeGreaterThanOrEqual(2);
+      expect(concepts.length).toBeLessThanOrEqual(4);
+      expect(new Set(concepts).size).toBe(concepts.length);
+      for (const concept of concepts) expect(labels[concept]).toBeTruthy();
+    }
+    expect(Object.values(genreConcepts).some(label => label.includes('玄幻'))).toBe(true);
+    expect(Object.values(genreConcepts).some(label => label.includes('悬疑'))).toBe(true);
+  });
+
   test('official mod and Hub cards have typed public Works and bounded distinct native seeds', () => {
     const extra = new Map(extraWorks.map(work => [work.id, work]));
     expect(officialMods.length).toBeGreaterThanOrEqual(4);
@@ -342,7 +358,7 @@ describe('dev seed plan', () => {
     expect(steps.map(step => step.name)).toEqual([
       'seedAccounts', 'seedClassics', 'seedWorks', 'seedContributions', 'seedRealms', 'seedAdoptions',
       'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
-      'seedProfileCredits', 'seedProfileBios', 'seedProfileFollows', 'seedOfficialZones',
+      'seedProfileCredits', 'seedProfileBios', 'seedProfileFollows', 'seedOfficialZones', 'seedBookConcepts',
       'seedOfficialThemes',
       // Shelves, ratings and votes wait for readable classics and community Realms (G-385).
       'seedProfileShelves', 'seedCommunityRealms', 'seedCommunityDiscussions', 'seedReadingLives',

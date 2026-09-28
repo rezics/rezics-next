@@ -317,13 +317,14 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
     'classification.decision.set': 'classification:decide:https://rezics.com/id/',
     'classification.proposition.define': 'classification:define:global',
     'recommendation.generation.manage': 'recommendation:manage' } as const;
-  if (grants.length > 10 || grants.some(({ action, scope }) =>
-    action === 'context.create' || action === 'classification.proposition.define'
-      || action === 'recommendation.generation.manage'
-      ? scope !== scopePrefix[action]
-      : (!scope.startsWith(scopePrefix[action])
-        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-          scope.slice(scopePrefix[action].length))))) {
+  if (grants.length > 10 || grants.some(({ action, scope }) => {
+    if (action === 'classification.decision.set' && scope === 'classification:decide:global') return false;
+    if (action === 'context.create' || action === 'classification.proposition.define'
+      || action === 'recommendation.generation.manage') return scope !== scopePrefix[action];
+    return !scope.startsWith(scopePrefix[action])
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+        scope.slice(scopePrefix[action].length));
+  })) {
     throw new Error('Home seed grant is outside the serial fixture');
   }
   const pool = new Pool({ connectionString: input.accessDatabaseUrl });

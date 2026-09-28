@@ -23,6 +23,9 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     await manager.grant(MANAGE_SCOPE, MANAGE_ACTION);
     const source = await stack.publicWork(manager.actor, ['en'], 'A public source book');
     const candidate = await stack.publicWork(manager.actor, ['en'], 'A co-read book');
+    const unrelated = await stack.publicWork(manager.actor, ['en'], 'A co-read software guide');
+    const modSource = await stack.publicWork(manager.actor, ['en'], 'A source mod');
+    const modCandidate = await stack.publicWork(manager.actor, ['en'], 'Another mod');
     const another = await stack.publicWork(manager.actor, ['en'], 'Another similar book');
     const sameAuthor = await stack.publicWork(manager.actor, ['en'], 'A second book by the author');
     const chapter = await stack.publicWork(manager.actor, ['en'], 'A chapter Work');
@@ -31,6 +34,9 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
       GRAPH ${iri(GRAPHS.current)} {
         ${[source, candidate, another, sameAuthor, chapter, hidden]
           .map(item => `${iri(item.work)} a <https://schema.org/Book> .`).join('\n')}
+        ${iri(unrelated.work)} a <https://schema.org/DigitalDocument> .
+        ${iri(modSource.work)} a <https://rezics.com/vocab/ModPackage> .
+        ${iri(modCandidate.work)} a <https://rezics.com/vocab/ModPackage> .
         ${iri(chapter.work)} <https://schema.org/isPartOf> ${iri(source.work)} .
       }
     }`);
@@ -67,7 +73,13 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     expect(fallback.items.map(item => item.id)).not.toContain(source.work);
     expect(fallback.items.map(item => item.id)).not.toContain(hidden.work);
     expect(fallback.items.map(item => item.id)).not.toContain(chapter.work);
+    expect(fallback.items.map(item => item.id)).not.toContain(unrelated.work);
     expect(fallback.items.map(item => item.id)).not.toContain(sameAuthor.work);
+    const mods = await json<CardPage>(await app.handle(new Request(
+      `http://main.local/v1/works/${modSource.work.slice(-36)}/also-enjoyed?limit=6`)));
+    expect(mods.items.map(item => item.id)).toContain(modCandidate.work);
+    expect(mods.items.map(item => item.id)).not.toContain(candidate.work);
+    expect(mods.items.every(item => item.basis === 'similar')).toBe(true);
     const originalQuery = stack.fuseki.query.bind(stack.fuseki);
     let churn = 0;
     stack.fuseki.query = async (sparql, bytes) => {
@@ -132,6 +144,8 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
       [reader.actor, source.work, index === 2 ? 'reading' : 'read']);
       if (index < 2 || index === 4) await stack.contentPool.query(`INSERT INTO reader.library_status
         (agent, work, status, version) VALUES ($1,$2,'read',1)`, [reader.actor, candidate.work]);
+      if (index < 3) await stack.contentPool.query(`INSERT INTO reader.library_status
+        (agent, work, status, version) VALUES ($1,$2,'read',1)`, [reader.actor, unrelated.work]);
     }
     await manager.grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
     const global = await json<{ context: string }>(await manager.send('POST', '/v1/global-rating-contexts',
@@ -170,6 +184,7 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     const signals = await store.candidates(source.work);
     expect(signals.sourceReaders).toBe(4);
     expect(signals.candidates.find(item => item.work === candidate.work)?.sharedReaders).toBe(3);
+    expect(signals.candidates.find(item => item.work === unrelated.work)?.sharedReaders).toBe(3);
     const page = await json<CardPage>(await read());
     expect(page.stale).toBe(false);
     expect(page.projectionPosition).toEqual(current.sourcePosition);
@@ -177,6 +192,7 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     expect(page.items.find(item => item.id === candidate.work)?.title.value).toBe('A co-read book');
     expect(page.items.find(item => item.id === candidate.work)?.rating?.count).toBe(1);
     expect(page.items.map(item => item.id)).not.toContain(hidden.work);
+    expect(page.items.map(item => item.id)).not.toContain(unrelated.work);
     const beforeQueries = stack.fuseki.queries;
     const first = await json<CardPage>(await read(1));
     expect(stack.fuseki.queries - beforeQueries).toBeLessThanOrEqual(80);

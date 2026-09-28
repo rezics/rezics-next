@@ -68,11 +68,11 @@ async function classCandidates(session: WorkReadSession, source: string): Promis
  * This still works before Discovery has its first active generation. */
 async function typeCandidates(session: WorkReadSession, source: Awaited<ReturnType<typeof readWorkBasis>>) {
   const typeValues = source.card.types.filter(type => WORK_SEMANTIC_TYPES.includes(type as typeof WORK_SEMANTIC_TYPES[number]));
-  if (!typeValues.length && !source.selectedLanguage) return [];
+  if (!typeValues.length) return [];
   const rows = await session.query(`SELECT DISTINCT ?work WHERE {
-    ${typeValues.length ? `VALUES ?type { ${typeValues.map(type => `<${type}>`).join(' ')} }` : ''}
+    VALUES ?type { ${typeValues.map(type => `<${type}>`).join(' ')} }
     ${publicWork('?work', '?main')}
-    ${typeValues.length ? `GRAPH ${iri(GRAPHS.current)} { ?work a ?type }` : ''}
+    GRAPH ${iri(GRAPHS.current)} { ?work a ?type }
     ${source.selectedLanguage ? `GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?selection }
       GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:language ${lit(source.selectedLanguage)} }` : ''}
     FILTER(?work != ${iri(source.card.id)})
@@ -98,15 +98,18 @@ async function realmCandidates(session: WorkReadSession, source: string) {
   return [...new Set(works)].slice(0, 24);
 }
 
-async function publicCandidates(session: WorkReadSession, candidates: Candidate[], source: string) {
+async function publicCandidates(session: WorkReadSession, candidates: Candidate[], source: string,
+  sourceTypes: readonly string[]) {
   const ids = candidates.map(item => item.work);
-  if (!ids.length) return [];
+  if (!ids.length || !sourceTypes.length) return [];
   const visible = new Set<string>();
   for (let offset = 0; offset < ids.length; offset += 20) {
     const batch = ids.slice(offset, offset + 20);
     const rows = await session.query(`SELECT DISTINCT ?work WHERE {
       VALUES ?work { ${batch.map(iri).join(' ')} }
+      VALUES ?sourceType { ${sourceTypes.map(type => `<${type}>`).join(' ')} }
       ${publicWork('?work', '?main')}
+      GRAPH ${iri(GRAPHS.current)} { ?work a ?sourceType }
     } LIMIT 21`, 20);
     for (const row of rows) if (row.work) visible.add(row.work.value);
   }
@@ -128,6 +131,8 @@ async function publicCandidates(session: WorkReadSession, candidates: Candidate[
 export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
   store: AlsoEnjoyedStore) {
   const sourceBasis = await readWorkBasis(session, source);
+  const sourceTypes = sourceBasis.card.types.filter(type =>
+    WORK_SEMANTIC_TYPES.includes(type as typeof WORK_SEMANTIC_TYPES[number]));
   const binding = ['also-enjoyed-v1', source, session.options.language ?? null,
     session.options.actingSubject ?? null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
@@ -147,7 +152,7 @@ export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
   append(await classCandidates(session, source), 'similar');
   append(await typeCandidates(session, sourceBasis), 'similar');
   append(await realmCandidates(session, source), 'realm');
-  const visible = await publicCandidates(session, candidates, source);
+  const visible = await publicCandidates(session, candidates, source, sourceTypes);
   const fingerprint = hash([co.generation, visible]);
   if (cursor?.order && cursor.order !== fingerprint) throw new WorkReadMoved('Recommendations changed');
   const start = cursor ? Number(cursor.after) : 0;
@@ -201,12 +206,13 @@ export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
     || !await session.deps.access.canReadWork(session.principal, session.options.actingSubject, source))) {
     throw new WorkReadMissing('Work is unavailable');
   }
-  const finalVisible = new Set((await publicCandidates(session, live, source)).map(item => item.work));
+  const finalVisible = new Set((await publicCandidates(session, live, source, sourceTypes)).map(item => item.work));
   const items: Static<typeof alsoEnjoyedItem>[] = live.flatMap((item, index) => {
     const summary = summaries[index], final = fenced[index + 1], fact = facts.get(item.work)!,
       metadata = serial.get(item.work);
     if (summary?.status !== 'available' || summary.type !== 'work'
       || summary.disclosure !== 'public' || !finalVisible.has(item.work)
+      || ![...fact.types].some(type => sourceTypes.includes(type))
       || !final || JSON.stringify(summary) !== JSON.stringify(final) || !metadata) {
       session.stale = true;
       return [];

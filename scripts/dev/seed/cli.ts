@@ -14,6 +14,7 @@ import { communityPeople, communityRealms } from './community-plan.ts';
 import { seedCommunityRealms } from './community-step.ts';
 import { seedContributions } from './contributions-step.ts';
 import { seedHomeFeed } from './feed-step.ts';
+import { seedBookConcepts } from './genres-step.ts';
 import { seedLibrary } from './library-step.ts';
 import { seedModeration } from './moderation-step.ts';
 import { seedOfficialZones } from './official-zones-step.ts';
@@ -110,7 +111,8 @@ function describe(error: unknown): string {
 export const steps: readonly SeedStep[] = [
   seedAccounts, seedClassics, seedWorks, seedContributions, seedRealms, seedAdoptions,
   seedLibrary, seedChapters, seedModeration, seedHomeFeed,
-  seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedOfficialThemes,
+  seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedBookConcepts,
+  seedOfficialThemes,
   seedProfileShelves, seedCommunityRealms, seedCommunityDiscussions, seedReadingLives, seedRatings,
   seedReviews, seedCommunityVotes, seedCoReaders,
   checkPublicReads, printSeedReport,
