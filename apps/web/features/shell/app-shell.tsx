@@ -1,5 +1,7 @@
+import interfaceFont from '@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url';
 import { SkipNavLink } from '@rezics/ui/skip-nav';
 import type { ReactNode } from 'react';
+import { preload } from 'react-dom';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BottomNav } from './bottom-nav.tsx';
 import { Logo } from './logo.tsx';
@@ -37,6 +39,9 @@ export interface AppShellProps {
  */
 export function AppShell({ locale, messages, theme, navCollapsed, signedIn, account, notifications, communities,
   children }: AppShellProps) {
+  // The interface face, requested with the stylesheet rather than after it: arriving a round trip later on a
+  // phone, the swap re-wrapped the text above the fold and shifted the page (CLS 0.15 on Home).
+  preload(interfaceFont, { as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' });
   return <ShellProvider locale={locale} messages={messages} initialTheme={theme} initialCollapsed={navCollapsed}
     signedIn={signedIn}>
     <SkipNavLink id={MAIN_CONTENT_ID}>{messages.skipToContent}</SkipNavLink>
