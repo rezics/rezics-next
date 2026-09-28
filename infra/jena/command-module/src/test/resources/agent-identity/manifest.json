@@ -1,0 +1,22 @@
+{
+  "profiles": [
+    {
+      "id": "agent-identity-probe",
+      "sha256": "aab6516289a7d6c99d03a039beaa3621e3d9e84d34461450a65cac1c106be148",
+      "file": "shapes/agent-identity.ttl"
+    }
+  ],
+  "canonical": [
+    {
+      "type": "https://rezics.com/vocab/Agent",
+      "routes": [
+        {
+          "profile": "agent-identity-probe",
+          "shape": "https://rezics.com/definition/agent-identity-probe/agent-shape",
+          "when": []
+        }
+      ]
+    }
+  ],
+  "bindingDemands": []
+}

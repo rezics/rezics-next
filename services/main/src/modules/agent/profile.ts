@@ -19,6 +19,35 @@ export class AgentProfileConflict extends Error {}
 export class AgentProfileValidationFailed extends Error {}
 export class AgentProfileUnavailable extends Error {}
 
+const violationIri = (text: string, pattern: RegExp): string | null => {
+  pattern.lastIndex = 0;
+  return pattern.exec(text)?.[1] ?? null;
+};
+
+/** Path and constraint only. Report values and focus labels stay out of the problem and the log. */
+export function agentProfileViolation(report: unknown): { path: string | null; constraint: string | null } {
+  if (typeof report !== 'string' || !report) return { path: null, constraint: null };
+  const path = violationIri(report, /sh:resultPath\s+<([^>\s]+)>/g)
+    ?? violationIri(report, /<http:\/\/www\.w3\.org\/ns\/shacl#resultPath>\s+<([^>\s]+)>/g);
+  const component = violationIri(report, /sh:sourceConstraintComponent\s+<([^>\s]+)>/g)
+    ?? violationIri(report, /<http:\/\/www\.w3\.org\/ns\/shacl#sourceConstraintComponent>\s+<([^>\s]+)>/g);
+  const line = report.split('\n').map(item => item.trim()).find(item => item
+    && !item.startsWith('sh:resultPath') && !item.startsWith('sh:sourceConstraintComponent')
+    && !item.startsWith('<') && !item.includes('"'));
+  const policy = line && line.length <= 180 && /^[A-Za-z0-9][A-Za-z0-9 :._/-]*$/.test(line)
+    ? (line.split(/:\s+(?:https?:|urn:)/)[0] ?? line).trim() : null;
+  return { path, constraint: component ?? (policy || null) };
+}
+
+function validationDetail(report: unknown): string {
+  const violation = agentProfileViolation(report);
+  console.error(JSON.stringify({ event: 'agent-profile-validation-failed',
+    path: violation.path, constraint: violation.constraint }));
+  const parts = [violation.path, violation.constraint].filter((part): part is string => !!part);
+  return parts.length ? `Agent profile failed model validation: ${parts.join(' ')}`
+    : 'Agent profile failed model validation';
+}
+
 export interface AgentBio { text: string; language: string }
 export interface AgentProfileInput {
   agent: string; expectedHead: string; displayName: string;
@@ -241,7 +270,7 @@ export class AgentPublicProfiles {
       const saved = await terminal(this.env, receipt);
       if (!saved) {
         if (command?.status === 'invalid') {
-          throw new AgentProfileValidationFailed('Agent profile failed model validation');
+          throw new AgentProfileValidationFailed(validationDetail(command.report));
         }
         if (command?.status === 'unknown-profile') {
           throw new AgentProfileUnavailable('Agent profile shape is unavailable');

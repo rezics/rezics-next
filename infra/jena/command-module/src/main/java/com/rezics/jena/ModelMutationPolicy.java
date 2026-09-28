@@ -66,11 +66,11 @@ final class ModelMutationPolicy {
         Set<String> dependentRevisions = new HashSet<>();
         int[] inboundQuads = { 0 };
         for (var entry : before.current().entrySet()) {
-            // Structure head and generation-count edits preserve both resource types.
-            // Their inbound occurrence/revision links constrain the referenced class,
-            // not these mutable scalar fields; validating each sibling would turn a
-            // bounded edit into a whole-Structure dependency scan.
-            if (stableStructureType(data, entry.getKey(), entry.getValue())) continue;
+            // Structure head, generation-count and Agent profile edits preserve the
+            // resource type. Inbound links constrain that type, not the scalar fields;
+            // validating each one would turn a bounded edit into a whole-graph scan.
+            if (stableStructureType(data, entry.getKey(), entry.getValue())
+                || stableAgentIdentity(data, entry.getKey(), entry.getValue())) continue;
             boolean agentTombstone = agentCompensation(data, receipt, entry.getKey(), entry.getValue());
             String overflow = dependents(profiles, data, entry.getKey(), plan,
                 dependentCurrent, dependentRevisions, inboundQuads,
@@ -201,6 +201,12 @@ final class ModelMutationPolicy {
         if (before.selection() == null || typeChanged(data, name, before)) return false;
         String type = before.selection().type();
         return type.equals(RV + "Structure") || type.equals(RV + "StructureGeneration");
+    }
+
+    /** A profile edit keeps rv:Agent. Compensation replaces that type and still scans. */
+    private static boolean stableAgentIdentity(DatasetGraph data, String name, Subject before) {
+        if (before.selection() == null || typeChanged(data, name, before)) return false;
+        return before.selection().type().equals(RV + "Agent");
     }
 
     private static String dependents(ProfileRegistry profiles, DatasetGraph data, String child,

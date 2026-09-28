@@ -2,6 +2,7 @@ package com.rezics.jena;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -12,6 +13,7 @@ import org.apache.jena.query.DatasetFactory;
 import org.apache.jena.query.ReadWrite;
 import org.apache.jena.sparql.core.DatasetGraph;
 import org.apache.jena.vocabulary.RDF;
+import org.apache.jena.vocabulary.RDFS;
 import org.junit.Test;
 
 public class ModelMutationPolicyTest {
@@ -78,6 +80,35 @@ public class ModelMutationPolicyTest {
             data.delete(uri(CommandPolicy.CURRENT), uri(ITEM), RDF.type.asNode(), secondary);
             assertEquals("uncanonical reverse revision dependency requires staged lifecycle: " + parent.getURI(),
                 report(ModelMutationPolicy.check(PROFILES, data, plan(), "urn:receipt:probe", before)));
+        } finally { data.abort(); data.end(); }
+    }
+
+    @Test public void stableAgentProfileEditSkipsReverseDependents() {
+        ProfileRegistry profiles = ProfileRegistry.load(Path.of("src/test/resources/agent-identity"));
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(ReadWrite.WRITE);
+        try {
+            String agent = "https://rezics.com/id/00000000-0000-4000-8000-0000000000a1";
+            Node node = uri(agent);
+            data.add(uri(CommandPolicy.CURRENT), node, RDF.type.asNode(), uri(RV + "Agent"));
+            data.add(uri(CommandPolicy.CURRENT), node, uri(RV + "agentKind"), uri(RV + "PersonAgent"));
+            data.add(uri(CommandPolicy.CURRENT), node, RDFS.label.asNode(), NodeFactory.createLiteralString("Old Name"));
+            data.add(uri(CommandPolicy.CURRENT), node, uri(RV + "profileHandle"),
+                NodeFactory.createLiteralString("agent-00000000-0000-4000-8000-0000000000a1"));
+            data.add(uri(CommandPolicy.CURRENT), node, uri(RV + "profileDisclosure"), uri(RV + "Public"));
+            for (int i = 0; i < 300; i++) data.add(uri(CommandPolicy.REVISIONS), uri("urn:probe:credit:" + i),
+                uri(RV + "author"), node);
+            CommandPolicy.Plan plan = new CommandPolicy.Plan(null, Set.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS),
+                Set.of(agent), Set.of(), Set.of(), false, false, true);
+            ModelMutationPolicy.Snapshot before = ModelMutationPolicy.capture(profiles, data, plan);
+            data.delete(uri(CommandPolicy.CURRENT), node, RDFS.label.asNode(), NodeFactory.createLiteralString("Old Name"));
+            data.add(uri(CommandPolicy.CURRENT), node, RDFS.label.asNode(), NodeFactory.createLiteralString("New Name"));
+            assertNull(ModelMutationPolicy.check(profiles, data, plan, "urn:rezics:receipt:agent-profile:probe", before));
+            data.delete(uri(CommandPolicy.CURRENT), node, uri(RV + "agentKind"), uri(RV + "PersonAgent"));
+            String broken = report(ModelMutationPolicy.check(profiles, data, plan,
+                "urn:rezics:receipt:agent-profile:probe", before));
+            assertTrue(broken.contains(RV + "agentKind"));
+            assertTrue(!broken.contains("reverse dependency footprint"));
         } finally { data.abort(); data.end(); }
     }
 

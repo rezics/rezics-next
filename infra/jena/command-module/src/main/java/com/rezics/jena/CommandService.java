@@ -674,18 +674,30 @@ final class CommandService extends ActionService {
         return null;
     }
     private static String boundedReport(Model report) {
+        StringBuilder summary = new StringBuilder();
+        var results = report.listSubjectsWithProperty(report.createProperty(SH, "resultSeverity"));
+        if (results.hasNext()) {
+            Resource first = results.next();
+            appendViolationIri(summary, "sh:resultPath", first, report.createProperty(SH, "resultPath"));
+            appendViolationIri(summary, "sh:sourceConstraintComponent", first,
+                report.createProperty(SH, "sourceConstraintComponent"));
+        }
         Set<String> paths = new java.util.TreeSet<>();
         var pathStatements = report.listStatements(null, report.createProperty(SH, "resultPath"), (org.apache.jena.rdf.model.RDFNode) null);
         while (pathStatements.hasNext()) {
             var path = pathStatements.next().getObject();
             if (path.isURIResource()) paths.add(path.asResource().getURI());
         }
-        StringBuilder summary = new StringBuilder();
         for (String path : paths) summary.append("sh:resultPath <").append(path).append(">\n");
         var statements = report.listStatements();
         int count = 0;
         while (statements.hasNext() && count++ < 20 && summary.length() < 4000) summary.append(statements.next()).append("\n");
         return summary.substring(0, Math.min(4096, summary.length()));
+    }
+    private static void appendViolationIri(StringBuilder summary, String name, Resource result,
+                                           org.apache.jena.rdf.model.Property property) {
+        Resource value = result.getPropertyResourceValue(property);
+        if (value != null && value.isURIResource()) summary.append(name).append(" <").append(value.getURI()).append(">\n");
     }
     private static String receiptValue(DatasetGraph dataset, String receipt, String predicate) {
         var iter = dataset.find(NodeFactory.createURI(CommandPolicy.RECEIPTS), NodeFactory.createURI(receipt),

@@ -108,9 +108,14 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     })).status).toBe(400);
     class RejectedProfileFuseki extends FusekiClient {
       outcome: 'invalid' | 'guard-unmatched' = 'invalid';
+      report = [
+        'sh:resultPath <https://rezics.com/vocab/profileHandle>',
+        'sh:sourceConstraintComponent <http://www.w3.org/ns/shacl#MinCountConstraintComponent>',
+        '<_:b0> <http://www.w3.org/ns/shacl#value> "Daniel Chen 陈丹尼"',
+      ].join('\n');
       override async commandWithReceipt(input: CommandEnvelope): Promise<CommandResult> {
         if (input.receipt.startsWith('urn:rezics:receipt:agent-profile:')) {
-          return { status: this.outcome };
+          return this.outcome === 'invalid' ? { status: 'invalid', report: this.report } : { status: this.outcome };
         }
         return super.commandWithReceipt(input);
       }
@@ -126,7 +131,11 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
         authorization: `Bearer ${owner.token}`, 'content-type': 'application/json',
         'idempotency-key': key }, body: JSON.stringify(body(first.revision as string, 'Rejected')),
       })), rejected.outcome === 'invalid' ? 422 : 409);
-    expect((await reject('profile-invalid')).code).toBe('agent_profile_validation_failed');
+    const invalidProfile = await reject('profile-invalid');
+    expect(invalidProfile.code).toBe('agent_profile_validation_failed');
+    expect(invalidProfile.title).toContain('https://rezics.com/vocab/profileHandle');
+    expect(invalidProfile.title).toContain('http://www.w3.org/ns/shacl#MinCountConstraintComponent');
+    expect(String(invalidProfile.title)).not.toContain('Daniel Chen');
     rejected.outcome = 'guard-unmatched';
     expect((await reject('profile-guard-unmatched')).code).toBe('agent_profile_conflict');
     expect((await json(await call('GET', path), 200)).revision).toBe(first.revision);
@@ -234,6 +243,62 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
       bio: null, avatarSelection: null, avatarUrl: null });
     expect((await notificationAgent(agent))?.avatar).toBeNull();
     expect((await call('GET', `/v1/media/avatars/${selection.selection}`)).status).toBe(404);
+    const fanOut = async (target: string) => {
+      const triples = Array.from({ length: 300 }, (_, index) =>
+        `<urn:rezics:probe:agent-dependent:${target.slice(-8)}:${index}> <https://rezics.com/vocab/author> <${target}> .`).join('\n');
+      await stack.fuseki.update(`INSERT DATA { GRAPH <urn:rezics:graph:revisions> { ${triples} } }`);
+    };
+    const legacyOrg = await json(await call('POST', '/v1/agents', owner.token,
+      { profile: 'agent-provision-v1', kind: 'organization', displayName: 'Old Press' }), 201);
+    const legacyAgent = legacyOrg.agent as string;
+    const legacyPath = `/v1/agents/${legacyAgent.slice(-36)}`;
+    await fanOut(legacyAgent);
+    const legacyHead = await json(await call('GET', legacyPath), 200);
+    const legacyRenamed = await json(await call('PUT', `${legacyPath}/profile`, owner.token, {
+      profile: 'agent-public-profile-v1', expectedHead: legacyHead.revision,
+      displayName: 'Old Press Books', avatarSelection: null, bio: null,
+    }), 201);
+    expect(legacyRenamed.profile).toBe('agent-public-profile-v1');
+    const upgraded = await json(await call('PUT', `${legacyPath}/profile`, owner.token, {
+      profile: 'agent-public-profile-v2', expectedHead: legacyRenamed.revision,
+      displayName: 'Old Press Books', avatarSelection: null, bio: null,
+      localizedName: { original: 'en', labels: { en: 'Old Press Books', 'zh-Hans': '老出版社' } },
+    }), 201);
+    expect(upgraded.profile).toBe('agent-public-profile-v2');
+    const upgradedGraph = await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?model ?format WHERE {
+        GRAPH <urn:rezics:graph:revisions> { <${upgraded.revision}> rv:modelRevision ?model . }
+        GRAPH <urn:rezics:graph:current> { <${legacyAgent}> rv:profileNameFormat ?format . }
+      } LIMIT 2`);
+    expect(upgradedGraph.results?.bindings.map(row => row.model?.value))
+      .toEqual(['https://rezics.com/definition/agent-profile-v2']);
+    expect(upgradedGraph.results?.bindings.map(row => row.format?.value))
+      .toEqual(['https://rezics.com/vocab/LocalizedNameV2']);
+    expect(await json(await call('GET', legacyPath, undefined, undefined, randomUUID(), 'zh-CN'), 200))
+      .toMatchObject({ displayName: '老出版社', originalDisplayName: 'Old Press Books' });
+    const crowded = await json(await call('POST', '/v1/agents', owner.token,
+      { profile: 'agent-provision-v1', kind: 'person', displayName: 'Daniel Chen 陈丹尼' }), 201);
+    const crowdedAgent = crowded.agent as string;
+    const crowdedPath = `/v1/agents/${crowdedAgent.slice(-36)}`;
+    await fanOut(crowdedAgent);
+    const crowdedHead = await json(await call('GET', crowdedPath), 200);
+    const crowdedRenamed = await json(await call('PUT', `${crowdedPath}/profile`, owner.token, {
+      profile: 'agent-public-profile-v1', expectedHead: crowdedHead.revision,
+      displayName: 'Daniel Chen', avatarSelection: null, bio: null,
+    }), 201);
+    expect(crowdedRenamed.profile).toBe('agent-public-profile-v1');
+    expect((await json(await call('GET', crowdedPath), 200)).displayName).toBe('Daniel Chen');
+    await stack.fuseki.update(`DELETE WHERE { GRAPH <urn:rezics:graph:current> {
+      <${crowdedAgent}> <https://rezics.com/vocab/profileHandle> ?handle } }`);
+    const leaked = 'Secret Name Should Not Leak';
+    const shapeRejected = await json(await call('PUT', `${crowdedPath}/profile`, owner.token, {
+      profile: 'agent-public-profile-v1', expectedHead: crowdedRenamed.revision,
+      displayName: leaked, avatarSelection: null, bio: null,
+    }), 422);
+    expect(shapeRejected.code).toBe('agent_profile_validation_failed');
+    expect(String(shapeRejected.title)).toContain('https://rezics.com/vocab/profileHandle');
+    expect(String(shapeRejected.title)).toContain('MinCountConstraintComponent');
+    expect(String(shapeRejected.title)).not.toContain(leaked);
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
     expect((await call('PUT', `${path}/profile`, owner.token,
       body(cleared.revision as string, 'Held'))).status).toBe(503);

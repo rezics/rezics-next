@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { AgentProfileInvalid, checkedAgentProfile } from '../src/modules/agent/profile.ts';
+import { AgentProfileInvalid, agentProfileViolation, checkedAgentProfile } from '../src/modules/agent/profile.ts';
 import { agentLocalizedName } from '../src/modules/agent/localized-name.ts';
 
 const input = () => ({ agent: `https://rezics.com/id/${randomUUID()}`,
@@ -36,4 +36,22 @@ test('G-437: Agent v2 language literals retain one original while v1 JSON remain
   expect(() => agentLocalizedName([...rows, rows[0]!], 'North Star Editions')).toThrow();
   expect(() => agentLocalizedName([{ localizedName: { value: 'Name', 'xml:lang': 'en' },
     originalNameLanguage: { value: 'ja' } }], 'Name')).toThrow();
+});
+
+test('G-442: a profile validation report keeps the first path and constraint', () => {
+  const secret = 'Daniel Chen 陈丹尼';
+  expect(agentProfileViolation([
+    'sh:resultPath <https://rezics.com/vocab/profileHandle>',
+    'sh:sourceConstraintComponent <http://www.w3.org/ns/shacl#MinCountConstraintComponent>',
+    `<_:b0> <http://www.w3.org/ns/shacl#value> "${secret}"`,
+  ].join('\n'))).toEqual({
+    path: 'https://rezics.com/vocab/profileHandle',
+    constraint: 'http://www.w3.org/ns/shacl#MinCountConstraintComponent',
+  });
+  expect(agentProfileViolation('reverse dependency footprint exceeds 256')).toEqual({
+    path: null, constraint: 'reverse dependency footprint exceeds 256',
+  });
+  expect(agentProfileViolation(`prestate canonical selector changed: https://rezics.com/id/${randomUUID()}`))
+    .toEqual({ path: null, constraint: 'prestate canonical selector changed' });
+  expect(JSON.stringify(agentProfileViolation(`sh:value "${secret}"`))).not.toContain(secret);
 });
