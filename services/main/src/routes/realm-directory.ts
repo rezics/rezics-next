@@ -3,6 +3,7 @@ import { problemResult } from '../api-contract.ts';
 import { MediaUnavailable } from '../modules/media/store.ts';
 import { realmDirectoryPage } from '../modules/realm-directory/contract.ts';
 import { readRealmDirectory } from '../modules/realm-directory/read.ts';
+import { readSharedVocabulary, SHARED_VOCABULARY_COST } from '../modules/realm-directory/vocabulary.ts';
 import { pageQuery, readLanguage } from '../modules/work/read-contract.ts';
 import { WorkReadInvalid, WorkReadLimit, WorkReadMoved, WorkReadUnavailable, workRead }
   from '../modules/work/read-session.ts';
@@ -14,7 +15,8 @@ const errors = { 400: problemResult(400), 409: problemResult(409),
 const query = t.Object({ limit: pageQuery.limit, cursor: pageQuery.cursor,
   language: t.Optional(readLanguage), q: t.Optional(t.String({ minLength: 1, maxLength: 80 })),
   topic: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
-  sort: t.Optional(t.Union([t.Literal('activity'), t.Literal('members'), t.Literal('newest')])) },
+  sort: t.Optional(t.Union([t.Literal('activity'), t.Literal('members'), t.Literal('newest'),
+    t.Literal('growing')])) },
 { additionalProperties: false });
 const headers = { 'cache-control': 'no-store' };
 
@@ -28,10 +30,21 @@ function directoryError(error: unknown): Response {
   return commandError(error);
 }
 
-export const openApiOperations = { '/v1/realms': { get: { bearer: false } } } as const;
+export const openApiOperations = { '/v1/realms': { get: { bearer: false } },
+  '/v1/classification-vocabulary': { get: { bearer: false } } } as const;
 
 export function realmDirectoryRoutes(work: MainWorkDependencies) {
-  return new Elysia().get('/v1/realms', { query,
+  return new Elysia().get('/v1/classification-vocabulary', {
+    query: t.Object({ language: t.Optional(readLanguage),
+      q: t.Optional(t.String({ minLength: 1, maxLength: 80 })) }, { additionalProperties: false }),
+    response: { 200: t.Object({ profile: t.Literal('shared-vocabulary-v1'),
+      items: t.Array(t.Object({ id: t.String(), label: t.String() }),
+        { maxItems: SHARED_VOCABULARY_COST.page }), hasMore: t.Boolean() }), ...errors },
+  }, async ({ request, query: options }) => {
+    try { return Response.json(await workRead(work, new Request(request.url), options,
+      session => readSharedVocabulary(session, options.q)), { headers }); }
+    catch (error) { return directoryError(error); }
+  }).get('/v1/realms', { query,
     response: { 200: realmDirectoryPage, ...errors },
   }, async ({ request, query: options }) => {
     try {

@@ -6,15 +6,17 @@ import type { PublicProfile } from '../realm-profile/schema.ts';
 import { directorySource, type Candidate } from './source.ts';
 import { REALM_DIRECTORY_COST } from './contract.ts';
 
-export type RealmDirectorySort = 'activity' | 'members' | 'newest';
+export type RealmDirectorySort = 'activity' | 'members' | 'newest' | 'growing';
 export interface DirectoryRow { realm: string; space: string; profile: PublicProfile | null;
   rank: string; count_value: string; count_revision: string }
 
 /** Derived, rebuildable projection. Source updates and deletions commit with
  * their watermark; restore/erasure invalidates the projection. A cold rebuild
  * streams bounded source batches. Ordinary updates hydrate only affected Realms.
- * Sorted pages seek an ordered B-tree: O(log R + P); substring search can scan
- * the matching order O(R). Neither path materializes the whole directory in JS. */
+ * Activity, member and newest pages seek an ordered B-tree: O(log R + P).
+ * Growing reads at most seven daily aggregate rows per Realm and sorts in SQL;
+ * substring search can scan the matching order O(R). No path materializes the
+ * whole directory in JS. */
 export class RealmDirectoryIndex {
   constructor(private readonly pool: Pool) {}
 
@@ -121,12 +123,21 @@ export class RealmDirectoryIndex {
     const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
     if (!await this.refresh(session)) throw new WorkReadUnavailable('Realm directory is refreshing; retry');
     const column = input.sort === 'members' ? 'count_value' : input.sort === 'newest' ? 'created' : 'activity';
+    const growing = input.sort === 'growing';
+    const rankColumn = growing ? '-COALESCE(g.growth,0)' : `-d.${column}`;
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       await client.query("SET LOCAL statement_timeout = '5s'");
-      const position = (await client.query<{ revision: string }>(
-        'SELECT revision FROM access.realm_count_position WHERE singleton')).rows[0]!.revision;
+      const positionRow = (await client.query<{ revision: string; growth_revision: string; day: string }>(
+        growing ? `SELECT p.revision::text, g.revision::text AS growth_revision,
+          (now() AT TIME ZONE 'UTC')::date::text AS day
+          FROM access.realm_count_position p CROSS JOIN access.realm_growth_position g
+          WHERE p.singleton AND g.singleton`
+          : 'SELECT revision::text FROM access.realm_count_position WHERE singleton')).rows[0];
+      if (!positionRow) throw new WorkReadUnavailable('Realm growth basis is unavailable');
+      const position = growing
+        ? `${positionRow.revision}/${positionRow.growth_revision}/${positionRow.day}` : positionRow.revision;
       let rank: string | null = null;
       if (cursor) {
         const [prior, order] = cursor.order.split(':');
@@ -140,14 +151,22 @@ export class RealmDirectoryIndex {
         || source.target_sequence !== null || source.rebuilding) {
         throw new WorkReadMoved('Realm directory source moved');
       }
-      const rows = (await client.query<DirectoryRow>(`SELECT d.realm, d.space, d.profile,
-        (-d.${column})::text AS rank, d.count_value::text, COALESCE(c.revision,0)::text AS count_revision
+      const rows = (await client.query<DirectoryRow>(`${growing ? `WITH growth AS (
+        SELECT realm, SUM(members + posts) AS growth FROM access.realm_growth_day
+        WHERE day BETWEEN $6::date - 6 AND $6::date
+          AND (data_epoch = '' OR data_epoch = $7::text)
+        GROUP BY realm)` : ''}
+        SELECT d.realm, d.space, d.profile,
+        (${rankColumn})::text AS rank, d.count_value::text, COALESCE(c.revision,0)::text AS count_revision
         FROM access.realm_directory d LEFT JOIN access.realm_member_count c ON c.realm = d.realm
-        WHERE ${cursor ? `(-d.${column}, d.realm) > ($1::numeric, $2::text)` : "$1::numeric IS NULL AND $2::text = ''"}
+        ${growing ? 'LEFT JOIN growth g ON g.realm = d.realm' : ''}
+        WHERE ${cursor ? `(${rankColumn}, d.realm) > ($1::numeric, $2::text)` : "$1::numeric IS NULL AND $2::text = ''"}
           AND ($3::text = '' OR strpos(d.search_text, $3) > 0)
           AND ($5::text IS NULL OR d.topics @> ARRAY[$5::text])
-        ORDER BY -d.${column}, d.realm LIMIT $4`,
-      [rank, cursor?.after ?? '', input.q, limit + 1, input.topic ?? null])).rows;
+        ORDER BY ${rankColumn}, d.realm LIMIT $4`,
+      growing ? [rank, cursor?.after ?? '', input.q, limit + 1, input.topic ?? null,
+        positionRow.day, session.position.dataEpoch]
+        : [rank, cursor?.after ?? '', input.q, limit + 1, input.topic ?? null])).rows;
       await client.query('COMMIT');
       const page = rows.slice(0, limit);
       return { rows: page, position, next: rows.length > limit && page.length
@@ -159,9 +178,14 @@ export class RealmDirectoryIndex {
     } finally { client.release(); }
   }
 
-  async fence(position: string): Promise<void> {
-    const row = (await this.pool.query<{ revision: string }>(
-      'SELECT revision FROM access.realm_count_position WHERE singleton')).rows[0];
-    if (row?.revision !== position) throw new WorkReadMoved('Realm membership changed');
+  async fence(position: string, growing = false): Promise<void> {
+    const row = (await this.pool.query<{ revision: string; growth_revision: string; day: string }>(
+      growing ? `SELECT p.revision::text, g.revision::text AS growth_revision,
+        (now() AT TIME ZONE 'UTC')::date::text AS day
+        FROM access.realm_count_position p CROSS JOIN access.realm_growth_position g
+        WHERE p.singleton AND g.singleton`
+        : 'SELECT revision::text FROM access.realm_count_position WHERE singleton')).rows[0];
+    const current = growing ? `${row?.revision}/${row?.growth_revision}/${row?.day}` : row?.revision;
+    if (current !== position) throw new WorkReadMoved('Realm directory ranking changed');
   }
 }

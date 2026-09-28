@@ -5,6 +5,7 @@ import { createMainApp } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { REALM_DIRECTORY_COST } from '../src/modules/realm-directory/contract.ts';
 import { searchText } from '../src/modules/realm-directory/read.ts';
+import { readSharedVocabulary } from '../src/modules/realm-directory/vocabulary.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved }
   from '../src/modules/work/read-session.ts';
 
@@ -44,4 +45,18 @@ test('Realm directory is a public typed Main route', () => {
     lineage: { dataEpoch: 'one', routingEpoch: 'one' }, objectDirectory: '.temp/realm-directory' },
   account: {} as never, access: {} as never });
   expect(app.routes.some(route => route.method === 'GET' && route.path === '/v1/realms')).toBe(true);
+  expect(app.routes.some(route => route.method === 'GET' && route.path === '/v1/classification-vocabulary'))
+    .toBe(true);
+});
+
+test('community topics use the current shared vocabulary and match both languages', async () => {
+  const id = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const session = { options: { language: 'zh-CN' }, query: async (sparql: string) => {
+    expect(sparql).toContain('rv:VocabularyDefinition');
+    return [{ concept: { value: id }, label: { value: 'Mystery', 'xml:lang': 'en' } },
+      { concept: { value: id }, label: { value: '悬疑', 'xml:lang': 'zh-Hans' } }];
+  } } as never;
+  expect((await readSharedVocabulary(session, 'Myst')).items).toEqual([{ id, label: '悬疑' }]);
+  expect((await readSharedVocabulary(session, '悬疑')).items).toEqual([{ id, label: '悬疑' }]);
+  expect((await readSharedVocabulary(session, 'Fantasy')).items).toEqual([]);
 });

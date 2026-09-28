@@ -27,6 +27,17 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     const first = await create('First space');
     const second = await create('Second space');
     const third = await create('Unpublished space');
+    const scheme = `https://rezics.com/id/${randomUUID()}`;
+    const topic = `https://rezics.com/id/${randomUUID()}`;
+    await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+      INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(scheme)} a skos:ConceptScheme, rv:VocabularyDefinition ; rv:schemeState rv:Active .
+        ${iri(topic)} a skos:Concept ; skos:inScheme ${iri(scheme)} ; rv:conceptState rv:Active ;
+          skos:prefLabel "Mystery"@en, "悬疑"@zh-Hans .
+      } }`);
+    const vocabulary = await json<{ items: { id: string; label: string }[] }>(
+      await stack.call('GET', '/v1/classification-vocabulary?language=zh-CN&q=Mystery'));
+    expect(vocabulary.items).toContainEqual({ id: topic, label: '悬疑' });
     const publish = async (realm: string, en: string, zh: string, count: number) => {
       await editor.grant(`realm:profile:${realm}`, 'realm.profile.publish');
       return json<{ revision: string }>(await editor.send('PUT',
@@ -110,6 +121,8 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     await stack.accessPool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'institution') ON CONFLICT DO NOTHING", [second.realm]);
     await stack.accessPool.query(`INSERT INTO access.membership_policy
       (kind, owner_subject, revision, terms_revision) VALUES ('realm',$1,1,'terms-1')`, [second.realm]);
+    const beforeGrowth = await json<DirectoryPage>(await get('/v1/realms?sort=growing&limit=1'));
+    expect(beforeGrowth.nextCursor).toBeString();
     const privateMembership = randomUUID();
     const consent = randomUUID();
     await stack.accessPool.query(`INSERT INTO access.private_membership_consent
@@ -120,10 +133,26 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
       (id, kind, owner_subject, principal_id, state, generation, policy_revision, terms_revision, consent_reference)
       VALUES ($1,'realm',$2,$3,'joined',1,1,'terms-1',$4)`,
     [privateMembership, second.realm, editor.principalId, consent]);
+    expect((await get(`/v1/realms?sort=growing&limit=1&cursor=${beforeGrowth.nextCursor}`)).status)
+      .toBe(409);
     const publicMembership = randomUUID();
     await stack.accessPool.query(`INSERT INTO access.membership
       (id, kind, owner_subject, member_subject, state, generation, policy_revision, terms_revision, consent_reference)
       VALUES ($1,'realm',$2,$3,'joined',1,1,'terms-1','fixture')`, [publicMembership, second.realm, editor.actor]);
+    const growingMembers = await json<DirectoryPage>(await get('/v1/realms?sort=growing&limit=1'));
+    expect(growingMembers.items[0]?.id).toBe(second.realm);
+    for (let index = 0; index < 3; index++) {
+      const placement = `https://rezics.com/id/${randomUUID()}`;
+      await stack.accessPool.query(`INSERT INTO access.feed_item
+        (data_epoch,id,sequence,kind,occurred_at,time_basis,best_key,realm,group_bucket,
+          group_key,group_leader,group_members,sort_time)
+        VALUES ($1,$2,$3,'discussion',now(),'relay',0,$4,'fixture',$2,true,ARRAY[$2],now())`,
+      [stack.env.lineage.dataEpoch, placement, index + 1, third.realm]);
+    }
+    expect((await json<DirectoryPage>(await get('/v1/realms?sort=growing&limit=1'))).items[0]?.id)
+      .toBe(third.realm);
+    expect((await get(`/v1/realms?sort=growing&limit=1&cursor=${growingMembers.nextCursor}`)).status)
+      .toBe(409);
     const exactBody = { profile: 'realm-public-profile-v1', expectedHead: secondProfile.revision,
       actingSubject: editor.actor, publication: { name: { en: 'Book Circle', 'zh-CN': '图书圈' },
         description: { en: 'Together', 'zh-CN': '一起阅读' }, iconSelection: null, bannerSelection: null,
