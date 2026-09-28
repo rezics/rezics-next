@@ -30,12 +30,12 @@ const translations: Record<string, Strings> = {
   },
   'zh-Hant': {
     tagline: '網路連載、輕小說與原創作品，由小說編輯部公開甄選。',
-    official: 'REZICS 官方專區',
+    official: 'REZICS 官方 Zone',
     podium: '榜單前三',
     more: '完整榜單',
     footerTitle: 'REZICS 小說',
-    footerNote: '本專區的每一部推薦都來自一項公開決定。點開作品旁的印章，就能看到它為什麼在這裡。',
-    decisions: '決定紀錄',
+    footerNote: '這個 Zone 的每項精選都是公開決策的結果。點開作品旁的印章，就能了解它為何入選。',
+    decisions: '決策紀錄',
     about: '關於與規則',
     works: '全部作品',
   },
@@ -60,6 +60,16 @@ const translations: Record<string, Strings> = {
     decisions: 'Entscheidungsprotokoll',
     about: 'Über die Zone und ihre Regeln',
     works: 'Alle Werke',
+  ja: {
+    tagline: 'ウェブ連載やライトノベル、オリジナル作品を、小説編集チームが公開の場で選び抜きます。',
+    official: 'REZICS 公式 Zone',
+    podium: 'ランキング上位',
+    more: 'ランキングをすべて見る',
+    footerTitle: 'REZICSの小説',
+    footerNote: 'この Zone のおすすめはすべて公開の決定によって選ばれています。作品の横のスタンプをたどると、選ばれた理由がわかります。',
+    decisions: '決定ログ',
+    about: '概要とルール',
+    works: 'すべての作品',
   },
 };
 
