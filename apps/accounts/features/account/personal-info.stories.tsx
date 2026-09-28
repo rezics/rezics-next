@@ -149,7 +149,7 @@ export const JapaneseFallback: Story = {
     const language = canvas.getByRole('combobox', { name: '言語' });
     await expect(language).toHaveValue('ja');
     const options = within(language).getAllByRole('option');
-    expect(options.map(option => option.textContent?.trim()))
+    await expect(options.map(option => option.textContent?.trim()))
       .toEqual(['English', '繁體中文', '简体中文', '日本語', '한국어', 'Deutsch', 'Français', 'Español']);
   },
 };

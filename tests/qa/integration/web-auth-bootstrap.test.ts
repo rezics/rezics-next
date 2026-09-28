@@ -14,6 +14,7 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { baselineMemberProof } from '../../../services/main/src/modules/access/baseline.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -32,7 +33,7 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
   };
   const privateConfig = JSON.parse(readFileSync(result.privateConfigPath, 'utf8')) as {
     operator: { id: string }; member: { id: string; email: string; password: string };
-    mainClient: { id: string; secret: string };
+    mainClient: { id: string; secret: string }; principalId: string;
   };
   const runtime = readEnv(result.runtimeEnvPath);
   expect(runtime.ACCOUNT_MAIN_CLIENT_ID).toBe(privateConfig.mainClient.id);
@@ -53,6 +54,11 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
     operatorUserIds: new Set([privateConfig.operator.id]),
   }), accountPool).listen({ hostname: '127.0.0.1', port: Number(runtime.ACCOUNT_PORT) });
   try {
+    const db = await accessPool.connect();
+    try {
+      expect(await baselineMemberProof(db, privateConfig.principalId, result.actingSubject))
+        .toMatchObject({ provision_id: expect.any(String), representation_id: expect.any(String) });
+    } finally { db.release(); }
     const firstParty = await accountPool.query(`SELECT 1 FROM rezics_oauth_first_party_client
       WHERE client_id = $1`, [publicConfig.clientId]);
     expect(firstParty.rowCount).toBe(1);
@@ -135,14 +141,14 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
     const denied = await main.handle(new Request('http://localhost/v1/works', {
       method: 'POST', headers: { authorization: `Bearer ${token}`,
         'content-type': 'application/json', 'idempotency-key': `web-auth-denied-${randomUUID()}` },
-      body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Denied local Work',
+      body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Denied local Work', language: 'en',
         actingSubject: `https://rezics.com/id/${randomUUID()}` }),
     }));
     expect(denied.status).toBe(403);
     const work = await main.handle(new Request('http://localhost/v1/works', {
       method: 'POST', headers: { authorization: `Bearer ${token}`,
         'content-type': 'application/json', 'idempotency-key': `web-auth-${randomUUID()}` },
-      body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Local web auth Work',
+      body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Local web auth Work', language: 'en',
         actingSubject: result.actingSubject }),
     }));
     expect(work.status).toBe(201);
@@ -200,7 +206,7 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
       method: 'POST', headers: { authorization: `Bearer ${token}`,
         'content-type': 'application/json', 'idempotency-key': `web-author-${randomUUID()}` },
       body: JSON.stringify({ profile: 'metadata-only-v1', authoring: 'own-work',
-        title: 'Local authored Work', actingSubject: result.actingSubject }),
+        title: 'Local authored Work', language: 'en', actingSubject: result.actingSubject }),
     }));
     expect(authored.status, await authored.clone().text()).toBe(201);
   } finally {

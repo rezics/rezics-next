@@ -140,7 +140,7 @@ async function signInOperator(app: ReturnType<typeof createAccountApp>, base: st
 }
 
 async function grantWorkCreation(pool: Pool, issuer: string, memberId: string,
-  actor: string): Promise<string> {
+  actor: string, provision: { id: string; digest: string; dataEpoch: string; sequence: string }): Promise<string> {
   const principalId = randomUUID();
   const client = await pool.connect();
   try {
@@ -164,6 +164,14 @@ async function grantWorkCreation(pool: Pool, issuer: string, memberId: string,
       (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
       VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '8 hours')`,
     [randomUUID(), actor]);
+    const control = randomUUID();
+    await client.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'agent.control','infinity')`, [control, principalId, actor]);
+    await client.query(`INSERT INTO access.agent_provision (id, principal_id, idempotency_key,
+      request_digest, agent_id, agent_kind, display_name, principal_epoch, state,
+      graph_data_epoch, graph_sequence, representation_id)
+      VALUES ($1::uuid,$2,$1::text,$3,$4,'person','Local author',0,'active',$5,$6,$7)`,
+    [provision.id, principalId, provision.digest, actor, provision.dataEpoch, provision.sequence, control]);
     await client.query('COMMIT');
     return principalId;
   } catch (error) {
@@ -273,12 +281,15 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     }
     const actor = `https://rezics.com/id/${randomUUID()}`;
     const agent = { kind: 'person' as const, displayName: 'Local author' };
-    await createAgentGraph({ fuseki: new FusekiClient(apps.FUSEKI_URL!,
+    const provisionId = randomUUID();
+    const digest = agentProvisionDigest(agent);
+    const receipt = await createAgentGraph({ fuseki: new FusekiClient(apps.FUSEKI_URL!,
       apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!),
       lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
       objectDirectory: join(outputDir, 'objects') },
-    { id: randomUUID(), agent: actor, ...agent, digest: agentProvisionDigest(agent) });
-    const principalId = await grantWorkCreation(accessPool, discovery.issuer, member.id, actor);
+    { id: provisionId, agent: actor, ...agent, digest });
+    const principalId = await grantWorkCreation(accessPool, discovery.issuer, member.id, actor,
+      { id: provisionId, digest, dataEpoch: receipt.dataEpoch, sequence: receipt.sequence });
     const publicConfigPath = join(outputDir, 'public.json');
     const privateConfigPath = join(outputDir, 'private.json');
     const runtimeEnvPath = join(outputDir, 'runtime.env');

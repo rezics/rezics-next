@@ -11,5 +11,6 @@ export async function signInAtAccounts(page: Page, next: string,
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByLabel('Enter your password').fill(member.password);
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page).toHaveURL(next);
+  // OAuth crosses Accounts and the Worker; use the same loaded-host allowance as hydration.
+  await expect(page).toHaveURL(next, { timeout: 60_000 });
 }

@@ -24,15 +24,29 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const body = () => within(document.body);
+async function settledOverlay(element: HTMLElement) {
+  // Presence precedes Ark's focus handoff and CSS entry animation. Typing before
+  // the handoff can send later characters to the initial field instead.
+  await waitFor(() => expect(element.contains(document.activeElement)).toBe(true));
+  await Promise.all(element.getAnimations().map(animation => animation.finished));
+}
+async function openDialog(name: string) {
+  const element = await body().findByRole('dialog', { name }, { timeout: 5000 });
+  await settledOverlay(element);
+  return within(element);
+}
 async function openMenu(canvas: ReturnType<typeof within>, name: string, item: string) {
   await userEvent.click(canvas.getByRole('button', { name: `Actions for ${name}` }));
   const menu = await body().findByRole('menu', {}, { timeout: 5000 });
+  await settledOverlay(menu);
   const choice = within(menu).getByRole('menuitem', { name: item });
-  // Choose from the keyboard: a pointer press while the menu is still zooming in can land beside the item and
-  // close the menu without choosing, which failed these stories on a loaded host.
-  for (let step = 0; step < 10 && !choice.hasAttribute('data-highlighted'); step += 1) {
+  const highlighted = () => menu.querySelector('[data-highlighted]');
+  for (let step = 0; step <= within(menu).getAllByRole('menuitem').length && highlighted() !== choice; step++) {
+    const previous = highlighted();
     await userEvent.keyboard('{ArrowDown}');
+    await waitFor(() => expect(highlighted()).not.toBe(previous));
   }
+  await expect(choice).toHaveAttribute('data-highlighted');
   await userEvent.keyboard('{Enter}');
 }
 
@@ -68,7 +82,7 @@ export const Invite: Story = {
     reset();
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Invite' }));
-    const dialog = within(await body().findByRole('dialog', { name: 'Invite someone to join' }, { timeout: 5000 }));
+    const dialog = await openDialog('Invite someone to join');
     await expect(dialog.queryByRole('textbox', { name: 'Reason' })).toBeNull();
     await userEvent.type(dialog.getByRole('textbox', { name: 'Who' }), '@lin_mei');
     await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'Invitation stays open for' }), '3 days');
@@ -85,7 +99,7 @@ export const BanForThirtyDays: Story = {
     reset();
     const canvas = within(canvasElement);
     await openMenu(canvas, 'Sophie Li 李素菲', 'Ban…');
-    const dialog = within(await body().findByRole('dialog', { name: 'Ban Sophie Li 李素菲' }, { timeout: 5000 }));
+    const dialog = await openDialog('Ban Sophie Li 李素菲');
     await expect(dialog.getByText(/aren’t given back when the ban ends/)).toBeInTheDocument();
     await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'For how long' }), '30 days');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Spoilers in three titles after a warning.');
@@ -102,7 +116,7 @@ export const Unban: Story = {
     reset();
     const canvas = within(canvasElement);
     await openMenu(canvas, 'Jun Zhang 张俊', 'Unban…');
-    const dialog = within(await body().findByRole('dialog', { name: 'Unban Jun Zhang 张俊?' }, { timeout: 5000 }));
+    const dialog = await openDialog('Unban Jun Zhang 张俊?');
     await userEvent.click(dialog.getByRole('button', { name: 'Unban' }));
     await expect(dialog.getByText('Write a reason first.')).toBeInTheDocument();
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Appeal accepted.');
@@ -119,7 +133,7 @@ export const BanSomeoneByHandle: Story = {
     reset();
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Ban someone' }));
-    const dialog = within(await body().findByRole('dialog', { name: 'Ban someone from this Realm' }, { timeout: 5000 }));
+    const dialog = await openDialog('Ban someone from this Realm');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Who' }), '@nobody_here');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Spam.');
     await userEvent.click(dialog.getByRole('button', { name: 'Ban' }));
@@ -139,7 +153,7 @@ export const UnbanSomeoneOutsideTheRoster: Story = {
     reset();
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Unban someone' }));
-    const dialog = within(await body().findByRole('dialog', { name: 'Unban someone in this Realm' }, { timeout: 5000 }));
+    const dialog = await openDialog('Unban someone in this Realm');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Who' }), '@lin_mei');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Ban was a mistake.');
     await userEvent.click(dialog.getByRole('button', { name: 'Unban' }));
@@ -156,7 +170,7 @@ export const ChangedMeanwhile: Story = {
     reset();
     const canvas = within(canvasElement);
     await openMenu(canvas, 'An Wu 吴安', 'Remove from Realm…');
-    const dialog = within(await body().findByRole('dialog', { name: 'Remove An Wu 吴安 from the Realm?' }, { timeout: 5000 }));
+    const dialog = await openDialog('Remove An Wu 吴安 from the Realm?');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Stepped down.');
     await userEvent.click(dialog.getByRole('button', { name: 'Remove' }));
     await expect(await dialog.findByRole('alert', {}, { timeout: 5000 })).toHaveTextContent('This member changed while you were deciding.');
@@ -170,8 +184,8 @@ export const GiveRoleWithImpact: Story = {
     reset();
     const canvas = within(canvasElement);
     await openMenu(canvas, 'Sophie Li 李素菲', 'Give a role…');
-    const dialog = within(await body().findByRole('dialog', { name: 'Give Sophie Li 李素菲 a role' }, { timeout: 5000 }));
-    const impact = dialog.getByRole('region', { name: 'Who this affects' });
+    const dialog = await openDialog('Give Sophie Li 李素菲 a role');
+    const impact = await dialog.findByRole('region', { name: 'Who this affects' });
     await expect(await within(impact).findByText('1 member gains: Moderate the queue')).toBeInTheDocument();
     await expect(impact).toHaveTextContent('Sophie Li 李素菲');
     await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'Role' }), 'Rules editors');

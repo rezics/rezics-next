@@ -253,14 +253,8 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
 
 interface PrivateFixture { member: { email: string; password: string } }
 
-/** Grants the QA web fixture's Agent `work.read` on one Work, as Access would for a reader with access. */
-function grantRead(work: string) {
-  const grant = spawnSync('bun', ['apps/web/tests/grant-read.ts'], { cwd: process.cwd(),
-    env: { ...process.env, REZICS_QA_WORK: work }, encoding: 'utf8', timeout: 30_000 });
-  if (grant.status !== 0 || grant.error) throw new Error(`QA Work read grant failed: ${grant.stderr || grant.status}`);
-}
-
-test('a signed-in reader shelves and rates a Work, sees their rating in Mine and keeps reading progress where Main allows it', async ({ page }) => {
+test('a signed-in reader shelves and rates a Work, sees their rating in Mine and continues from saved progress', async ({ page }) => {
+  test.setTimeout(150_000);
   const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
   if (!path) throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must point to the isolated QA web-auth fixture');
   const { member } = JSON.parse(readFileSync(path, 'utf8')) as PrivateFixture;
@@ -274,35 +268,31 @@ test('a signed-in reader shelves and rates a Work, sees their rating in Mine and
     .toHaveAttribute('aria-current', 'true');
 
   // The shelf action under the cover writes Main's reader status and survives a reload; the menu changes and clears it.
-  // A QA Agent Main does not treat as a baseline member has no reader library; then no control is drawn at all.
-  const libraryOpen = await page.getByRole('button', { name: 'Want to read', exact: true }).count() > 0;
-  if (!libraryOpen) {
-    await expect(page.getByRole('link', { name: /^Want to read/ })).toHaveCount(0);
-    await expect(page.getByRole('radio')).toHaveCount(0);
-  }
-  if (libraryOpen) await page.getByRole('button', { name: 'Want to read', exact: true }).click();
+  // The QA Person has a baseline membership; missing library controls must fail this journey.
+  await page.getByRole('button', { name: 'Want to read', exact: true }).click();
   const shelved = (status: string) => page.getByRole('button', { name: new RegExp(`^${status} — Shelve`) });
-  if (libraryOpen) {
-    await expect(shelved('Want to read')).toBeVisible();
-    await page.reload();
-    await expect(shelved('Want to read')).toBeVisible();
-    await shelved('Want to read').click();
-    await page.getByRole('menuitemradio', { name: 'Currently reading' }).click();
-    await expect(shelved('Currently reading')).toBeVisible();
-    await page.reload();
-    await expect(shelved('Currently reading')).toBeVisible();
-    await shelved('Currently reading').click();
-    await page.getByRole('menuitem', { name: 'Remove from my shelves' }).click();
-    await expect(page.getByRole('button', { name: 'Want to read', exact: true })).toBeVisible();
-  }
+  const savedShelf = async (status: string) => {
+    await expect(shelved(status)).toBeVisible();
+    // The label is optimistic. Wait for Main's acknowledgement before navigating.
+    await expect(shelved(status)).not.toHaveAttribute('aria-busy', 'true');
+  };
+  await savedShelf('Want to read');
+  await page.reload();
+  await expect(shelved('Want to read')).toBeVisible();
+  await shelved('Want to read').click();
+  await page.getByRole('menuitemradio', { name: 'Currently reading' }).click();
+  await savedShelf('Currently reading');
+  await page.reload();
+  await expect(shelved('Currently reading')).toBeVisible();
+  await shelved('Currently reading').click();
+  await page.getByRole('menuitem', { name: 'Remove from my shelves' }).click();
+  await expect(page.getByRole('button', { name: 'Want to read', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Want to read', exact: true })).toBeEnabled();
 
-  // Main keeps progress only where the reader holds work.read on the Work and the chapter's target.
+  // The baseline member can read this public Work and its published chapters.
   const [first, second] = seed.chapters.map(uuid);
   await page.goto(`/en/w/${id}/read/${first}`);
-  await expect(page.getByText('Progress isn’t kept for this Work yet.')).toBeVisible();
-  grantRead(seed.work);
-  grantRead(seed.targets[0]!);
-  await page.reload();
+  await expect(page.getByText('Progress isn’t kept for this Work yet.')).toHaveCount(0);
   await page.getByRole('button', { name: 'Mark chapter as read' }).click();
   await expect(page.getByText('Chapter read')).toBeVisible();
   await page.reload();
@@ -310,18 +300,18 @@ test('a signed-in reader shelves and rates a Work, sees their rating in Mine and
   await page.getByRole('button', { name: 'Mark as unread' }).click();
   await expect(page.getByRole('button', { name: 'Mark chapter as read' })).toBeVisible();
   await page.goto(`/en/w/${id}/read/${second}`);
-  await expect(page.getByText('Progress isn’t kept for this Work yet.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Mark chapter as read' })).toBeVisible();
 
   // Chapter 1 read and the Work on the reader's shelf: Continue opens chapter 2 and names it.
   await page.goto(`/en/w/${id}/read/${first}`);
   await page.getByRole('button', { name: 'Mark chapter as read' }).click();
   await expect(page.getByText('Chapter read')).toBeVisible();
-  if (!libraryOpen) return;
   await page.goto(`/en/w/${id}`);
   await page.getByRole('button', { name: 'Want to read', exact: true }).click();
+  await savedShelf('Want to read');
   await shelved('Want to read').click();
   await page.getByRole('menuitemradio', { name: 'Currently reading' }).click();
-  await expect(shelved('Currently reading')).toBeVisible();
+  await savedShelf('Currently reading');
   await page.reload();
   const resume = page.getByRole('link', { name: 'Continue reading' });
   await expect(resume).toHaveAttribute('href', new RegExp(`^/en/w/${id}/read/${second}(\\?|$)`));
