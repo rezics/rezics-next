@@ -43,7 +43,7 @@ export const zoneReplyPage = t.Object({ profile: t.Union([
   { maxItems: ZONE_MODULE_COST.pageSize }), ...pageFields });
 export const zoneGenrePage = t.Object({ profile: t.Literal('zone-genres-v1'),
   realm: readId, context: readId,
-  items: t.Array(t.Object({ id: readId, name: readName }), { maxItems: ZONE_MODULE_COST.pageSize }),
+  items: t.Array(t.Object({ id: readId, concept: readId, name: readName }), { maxItems: ZONE_MODULE_COST.pageSize }),
   ...pageFields });
 export const zoneEditorLists = t.Object({ profile: t.Literal('zone-editor-lists-v1'),
   realm: readId, lists: t.Array(t.Object({ collection: readId, name: readName,

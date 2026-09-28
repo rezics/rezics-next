@@ -18,7 +18,8 @@ async function modsContext(state: SeedState, steward: SeedState['createdRealms']
     concepts.push(await state.api.post<{ concept: string; definitionRevision: string }>(
       '/v1/classification-propositions', { profile: 'classification-proposition-v1', label,
         actingSubject: steward.actingSubject }, steward.token,
-    seedKey('official-mod-concept-attempt', `${label.toLowerCase()}:${Bun.randomUUIDv7()}`)));
+    // A new stable namespace leaves legacy cancelled admissions replayable.
+    seedKey('official-mod-concept-v3', label.toLowerCase())));
   }
   const context = await state.api.post<{ context: string }>('/v1/contexts', {
     profile: 'context-v1', role: 'shared', disclosure: 'public', base: null,
