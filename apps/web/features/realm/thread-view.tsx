@@ -67,7 +67,7 @@ function AboutWork({ work }: { work: ThreadRead['work'] }) {
 function OpeningPost({ post, read, realm, count }: { post: ThreadReply; read: ThreadRead;
   realm: ThreadViewProps['realm']; count: number }) {
   const { t } = useFeed();
-  const title = post.title ?? '', body = post.body;
+  const title = post.blocked ? t.blockedUser : post.title ?? '', body = post.body;
   const href = threadPath(realm.path, post.reply);
   const words = body ? <ReplyBody reply={{ ...post, body }} className="text-base/relaxed" /> : null;
   return <article aria-labelledby="thread-title" className="grid gap-3">
@@ -77,21 +77,21 @@ function OpeningPost({ post, read, realm, count }: { post: ThreadReply; read: Th
     </div>
     <h1 id="thread-title" lang={post.language ?? undefined} className="text-pretty font-semibold text-xl/snug
       [overflow-wrap:anywhere] sm:text-2xl/snug">{title || t.untitled}</h1>
-    {announcesSpoilers(title) ? <>
+    {post.blocked ? null : announcesSpoilers(title) ? <>
       <span className="w-fit rounded-full bg-warning/15 px-2 py-0.5 font-semibold text-[11px] text-warning-foreground
         uppercase tracking-wide">{t.spoilerTag}</span>
       {words ? <SpoilerVeil>{words}</SpoilerVeil> : null}
     </> : words}
     <AboutWork work={read.work} />
-    <div role="group" aria-label={t.actions} className="-ms-1 flex flex-wrap items-center gap-1.5">
-      <VoteControl target={{ id: post.placement, vote: post.vote.value, score: post.vote.score,
-        revision: post.vote.revision, open: post.vote.open }} />
+    <fieldset className="-ms-1 flex flex-wrap items-center gap-1.5"><legend className="sr-only">{t.actions}</legend>
+      {post.blocked ? null : <VoteControl target={{ id: post.placement, vote: post.vote.value, score: post.vote.score,
+        revision: post.vote.revision, open: post.vote.open }} />}
       <a href="#comments" className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 font-medium
         text-muted-foreground text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
         <MessageCircleIcon aria-hidden="true" className="size-4" />
         {t.comments(count)}{read.complete ? '' : '+'}</a>
       <ShareButton href={href} title={title} />
-    </div>
+    </fieldset>
   </article>;
 }
 

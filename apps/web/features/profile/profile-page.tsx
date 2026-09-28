@@ -22,6 +22,8 @@ import { type FollowActions, FollowControl } from './follow-button.tsx';
 import { followerLabel } from './followers.ts';
 import type { ProfileMessages } from './messages.ts';
 import { ProfileAvatar } from './profile-avatar.tsx';
+import { ProfileContributions } from './contributions.tsx';
+import type { ContributionPage } from './contributions.tsx';
 import { isNativeHandle, profileHref, type ProfileView } from './route.ts';
 import type { AgentProfile, AgentWorksPage, FollowState, LibraryView, Loaded, ReadFailure, ShelfCard,
   ShelfStatus } from './types.ts';
@@ -244,6 +246,8 @@ export interface ProfilePageProps {
   followActions?: FollowActions;
   locale: UiLocale;
   messages: ProfileMessages;
+  /** Stories can supply a small public activity page without a running Main. */
+  contributionsRead?: (kind: 'posts' | 'comments', cursor?: string) => Promise<ContributionPage>;
 }
 
 /**
@@ -252,7 +256,7 @@ export interface ProfilePageProps {
  * organization shows the works it is credited on.
  */
 export function ProfilePage({ profile, works, follow, library, reader, readerActions, followActions, locale,
-  messages }: ProfilePageProps) {
+  messages, contributionsRead }: ProfilePageProps) {
   const t = materializeData(messages, { locale });
   const credited = works.ok && works.data.items.length > 0;
   const hasShelves = library?.kind === 'shelves' && library.shelves.some(shelf => shelf.count > 0);
@@ -269,9 +273,16 @@ export function ProfilePage({ profile, works, follow, library, reader, readerAct
     <PageContainer className="grid gap-12 [text-autospace:normal]">
       <ProfileHeader profile={profile} credited={credited} follow={follow} reader={reader}
         followActions={followActions} locale={locale} messages={messages} />
-      {worksRegion || libraryRegion ? <div className="grid gap-12">{worksRegion}{libraryRegion}</div>
-        : <EmptyState icon={UserRoundIcon} title={t.nothingYetTitle({ name: profile.displayName })}
-          description={profile.kind === 'person' ? t.nothingYetBody : t.nothingYetWorksBody} />}
+      {profile.kind === 'person' ? <ProfileContributions agent={profile.id}
+        actingSubject={reader.actingSubject ?? null} locale={locale} messages={messages}
+        load={contributionsRead}>
+        {worksRegion || libraryRegion ? <div className="grid gap-12">{worksRegion}{libraryRegion}</div>
+          : <EmptyState icon={UserRoundIcon} title={t.nothingYetTitle({ name: profile.displayName })}
+            description={t.nothingYetBody} />}
+      </ProfileContributions>
+        : worksRegion || libraryRegion ? <div className="grid gap-12">{worksRegion}{libraryRegion}</div>
+          : <EmptyState icon={UserRoundIcon} title={t.nothingYetTitle({ name: profile.displayName })}
+            description={t.nothingYetWorksBody} />}
     </PageContainer>
   </ReaderActionsProvider>;
 }

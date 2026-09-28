@@ -1,7 +1,7 @@
 import type { Static } from 'typebox';
 import { readEpochOrder } from '../discovery/lineage.ts';
 import { activityTime, bestKey } from '../feed/ranking.ts';
-import { readAgentCards } from '../profiles/read.ts';
+import { readAgent, readAgentCards } from '../profiles/read.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid, WorkReadMissing,
@@ -101,6 +101,21 @@ async function authors(session: WorkReadSession, ids: readonly string[]) {
 function reader(session: WorkReadSession) {
   return session.principal && session.options.actingSubject
     ? { principal: session.principal, agent: session.options.actingSubject } : undefined;
+}
+
+/** Check only the bounded authors in this read, using the reader's own block policy. */
+async function blockedAuthors(session: WorkReadSession, authors: readonly string[]): Promise<Set<string>> {
+  const viewing = reader(session);
+  if (!viewing) return new Set();
+  const preferences = session.deps.personPreferences;
+  if (!preferences) throw new WorkReadUnavailable('Person preferences are unavailable');
+  const unique = [...new Set(authors)];
+  const blocked = new Set<string>();
+  for (let start = 0; start < unique.length; start += 128) {
+    for (const actor of await preferences.blockedActors(viewing.principal, viewing.agent,
+      unique.slice(start, start + 128))) blocked.add(actor);
+  }
+  return blocked;
 }
 
 /** Best is Home's vote and age signal; Top is net score; New is newest first. Ties go newest first. */
@@ -229,18 +244,22 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     if (row && item.parent && shown.has(item.parent)) { shown.add(item.reply); below.push(row); }
   }
   const all = [...above, ...below];
-  const [texts, titles, named, votes] = await Promise.all([bodies(session, all), works(session, [focused.work]),
+  const [texts, titles, named, votes, blocked] = await Promise.all([bodies(session, all), works(session, [focused.work]),
     authors(session, all.map(row => row.author)),
-    threads.votes(session.position.dataEpoch, all.map(row => row.placement), reader(session))]);
+    threads.votes(session.position.dataEpoch, all.map(row => row.placement), reader(session)),
+    blockedAuthors(session, all.map(row => row.author))]);
   const about = titles.get(focused.work);
   if (!about || !texts.has(focus)) throw new WorkReadMissing('Reply is unavailable');
   const reply = (row: Head): Reply[] => {
     const text = texts.get(row.reply);
     if (!text) return [];
     const { title, body } = row.parent ? { title: null, body: text.body.trim() } : discussionParts(text.body);
-    return [{ reply: row.reply, placement: row.placement, parent: row.parent, author: named(row.author),
-      time: row.time.toISOString(), language: text.language, revisionId: row.revisionId, title,
-      body: clip(body, REALM_THREAD_COST.bodyChars),
+    const hidden = blocked.has(row.author);
+    return [{ reply: row.reply, placement: row.placement, parent: row.parent,
+      author: hidden ? null : named(row.author), blocked: hidden,
+      time: row.time.toISOString(), language: text.language, revisionId: row.revisionId,
+      title: hidden ? null : title,
+      body: hidden ? '' : clip(body, REALM_THREAD_COST.bodyChars),
       vote: votes.get(row.placement) ?? closed }];
   };
   // Depth first, each reply's replies in the chosen order. A reply whose body
@@ -263,8 +282,46 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     if (!shownReply.length) break;
     ancestors.unshift(...shownReply);
   }
+  const blockedNow = await blockedAuthors(session, all.map(row => row.author));
+  if (blockedNow.size !== blocked.size || [...blocked].some(author => !blockedNow.has(author))) {
+    throw new WorkReadMoved('Reader blocks changed during the thread read');
+  }
   await readRealmBasis(session, realm);
   return { profile: 'realm-thread-v1', realm, thread: ancestors[0]?.reply ?? focus, focus, sort, work: about,
     rootRevision: focused.rootRevision, ancestors, items, complete, sourcePosition: session.position };
 }
 
+/** Eight newest candidates per page; each exposed entry must still be the current public placement. */
+export const PROFILE_CONTRIBUTION_COST = { pageSize: 8, candidates: 9, excerptChars: 400 } as const;
+
+export async function readProfileContributions(session: WorkReadSession, author: string,
+  kind: 'posts' | 'comments', encoded?: string, profileGate = readAgent) {
+  await profileGate(session, author);
+  const threads = store(session);
+  if (!session.deps.realmReplies) throw new WorkReadUnavailable('Realm replies are unavailable');
+  const binding = ['agent-realm-contributions-v1', author, kind];
+  const cursor = decodeReadCursor(encoded, binding, session.position);
+  if (cursor && Number.isNaN(Date.parse(cursor.order))) throw new WorkReadInvalid('Contribution cursor is invalid');
+  const nodes = await threads.authorPage(author, kind, PROFILE_CONTRIBUTION_COST.candidates,
+    cursor ? { time: cursor.order, reply: cursor.after } : undefined);
+  const page = nodes.slice(0, PROFILE_CONTRIBUTION_COST.pageSize);
+  const items = [];
+  for (const node of page) {
+    if (!node.origin) continue;
+    const visible = await session.deps.realmReplies.readPublic(node.reply,
+      session.principal ?? undefined, session.options.actingSubject);
+    if (!visible || visible.originRealm !== node.origin || visible.author !== author) continue;
+    const parts = node.parent ? { title: null, body: visible.body } : discussionParts(visible.body);
+    items.push({ reply: node.reply, realm: node.origin, parent: node.parent,
+      time: node.createdAt.toISOString(), title: parts.title,
+      excerpt: clip(parts.body, PROFILE_CONTRIBUTION_COST.excerptChars) });
+  }
+  if (!await session.deps.personPreferences?.profileVisible(author, session.principal)) {
+    throw new WorkReadMissing('Agent unavailable');
+  }
+  const last = page.at(-1);
+  const next = nodes.length > PROFILE_CONTRIBUTION_COST.pageSize && last
+    ? encodeReadCursor(binding, session.position, last.reply, last.createdAt.toISOString()) : null;
+  return { profile: 'agent-realm-contributions-v1' as const, kind,
+    ...pageResult(session, items, next) };
+}

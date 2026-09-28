@@ -32,6 +32,7 @@ export const Author: Story = {
     await expect(canvas.getByText('Author', { selector: 'p' })).toBeVisible();
     await expect(canvas.getByText('@lin_mei')).toBeVisible();
     await expect(canvas.getByText('128 followers')).toBeVisible();
+    await expect(canvas.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
     // Signed out, Follow leads to sign-in and comes back to this profile.
     await expect(canvas.getByRole('link', { name: /^Follow/ }))
       .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent('/en/@lin_mei')}`);
@@ -48,6 +49,23 @@ export const Author: Story = {
     const summary = within(canvas.getByRole('navigation', { name: 'Bookshelves' }));
     await expect(summary.getByRole('link', { name: 'Read 48' })).toHaveAttribute('href', '/en/@lin_mei/shelves/read');
     await expect(canvas.getByRole('heading', { level: 2, name: 'Currently reading 2' })).toBeVisible();
+  },
+};
+
+export const PostsAndComments: Story = {
+  args: { contributionsRead: async kind => ({ items: kind === 'posts' ? [{ reply: storyId(901),
+    realm: storyId(902), parent: null, time: '2026-09-28T10:00:00Z', title: 'A first post',
+    excerpt: 'What should I read next?' }] : [{ reply: storyId(903), realm: storyId(902),
+    parent: storyId(901), time: '2026-09-28T09:00:00Z', title: null,
+    excerpt: 'A **great** recommendation.' }], nextCursor: null }) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('tab', { name: 'Posts' }));
+    await expect(await canvas.findByRole('link', { name: 'A first post' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('tab', { name: 'Comments' }));
+    await expect(await canvas.findByText('great')).toHaveProperty('tagName', 'STRONG');
+    await userEvent.click(canvas.getByRole('tab', { name: 'Overview' }));
+    await expect(canvas.getByRole('heading', { name: 'Works by Lin Mei 林梅' })).toBeVisible();
   },
 };
 

@@ -48,6 +48,25 @@ const approved = (realm: string, reply: string, revision: string, review: string
 export class RealmReplyThreadStore {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
 
+  /** One author's newest Realm replies; a caller must still admit each current placement. */
+  async authorPage(author: string, kind: 'posts' | 'comments', limit: number,
+    before?: { time: string; reply: string }): Promise<ThreadNode[]> {
+    if (!native.test(author) || !Number.isInteger(limit) || limit < 1 || limit > 9
+      || before && (!native.test(before.reply) || Number.isNaN(Date.parse(before.time)))) {
+      throw new RealmReplyInvalid('invalid author page');
+    }
+    const rows = await this.content.query<{ reply: string; parent: string | null; author: string;
+      origin: string | null; root_target: string; root_revision: string; created_at: Date }>(`
+      SELECT id AS reply, parent_reply AS parent, author, origin_realm AS origin,
+        root_target, root_revision, created_at FROM content.reply
+      WHERE author = $1 AND origin_realm IS NOT NULL
+        AND parent_reply IS ${kind === 'posts' ? 'NULL' : 'NOT NULL'}
+        AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::text))
+      ORDER BY created_at DESC, id DESC LIMIT $4`,
+    [author, before?.time ?? null, before?.reply ?? '', limit]);
+    return rows.rows.map(node);
+  }
+
   /** The focused reply and its descendants, breadth first; one row past `limit` means more exist. */
   async subtree(focus: string, limit: number = REALM_THREAD_COST.replies + 1): Promise<ThreadNode[]> {
     if (!native.test(focus) || !Number.isInteger(limit) || limit < 1 || limit > REALM_THREAD_COST.replies + 1) {

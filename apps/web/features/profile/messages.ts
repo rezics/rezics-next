@@ -18,6 +18,10 @@ export const messages = {
   editProfile: 'Edit profile',
   showMore: 'Show more',
   showLess: 'Show less',
+  activityTabs: 'Profile activity', overview: 'Overview', posts: 'Posts', comments: 'Comments',
+  post: 'Post', comment: 'Comment', noPosts: 'No public posts yet', noComments: 'No public comments yet',
+  contributionsLoading: 'Loading activity…', contributionsFailed: 'Couldn’t load activity. Try again.',
+  showSpoiler: 'Show spoiler',
 
   worksHeading: insert('Works by {{name}}', { name: String }),
   workCount: plural({ one: insert('{{count}} work'), other: insert('{{count}} works') },

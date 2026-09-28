@@ -95,6 +95,36 @@ export const Thread: Story = {
   },
 };
 
+/** A blocked author's words stay withheld even after the reader opens the collapsed branch. */
+export const BlockedReply: Story = {
+  args: { read: { ...storyThread, items: storyThread.items.map(item => item.reply === storyReply(2)
+    ? { ...item, author: null, body: '', blocked: true } : item) } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const branch = canvas.getByRole('button', { name: 'Show the reply by Blocked user' });
+    await expect(branch).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(branch);
+    const blocked = within(branch.closest('article')!);
+    await expect(blocked.getAllByText('Blocked user').length).toBeGreaterThan(0);
+    const byline = branch.closest('article')!.querySelector('p[id]');
+    await expect(byline).toHaveTextContent('Blocked user');
+    await expect(byline).not.toHaveTextContent('Daniel Chen 陈丹尼');
+  },
+};
+
+export const FormattedReply: Story = {
+  args: { read: { ...storyThread, items: storyThread.items.map(item => item.reply === storyReply(2)
+    ? { ...item, body: '**A thought** with [a link](https://example.org) and >!a secret!<.' } : item) } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('A thought')).toHaveProperty('tagName', 'STRONG');
+    await expect(canvas.getByRole('link', { name: 'a link' })).toHaveAttribute('href', 'https://example.org/');
+    await expect(canvas.queryByText('a secret')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Show spoiler' }));
+    await expect(canvas.getByText('a secret')).toBeVisible();
+  },
+};
+
 /** Replying inline: the words go to Main through its four reply steps, and the thread reads again. */
 export const ReplyInline: Story = {
   args: { api: memoryThreads() },

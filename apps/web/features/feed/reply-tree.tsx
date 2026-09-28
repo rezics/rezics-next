@@ -11,6 +11,7 @@ import { useFeed } from './feed-context.tsx';
 import { ReplyComposer, type ReplyTarget } from './reply-composer.tsx';
 import { type ReplyNode, THREAD_DEPTH, type ThreadReply } from './thread.ts';
 import { absoluteTime, relativeTime } from './time.ts';
+import { MarkdownBody } from '../post-composer/markdown.tsx';
 
 /** Replies scored this low start folded, as Reddit folds them; one tap opens them. */
 const FOLD_SCORE = -5;
@@ -43,10 +44,10 @@ function CopyLink({ href }: { href: string }) {
 
 /** The reply's words, paragraph by paragraph, in its own language. */
 export function ReplyBody({ reply, className }: { reply: ThreadReply; className?: string }) {
+  const { t } = useFeed();
   return <div lang={reply.language ?? undefined} className={cn('grid gap-2 text-pretty text-[0.9375rem]/relaxed',
     '[overflow-wrap:anywhere]', readableText, className)}>
-    {reply.body.split(/\n{2,}/).map((paragraph, index) => <p key={index} className="whitespace-pre-line">
-      {paragraph}</p>)}
+    <MarkdownBody text={reply.body} showSpoiler={t.showSpoiler} className="grid gap-2" />
   </div>;
 }
 
@@ -54,7 +55,8 @@ export function ReplyBody({ reply, className }: { reply: ThreadReply; className?
 export function ReplyByline({ reply, opener, id }: { reply: ThreadReply; opener: string | null; id?: string }) {
   const { t, locale, now } = useFeed();
   return <p id={id} className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[13px] text-muted-foreground">
-    {reply.author ? <LocalizedLink href={`/@${reply.author.handle}`} className="truncate font-semibold text-foreground
+    {reply.blocked ? <span className="font-medium">{t.blockedUser}</span>
+      : reply.author ? <LocalizedLink href={`/@${reply.author.handle}`} className="truncate font-semibold text-foreground
       outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">{reply.author.name}</LocalizedLink>
       : <span className="italic">{t.someone}</span>}
     {reply.author && reply.author.id === opener ? <abbr title={t.originalPoster} className="rounded bg-info/10 px-1
@@ -74,11 +76,11 @@ export function ReplyByline({ reply, opener, id }: { reply: ThreadReply; opener:
 function Reply({ node, context }: { node: ReplyNode; context: ThreadContext }) {
   const { t } = useFeed();
   const { reply } = node;
-  const [folded, setFolded] = useState(reply.vote.score <= FOLD_SCORE);
+  const [folded, setFolded] = useState(Boolean(reply.blocked) || reply.vote.score <= FOLD_SCORE);
   const [replying, setReplying] = useState(false);
   const bylineId = useId();
   const repliesId = useId();
-  const name = reply.author?.name ?? t.someone;
+  const name = reply.blocked ? t.blockedUser : reply.author?.name ?? t.someone;
   const deep = node.depth >= THREAD_DEPTH && node.children.length > 0;
   return <li className="min-w-0">
     <article aria-labelledby={bylineId} id={`reply-${reply.reply.slice(-36)}`} className="grid scroll-mt-24
@@ -100,19 +102,20 @@ function Reply({ node, context }: { node: ReplyNode; context: ThreadContext }) {
             group-focus-visible/line:w-0.5 group-focus-visible/line:bg-ring" />}
       </button>
       {folded ? <p className="col-start-2 row-start-2 self-center text-muted-foreground text-xs">
-        {node.descendants ? t.foldedReplies(node.descendants + 1) : t.folded}</p> : null}
+        {reply.blocked ? t.blockedUser : node.descendants ? t.foldedReplies(node.descendants + 1) : t.folded}</p> : null}
       <div id={repliesId} hidden={folded} className="col-start-2 row-start-2 grid min-w-0 gap-1.5 pt-0.5">
-        <ReplyBody reply={reply} />
-        <div role="group" aria-label={t.actions} className="-ms-1.5 flex flex-wrap items-center gap-0.5">
-          <VoteControl target={{ id: reply.placement, vote: reply.vote.value, score: reply.vote.score,
-            revision: reply.vote.revision, open: reply.vote.open }} plain />
-          <button type="button" aria-expanded={replying} className={action} onClick={() => setReplying(!replying)}>
-            <ReplyIcon aria-hidden="true" className="size-3.5" />{t.replyAction}</button>
+        {reply.blocked ? <p className="text-muted-foreground text-sm">{t.blockedUser}</p>
+          : <ReplyBody reply={reply} />}
+        <fieldset className="-ms-1.5 flex flex-wrap items-center gap-0.5"><legend className="sr-only">{t.actions}</legend>
+          {reply.blocked ? null : <VoteControl target={{ id: reply.placement, vote: reply.vote.value, score: reply.vote.score,
+            revision: reply.vote.revision, open: reply.vote.open }} plain />}
+          {reply.blocked ? null : <button type="button" aria-expanded={replying} className={action} onClick={() => setReplying(!replying)}>
+            <ReplyIcon aria-hidden="true" className="size-3.5" />{t.replyAction}</button>}
           <CopyLink href={context.replyHref(reply.reply)} />
           <button type="button" className={cn(action, 'sm:hidden')} onClick={() => setFolded(true)}>
             <MinusIcon aria-hidden="true" className="size-3.5" />{t.collapse}</button>
-        </div>
-        {replying ? <div className="pt-1">
+        </fieldset>
+        {replying && !reply.blocked ? <div className="pt-1">
           <ReplyComposer target={context.target} parent={{ reply: reply.reply, revisionId: reply.revisionId }}
             parentAuthor={name} inline autoFocus onDone={() => setReplying(false)} />
         </div> : null}

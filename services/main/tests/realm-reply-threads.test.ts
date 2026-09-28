@@ -30,7 +30,7 @@ interface Placed { id: number; parent?: number; author: number; minutes?: number
   approved?: boolean; graphParent?: number | null; hiddenAuthor?: boolean }
 
 function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Record<number, Partial<ThreadVote>>;
-  truncated?: boolean; countsComplete?: boolean } = {}) {
+  truncated?: boolean; countsComplete?: boolean; blocked?: number[] } = {}) {
   const calls = { graph: 0, admitted: 0, votes: 0, bodies: 0, counts: 0, store: 0 };
   const byId = new Map(placed.map(item => [item.id, item]));
   const node = (item: Placed): ThreadNode => ({ reply: reply(item.id), parent: item.parent ? reply(item.parent) : null,
@@ -51,7 +51,8 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
     return out;
   };
   const session = {
-    options: {}, position: { dataEpoch: 'epoch', sequence: '9' }, principal: null,
+    options: options.blocked ? { actingSubject: agent(9) } : {},
+    position: { dataEpoch: 'epoch', sequence: '9' }, principal: options.blocked ? {} : null,
     realm: async () => {
       if (options.privateRealm) throw new WorkReadMissing('Realm is unavailable');
       return { space: realm, realmRevision: 'r1', visibility: 'public', reviewMode: 'open', revision: null };
@@ -73,6 +74,8 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
       name: { value: 'Rainy Night Bookshop', language: 'en', direction: 'ltr', basis: 'requested' },
       avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: id, resourceType: 'work' } })),
     deps: {
+      personPreferences: { blockedActors: async (_principal: unknown, _agent: string, actors: string[]) =>
+        new Set(actors.filter(actor => options.blocked?.some(id => actor === agent(id)))) },
       profiles: { agentFences: async (ids: string[]) => new Map(ids.map(id => [id, 'fence'])) },
       content: { readExactBatch: async (ids: string[]) => {
         calls.bodies++;
@@ -151,6 +154,22 @@ test('a thread shows its approved replies nested, hides what sits under a withdr
   expect(read.work).toMatchObject({ cover: { kind: 'fallback' } });
   // One graph batch, one admission batch, one vote batch and one body batch, whatever the thread's size.
   expect(calls).toMatchObject({ graph: 1, admitted: 1, votes: 1, bodies: 1 });
+});
+
+test('a reader who blocked an author gets a collapsed reply without its identity or words', async () => {
+  const read = await readRealmThread(world(thread, { blocked: [2] }).session, realm, reply(1));
+  const items = new Map(read.items.map(item => [item.reply, item]));
+  expect(items.get(reply(2))).toMatchObject({ blocked: true, author: null, body: '', title: null });
+  expect(items.get(reply(4))).toMatchObject({ blocked: false, body: 'Title 4\nBody 4' });
+  expect(items.get(reply(3))).toMatchObject({ blocked: false });
+});
+
+test('a block changed while reading restarts the thread rather than exposing a stale body', async () => {
+  const { session } = world(thread, { blocked: [2] });
+  let reads = 0;
+  Object.assign(session.deps, { personPreferences: { blockedActors: async () =>
+    new Set([agent(++reads === 1 ? 2 : 3)]) } });
+  await expect(readRealmThread(session, realm, reply(1))).rejects.toBeInstanceOf(WorkReadMoved);
 });
 
 test('a thread reads in the order asked for: Top by votes, New newest first', async () => {

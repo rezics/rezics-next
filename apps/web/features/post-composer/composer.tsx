@@ -4,7 +4,6 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
 import { Input } from '@rezics/ui/input';
-import { Textarea } from '@rezics/ui/textarea';
 import { CircleAlertIcon, SearchIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -15,6 +14,7 @@ import type { RealmHeader } from '../realm/types.ts';
 import Link from '../shell/localized-link.tsx';
 import { newPostProgress, submitPost, type PostProgress } from './api.ts';
 import { postText as words } from './messages.ts';
+import { MarkdownEditor } from './markdown-editor.tsx';
 
 export interface CommunityChoice { id: string; name: string }
 interface WorkChoice { id: string; mainVersion: string; title: string }
@@ -211,20 +211,21 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
             ? <p className="text-muted-foreground text-sm">{words.noWork[locale]}</p> : null}
         </>}
       </section>
-      <label className="grid gap-1.5 text-sm font-semibold">{words.titleLabel[locale]}
-        <Input required maxLength={280} value={draft.title} readOnly={locked}
-          onChange={event => change({ title: event.currentTarget.value })} /></label>
-      <label className="grid gap-1.5 text-sm font-semibold">{words.body[locale]}
-        <Textarea rows={9} maxLength={7800} value={draft.body} readOnly={locked}
-          onChange={event => change({ body: event.currentTarget.value })} />
-        <span className="text-muted-foreground text-xs font-normal">{words.bodyHelp[locale]}</span></label>
-      <label className="flex items-start gap-3 text-sm">
-        <Checkbox checked={draft.spoiler} disabled={locked}
+      <div className="grid gap-1.5 text-sm font-semibold"><label htmlFor="post-title">{words.titleLabel[locale]}</label>
+        <Input id="post-title" required maxLength={280} value={draft.title} readOnly={locked}
+          onChange={event => change({ title: event.currentTarget.value })} /></div>
+      <section className="grid gap-1.5"><h2 className="text-sm font-semibold">{words.body[locale]}</h2>
+        <MarkdownEditor label={words.body[locale]} rows={9} maxLength={7800} value={draft.body}
+          readOnly={locked} onChange={body => change({ body })} editLabel={words.edit[locale]}
+          previewLabel={words.preview[locale]} showSpoiler={words.showSpoiler[locale]} />
+        <span className="text-muted-foreground text-xs">{words.bodyHelp[locale]}</span></section>
+      <div className="flex items-start gap-3 text-sm">
+        <Checkbox id="post-spoiler" checked={draft.spoiler} disabled={locked}
           onCheckedChange={details => change({ spoiler: details.checked === true })}
           aria-label={words.spoiler[locale]} />
-        <span className="grid gap-0.5"><span className="font-medium">{words.spoiler[locale]}</span>
-          <span className="text-muted-foreground">{words.spoilerHelp[locale]}</span></span>
-      </label>
+        <label htmlFor="post-spoiler" className="grid gap-0.5"><span className="font-medium">{words.spoiler[locale]}</span>
+          <span className="text-muted-foreground">{words.spoilerHelp[locale]}</span></label>
+      </div>
       {error ? <Alert variant="destructive" role="alert"><CircleAlertIcon aria-hidden="true" />
         <AlertDescription>{words[error][locale]}</AlertDescription></Alert> : null}
       <div className="flex flex-wrap items-center gap-3">

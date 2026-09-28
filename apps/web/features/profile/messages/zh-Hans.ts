@@ -16,6 +16,10 @@ export default {
   editProfile: '编辑个人资料',
   showMore: '展开',
   showLess: '收起',
+  activityTabs: '个人动态', overview: '概览', posts: '帖子', comments: '评论',
+  post: '帖子', comment: '评论', noPosts: '还没有公开帖子', noComments: '还没有公开评论',
+  contributionsLoading: '正在加载动态…', contributionsFailed: '无法加载动态，请重试。',
+  showSpoiler: '显示剧透内容',
 
   worksHeading: insert('{{name}}的作品', { name: String }),
   workCount: plural({ other: insert('{{count}} 部作品') }, { count: asValue(number()) }),

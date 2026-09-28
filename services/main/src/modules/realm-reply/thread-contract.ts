@@ -51,7 +51,9 @@ export const realmThreadsPage = t.Object({ profile: t.Literal('realm-threads-v1'
 export const realmThreadReply = t.Object({ reply: readId, placement: readId, parent: t.Nullable(readId),
   author: threadAuthor, time: t.String(), language: t.Nullable(t.String()), revisionId: readUuid,
   title: t.Nullable(t.String({ maxLength: DISCUSSION_TITLE_CHARS + 1 })),
-  body: t.String({ maxLength: REALM_THREAD_COST.bodyChars }), vote: threadVote });
+  body: t.String({ maxLength: REALM_THREAD_COST.bodyChars }),
+  /** The reader blocked this author; the body and author are withheld from this read. */
+  blocked: t.Optional(t.Boolean()), vote: threadVote });
 export const realmThreadQuery = t.Object({ sort: t.Optional(threadSort),
   language: t.Optional(realmThreadsQuery.properties.language),
   actingSubject: t.Optional(readId) }, { additionalProperties: false });

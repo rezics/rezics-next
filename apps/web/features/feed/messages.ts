@@ -56,7 +56,7 @@ export const messages = {
   version: insert('Version {{version}}', { version: String }),
   promptPreview: 'Prompt preview',
   // A discussion or reply
-  someone: 'A member', aboutWork: insert('On {{title}}', { title: String }),
+  someone: 'A member', blockedUser: 'Blocked user', aboutWork: insert('On {{title}}', { title: String }),
   spoilerTag: 'Spoiler', spoilerAnnounced: 'The author marked this as a spoiler.', showSpoiler: 'Show spoiler',
   replyIn: 'A reply in a discussion', replyAction: 'Reply', viewThread: 'View in thread', replied: 'replied',
   moreDiscussions: plural({ one: insert('{{count}} more discussion about this work'),
@@ -71,6 +71,7 @@ export const messages = {
   threadIncomplete: 'This thread is long, so some replies aren’t shown here. Open a reply to read everything under it.',
   threadFailed: 'Couldn’t load this discussion', threadFailedBody: 'Check your connection, then try again.',
   joinConversation: 'Join the conversation', addComment: 'Add a comment',
+  write: 'Write', preview: 'Preview',
   replyTo: insert('Reply to {{name}}', { name: String }),
   signInToReply: 'Sign in to reply', joinToReply: 'Join this community to reply.',
   repliesReviewed: 'This community reviews every reply before it appears, so replying here isn’t open yet.',

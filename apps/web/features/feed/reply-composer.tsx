@@ -1,13 +1,13 @@
 'use client';
 
 import { Button } from '@rezics/ui/button';
-import { Textarea } from '@rezics/ui/textarea';
 import { cn } from '@rezics/ui/utils';
 import { CircleAlertIcon, LockIcon, LogInIcon, UsersRoundIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useId, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFeed } from './feed-context.tsx';
 import { type ReplyInput, type ReplyProgress, replyProgress, type ThreadApi } from './thread-api.ts';
+import { MarkdownEditor } from '../post-composer/markdown-editor.tsx';
 
 /** Main's longest reply body (`member-reply-draft-v1`). */
 const MAX_REPLY = 8192;
@@ -44,7 +44,6 @@ export function ReplyComposer({ target, parent, parentAuthor, inline = false, au
 }) {
   const { t, actingSubject, signInHref } = useFeed();
   const router = useRouter();
-  const fieldId = useId();
   const [text, setText] = useState('');
   const [open, setOpen] = useState(inline);
   const [busy, setBusy] = useState(false);
@@ -94,10 +93,10 @@ export function ReplyComposer({ target, parent, parentAuthor, inline = false, au
   const expanded = open || text.length > 0;
   return <form id={id} className={cn('grid scroll-mt-24 gap-2', !inline && 'rounded-2xl')}
     onSubmit={event => { event.preventDefault(); void send(); }}>
-    <label htmlFor={fieldId} className="sr-only">{label}</label>
-    <Textarea id={fieldId} value={text} maxLength={MAX_REPLY} autoFocus={autoFocus} disabled={busy}
-      placeholder={inline ? label : t.joinConversation} rows={expanded ? 4 : 1}
-      readOnly={saved} onFocus={() => setOpen(true)} onChange={event => setText(event.target.value)}
+    <MarkdownEditor label={label} value={text} onChange={setText} maxLength={MAX_REPLY}
+      autoFocus={autoFocus} disabled={busy} placeholder={inline ? label : t.joinConversation}
+      rows={expanded ? 4 : 1} readOnly={saved} onFocus={() => setOpen(true)}
+      editLabel={t.write} previewLabel={t.preview} showSpoiler={t.showSpoiler}
       onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) void send(); }}
       className={cn('bg-background', !expanded && 'min-h-11 py-2.5')} />
     {expanded ? <div className="flex flex-wrap items-center justify-end gap-2">

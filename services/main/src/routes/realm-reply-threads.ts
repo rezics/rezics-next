@@ -2,7 +2,8 @@ import { Elysia, t } from 'elysia';
 import { readUuid } from '../modules/work/read-contract.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { realmThread, realmThreadQuery, realmThreadsPage, realmThreadsQuery } from '../modules/realm-reply/thread-contract.ts';
-import { readRealmThread, readRealmThreads } from '../modules/realm-reply/thread-read.ts';
+import { PROFILE_CONTRIBUTION_COST, readProfileContributions, readRealmThread, readRealmThreads }
+  from '../modules/realm-reply/thread-read.ts';
 import { RealmReplyInvalid } from '../modules/realm-reply/content-store.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
@@ -16,6 +17,7 @@ const headers = { 'cache-control': 'no-store' };
 export const openApiOperations = {
   '/v1/realms/{realm}/threads': { get: { bearer: false } },
   '/v1/realms/{realm}/threads/{reply}': { get: { bearer: false } },
+  '/v1/agents/{id}/realm-contributions': { get: { bearer: false } },
 } as const;
 
 function threadError(error: unknown): Response {
@@ -25,6 +27,23 @@ function threadError(error: unknown): Response {
 
 export function realmReplyThreadRoutes(work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/agents/:id/realm-contributions', { params: t.Object({ id: readUuid }),
+      query: t.Object({ kind: t.Union([t.Literal('posts'), t.Literal('comments')]),
+        cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
+        actingSubject: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })) },
+      { additionalProperties: false }), detail: { security: [{}, { bearerAuth: [] }] },
+      response: { 200: t.Object({ profile: t.Literal('agent-realm-contributions-v1'),
+        kind: t.Union([t.Literal('posts'), t.Literal('comments')]),
+        items: t.Array(t.Object({ reply: t.String(), realm: t.String(), parent: t.Nullable(t.String()),
+          time: t.String(), title: t.Nullable(t.String()), excerpt: t.String() }),
+        { maxItems: PROFILE_CONTRIBUTION_COST.pageSize }),
+        nextCursor: t.Nullable(t.String()), sourcePosition: t.Object({ datasetId: t.String(),
+          dataEpoch: t.String(), sequence: t.String() }) }), ...workReadProblems },
+    }, async ({ request, params, query }) => {
+      try { return Response.json(await workRead(work, request, query,
+        session => readProfileContributions(session, id(params.id), query.kind, query.cursor)), { headers }); }
+      catch (error) { return threadError(error); }
+    })
     .get('/v1/realms/:realm/threads', { params: t.Object({ realm: readUuid }), query: realmThreadsQuery,
       detail: { security: [{}, { bearerAuth: [] }] }, response: { 200: realmThreadsPage, ...workReadProblems },
     }, async ({ request, params, query }) => {
