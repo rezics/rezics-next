@@ -19,6 +19,8 @@ export const messages = {
   filtersTitle: 'Filter your feed', filtersDescription: 'Only posts that match every choice are shown.',
   languages: 'Languages', realms: 'Realms', noRealmsToFilter: 'Follow a Realm to filter by it.',
   showPosts: 'Show posts', clearFilters: 'Clear filters', close: 'Close',
+  activeFilters: 'Active filters', removeFilter: insert('Remove filter: {{filter}}', { filter: String }),
+  postView: 'Post view', cardView: 'Card view', compactView: 'Compact view',
 
   // A post
   by: insert('by {{name}}', { name: String }),
@@ -57,7 +59,7 @@ export const messages = {
   // A discussion or reply
   someone: 'A member', aboutWork: insert('On {{title}}', { title: String }),
   spoilerTag: 'Spoiler', spoilerAnnounced: 'The author marked this as a spoiler.', showSpoiler: 'Show spoiler',
-  replyIn: 'A reply in a discussion', replyAction: 'Reply', viewThread: 'View in thread',
+  replyIn: 'A reply in a discussion', replyAction: 'Reply', viewThread: 'View in thread', replied: 'replied',
   moreDiscussions: plural({ one: insert('{{count}} more discussion about this work'),
     other: insert('{{count}} more discussions about this work') }, { count: asValue(number()) }),
 

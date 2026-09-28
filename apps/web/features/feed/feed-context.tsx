@@ -4,8 +4,9 @@ import { materializeData } from 'native-i18n';
 import { createContext, type ReactNode, use, useCallback, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type FeedApi, mainFeedApi } from './api.ts';
+import { preferenceCookie } from '../shell/preferences.ts';
 import type { FeedMessages } from './messages.ts';
-import type { FeedTab } from './state.ts';
+import { type FeedTab, type PostView, VIEW_COOKIE } from './state.ts';
 
 interface FeedEnvironment {
   locale: UiLocale;
@@ -30,9 +31,16 @@ interface FeedEnvironment {
   realmSegments?: Readonly<Record<string, string>>;
   /** Stories pass an in-memory Main; the app talks to Main through the BFF. */
   api?: FeedApi;
+  /** Posts as cards, or one line each; the reader's choice, kept in a cookie. */
+  view?: PostView;
 }
 
-interface FeedValue extends Omit<FeedEnvironment, 'messages' | 'api' | 'followedRealms' | 'realmSegments'> {
+
+
+interface FeedValue extends Omit<FeedEnvironment, 'messages' | 'api' | 'followedRealms' | 'realmSegments' | 'view'> {
+  view: PostView;
+  /** Switches between cards and one line per post, and remembers it for the next visit. */
+  setView: (view: PostView) => void;
   t: ReturnType<typeof materializeData<FeedMessages>>;
   api: () => FeedApi;
   /** A Realm's page, by its Zone's segment when it has one. */
@@ -50,7 +58,8 @@ export function useFeed(): FeedValue {
   return value;
 }
 
-export function FeedProvider({ children, messages, api, followedRealms, realmSegments = {}, ...environment }:
+export function FeedProvider({ children, messages, api, followedRealms, realmSegments = {}, view: initialView = 'card',
+  ...environment }:
   FeedEnvironment & {
   children: ReactNode;
 }) {
@@ -61,8 +70,13 @@ export function FeedProvider({ children, messages, api, followedRealms, realmSeg
   // Joins and leaves made on this page, over what the server read.
   const [changed, setChanged] = useState<ReadonlyMap<string, boolean>>(new Map());
   const t = useMemo(() => materializeData(messages, { locale: environment.locale }), [messages, environment.locale]);
+  const [view, setViewState] = useState<PostView>(initialView);
+  const setView = useCallback((next: PostView) => {
+    setViewState(next);
+    document.cookie = preferenceCookie(VIEW_COOKIE, next, location.protocol === 'https:');
+  }, []);
   const value: FeedValue = {
-    ...environment, t,
+    ...environment, t, view, setView,
     api: getApi,
     realmPath: realm => `/r/${realmSegments[realm] ?? realm.slice(-36)}`,
     realmState(realm) {

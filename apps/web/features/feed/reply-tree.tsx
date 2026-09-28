@@ -6,7 +6,7 @@ import { useId, useState } from 'react';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { VoteControl } from './actions.tsx';
-import { readableText } from './discussion-card.tsx';
+import { readableText } from './post-row.tsx';
 import { useFeed } from './feed-context.tsx';
 import { ReplyComposer, type ReplyTarget } from './reply-composer.tsx';
 import { type ReplyNode, THREAD_DEPTH, type ThreadReply } from './thread.ts';

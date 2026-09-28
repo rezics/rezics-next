@@ -4,18 +4,15 @@ import { Button, buttonVariants } from '@rezics/ui/button';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@rezics/ui/menu';
 import { cn } from '@rezics/ui/utils';
 import { ArrowBigDownIcon, ArrowBigUpIcon, BellOffIcon, BookOpenIcon, CheckIcon, CopyIcon, DownloadIcon,
-  EllipsisIcon, EyeOffIcon, MessageCircleIcon, MessageSquareQuoteIcon, Share2Icon, ThumbsDownIcon, Undo2Icon,
+  EllipsisIcon, EyeOffIcon, MessageSquareQuoteIcon, Share2Icon, ThumbsDownIcon, Undo2Icon,
   VolumeXIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ShelfButton } from '../catalogue/reader-actions.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { commandKey } from './api.ts';
 import { useFeed } from './feed-context.tsx';
+import { barAction } from './post-row.tsx';
 import type { FeedbackKind, FeedbackStrength, FeedItem, Vote } from './types.ts';
-
-export const pill = 'inline-flex h-9 items-center gap-1.5 rounded-full px-3 font-medium text-muted-foreground text-sm '
-  + 'outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 '
-  + 'focus-visible:ring-ring';
 
 /** What a vote acts on: a feed activity (a post, a discussion or a reply's placement) and its standing. */
 export interface VoteTarget {
@@ -81,12 +78,13 @@ export function VoteControl({ target, plain = false }: { target: VoteTarget; pla
 }
 
 /** The one action that fits what the post is about: read, install, use, or put on a shelf. */
-function PrimaryAction({ item, title }: { item: FeedItem; title: string }) {
+export function PrimaryAction({ item, title }: { item: FeedItem; title: string }) {
   const { t, locale } = useFeed();
   const action = item.primaryAction;
   const link = (href: string, icon: typeof BookOpenIcon, label: string) => {
     const Icon = icon;
-    return <LocalizedLink href={href} className={cn(buttonVariants({ size: 'sm', variant: 'soft' }), 'rounded-full')}>
+    return <LocalizedLink href={href} className={cn(buttonVariants({ size: 'sm', variant: 'soft' }),
+      'ms-1 h-7 rounded-full px-3')}>
       <Icon aria-hidden="true" />{label}</LocalizedLink>;
   };
   switch (action.kind) {
@@ -99,7 +97,7 @@ function PrimaryAction({ item, title }: { item: FeedItem; title: string }) {
     case 'install': return link(action.href, DownloadIcon, t.install);
     case 'copy-prompt': return link(action.href, CopyIcon, t.usePrompt);
     case 'want-to-read': return <ShelfButton work={action.work} title={title} locale={locale} size="sm" variant="outline"
-      className="w-auto" />;
+      className="ms-1 w-auto [&_a]:h-7 [&_button]:h-7" />;
     case 'read-review': return link(action.href, MessageSquareQuoteIcon, t.readReview);
     case 'open': return null;
   }
@@ -114,15 +112,15 @@ async function sharePage(href: string, title: string, locale: string): Promise<'
   return navigator.clipboard.writeText(url).then(() => 'copied' as const, () => 'failed' as const);
 }
 
-/** Share, beside the other actions from `sm` up; on phones it lives in the post's menu so the bar fits one row. */
+/** Share: the system share sheet where there is one, otherwise a copied link. A bare icon, as the bar's others. */
 export function ShareButton({ href, title }: { href: string; title: string }) {
   const { t, locale } = useFeed();
   const [copied, setCopied] = useState(false);
-  return <button type="button" onClick={() => void sharePage(href, title, locale).then(done => setCopied(done === 'copied'))}
-    className={cn(pill, 'max-sm:hidden')}>
+  return <button type="button" aria-label={copied ? t.linkCopied : t.share} title={t.share}
+    onClick={() => void sharePage(href, title, locale).then(done => setCopied(done === 'copied'))}
+    className={cn(barAction, 'w-8 justify-center px-0')}>
     {copied ? <CheckIcon aria-hidden="true" className="size-4 text-success-foreground" />
       : <Share2Icon aria-hidden="true" className="size-4" />}
-    {copied ? t.linkCopied : t.share}
     {copied ? <span role="status" className="sr-only">{t.linkCopied}</span> : null}
   </button>;
 }
@@ -133,18 +131,13 @@ export interface Dismissal {
   undo: { kind: FeedbackKind; target: string } | null;
 }
 
-export function MoreMenu({ item, share, onDismiss }: { item: FeedItem; share: { href: string; title: string } | null;
+export function MoreMenu({ item, onDismiss }: { item: FeedItem; share?: { href: string; title: string } | null;
   onDismiss: (dismissal: Dismissal) => void }) {
-  const { t, api, actingSubject, locale } = useFeed();
+  const { t, api, actingSubject } = useFeed();
   const [failed, setFailed] = useState(false);
-  const [copied, setCopied] = useState(false);
-  if (!actingSubject && !share) return null;
-  const choices = !actingSubject ? [] : feedbackChoices(item, t);
+  if (!actingSubject) return null;
+  const choices = feedbackChoices(item, t);
   async function choose(value: string) {
-    if (value === 'share' && share) {
-      setCopied(await sharePage(share.href, share.title, locale) === 'copied');
-      return;
-    }
     const choice = choices.find(item => item.value === value);
     if (!choice || !actingSubject) return;
     setFailed(false);
@@ -154,22 +147,18 @@ export function MoreMenu({ item, share, onDismiss }: { item: FeedItem; share: { 
     else setFailed(true);
   }
   return <>
+    {failed ? <p role="status" className="text-destructive-foreground text-xs">{t.feedbackFailed}</p> : null}
     <Menu onSelect={({ value }) => void choose(value)}>
-      <MenuTrigger aria-label={t.moreOptions} title={t.moreOptions}
-        className={cn(pill, 'w-9 justify-center px-0', !actingSubject && 'sm:hidden')}>
+      <MenuTrigger aria-label={t.moreOptions} title={t.moreOptions} className={cn(barAction, 'size-7 justify-center px-0')}>
         <EllipsisIcon aria-hidden="true" className="size-4" />
       </MenuTrigger>
       <MenuContent className="w-64">
-        {share ? <MenuItem value="share" className="sm:hidden"><Share2Icon aria-hidden="true" />{t.share}</MenuItem> : null}
-        {share && choices.length ? <MenuSeparator className="sm:hidden" /> : null}
         {choices.map((choice, index) => <span key={choice.value} className="contents">
           {index === 2 ? <MenuSeparator /> : null}
           <MenuItem value={choice.value}><choice.icon aria-hidden="true" />{choice.label}</MenuItem>
         </span>)}
       </MenuContent>
     </Menu>
-    {copied ? <p role="status" className="text-muted-foreground text-xs">{t.linkCopied}</p> : null}
-    {failed ? <p role="status" className="text-destructive-foreground text-xs">{t.feedbackFailed}</p> : null}
   </>;
 }
 
@@ -193,27 +182,6 @@ function feedbackChoices(item: FeedItem, t: T) {
       target: item.actor.id, strength: 'mute', done: t.mutedName({ name: item.actor.name }) },
   ];
   return choices;
-}
-
-/** The row under every post: vote, comments, the kind's action, share and more. */
-export function EngagementBar({ item, title, href, onDismiss }: {
-  item: FeedItem; title: string; href: string | null; onDismiss: (dismissal: Dismissal) => void;
-}) {
-  const { t, locale } = useFeed();
-  const comments = item.target.work ? item.links.comments : null;
-  const count = new Intl.NumberFormat(locale, { notation: 'compact' }).format(item.comments.value);
-  const commentLabel = item.comments.kind === 'exact' ? t.comments(item.comments.value)
-    : t.commentsAtLeast(item.comments.value);
-  return <div role="group" aria-label={t.actions} className="-ms-1 flex flex-wrap items-center gap-1.5">
-    <VoteControl target={{ id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision }} />
-    {comments ? <LocalizedLink href={comments} aria-label={commentLabel} className={pill}>
-      <MessageCircleIcon aria-hidden="true" className="size-4" />
-      <span aria-hidden="true" className="tabular-nums">{count}{item.comments.kind === 'exact' ? '' : '+'}</span>
-    </LocalizedLink> : null}
-    <PrimaryAction item={item} title={title} />
-    {href ? <ShareButton href={href} title={title} /> : null}
-    <MoreMenu item={item} share={href ? { href, title } : null} onDismiss={onDismiss} />
-  </div>;
 }
 
 /** A post the reader hid or muted: one line that says so, with Undo while the page is open. */

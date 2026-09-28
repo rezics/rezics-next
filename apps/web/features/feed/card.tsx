@@ -1,22 +1,21 @@
 'use client';
 
 import { cn } from '@rezics/ui/utils';
-import { BookCheckIcon, BookOpenIcon, BookPlusIcon, EyeOffIcon, FileTextIcon, LibraryBigIcon, MessageSquareQuoteIcon,
-  MessageSquareTextIcon, MessagesSquareIcon, PackageIcon, SparklesIcon, StampIcon, type LucideIcon } from 'lucide-react';
-import Link from 'next/link';
-import { useId, useState } from 'react';
-import { localizedPath } from '../../i18n/locale.ts';
+import { BookCheckIcon, BookOpenIcon, BookPlusIcon, EyeOffIcon, FileTextIcon, LibraryBigIcon, MessageCircleIcon,
+  MessageSquareQuoteIcon, MessageSquareTextIcon, MessagesSquareIcon, PackageIcon, SparklesIcon, StampIcon,
+  type LucideIcon } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { StarMeter } from '../catalogue/rating.tsx';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { authorSeparator, type CoverWork, coverKindOf } from '../catalogue/work.ts';
 import { authorHref } from '../author/route.ts';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { type Dismissal, DismissedPost, EngagementBar, JoinButton, MoreMenu } from './actions.tsx';
-import { DiscussionCard, type DiscussionPost, readableText } from './discussion-card.tsx';
+import { type Dismissal, DismissedPost, JoinButton, MoreMenu, PrimaryAction, ShareButton, VoteControl } from './actions.tsx';
+import { DiscussionCard, type DiscussionPost } from './discussion-card.tsx';
 import { discussionText, threadPath } from './discussion.ts';
 import { useFeed } from './feed-context.tsx';
-import { absoluteTime, relativeTime } from './time.ts';
+import { type AttachedWork, barAction, MetaLine, PostRow, PostTime, rowLink, WorkAttachment } from './post-row.tsx';
 import type { FeedItem } from './types.ts';
 
 type T = ReturnType<typeof useFeed>['t'];
@@ -95,19 +94,21 @@ function kicker(item: FeedItem, now: number, t: T): { icon: LucideIcon; text: st
 
 const spoilerHidden = (item: FeedItem) => item.viewerState.status === 'available' && item.viewerState.spoiler.hidden;
 
-/** The kind-specific facts under a title: chapter, version, time to cook, running time. */
-function details(item: FeedItem, t: T, locale: string): string[] {
+/** What a chapter post is titled: its number and, unless it could spoil, its own title. */
+function chapterTitle(item: FeedItem, card: Extract<FeedItem['card'], { kind: 'chapter' }>, t: T, locale: string): string {
+  const { range } = item.group;
+  const format = (value: number) => new Intl.NumberFormat(locale).format(value);
+  if (range && range.from !== range.to) return t.chapterRange({ from: format(range.from), to: format(range.to) });
+  const number = card.number !== undefined ? t.chapterNumber({ number: format(card.number) }) : t.newChapter;
+  // A chapter title can spoil as much as its text.
+  return card.title && !spoilerHidden(item) ? `${number} · ${card.title}` : number;
+}
+
+/** The small facts a post's preview opens with: length, version level, time to cook, running time, helpfulness. */
+function details(item: FeedItem, t: T): string[] {
   const { card } = item;
   const facts: string[] = [];
-  if (card.kind === 'chapter') {
-    if (card.number !== undefined && !(item.group.range && item.group.range.from !== item.group.range.to)) {
-      facts.push(t.chapterNumber({ number: new Intl.NumberFormat(locale).format(card.number) }));
-    }
-    // A chapter title can spoil as much as its text.
-    if (card.title && !spoilerHidden(item)) facts.push(card.title);
-    if (card.wordCount !== undefined) facts.push(t.words(card.wordCount));
-  }
-  if (card.kind === 'release' && card.version) facts.push(t.version({ version: card.version }));
+  if (card.kind === 'chapter' && card.wordCount !== undefined) facts.push(t.words(card.wordCount));
   if (card.kind === 'release' && card.level) facts.push(card.level);
   if (card.kind === 'recipe') facts.push(...[card.totalTime, card.servings].filter(fact => fact !== undefined));
   if (card.kind === 'media' && card.durationSeconds !== undefined) {
@@ -127,6 +128,11 @@ function excerptOf(item: FeedItem): string | null {
   return item.target.excerpt;
 }
 
+/** The Work's credited authors as a line of names, the poster or curator never among them. */
+function authorLine(authors: FeedItem['authors']): string | null {
+  const named = authors.flatMap(author => author.displayName ? [author.displayName] : []);
+  return named.length ? named.join(authorSeparator(named)) : null;
+}
 
 /**
  * The followed author a card answers to, named as the card names them: one
@@ -147,7 +153,12 @@ function followedAuthor(item: FeedItem): string | null {
     ?? (item.actor.id === reason.target ? item.actor.name : null);
 }
 
-function Byline({ item }: { item: FeedItem }) {
+/**
+ * The one meta line: Realm · person · time · what happened, then Join and the
+ * post's menu. A pick is the Realm's act, so its curator is not named as if
+ * they wrote the Work; reasons show only where they are exceptions.
+ */
+function FeedMeta({ item, end }: { item: FeedItem; end: ReactNode }) {
   const { t, locale, now, avatarQuery, tab, realmPath } = useFeed();
   const names = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' })
     .format(item.group.actors.map(actor => actor.name));
@@ -159,79 +170,40 @@ function Byline({ item }: { item: FeedItem }) {
       : item.reason.kind === 'recommended' && tab === 'following' ? t.suggested : null;
   const why = item.reason.kind === 'recommended'
     ? item.reason.basis === 'thin-following' ? t.suggestedThin : t.suggestedAll : undefined;
-  // A pick is the Realm's act. Naming its curator here would read as the Work's author.
-  const people = item.reasons.some(reason => reason.kind === 'realm-pick') || item.kind === 'adoption' && item.realm
+  const people = item.reasons.some(candidate => candidate.kind === 'realm-pick') || item.kind === 'adoption' && item.realm
     ? null : names;
-  return <div className="flex min-w-0 items-center gap-2 text-[13px]">
-    {item.realm
-      ? <CommunityIcon icon={item.realm.icon} name={item.realm.name.value} avatarQuery={avatarQuery} />
-      : <CommunityIcon icon={null} name={item.actor.name} person />}
-    <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-muted-foreground">
-      {item.realm ? <>
-        <Link href={localizedPath(realmPath(item.realm.id), locale)} lang={item.realm.name.language}
-          className="relative z-10 truncate font-semibold text-foreground outline-none hover:underline
-            focus-visible:ring-2 focus-visible:ring-ring">{item.realm.name.value}</Link>
-        <span aria-hidden="true">·</span>
-      </> : null}
-      {people ? <>
-        <span className={cn('truncate', !item.realm && 'font-semibold text-foreground')}>{people}</span>
-        <span aria-hidden="true">·</span>
-      </> : null}
-      <time dateTime={item.time} title={absoluteTime(item.time, locale)} suppressHydrationWarning
-        className="whitespace-nowrap">{relativeTime(item.time, now, locale)}</time>
-      {reason ? <span title={why} className="rounded-full bg-info/10 px-2 py-0.5 font-medium text-[11px]
-        text-info-foreground">{reason}</span> : null}
-    </p>
-    {item.realm ? <JoinButton realm={item.realm} /> : null}
-  </div>;
+  const { icon: Icon, text } = kicker(item, now, t);
+  return <MetaLine icon={item.realm ? <CommunityIcon icon={item.realm.icon} name={item.realm.name.value}
+    avatarQuery={avatarQuery} size="xs" /> : <CommunityIcon icon={null} name={item.actor.name} person size="xs" />}
+  parts={[
+    item.realm ? <LocalizedLink href={realmPath(item.realm.id)} lang={item.realm.name.language}
+      className={cn(rowLink, 'truncate font-semibold text-foreground')}>{item.realm.name.value}</LocalizedLink> : null,
+    people ? <span className={cn('truncate', !item.realm && 'font-semibold text-foreground')}>{people}</span> : null,
+    <PostTime time={item.time} />,
+    <span className="flex items-center gap-1"><Icon aria-hidden="true" className="size-3.5 shrink-0" />{text}</span>,
+    reason ? <span title={why} className="rounded-full bg-info/10 px-1.5 font-medium text-[11px] text-info-foreground">
+      {reason}</span> : null,
+  ]} end={end} />;
 }
 
-/**
- * The Work's credited authors, under its title where readers look for them.
- * Authors on REZICS link to their profiles; the poster or the curator is
- * never named here.
- */
-function Authors({ authors }: { authors: FeedItem['authors'] }) {
-  const { t } = useFeed();
-  const named = authors.filter((author): author is typeof author & { displayName: string } => author.displayName !== null);
-  if (!named.length) return null;
-  const separator = authorSeparator(named.map(author => author.displayName));
-  const marker = '\u2063';
-  const [before = '', after = ''] = t.writtenBy({ names: marker }).split(marker);
-  return <p className="truncate text-muted-foreground text-sm">{before}
-    {named.map((author, index) => {
-      const href = author.handle ? authorHref({ kind: 'agent', handle: author.handle })
-        : author.provider === 'open-library' && author.key
-          ? authorHref({ kind: 'external', key: author.key }) : null;
-      return <span key={author.id}>{index ? separator : null}{href
-        ? <LocalizedLink href={href} className="relative z-10 font-medium text-foreground outline-none
-          hover:underline focus-visible:ring-2 focus-visible:ring-ring">{author.displayName}</LocalizedLink>
-        : <span className="font-medium text-foreground">{author.displayName}</span>}</span>;
-    })}{after}</p>;
-}
-
-/**
- * A reader's review under the Work's title: their stars, then the opening
- * lines, or a note when the review discusses the plot. Its page has the rest.
- */
-function ReviewBody({ card, lang }: { card: Extract<FeedItem['card'], { kind: 'review' }>; lang?: string }) {
-  const { t, locale } = useFeed();
+/** A review's title: its stars, then its opening line, or its rating when it keeps the plot back. */
+function reviewHeading(card: Extract<FeedItem['card'], { kind: 'review' }>, t: T, locale: string) {
   const rating = new Intl.NumberFormat(locale).format(card.rating);
-  return <div className="grid gap-1.5">
-    <p className="flex items-center gap-2 text-sm">
-      <StarMeter mean={card.rating} max={card.scale} />
-      <span className="sr-only">{t.ratedOutOf({ rating, scale: String(card.scale) })}</span>
-      {card.scale === 5 ? null : <span aria-hidden="true" className="font-semibold tabular-nums">{rating}/{card.scale}</span>}
-    </p>
-    {card.opening ? <blockquote lang={lang} className={cn('line-clamp-4 whitespace-pre-line border-border border-s-2 ps-3',
-      'text-pretty text-sm/relaxed', readableText)}>{card.opening}</blockquote>
-      : card.spoiler ? <div className="flex items-start gap-3 rounded-xl border border-border/70 border-dashed bg-muted/40
-        px-3 py-2.5 text-sm">
-        <EyeOffIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-        <p><span className="font-medium">{t.reviewSpoilerTitle}</span>
-          <span className="block text-muted-foreground">{t.reviewSpoilerBody}</span></p>
-      </div> : null}
-  </div>;
+  const { title, body } = card.opening ? discussionText(card.opening) : { title: '', body: '' };
+  return { title: <span className="inline-flex max-w-full items-baseline gap-2">
+    <StarMeter mean={card.rating} max={card.scale} className="translate-y-px text-[0.8125rem]" />
+    <span className="sr-only">{t.ratedOutOf({ rating, scale: String(card.scale) })}</span>
+    {card.scale === 5 ? null : <span aria-hidden="true" className="font-semibold tabular-nums">{rating}/{card.scale}</span>}
+    <span className="min-w-0">{title || t.review}</span>
+  </span>, body };
+}
+
+/** A spoiler Main keeps back: one line that says so, in place of the words. */
+function Withheld({ title, body }: { title: string; body: string }) {
+  return <span className="flex items-center gap-1.5 text-muted-foreground">
+    <EyeOffIcon aria-hidden="true" className="size-3.5 shrink-0" />
+    <span className="truncate"><span className="font-medium text-foreground">{title}</span> {body}</span>
+  </span>;
 }
 
 /**
@@ -241,19 +213,16 @@ function ReviewBody({ card, lang }: { card: Extract<FeedItem['card'], { kind: 'r
 function ListPreview({ card }: { card: Extract<FeedItem['card'], { kind: 'list' }> }) {
   const { t, avatarQuery } = useFeed();
   if (!card.works.length) return null;
-  return <div className="mt-1 grid gap-2">
-    <ul aria-label={t.listPreview} className="flex items-end gap-2.5">
-      {card.works.map(work => <li key={work.id}>
-        <LocalizedLink href={`/w/${work.id.slice(-36)}`} aria-label={work.title.value} className="block rounded-[0.25rem]
-          outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
-            authors: [] }} avatarQuery={avatarQuery} size="sm" className="sm:w-[4.5rem]" />
-        </LocalizedLink>
-      </li>)}
-    </ul>
-    <p className="text-muted-foreground text-sm">{card.count.kind === 'exact' ? t.listWorks(card.count.value)
-      : t.listWorksAtLeast(card.count.value)}</p>
-  </div>;
+  return <span className="mt-1 flex items-end gap-2">
+    <span className="sr-only">{t.listPreview}</span>
+    {card.works.map(work => <LocalizedLink key={work.id} href={`/w/${work.id.slice(-36)}`} aria-label={work.title.value}
+      className="relative z-10 block rounded-[0.1875rem] outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
+        authors: [] }} avatarQuery={avatarQuery} size="xs" />
+    </LocalizedLink>)}
+    <span className="text-muted-foreground text-sm">{card.count.kind === 'exact' ? t.listWorks(card.count.value)
+      : t.listWorksAtLeast(card.count.value)}</span>
+  </span>;
 }
 
 /** A discussion or reply from Home, as the post it is: its thread is where it leads. */
@@ -265,7 +234,8 @@ function discussionPost(item: FeedItem & { realm: NonNullable<FeedItem['realm']>
     vote: { id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision },
     realm: item.realm, author: { name: item.actor.name, handle: item.actor.handle }, time: item.time,
     text: target.excerpt ?? '', language: target.language,
-    work: target.work ? { id: target.work, title: target.title, cover: target.cover, types: target.types } : null,
+    work: target.work ? { id: target.work, title: target.title, cover: target.cover, types: target.types,
+      byline: authorLine(item.authors) } : null,
     comments: item.kind === 'discussion' ? item.comments : null,
     // Home groups a Realm's discussions of one Work on one day; the rest are on the Realm's Discussions tab.
     more: item.group.count > 1 ? { count: item.group.count - 1, href: `${realmPath(item.realm.id)}/discussions` } : null };
@@ -290,64 +260,82 @@ export function FeedCard({ item, position, total }: { item: FeedItem; position?:
 }
 
 /**
- * One post, in the same anatomy for every kind: who and where, what happened,
- * the content, then the engagement bar. Repeated updates arrive grouped from
- * Main and read as one post ("Chapters 212–214"); a chapter past the reader's
- * position keeps its text hidden.
+ * One post, in the same anatomy for every kind: the meta line, the post's own
+ * title (a chapter, a release, a review, or the Work itself), a short preview,
+ * the Work attached, then the bar. Repeated updates arrive grouped from Main
+ * and read as one post ("Chapters 212–214"); a chapter past the reader's
+ * position keeps its title and text hidden.
  */
 function FeedPost({ item, position, total }: { item: FeedItem; position?: number; total?: number }) {
-  const { t, locale, now, avatarQuery } = useFeed();
-  const titleId = useId();
+  const { t, locale, avatarQuery } = useFeed();
   const [dismissed, setDismissed] = useState<Dismissal | null>(null);
   if (dismissed) return <DismissedPost dismissal={dismissed} onUndo={() => setDismissed(null)} />;
   const href = targetHref(item);
-  const title = item.target.title.value || t.untitled;
+  const workTitle = item.target.title.value || t.untitled;
   const lang = titleLanguage(item);
-  const { icon: Icon, text } = kicker(item, now, t);
-  const facts = details(item, t, locale);
+  const { card } = item;
   const hidden = spoilerHidden(item);
+  const facts = details(item, t);
   const excerpt = hidden ? null : excerptOf(item);
-  const coverHref = item.target.work !== null ? href : null;
-  return <article aria-labelledby={titleId} aria-posinset={position} aria-setsize={total ?? -1} data-kind={item.kind}
-    className="group/post relative grid gap-2.5 border-border/60 border-b px-3 py-4 transition-colors
-      hover:bg-accent/25 sm:px-4">
-    <Byline item={item} />
-    <div className={cn('grid gap-x-4', coverHref && 'grid-cols-[minmax(0,1fr)_auto]')}>
-      <div className="grid min-w-0 content-start gap-1.5">
-        <p className="flex items-center gap-1.5 font-medium text-muted-foreground text-xs">
-          <Icon aria-hidden="true" className="size-3.5 shrink-0" />{text}</p>
-        <h3 id={titleId} lang={lang} dir={item.target.title.direction}
-          className={cn('text-pretty font-semibold text-[1.0625rem]/snug [overflow-wrap:anywhere] sm:text-lg/snug',
-            coverHref && 'font-work-title font-medium')}>
-          {href ? <LocalizedLink href={href} className="outline-none decoration-1 underline-offset-2 hover:underline
-            focus-visible:ring-2 focus-visible:ring-ring">{title}</LocalizedLink> : title}
-        </h3>
-        <Authors authors={item.authors} />
-        {facts.length ? <p className="flex flex-wrap gap-x-1.5 text-muted-foreground text-sm">
-          {facts.map((fact, index) => <span key={fact} lang={index === 1 && item.card.kind === 'chapter' ? lang : undefined}>
-            {index ? <span aria-hidden="true" className="me-1.5">·</span> : null}{fact}</span>)}
-        </p> : null}
-        {hidden ? <div className="mt-1 flex items-start gap-3 rounded-xl border border-border/70 border-dashed
-          bg-muted/40 px-3 py-2.5 text-sm">
-          <EyeOffIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <p><span className="font-medium">{t.spoilerTitle}</span>
-            <span className="block text-muted-foreground">{t.spoilerBody}</span></p>
-        </div> : null}
-        {item.card.kind === 'list' ? <ListPreview card={item.card} /> : null}
-        {item.card.kind === 'review' ? <ReviewBody card={item.card} lang={item.target.language ?? undefined} />
-          : item.card.kind === 'prompt' && item.card.preview
-          ? <figure className="mt-1 grid gap-1">
-            <figcaption className="sr-only">{t.promptPreview}</figcaption>
-            <pre lang={item.target.language ?? undefined} className="line-clamp-4 whitespace-pre-wrap rounded-xl bg-code
-              px-3 py-2.5 font-mono text-code-foreground text-xs/relaxed">{item.card.preview}</pre>
-          </figure>
-          : excerpt ? <p lang={item.target.language ?? undefined} className={cn('line-clamp-3 whitespace-pre-line',
-            'text-pretty text-muted-foreground text-sm/relaxed', readableText)}>{excerpt}</p> : null}
-      </div>
-      {coverHref ? <LocalizedLink href={coverHref} tabIndex={-1} aria-hidden="true" className="self-start">
-        <CatalogueCover work={coverWork(item, title, lang)} avatarQuery={avatarQuery} size="sm" className="sm:w-20" />
-      </LocalizedLink> : null}
-    </div>
-    <EngagementBar item={item} title={title} href={href} onDismiss={setDismissed} />
-  </article>;
+  const byline = authorLine(item.authors);
+  const attached: AttachedWork | null = item.target.work ? { id: item.target.work,
+    title: { ...item.target.title, value: workTitle, language: lang ?? item.target.title.language },
+    cover: item.target.cover, types: item.target.types, byline } : null;
+  const contentLang = item.target.language ?? undefined;
+  const text = (value: string) => <span lang={contentLang} className="whitespace-pre-line">{value}</span>;
+  const factLine = facts.length ? <span className="me-1.5 text-muted-foreground/90">{facts.join(' · ')}</span> : null;
+  // A chapter, release or review is about its Work, attached below; any other post is the Work, cover beside it.
+  let title: ReactNode = workTitle, titleLang = lang, titleClass = 'font-work-title font-medium';
+  let preview: ReactNode = null, about: AttachedWork | null = null;
+  if (card.kind === 'chapter') {
+    title = chapterTitle(item, card, t, locale); titleLang = contentLang; titleClass = '';
+    preview = hidden ? <Withheld title={t.spoilerTitle} body={t.spoilerBody} />
+      : <>{factLine}{excerpt ? text(excerpt) : null}</>;
+    about = attached;
+  } else if (card.kind === 'release') {
+    title = card.version ? t.version({ version: card.version }) : t.newRelease; titleLang = undefined; titleClass = '';
+    preview = <>{factLine}{excerpt ? text(excerpt) : null}</>;
+    about = attached;
+  } else if (card.kind === 'review') {
+    const review = reviewHeading(card, t, locale);
+    title = review.title; titleLang = contentLang; titleClass = '';
+    preview = card.opening ? review.body ? <>{factLine}{text(review.body)}</> : factLine
+      : card.spoiler ? <Withheld title={t.reviewSpoilerTitle} body={t.reviewSpoilerBody} /> : factLine;
+    about = attached;
+  } else if (card.kind === 'list') {
+    titleLang = item.target.title.language; titleClass = '';
+    preview = <ListPreview card={card} />;
+  } else if (card.kind === 'prompt' && card.preview) {
+    preview = <>{byline ? <span className="block">{t.writtenBy({ names: byline })}</span> : null}
+      <code lang={contentLang} className="font-mono text-code-foreground text-xs">{card.preview}</code></>;
+  } else {
+    preview = <>{byline ? <span className="block">{t.writtenBy({ names: byline })}</span> : null}
+      {factLine}{excerpt ? text(excerpt) : null}</>;
+  }
+  const comments = item.target.work ? item.links.comments : null;
+  const count = new Intl.NumberFormat(locale, { notation: 'compact' }).format(item.comments.value);
+  const plainTitle = card.kind === 'review' ? workTitle : typeof title === 'string' ? title : workTitle;
+  return <PostRow kind={item.kind} href={href} position={position} total={total}
+    meta={<FeedMeta item={item} end={<>
+      {item.realm ? <JoinButton realm={item.realm} /> : null}
+      <MoreMenu item={item} share={href ? { href, title: plainTitle } : null} onDismiss={setDismissed} />
+    </>} />}
+    title={title} titleLang={titleLang} titleDir={item.target.title.direction} titleClass={titleClass}
+    preview={preview}
+    thumbnail={about || card.kind === 'list' || !href || item.target.work === null ? null
+      : <LocalizedLink href={href} tabIndex={-1} aria-hidden="true" className="block">
+        <CatalogueCover work={coverWork(item, workTitle, lang)} avatarQuery={avatarQuery} size="xs"
+          className="w-12 sm:w-14" />
+      </LocalizedLink>}
+    attachment={about ? <WorkAttachment work={about} /> : null}
+    vote={<VoteControl target={{ id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision }} plain />}
+    comments={comments ? <LocalizedLink href={comments} className={barAction}
+      aria-label={item.comments.kind === 'exact' ? t.comments(item.comments.value) : t.commentsAtLeast(item.comments.value)}>
+      <MessageCircleIcon aria-hidden="true" className="size-4" />
+      <span aria-hidden="true" className="tabular-nums">{count}{item.comments.kind === 'exact' ? '' : '+'}</span>
+    </LocalizedLink> : null}
+    actions={<>
+      <PrimaryAction item={item} title={workTitle} />
+      {href ? <ShareButton href={href} title={plainTitle} /> : null}
+    </>} />;
 }

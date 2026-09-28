@@ -2,37 +2,12 @@
 
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { XIcon } from 'lucide-react';
-import Link from 'next/link';
 import { materializeData } from 'native-i18n';
 import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { localizedPath } from '../../i18n/locale.ts';
-import type { Community } from '../shell/communities.ts';
-import { CommunityIcon } from '../shell/community-icon.tsx';
 import { preferenceCookie } from '../shell/preferences.ts';
 import { WELCOME_COOKIE } from './cookies.ts';
 import type { HomeMessages } from './messages.ts';
-
-/** The official Zones as tiles, for everyone, above the feed. */
-export function OfficialZoneTiles({ zones, locale, messages }: { zones: readonly Community[]; locale: UiLocale;
-  messages: HomeMessages }) {
-  const t = materializeData(messages, { locale });
-  if (!zones.length) return null;
-  return <section aria-labelledby="official-zones" className="grid gap-2 px-3 sm:px-0">
-    <h2 id="official-zones" className="font-semibold text-sm">{t.officialZones}
-      <span className="ms-2 font-normal text-muted-foreground">{t.officialZonesIntro}</span></h2>
-    <ul className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0">
-      {zones.map(zone => <li key={zone.id} className="shrink-0">
-        <Link href={localizedPath(zone.href, locale)} className="flex h-12 items-center gap-2.5 rounded-2xl border
-          border-border/60 bg-card pe-4 ps-2.5 font-medium text-sm outline-none transition-colors hover:border-primary/40
-          focus-visible:ring-2 focus-visible:ring-ring">
-          <CommunityIcon icon={zone.icon} name={zone.name} size="md" className="size-8" />
-          <span lang={zone.language}>{zone.name}</span>
-        </Link>
-      </li>)}
-    </ul>
-  </section>;
-}
 
 /** For signed-out visitors: why to join, dismissible, never in the way of the feed. */
 export function WelcomeCard({ locale, messages, signUpHref, signInHref, dismissed = false }: {

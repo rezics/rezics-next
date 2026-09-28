@@ -18,6 +18,8 @@ export default {
   filtersTitle: '筛选动态', filtersDescription: '只显示同时符合所有选项的内容。',
   languages: '语言', realms: '领域', noRealmsToFilter: '关注领域后即可按领域筛选。',
   showPosts: '查看结果', clearFilters: '清除筛选', close: '关闭',
+  activeFilters: '已启用的筛选', removeFilter: insert('移除筛选：{{filter}}', { filter: String }),
+  postView: '帖子视图', cardView: '卡片视图', compactView: '紧凑视图',
 
   by: insert('{{name}} 发布', { name: String }),
   newWork: '新作品', newChapter: '新章节', newRelease: '新版本', update: '更新',
@@ -49,7 +51,7 @@ export default {
   promptPreview: '提示词预览',
   someone: '一位成员', aboutWork: insert('关于作品：{{title}}', { title: String }),
   spoilerTag: '剧透', spoilerAnnounced: '作者标注了剧透。', showSpoiler: '显示剧透内容',
-  replyIn: '讨论中的一条回复', replyAction: '回复', viewThread: '在讨论中查看',
+  replyIn: '讨论中的一条回复', replyAction: '回复', viewThread: '在讨论中查看', replied: '回复了',
   moreDiscussions: plural({ other: insert('关于这部作品还有 {{count}} 个讨论') }, { count: asValue(number()) }),
   backTo: insert('返回{{realm}}', { realm: String }),
   sortComments: '评论排序', commentsHeading: '评论',

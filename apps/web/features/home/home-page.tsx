@@ -13,14 +13,14 @@ import { FeedProvider, FeedView } from '../feed/feed-context.tsx';
 import { FeedList } from '../feed/feed-list.tsx';
 import type { FeedMessages } from '../feed/messages.ts';
 import type { ContinueItem, InterestsResult } from '../feed/types.ts';
-import { type FeedDefaults, feedSearch, type FeedState, interestKinds, withChange } from '../feed/state.ts';
+import { type FeedDefaults, feedSearch, type FeedState, interestKinds, type PostView, withChange } from '../feed/state.ts';
 import type { FeedPage, FeedQuery, Loaded } from '../feed/types.ts';
 import { type Community, followedRealmIds, segmentsOf } from '../shell/communities.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { ContinueStrip } from './continue-strip.tsx';
 import { InterestPicker } from './interest-picker.tsx';
 import type { HomeMessages } from './messages.ts';
-import { OfficialZoneTiles, WelcomeCard } from './welcome.tsx';
+import { WelcomeCard } from './welcome.tsx';
 
 export interface HomePageProps {
   locale: UiLocale;
@@ -36,7 +36,7 @@ export interface HomePageProps {
   newPerson: boolean;
   followed: { realms: Community[]; zones: Community[]; complete: boolean } | null;
   continueItems: readonly ContinueItem[] | null;
-  /** Official Zones: tiles for visitors, and the addresses Realm links use for everyone. */
+  /** Official Zones: the addresses Realm links use, `/r/fiction` rather than a UUID. */
   official: readonly Community[];
   interests: Pick<InterestsResult, 'kinds' | 'languages'>;
   pickerSkipped: boolean;
@@ -49,6 +49,8 @@ export interface HomePageProps {
   rail?: ReactNode;
   /** Stories: an in-memory Main. */
   api?: FeedApi;
+  /** Cards or one line per post, as the reader last chose. */
+  view?: PostView;
 }
 
 export interface HomePostsProps {
@@ -116,10 +118,11 @@ function EmptyFeed({ state, defaults, locale, messages }: { state: FeedState; de
 }
 
 /**
- * Home, in Reddit's frame: the Continue strip first (it is what brings people
- * back), then Following or All with the sort always in view, the posts, and a
- * rail at wide sizes. Signed out it is All · Best under the official Zones; a
- * new person first picks interests and follows communities in one step.
+ * Home, in Reddit's frame with X's treatment: the Continue strip first (it is
+ * what brings people back), then the tabs and one compact control line, the
+ * posts as divided rows with no frame around them, and a rail at wide sizes.
+ * Signed out it is All · Best; the official Zones are in the navigation. A new
+ * person first picks interests and follows communities in one step.
  */
 export function HomePage(props: HomePageProps) {
   const { locale, messages, state, defaults, signedIn, actingSubject } = props;
@@ -131,22 +134,18 @@ export function HomePage(props: HomePageProps) {
   return <FeedProvider locale={locale} messages={messages.feed} now={props.now} signedIn={signedIn}
     actingSubject={actingSubject} signInHref={props.signInHref} avatarQuery={props.avatarQuery} tab={state.tab}
     followedRealms={props.followed?.complete ? followedRealmIds(props.followed) : null} api={props.api}
-    realmSegments={segmentsOf(props.official)}>
+    realmSegments={segmentsOf(props.official)} view={props.view}>
     <div className="mx-auto grid w-full max-w-[72rem] items-start gap-6 py-4 sm:px-6 sm:py-6 lg:px-8
       xl:grid-cols-[minmax(0,46rem)_20rem] xl:justify-center">
       <div className="grid min-w-0 gap-5">
         <h1 className="sr-only">{t.title}</h1>
-        {!signedIn ? <>
-          <OfficialZoneTiles zones={props.official} locale={locale} messages={messages.home} />
-          <WelcomeCard locale={locale} messages={messages.home} signInHref={props.signInHref}
-            signUpHref={props.signUpHref} dismissed={props.welcomeDismissed} />
-        </> : null}
+        {!signedIn ? <WelcomeCard locale={locale} messages={messages.home} signInHref={props.signInHref}
+          signUpHref={props.signUpHref} dismissed={props.welcomeDismissed} /> : null}
         {props.newPerson && actingSubject ? <InterestPicker locale={locale} messages={messages.home}
           kindNames={kindNames} initial={props.interests} collapsed={props.pickerSkipped} /> : null}
         {props.continueItems?.length ? <ContinueStrip items={props.continueItems} locale={locale}
           messages={messages.home} /> : null}
-        <section aria-labelledby="home-posts" className="min-w-0 border-border/60 border-y bg-card sm:rounded-2xl
-          sm:border sm:shadow-(--aura-shadow-card)">
+        <section aria-labelledby="home-posts" className="min-w-0">
           <h2 id="home-posts" className="sr-only">{feed.posts}</h2>
           <FeedControls state={state} defaults={defaults} signedIn={Boolean(actingSubject)} locale={locale}
             messages={messages.feed} realms={realms} />
