@@ -118,6 +118,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @vitejs/plugin-rsc | 0.5.35 | apps/accounts, apps/web |
 | @vitest/browser-playwright | 5.0.2 | apps/accounts, apps/web |
 | aws4fetch | 1.0.20 | services/main |
+| axe-core | 4.13.0 | apps/web |
 | better-auth | 1.7.5 | services/account, services/main |
 | better-call | 1.4.0 | services/account |
 | clsx | 2.1.1 | packages/ui |
