@@ -66,7 +66,7 @@ export async function seedClassics(state: SeedState): Promise<void> {
     const adopted = await api.post<{ adoption: WorkReceipt; replayed: boolean }>(
       `/v1/sources/proposals/${shortId(proposal.proposal)}/adoption/native-work`,
       { profile: 'source-native-work-adoption-v1', actingSubject: actor,
-        confirmedTitle: proposal.candidateTitle, titleLanguage: 'en' },
+        confirmedTitle: proposal.candidateTitle },
       token, seedKey('source-adoption', classic.id));
     const receipt = { ...adopted.adoption, replayed: adopted.replayed };
     state.created.set(classic.id, receipt);
