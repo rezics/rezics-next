@@ -18,7 +18,8 @@ export interface NativeWorkSourceProposal {
   conversion: string;
   sourceDigest: string;
   candidateTitle: string;
-  semanticTypes: [];
+  semanticTypes: ['https://schema.org/Book'];
+  semanticTypeBasis: 'source-record-type';
   sourceOnlyFields: ['description', 'authors', 'subjects'];
   rightsEvidence: StagedSourceObservation['rightsEvidence'];
   rightsStatus: 'undetermined';
@@ -44,7 +45,8 @@ function result(row: ProposalRow): NativeWorkSourceProposal {
     proposal: url(row.id), target: 'new-native-work', record: url(row.record_id),
     observation: url(row.observation_id), conversion: url(row.conversion_id),
     sourceDigest: row.source_digest, candidateTitle: row.candidate_title,
-    semanticTypes: [], sourceOnlyFields: ['description', 'authors', 'subjects'],
+    semanticTypes: ['https://schema.org/Book'], semanticTypeBasis: 'source-record-type',
+    sourceOnlyFields: ['description', 'authors', 'subjects'],
     rightsEvidence: row.rights_evidence, rightsStatus: 'undetermined',
     graphReceipt: row.graph_receipt,
     graphPosition: { datasetId: 'product', dataEpoch: row.graph_data_epoch,

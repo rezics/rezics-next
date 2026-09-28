@@ -174,7 +174,8 @@ test('LIVE01/LIVE02/LIVE07: private source graph projects retained Work evidence
       state: 'proposed', target: 'new-native-work', record: first.record,
       observation: first.observation, conversion: first.conversion,
       sourceDigest: first.sourceDigest, candidateTitle: 'Source "Work"',
-      semanticTypes: [], sourceOnlyFields: ['description', 'authors', 'subjects'],
+      semanticTypes: ['https://schema.org/Book'], semanticTypeBasis: 'source-record-type',
+      sourceOnlyFields: ['description', 'authors', 'subjects'],
       rightsEvidence: { basis: 'unknown', note: 'Scope still under review' },
       rightsStatus: 'undetermined', graphReceipt: first.receipt,
       graphPosition: first.sourcePosition } });

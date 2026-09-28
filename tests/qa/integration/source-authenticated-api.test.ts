@@ -370,7 +370,8 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
     const adoptionWrite = await adoptionResponse.json() as {
       adoption: NativeWorkSourceAdoption; replayed: boolean };
     expect(adoptionWrite).toMatchObject({ replayed: true, adoption: {
-      proposal: proposal.proposal, title: 'Source title', adoptedFields: ['title'],
+      proposal: proposal.proposal, title: 'Source title', adoptedFields: ['title', 'semanticTypes'],
+      semanticTypes: ['https://schema.org/Book'], semanticTypeBasis: 'source-record-type',
       rightsStatus: 'undetermined' } });
     expect(adoptionWrite.adoption.work).not.toBe(adoptionWrite.adoption.mainVersion);
     const replay = await call('POST', adoptionPath, fullToken, adoptionBody);

@@ -3,6 +3,7 @@ package com.rezics.jena;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.apache.jena.graph.Node;
@@ -195,7 +196,22 @@ final class ModelMutationPolicy {
                         && inbound.getPredicate().equals(NodeFactory.createURI(RV + "component"))
                         && data.contains(REVISIONS, parent, RDF.type.asNode(),
                             NodeFactory.createURI(RV + "RevisionAnchor"));
-                    if (typeChanged && !historicalAgentAnchor
+                    boolean historicalWorkAnchor = typeChanged
+                        && inbound.getPredicate().equals(NodeFactory.createURI(RV + "component"))
+                        && data.contains(CURRENT, object, RDF.type.asNode(),
+                            NodeFactory.createURI("https://schema.org/CreativeWork"))
+                        && data.contains(REVISIONS, parent, RDF.type.asNode(),
+                            NodeFactory.createURI(RV + "RevisionAnchor"))
+                        && data.contains(REVISIONS, parent, NodeFactory.createURI(RV + "modelRevision"),
+                            NodeFactory.createURI("https://rezics.com/definition/work-metadata-v1"))
+                        && data.contains(REVISIONS, parent, NodeFactory.createURI(RV + "shapeRevision"),
+                            NodeFactory.createURI("https://rezics.com/definition/work-metadata-v1"))
+                        && profiles.get("work-type-v1") != null
+                        && CommandService.validateOne(data, new CommandService.Validation(
+                            "work-type-v1", profiles.get("work-type-v1"),
+                            "https://rezics.com/definition/work-type-v1/work-revision-shape",
+                            List.of(name), List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of())) == null;
+                    if (typeChanged && !historicalAgentAnchor && !historicalWorkAnchor
                         && CanonicalPolicy.select(profiles, data, name, true) == null)
                         return "uncanonical reverse revision dependency requires staged lifecycle: " + name;
                     revisions.add(name);

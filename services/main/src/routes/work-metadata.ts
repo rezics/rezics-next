@@ -2,6 +2,9 @@ import { Elysia, t } from 'elysia';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
 import { setWorkMetadata } from '../modules/work/metadata-command.ts';
+import { stateWorkType } from '../modules/work/type-command.ts';
+import { WorkTypeConflict, WORK_TYPE_OPTIONS } from '../modules/work/type-schema.ts';
+import { InvalidWorkSemanticTypes, MAX_WORK_SEMANTIC_TYPES } from '../modules/work/activate.ts';
 import { readWorkEdition, readWorkEditions, readWorkMetadata } from '../modules/work/metadata-read.ts';
 import { metadataWrite, metadataEditionState, metadataHeaderState, InvalidWorkMetadata,
   StaleWorkMetadata, WorkMetadataUnavailable } from '../modules/work/metadata-schema.ts';
@@ -9,7 +12,7 @@ import { pageFields, pageQuery, readId, readLanguage, readPosition, readQuery, r
   from '../modules/work/read-contract.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
-import { problem } from './problems.ts';
+import { commandError, problem } from './problems.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
 const params = t.Object({ id: readUuid });
@@ -17,6 +20,7 @@ const headers = { 'cache-control': 'private, no-store' };
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 export const openApiOperations = {
   '/v1/works/{id}/metadata': { get: { bearer: false }, put: { bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/type': { put: { bearer: true, idempotencyKey: true } },
   '/v1/works/{id}/editions': { get: { bearer: false } },
   '/v1/works/{id}/editions/{edition}': { get: { bearer: false } },
 } as const;
@@ -28,6 +32,41 @@ function metadataError(error: unknown) {
 }
 export function workMetadataRoutes(work: MainWorkDependencies) {
   return new Elysia()
+    .put('/v1/works/:id/type', { params,
+      body: t.Object({ profile: t.Literal('work-type-v1'), expectedHead: readId,
+        types: t.Array(t.String({ enum: WORK_TYPE_OPTIONS }),
+          { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true }),
+        actingSubject: readId }, { additionalProperties: false }),
+      response: { 200: t.Object({ profile: t.Literal('work-type-v1'), work: readId,
+        revision: readId, predecessor: readId,
+        types: t.Array(t.String({ enum: WORK_TYPE_OPTIONS }),
+          { maxItems: MAX_WORK_SEMANTIC_TYPES }),
+        receipt: t.String(), sourcePosition: readPosition, replayed: t.Boolean() }),
+        202: pendingOperation, ...writeProblems },
+    }, async ({ request, params: path, body }) => {
+      const idempotencyKey = request.headers.get('idempotency-key');
+      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      try {
+        const receipt = await stateWorkType(work.environment, work.account, work.access, request,
+          { work: `https://rezics.com/id/${path.id}`, expectedHead: body.expectedHead,
+            types: body.types, actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ profile: 'work-type-v1', work: receipt.work,
+          revision: receipt.revision, predecessor: receipt.predecessor,
+          types: [...body.types].sort(), receipt: receipt.receipt,
+          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
+            sequence: receipt.sequence }, replayed: receipt.replayed }, { headers });
+      } catch (error) {
+        if (error instanceof InvalidWorkSemanticTypes) {
+          return problem(400, 'invalid_work_semantic_types', 'Work types conflict');
+        }
+        if (error instanceof WorkTypeConflict) {
+          return problem(409, 'work_type_conflict', error.message);
+        }
+        return commandError(error);
+      }
+    })
     .put('/v1/works/:id/metadata', { params, body: metadataWrite,
       response: { 200: t.Object({ work: readId, component: t.String(), revision: readId, receipt: t.String(),
         sourcePosition: readPosition, replayed: t.Boolean() }), 202: pendingOperation,

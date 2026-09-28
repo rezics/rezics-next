@@ -100,7 +100,7 @@ export function normalizeWorkSemanticTypes(types: readonly string[] = []): strin
   return [...types].sort();
 }
 
-function assertNativeWorkKindCombination(types: readonly string[]): void {
+export function assertNativeWorkTypeCombination(types: readonly string[]): void {
   const interests = new Set(types.map(type => workKinds[type as keyof typeof workKinds].interest).filter(Boolean));
   if (interests.size > 1 || types.includes('https://rezics.com/vocab/SkillPackage')
     && types.includes('https://rezics.com/vocab/PromptTemplate')) {
@@ -116,7 +116,7 @@ export function metadataWorkRequestDigest(title: string,
     throw new Error('invalid title');
   }
   const types = normalizeWorkSemanticTypes(semanticTypes);
-  assertNativeWorkKindCombination(types);
+  assertNativeWorkTypeCombination(types);
   if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(language) || language.length > 35) {
     throw new Error('invalid title language');
   }

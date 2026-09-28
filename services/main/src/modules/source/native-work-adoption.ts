@@ -9,7 +9,7 @@ import { metadataWorkRequestDigest, type WorkActivationEnvironment,
 } from '../work/activate.ts';
 import { GRAPHS, RV, iri, hash } from '../work/activate.ts';
 import { readWorkTerminalReceipt } from '../work/receipt.ts';
-import type { SourceNativeWorkProposalStore } from './native-work-proposal.ts';
+import type { NativeWorkSourceProposal, SourceNativeWorkProposalStore } from './native-work-proposal.ts';
 
 export class SourceAdoptionInvalid extends Error {}
 export class SourceAdoptionConflict extends Error {}
@@ -38,7 +38,9 @@ export interface NativeWorkSourceAdoption {
   proposal: string;
   sourceRecord: string;
   sourceConversion: string;
-  adoptedFields: ['title'];
+  adoptedFields: ['title'] | ['title', 'semanticTypes'];
+  semanticTypes: [] | ['https://schema.org/Book'];
+  semanticTypeBasis: 'source-record-type' | null;
   title: string;
   titleLanguage: string;
   titleLanguageAtActivation: string;
@@ -248,25 +250,33 @@ export class SourceNativeWorkAdoptionStore {
     return new Set(rows.map(row => row.work));
   }
 
-  private async verifiedBinding(row: BindingRow, intent: IntentRow): Promise<void> {
+  private async verifiedBinding(row: BindingRow, intent: IntentRow,
+    proposal: NativeWorkSourceProposal): Promise<boolean> {
     const receipt = await readWorkTerminalReceipt(this.env.fuseki, row.admission_id);
+    const typedDigest = metadataWorkRequestDigest(intent.confirmed_title, proposal.semanticTypes,
+      intent.activation_language);
+    const legacyDigest = metadataWorkRequestDigest(intent.confirmed_title, undefined,
+      intent.activation_language);
     if (!receipt || receipt.outcome !== 'succeeded'
       || receipt.receipt !== row.graph_receipt || receipt.admissionId !== row.admission_id
-      || receipt.requestDigest !== metadataWorkRequestDigest(intent.confirmed_title, undefined,
-        intent.activation_language)
+      || ![typedDigest, legacyDigest].includes(receipt.requestDigest)
       || receipt.scope !== 'work:create:root' || receipt.work !== row.work
       || receipt.mainVersion !== row.main_version || receipt.workRevision !== row.work_revision
       || receipt.mainRevision !== row.main_revision || receipt.dataEpoch !== row.data_epoch
       || receipt.sequence !== row.sequence) {
       throw new SourceAdoptionUnavailable('native Work receipt differs from source binding');
     }
+    return receipt.requestDigest === typedDigest;
   }
 
   private result(row: BindingRow, intent: IntentRow,
-    proposal: { proposal: string; record: string; conversion: string }): NativeWorkSourceAdoption {
+    proposal: NativeWorkSourceProposal, typed: boolean): NativeWorkSourceAdoption {
     return { profile: 'source-native-work-adoption-v1', state: 'adopted',
       binding: url(row.id), proposal: proposal.proposal, sourceRecord: proposal.record,
-      sourceConversion: proposal.conversion, adoptedFields: ['title'],
+      sourceConversion: proposal.conversion,
+      adoptedFields: typed ? ['title', 'semanticTypes'] : ['title'],
+      semanticTypes: typed ? proposal.semanticTypes : [],
+      semanticTypeBasis: typed ? proposal.semanticTypeBasis : null,
       title: intent.confirmed_title, titleLanguage: intent.title_language,
       titleLanguageAtActivation: intent.activation_language,
       titleLanguageBasis: intent.title_language_basis,
@@ -333,11 +343,12 @@ export class SourceNativeWorkAdoptionStore {
       if (existing.intent_id !== intent.id) {
         throw new SourceAdoptionUnavailable('source binding differs from adoption intent');
       }
-      await this.verifiedBinding(existing, intent);
-      return { adoption: this.result(existing, intent, proposal), replayed: true };
+      const typed = await this.verifiedBinding(existing, intent, proposal);
+      return { adoption: this.result(existing, intent, proposal, typed), replayed: true };
     }
     const work = await createAdmittedMetadataWork(this.env, this.account, this.access, request,
       { title: intent.confirmed_title, language: intent.activation_language,
+        semanticTypes: proposal.semanticTypes,
         actingSubject: intent.acting_subject,
         authorityPath: intent.authority_path, idempotencyKey: intent.work_idempotency_key });
     const bound = await this.pool.query<{ id: string }>(`INSERT INTO source.native_work_binding
@@ -357,8 +368,8 @@ export class SourceNativeWorkAdoptionStore {
       || row.sequence !== work.sequence) {
       throw new SourceAdoptionUnavailable('source binding differs from committed Work');
     }
-    await this.verifiedBinding(row, intent);
-    return { adoption: this.result(row, intent, proposal),
+    const typed = await this.verifiedBinding(row, intent, proposal);
+    return { adoption: this.result(row, intent, proposal, typed),
       replayed: bound.rowCount === 0 || work.replayed };
   }
 
@@ -377,8 +388,8 @@ export class SourceNativeWorkAdoptionStore {
       WHERE b.proposal_id = $1 AND b.principal_id = $2`, [proposalId, principalId]);
     const row = rows.rows[0];
     if (!row) return null;
-    await this.verifiedBinding(row, row);
-    return this.result(row, row, proposal);
+    const typed = await this.verifiedBinding(row, row, proposal);
+    return this.result(row, row, proposal, typed);
   }
 
   async readSupport(principalId: string, work: string): Promise<NativeWorkSourceSupport | null> {

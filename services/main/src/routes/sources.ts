@@ -165,7 +165,8 @@ const sourceProposalResult = t.Object({
   state: t.Literal('proposed'), proposal: t.String(),
   target: t.Literal('new-native-work'), record: t.String(),
   observation: t.String(), conversion: t.String(), sourceDigest: t.String(),
-  candidateTitle: t.String(), semanticTypes: t.Array(t.String(), { maxItems: 0 }),
+  candidateTitle: t.String(), semanticTypes: t.Tuple([t.Literal('https://schema.org/Book')]),
+  semanticTypeBasis: t.Literal('source-record-type'),
   sourceOnlyFields: t.Tuple([t.Literal('description'), t.Literal('authors'),
     t.Literal('subjects')]), rightsEvidence: sourceRightsEvidence,
   rightsStatus: t.Literal('undetermined'), graphReceipt: t.String(),
@@ -184,7 +185,10 @@ const sourceAuthorNameResult = t.Object({ revision: groupUuid, authorKey: t.Stri
 const sourceAdoptionResult = t.Object({
   profile: t.Literal('source-native-work-adoption-v1'), state: t.Literal('adopted'),
   binding: t.String(), proposal: t.String(), sourceRecord: t.String(),
-  sourceConversion: t.String(), adoptedFields: t.Tuple([t.Literal('title')]),
+  sourceConversion: t.String(), adoptedFields: t.Union([
+    t.Tuple([t.Literal('title')]), t.Tuple([t.Literal('title'), t.Literal('semanticTypes')])]),
+  semanticTypes: t.Union([t.Tuple([]), t.Tuple([t.Literal('https://schema.org/Book')])]),
+  semanticTypeBasis: t.Nullable(t.Literal('source-record-type')),
   title: t.String(), titleLanguage: t.String(), titleLanguageAtActivation: t.String(),
   titleLanguageBasis: t.Union([t.Literal('explicit'), t.Literal('work'),
     t.Literal('edition'), t.Literal('inferred')]),
