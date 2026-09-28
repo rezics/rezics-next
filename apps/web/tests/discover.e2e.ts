@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 // have a standing rating question depending on which specs ran first. Earlier
 // browser cases may create Works, making a built generation out of date.
 
-const preparedOrListed = /This list is being prepared|Nothing here yet|Couldn’t load/;
+const preparedOrListed = /being prepared|Nothing here yet|Couldn’t load|Readers’ favorites|Recently added/;
 
 test('discover shows shelves by meaning, scope only when chosen, and says honestly when lists are not ready', async ({ page }) => {
   await page.goto('/en/discover');
@@ -13,6 +13,8 @@ test('discover shows shelves by meaning, scope only when chosen, and says honest
   const community = page.getByRole('navigation', { name: 'Whose picks' });
   await expect(community.getByRole('link', { name: 'Everyone' })).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('main')).toContainText(preparedOrListed);
+  // Lists that cannot show are named once, never as a column of identical boxes.
+  expect(await page.locator('main').getByText(/being prepared/).count()).toBeLessThanOrEqual(1);
   // The model's words stay out of a reader's page.
   await expect(page.locator('main')).not.toContainText(/Global|Realm|Context/);
 

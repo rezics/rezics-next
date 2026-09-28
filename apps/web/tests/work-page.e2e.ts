@@ -59,9 +59,9 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await page.goto(`/en/w/${id}`);
   await expect(page).toHaveTitle(`${seed.title} · REZICS`);
   await expect(page.getByRole('heading', { level: 1, name: seed.title })).toHaveAttribute('lang', 'en');
-  await expect(page.getByRole('link', { name: /Open Library author OL2162284A/ }))
-    .toHaveAttribute('href', 'https://openlibrary.org/authors/OL2162284A');
-  await expect(page.getByText(/· English$/)).toBeVisible();
+  // A source author links to the source, named as it lists them or by its reference until it names them.
+  await expect(page.locator('a[href="https://openlibrary.org/authors/OL2162284A"]')).toBeVisible();
+  await expect(page.getByText(/^Book · English/)).toBeVisible();
   await expect(page.getByText('Maren Osei').first()).toBeVisible();
   await expect(page.getByText('La Cartographe des marées').first()).toHaveAttribute('lang', 'fr');
   await expect(page.getByRole('region', { name: 'About this Work' })).toContainText('A surveyor maps a delta');
@@ -79,11 +79,18 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await expect(page.getByRole('region', { name: 'Genres' }).getByRole('link', { name: 'Adventure' }))
     .toHaveAttribute('href', /^\/en\/discover\?term=[0-9a-f-]{36}$/);
   await expect(page.getByRole('region', { name: 'Communities' })).toContainText('Reads the English version');
-  // Identifiers are folded into Details until asked for.
+  // Details speak plainly; identifiers wait one step further in, under Cite.
   await expect(page.getByText(seed.work, { exact: true })).toBeHidden();
-  await page.getByText('Details and identifiers').click();
-  await expect(page.getByText(seed.work, { exact: true })).toBeVisible();
+  await page.getByText('Details', { exact: true }).click();
   await expect(page.getByRole('button', { name: 'Copy citation' })).toBeVisible();
+  await expect(page.getByText(seed.work, { exact: true })).toBeHidden();
+  await page.getByText('Identifiers', { exact: true }).click();
+  await expect(page.getByText(seed.work, { exact: true })).toBeVisible();
+  // Reviews answer everyone's rating question; signed out, writing one leads to sign-in.
+  const reviews = page.getByRole('region', { name: 'Reviews' });
+  await expect(reviews).toContainText('No reviews yet');
+  await expect(reviews.getByRole('link', { name: /Write a review/ }))
+    .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent(`/en/w/${id}`)}`);
 
   // A community comes from the URL and re-scopes ratings and genres; nothing falls back to everyone's view.
   await scope.getByRole('link', { name: 'Community: Tidewater Readers' }).click();
@@ -116,9 +123,10 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await sections.getByRole('link', { name: 'History' }).click();
   await expect(page).toHaveURL(`/en/w/${id}/history`);
   const history = page.getByRole('region', { name: 'History' });
-  await expect(history.getByRole('listitem').first()).toContainText('Reply placed in a community');
-  await expect(history).toContainText('Version published');
-  await expect(history).toContainText('Metadata revised');
+  await expect(history.getByRole('listitem').first()).toContainText('A reply was placed in a community');
+  await expect(history).toContainText('A version was published');
+  await expect(history).toContainText('Details edited');
+  await expect(history).not.toContainText('Sequence');
   await history.getByRole('link', { name: 'Replies' }).click();
   await expect(page).toHaveURL(`/en/w/${id}/history?kind=reply-placement`);
   await expect(history.getByRole('listitem')).toHaveCount(1);
@@ -139,11 +147,12 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await expect(contents.getByRole('listitem')).toHaveText([/^Low Water/, /^The Surveyor’s Chain/,
     /^Unavailable chapterNot available to read yet/]);
   await expect(contents.getByRole('link', { name: /Unavailable chapter/ })).toHaveCount(0);
-  await page.getByRole('link', { name: 'Read', exact: true }).click();
-  await expect(page).toHaveURL(`/en/w/${id}/contents`);
+  // Read under the cover opens chapter 1 for a reader who has not started, as Contents' Start reading does.
+  const [first, second] = seed.chapters.map(uuid);
+  await expect(page.getByRole('link', { name: 'Start reading' }).first())
+    .toHaveAttribute('href', `/en/w/${id}/read/${first}`);
 
   // The reader: exact text, next and previous by link and by arrow key, and settings that persist.
-  const [first, second] = seed.chapters.map(uuid);
   await contents.getByRole('link', { name: 'Start reading' }).click();
   await expect(page).toHaveURL(`/en/w/${id}/read/${first}`);
   const article = page.getByRole('article');
