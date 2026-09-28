@@ -41813,6 +41813,2160 @@
         ]
       }
     },
+    "/v1/authors/open-library/{author}": {
+      "get": {
+        "operationId": "getV1AuthorsOpen-libraryByAuthor",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "author",
+            "required": true,
+            "schema": {
+              "pattern": "^OL[1-9][0-9]{0,11}A$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "maxLength": 35,
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "facts": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "birthDate": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "approximate": {
+                              "type": "boolean"
+                            },
+                            "day": {
+                              "~elyTyp": 7,
+                              "maximum": 31,
+                              "minimum": 1,
+                              "nullable": true,
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "month": {
+                              "~elyTyp": 7,
+                              "maximum": 12,
+                              "minimum": 1,
+                              "nullable": true,
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "source": {
+                              "properties": {
+                                "basis": {
+                                  "const": "facts",
+                                  "type": "string"
+                                },
+                                "digest": {
+                                  "type": "string"
+                                },
+                                "fetchedAt": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "anyOf": [
+                                    {
+                                      "const": "/birth_date",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "/death_date",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "/fuller_name",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "pattern": "^/remote_ids/(project_gutenberg|librivox|wikidata|lc_naf|viaf|isni)$",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "observation": {
+                                  "type": "string"
+                                },
+                                "record": {
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "type": "string"
+                                },
+                                "sourceRevision": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "record",
+                                "observation",
+                                "revision",
+                                "sourceRevision",
+                                "digest",
+                                "url",
+                                "fetchedAt",
+                                "basis",
+                                "field"
+                              ],
+                              "type": "object"
+                            },
+                            "text": {
+                              "maxLength": 100,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "year": {
+                              "~elyTyp": 7,
+                              "maximum": 9999,
+                              "minimum": 1,
+                              "nullable": true,
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "text",
+                            "year",
+                            "month",
+                            "day",
+                            "approximate",
+                            "source"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "deathDate": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "approximate": {
+                              "type": "boolean"
+                            },
+                            "day": {
+                              "~elyTyp": 7,
+                              "maximum": 31,
+                              "minimum": 1,
+                              "nullable": true,
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "month": {
+                              "~elyTyp": 7,
+                              "maximum": 12,
+                              "minimum": 1,
+                              "nullable": true,
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "source": {
+                              "properties": {
+                                "basis": {
+                                  "const": "facts",
+                                  "type": "string"
+                                },
+                                "digest": {
+                                  "type": "string"
+                                },
+                                "fetchedAt": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "anyOf": [
+                                    {
+                                      "const": "/birth_date",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "/death_date",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "/fuller_name",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "pattern": "^/remote_ids/(project_gutenberg|librivox|wikidata|lc_naf|viaf|isni)$",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "observation": {
+                                  "type": "string"
+                                },
+                                "record": {
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "type": "string"
+                                },
+                                "sourceRevision": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "record",
+                                "observation",
+                                "revision",
+                                "sourceRevision",
+                                "digest",
+                                "url",
+                                "fetchedAt",
+                                "basis",
+                                "field"
+                              ],
+                              "type": "object"
+                            },
+                            "text": {
+                              "maxLength": 100,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "year": {
+                              "~elyTyp": 7,
+                              "maximum": 9999,
+                              "minimum": 1,
+                              "nullable": true,
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "text",
+                            "year",
+                            "month",
+                            "day",
+                            "approximate",
+                            "source"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "fullerName": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "source": {
+                              "properties": {
+                                "basis": {
+                                  "const": "facts",
+                                  "type": "string"
+                                },
+                                "digest": {
+                                  "type": "string"
+                                },
+                                "fetchedAt": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "anyOf": [
+                                    {
+                                      "const": "/birth_date",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "/death_date",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "/fuller_name",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "pattern": "^/remote_ids/(project_gutenberg|librivox|wikidata|lc_naf|viaf|isni)$",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "observation": {
+                                  "type": "string"
+                                },
+                                "record": {
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "type": "string"
+                                },
+                                "sourceRevision": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "record",
+                                "observation",
+                                "revision",
+                                "sourceRevision",
+                                "digest",
+                                "url",
+                                "fetchedAt",
+                                "basis",
+                                "field"
+                              ],
+                              "type": "object"
+                            },
+                            "value": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "source"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "identifiers": {
+                          "items": {
+                            "properties": {
+                              "scheme": {
+                                "enum": [
+                                  "project_gutenberg",
+                                  "librivox",
+                                  "wikidata",
+                                  "lc_naf",
+                                  "viaf",
+                                  "isni"
+                                ],
+                                "type": "string"
+                              },
+                              "source": {
+                                "properties": {
+                                  "basis": {
+                                    "const": "facts",
+                                    "type": "string"
+                                  },
+                                  "digest": {
+                                    "type": "string"
+                                  },
+                                  "fetchedAt": {
+                                    "type": "string"
+                                  },
+                                  "field": {
+                                    "anyOf": [
+                                      {
+                                        "const": "/birth_date",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "/death_date",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "/fuller_name",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "pattern": "^/remote_ids/(project_gutenberg|librivox|wikidata|lc_naf|viaf|isni)$",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "observation": {
+                                    "type": "string"
+                                  },
+                                  "record": {
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "type": "string"
+                                  },
+                                  "sourceRevision": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "record",
+                                  "observation",
+                                  "revision",
+                                  "sourceRevision",
+                                  "digest",
+                                  "url",
+                                  "fetchedAt",
+                                  "basis",
+                                  "field"
+                                ],
+                                "type": "object"
+                              },
+                              "url": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "maxLength": 32,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "scheme",
+                              "value",
+                              "url",
+                              "source"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 6,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "birthDate",
+                        "deathDate",
+                        "fullerName",
+                        "identifiers"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "key": {
+                      "pattern": "^/authors/OL[1-9][0-9]{0,11}A$",
+                      "type": "string"
+                    },
+                    "links": {
+                      "properties": {
+                        "page": {
+                          "type": "string"
+                        },
+                        "works": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "page",
+                        "works"
+                      ],
+                      "type": "object"
+                    },
+                    "name": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "displayName": {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "nameSource": {
+                          "properties": {
+                            "basis": {
+                              "const": "facts",
+                              "type": "string"
+                            },
+                            "digest": {
+                              "type": "string"
+                            },
+                            "fetchedAt": {
+                              "type": "string"
+                            },
+                            "field": {
+                              "const": "/name",
+                              "type": "string"
+                            },
+                            "observation": {
+                              "type": "string"
+                            },
+                            "record": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "string"
+                            },
+                            "sourceRevision": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "record",
+                            "observation",
+                            "revision",
+                            "sourceRevision",
+                            "digest",
+                            "url",
+                            "fetchedAt",
+                            "basis",
+                            "field"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "displayName",
+                        "nameSource"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "external-author-read-v1",
+                      "type": "string"
+                    },
+                    "provider": {
+                      "const": "open-library",
+                      "type": "string"
+                    },
+                    "record": {
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "totals": {
+                      "properties": {
+                        "ratings": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "context": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "count": {
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "exact",
+                                    "lower-bound"
+                                  ],
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "kind"
+                              ],
+                              "type": "object"
+                            },
+                            "mean": {
+                              "type": "number"
+                            },
+                            "scale": {
+                              "properties": {
+                                "max": {
+                                  "enum": [
+                                    5,
+                                    10
+                                  ],
+                                  "type": "string"
+                                },
+                                "min": {
+                                  "const": 1,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "context",
+                            "count",
+                            "mean",
+                            "scale"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "readers": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "exact",
+                                "lower-bound"
+                              ],
+                              "type": "string"
+                            },
+                            "value": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "kind"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "works": {
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "exact",
+                                "lower-bound"
+                              ],
+                              "type": "string"
+                            },
+                            "value": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "kind"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "works",
+                        "ratings",
+                        "readers"
+                      ],
+                      "type": "object"
+                    },
+                    "works": {
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "properties": {
+                              "authors": {
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "properties": {
+                                        "displayName": {
+                                          "~elyTyp": 7,
+                                          "maxLength": 200,
+                                          "minLength": 1,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "key": {
+                                          "pattern": "^/authors/OL[1-9][0-9]{0,11}A$",
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "const": "external",
+                                          "type": "string"
+                                        },
+                                        "provider": {
+                                          "const": "open-library",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "provider",
+                                        "key",
+                                        "displayName"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "properties": {
+                                        "agent": {
+                                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        },
+                                        "displayName": {
+                                          "maxLength": 200,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "handle": {
+                                          "maxLength": 100,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "const": "agent",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "agent",
+                                        "handle",
+                                        "displayName"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "completionStatus": {
+                                "~elyTyp": 7,
+                                "enum": [
+                                  "ongoing",
+                                  "completed",
+                                  "hiatus"
+                                ],
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "cover": {
+                                "anyOf": [
+                                  {
+                                    "properties": {
+                                      "key": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "fallback",
+                                        "type": "string"
+                                      },
+                                      "policy": {
+                                        "type": "string"
+                                      },
+                                      "resourceType": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "policy",
+                                      "key",
+                                      "resourceType"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "basis": {
+                                        "properties": {
+                                          "context": {
+                                            "type": "string"
+                                          },
+                                          "policy": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "policy",
+                                          "context"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "crop": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "height": {
+                                        "type": "integer"
+                                      },
+                                      "kind": {
+                                        "const": "image",
+                                        "type": "string"
+                                      },
+                                      "mediaType": {
+                                        "type": "string"
+                                      },
+                                      "selection": {
+                                        "type": "string"
+                                      },
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "width": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "selection",
+                                      "url",
+                                      "mediaType",
+                                      "width",
+                                      "height",
+                                      "crop",
+                                      "basis"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "rating": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "properties": {
+                                  "context": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "count": {
+                                    "maximum": 100,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "mean": {
+                                    "type": "number"
+                                  },
+                                  "scale": {
+                                    "properties": {
+                                      "max": {
+                                        "enum": [
+                                          5,
+                                          10
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "min": {
+                                        "const": 1,
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "min",
+                                      "max"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "sum": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "context",
+                                  "count",
+                                  "sum",
+                                  "mean",
+                                  "scale"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "tagline": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "title": {
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              },
+                              "types": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 8,
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "cover",
+                              "types",
+                              "tagline",
+                              "completionStatus",
+                              "rating",
+                              "authors"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 20,
+                          "type": "array"
+                        },
+                        "nextCursor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "nextCursor"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "provider",
+                    "key",
+                    "name",
+                    "facts",
+                    "record",
+                    "totals",
+                    "works",
+                    "sourcePosition",
+                    "links"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/authors/open-library/{author}/works": {
+      "get": {
+        "operationId": "getV1AuthorsOpen-libraryByAuthorWorks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "author",
+            "required": true,
+            "schema": {
+              "pattern": "^OL[1-9][0-9]{0,11}A$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "maxLength": 35,
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "properties": {
+                        "kind": {
+                          "const": "exact-page",
+                          "type": "string"
+                        },
+                        "total": {
+                          "type": "null"
+                        },
+                        "value": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "kind",
+                        "total"
+                      ],
+                      "type": "object"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "authors": {
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "properties": {
+                                    "displayName": {
+                                      "~elyTyp": 7,
+                                      "maxLength": 200,
+                                      "minLength": 1,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "key": {
+                                      "pattern": "^/authors/OL[1-9][0-9]{0,11}A$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "external",
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "const": "open-library",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "provider",
+                                    "key",
+                                    "displayName"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "properties": {
+                                    "agent": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "displayName": {
+                                      "maxLength": 200,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "handle": {
+                                      "maxLength": 100,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "agent",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "agent",
+                                    "handle",
+                                    "displayName"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "maxItems": 3,
+                            "type": "array"
+                          },
+                          "completionStatus": {
+                            "~elyTyp": 7,
+                            "enum": [
+                              "ongoing",
+                              "completed",
+                              "hiatus"
+                            ],
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "cover": {
+                            "anyOf": [
+                              {
+                                "properties": {
+                                  "key": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "fallback",
+                                    "type": "string"
+                                  },
+                                  "policy": {
+                                    "type": "string"
+                                  },
+                                  "resourceType": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "policy",
+                                  "key",
+                                  "resourceType"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "basis": {
+                                    "properties": {
+                                      "context": {
+                                        "type": "string"
+                                      },
+                                      "policy": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "policy",
+                                      "context"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "crop": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "height": {
+                                    "type": "integer"
+                                  },
+                                  "kind": {
+                                    "const": "image",
+                                    "type": "string"
+                                  },
+                                  "mediaType": {
+                                    "type": "string"
+                                  },
+                                  "selection": {
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  },
+                                  "width": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "selection",
+                                  "url",
+                                  "mediaType",
+                                  "width",
+                                  "height",
+                                  "crop",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "rating": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "context": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "count": {
+                                "maximum": 100,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "mean": {
+                                "type": "number"
+                              },
+                              "scale": {
+                                "properties": {
+                                  "max": {
+                                    "enum": [
+                                      5,
+                                      10
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "min": {
+                                    "const": 1,
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "min",
+                                  "max"
+                                ],
+                                "type": "object"
+                              },
+                              "sum": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "context",
+                              "count",
+                              "sum",
+                              "mean",
+                              "scale"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "tagline": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "basis": {
+                                "enum": [
+                                  "requested",
+                                  "fallback"
+                                ],
+                                "type": "string"
+                              },
+                              "direction": {
+                                "enum": [
+                                  "ltr",
+                                  "rtl"
+                                ],
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "language",
+                              "direction",
+                              "basis"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "title": {
+                            "properties": {
+                              "basis": {
+                                "enum": [
+                                  "requested",
+                                  "fallback"
+                                ],
+                                "type": "string"
+                              },
+                              "direction": {
+                                "enum": [
+                                  "ltr",
+                                  "rtl"
+                                ],
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "language",
+                              "direction",
+                              "basis"
+                            ],
+                            "type": "object"
+                          },
+                          "types": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "cover",
+                          "types",
+                          "tagline",
+                          "completionStatus",
+                          "rating",
+                          "authors"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor",
+                    "sourcePosition",
+                    "count"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/catalog/resources/{resource}/descriptions": {
       "patch": {
         "operationId": "patchV1CatalogResourcesByResourceDescriptions",
