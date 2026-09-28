@@ -26,7 +26,14 @@ type Story = StoryObj<typeof meta>;
 const body = () => within(document.body);
 async function openMenu(canvas: ReturnType<typeof within>, name: string, item: string) {
   await userEvent.click(canvas.getByRole('button', { name: `Actions for ${name}` }));
-  await userEvent.click(await body().findByRole('menuitem', { name: item }, { timeout: 5000 }));
+  const menu = await body().findByRole('menu', {}, { timeout: 5000 });
+  const choice = within(menu).getByRole('menuitem', { name: item });
+  // Choose from the keyboard: a pointer press while the menu is still zooming in can land beside the item and
+  // close the menu without choosing, which failed these stories on a loaded host.
+  for (let step = 0; step < 10 && !choice.hasAttribute('data-highlighted'); step += 1) {
+    await userEvent.keyboard('{ArrowDown}');
+  }
+  await userEvent.keyboard('{Enter}');
 }
 
 export const Roster: Story = {
