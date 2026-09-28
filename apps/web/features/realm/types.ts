@@ -19,6 +19,11 @@ export type ZoneDecisionPage = Ok<Realm['modules']['recent-decisions']['get']>;
 export type ZoneReplyPage = Ok<Realm['modules']['discussions']['get']>;
 export type ZoneEditorLists = Ok<Realm['modules']['editor-lists']['get']>;
 export type ZoneGenrePage = Ok<ReturnType<Realm['modules']['genres']>['get']>;
+export type ZoneBrowsePage = Ok<Realm['modules']['browse']['get']>;
+export type ZoneBrowseQuery = NonNullable<NonNullable<Parameters<Realm['modules']['browse']['get']>[0]>['query']>;
+/** Main's admitted Facets (`GET /v1/facets`): their names and labels in every UI locale. */
+export type FacetList = Ok<MainClient['v1']['facets']['get']>;
+export type ModReleasePage = Ok<ReturnType<MainClient['v1']['mod-releases']>['get']>;
 export type RankingPage = Ok<Realm['rankings']['get']>;
 export type RankingMetric = RankingPage['metric'];
 export type ZonePresentationRead = Ok<Zone['presentation']['get']>;

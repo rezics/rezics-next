@@ -70,6 +70,50 @@ function RankBadge({ rank, label, className }: { rank: number; label: string; cl
     <span className="sr-only">{label}</span><span aria-hidden="true">{rank}</span></span>;
 }
 
+/** How long ago a moment was, in the reader's language (`3 days ago`, `last month`). */
+export function agoText(at: string, locale: UiLocale, now = Date.now()): string | null {
+  const time = Date.parse(at);
+  if (Number.isNaN(time)) return null;
+  const days = Math.max(0, Math.floor((now - time) / 86_400_000));
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  return days < 30 ? format.format(-days, 'day') : days < 365 ? format.format(-Math.floor(days / 30), 'month')
+    : format.format(-Math.floor(days / 365), 'year');
+}
+
+/**
+ * What a reader checks before opening a Work, as its field's sites list it: a
+ * mod's environment, loaders and game versions (Modrinth), a serial's status,
+ * chapters and length (novel sites), and when it last changed. Each fact is
+ * Main's; a Work without one shows nothing for it.
+ */
+export function WorkFacts({ work, locale, messages, className }: {
+  work: ZoneWork; locale: UiLocale; messages: ZoneMessages; className?: string;
+}) {
+  const t = materializeData(messages, { locale });
+  const { mod } = work;
+  const at = mod?.updatedAt ?? work.latestChapter?.at ?? work.updatedAt;
+  const ago = at ? agoText(at, locale) : null;
+  const versions = mod?.gameVersions ?? [];
+  const facts = [
+    mod?.environment ? { key: 'env', text: { client: messages.envClient, server: messages.envServer,
+      'client-and-server': messages.envBoth }[mod.environment] } : null,
+    ...(mod?.loaders ?? []).map(loader => ({ key: loader, text: loader, code: true })),
+    ...versions.slice(0, 3).map(version => ({ key: version, text: version, code: true })),
+    versions.length > 3 ? { key: 'more', text: `+${versions.length - 3}` } : null,
+    work.status ? { key: 'status', text: { ongoing: messages.statusOngoing, completed: messages.statusCompleted,
+      hiatus: messages.statusHiatus }[work.status] } : null,
+    work.chapters ? { key: 'chapters', text: t.chapters(work.chapters) } : null,
+    work.words ? { key: 'words', text: t.words({ count: new Intl.NumberFormat(locale, { notation: 'compact' })
+      .format(work.words) }) } : null,
+  ].filter(fact => fact !== null);
+  if (!facts.length && !ago) return null;
+  return <ul className={cn('flex flex-wrap items-center gap-1.5 text-muted-foreground text-xs', className)}>
+    {facts.map(fact => <li key={fact.key} translate={'code' in fact ? 'no' : undefined}
+      className="rounded-full border border-border/80 px-2 py-0.5 leading-tight">{fact.text}</li>)}
+    {ago ? <li className="ms-0.5"><time dateTime={at ?? undefined}>{t.updated({ ago })}</time></li> : null}
+  </ul>;
+}
+
 export interface ZoneCardProps {
   work: ZoneWork;
   rank?: number;
@@ -130,8 +174,11 @@ export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, heading
       {work.tagline ? <p lang={work.tagline.lang} dir={work.tagline.dir} className={cn('text-pretty',
         'text-muted-foreground text-sm/snug', compact ? 'line-clamp-1' : 'line-clamp-2')}>{work.tagline.value}</p>
         : null}
-      {work.latestChapter?.title ? <p className="line-clamp-1 text-primary text-sm">
-        {t.newChapter({ chapter: work.latestChapter.title.value })}</p> : null}
+      {work.latestChapter?.title ? <p lang={work.latestChapter.title.lang} className="line-clamp-1 text-primary text-sm">
+        <LocalizedLink href={work.latestChapter.href} className="rounded-sm outline-none hover:underline
+          focus-visible:ring-2 focus-visible:ring-ring">{t.newChapter({ chapter: work.latestChapter.title.value })}
+        </LocalizedLink></p> : null}
+      {compact ? null : <WorkFacts work={work} locale={locale} messages={messages} className="mt-1" />}
     </div>
     {whyHere ? <WhyHere work={work} locale={locale} messages={messages} className="-me-1 -mt-1" /> : <span />}
   </article>;

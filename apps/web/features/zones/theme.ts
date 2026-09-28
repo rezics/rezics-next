@@ -66,21 +66,25 @@ export function zoneScheme(tokens: ZoneTokens, reader: ReaderTheme): 'dark' | nu
 
 /**
  * Maps presentation tokens to CSS custom properties on the Zone's scope.
- * With `enabled` false (the reader chose the standard look) the Zone keeps
- * its structure (density, cover shape) but none of its colors or type.
+ * Zones use REZICS's shared visual language (docs/plan/frontend.md, "Zones"):
+ * they differ in how they lay information out, not in colour or type. So only
+ * structure applies (density, and modules as panels or on the page); a Zone's
+ * accent, tint, scheme, radius and fonts apply only when it asks for its own
+ * look (`ownLook`), which no Zone can do yet. With `enabled` false (the reader
+ * chose the standard look) modules also sit on the page itself.
  */
-export function zoneTheme(tokens: ZoneTokens, { reader, enabled }: { reader: ReaderTheme; enabled: boolean }):
-  ZoneTheme {
+export function zoneTheme(tokens: ZoneTokens, { reader, enabled, ownLook = false }:
+  { reader: ReaderTheme; enabled: boolean; ownLook?: boolean }): ZoneTheme {
   // Covers keep the catalogue's proportions for each kind of Work, so coverStyle has no effect here;
   // density sets how many covers a shelf shows across.
   const structure = tokens.density === 'compact'
     ? { '--zone-gap': '1rem', '--zone-pad': '1rem', '--zone-shelf-gap': '1rem', '--zone-tiles': '6' }
     : { '--zone-gap': '1.75rem', '--zone-pad': '1.25rem', '--zone-shelf-gap': '1.5rem', '--zone-tiles': '5' };
-  if (!enabled) {
-    return { className: 'zone-scope', style: { ...structure, '--zone-page': 'var(--background)',
-      '--zone-panel': 'transparent', '--zone-panel-pad': '0px', '--zone-radius-card': radii.md[0],
-      '--zone-heading-font': fonts.sans, '--zone-heading-scale': '1' } };
-  }
+  const panels = enabled && tokens.pageSurface === 'cards';
+  const shared = { ...structure, '--zone-page': 'var(--background)',
+    '--zone-panel': panels ? 'var(--card)' : 'transparent', '--zone-panel-pad': panels ? 'var(--zone-pad)' : '0px',
+    '--zone-radius-card': radii.md[0], '--zone-heading-font': fonts.sans, '--zone-heading-scale': '1' };
+  if (!enabled || !ownLook) return { className: 'zone-scope', style: shared };
   const light = accentRoles(tokens, 'light');
   const dark = accentRoles(tokens, 'dark');
   const both = (role: keyof typeof light) => pair(toHex(light[role]), toHex(dark[role]));

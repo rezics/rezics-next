@@ -1,10 +1,11 @@
 import type { RankingMetric as ChartMetric, ZoneBanner, ZoneModuleData, ZoneShelfTab, ZoneWork }
   from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
-import { discoverHref } from '../discover/state.ts';
 import { feedOf, placedModule, type PresentationModule, type RealmFeed, type ZonePresentation }
   from '../zones/presentation.ts';
 import type { ModuleState, PlacedModule } from '../zones/zone-home.tsx';
+import { isoMoment } from '../zones/adapt-cards.ts';
+import { chipHref } from '../zones/browse-state.ts';
 import { type AdaptContext, bannerImage, liveBanners, type ModuleCredit, zoneDecision, zonePeople, zoneText, zoneWork }
   from './adapt.ts';
 import { readLatestChapters, readNewAdoptions, readRankings, readRealmWorks, readRecentDecisions,
@@ -76,7 +77,7 @@ async function feedWorks(feed: RealmFeed, context: AdaptContext): Promise<Loaded
     const seen = new Set<string>();
     return { ok: true, data: page.data.items.filter(item => !seen.has(item.work.id) && seen.add(item.work.id))
       .map(item => ({ ...withRealmCard(zoneWork(item.work, context, null), cards.get(item.work.id)),
-        latestChapter: { title: null, at: null,
+        latestChapter: { title: zoneText(item.chapterTitle), at: isoMoment(item.chapterUpdatedAt),
           href: `/w/${idOf(item.work.id)}/read/${idOf(item.chapter)}` } })) };
   }
   return { ok: false, failure: 'invalid' };
@@ -226,13 +227,10 @@ async function genres(module: PresentationModule, context: AdaptContext): Promis
   if (!contextId) return unsupported;
   const read = await readZoneGenres(context.realm, contextId, context.locale);
   if (!read.ok) return failed;
-  const chips = read.data.items.flatMap(item => {
-    const term = idOf(item.id);
-    return term ? [{ id: item.id, label: zoneText(item.name),
-      // The chip Context only names the navigation; Discover's `context` selects a rating population.
-      href: discoverHref({ scope: { kind: 'realm', realm: context.realm },
-        context: null, type: null, term }) }] : [];
-  }).slice(0, module.options?.limit ?? 12);
+  // Each chip opens the Zone's own browse page filtered by its Concept (the `concept` Facet).
+  const chips = read.data.items.map(item => ({ id: item.id, label: zoneText(item.name),
+    href: chipHref(realmHref(context.locale, context.ref, 'browse'), 'concept', item.concept) }))
+    .slice(0, module.options?.limit ?? 12);
   return chips.length ? { state: 'ready', data: { chips } } : empty;
 }
 
@@ -259,7 +257,7 @@ async function load(module: PresentationModule, presentation: ZonePresentation, 
 /** Where a module's "More" leads, when the Realm has a view for it. */
 function moreOf(module: PresentationModule, locale: UiLocale, ref: string): string | null {
   if (module.type === 'decision-log') return realmHref(locale, ref, 'decisions');
-  if (module.type === 'shelf') return realmHref(locale, ref, 'works');
+  if (module.type === 'shelf') return realmHref(locale, ref, 'browse');
   return null;
 }
 

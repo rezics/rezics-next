@@ -18,7 +18,11 @@ import type { AnchorHTMLAttributes, ComponentType, ReactNode } from 'react';
 export const zonePresets = ['clean', 'editorial', 'vibrant', 'serial'] as const;
 export type ZonePreset = (typeof zonePresets)[number];
 
-/** Presentation tokens (Main's `zone-presentation-v1`). */
+/**
+ * Presentation tokens (Main's `zone-presentation-v1`). Zones share REZICS's visual
+ * language: the platform applies their structure (density, panels) and keeps their
+ * colour, scheme and type tokens for a Zone that asks for its own look.
+ */
 export interface ZoneTokens {
   /**
    * The scheme the Zone was designed for. `dark` darkens the Zone for readers
@@ -81,17 +85,19 @@ export interface ZoneWork {
   hub?: ZoneHubItem | null;
 }
 
-/** A mod's latest verified release: what a player checks before installing it. */
+/** What a mod runs on across its verified releases: what a player checks before installing it. */
 export interface ZoneModRelease {
   /** `Minecraft`. */
   game: string;
-  /** Game versions the release was checked against (`1.21.1`). */
+  /** Game versions its releases were checked against, newest first (`1.21.1`). */
   gameVersions: string[];
   /** Mod loaders it runs on (`Fabric`, `Forge`, `NeoForge`). */
   loaders: string[];
-  /** The release's own version, when its manifest declares one (`1.3.0`). */
+  /** Where its newest release runs, as its manifest declares; null when it does not say. */
+  environment: 'client' | 'server' | 'client-and-server' | null;
+  /** The newest release's own version, when its manifest declares one (`1.3.0`). */
   version: string | null;
-  /** ISO date-time Main recorded the release: the mod's last update. */
+  /** ISO date-time the newest release was published: the mod's last update. */
   updatedAt: string | null;
 }
 
@@ -177,7 +183,28 @@ export interface ZoneContext {
   tokens: ZoneTokens;
   /** The interface locale (`en`, `zh-Hans`, ...). */
   locale: string;
-  links: { home: string; works: string; discussions: string; decisions: string; about: string };
+  links: { home: string; browse: string; works: string; discussions: string; decisions: string; about: string };
+}
+
+/** A value the Zone can be filtered by, as a link into its browse page with that one Condition. */
+export interface ZoneFilterChip {
+  /** The Facet it filters by (`modLoader`, `status`). */
+  facet: string;
+  value: string;
+  label: ZoneText;
+  /** How many of the Zone's newest picks it matches. */
+  count: number;
+  href: string;
+}
+
+/** What a Zone's home leads with: its search and the filters Main measures, grouped by Facet. */
+export interface ZoneBrowseEntry {
+  /** The browse page; the search form submits its text there as `q`. */
+  href: string;
+  /** The search field's accessible name and placeholder, in the reader's language. */
+  searchLabel: string;
+  placeholder: string;
+  groups: { facet: string; label: string; chips: ZoneFilterChip[] }[];
 }
 
 /** What the platform's link takes: an anchor whose `href` is a path or URL. */
@@ -222,6 +249,7 @@ export interface ZoneWorkRenderers {
   whyHere: (work: Pick<ZoneWork, 'title' | 'decision'>) => ReactNode;
 }
 export interface HeroSlotProps extends ZoneSlotProps, ZoneWorkRenderers { banners: ZoneBanner[] }
+export interface BrowseBarSlotProps extends ZoneSlotProps { browse: ZoneBrowseEntry }
 export interface ModuleSlotProps<Type extends ZoneModuleType> extends ZoneSlotProps, ZoneWorkRenderers {
   module: ZoneModule<Type>;
   data: ZoneModuleData[Type];
@@ -230,6 +258,8 @@ export interface ModuleSlotProps<Type extends ZoneModuleType> extends ZoneSlotPr
 /** The slots a package may fill; an empty slot keeps the platform rendering. */
 export interface ZoneSlots {
   header?: ComponentType<HeaderSlotProps>;
+  /** The search and filters the home leads with; the platform's is a search field and chip rows. */
+  browseBar?: ComponentType<BrowseBarSlotProps>;
   hero?: ComponentType<HeroSlotProps>;
   workCard?: ComponentType<WorkCardSlotProps>;
   footer?: ComponentType<ZoneSlotProps>;
@@ -241,7 +271,9 @@ export interface ZonePackage {
   slug: string;
   /**
    * The package stylesheet. Write it as `@layer zone { @scope ([data-zone="<slug>"]) { … } }`
-   * so it styles only this Zone's content box.
+   * so it styles only this Zone's content box. A package lays information out; it keeps
+   * REZICS's colours and type, so it names colours and fonts only through the platform's
+   * custom properties (`var(--primary)`, `var(--font-interface)`), never as literals.
    */
   css: string;
   slots: ZoneSlots;

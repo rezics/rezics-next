@@ -161,6 +161,9 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   const text = query.q?.trim() ? query.q.trim() : null;
   const sort: ZoneBrowseSort = query.sort ?? (text ? 'relevance' : 'newest');
   if (sort === 'relevance' && !text) throw new WorkReadInvalid('Relevance needs search text');
+  if (query.type?.some(type => !(WORK_SEMANTIC_TYPES as readonly string[]).includes(type))) {
+    throw new WorkReadInvalid('Work type is not admitted');
+  }
   const filter = browseFilter(query);
   if (query.length) {
     const band = lengthBand(query.length);

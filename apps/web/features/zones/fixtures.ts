@@ -186,7 +186,7 @@ export function fictionZone(locale: UiLocale, tokens: ZoneTokens = presetTokens.
       : 'Web serials, light novels and originals, picked in public by the Fiction editors.',
     locale === 'zh-Hans' ? 'zh-Hans' : 'en'),
     icon: null, hero: null, tokens, locale,
-    links: { home: '/en/r/fiction', works: '/en/r/fiction/works', discussions: '/en/r/fiction/discussions',
+    links: { home: '/en/r/fiction', browse: '/en/r/fiction/browse', works: '/en/r/fiction/browse', discussions: '/en/r/fiction/discussions',
       decisions: '/en/r/fiction/decisions', about: '/en/r/fiction/about' } };
 }
 
@@ -213,7 +213,7 @@ export function communityZone(locale: UiLocale, tokens: ZoneTokens = presetToken
     description: text(zh ? '读经典、聊经典：这里收录公版名著与它们的好译本。'
       : 'Reading the classics together: public-domain novels and their best translations.', zh ? 'zh-Hans' : 'en'),
     icon: null, hero: null, tokens, locale,
-    links: { home: '/en/r/classics', works: '/en/r/classics/works', discussions: '/en/r/classics/discussions',
+    links: { home: '/en/r/classics', browse: '/en/r/classics/browse', works: '/en/r/classics/browse', discussions: '/en/r/classics/discussions',
       decisions: '/en/r/classics/decisions', about: '/en/r/classics/about' } };
 }
 

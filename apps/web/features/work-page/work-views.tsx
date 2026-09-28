@@ -34,6 +34,7 @@ import type { WorkHeader as Header, Reviewer } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
 import { InvalidScope, OverviewLayout, ReadButton, WorkFrame, WorkPageCover } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
+import { WorkTypeSections } from '../zones/mod-sections.tsx';
 
 // Server compositions for the `/w/[ref]` routes: each region reads Main on its
 // own under Suspense, so the page streams as answers arrive and one failure
@@ -230,7 +231,11 @@ export function WorkOverview({ workRef, id, work, scope, context, locale, messag
 }) {
   const t = messages;
   const loading = t.loadingRegion;
-  return <OverviewLayout messages={messages} about={<WorkAbout work={work} messages={messages} />}
+  // A Work's type may add sections after its description, such as a mod's versions and dependencies.
+  return <OverviewLayout messages={messages} about={<>
+    <WorkAbout work={work} messages={messages} />
+    <Suspense fallback={null}><WorkTypeSections work={id} types={work.types} locale={locale} /></Suspense>
+  </>}
     scopeBar={<Suspense fallback={<ScopeBarSkeleton label={loading} />}>
       <ScopeBarSlot workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />
     </Suspense>}

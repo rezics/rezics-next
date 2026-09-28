@@ -102,8 +102,9 @@ describe('Main reads as Zone data', () => {
   });
 
   test('a Work card carries Main’s mod release to the package, with ISO times', () => {
-    const mod = { profile: 'mod-work-card-v1' as const, game: 'Minecraft' as const, gameVersions: ['1.21.1'],
-      loaders: ['Fabric' as const], latestRelease: '1.3.0', capturedAt: '2026-09-28T04:03:27.915Z' };
+    const mod = { profile: 'mod-work-card-v2' as const, game: 'Minecraft' as const, gameVersions: ['1.21.1'],
+      loaders: ['Fabric' as const], environment: 'client' as const, latestRelease: '1.3.0',
+      updatedAt: '2026-09-28T04:03:27.915Z' };
     const adapted = zoneWork({ ...card({ lastUpdatedAt: new Date('2026-09-27T12:00:00.000Z') as unknown as string }),
       mod }, context, null);
     expect(adapted.updatedAt).toBe('2026-09-27T12:00:00.000Z');

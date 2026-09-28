@@ -1,7 +1,7 @@
 import type { ZoneHubItem, ZoneModRelease, ZoneWork } from '@rezics/zone-sdk';
 import type { ZoneWorkPage } from '../realm/types.ts';
 
-// Main's public mod and Hub cards (`mod-work-card-v1`, `hub-work-card-v1`) as
+// Main's public mod and Hub cards (`mod-work-card-v2`, `hub-work-card-v1`) as
 // the Zone SDK's. Only the new-adoptions and recently-completed reads carry
 // them; other modules take them from the Realm's card for the same Work.
 
@@ -19,7 +19,7 @@ export function isoMoment(value: unknown): string | null {
 
 function zoneMod(card: MainCards['mod']): ZoneModRelease | null {
   return card ? { game: card.game, gameVersions: card.gameVersions, loaders: card.loaders,
-    version: card.latestRelease, updatedAt: isoMoment(card.capturedAt) } : null;
+    environment: card.environment, version: card.latestRelease, updatedAt: isoMoment(card.updatedAt) } : null;
 }
 
 function zoneHub(card: MainCards['hub']): ZoneHubItem | null {

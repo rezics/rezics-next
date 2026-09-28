@@ -49,7 +49,8 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
   return <ZoneFrame zone={zone} dataZone={zone.slug ?? 'classics'} theme={theme} pkg={pkg} actions={actions}
     members={members} masthead={<ZoneMasthead zone={zone} members={members} actions={actions} />}
     tabs={<RealmTabs locale={locale} realmRef={ref} label={messages.sections} navigation={navigation}
-      labels={{ home: messages.home, works: messages.works, discussions: messages.discussions,
+      labels={{ home: messages.home, browse: zoneMessages.browseTab, works: messages.works,
+        discussions: messages.discussions,
         decisions: messages.decisions, about: messages.about }} />}
     notice={<ExecutionNotice execution={execution} showDesignHref={zone.links.home} messages={zoneMessages} />}>
     {/* Signed out, as a first visit: shelf controls lead to sign-in. */}

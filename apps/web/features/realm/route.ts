@@ -5,9 +5,10 @@
 import { type UiLocale } from '../../i18n/define.ts';
 import { withoutLocale } from '../../i18n/locale.ts';
 
-/** The Realm's views, in tab order. Each is its own URL. */
-export const realmTabs = ['home', 'works', 'discussions', 'decisions', 'about'] as const;
-export type RealmTab = (typeof realmTabs)[number];
+/** The Realm's views in the tab bar, in order. Each is its own URL. */
+export const realmTabs = ['home', 'browse', 'discussions', 'decisions', 'about'] as const;
+/** Every view with a URL: `works`, the adopted Works a page at a time, now opens Browse's grid. */
+export type RealmTab = (typeof realmTabs)[number] | 'works';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Main's official route segment (`services/main/src/routes/zones.ts`).
@@ -43,7 +44,7 @@ export function realmHref(locale: UiLocale, ref: string, tab: RealmTab = 'home',
  */
 export function repeatsTab(href: string, ref: string): boolean {
   const path = withoutLocale(href.split(/[?#]/)[0] ?? '').replace(/\/+$/, '');
-  return realmTabs.some(tab => path === `/r/${ref}${tab === 'home' ? '' : `/${tab}`}`);
+  return [...realmTabs, 'works'].some(tab => path === `/r/${ref}${tab === 'home' ? '' : `/${tab}`}`);
 }
 
 /** The in-page anchor of a Decision on the Decisions tab. */

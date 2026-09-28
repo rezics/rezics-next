@@ -1,7 +1,6 @@
 import { t } from 'elysia';
 import { pageFields, pageQuery, readAvatar, readId, readName, readPosition, readUuid, workCard }
   from '../work/read-contract.ts';
-import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { realmDecision } from '../realm-reads/read-contract.ts';
 import { discoveryCredit } from '../discovery/contract.ts';
 import { MOD_RELEASE_COST } from '../package/mod-release.ts';
@@ -79,18 +78,20 @@ export const zoneLengthBands = ['0-99999', '100000-299999', '300000-999999', '10
 const modLoader = t.Union([t.Literal('Fabric'), t.Literal('Forge'), t.Literal('NeoForge')]);
 const environmentValue = t.Union([t.Literal('client'), t.Literal('server')]);
 const gameVersion = t.String({ pattern: '^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$' });
-const workType = t.Union(WORK_SEMANTIC_TYPES.map(value => t.Literal(value)));
+/** A Work type IRI; the read admits only `WORK_SEMANTIC_TYPES` (a literal union types as never through Eden). */
+const workType = t.String({ pattern: '^https://[!-~]{1,200}$' });
 const status = t.Union([t.Literal('ongoing'), t.Literal('completed'), t.Literal('hiatus')]);
-const values = <T extends Parameters<typeof t.Array>[0]>(item: T) =>
-  t.Optional(t.Array(item, { minItems: 1, maxItems: ZONE_BROWSE_COST.filterValues, uniqueItems: true }));
+const many = { minItems: 1, maxItems: ZONE_BROWSE_COST.filterValues, uniqueItems: true } as const;
+const sortValue = t.Union([t.Literal('relevance'), t.Literal('newest'), t.Literal('updated')]);
 /** Conditions as query parameters: values within a Facet match any, Facets match all. */
 export const zoneBrowseQuery = t.Object({ language: pageQuery.language, limit: pageQuery.limit,
   cursor: pageQuery.cursor, q: t.Optional(t.String({ minLength: 1, maxLength: ZONE_BROWSE_COST.textCharacters })),
-  sort: t.Optional(t.Union(zoneBrowseSorts.map(value => t.Literal(value)))),
-  type: values(workType), concept: values(readId), status: values(status),
+  sort: t.Optional(sortValue),
+  type: t.Optional(t.Array(workType, many)), concept: t.Optional(t.Array(readId, many)),
+  status: t.Optional(t.Array(status, many)),
   length: t.Optional(t.String({ pattern: '^(0|[1-9][0-9]{0,9})-([1-9][0-9]{0,9})?$' })),
-  loader: values(modLoader), gameVersion: values(gameVersion), environment: values(environmentValue) },
-{ additionalProperties: false });
+  loader: t.Optional(t.Array(modLoader, many)), gameVersion: t.Optional(t.Array(gameVersion, many)),
+  environment: t.Optional(t.Array(environmentValue, many)) }, { additionalProperties: false });
 /**
  * The Facets a Zone browse page filters by, named as FilterDocument Conditions
  * name them. `type` and `concept` are admitted Facets (GET /v1/facets); the
@@ -107,7 +108,7 @@ const facetValues = t.Array(t.Object({ value: t.String(), count: t.Integer({ min
   name: t.Optional(readName) }), { maxItems: ZONE_BROWSE_COST.windowRows });
 export const zoneBrowsePage = t.Object({ profile: t.Literal('zone-browse-v1'), realm: readId,
   /** The Query as Main applied it: text, sort and the Filter in FilterDocument form. */
-  query: t.Object({ text: t.Nullable(t.String()), sort: t.Union(zoneBrowseSorts.map(value => t.Literal(value))),
+  query: t.Object({ text: t.Nullable(t.String()), sort: sortValue,
     filter: t.Object({ all: t.Array(condition, { maxItems: zoneBrowseFacets.length }) }) }),
   /** How many of the window's Works each value would match, with the other Facets' Conditions applied. */
   facets: t.Object(Object.fromEntries(zoneBrowseFacets.map(facet => [facet, facetValues])) as

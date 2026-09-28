@@ -10,18 +10,18 @@ import { SlotBoundary } from './slot-boundary.tsx';
 import type { ZoneTheme } from './theme.ts';
 
 /**
- * The Zone's own header: its hero image (or a wash of its accent), icon,
- * name, one-line description and member count, with the platform controls
- * the reader always gets.
+ * The Zone's own header: its hero image when it has one, icon, name,
+ * one-line description and member count, with the platform controls the
+ * reader always gets. Without a hero it sits on the page, untinted.
  */
 export function ZoneMasthead({ zone, members, actions }: { zone: ZoneContext; members: string | null; actions: ReactNode }) {
   return <header className="zone-masthead relative isolate">
     <div aria-hidden="true" className={cn('relative -z-10 overflow-hidden',
-      zone.hero ? 'h-36 sm:h-48 lg:h-56' : 'h-20 sm:h-24')}>
+      zone.hero ? 'h-36 sm:h-48 lg:h-56' : 'h-14 sm:h-16')}>
       {zone.hero ? <>
         <img src={zone.hero.url} alt="" className="size-full object-cover" />
         <span className="absolute inset-0 bg-linear-to-t from-(--zone-page) via-(--zone-page)/10 to-transparent" />
-      </> : <span className="absolute inset-0 bg-[radial-gradient(90%_140%_at_12%_0%,color-mix(in_oklab,var(--zone-accent,var(--primary))_24%,transparent),transparent_70%)]" />}
+      </> : null}
     </div>
     <div className="mx-auto flex w-full max-w-6xl flex-wrap items-end gap-x-4 gap-y-3 px-4 sm:px-6 lg:px-10">
       {zone.icon ? <img src={zone.icon.url} alt="" className="-mt-10 size-18 shrink-0 rounded-2xl bg-card object-cover

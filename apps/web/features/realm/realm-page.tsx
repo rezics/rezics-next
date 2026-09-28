@@ -113,7 +113,7 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
     slug, realm: header.id, name: zoneText(header.name), description: zoneText(header.description),
     icon: zoneImage(header.icon, reader.avatarQuery), hero: zoneImage(header.banner, reader.avatarQuery),
     tokens: presentation.tokens, locale,
-    links: { home: realmHref(locale, ref), works: realmHref(locale, ref, 'works'),
+    links: { home: realmHref(locale, ref), browse: realmHref(locale, ref, 'browse'), works: realmHref(locale, ref, 'browse'),
       discussions: realmHref(locale, ref, 'discussions'), decisions: realmHref(locale, ref, 'decisions'),
       about: realmHref(locale, ref, 'about') },
   };
@@ -149,7 +149,8 @@ export async function RealmFrame({ view, tab, locale, search, children }: {
     nonce={request.get(ZONE_NONCE_HEADER) ?? undefined} actions={actions} members={members}
     masthead={<ZoneMasthead zone={zone} members={members} actions={actions} />}
     tabs={<RealmTabs locale={locale} realmRef={realm.ref} label={messages.sections} navigation={presentation.navigation}
-      labels={{ home: messages.home, works: messages.works, discussions: messages.discussions,
+      labels={{ home: messages.home, browse: zoneMessages.browseTab, works: messages.works,
+        discussions: messages.discussions,
         decisions: messages.decisions, about: messages.about }} />}
     notice={<ExecutionNotice execution={execution} showDesignHref={showDesign} messages={zoneMessages} />}>
     {/* Shelf controls on every tile; signing in from one returns to this tab. */}

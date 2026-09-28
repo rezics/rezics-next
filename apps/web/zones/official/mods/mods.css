@@ -1,19 +1,6 @@
-/*
- * The Mods Zone's art direction: a game-mod hub. A block grid behind the
- * masthead and footer, heavy rounded headings, square mod tiles, monospace
- * figures and one bright action on every card: Get. Everything is scoped to
- * the Zone's content box and reads the theme variables the platform derives
- * from the Zone tokens, so light, dark and contrast stay the platform's.
- */
+/* Mods lays its picks out as Modrinth lists projects; colours and type stay REZICS's own. */
 @layer zone {
   @scope ([data-zone="mods"]) {
-    :scope {
-      --mh-grid: color-mix(in oklab, var(--zone-accent) 16%, transparent);
-      --mh-line: color-mix(in oklab, var(--foreground) 12%, transparent);
-      --mh-surface: color-mix(in oklab, var(--zone-accent) 7%, var(--card));
-      --mh-glow: color-mix(in oklab, var(--zone-accent) 45%, transparent);
-    }
-
     .mh-page {
       inline-size: 100%;
       max-inline-size: 72rem;
@@ -21,648 +8,199 @@
       padding-inline: 1rem;
     }
 
-    .mh-eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.375rem;
-      color: var(--primary);
-      font-size: 0.75rem;
-      font-weight: 800;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-
-    .mh-eyebrow > svg {
-      inline-size: 0.9rem;
-      block-size: 0.9rem;
-    }
-
-    /* Masthead on a block grid */
-
-    .mh-hub {
-      position: relative;
-      isolation: isolate;
-      overflow: hidden;
-      padding-block: 1.75rem;
-      border-block-end: 1px solid var(--mh-line);
-      background: var(--mh-surface);
-    }
-
-    .mh-hub::before,
-    .mh-footer::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      background-image:
-        linear-gradient(var(--mh-grid) 1px, transparent 1px),
-        linear-gradient(90deg, var(--mh-grid) 1px, transparent 1px);
-      background-position: -1px -1px;
-      background-size: 2rem 2rem;
-    }
-
-    .mh-hub::before {
-      mask-image: radial-gradient(120% 110% at 88% 0%, #000 15%, transparent 72%);
-    }
-
-    .mh-hub::after {
-      content: "";
-      position: absolute;
-      inset: -40% auto auto -10%;
-      z-index: -1;
-      inline-size: 32rem;
-      block-size: 20rem;
-      border-radius: 50%;
-      background: var(--mh-glow);
-      filter: blur(4rem);
-      opacity: 0.45;
-    }
-
-    .mh-hub-inner {
+    .mh-section {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: center;
-      gap: 1rem 1.25rem;
-    }
-
-    .mh-hub-icon {
-      display: grid;
-      place-items: center;
-      inline-size: 3.75rem;
-      block-size: 3.75rem;
-      border-radius: 1.125rem;
-      background: linear-gradient(140deg, var(--zone-accent), color-mix(in oklab, var(--zone-accent) 55%, #000));
-      color: #fff;
-      box-shadow: 0 0.75rem 2rem -0.75rem var(--mh-glow), inset 0 1px 0 rgb(255 255 255 / 0.25);
-      rotate: -6deg;
-    }
-
-    .mh-hub-icon > svg {
-      inline-size: 1.875rem;
-      block-size: 1.875rem;
-    }
-
-    .mh-hub-icon-small {
-      inline-size: 2.75rem;
-      block-size: 2.75rem;
-      border-radius: 0.875rem;
-    }
-
-    .mh-hub-icon-small > svg {
-      inline-size: 1.375rem;
-      block-size: 1.375rem;
-    }
-
-    .mh-wordmark {
-      margin-block: 0.125rem 0.25rem;
-      font-family: var(--zone-heading-font);
-      font-size: clamp(2rem, 1.35rem + 2.8vw, 3.25rem);
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      line-height: 1.05;
-      text-wrap: balance;
-    }
-
-    .mh-tagline {
-      max-inline-size: 38rem;
-      color: var(--muted-foreground);
-      text-wrap: pretty;
-    }
-
-    .mh-hub-side {
-      display: flex;
-      flex-wrap: wrap;
-      grid-column: 1 / -1;
-      align-items: center;
-      gap: 0.75rem 1rem;
-    }
-
-    .mh-stat {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.375rem;
-      color: var(--muted-foreground);
-      font-family: var(--font-code);
-      font-size: 0.8125rem;
-    }
-
-    .mh-stat > svg {
-      inline-size: 1rem;
-      block-size: 1rem;
-    }
-
-    /* Featured spotlight */
-
-    .mh-featured-grid {
-      display: grid;
-      gap: var(--zone-gap);
-    }
-
-    .mh-spotlight {
-      position: relative;
-      isolation: isolate;
-      display: grid;
-      grid-template-columns: 6rem minmax(0, 1fr);
-      align-items: start;
-      gap: 1rem;
-      overflow: hidden;
-      padding: 1.125rem;
-      border: 1px solid color-mix(in oklab, var(--zone-accent) 30%, var(--mh-line));
-      border-radius: var(--zone-radius-card);
-      background: var(--card);
-      box-shadow: 0 1.5rem 3rem -2rem var(--mh-glow);
-    }
-
-    .mh-spotlight::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      background-image:
-        linear-gradient(var(--mh-grid) 1px, transparent 1px),
-        linear-gradient(90deg, var(--mh-grid) 1px, transparent 1px);
-      background-size: 1.5rem 1.5rem;
-      mask-image: linear-gradient(250deg, #000, transparent 55%);
-    }
-
-    .mh-spotlight .mh-thumb {
-      inline-size: 100%;
-    }
-
-    .mh-spotlight-title {
-      margin-block: 0.375rem 0.125rem;
-      font-family: var(--zone-heading-font);
-      font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem);
-      font-weight: 800;
-      letter-spacing: -0.015em;
-      line-height: 1.1;
-      text-wrap: balance;
-    }
-
-    .mh-spotlight .mh-hook {
-      margin-block-start: 0.5rem;
-      color: var(--foreground);
-      font-size: 1rem;
-      -webkit-line-clamp: 3;
-    }
-
-    .mh-actions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
       gap: 0.75rem;
-      margin-block-start: 1rem;
-    }
-
-    .mh-stamp > a {
-      inline-size: 2.5rem;
-      block-size: 2.5rem;
-      border: 1px solid var(--mh-line);
-    }
-
-    .mh-also {
-      display: grid;
-      align-content: start;
-      gap: 0.75rem;
-    }
-
-    .mh-stack {
-      display: grid;
-      gap: 0.625rem;
-    }
-
-    /* Games and loaders up front */
-
-    .mh-filters {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
       min-inline-size: 0;
-      padding: 0.375rem;
-      border: 1px solid var(--mh-line);
-      border-radius: calc(var(--zone-radius-card) + 0.25rem);
-      background: var(--mh-surface);
-    }
-
-    .mh-filters-label {
-      flex: none;
-      padding-inline: 0.625rem 0.25rem;
-      color: var(--muted-foreground);
-      font-size: 0.75rem;
-      font-weight: 800;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    /* The row scrolls; its end fades so the next chip shows there is more. */
-    .mh-chips {
-      display: flex;
-      gap: 0.375rem;
-      min-inline-size: 0;
-      padding-inline-end: 1.5rem;
-      overflow-x: auto;
-      scrollbar-width: none;
-      mask-image: linear-gradient(to left, transparent, #000 2rem);
-    }
-
-    .mh-chips:dir(rtl) {
-      mask-image: linear-gradient(to right, transparent, #000 2rem);
-    }
-
-    .mh-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.375rem;
-      block-size: 2.25rem;
-      padding-inline: 0.75rem 0.875rem;
-      border: 1px solid var(--mh-line);
-      border-radius: 999px;
-      background: var(--card);
-      font-size: 0.875rem;
-      font-weight: 700;
-      white-space: nowrap;
-      transition: border-color 0.15s, color 0.15s;
-    }
-
-    .mh-chip > svg {
-      inline-size: 1rem;
-      block-size: 1rem;
-      color: var(--primary);
-    }
-
-    .mh-chip:hover {
-      border-color: var(--primary);
-      color: var(--primary);
-    }
-
-    /* Boards: modules as bordered panels */
-
-    .zone-module {
-      border: 1px solid var(--mh-line);
-    }
-
-    .mh-board {
-      min-inline-size: 0;
-      padding: var(--zone-panel-pad);
       border-radius: var(--zone-radius-card);
       background: var(--zone-panel);
+      padding: var(--zone-panel-pad);
     }
 
-    .mh-section-head {
+    .mh-head {
       display: flex;
       flex-wrap: wrap;
-      align-items: center;
-      gap: 0.5rem 0.75rem;
-      margin-block-end: 0.875rem;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.25rem 1rem;
     }
 
-    .mh-section-title,
-    .zone-module > header h2 {
+    .mh-head h2 {
       font-family: var(--zone-heading-font);
-      font-weight: 800;
+      font-size: calc(1.25rem * var(--zone-heading-scale, 1));
+      font-weight: 650;
       letter-spacing: -0.01em;
     }
 
-    .mh-section-title {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-inline-end: auto;
-      font-size: calc(1.1875rem * var(--zone-heading-scale, 1));
+    .mh-head h3 {
+      font-size: 1rem;
+      font-weight: 600;
     }
 
-    /* How many picks changed this week, with a live dot. */
-    .mh-pulse {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.25rem 0.625rem;
-      border-radius: 999px;
-      background: var(--accent);
-      color: var(--accent-foreground);
-      font-size: 0.75rem;
-      font-weight: 700;
-    }
-
-    .mh-pulse > span {
-      inline-size: 0.5rem;
-      block-size: 0.5rem;
-      border-radius: 50%;
-      background: currentColor;
-      box-shadow: 0 0 0 0 currentColor;
-      animation: mh-pulse 2s ease-out infinite;
-    }
-
-    @keyframes mh-pulse {
-      70% {
-        box-shadow: 0 0 0 0.375rem transparent;
-      }
-    }
-
-    .mh-section-title > svg {
-      inline-size: 1.25rem;
-      block-size: 1.25rem;
-      color: var(--primary);
+    .mh-count {
+      color: var(--muted-foreground);
+      font-weight: 400;
     }
 
     .mh-more {
       flex: none;
+      border-radius: 0.25rem;
       color: var(--primary);
       font-size: 0.875rem;
-      font-weight: 700;
+      font-weight: 600;
+      outline: none;
     }
 
     .mh-more:hover,
-    .mh-card-title a:hover,
-    .mh-spotlight-title a:hover,
-    .mh-footer a:hover {
+    .mh-title a:hover,
+    .mh-by a:hover {
       text-decoration: underline;
       text-underline-offset: 0.2em;
     }
 
-    /* Segmented tabs: the selected one on the accent wash, in the ink the platform made readable on it. */
-    [data-scope="tabs"][data-part="indicator"] {
-      background: var(--accent);
-    }
-
-    [data-scope="tabs"][data-part="trigger"][aria-selected="true"] {
-      color: var(--accent-foreground);
+    .mh-more:focus-visible,
+    .mh-title a:focus-visible,
+    .mh-by a:focus-visible {
+      box-shadow: 0 0 0 2px var(--ring);
     }
 
     .mh-list {
       display: grid;
-      gap: 0.625rem;
-    }
-
-    .mh-tiles {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
-      gap: 0.875rem;
-    }
-
-    .mh-tiles > li > div {
-      block-size: 100%;
-    }
-
-    .mh-collection + .mh-collection {
-      margin-block-start: 1.5rem;
-      padding-block-start: 1.25rem;
-      border-block-start: 1px solid var(--mh-line);
-    }
-
-    .mh-collection-head {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.875rem;
-      margin-block-end: 1rem;
-    }
-
-    .mh-collection-icon {
-      display: grid;
-      flex: none;
-      place-items: center;
-      inline-size: 2.5rem;
-      block-size: 2.5rem;
-      border-radius: 0.75rem;
-      background: var(--accent);
-      color: var(--accent-foreground);
-    }
-
-    .mh-collection-icon > svg {
-      inline-size: 1.25rem;
-      block-size: 1.25rem;
-    }
-
-    .mh-collection-title {
-      font-family: var(--zone-heading-font);
-      font-size: 1.125rem;
-      font-weight: 800;
-      line-height: 1.25;
-      text-wrap: balance;
-    }
-
-    /* Download-first cards */
-
-    .mh-card {
-      display: flex;
-      align-items: center;
-      gap: 0.875rem;
-      block-size: 100%;
-      padding: 0.75rem;
-      border: 1px solid var(--mh-line);
-      border-radius: calc(var(--zone-radius-card) * 0.75);
+      border: 1px solid var(--border);
+      border-radius: var(--zone-radius-card);
       background: var(--card);
-      transition: border-color 0.15s, box-shadow 0.15s;
     }
 
-    .mh-card:hover {
-      border-color: color-mix(in oklab, var(--zone-accent) 50%, var(--mh-line));
-      box-shadow: 0 0.75rem 1.75rem -1.25rem var(--mh-glow);
+    .mh-list > li {
+      min-inline-size: 0;
+      padding: 0.875rem 1rem;
     }
 
-    .mh-card-body {
+    .mh-list > li + li {
+      border-block-start: 1px solid var(--border);
+    }
+
+    .mh-grid {
       display: grid;
-      flex: 1;
-      align-content: start;
+      gap: 0.75rem;
+    }
+
+    .mh-grid > li {
+      min-inline-size: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--zone-radius-card);
+      background: var(--card);
+      padding: 1rem;
+    }
+
+    .mh-collection {
+      display: grid;
+      gap: 0.5rem;
+    }
+
+    .mh-row {
+      display: grid;
+      grid-template-columns: 4rem minmax(0, 1fr);
+      align-items: start;
+      gap: 0.25rem 0.875rem;
+    }
+
+    .mh-row:has(> .mh-rank) {
+      grid-template-columns: 1.75rem 4rem minmax(0, 1fr);
+    }
+
+    .mh-row[data-layout="rail"] {
+      grid-template-columns: 2.75rem minmax(0, 1fr);
+    }
+
+    .mh-rank {
+      align-self: center;
+      color: var(--muted-foreground);
+      font-size: 1rem;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .mh-icon {
+      display: block;
+      border-radius: 22%;
+      outline: none;
+    }
+
+    .mh-body {
+      display: grid;
       gap: 0.25rem;
       min-inline-size: 0;
+      padding-inline-end: 1.5rem;
     }
 
-    .mh-thumb {
-      display: block;
-      flex: none;
-      inline-size: 4.5rem;
-    }
-
-    .mh-card-title {
-      display: -webkit-box;
-      overflow: hidden;
-      font-family: var(--zone-heading-font);
-      font-size: 1rem;
-      font-weight: 800;
+    .mh-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0 0.5rem;
+      font-size: 1.0625rem;
+      font-weight: 650;
       line-height: 1.3;
-      text-wrap: pretty;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
+    }
+
+    .mh-row[data-layout="rail"] .mh-title {
+      font-size: 0.9375rem;
+    }
+
+    .mh-title a,
+    .mh-by a {
+      border-radius: 0.25rem;
+      color: inherit;
+      outline: none;
     }
 
     .mh-by {
-      overflow: hidden;
       color: var(--muted-foreground);
-      font-size: 0.8125rem;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-size: 0.875rem;
+      font-weight: 400;
     }
 
-    .mh-hook {
+    .mh-summary {
       display: -webkit-box;
       overflow: hidden;
       color: var(--muted-foreground);
       font-size: 0.875rem;
       line-height: 1.45;
-      text-wrap: pretty;
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
     }
 
-    .mh-badges {
+    .mh-tags {
       display: flex;
       flex-wrap: wrap;
       gap: 0.375rem;
       margin-block-start: 0.25rem;
     }
 
-    .mh-badges > li {
-      padding: 0.125rem 0.5rem;
-      border: 1px solid var(--mh-line);
+    .mh-tags > li {
+      border: 1px solid var(--border);
       border-radius: 999px;
+      padding: 0.0625rem 0.5rem;
       color: var(--muted-foreground);
-      font-size: 0.6875rem;
-      font-weight: 700;
-      line-height: 1.4;
+      font-size: 0.75rem;
+      line-height: 1.5;
     }
 
-    /* What it runs on leads the line, the loader in the Zone's accent. */
-    .mh-badges > li[data-game] {
-      color: var(--foreground);
-    }
-
-    .mh-badges > li[data-loader] {
-      border-color: color-mix(in oklab, var(--zone-accent) 55%, var(--mh-line));
-      color: var(--foreground);
-    }
-
-    .mh-badges > li[data-fresh] {
-      border-color: transparent;
-      background: var(--accent);
-      color: var(--accent-foreground);
-    }
-
-    .mh-rank {
-      flex: none;
-      inline-size: 1.75rem;
-      color: var(--muted-foreground);
-      font-family: var(--font-code);
-      font-size: 1.25rem;
-      font-weight: 800;
-      text-align: center;
-    }
-
-    .mh-rank[data-top] {
-      color: var(--primary);
-    }
-
-    .mh-get {
-      display: inline-flex;
-      flex: none;
+    .mh-updated {
+      display: flex;
+      grid-column: -2 / -1;
       align-items: center;
-      align-self: flex-end;
       gap: 0.375rem;
-      block-size: 2.25rem;
-      padding-inline: 0.75rem 0.875rem;
-      border-radius: 999px;
-      background: var(--primary);
-      color: var(--primary-foreground);
-      font-size: 0.875rem;
-      font-weight: 800;
-      box-shadow: 0 0.5rem 1rem -0.625rem var(--mh-glow);
-      transition: translate 0.15s, box-shadow 0.15s;
-    }
-
-    .mh-get > svg {
-      inline-size: 1rem;
-      block-size: 1rem;
-    }
-
-    .mh-get:hover {
-      translate: 0 -1px;
-      box-shadow: 0 0.75rem 1.25rem -0.625rem var(--mh-glow);
-    }
-
-    .mh-get:focus-visible {
-      outline: 2px solid var(--ring);
-      outline-offset: 2px;
-    }
-
-    .mh-get[data-size="large"] {
-      align-self: auto;
-      block-size: 2.75rem;
-      padding-inline: 1.125rem 1.375rem;
-      font-size: 1rem;
-    }
-
-    /* The stamp keeps the card's top corner: rows and rail entries leave it a lane. */
-    .mh-card[data-layout="rail"] {
-      gap: 0.625rem;
-      padding: 0.5rem 2.5rem 0.5rem 0.5rem;
-    }
-
-    .mh-card[data-layout="rail"] .mh-thumb {
-      inline-size: 2.75rem;
-    }
-
-    .mh-card[data-layout="rail"] .mh-card-title {
-      font-size: 0.9375rem;
-      -webkit-line-clamp: 1;
-    }
-
-    /* In the rail, Get is a round icon so the title keeps the room. */
-    .mh-card[data-layout="rail"] .mh-get {
-      align-self: center;
-      justify-content: center;
-      inline-size: 2.25rem;
-      block-size: 2.25rem;
-      padding: 0;
-    }
-
-    .mh-card[data-layout="rail"] .mh-get-label {
-      position: absolute;
-      inline-size: 1px;
-      block-size: 1px;
-      overflow: hidden;
-      clip-path: inset(50%);
+      color: var(--muted-foreground);
+      font-size: 0.8125rem;
       white-space: nowrap;
     }
 
-    .mh-card[data-layout="cover"] {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 0.625rem;
-    }
-
-    .mh-card[data-layout="cover"] .mh-thumb {
-      inline-size: 100%;
-    }
-
-    .mh-card[data-layout="cover"] .mh-get {
-      justify-content: center;
-      align-self: stretch;
-      margin-block-start: auto;
-    }
-
-    .mh-footer {
-      position: relative;
-      isolation: isolate;
-      overflow: hidden;
-      margin-block-start: 1rem;
-      background: light-dark(#17121f, #07050b);
-      color: #ece8f4;
-      --mh-grid: rgb(255 255 255 / 0.06);
-    }
-
-    .mh-footer::before {
-      mask-image: linear-gradient(90deg, transparent, #000);
-    }
-
-    .mh-footer-inner {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      padding-block: 2.25rem;
-    }
-
-    .mh-footer a {
-      color: inherit;
+    .mh-updated svg {
+      inline-size: 0.875rem;
+      block-size: 0.875rem;
     }
 
     @media (min-width: 40rem) {
@@ -670,97 +208,29 @@
         padding-inline: 1.5rem;
       }
 
-      .mh-spotlight {
-        grid-template-columns: 9rem minmax(0, 1fr);
-        gap: 1.5rem;
-        padding: 1.5rem;
+      .mh-row {
+        grid-template-columns: 4rem minmax(0, 1fr) auto;
       }
 
-      .mh-footer-inner {
-        flex-direction: row;
-        align-items: center;
+      .mh-row:has(> .mh-rank) {
+        grid-template-columns: 1.75rem 4rem minmax(0, 1fr) auto;
+      }
+
+      .mh-updated {
+        grid-column: auto;
+        align-self: end;
+      }
+    }
+
+    @media (min-width: 48rem) {
+      .mh-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
 
     @media (min-width: 64rem) {
       .mh-page {
         padding-inline: 2.5rem;
-      }
-
-      .mh-hub-inner {
-        grid-template-columns: auto minmax(0, 1fr) auto;
-      }
-
-      .mh-hub-side {
-        flex-direction: column;
-        grid-column: auto;
-        align-items: flex-end;
-      }
-
-      .mh-featured-grid {
-        grid-template-columns: minmax(0, 1fr) 18.5rem;
-        align-items: stretch;
-      }
-
-      .mh-spotlight {
-        grid-template-columns: 11rem minmax(0, 1fr);
-      }
-    }
-
-    /* Phones: rows stay one line, with Get as an icon beside the stamp's lane. */
-    @media (max-width: 30rem) {
-      .mh-board {
-        padding: min(var(--zone-panel-pad), 0.75rem);
-      }
-
-      .mh-card[data-layout="row"] {
-        gap: 0.625rem;
-        padding: 0.625rem 2.375rem 0.625rem 0.625rem;
-      }
-
-      .mh-card[data-layout="row"] .mh-thumb {
-        inline-size: 3rem;
-        align-self: flex-start;
-      }
-
-      .mh-card[data-layout="row"] .mh-rank {
-        inline-size: 1.25rem;
-        font-size: 1rem;
-      }
-
-      .mh-card[data-layout="row"] .mh-get {
-        justify-content: center;
-        inline-size: 2.25rem;
-        padding: 0;
-      }
-
-      .mh-card[data-layout="row"] .mh-get-label {
-        position: absolute;
-        inline-size: 1px;
-        block-size: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .mh-card,
-      .mh-get,
-      .mh-chip {
-        transition: none;
-      }
-
-      .mh-pulse > span {
-        animation: none;
-      }
-    }
-
-    @media print {
-      .mh-hub::before,
-      .mh-hub::after,
-      .mh-footer {
-        display: none;
       }
     }
   }

@@ -8,16 +8,20 @@ import { getMessages, getTranslation } from '../../i18n/server.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
-import { ZoneHome } from '../zones/zone-home.tsx';
+import { ZoneBrowse } from '../zones/browse.tsx';
+import { type BrowseFacet, browseFacets, mainBrowseQuery, parseBrowseState } from '../zones/browse-state.ts';
+import { browseEntry, browseModel, type FacetCounts } from '../zones/browse-view.ts';
+import { cardRenderer, ZoneHome } from '../zones/zone-home.tsx';
 import { zoneDecision, zoneText, zoneWork } from './adapt.ts';
 import { loadModules } from './modules.ts';
-import { readAgent, readRealmDecision, readRealmDecisions, readRealmDirectory, readRealmWorks, readRoster,
-  resolveRealm } from './read.ts';
+import { readAgent, readFacets, readRealmDecision, readRealmDecisions, readRealmDirectory, readRealmWorks, readRoster,
+  readZoneBrowse, resolveRealm } from './read.ts';
+import type { ZoneBrowsePage } from './types.ts';
 import { loadRealmView, membersText, RealmFrame, type RealmView } from './realm-page.tsx';
 import { idOf, parseCursor, parseDecision, parseRealmRef, type RealmTab, realmHref } from './route.ts';
 import { RealmUnavailable } from './states.tsx';
 import type { ReadFailure } from './types.ts';
-import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions, RealmWorks } from './views.tsx';
+import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions } from './views.tsx';
 import { profileHref } from '../profile/route.ts';
 
 // The `/r/{realm}` routes are thin: each resolves the Realm view, renders the
@@ -72,10 +76,25 @@ function failure(view: RealmView, tab: RealmTab, reason: ReadFailure) {
     firstPage={realmHref(view.context.locale, view.context.ref, tab)} /></PageContainer>;
 }
 
+/** Main's value counts per Facet, with Concept names as the SDK's text. */
+function facetCounts(page: ZoneBrowsePage): FacetCounts {
+  const counts = {} as Record<BrowseFacet, FacetCounts[BrowseFacet]>;
+  for (const facet of browseFacets) {
+    counts[facet] = page.facets[facet].map(item => ({ value: item.value, count: item.count,
+      name: item.name ? zoneText(item.name) : null }));
+  }
+  return counts;
+}
+
 export function RealmHomeRoute(props: RealmRouteProps) {
   return realmRoute(props, 'home', async view => {
-    const modules = await loadModules(view.presentation, view.context, view.bannerMedia);
-    return <ZoneHome modules={modules} zone={view.zone} pkg={view.pkg} locale={view.context.locale}
+    const { locale, realm } = view.context;
+    // The home leads with search and the values a browse page filters by; its counts come from one browse read.
+    const [modules, window] = await Promise.all([loadModules(view.presentation, view.context, view.bannerMedia),
+      readZoneBrowse(realm, locale, { limit: 1 })]);
+    const browse = browseEntry({ base: view.zone.links.browse, zoneName: view.zone.name.value,
+      counts: window.ok ? facetCounts(window.data) : null, locale, messages: view.zoneMessages });
+    return <ZoneHome modules={modules} zone={view.zone} pkg={view.pkg} locale={view.context.locale} browse={browse}
       messages={view.zoneMessages} avatarQuery={view.reader.avatarQuery} empty={<EmptyState icon={LibraryBigIcon} title={view.messages.emptyHomeTitle}
         description={view.messages.emptyHomeBody}>
         <LocalizedLink href={view.zone.links.about} className={buttonVariants({ variant: 'outline' })}>
@@ -84,15 +103,31 @@ export function RealmHomeRoute(props: RealmRouteProps) {
   });
 }
 
-export function RealmWorksRoute(props: RealmRouteProps) {
-  return realmRoute(props, 'works', async (view, locale, search) => {
-    const cursor = parseCursor(search);
-    const page = await readRealmWorks(view.context.realm, locale, cursor);
-    if (!page.ok) return failure(view, 'works', page.failure);
-    return <RealmWorks realmName={view.zone.name.value} locale={locale} messages={view.messages}
-      zoneMessages={view.zoneMessages} avatarQuery={view.reader.avatarQuery} {...paging(view, 'works', cursor, page.data.nextCursor)}
-      works={page.data.items.map(item => zoneWork(item, view.context, item.selection))} />;
+/**
+ * A Zone's browse page: its newest picks filtered by the Facets Main reads
+ * for them and sorted as the reader chose, in a list or a grid.
+ */
+export function RealmBrowseRoute(props: RealmRouteProps) {
+  return realmRoute(props, 'browse', async (view, locale, search) => {
+    const state = parseBrowseState(search);
+    const [page, facets] = await Promise.all([readZoneBrowse(view.context.realm, locale, mainBrowseQuery(state)),
+      readFacets()]);
+    if (!page.ok) return failure(view, 'browse', page.failure);
+    const admitted = new Map((facets.ok ? facets.data.facets : []).filter(facet => facet.current)
+      .map(facet => [facet.name, facet.labels[locale]] as const));
+    const model = browseModel({ base: view.zone.links.browse, zoneName: view.zone.name.value, state, admitted, locale,
+      messages: view.zoneMessages, page: { ...page.data, facets: facetCounts(page.data), sort: page.data.query.sort,
+        items: page.data.items.map(item => zoneWork(item, view.context, item.evidence)) } });
+    return <ZoneBrowse model={model} messages={view.zoneMessages}
+      card={cardRenderer(view.zone, view.pkg, locale, view.zoneMessages, view.reader.avatarQuery)} />;
   });
+}
+
+/** The former Works tab: every adopted Work, newest first, is Browse's grid. */
+export async function RealmWorksRoute({ params }: RealmRouteProps) {
+  const { locale, realm } = await params;
+  if (!isUiLocale(locale)) notFound();
+  redirect(realmHref(locale, realm, 'browse', { view: 'grid' }));
 }
 
 export function RealmDecisionsRoute(props: RealmRouteProps) {

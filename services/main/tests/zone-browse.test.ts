@@ -160,7 +160,7 @@ test('Tags built before the latest change withhold Tag-filtered Works; missing T
   await expect(readZoneBrowse(none.read, realm, { concept: [fabric] })).rejects.toBeInstanceOf(WorkReadUnavailable);
   expect((await readZoneBrowse(session(6, { tags: 'none' }).read, realm, {})).tags).toBe('unavailable');
   const failing = session(6);
-  (failing.read.deps as { discovery: { active: () => Promise<never> } }).discovery.active = async () => {
+  (failing.read.deps as unknown as { discovery: { active: () => Promise<never> } }).discovery.active = async () => {
     throw new RecommendationUnavailable('no generation');
   };
   expect((await readZoneBrowse(failing.read, realm, {})).tags).toBe('unavailable');

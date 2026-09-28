@@ -2,11 +2,13 @@ import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { idOf, parseRealmRef } from './route.ts';
-import { type AgentRead, failureOf, type Loaded, type OfficialZone, type RankingMetric, type RankingPage,
+import { type AgentRead, failureOf, type FacetList, type Loaded, type ModReleasePage, type OfficialZone,
+  type RankingMetric, type RankingPage,
   type RealmDecisionsPage, type RealmDecisionRead, type RealmDirectoryPage, type RealmHeader, type RealmRoster,
   type RealmZoneRead,
   type RealmWorksPage, type ZoneChapterPage, type ZoneDecisionPage, type ZoneEditorLists,
-  type ZoneGenrePage, type ZonePresentationRead, type ZoneReplyPage, type ZoneWorkPage } from './types.ts';
+  type ZoneBrowsePage, type ZoneBrowseQuery, type ZoneGenrePage, type ZonePresentationRead, type ZoneReplyPage,
+  type ZoneWorkPage } from './types.ts';
 
 // Server reads for Realm pages. Every read is public: Main answers Realm,
 // Zone presentation and Zone module reads the same for everyone, so no
@@ -127,6 +129,23 @@ export const readZoneEditorLists = cache(async (realm: string, locale: UiLocale)
 export const readZoneGenres = cache(async (realm: string, context: string, locale: UiLocale):
   Promise<Loaded<ZoneGenrePage>> =>
   settle(() => main().v1.realms({ realm }).modules.genres({ context }).get({ query: { language: locale } })));
+
+const browsePage = cache(async (realm: string, locale: UiLocale, query: string): Promise<Loaded<ZoneBrowsePage>> => {
+  const parsed = JSON.parse(query) as ZoneBrowseQuery;
+  return settle(() => main().v1.realms({ realm }).modules.browse.get({ query: { ...parsed, language: locale } }),
+    parsed.cursor);
+});
+
+/** One page of the Zone's browse read for a Query (cached per request by its exact Query). */
+export const readZoneBrowse = (realm: string, locale: UiLocale, query: ZoneBrowseQuery) =>
+  browsePage(realm, locale, JSON.stringify(query));
+
+/** Main's admitted Facets, for the labels of the Facets a browse page shows. */
+export const readFacets = cache(async (): Promise<Loaded<FacetList>> => settle(() => main().v1.facets.get()));
+
+/** A mod Work's disclosed releases, newest first. */
+export const readModReleases = cache(async (work: string): Promise<Loaded<ModReleasePage>> =>
+  settle(() => main().v1['mod-releases']({ work }).get({ query: { limit: 20 } })));
 
 /** A few active public Realms, for "Other communities". */
 export const readRealmDirectory = cache(async (locale: UiLocale): Promise<Loaded<RealmDirectoryPage>> =>

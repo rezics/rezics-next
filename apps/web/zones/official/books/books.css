@@ -349,7 +349,7 @@
       border-radius: 999px;
       background: var(--card);
       color: var(--foreground);
-      box-shadow: 0 2px 12px rgb(0 0 0 / 0.2);
+      box-shadow: 0 2px 12px color-mix(in oklab, var(--foreground) 20%, transparent);
       cursor: pointer;
       transition: scale 0.2s ease-out;
     }

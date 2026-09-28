@@ -80,24 +80,35 @@ describe('Zone themes', () => {
     expect(toHex(dark.primary)).not.toBe('#df3d35');
   });
 
-  test('tokens become custom properties with a light and a dark value; the standard look keeps only structure', () => {
-    const themed = zoneTheme(presetTokens.serial, { reader: 'light', enabled: true });
+  test('Zones keep the shared visual language: only structure applies, never colour, scheme or type', () => {
+    for (const preset of zonePresets) {
+      const theme = zoneTheme(presetTokens[preset], { reader: 'system', enabled: true });
+      expect(theme.className).toBe('zone-scope');
+      expect(Object.keys(theme.style).filter(name => ['--primary', '--accent', '--ring', '--radius',
+        '--zone-accent'].includes(name))).toEqual([]);
+      expect(theme.style).toMatchObject({ '--zone-page': 'var(--background)', '--zone-heading-font': 'var(--font-interface)',
+        '--zone-heading-scale': '1' });
+    }
+    const serial = zoneTheme(presetTokens.serial, { reader: 'light', enabled: true });
+    expect([serial.style['--zone-panel'], serial.style['--zone-tiles']]).toEqual(['var(--card)', '6']);
+    const standard = zoneTheme(presetTokens.serial, { reader: 'system', enabled: false });
+    expect([standard.style['--zone-panel'], standard.style['--zone-panel-pad']]).toEqual(['transparent', '0px']);
+  });
+
+  test('a Zone that asks for its own look gets its tokens with a light and a dark value', () => {
+    const themed = zoneTheme(presetTokens.serial, { reader: 'light', enabled: true, ownLook: true });
     expect(themed.style['--primary']).toMatch(/^light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)$/);
-    expect(themed.style['--zone-panel']).toBe('var(--card)');
     expect(themed.style['--zone-radius-card']).toBe('0.375rem');
-    expect(themed.style['--zone-tiles']).toBe('6');
-    const standard = zoneTheme(presetTokens.vibrant, { reader: 'system', enabled: false });
-    expect(standard.style['--primary']).toBeUndefined();
-    expect(standard.style['--zone-heading-font']).toBe('var(--font-interface)');
-    expect(standard.style['--zone-tiles']).toBe('5');
-    expect(standard.className).toBe('zone-scope');
+    expect(zoneTheme(presetTokens.serial, { reader: 'light', enabled: false, ownLook: true }).style['--primary'])
+      .toBeUndefined();
   });
 
   test('a dark Zone darkens only for readers who follow the system; an explicit reader choice wins', () => {
     expect(zoneScheme(presetTokens.vibrant, 'system')).toBe('dark');
     expect(zoneScheme(presetTokens.vibrant, 'light')).toBeNull();
     expect(zoneScheme(presetTokens.editorial, 'system')).toBeNull();
-    expect(zoneTheme(presetTokens.vibrant, { reader: 'system', enabled: true }).className).toBe('zone-scope dark');
+    expect(zoneTheme(presetTokens.vibrant, { reader: 'system', enabled: true, ownLook: true }).className)
+      .toBe('zone-scope dark');
   });
 
   test('the surfaces themes derive against are Rezics Aura’s', () => {
@@ -142,11 +153,11 @@ describe('Zone presentation', () => {
 });
 
 describe('Zone Work cards from Main', () => {
-  test('a bound mod release keeps its game, versions, loader and release; its capture time is its last update', () => {
-    expect(zoneWorkCards({ mod: { profile: 'mod-work-card-v1', game: 'Minecraft', gameVersions: ['1.21.1'],
-      loaders: ['Fabric'], latestRelease: '1.3.0', capturedAt: '2026-09-28T04:03:27.915Z' }, hub: null }))
-      .toEqual({ mod: { game: 'Minecraft', gameVersions: ['1.21.1'], loaders: ['Fabric'], version: '1.3.0',
-        updatedAt: '2026-09-28T04:03:27.915Z' }, hub: null });
+  test('a mod keeps what its releases run on and its newest release; that release\u2019s time is its last update', () => {
+    expect(zoneWorkCards({ mod: { profile: 'mod-work-card-v2', game: 'Minecraft', gameVersions: ['1.21.1', '1.20.1'],
+      loaders: ['Fabric'], environment: 'client', latestRelease: '1.3.0', updatedAt: '2026-09-28T04:03:27.915Z' },
+    hub: null })).toEqual({ mod: { game: 'Minecraft', gameVersions: ['1.21.1', '1.20.1'], loaders: ['Fabric'],
+      environment: 'client', version: '1.3.0', updatedAt: '2026-09-28T04:03:27.915Z' }, hub: null });
   });
 
   test('a published prompt or Skill copies exactly its published text and shows only its disclosed excerpt', () => {
@@ -161,11 +172,11 @@ describe('Zone Work cards from Main', () => {
   });
 
   test('a release time Eden revived as a Date crosses to the page as the ISO string the SDK promises', () => {
-    const capturedAt = new Date('2026-09-28T04:27:33.000Z') as unknown as string;
-    expect(zoneWorkCards({ mod: { profile: 'mod-work-card-v1', game: 'Minecraft', gameVersions: ['1.21.1'],
-      loaders: ['Forge'], latestRelease: null, capturedAt } }).mod?.updatedAt).toBe('2026-09-28T04:27:33.000Z');
-    expect(zoneWorkCards({ mod: { profile: 'mod-work-card-v1', game: 'Minecraft', gameVersions: [],
-      loaders: [], latestRelease: null, capturedAt: 'soon' } }).mod?.updatedAt).toBeNull();
+    const updatedAt = new Date('2026-09-28T04:27:33.000Z') as unknown as string;
+    const card = { profile: 'mod-work-card-v2' as const, game: 'Minecraft' as const, gameVersions: [],
+      loaders: ['Forge' as const], environment: null, latestRelease: null, updatedAt };
+    expect(zoneWorkCards({ mod: card }).mod?.updatedAt).toBe('2026-09-28T04:27:33.000Z');
+    expect(zoneWorkCards({ mod: { ...card, updatedAt: 'soon' } }).mod?.updatedAt).toBeNull();
   });
 
   test('reads without the cards, and Works without them, carry none', () => {
@@ -275,6 +286,18 @@ describe('Official Zone packages', () => {
       if (char === '}') depth -= 1;
       if (index > opened && index < css.length - 3) expect(depth).toBeGreaterThanOrEqual(2);
     }
+  });
+
+  test.each(officialSlugs)('%s keeps REZICS’s colours and type: it names them only through platform properties', slug => {
+    const css = packageFiles(slug)[`${slug}.css`]!.replace(/\/\*[\s\S]*?\*\//g, '');
+    // Colours come from the platform's custom properties (mixed, at most), never as literals.
+    expect(css.match(/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/gi) ?? []).toEqual([]);
+    // Type is the interface face, the Work-title face or code; a package never brings its own.
+    const families = [...css.matchAll(/font-family:\s*([^;]+);/g)].map(match => match[1]!.trim());
+    expect(families.filter(family => !/^(?:inherit|var\(--(?:zone-heading-font|font-interface|font-work-serif|font-work-title|font-code)\))$/
+      .test(family))).toEqual([]);
+    // The accent a Zone may one day ask for is not a colour any package relies on.
+    expect(css).not.toContain('--zone-accent');
   });
 
   test.each(officialSlugs)('%s stays within the size budget', slug => {

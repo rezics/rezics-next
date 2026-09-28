@@ -1,11 +1,12 @@
 import type { ComponentType } from 'react';
-import type { ModuleSlotProps, ZoneCardOptions, ZoneContext, ZoneModule, ZoneModuleData, ZoneModuleType, ZonePackage,
-  ZoneWork, ZoneWorkRenderers } from '@rezics/zone-sdk';
+import type { ModuleSlotProps, ZoneBrowseEntry, ZoneCardOptions, ZoneContext, ZoneModule, ZoneModuleData,
+  ZoneModuleType, ZonePackage, ZoneWork, ZoneWorkRenderers } from '@rezics/zone-sdk';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
+import { ZoneBrowseBar } from './browse.tsx';
 import { WhyHere, ZoneWorkCard, ZoneWorkRow } from './card.tsx';
 import type { ZoneMessages } from './messages.ts';
 import { AnnouncementModule, type CardRenderer, ChipModule, DecisionModule, DiscussionModule, EditorialModule,
@@ -91,16 +92,18 @@ function renderModule(placed: PlacedModule, zone: ZoneContext, pkg: ZonePackage 
 }
 
 /**
- * A Zone's home: the hero across the page, then the main column of modules
- * with rail modules beside it on wide screens and after it on phones. Each
- * module renders from the platform registry unless the Zone's approved
- * package fills its slot.
+ * A Zone's home: its search and filters first (the browse bar), the hero
+ * across the page, then the main column of modules with rail modules beside
+ * it on wide screens and after it on phones. Each module renders from the
+ * platform registry unless the Zone's approved package fills its slot.
  */
-export function ZoneHome({ modules, zone, pkg, locale, messages, avatarQuery, empty }: {
+export function ZoneHome({ modules, zone, pkg, locale, messages, avatarQuery, empty, browse }: {
   modules: readonly PlacedModule[]; zone: ZoneContext; pkg: ZonePackage | null;
   locale: UiLocale; messages: ZoneMessages; avatarQuery?: string;
   /** Shown when no module has anything yet. */
   empty: ReactNode;
+  /** The search and filters the home leads with; none on a page without a browse page. */
+  browse?: ZoneBrowseEntry;
 }) {
   const card = cardRenderer(zone, pkg, locale, messages, avatarQuery);
   const visible = modules.filter(shows);
@@ -110,7 +113,13 @@ export function ZoneHome({ modules, zone, pkg, locale, messages, avatarQuery, em
   const HeroSlot = pkg?.slots.hero;
   const heroNode = hero ? renderModule(hero, zone, null, card, locale, messages, avatarQuery) : null;
   const heroBanners = hero && isType(hero, 'hero-carousel') && hero.state.state === 'ready' ? hero.state.data.banners : [];
+  const BrowseSlot = pkg?.slots.browseBar;
+  const bar = browse ? <ZoneBrowseBar browse={browse} messages={messages} /> : null;
   return <div className="grid grid-cols-1 gap-(--zone-gap) pt-4 pb-10 sm:pt-6">
+    {browse && bar ? <PageContainer className="py-0 sm:py-0 lg:py-0">
+      {BrowseSlot ? <SlotBoundary slot="browseBar" fallback={bar}>
+        <BrowseSlot zone={zone} browse={browse} fallback={bar} Link={LocalizedLink} /></SlotBoundary> : bar}
+    </PageContainer> : null}
     {HeroSlot && heroNode ? <SlotBoundary slot="hero" fallback={heroNode}>
       <HeroSlot zone={zone} banners={heroBanners} fallback={heroNode} Link={LocalizedLink}
         {...workRenderers(card, locale, messages)} /></SlotBoundary> : heroNode}

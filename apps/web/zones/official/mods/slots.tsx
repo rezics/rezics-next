@@ -1,216 +1,128 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@rezics/ui/tabs';
 import { WorkCover } from '@rezics/ui/work-cover';
-import { type HeaderSlotProps, type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps,
-  type ZoneLinkProps, type ZoneModRelease, type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
-import { BlocksIcon, DownloadIcon, FlameIcon, Gamepad2Icon, LayersIcon, TrendingUpIcon, UsersIcon } from 'lucide-react';
+import { type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps, type ZoneLinkProps,
+  type ZoneModRelease, type ZoneWork } from '@rezics/zone-sdk';
+import { HistoryIcon } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { strings } from './strings.ts';
 
-// Slots of the official Mods Zone, a game-mod hub. Cards lead with the one
-// action a mod page needs, getting it; the platform keeps each card's "Why
-// here?" stamp in the card's top corner, which these cards leave free.
+// Slots of the official Mods Zone, laid out as Modrinth lists projects: a
+// row per mod with its icon, name and author, one-line summary and what it
+// runs on (environment, loaders, game versions), and when it last changed at
+// the end. The Zone keeps REZICS's colours and type; only the layout is its
+// own. REZICS counts no downloads, so no row shows one. The platform keeps
+// each card's "Why here?" stamp in its top corner, which these rows leave free.
 
 type Strings = ReturnType<typeof strings>;
 const DAY = 86_400_000;
 
-/** How long ago a Work last changed, in the reader's language, and whether that was this week. */
-function freshness(at: string, locale: string, now = Date.now()): { ago: string; thisWeek: boolean } | null {
+/** How long ago a Work last changed, in the reader's language. */
+function ago(at: string, locale: string, now = Date.now()): string | null {
   const time = Date.parse(at);
   if (Number.isNaN(time)) return null;
   const days = Math.max(0, Math.floor((now - time) / DAY));
   const format = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
-  const ago = days < 30 ? format.format(-days, 'day')
+  return days < 30 ? format.format(-days, 'day')
     : days < 365 ? format.format(-Math.floor(days / 30), 'month') : format.format(-Math.floor(days / 365), 'year');
-  return { ago, thisWeek: days < 7 };
 }
 
-/** When a pick last changed: its mod's latest release, or else its last published revision. */
+/** When a pick last changed: its mod's newest release, or else its last published revision. */
 const lastUpdate = (work: ZoneWork) => work.mod?.updatedAt ?? work.updatedAt;
 
-/** The game and its versions a mod runs on, in one line (`Minecraft 1.21.1`). */
-const gameLine = (mod: ZoneModRelease) => [mod.game, ...mod.gameVersions].join(' ');
-
-/**
- * What a player checks before installing a pick: the game and versions, the
- * loader, the latest release, whether it is kept up and when it last changed.
- */
-function Badges({ work, locale, t }: { work: ZoneWork; locale: string; t: Strings }) {
-  const at = lastUpdate(work);
-  const fresh = at ? freshness(at, locale) : null;
-  const { mod } = work;
-  if (!mod && !work.status && !fresh) return null;
-  return <ul className="mh-badges">
-    {mod ? <li data-game="" translate="no">{gameLine(mod)}</li> : null}
-    {mod?.loaders.map(loader => <li key={loader} data-loader="" translate="no">{loader}</li>)}
-    {mod?.version ? <li translate="no"><span className="sr-only">{t.release} </span>{t.version(mod.version)}</li>
-      : null}
-    {work.status ? <li data-status={work.status}>{t.status[work.status]}</li> : null}
-    {fresh ? <li data-fresh={fresh.thisWeek ? '' : undefined}><time dateTime={at ?? undefined}>
-      {t.updated(fresh.ago)}</time></li> : null}
+/** What a player checks before installing: where it runs, its loaders and its game versions. */
+function Compatibility({ mod, t, limit = 3 }: { mod: ZoneModRelease; t: Strings; limit?: number }) {
+  const versions = mod.gameVersions;
+  return <ul className="mh-tags" aria-label={t.compatibility}>
+    {mod.environment ? <li>{t.environments[mod.environment]}</li> : null}
+    {mod.loaders.map(loader => <li key={loader} translate="no">{loader}</li>)}
+    {versions.slice(0, limit).map(version => <li key={version} translate="no">{version}</li>)}
+    {versions.length > limit ? <li>+{versions.length - limit}</li> : null}
   </ul>;
 }
 
-const updatedThisWeek = (works: readonly ZoneWork[], locale: string) =>
-  works.filter(work => {
-    const at = lastUpdate(work);
-    return at && freshness(at, locale)?.thisWeek;
-  }).length;
-
-/** The Work's own cover, as on every other page: a mod's package tile, a guide's poster. */
-function Thumb({ work, Link, eager }: { work: ZoneWork; Link: ComponentType<ZoneLinkProps>; eager?: boolean }) {
-  return <Link href={work.href} tabIndex={-1} aria-hidden="true" className="mh-thumb">
-    <WorkCover {...workCoverProps(work)} loading={eager ? 'eager' : 'lazy'} /></Link>;
+function Byline({ work, t, Link }: { work: ZoneWork; t: Strings; Link: ComponentType<ZoneLinkProps> }) {
+  if (!work.author) return null;
+  const [before, after] = t.by('⁣').split('⁣');
+  return <span lang={work.author.lang || undefined} className="mh-by">{before}
+    {work.authorHref ? <Link href={work.authorHref}>{work.author.value}</Link> : work.author.value}{after}</span>;
 }
 
-function Get({ work, title, t, Link, large }: {
-  work: ZoneWork; title: string; t: Strings; Link: ComponentType<ZoneLinkProps>; large?: boolean;
-}) {
-  return <Link href={work.href} className="mh-get" data-size={large ? 'large' : undefined}>
-    <DownloadIcon aria-hidden="true" /><span className="mh-get-label">{t.get}</span><span className="sr-only"> {title}</span>
-  </Link>;
-}
-
-/** A download-first card: a row in lists, a tile in collections and a one-line entry in the rail. */
-export function ModsCard({ zone, work, layout, rank, Link }: WorkCardSlotProps) {
+/** A Modrinth-style result row; covers and rails keep the platform's own card. */
+export function ModsCard({ zone, work, layout, rank, Link, fallback }: WorkCardSlotProps) {
+  if (layout === 'cover') return fallback;
   const t = strings(zone.locale);
   const title = work.title?.value ?? t.untitled;
-  return <article className="mh-card" data-layout={layout}>
-    {rank && layout !== 'cover' ? <span className="mh-rank" data-top={rank <= 3 ? '' : undefined}>{rank}</span> : null}
-    <Thumb work={work} Link={Link} />
-    <div className="mh-card-body">
-      <h3 lang={work.title?.lang} dir={work.title?.dir} className="mh-card-title">
-        <Link href={work.href}>{title}</Link></h3>
-      {work.author ? <p lang={work.author.lang || undefined} className="mh-by">
-        {t.by('\u2063').split('\u2063')[0]}
-        {work.authorHref ? <Link href={work.authorHref} className="rounded-sm outline-none hover:underline
-          focus-visible:ring-2 focus-visible:ring-ring">{work.author.value}</Link> : work.author.value}
-        {t.by('\u2063').split('\u2063')[1]}</p> : null}
-      {work.mod && layout === 'rail' ? <p className="mh-by" translate="no">
-        {[gameLine(work.mod), ...work.mod.loaders].join(' · ')}</p> : null}
-      {work.tagline && layout !== 'rail' ? <p lang={work.tagline.lang} dir={work.tagline.dir} className="mh-hook">
+  const at = lastUpdate(work);
+  const when = at ? ago(at, zone.locale) : null;
+  return <article className="mh-row" data-layout={layout}>
+    {rank ? <span className="mh-rank"><span className="sr-only">{t.rank(rank)}</span>
+      <span aria-hidden="true">{rank}</span></span> : null}
+    <Link href={work.href} tabIndex={-1} aria-hidden="true" className="mh-icon">
+      <WorkCover {...workCoverProps(work)} loading="lazy" /></Link>
+    <div className="mh-body">
+      <h3 className="mh-title">
+        <Link href={work.href} lang={work.title?.lang} dir={work.title?.dir}>{title}</Link>
+        {layout === 'row' ? <Byline work={work} t={t} Link={Link} /> : null}
+      </h3>
+      {work.tagline && layout === 'row' ? <p lang={work.tagline.lang} dir={work.tagline.dir} className="mh-summary">
         {work.tagline.value}</p> : null}
-      {layout !== 'rail' ? <Badges work={work} locale={zone.locale} t={t} /> : null}
+      {work.mod ? <Compatibility mod={work.mod} t={t} limit={layout === 'rail' ? 1 : 3} /> : null}
     </div>
-    <Get work={work} title={title} t={t} Link={Link} />
+    {when && layout === 'row' ? <p className="mh-updated"><HistoryIcon aria-hidden="true" />
+      <time dateTime={at ?? undefined}>{t.updated(when)}</time></p> : null}
   </article>;
 }
 
-/** The hub's header: its mark on a block grid, the Zone's name and the platform controls. */
-export function ModsHeader({ zone, actions, members }: HeaderSlotProps) {
-  const t = strings(zone.locale);
-  return <header className="mh-hub">
-    <div className="mh-page mh-hub-inner">
-      <span aria-hidden="true" className="mh-hub-icon"><BlocksIcon /></span>
-      <div className="mh-hub-copy">
-        <p className="mh-eyebrow">{t.official}</p>
-        <h1 lang={zone.name.lang} dir={zone.name.dir} className="mh-wordmark">{zone.name.value}</h1>
-        <p lang={zone.description?.lang} className="mh-tagline">{zone.description?.value ?? t.tagline}</p>
-      </div>
-      <div className="mh-hub-side">
-        {members ? <p className="mh-stat"><UsersIcon aria-hidden="true" />{members}</p> : null}
-        <div className="flex flex-wrap items-center gap-2">{actions}</div>
-      </div>
-    </div>
-  </header>;
-}
-
-/** The featured pick as a spotlight with its Get button, and the other picks beside it. */
-export function ModsHero({ zone, banners, card, whyHere, Link, fallback }: HeroSlotProps) {
-  const picks = banners.flatMap(banner => banner.work && !banner.image ? [banner.work] : []);
-  const [lead, ...rest] = picks;
-  if (!lead || picks.length !== banners.length) return fallback;
-  const t = strings(zone.locale);
-  const title = lead.title?.value ?? t.untitled;
-  return <section aria-labelledby="mh-featured" className="mh-featured">
-    <div className="mh-page mh-featured-grid">
-      <article className="mh-spotlight">
-        <Thumb work={lead} Link={Link} eager />
-        <div className="mh-spotlight-copy">
-          <h2 id="mh-featured" className="mh-eyebrow"><FlameIcon aria-hidden="true" />{t.featured}</h2>
-          <h3 lang={lead.title?.lang} dir={lead.title?.dir} className="mh-spotlight-title">
-            <Link href={lead.href}>{title}</Link></h3>
-          {lead.author ? <p lang={lead.author.lang || undefined} className="mh-by">
-            {t.by('\u2063').split('\u2063')[0]}
-            {lead.authorHref ? <Link href={lead.authorHref} className="rounded-sm outline-none hover:underline
-              focus-visible:ring-2 focus-visible:ring-ring">{lead.author.value}</Link> : lead.author.value}
-            {t.by('\u2063').split('\u2063')[1]}</p> : null}
-          {lead.tagline ? <p lang={lead.tagline.lang} dir={lead.tagline.dir} className="mh-hook">
-            {lead.tagline.value}</p> : null}
-          <Badges work={lead} locale={zone.locale} t={t} />
-          <div className="mh-actions">
-            <Get work={lead} title={title} t={t} Link={Link} large />
-            <span className="mh-stamp">{whyHere(lead)}</span>
-          </div>
-        </div>
-      </article>
-      {rest.length ? <section aria-labelledby="mh-also" className="mh-also">
-        <h2 id="mh-also" className="mh-eyebrow">{t.alsoFeatured}</h2>
-        <ol className="mh-stack">{rest.map(work => <li key={work.id}>{card(work, { layout: 'rail' })}</li>)}</ol>
-      </section> : null}
-    </div>
-  </section>;
-}
-
-/** Entry points up front: the Zone's games and loaders as a filter bar. */
-export function ModsFilters({ module, data, Link }: ModuleSlotProps<'chip-nav'>) {
-  const heading = `mh-filters-${module.id}`;
-  return <nav aria-labelledby={heading} data-zone-module="chip-nav" className="mh-filters">
-    <h2 id={heading} className="mh-filters-label">{module.title}</h2>
-    <ul className="mh-chips">
-      {data.chips.map(chip => <li key={chip.id}>
-        <Link href={chip.href} lang={chip.label.lang} className="mh-chip">
-          <Gamepad2Icon aria-hidden="true" />{chip.label.value}</Link>
-      </li>)}
-    </ul>
-  </nav>;
-}
-
-function SectionHead({ id, title, icon, note, more, t, Link }: {
-  id: string; title: string; icon?: ReactNode; note?: ReactNode; more: string | null; t: Strings;
-  Link: ComponentType<ZoneLinkProps>;
+function SectionHead({ id, title, more, t, Link }: {
+  id: string; title: string; more: string | null; t: Strings; Link: ComponentType<ZoneLinkProps>;
 }) {
-  return <header className="mh-section-head">
-    <h2 id={id} className="mh-section-title">{icon}{title}</h2>
-    {note}
+  return <header className="mh-head">
+    <h2 id={id}>{title}</h2>
     {more ? <Link href={more} className="mh-more">{t.more}</Link> : null}
   </header>;
 }
 
-/** Rankings as a trending board: today, this week and this month, numbered rows with Get. */
+const rows = (items: readonly ReactNode[]) => <ul className="mh-list">
+  {items.map((item, index) => <li key={index}>{item}</li>)}</ul>;
+
+/** Featured picks as result rows in two columns; an art-directed banner keeps the platform hero. */
+export function ModsHero({ zone, banners, card, fallback }: HeroSlotProps) {
+  const picks = banners.flatMap(banner => banner.work && !banner.image ? [banner.work] : []);
+  if (!picks.length || picks.length !== banners.length) return fallback;
+  const t = strings(zone.locale);
+  return <section aria-labelledby="mh-featured" className="mh-page mh-section">
+    <header className="mh-head"><h2 id="mh-featured">{t.featured}</h2></header>
+    <ul className="mh-grid">{picks.map(work => <li key={work.id}>{card(work, { layout: 'row' })}</li>)}</ul>
+  </section>;
+}
+
+/** Rankings as numbered rows: today, this week and this month. */
 export function ModsTrending({ zone, module, data, card, Link }: ModuleSlotProps<'ranking'>) {
   const t = strings(zone.locale);
   const tabs = data.tabs.filter(tab => tab.items.length);
   const heading = `mh-trending-${module.id}`;
-  return <section aria-labelledby={heading} data-zone-module="ranking" className="zone-module mh-board">
-    <SectionHead id={heading} title={module.title} icon={<TrendingUpIcon aria-hidden="true" />} more={module.more}
-      t={t} Link={Link} />
+  return <section aria-labelledby={heading} data-zone-module="ranking" className="zone-module mh-section">
+    <SectionHead id={heading} title={module.title} more={module.more} t={t} Link={Link} />
     <Tabs defaultValue={tabs[0]?.interval} className="gap-3">
       <TabsList aria-label={module.title}>
         {tabs.map(tab => <TabsTrigger key={tab.interval} value={tab.interval} className="px-3">
           {t.intervals[tab.interval]}</TabsTrigger>)}
       </TabsList>
       {tabs.map(tab => <TabsContent key={tab.interval} value={tab.interval}>
-        <ol className="mh-list">
-          {tab.items.slice(0, 10).map(item => <li key={item.work.id}>
-            {card(item.work, { layout: 'row', rank: item.rank })}</li>)}
-        </ol>
+        {rows(tab.items.slice(0, 10).map(item => card(item.work, { layout: 'row', rank: item.rank })))}
       </TabsContent>)}
     </Tabs>
   </section>;
 }
 
-/** Shelves as the hub's lists: the first rows of each, every one leading with Get, and how many changed this week. */
+/** Shelves as result lists, newest first, one tab per source. */
 export function ModsShelf({ zone, module, data, card, Link }: ModuleSlotProps<'shelf'>) {
   const t = strings(zone.locale);
   const tabs = data.tabs.filter(tab => tab.items.length);
   const heading = `mh-shelf-${module.id}`;
-  const fresh = updatedThisWeek([...new Map(tabs.flatMap(tab => tab.items).map(work => [work.id, work])).values()],
-    zone.locale);
-  const list = (items: readonly ZoneWork[]) => <ul className="mh-list">
-    {items.slice(0, 6).map(work => <li key={work.id}>{card(work, { layout: 'row' })}</li>)}</ul>;
-  return <section aria-labelledby={heading} data-zone-module="shelf" className="zone-module mh-board">
-    <SectionHead id={heading} title={module.title} more={module.more} t={t} Link={Link}
-      note={fresh ? <p className="mh-pulse"><span aria-hidden="true" />{t.updatedThisWeek(fresh)}</p> : null} />
+  const list = (items: readonly ZoneWork[]) => rows(items.slice(0, 8).map(work => card(work, { layout: 'row' })));
+  return <section aria-labelledby={heading} data-zone-module="shelf" className="zone-module mh-section">
+    <SectionHead id={heading} title={module.title} more={module.more} t={t} Link={Link} />
     {tabs.length === 1 ? list(tabs[0]!.items) : <Tabs defaultValue={tabs[0]?.id} className="gap-3">
       <TabsList aria-label={module.title}>
         {tabs.map(tab => <TabsTrigger key={tab.id} value={tab.id} className="px-3">{tab.label}</TabsTrigger>)}
@@ -220,48 +132,20 @@ export function ModsShelf({ zone, module, data, card, Link }: ModuleSlotProps<'s
   </section>;
 }
 
-/** Editors' lists as collections: a named set of tiles, each one Get away. */
+/** Editors' lists as named collections of rows. */
 export function ModsCollections({ zone, module, data, card, Link }: ModuleSlotProps<'editorial-list'>) {
   const t = strings(zone.locale);
   const heading = `mh-collections-${module.id}`;
-  return <section aria-labelledby={heading} data-zone-module="editorial-list" className="zone-module mh-board">
+  return <section aria-labelledby={heading} data-zone-module="editorial-list" className="zone-module mh-section">
     <SectionHead id={heading} title={module.title} more={null} t={t} Link={Link} />
     {data.lists.map((list, index) => <article key={list.id} aria-labelledby={`${heading}-${index}`}
       className="mh-collection">
-      <header className="mh-collection-head">
-        <span aria-hidden="true" className="mh-collection-icon"><LayersIcon /></span>
-        <div className="min-w-0 flex-1">
-          <p className="mh-eyebrow">{t.collection} · {t.count(list.items.length)}</p>
-          <h3 id={`${heading}-${index}`} lang={list.title.lang} dir={list.title.dir} className="mh-collection-title">
-            {list.title.value}</h3>
-          {list.blurb ? <p lang={list.blurb.lang} className="mh-hook">{list.blurb.value}</p> : null}
-        </div>
+      <header className="mh-head">
+        <h3 id={`${heading}-${index}`} lang={list.title.lang} dir={list.title.dir}>{list.title.value}
+          <span className="mh-count"> · {t.count(list.items.length)}</span></h3>
         {list.href ? <Link href={list.href} className="mh-more">{t.more}</Link> : null}
       </header>
-      <ul className="mh-tiles">
-        {list.items.map(work => <li key={work.id}>{card(work, { layout: 'cover' })}</li>)}
-      </ul>
+      {rows(list.items.map(work => card(work, { layout: 'row' })))}
     </article>)}
   </section>;
-}
-
-/** A closing band: what the hub is and where its decisions are. */
-export function ModsFooter({ zone, Link }: ZoneSlotProps) {
-  const t = strings(zone.locale);
-  return <footer className="mh-footer">
-    <div className="mh-page mh-footer-inner">
-      <span aria-hidden="true" className="mh-hub-icon mh-hub-icon-small"><BlocksIcon /></span>
-      <div className="min-w-0 flex-1 space-y-1">
-        <p className="font-semibold">{t.footerTitle}</p>
-        <p className="max-w-xl text-pretty text-sm opacity-80">{t.footerNote}</p>
-      </div>
-      <nav aria-label={t.footerTitle}>
-        <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-          <li><Link href={zone.links.works}>{t.works}</Link></li>
-          <li><Link href={zone.links.decisions}>{t.decisions}</Link></li>
-          <li><Link href={zone.links.about}>{t.about}</Link></li>
-        </ul>
-      </nav>
-    </div>
-  </footer>;
 }
