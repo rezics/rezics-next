@@ -3,6 +3,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { profileHref } from '../profile/route.ts';
 import { coverKindOf } from '../catalogue/work.ts';
+import { isoMoment, zoneWorkCards } from '../zones/adapt-cards.ts';
 import type { FallbackReason, MainExecution, PresentationBanner } from '../zones/presentation.ts';
 import { decisionHref, realmWorkHref } from './route.ts';
 import type { MainAvatar, MainName, RealmDecision, WorkCard, ZonePresentationRead } from './types.ts';
@@ -43,7 +44,8 @@ export interface AdaptContext {
  * A Work card in this Zone. `decision` is the public Decision that placed
  * it here (the adoption's selection).
  */
-export function zoneWork(card: WorkCard & { primaryCredits?: { displayName: string | null }[] },
+export function zoneWork(card: WorkCard & { primaryCredits?: { displayName: string | null }[] }
+  & Parameters<typeof zoneWorkCards>[0],
   context: AdaptContext, decision: string | null): ZoneWork {
   const author = card.primaryCredits?.find(credit => credit.displayName)?.displayName;
   return { id: card.id, href: realmWorkHref(card.id, context.realm), title: zoneText(card.title),
@@ -51,8 +53,9 @@ export function zoneWork(card: WorkCard & { primaryCredits?: { displayName: stri
     author: author ? { value: author, lang: '', dir: 'ltr' } : null,
     tagline: zoneText(card.tagline),
     status: card.completionStatus, chapters: card.chapterCount, words: card.wordCount,
-    updatedAt: card.lastUpdatedAt,
-    decision: decision ? decisionHref(context.locale, context.ref, decision) : null };
+    updatedAt: isoMoment(card.lastUpdatedAt),
+    decision: decision ? decisionHref(context.locale, context.ref, decision) : null,
+    ...zoneWorkCards(card) };
 }
 
 /** A Work's credited author as Main's module reads name them: a REZICS Agent, or a source such as Open Library. */

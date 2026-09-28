@@ -87,8 +87,18 @@ describe('Main reads as Zone data', () => {
       cover: { url: '/api/main/v1/media/avatars/s', width: 400, height: 600 }, kind: 'book', author: null,
       tagline: { value: 'A delta that redraws itself.', lang: 'en', dir: 'ltr' }, status: 'ongoing', chapters: 41,
       words: null, updatedAt: '2026-09-27T12:00:00.000Z',
-      decision: `/en/r/fiction/decisions?decision=${decision}#decision-${decision}` });
+      decision: `/en/r/fiction/decisions?decision=${decision}#decision-${decision}`, mod: null, hub: null });
     expect(zoneWork(card({ tagline: null }), context, null)).toMatchObject({ tagline: null, decision: null });
+  });
+
+  test('a Work card carries Main’s mod release to the package, with ISO times', () => {
+    const mod = { profile: 'mod-work-card-v1' as const, game: 'Minecraft' as const, gameVersions: ['1.21.1'],
+      loaders: ['Fabric' as const], latestRelease: '1.3.0', capturedAt: '2026-09-28T04:03:27.915Z' };
+    const adapted = zoneWork({ ...card({ lastUpdatedAt: new Date('2026-09-27T12:00:00.000Z') as unknown as string }),
+      mod }, context, null);
+    expect(adapted.updatedAt).toBe('2026-09-27T12:00:00.000Z');
+    expect(adapted.mod).toMatchObject({ game: 'Minecraft', version: '1.3.0', updatedAt: '2026-09-28T04:03:27.915Z' });
+    expect(withRealmCard(zoneWork(card(), context, null), adapted).mod).toEqual(adapted.mod);
   });
 
   test('a people module names each credited author once, with their Works here, and links where to find more', () => {
