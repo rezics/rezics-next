@@ -227,8 +227,9 @@ async function genres(module: PresentationModule, context: AdaptContext): Promis
   const chips = read.data.items.flatMap(item => {
     const term = idOf(item.id);
     return term ? [{ id: item.id, label: zoneText(item.name),
+      // The chip Context only names the navigation; Discover's `context` selects a rating population.
       href: discoverHref({ scope: { kind: 'realm', realm: context.realm },
-        context: contextId, type: null, term }) }] : [];
+        context: null, type: null, term }) }] : [];
   }).slice(0, module.options?.limit ?? 12);
   return chips.length ? { state: 'ready', data: { chips } } : empty;
 }
