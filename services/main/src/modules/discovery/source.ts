@@ -110,7 +110,13 @@ export async function projectDiscoveryBatch(session: WorkReadSession, basis: Dis
     if (spent + cost > 120 && checkpoint !== after) break;
     spent += cost;
     checkpoint = work;
-    const classifications = classified ? await readWorkClassifications(session, work) : null;
+    const classifications = classified ? await readWorkClassifications(session, work).catch(error => {
+      if (error instanceof WorkReadMissing) return false as const;
+      throw error;
+    }) : null;
+    // The classification owner also checks current Work disclosure. An
+    // unavailable candidate is a hole, as in the former one-Work projector.
+    if (classifications === false) continue;
     if (classifications?.nextCursor || (classifications?.items.length ?? 0) > DISCOVERY_COST.termsPerWork) {
       throw new WorkReadLimit('Discovery classification fanout exceeds its build budget');
     }
