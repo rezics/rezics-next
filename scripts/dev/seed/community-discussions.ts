@@ -32,11 +32,13 @@ async function replyRoot(state: SeedState, id: string, roots: Map<string, Root>)
 /** The author places their own reply; if the Realm asks for review, its owner approves it first. */
 async function place(api: SeedApi, realm: { realm: string; owner: Session }, author: Session,
   reply: { reply: string; revisionId: string }, root: Root, key: string): Promise<string> {
-  const exact = await readMain<{ revisionDigest: string }>(api,
-    `/v1/member-replies/${short(reply.reply)}?actingSubject=${encodeURIComponent(author.actingSubject)}`, author.token);
+  // A reply written in a Realm stays private until placed there; its author reads the exact revision's digest.
+  const exact = await readMain<{ reference: { byteDigest: string } }>(api, `/v1/content-revisions/${
+    reply.revisionId}?actingSubject=${encodeURIComponent(author.actingSubject)}`, author.token);
   if (!exact) throw new Error('Discussion reply is unreadable by its author');
+  const digest = exact.reference.byteDigest;
   const body = { profile: 'realm-reply-placement-v1', realm: realm.realm, reply: reply.reply,
-    revisionId: reply.revisionId, revisionDigest: exact.revisionDigest, expectedHead: null };
+    revisionId: reply.revisionId, revisionDigest: digest, expectedHead: null };
   try {
     return (await api.post<{ placement: string }>('/v1/realm-reply-placements', { ...body, reviewDecisionId: null,
       actingSubject: author.actingSubject }, author.token, seedKey('community-placement', key))).placement;
@@ -46,7 +48,7 @@ async function place(api: SeedApi, realm: { realm: string; owner: Session }, aut
   const { owner } = realm;
   const review = await api.post<{ decisionId: string }>('/v1/realm-reply-reviews', {
     profile: 'realm-reply-review-v1', realm: realm.realm, reply: reply.reply, revisionId: reply.revisionId,
-    revisionDigest: exact.revisionDigest, expectedGeneration: '0', supersedes: null, outcome: 'approved',
+    revisionDigest: digest, expectedGeneration: '0', supersedes: null, outcome: 'approved',
     method: 'human', methodRevision: 'realm-manager-v1',
     dependencyDigest: createHash('sha256').update(root.revision).digest('hex'),
     reasonReference: null, actingSubject: owner.actingSubject }, owner.token, seedKey('community-review', key));
