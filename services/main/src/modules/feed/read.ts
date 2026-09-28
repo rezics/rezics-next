@@ -27,6 +27,20 @@ export async function visibleFeedSources(session: WorkReadSession, rows: readonl
   return [...await feedSources(session, { ids: graph }), ...await feedReviewSources(session, reviews)];
 }
 
+/** One pointer batch fences the composition labels and order used by chapter cards. */
+async function chapterPointers(session: WorkReadSession, sources: readonly FeedSource[]) {
+  const occurrences = [...new Set(sources.flatMap(source => source.occurrence ? [source.occurrence] : []))];
+  if (!occurrences.length) return new Map<string, string>();
+  const rows = await session.query(`SELECT ?occurrence ?structure ?head WHERE {
+    VALUES ?occurrence { ${occurrences.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?occurrence rv:structure ?structure . ?structure rv:structureHead ?head }
+  } LIMIT ${occurrences.length + 1}`, occurrences.length + 1);
+  if (new Set(rows.map(row => row.occurrence?.value)).size !== rows.length
+    || rows.some(row => !row.occurrence || !occurrences.includes(row.occurrence.value)
+      || !row.structure || !row.head)) throw new WorkReadMoved('Chapter composition changed');
+  return new Map(rows.map(row => [row.occurrence!.value, `${row.structure!.value}\0${row.head!.value}`]));
+}
+
 /** A fewer signal keeps one deterministic card in four. Hide and mute remove
  * every matching card. This is applied before grouping and cursor emission. */
 export function excludedFeedSource(source: FeedSource, exclusions: readonly HomeExclusion[]): boolean {
@@ -250,6 +264,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const withinWindow = page.filter(row => row.sort_time.getTime() >= cutoff && row.sort_time.getTime() <= asOf);
   const memberRows = await store.members(session.position.dataEpoch, withinWindow.flatMap(row => row.group_members));
   const sources = await visibleFeedSources(session, memberRows);
+  const initialChapters = await chapterPointers(session, sources);
   // At most eight member Works enter this one bounded catalogue read. The
   // same type and accepted-Sense relation powers onboarding suggestions.
   const workKinds = interests.length ? await readWorkKindMatches(session, [...new Set(sources
@@ -305,6 +320,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
   }
   const final = await visibleFeedSources(session, items);
+  const finalChapters = await chapterPointers(session, final);
   const finalWorkKinds = interests.length ? await readWorkKindMatches(session,
     [...new Set(final.filter(source => matchingActivityKinds(source.kind).length === 0)
       .flatMap(source => source.work ? [source.work] : []))]) : new Map();
@@ -332,6 +348,16 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       if (item.kind === 'review' && (finalSource.readerReview?.revision !== sources.find(source => source.id === item.id)?.readerReview?.revision
         || finalSource.readerReview?.helpful_count !== (item.card.kind === 'review' ? item.card.helpfulCount : -1))) {
         throw new WorkReadMoved('Review changed');
+      }
+      if (item.card.kind === 'chapter') {
+        const earlier = sources.find(source => source.id === item.id)!;
+        if (!earlier.occurrence || earlier.occurrence !== finalSource.occurrence
+          || earlier.contentTarget !== finalSource.contentTarget
+          || earlier.contentRevision !== finalSource.contentRevision
+          || earlier.excerpt !== finalSource.excerpt || earlier.language !== finalSource.language
+          || initialChapters.get(earlier.occurrence) !== finalChapters.get(earlier.occurrence)) {
+          throw new WorkReadMoved('Chapter content changed');
+        }
       }
       if (item.card.kind === 'prompt' || item.card.kind === 'release' || item.card.kind === 'review') {
         const card = await feedCardData(session, finalSource, item.target, item.links.target);

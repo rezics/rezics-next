@@ -2,6 +2,7 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { publicAgent } from '../profiles/read.ts';
 import { allocateAgentHandle } from '../agent/handle.ts';
+import { sourceReportedCredits } from '../source/author-name-read.ts';
 import { DISCOVERY_COST, type ProjectedWork } from './contract.ts';
 
 /** One bounded source query. External references retain their explicit absent
@@ -26,11 +27,17 @@ export async function primaryDiscoveryCredits(session: WorkReadSession, work: st
     || new Set(rows.map(row => row.id!.value)).size !== rows.length) {
     throw new WorkReadUnavailable('Discovery credits are ambiguous');
   }
-  return rows.map(row => row.agent ? { id: row.id!.value, role: 'author', participantKind: 'agent',
+  const confirmed: ProjectedWork['primaryCredits'] = rows.map(row => row.agent
+    ? { id: row.id!.value, role: 'author', participantKind: 'agent',
     provider: null, key: null, ordinal: null, agent: row.agent.value, displayName: null, handle: null }
     : ({ id: row.id!.value, role: 'author', participantKind: 'external-reference',
     provider: 'open-library', key: row.key!.value, ordinal: Number(row.ordinal!.value),
     agent: null, displayName: null, handle: null }));
+  const reported = (await sourceReportedCredits(session, [work])).get(work) ?? [];
+  const confirmedKeys = new Set(confirmed.flatMap(credit => credit.key !== null ? [credit.key] : []));
+  return [...confirmed, ...reported.filter(credit => !confirmedKeys.has(credit.key))]
+    .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
+    .slice(0, DISCOVERY_COST.primaryCredits);
 }
 
 /** At most 60 projected Agent mentions per page and one graph name read. */

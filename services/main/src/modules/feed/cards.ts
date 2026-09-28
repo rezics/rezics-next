@@ -2,6 +2,7 @@ import type { Static } from 'typebox';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { readCompositionHeader } from '../structure/graph.ts';
 import { readCompositionPage } from '../structure/read.ts';
+import { firstChapterHeading } from '../work-contents/read.ts';
 import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import type { feedAction, feedCard, FeedItem } from './contract.ts';
 import type { FeedSource } from './source.ts';
@@ -107,8 +108,10 @@ async function chapterCard(session: WorkReadSession, source: FeedSource, occurre
   const after = await readCompositionHeader(session.deps.environment, header.structure);
   if (after?.head !== header.head) throw new WorkReadMoved('Chapter composition changed');
   const label = record.labels.find(label => label.language.toLowerCase() === source.language?.toLowerCase()) ?? record.labels[0];
+  const title = label && !/^(?:untitled chapter|未命名章节)$/iu.test(label.value.trim())
+    ? label.value : source.excerpt ? firstChapterHeading({ body: source.excerpt }) : null;
   return { card: { kind: 'chapter', occurrence, parent: record.parent, number: page.occurrenceContext.ordinal,
-    ...(label ? { title: label.value } : {}), ...(source.excerpt ? { excerpt: source.excerpt } : {}) },
+    ...(title ? { title } : {}), ...(source.excerpt ? { excerpt: source.excerpt } : {}) },
   primaryAction: { kind: 'read-chapter', work: header.work, occurrence,
     href: `/w/${header.work.slice(-36)}/read/${occurrence.slice(-36)}${source.language ? `?language=${encodeURIComponent(source.language.toLowerCase())}` : ''}` } };
 }

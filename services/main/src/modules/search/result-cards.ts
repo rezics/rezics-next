@@ -7,7 +7,7 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { metadataComponent, METADATA_PROFILE } from '../work/metadata-schema.ts';
 import { parsedMetadataState, selectedMetadata } from '../work/metadata-read.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
-import { readAuthorNames } from '../source/author-name-read.ts';
+import { readAuthorNames, sourceReportedCredits } from '../source/author-name-read.ts';
 import { WorkReadMoved } from '../work/read-session.ts';
 import { searchPageRatings } from './ratings.ts';
 
@@ -94,6 +94,14 @@ export async function searchPageCredits(session: WorkReadSession, works: readonl
       displayName: null, handle: null } : { id: row.id.value, role: 'author',
       participantKind: 'external-reference', provider: 'open-library', key: row.key!.value,
       ordinal: Number(row.ordinal!.value), agent: null, displayName: null, handle: null });
+  }
+  const reported = await sourceReportedCredits(session, works);
+  for (const [work, candidates] of reported) {
+    const confirmed = result.get(work)!;
+    const confirmedKeys = new Set(confirmed.flatMap(credit => credit.key !== null ? [credit.key] : []));
+    result.set(work, [...confirmed, ...candidates.filter(credit => !confirmedKeys.has(credit.key))]
+      .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
+      .slice(0, DISCOVERY_COST.primaryCredits));
   }
   return result;
 }

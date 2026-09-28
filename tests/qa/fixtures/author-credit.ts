@@ -15,6 +15,7 @@ import { SourceNativeWorkAdoptionStore, type NativeWorkSourceAdoption } from '..
 import { SourceNativeWorkAttachmentStore } from '../../../services/main/src/modules/source/native-work-attachment.ts';
 import { SourceChildCorrespondenceStore } from '../../../services/main/src/modules/source/record-child-correspondence.ts';
 import { SourceAuthorCreditStore, type AdoptSourceAuthorCreditInput } from '../../../services/main/src/modules/source/author-credit.ts';
+import { SourceAuthorNameStore } from '../../../services/main/src/modules/source/author-name.ts';
 import { ProviderIdentityStore } from '../../../services/main/src/modules/source/provider-identity.ts';
 import { SourceFieldWithdrawalStore } from '../../../services/main/src/modules/source/withdrawal.ts';
 import { SourceFieldAttachmentStore } from '../../../services/main/src/modules/source/support-attach.ts';
@@ -98,6 +99,12 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   const intake = new SourceIntakeStore(pool), conversions = new OpenLibraryConversionStore(pool, intake);
   const graph = new OpenLibrarySourceGraph(fuseki, env.lineage, conversions);
   const proposals = new SourceNativeWorkProposalStore(pool, graph, conversions);
+  const retainedAuthorNames = new Map<string, string>();
+  const sourceAuthorNames = new SourceAuthorNameStore(pool, intake, (async (input: string | URL | Request) => {
+    const authorKey = new URL(String(input)).pathname.replace(/\.json$/u, '');
+    return Response.json({ key: authorKey, type: { key: '/type/author' }, revision: 1,
+      name: retainedAuthorNames.get(authorKey) });
+  }) as typeof fetch);
   const correspondences = new SourceChildCorrespondenceStore(pool, conversions);
   const adoptions = new SourceNativeWorkAdoptionStore(pool, proposals, env, account.verifier, access);
   const credits = new SourceAuthorCreditStore(faultPool, proposals, conversions, correspondences, env, account.verifier, access);
@@ -136,6 +143,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     sourceIntake: intake, recipeSourceConversions: new RecipeSourceConversionStore(pool, intake),
     sourceConversions: conversions, sourceGraph: graph, sourceProposals: proposals,
     sourceCorrespondences: correspondences, sourceAdoptions: adoptions, sourceAuthorCredits: credits,
+    sourceAuthorNames,
     sourceNativeChildren: nativeChildren,
     sourceProviderIdentity: new ProviderIdentityStore(pool),
     sourceFieldWithdrawals: fieldWithdrawals,
@@ -182,9 +190,10 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     occurrence: sourceChildOccurrence(proposal.observation, 'authors', sourceOrdinal),
     confirmedSourceKey: key, confirmedRoleKey: '/type/author_role',
     baseSupport: null, correspondence: null, confirmedUse: 'factual-reference-only' });
-  return { account, pool, accessPool, env, access, intake, conversions, graph, proposals,
+  return { account, pool, accessPool, env, access, intake, conversions, graph, proposals, adoptions,
     rightsStore, governance, ruleDigest,
-    credits, nativeChildren, principalId, otherPrincipal, actor,
+    credits, nativeChildren, principalId, otherPrincipal, actor, sourceAuthorNames,
+    setAuthorName: (key: string, name: string) => retainedAuthorNames.set(key, name),
     call, json, grant, propose, adoptWork, input, nativeFuseki, creditCommands, fieldCommands,
     failCertificate: () => { loseCertificate = true; }, loseGraph: () => { loseGraphResponse = true; },
     loseRetirementGraph: () => { loseRetirementResponse = true; },

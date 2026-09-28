@@ -49,7 +49,8 @@ export const creditItem = t.Object({ id: readId, role: t.Literal('author'),
   participantKind: t.Literal('external-reference'), provider: t.Literal('open-library'),
   key: t.String(), ordinal: t.Integer(), agent: t.Null(),
   displayName: t.Nullable(t.String({ minLength: 1, maxLength: 200 })), handle: t.Null(),
-  nameSource: t.Optional(authorNameProvenance) });
+  nameSource: t.Optional(authorNameProvenance),
+  confirmation: t.Optional(t.Literal('source-reported')) });
 export const classificationItem = t.Object({ sense: readId, concept: readId, name: readName,
   relevanceRevision: t.Nullable(readId),
   relevanceStatus: t.Union([t.Literal('unrecorded'), t.Literal('recorded'), t.Literal('stale'), t.Literal('withdrawn')]),
@@ -65,5 +66,5 @@ export const ratingRead = t.Object({ profile: t.Literal('work-rating-read-v1'), 
 
 /** Logical ceilings, not a claim about native Jena query-plan complexity. */
 export const WORK_READ_COST = { pageSize: 20, graphCalls: 160, graphBytes: 4 * 1024 * 1024,
-  queryBytes: 512 * 1024, deadlineMs: 10_000, rootRows: 128, attempts: 6,
+  queryBytes: 512 * 1024, deadlineMs: 10_000, rootRows: 128, creditProbeRows: 129, attempts: 6,
   retryDelayMs: 25, maximumRetryDelayMs: 200 } as const;

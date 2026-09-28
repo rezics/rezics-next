@@ -171,7 +171,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect(all.items.filter(item => item.target.work === first.work)).toHaveLength(1);
     expect(all.items.find(item => item.target.work === first.work)?.reasons).toEqual(expect.arrayContaining([
       { kind: 'realm-pick', realm: realm.realm, curator: author },
-      { kind: 'added-to-rezics', actor: author },
+      { kind: 'new-work', actor: author },
     ]));
     expect(all.items.find(item => item.target.work === first.work)?.authors).toEqual([
       expect.objectContaining({ agent: reader, displayName: 'Feed reader' }),
@@ -520,7 +520,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       const saved = await json<{ revisionId: string; sourcePosition: { dataEpoch: string } }>(await call('POST', '/v1/content-drafts', {
         profile: 'content-text-v1', resourceId: chapter.work, variantId: variant,
         language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-Hans' }, direction: 'ltr', expectedHead: null,
-        body: `Published chapter ${ordinal}`, actingSubject: author }, a.token), 201);
+        body: ordinal === 2 ? '# Chapter 1\nPublished chapter 2' : `Published chapter ${ordinal}`,
+        actingSubject: author }, a.token), 201);
       const exact = (await stack.content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
       if (exact?.status !== 'available') throw new Error('Missing chapter fixture');
       const published = await json<{ decision: string }>(await call('POST', '/v1/content-publications', {
@@ -536,12 +537,15 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       `/v1/compositions/${composition.structure.slice(-36)}/changes`, { profile: 'book-composition',
         expectedHead: composition.revision, actingSubject: author, operations: chapters.toReversed().map((target, index) => ({
           op: 'insert', parent: composition.structure, position: 'last', role: 'chapter', target,
-          label: { value: `Chapter ${index + 1}`, language: 'zh-Hans' } })) }, a.token));
+          label: { value: index === 0 ? 'Untitled chapter' : `Chapter ${index + 1}`,
+            language: 'zh-Hans' } })) }, a.token));
     await drain(); await refresh();
     const chapterCard = (await collect('sort=new&kinds=contribution')).find(item => item.card.kind === 'chapter')!;
-    expect(chapterCard).toMatchObject({ kind: 'contribution', target: { work: second.work, excerpt: 'Published chapter 2' },
+    expect(chapterCard).toMatchObject({ kind: 'contribution', target: { work: second.work,
+      excerpt: '# Chapter 1\nPublished chapter 2' },
       group: { count: 2, range: { kind: 'chapters', from: 1, to: 2 } },
-      card: { kind: 'chapter', occurrence: placements.occurrences[0], number: 1, title: 'Chapter 1', excerpt: 'Published chapter 2' },
+      card: { kind: 'chapter', occurrence: placements.occurrences[0], number: 1, title: 'Chapter 1',
+        excerpt: '# Chapter 1\nPublished chapter 2' },
       primaryAction: { kind: 'read-chapter', work: second.work, occurrence: placements.occurrences[0],
         href: `/w/${second.work.slice(-36)}/read/${placements.occurrences[0]!.slice(-36)}?language=zh-hans` } });
     expect(chapterCard.card).not.toHaveProperty('wordCount');
@@ -751,7 +755,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     [stack.env.lineage.dataEpoch, chapterCard.group.key]);
     const mixedBefore = stack.fuseki.queries;
     const mixed = await json<Page>(await call('GET', '/v1/feed?scope=all&sort=new&limit=20'));
-    expect(stack.fuseki.queries - mixedBefore).toBeLessThanOrEqual(160);
+    expect(stack.fuseki.queries - mixedBefore).toBeLessThanOrEqual(140);
     expect(mixed.items.length).toBeGreaterThan(0);
     expect(mixed.items.some(item => item.kind === 'review')).toBe(true);
     expect(mixed.items.some(item => item.card.kind === 'chapter')).toBe(true);

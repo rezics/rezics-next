@@ -94,13 +94,7 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         FILTER NOT EXISTS { ?draft a rv:ErasedRevision }
         BIND(EXISTS { ?id rv:predecessor ?previous } AS ?successor) }
       ${publicWork('?work', '?main')}
-      BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} {
-        ?authorCredit a rv:NativeAgentCredit ; rv:work ?work ; rv:agent ?actor ;
-          rv:creditRevision ?authorRevision ; schema:roleName "author" . }
-        GRAPH ${iri(GRAPHS.revisions)} { ?authorRevision a rv:NativeAgentCreditRevision ;
-          rv:component ?authorCredit ; rv:work ?work ; rv:agent ?actor ; schema:roleName "author" .
-          FILTER NOT EXISTS { ?authorRevision a rv:ErasedRevision } } } AS ?authored)
-      BIND(IF(?successor, "contribution", IF(?authored, "work", "added")) AS ?kind)
+      BIND(IF(?successor, "contribution", "work") AS ?kind)
       BIND(IF(?successor, ?contribution, ?work) AS ?target)
       OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:selection ?id ; rv:revision ?draft ; rv:searchBody ?body }
         BIND(SUBSTR(STR(?body),1,400) AS ?excerpt) }
@@ -192,6 +186,8 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
     return row[name]!.value;
   };
   if (new Set(rows.map(row => row.id?.value)).size !== rows.length) throw new WorkReadUnavailable('Feed source is ambiguous');
+  const sourceBound = await session.deps.sourceAdoptions?.boundWorks(rows.flatMap(row =>
+    row.kind?.value === 'work' && row.work ? [row.work.value] : [])) ?? new Set<string>();
   const mapped: FeedSource[] = [];
   for (const row of rows) {
     let actor = row.actor?.value;
@@ -211,7 +207,8 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
     }
     if (!actor) throw new WorkReadUnavailable('Feed actor unavailable');
     mapped.push({ id: required(row, 'id'), sequence: required(row, 'sequence'),
-    kind: required(row, 'kind') as FeedKind, target: required(row, 'target'), actor,
+    kind: required(row, 'kind') === 'work' && row.work && sourceBound.has(row.work.value)
+      ? 'added' : required(row, 'kind') as FeedKind, target: required(row, 'target'), actor,
     work: row.work?.value ?? null, realm: row.realm?.value ?? null, zone: row.zone?.value ?? null,
     language: row.language?.value ?? null, excerpt, title: row.title?.value ?? null,
     occurrence: row.occurrence?.value ?? null, contentTarget: row.contentTarget?.value ?? null, reply: row.reply?.value ?? null, contentRevision: row.contentRevision?.value ?? null, review: row.review?.value ?? null });

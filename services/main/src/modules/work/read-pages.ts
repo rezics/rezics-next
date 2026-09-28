@@ -1,7 +1,7 @@
 import type { Static } from 'typebox';
-import { readAuthorNames } from '../source/author-name-read.ts';
+import { readAuthorNames, sourceReportedCredits } from '../source/author-name-read.ts';
 import { GRAPHS, iri, lit } from './activate.ts';
-import { adoptionItem, creditItem, versionItem } from './read-contract.ts';
+import { adoptionItem, creditItem, versionItem, WORK_READ_COST } from './read-contract.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadUnavailable, type WorkReadSession } from './read-session.ts';
 import { fenceWorkBasis, readWorkBasis } from './read-header.ts';
 
@@ -18,7 +18,7 @@ export async function readWorkPage(session: WorkReadSession, work: string, kind:
   const limit = session.options.limit ?? 20;
   const binding = [kind, work, session.options.language ?? null, session.options.actingSubject ?? null, filter];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  const after = cursor ? `FILTER(STR(?id) > ${lit(cursor.after)})` : '';
+  const after = cursor && kind !== 'credits' ? `FILTER(STR(?id) > ${lit(cursor.after)})` : '';
   let relation: string;
   switch (kind) {
     case 'versions':
@@ -60,8 +60,12 @@ export async function readWorkPage(session: WorkReadSession, work: string, kind:
     ?epoch ?sequence ?selection ?key ?ordinal WHERE { { ${relation} } ${after}
     ${kind === 'versions' && filter.language ? `FILTER(LCASE(STR(?language)) = ${lit(filter.language.toLowerCase())})` : ''}
     ${kind === 'versions' && filter.kind ? `FILTER(?kind = ${lit(filter.kind)})` : ''}
-  } ORDER BY STR(?id) LIMIT ${limit + 1}`, limit + 1);
-  const page = rows.slice(0, limit);
+  } ORDER BY STR(?id) LIMIT ${kind === 'credits' ? WORK_READ_COST.creditProbeRows : limit + 1}`,
+  kind === 'credits' ? WORK_READ_COST.creditProbeRows : limit + 1);
+  if (kind === 'credits' && rows.length === WORK_READ_COST.creditProbeRows) {
+    throw new WorkReadUnavailable('Author credit inventory exceeds its bound');
+  }
+  const page = kind === 'credits' ? rows : rows.slice(0, limit);
   if (new Set(rows.map(row => row.id?.value)).size !== rows.length || page.some(row => !row.id)) {
     throw new WorkReadUnavailable('Page contains ambiguous identities');
   }
@@ -87,6 +91,17 @@ export async function readWorkPage(session: WorkReadSession, work: string, kind:
       }
     }
   });
+  if (kind === 'credits') {
+    const confirmed = items as Credit[];
+    const reported = (await sourceReportedCredits(session, [work], 128)).get(work) ?? [];
+    const confirmedKeys = new Set(confirmed.map(item => item.key));
+    const all = [...confirmed, ...reported.filter(item => !confirmedKeys.has(item.key))]
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const visible = all.filter(item => !cursor || item.id > cursor.after).slice(0, limit + 1);
+    await fenceWorkBasis(session, basis);
+    return pageResult(session, visible.slice(0, limit), visible.length > limit
+      ? encodeReadCursor(binding, session.position, visible[limit - 1]!.id) : null);
+  }
   await fenceWorkBasis(session, basis);
   return pageResult(session, items, next);
 }

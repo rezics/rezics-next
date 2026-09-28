@@ -1,5 +1,6 @@
 import { namedDiscoveryCredits } from '../discovery/credits.ts';
 import { DISCOVERY_COST, type DiscoveryCredit, type ProjectedCredit } from '../discovery/contract.ts';
+import { readAuthorNames, sourceReportedCredits } from '../source/author-name-read.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { metadataComponent, METADATA_PROFILE } from '../work/metadata-schema.ts';
 import { parsedMetadataState, selectedMetadata } from '../work/metadata-read.ts';
@@ -24,7 +25,20 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
       OPTIONAL { ?work rv:descriptiveMetadataHead ?head }
       OPTIONAL { ?work rv:mainVersion ?main . ?main rv:selectionHead ?selection } }
   } LIMIT ${ids.length + 1}`;
-  const pointers = await session.query(pointersQuery, ids.length + 1);
+  const components = ids.map(work => [work, metadataComponent(work,
+    { kind: 'header', originalTitle: null, localized: [] })] as const);
+  const pointers = await session.query(`SELECT ?work ?head ?main ?selection ?state WHERE {
+    VALUES (?work ?component) { ${components.map(([work, component]) => `(${iri(work)} ${iri(component)})`).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork .
+      OPTIONAL { ?work rv:descriptiveMetadataHead ?head }
+      OPTIONAL { ?work rv:mainVersion ?main . ?main rv:selectionHead ?selection } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:descriptiveMetadataHead ?head .
+        ?component a rv:WorkMetadataComponent ; rv:metadataKind "header" ;
+          rv:work ?work ; rv:metadataHead ?head }
+      GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:WorkMetadataRevision ; rv:component ?component ;
+        rv:modelRevision ${iri(METADATA_PROFILE)} ; rv:shapeRevision ${iri(METADATA_PROFILE)} ;
+        rv:metadataState ?state } }
+  } LIMIT ${ids.length + 1}`, ids.length + 1);
   const pointerSignature = (rows: typeof pointers) => {
     if (rows.length !== ids.length || new Set(rows.map(row => row.work?.value)).size !== ids.length
       || rows.some(row => !row.work || !ids.includes(row.work.value) || row.selection && !row.main)) {
@@ -34,19 +48,8 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
       row.main?.value ?? null, row.selection?.value ?? null]).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
   };
   const originalPointers = pointerSignature(pointers);
-  const components = ids.map(work => [work, metadataComponent(work,
-    { kind: 'header', originalTitle: null, localized: [] })] as const);
-  const metadata = await session.query(`SELECT ?work ?state WHERE {
-    VALUES (?work ?component) { ${components.map(([work, component]) => `(${iri(work)} ${iri(component)})`).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} { ?work rv:descriptiveMetadataHead ?head .
-      ?component a rv:WorkMetadataComponent ; rv:metadataKind "header" ;
-        rv:work ?work ; rv:metadataHead ?head }
-    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:WorkMetadataRevision ; rv:component ?component ;
-      rv:modelRevision ${iri(METADATA_PROFILE)} ; rv:shapeRevision ${iri(METADATA_PROFILE)} ;
-      rv:metadataState ?state }
-  } LIMIT ${ids.length + 1}`, ids.length + 1);
-  const states = new Map(metadata.map(row => [row.work?.value, row.state?.value]));
-  if (states.size !== metadata.length || metadata.some(row => !row.work || !row.state || !ids.includes(row.work.value))
+  const states = new Map(pointers.filter(row => row.state).map(row => [row.work?.value, row.state!.value]));
+  if (states.size !== pointers.filter(row => row.state).length
     || pointers.some(row => !!row.head !== states.has(row.work!.value))) {
     throw new WorkReadUnavailable('Feed metadata heads are incomplete');
   }
@@ -89,6 +92,9 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
         agent: null, displayName: null, handle: null });
   }
   const names = await namedDiscoveryCredits(session, [...credits.values()].flat(), ids.length);
+  const reported = await sourceReportedCredits(session, ids);
+  const sourceNames = await readAuthorNames(session, [...credits.values()].flat().flatMap(credit =>
+    credit.key !== null ? [credit.key] : []));
   const excerpts = new Map<string, { excerpt: string | null; language: string | null }>();
   for (const work of ids) {
     const raw = states.get(work);
@@ -127,8 +133,14 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
     }
   }
   for (const work of ids) {
-    const authors = (credits.get(work) ?? []).flatMap(credit => {
-      if (!credit.agent) return [credit as DiscoveryCredit];
+    const confirmed = credits.get(work) ?? [];
+    const confirmedKeys = new Set(confirmed.flatMap(credit => credit.key !== null ? [credit.key] : []));
+    const merged = [...confirmed, ...(reported.get(work) ?? []).filter(credit =>
+      !confirmedKeys.has(credit.key))]
+      .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
+      .slice(0, DISCOVERY_COST.primaryCredits);
+    const authors = merged.flatMap(credit => {
+      if (!credit.agent) return [{ ...credit, ...sourceNames.get(credit.key!) } as DiscoveryCredit];
       const name = names.get(credit.agent);
       return name ? [{ ...credit, ...name } as DiscoveryCredit] : [];
     });

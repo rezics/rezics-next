@@ -14,6 +14,8 @@ import type { SourceNativeWorkProposalStore } from './native-work-proposal.ts';
 export class SourceAdoptionInvalid extends Error {}
 export class SourceAdoptionConflict extends Error {}
 export class SourceAdoptionUnavailable extends Error {}
+export const SOURCE_ADOPTION_READ_COST = { authorWorks: 64, authorRefsPerWork: 128,
+  feedWorks: 20, ownerQueriesPerBatch: 1 } as const;
 export class SourceSupportConflict extends SourceAdoptionConflict {
   constructor(readonly code: 'source_support_changed' | 'source_support_pending'
     | 'source_support_withdrawn' | 'source_withdrawal_intent_conflict') { super(code); }
@@ -173,6 +175,10 @@ function withdrawalResult(row: WithdrawalRow, adoption: NativeWorkSourceAdoption
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ACTOR = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const url = (id: string): string => `https://rezics.com/id/${id}`;
+const reportedAuthorId = (binding: string, ordinal: number) => {
+  const bytes = hash(`source-reported-author:${binding}:${ordinal}`);
+  return url(`${bytes.slice(0, 8)}-${bytes.slice(8, 12)}-5${bytes.slice(13, 16)}-8${bytes.slice(17, 20)}-${bytes.slice(20, 32)}`);
+};
 
 export class SourceNativeWorkAdoptionStore {
   constructor(private readonly pool: Pool, private readonly proposals: SourceNativeWorkProposalStore,
@@ -180,6 +186,58 @@ export class SourceNativeWorkAdoptionStore {
     private readonly account: Pick<AccountAssertionVerifier, 'verify'>,
     private readonly access: Pick<AccessAdmissionRegistry,
       'register' | 'claim' | 'recordGraphOutcome' | 'issueTitleAdmission'>) {}
+
+  /** The adoption records only a title. These retained author references are
+   * source reported until the separate author-credit command confirms them. */
+  async authorReferences(works: readonly string[]): Promise<Map<string, Array<{ id: string;
+    key: string; ordinal: number }>>> {
+    if (works.length > SOURCE_ADOPTION_READ_COST.authorWorks || works.some(work => !ACTOR.test(work))) {
+      throw new SourceAdoptionInvalid('invalid source author batch');
+    }
+    const result = new Map<string, Array<{ id: string; key: string; ordinal: number }>>();
+    if (!works.length) return result;
+    const rows = (await this.pool.query<{ work: string; binding: string; projection: {
+      authorRefs?: Array<{ sourceKey: string; roleKey: string | null }> | null } }>(`
+      SELECT b.work, b.id AS binding, c.projection
+      FROM source.native_work_binding b
+      JOIN source.native_work_proposal p ON p.id = b.proposal_id
+      JOIN source.conversion c ON c.id = p.conversion_id
+      WHERE b.work = ANY($1::text[])
+        AND NOT EXISTS (SELECT 1 FROM source.native_work_support_withdrawal w WHERE w.binding_id = b.id)
+      LIMIT ${SOURCE_ADOPTION_READ_COST.authorWorks + 1}`, [[...new Set(works)]])).rows;
+    if (rows.length > SOURCE_ADOPTION_READ_COST.authorWorks
+      || new Set(rows.map(row => row.work)).size !== rows.length) {
+      throw new SourceAdoptionUnavailable('source author binding is ambiguous');
+    }
+    for (const row of rows) {
+      const refs = row.projection?.authorRefs;
+      if (refs === null || refs === undefined) continue;
+      if (!Array.isArray(refs) || refs.length > SOURCE_ADOPTION_READ_COST.authorRefsPerWork || refs.some(ref =>
+        !/^\/authors\/OL[1-9][0-9]{0,11}A$/.test(ref?.sourceKey ?? ''))) {
+        throw new SourceAdoptionUnavailable('retained source authors are invalid');
+      }
+      result.set(row.work, refs.map((ref, ordinal) => ({
+        id: reportedAuthorId(row.binding, ordinal),
+        key: ref.sourceKey, ordinal })));
+    }
+    return result;
+  }
+
+  /** Source binding, rather than a missing native credit, identifies an import. */
+  async boundWorks(works: readonly string[]): Promise<Set<string>> {
+    if (works.length > SOURCE_ADOPTION_READ_COST.feedWorks || works.some(work => !ACTOR.test(work))) {
+      throw new SourceAdoptionInvalid('invalid source binding batch');
+    }
+    if (!works.length) return new Set();
+    const rows = (await this.pool.query<{ work: string }>(`SELECT work FROM source.native_work_binding
+      WHERE work = ANY($1::text[]) LIMIT ${SOURCE_ADOPTION_READ_COST.feedWorks + 1}`,
+    [[...new Set(works)]])).rows;
+    if (rows.length > SOURCE_ADOPTION_READ_COST.feedWorks
+      || new Set(rows.map(row => row.work)).size !== rows.length) {
+      throw new SourceAdoptionUnavailable('source bindings are ambiguous');
+    }
+    return new Set(rows.map(row => row.work));
+  }
 
   private async verifiedBinding(row: BindingRow, intent: IntentRow): Promise<void> {
     const receipt = await readWorkTerminalReceipt(this.env.fuseki, row.admission_id);
