@@ -134,8 +134,12 @@ cursors and graph/text semantics.
 
 Querying is spread over separate shapes today. Each public search profile in
 [the search route](../../services/main/src/routes/search.ts) fixes one
-combination of type, Concept (still named `sense`), author, language, Realm and
-rating. The [grouped Statement read](../../services/main/src/modules/work/search-grouped.ts)
+combination of type, Concept (still named `sense`), language, rating and the
+selected text's author. That `author` is who wrote the published Contribution,
+the `contributor` Facet, not the Work's author credit. A Realm there is the
+Query's Context, which selects the Realm's publication and acceptance; it does
+not limit results to the Realm's population. The
+[grouped Statement read](../../services/main/src/modules/work/search-grouped.ts)
 has generic Conditions with role binding, and the
 [graph query schema](../../services/main/src/modules/graph-query/schema.ts) reads
 relations. The feed and onboarding use a fixed interest enum
@@ -143,7 +147,11 @@ relations. The feed and onboarding use a fixed interest enum
 matches Concept labels as strings, which this contract rejects. The web keeps
 its own tables of type names and cover forms.
 
-The direction: Facet definitions in `model/definitions`, generated like
-profiles; one Query input that Main compiles onto admitted, bounded templates,
-with today's profiles as the first templates; Saved Filters for groupings; and
+Facet definitions now live in `model/definitions/facet-*.ts`, and Main serves
+them at `GET /v1/facets`. A [mapping test](../../services/main/tests/facet-profile-mapping.test.ts)
+writes each Work search profile as a Query over them. The grouped read's
+predicate Conditions use the `statement` Facet with an exact relation
+DefinitionRef until named Facets, such as gender, are admitted. Still to come:
+one Query input that Main compiles onto admitted, bounded templates, with
+today's profiles as the first templates; Saved Filters for groupings; and
 labels read from the Resources themselves.
