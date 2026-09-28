@@ -4,7 +4,7 @@ import { people, seedKey, works } from './plan.ts';
 import { readingLives } from './reading-lives-plan.ts';
 import { reviews } from './reviews-plan.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
-import type { SeedState } from './state.ts';
+import { afterCatchUp, type SeedState } from './state.ts';
 
 interface Session { id: string; accountId: string; token: string; actingSubject: string }
 interface Work { work: string; mainVersion: string }
@@ -68,15 +68,17 @@ export async function seedGlobalRatings(api: SeedApi, owner: Session, readers: r
     for (const [id, value] of planned) {
       const work = targets.get(id);
       if (!work) throw new Error(`Rating target ${id} is unavailable`);
-      const head = await currentRating(api, reader, work.work, context);
       if (value !== null) count++;
-      if ((head?.value ?? null) === value) continue;
-      await api.post('/v1/global-rating-observations', {
-        profile: 'global-rating-standing-observation-v1', context, work: work.work,
-        mainVersion: work.mainVersion, value, expectedRevisionHead: head?.revision ?? null,
-        actingSubject: reader.actingSubject,
-      }, reader.token, seedKey('global-rating', `${reader.id}:${id}${head ? `:${head.revision.slice(-12)}` : ''}`));
-      changed++;
+      changed += await afterCatchUp(async () => {
+        const head = await currentRating(api, reader, work.work, context);
+        if ((head?.value ?? null) === value) return 0;
+        await api.post('/v1/global-rating-observations', {
+          profile: 'global-rating-standing-observation-v1', context, work: work.work,
+          mainVersion: work.mainVersion, value, expectedRevisionHead: head?.revision ?? null,
+          actingSubject: reader.actingSubject,
+        }, reader.token, seedKey('global-rating', `${reader.id}:${id}${head ? `:${head.revision.slice(-12)}` : ''}`));
+        return 1;
+      });
     }
   }
   return { context, count, changed };

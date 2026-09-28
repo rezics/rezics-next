@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { SeedApi, SeedEndpoints } from './api.ts';
+import { SeedApiError, type SeedApi, type SeedEndpoints } from './api.ts';
 import type { LocalOperatorInput, operatorSeedSession } from './operator.ts';
 
 export interface Session { id: string; accountId: string; cookie: string; token: string;
@@ -54,6 +54,21 @@ export async function refreshSeedTokens(state: SeedState): Promise<void> {
   if (state.operatorSession && Date.now() - state.operatorSession.issuedAt > 120_000) {
     state.operatorSession.token = await state.operatorSession.api.token(state.operatorSession.cookie);
     state.operatorSession.issuedAt = Date.now();
+  }
+}
+
+/**
+ * On a fresh stack Main answers a just-written Work's reads with 404 and some
+ * owner commands with 503 until the relay and projections catch up. Try again
+ * with backoff for up to about half a minute before calling it a finding.
+ */
+export async function afterCatchUp<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try { return await operation(); }
+    catch (error) {
+      if (!(error instanceof SeedApiError) || ![404, 503].includes(error.status) || attempt >= 6) throw error;
+      await new Promise(resolve => setTimeout(resolve, Math.min(8000, 500 * 2 ** attempt)));
+    }
   }
 }
 

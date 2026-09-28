@@ -2,7 +2,7 @@ import { SeedApiError } from './api.ts';
 import { person, publicWork } from './community-step.ts';
 import { seedKey } from './plan.ts';
 import { reviews } from './reviews-plan.ts';
-import { refreshSeedTokens, type SeedState } from './state.ts';
+import { afterCatchUp, refreshSeedTokens, type SeedState } from './state.ts';
 
 // Reviews on the global rating question, written after each reviewer's rating
 // (the ratings step) and shelf dates (the reading-lives step), which Main copies
@@ -24,7 +24,7 @@ export async function seedReviews(state: SeedState) {
   let changed = 0;
   for (const review of reviews) {
     await refreshSeedTokens(state);
-    await state.optional(`Review ${review.reader} on ${review.work}`, async () => {
+    await state.optional(`Review ${review.reader} on ${review.work}`, () => afterCatchUp(async () => {
       const reader = person(state, review.reader);
       const work = publicWork(state, review.work)?.work.work ?? state.created.get(review.work)?.work;
       if (!work) throw new Error(`Review target ${review.work} is unavailable`);
@@ -42,7 +42,7 @@ export async function seedReviews(state: SeedState) {
         changed++;
       }
       written.set(`${review.reader}:${review.work}`, id!);
-    });
+    }));
   }
   let helpful = 0;
   for (const review of reviews) {

@@ -1,7 +1,7 @@
 import { person } from './community-step.ts';
 import { seedKey } from './plan.ts';
 import { readingLives } from './reading-lives-plan.ts';
-import { refreshSeedTokens, type SeedState } from './state.ts';
+import { afterCatchUp, refreshSeedTokens, type SeedState } from './state.ts';
 
 // Public libraries: each person opens their library and shelves what they
 // read, with its dates, as the reader-status command records it. Each entry is
@@ -31,15 +31,17 @@ export async function seedReadingLives(state: SeedState) {
         const work = works.get(entry.work);
         if (!work) throw new Error(`Shelf Work ${entry.work} is unavailable`);
         entries++;
-        const current = (await state.api.get<{ status: Status }>(`/v1/works/${short(work)}/reader-state?actingSubject=${
-          encodeURIComponent(reader.actingSubject)}`, reader.token)).status;
-        if (current.status === entry.status && current.startedOn === entry.startedOn
-          && current.finishedOn === entry.finishedOn) continue;
-        await state.api.put(`/v1/works/${short(work)}/reader-status`, { actingSubject: reader.actingSubject,
-          expectedVersion: current.version, status: entry.status, startedOn: entry.startedOn,
-          finishedOn: entry.finishedOn }, reader.token,
-        seedKey('reading-life', `${life.person}:${entry.work}:${current.version}`));
-        shelved++;
+        shelved += await afterCatchUp(async () => {
+          const current = (await state.api.get<{ status: Status }>(`/v1/works/${short(work)}/reader-state?actingSubject=${
+            encodeURIComponent(reader.actingSubject)}`, reader.token)).status;
+          if (current.status === entry.status && current.startedOn === entry.startedOn
+            && current.finishedOn === entry.finishedOn) return 0;
+          await state.api.put(`/v1/works/${short(work)}/reader-status`, { actingSubject: reader.actingSubject,
+            expectedVersion: current.version, status: entry.status, startedOn: entry.startedOn,
+            finishedOn: entry.finishedOn }, reader.token,
+          seedKey('reading-life', `${life.person}:${entry.work}:${current.version}`));
+          return 1;
+        });
       }
     });
   }

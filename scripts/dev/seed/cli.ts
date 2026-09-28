@@ -148,10 +148,16 @@ async function run(options: Options): Promise<boolean> {
     publishedCount: 0, selectedCount: 0, publicForRealm: new Map(), publicWorks: new Map(),
     ratingContext: null, communityRealms: new Map(),
     commentCount: 0, replyCount: 0, reviewCount: 0, profileCreditCount: 0, profileFollowCount: 0 };
+  const timings: string[] = [];
+  const started = performance.now();
   for (const step of steps) {
+    const begun = performance.now();
     await refreshSeedTokens(state);
     await step(state);
+    timings.push(`  ${((performance.now() - begun) / 1000).toFixed(1).padStart(6)} s  ${step.name}`);
   }
+  console.log(`Step timings (${((performance.now() - started) / 1000).toFixed(1)} s in all):`);
+  for (const line of timings) console.log(line);
   return findings.size === 0;
 }
 
