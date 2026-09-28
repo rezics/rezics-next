@@ -11,7 +11,7 @@ import { DATASET, GRAPHS, RV, iri, lit } from '../modules/work/activate.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { mediaError, mediaRoutes } from './media.ts';
-import { resourceSummaryBatch } from '../modules/search/summary-contract.ts';
+import { resourceSummaryBatch } from '../modules/media/summary-contract.ts';
 import { problem } from './problems.ts';
 
 const ID = 'https://rezics.com/id/';
