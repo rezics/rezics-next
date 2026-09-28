@@ -14,7 +14,6 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../service
 import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
-import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
 import { RealmReplyThreadStore } from '../../../services/main/src/modules/realm-reply/thread-store.ts';
@@ -144,7 +143,7 @@ export async function startHomeStack(label: string) {
     realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env),
     realmReplyThreads: new RealmReplyThreadStore(stack.contentPool, stack.accessPool),
     reviews: new ReaderReviews(stack.accessPool), homePersonal: new HomePersonalStore(stack.accessPool),
-    personPreferences: new PersonPreferencesStore(stack.accessPool), savedFilters: new SavedFilterStore(stack.accessPool),
+    savedFilters: new SavedFilterStore(stack.accessPool),
     libraryStatus: new ReaderLibraryStatusStore(stack.contentPool), progress: new StructureProgressStore(stack.contentPool),
     content: stack.content, contentAuthoring: stack.content, media: stack.media, structureObjects,
     profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool), agentHandles: new AgentVanityHandles(stack.accessPool),

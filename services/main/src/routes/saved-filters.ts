@@ -60,7 +60,7 @@ export function savedFilterRoutes(work: MainWorkDependencies) {
             const summary = names.find(item => item.reference === concept);
             return summary?.status === 'available' && summary.type === 'concept' ? summary.name : null;
           };
-          const item = (row: SavedFilterRow) => ({ id: row.id, name: row.name,
+          const item = (row: SavedFilterRow) => ({ id: row.id, name: row.name, profile: row.profile,
             concept: row.concept ? { id: row.concept, name: label(row.concept) } : null,
             filter: row.document, facets: row.facets, context: row.context, position: row.pin_position,
             home: homeAvailable(row.document as FilterDocument) ? 'available' as const : 'unsupported' as const,

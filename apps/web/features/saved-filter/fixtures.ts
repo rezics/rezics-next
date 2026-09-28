@@ -23,10 +23,11 @@ export const topics = {
 type Topic = (typeof topics)[keyof typeof topics];
 
 const conceptFilter = (topic: Topic, id: number, position: number | null): SavedFilter => ({ id: uuid(id), name: null,
-  concept: { id: topic.id, name: topic.name }, filter: { all: [{ facet: conceptFacet, any: [topic.id] }] },
+  profile: 'filter-document-v2', concept: { id: topic.id, name: topic.name }, filter: { all: [{ facet: conceptFacet, any: [topic.id] }] },
   facets: [conceptFacet], context: 'global', position, home: 'available', revision: uuid(100 + id) });
 
-export const englishJapanese: SavedFilter = { id: uuid(3), name: 'English & Japanese', concept: null,
+export const englishJapanese: SavedFilter = { id: uuid(3), name: 'English & Japanese', profile: 'filter-document-v2',
+  concept: null,
   filter: { all: [{ facet: languageFacet, any: ['en', 'ja'] }] }, facets: [languageFacet], context: 'global',
   position: 1, home: 'available', revision: uuid(103) };
 
@@ -74,7 +75,8 @@ export function memorySavedFilters(initial: SavedFilters = readerFilters, option
       if (refused()) return refused()!;
       if (input.pinned && pinnedCount() >= MAX_PINNED) return { ok: false, failure: 'full' };
       const id = uuid(next++);
-      items.push({ id, name: input.name, concept: null, filter: input.filter as FilterDocument, facets: [languageFacet],
+      items.push({ id, name: input.name, profile: 'filter-document-v2', concept: null,
+        filter: input.filter as FilterDocument, facets: [languageFacet],
         context: 'global', position: input.pinned ? pinnedCount() : null, home: 'available', revision: uuid(next++) });
       bump();
       return receipt('created', id);

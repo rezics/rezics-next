@@ -78,6 +78,7 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
     const unpinnedBooks = await json<Receipt>(await create({ name: 'Books', filter: books, pinned: false }), 201);
     let page = await list();
     expect(byId(page, created.id!)).toMatchObject({ name: 'English and Japanese', position: 0, home: 'available',
+      profile: 'filter-document-v2',
       concept: null, facets: [language], filter: { all: [{ facet: language, any: ['en', 'ja'] }] } });
     expect(byId(page, unpinnedBooks.id!)).toMatchObject({ position: null, home: 'unsupported' });
 

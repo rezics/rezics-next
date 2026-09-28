@@ -1,5 +1,6 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
+import type { ResourceQuery } from '../../../../../model/definitions/filter-document-v2.ts';
 import { readId, readName, readUuid } from '../work/read-contract.ts';
 
 /**
@@ -14,6 +15,8 @@ import { readId, readName, readUuid } from '../work/read-contract.ts';
 export const SAVED_FILTER_COST = { named: 50, pinned: 8, listed: 100, documentBytes: 8192 } as const;
 
 const closed = { additionalProperties: false } as const;
+/** Saved Filters persist as filter-document-v2 Filters; the Filter group itself is unchanged from v1. */
+export const SAVED_FILTER_PROFILE = 'filter-document-v2' as const satisfies ResourceQuery['profile'];
 /** A reader's own name for a filter: trimmed, printable, 1–80 characters. */
 export const savedFilterName = t.String({ minLength: 1, maxLength: 80, pattern: '^[^\\u0000-\\u001f\\u007f]+$' });
 
@@ -22,7 +25,9 @@ export const savedFilterItem = t.Object({ id: readUuid,
   name: t.Nullable(t.String()),
   /** The followed Concept this filter is the one-Condition Filter of, and its label in the requested language. */
   concept: t.Nullable(t.Object({ id: readId, name: t.Nullable(readName) })),
-  /** The FilterDocument with exact Facet DefinitionRefs (model/definitions/filter-document-v1.ts). */
+  /** The Query definition revision the Filter was admitted under (model/definitions/filter-document-v2.ts). */
+  profile: t.Literal(SAVED_FILTER_PROFILE),
+  /** The Filter with exact Facet DefinitionRefs, as that revision's `filter` field holds it. */
   filter: t.Unknown(), facets: t.Array(t.String(), { maxItems: 32 }), context: t.Literal('global'),
   /** Home tab position after Following and All; null when not pinned. */
   position: t.Nullable(t.Integer({ minimum: 0, maximum: SAVED_FILTER_COST.pinned - 1 })),

@@ -17,6 +17,9 @@ CREATE TABLE access.saved_filter (
   -- Null only for a followed Concept's filter, which reads as the Concept's own label.
   name text CHECK (name IS NULL OR (length(name) BETWEEN 1 AND 80 AND name = btrim(name)
     AND name !~ '[[:cntrl:]]')),
+  -- The Query definition revision the Filter was admitted under (model/definitions); a new revision
+  -- widens this CHECK in a later migration rather than rereading stored filters.
+  profile text NOT NULL DEFAULT 'filter-document-v2' CHECK (profile = 'filter-document-v2'),
   document jsonb NOT NULL CHECK (jsonb_typeof(document) = 'object' AND octet_length(document::text) <= 8192),
   facets text[] NOT NULL CHECK (cardinality(facets) BETWEEN 1 AND 32),
   -- Saved Filters read the Global Context until Realm Context revisions are retained with them.

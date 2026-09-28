@@ -142,16 +142,23 @@ not limit results to the Realm's population. The
 [grouped Statement read](../../services/main/src/modules/work/search-grouped.ts)
 has generic Conditions with role binding, and the
 [graph query schema](../../services/main/src/modules/graph-query/schema.ts) reads
-relations. The feed and onboarding use a fixed interest enum
+relations. The feed's legacy `interests` parameter still uses a fixed enum
 ([Work kinds](../../services/main/src/modules/work/work-kinds.ts)) that also
-matches Concept labels as strings, which this contract rejects. The web keeps
-its own tables of type names and cover forms.
+matches Concept labels as strings, which this contract rejects; onboarding
+offers Concepts instead. The web keeps its own tables of type names and cover
+forms, and onboarding groups Concepts under them, since Main serves no type
+labels yet.
 
 Facet definitions now live in `model/definitions/facet-*.ts`, and Main serves
 them at `GET /v1/facets`. A [mapping test](../../services/main/tests/facet-profile-mapping.test.ts)
 writes each Work search profile as a Query over them. The grouped read's
 predicate Conditions use the `statement` Facet with an exact relation
-DefinitionRef until named Facets, such as gender, are admitted. Still to come:
-one Query input that Main compiles onto admitted, bounded templates, with
-today's profiles as the first templates; Saved Filters for groupings; and
-labels read from the Resources themselves.
+DefinitionRef until named Facets, such as gender, are admitted. Readers' Saved
+Filters exist for Home tabs ([owner](../../services/main/src/modules/saved-filter/store.ts)):
+a followed Concept's filter is created with its follow, and a pinned filter
+reads Home's feed through a feed template that refuses shapes it cannot show.
+That feed checks two candidates a page for a Concept, so a Concept index for
+the feed remains. Still to come: one Query input that Main compiles onto
+admitted, bounded templates, with today's profiles as the first templates;
+Saved Filters for groupings such as Zone scopes; and labels read from the
+Resources themselves.

@@ -7,7 +7,7 @@ import { agentPattern, controlRead, controlTransaction, ControlConflict, Control
 import { followPrincipal } from '../follows/authority.ts';
 import { commandKey } from '../follows/store.ts';
 import { admitSavedFilter } from './admit.ts';
-import { SAVED_FILTER_COST, type SavedFilterCreate, type SavedFilterDelete, type SavedFilterOrder,
+import { SAVED_FILTER_COST, SAVED_FILTER_PROFILE, type SavedFilterCreate, type SavedFilterDelete, type SavedFilterOrder,
   type SavedFilterReceipt, type SavedFilterUpdate } from './contract.ts';
 import { homeFeedConditions } from './feed.ts';
 
@@ -19,10 +19,11 @@ export class SavedFilterFollowed extends ControlConflict {}
 export class SavedFilterTabsFull extends ControlConflict {}
 
 export interface SavedFilterRow {
-  id: string; name: string | null; document: FilterDocument; facets: string[]; context: 'global';
+  id: string; name: string | null; profile: typeof SAVED_FILTER_PROFILE; document: FilterDocument; facets: string[];
+  context: 'global';
   concept: string | null; pin_position: number | null; revision: string;
 }
-const columns = 'id, name, document, facets, context, concept, pin_position, revision';
+const columns = 'id, name, profile, document, facets, context, concept, pin_position, revision';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
@@ -83,9 +84,9 @@ export class SavedFilterStore {
       if (inventory.named_count >= SAVED_FILTER_COST.named) throw new ControlInvalid('Saved Filter limit reached');
       const position = input.pinned ? await this.freeTab(client, owner) : null;
       const id = randomUUID(), revision = randomUUID();
-      await client.query(`INSERT INTO access.saved_filter (id, principal_id, name, document, facets, context,
-        concept, pin_position, revision) VALUES ($1,$2,$3,$4,$5,'global',NULL,$6,$7)`,
-      [id, owner, input.name, admitted.document, admitted.facets, position, revision]);
+      await client.query(`INSERT INTO access.saved_filter (id, principal_id, name, profile, document, facets,
+        context, concept, pin_position, revision) VALUES ($1,$2,$3,$8,$4,$5,'global',NULL,$6,$7)`,
+      [id, owner, input.name, admitted.document, admitted.facets, position, revision, SAVED_FILTER_PROFILE]);
       await client.query(`UPDATE access.saved_filter_inventory SET named_count = named_count + 1
         WHERE principal_id = $1`, [owner]);
       return { action: 'created' as const, id, filterRevision: revision };
