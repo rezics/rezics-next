@@ -141,9 +141,17 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
       }).toPass({ timeout: 90_000 });
     }
     // A chapter moves from its handle's menu (the keyboard's way) as well as by dragging the handle.
+    /** Opens a control's menu; a press before the page hydrates opens nothing, so it is pressed again. */
+    const menu = async (button: string, item: string) => {
+      await expect(async () => {
+        await page.keyboard.press('Escape');
+        await page.getByRole('button', { name: button, exact: true }).click();
+        await expect(page.getByRole('menuitem', { name: item })).toBeVisible({ timeout: 3_000 });
+      }).toPass({ timeout: 60_000 });
+      await page.getByRole('menuitem', { name: item }).click();
+    };
     const move = async (chapter: string, how: string) => {
-      await page.getByRole('button', { name: `Move “${chapter}”`, exact: true }).click();
-      await page.getByRole('menuitem', { name: how }).click();
+      await menu(`Move “${chapter}”`, how);
       await expect(page.getByRole('status').filter({ hasText: `Moved “${chapter}”` })).toBeAttached({ timeout: 30_000 });
     };
     await move('第三章 最后一班车', 'Move “第三章 最后一班车” up');
@@ -181,6 +189,8 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     const other = await context.newPage();
     await other.goto(page.url());
     await expect(other.getByRole('textbox', { name: 'Chapter text' })).toHaveValue(/没有地址的信/);
+    // Typing before the editor hydrates would land in the server-rendered field and never save.
+    await other.waitForLoadState('networkidle');
     await append(other, '\n另一个标签页写下的一段。');
     await expect(saveState(other)).toHaveText(/^Saved · /, { timeout: 30_000 });
     await other.close();
@@ -213,8 +223,7 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
       await expect(chapters.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible({ timeout: 30_000 });
     };
     await volume('第一卷 雨夜');
-    await page.getByRole('button', { name: 'Move “第一章 雨夜”', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Move to' }).click();
+    await menu('Move “第一章 雨夜”', 'Move to');
     await page.getByRole('menuitem', { name: '第一卷 雨夜' }).click();
     await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('1 chapter', { timeout: 30_000 });
     // A pointer drags the grip beside the Move button.
