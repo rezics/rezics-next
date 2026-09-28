@@ -78,13 +78,10 @@ export function accountAuthOptions(config: AccountConfig) {
           .catch(() => console.error('Account email intent unavailable'));
       },
     },
-    user: { additionalFields: { locale: localeField }, changeEmail: { enabled: true,
-      sendChangeEmailConfirmation: async ({ user, url }: { user: EmailUser; url: string }, request?: Request) => {
-        if (!config.email) throw new Error('Account email delivery is not configured');
-        await config.email.enqueue({ userId: user.id, to: user.email, url: markEmailChangeStep(url, 'requested'),
-          purpose: 'change-email', locale: emailLocale(user, request) });
-      },
-    }, deleteUser: { enabled: !!config.accessDeletionFence,
+    // emailChangeApi owns the durable two-mailbox flow. Provider change tokens
+    // carry mutable email addresses and cannot be revoked with account recovery.
+    user: { additionalFields: { locale: localeField }, changeEmail: { enabled: false },
+      deleteUser: { enabled: !!config.accessDeletionFence,
       beforeDelete: async (user: { id: string }) => {
         if (await operatorRole(config.pool, user.id)) {
           throw new APIError('CONFLICT', { message: 'transfer operator responsibility before deletion' });
@@ -132,7 +129,7 @@ export function accountAuthOptions(config: AccountConfig) {
           if (!verification.authenticationInfo.userVerified) {
             throw new APIError('FORBIDDEN', { code: 'USER_VERIFICATION_REQUIRED', message: 'Verify on your device' });
           }
-          await afterPasskeyAssertion(config.pool, clientData.id);
+          await afterPasskeyAssertion(config.pool, clientData.id, verification.authenticationInfo.newCounter);
         } },
       }),
       jwt(signingKeyOptions(config.pool)),

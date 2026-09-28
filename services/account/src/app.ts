@@ -16,6 +16,7 @@ import { connectedAppsApi } from './connected-apps.ts';
 import { adminApi } from './admin.ts';
 import { accountSettingsApi } from './account-settings.ts';
 import { displayPreferencesApi } from './display-preferences.ts';
+import { emailChangeApi } from './email-change.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
@@ -231,6 +232,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     })
     .use(consentApi(auth, pool))
     .use(methodsApi(auth, pool))
+    .use(emailChangeApi(auth, pool))
     .use(securityActivityApi(auth, pool))
     .use(connectedAppsApi(auth, pool))
     .use(adminApi(auth, pool))

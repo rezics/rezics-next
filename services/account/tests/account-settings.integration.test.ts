@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createPrivateKey, randomBytes, sign } from 'node:crypto';
 import { createOTP } from '@better-auth/utils/otp';
 import { symmetricDecrypt } from 'better-auth/crypto';
 import { chromium, type Page } from '@playwright/test';
+import type { PoolClient } from 'pg';
 import { accountLocales } from '../src/account-settings.ts';
 import { accountFixture } from './account-fixture.ts';
 import { oauthFixture } from './oauth-fixture.ts';
@@ -232,6 +233,11 @@ test('G261 settings: passkey step-up proves the person again without a second se
     const stepUp = await f.request('/api/account/reauthenticate/passkey', { response: own.response },
       `${member.cookie}; ${own.challenge}`);
     expect(stepUp.status).toBe(200);
+    const verifiedCounter = Buffer.from((own.response as { response: { authenticatorData: string } })
+      .response.authenticatorData, 'base64url').readUInt32BE(33);
+    expect(verifiedCounter).toBeGreaterThan(0);
+    expect((await f.pool.query('SELECT counter FROM passkey WHERE id = $1', [passkeyId])).rows[0].counter)
+      .toBe(verifiedCounter);
     expect(await stepUp.json()).toMatchObject({ verifiedUntil: expect.any(String) });
     expect(stepUp.headers.getSetCookie().some(value => value.includes('session_token'))).toBe(false);
     expect(await sessions()).toBe(before);
@@ -250,5 +256,132 @@ test('G261 settings: passkey step-up proves the person again without a second se
       signIn.challenge);
     expect(signedIn.status).toBe(200);
     expect(await sessions()).toBe(before + 1);
+  } finally { await browser.close(); await f.close(); }
+}, 90_000);
+
+test('SR-5: concurrent passkey step-ups preserve the highest counter; cloned regressions fail without a new session', async () => {
+  const f = await accountFixture({}, 'localhost');
+  const browser = await chromium.launch({ headless: true });
+  let blocker: PoolClient | undefined;
+  try {
+    const member = await f.signup('counter-race@example.test');
+    const page = await browser.newPage();
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('WebAuthn.enable');
+    const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: {
+      protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
+      isUserVerified: true, automaticPresenceSimulation: true } });
+    await page.goto(`${f.baseURL}/health/live`);
+    const options = await f.request('/api/auth/passkey/generate-register-options', undefined, member.cookie);
+    const registered = await f.request('/api/auth/passkey/verify-registration', {
+      response: await createPasskey(page, await options.json()),
+    }, `${member.cookie}; ${options.headers.get('set-cookie')}`);
+    expect(registered.status).toBe(200);
+    const passkeyId = (await registered.json() as { id: string }).id;
+    const assertion = async () => {
+      const options = await f.request('/api/auth/passkey/generate-authenticate-options', undefined, member.cookie);
+      const response = await assertPasskey(page, await options.json());
+      return { response, cookie: `${member.cookie}; ${options.headers.get('set-cookie')}`,
+        counter: Buffer.from((response as { response: { authenticatorData: string } }).response.authenticatorData,
+          'base64url').readUInt32BE(33) };
+    };
+    const stepUp = (proof: Awaited<ReturnType<typeof assertion>>) =>
+      f.request('/api/account/reauthenticate/passkey', { response: proof.response }, proof.cookie);
+    const sessions = async () => (await f.pool.query('SELECT id FROM "session" WHERE "userId" = $1 ORDER BY id', [member.id])).rows;
+    const before = await sessions();
+    const initial = await assertion();
+    expect((await stepUp(initial)).status).toBe(200);
+    const lower = await assertion();
+    const higher = await assertion();
+    expect(higher.counter).toBeGreaterThan(lower.counter);
+    blocker = await f.pool.connect();
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT 1 FROM passkey WHERE id = $1 FOR UPDATE', [passkeyId]);
+    const waiting = async (count: number) => {
+      const deadline = Date.now() + 2000;
+      while (Date.now() < deadline) {
+        const rows = await f.pool.query(`SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock'
+          AND query LIKE 'UPDATE passkey SET counter%'`);
+        if (rows.rowCount === count) return;
+        await Bun.sleep(10);
+      }
+      throw new Error('passkey counter writes did not wait');
+    };
+    const first = stepUp(higher);
+    await waiting(1);
+    const second = stepUp(lower);
+    await waiting(2);
+    await blocker.query('COMMIT'); blocker.release(); blocker = undefined;
+    expect((await first).status).toBe(200);
+    expect((await second).status).toBe(403);
+    expect((await f.pool.query('SELECT counter FROM passkey WHERE id = $1', [passkeyId])).rows[0].counter).toBe(higher.counter);
+    // Model a cloned authenticator whose signature is valid but counter is old.
+    const credential = (await cdp.send('WebAuthn.getCredentials', { authenticatorId })).credentials[0]!;
+    await cdp.send('WebAuthn.removeCredential', { authenticatorId, credentialId: credential.credentialId });
+    await cdp.send('WebAuthn.addCredential', { authenticatorId, credential: { ...credential, signCount: 0 } });
+    expect((await stepUp(await assertion())).status).toBe(403);
+    // An ordinary provider sign-in cannot overwrite a higher step-up counter.
+    await expect(f.pool.query('UPDATE passkey SET counter = $2 WHERE id = $1', [passkeyId, lower.counter]))
+      .rejects.toThrow('stale_passkey_counter');
+    expect(await sessions()).toEqual(before);
+  } finally {
+    if (blocker) { await blocker.query('ROLLBACK'); blocker.release(); }
+    await browser.close(); await f.close();
+  }
+}, 90_000);
+
+test('SR-5: a counterless authenticator can step up; failed persistence grants no proof', async () => {
+  const f = await accountFixture({}, 'localhost');
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const member = await f.signup('counterless@example.test');
+    const page = await browser.newPage();
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('WebAuthn.enable');
+    const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: {
+      protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
+      isUserVerified: true, automaticPresenceSimulation: true } });
+    await page.goto(`${f.baseURL}/health/live`);
+    const options = await f.request('/api/auth/passkey/generate-register-options', undefined, member.cookie);
+    const registered = await f.request('/api/auth/passkey/verify-registration', {
+      response: await createPasskey(page, await options.json()),
+    }, `${member.cookie}; ${options.headers.get('set-cookie')}`);
+    expect(registered.status).toBe(200);
+    const passkeyId = (await registered.json() as { id: string }).id;
+    // Chromium increments counters; re-sign with its test credential to model
+    // an authenticator that implements the standard's always-zero alternative.
+    // Seed its registration at zero without bypassing the monotonic UPDATE
+    // constraint (the password keeps removal from being the last method).
+    const stored = (await f.pool.query('DELETE FROM passkey WHERE id = $1 RETURNING *', [passkeyId])).rows[0];
+    await f.pool.query('INSERT INTO passkey SELECT * FROM jsonb_populate_record(NULL::passkey, $1::jsonb)',
+      [JSON.stringify({ ...stored, counter: 0 })]);
+    const credential = (await cdp.send('WebAuthn.getCredentials', { authenticatorId })).credentials[0]!;
+    const key = createPrivateKey({ key: Buffer.from(credential.privateKey, 'base64'), format: 'der', type: 'pkcs8' });
+    const assertion = async () => {
+      const options = await f.request('/api/auth/passkey/generate-authenticate-options', undefined, member.cookie);
+      const response = await assertPasskey(page, await options.json()) as { response: {
+        authenticatorData: string; clientDataJSON: string; signature: string } };
+      const data = Buffer.from(response.response.authenticatorData, 'base64url');
+      data.writeUInt32BE(0, 33);
+      response.response.authenticatorData = data.toString('base64url');
+      response.response.signature = sign(key.asymmetricKeyType === 'ed25519' ? null : 'sha256', Buffer.concat([data,
+        createHash('sha256').update(Buffer.from(response.response.clientDataJSON, 'base64url')).digest()]), key)
+        .toString('base64url');
+      return f.request('/api/account/reauthenticate/passkey', { response },
+        `${member.cookie}; ${options.headers.get('set-cookie')}`);
+    };
+    const sessions = (await f.pool.query('SELECT id FROM "session" WHERE "userId" = $1 ORDER BY id', [member.id])).rows;
+    await f.pool.query(`CREATE FUNCTION reject_counter_write() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      RAISE EXCEPTION 'counter unavailable'; END $$;
+      CREATE TRIGGER reject_counter_write BEFORE UPDATE ON passkey
+      FOR EACH ROW EXECUTE FUNCTION reject_counter_write()`);
+    expect((await assertion()).status).toBe(403);
+    expect((await f.pool.query('SELECT 1 FROM rezics_account_step_up')).rowCount).toBe(0);
+    await f.pool.query('DROP TRIGGER reject_counter_write ON passkey');
+    expect((await assertion()).status).toBe(200);
+    expect((await assertion()).status).toBe(200);
+    expect((await f.pool.query('SELECT counter, "rezicsLastUsedAt" FROM passkey WHERE id = $1', [passkeyId])).rows)
+      .toEqual([{ counter: 0, rezicsLastUsedAt: expect.any(Date) }]);
+    expect((await f.pool.query('SELECT id FROM "session" WHERE "userId" = $1 ORDER BY id', [member.id])).rows).toEqual(sessions);
   } finally { await browser.close(); await f.close(); }
 }, 90_000);

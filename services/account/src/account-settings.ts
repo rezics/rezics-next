@@ -60,12 +60,22 @@ const stepUpProof = new AsyncLocalStorage<{ userId: string; verified: boolean }>
 
 /** After a verified, user-verifying assertion: record when the passkey was
  * used, and end a step-up ceremony before the provider creates a session. */
-export async function afterPasskeyAssertion(pool: Pool, credentialId: string): Promise<void> {
-  const used = await pool.query<{ userId: string }>(`UPDATE passkey SET "rezicsLastUsedAt" = now()
-    WHERE "credentialID" = $1 RETURNING "userId"`, [credentialId]);
+export async function afterPasskeyAssertion(pool: Pool, credentialId: string, newCounter: number): Promise<void> {
   const proof = stepUpProof.getStore();
-  if (!proof) return;
-  proof.verified = used.rows[0]?.userId === proof.userId;
+  if (!proof) {
+    await pool.query('UPDATE passkey SET "rezicsLastUsedAt" = now() WHERE "credentialID" = $1', [credentialId]);
+    return;
+  }
+  // Better Auth 1.7.5 invokes this hook before persisting newCounter. The
+  // no-session exit below must perform that write itself. The predicate is
+  // rechecked after concurrent row writers; a stale assertion cannot lower or
+  // reuse a nonzero counter. Authenticators without counters may stay at zero.
+  // https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion
+  const used = await pool.query(`UPDATE passkey SET counter = $3, "rezicsLastUsedAt" = now()
+    WHERE "credentialID" = $1 AND "userId" = $2
+      AND (counter < $3 OR (counter = 0 AND $3 = 0)) RETURNING id`,
+  [credentialId, proof.userId, newCounter]);
+  proof.verified = used.rowCount === 1;
   throw new APIError('FORBIDDEN', { code: 'STEP_UP_ONLY', message: 'Verification complete' });
 }
 

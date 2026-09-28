@@ -28,7 +28,20 @@ export function pendingAuthorization(search: string): { clientId: string; scopes
 }
 
 /** A same-origin path to continue to after sign-in; anything else goes home. */
-export function safeReturnPath(value: string | null | undefined): string {
-  if (!value || !/^\/(?!\/)[^\\\r\n]*$/.test(value)) return '/';
-  return value;
+export function safeReturnPath(value: string | null | undefined, fallback = '/'): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return fallback;
+  // WHATWG URL parsing strips tabs/newlines and treats backslashes as slashes.
+  // Reject them before parsing, including escaped forms received via cookies
+  // or nested query strings. Never turn a rejected input into a different URL.
+  if (/[\u0000-\u001f\u007f-\u009f\\]/u.test(value)
+    || /%(?:0[0-9a-f]|1[0-9a-f]|7f|5c)|%c2%[89][0-9a-f]/i.test(value)) return fallback;
+  const origin = 'https://return-path.invalid';
+  try {
+    const url = new URL(value, origin);
+    const path = `${url.pathname}${url.search}${url.hash}`;
+    // Dot-segment normalization can expose a leading double slash, which
+    // would become a network-relative reference when the caller resolves it.
+    if (url.origin !== origin || path.startsWith('//')) return fallback;
+    return path;
+  } catch { return fallback; }
 }

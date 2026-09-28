@@ -24,6 +24,7 @@ const TABLES = [
   'rezics_account_operator_bootstrap', 'rezics_account_operator_audit', 'rezics_account_operator_note',
   'rezics_account_operator_command', 'rezics_account_operator_preference', 'rezics_account_operator_job',
   'rezics_account_operator_job_item', 'rezics_display_preferences',
+  'rezics_account_email_change',
 ] as const;
 const UUID_ID_TABLES = new Set<string>([
   'rezics_account_recovery_activation', 'rezics_account_recovery_approval',
@@ -42,6 +43,7 @@ const KEYS: Record<string, [string, string][]> = {
   rezics_account_operator_preference: [['user_id', 'text']],
   rezics_account_operator_job_item: [['job_id', 'uuid'], ['position', 'integer']],
   rezics_display_preferences: [['user_id', 'text']],
+  rezics_account_email_change: [['user_id', 'text']],
 };
 
 /** Offline coverage of every private Account table at one UTC snapshot. */

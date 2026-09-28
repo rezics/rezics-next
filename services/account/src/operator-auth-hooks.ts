@@ -3,6 +3,7 @@ import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/a
 import type { Pool } from 'pg';
 import { bootstrapOperators, operatorRole, rolePermits, writeAudit } from './operators.ts';
 import { requireStepUp } from './methods.ts';
+import { decodeJwt } from 'jose';
 
 const mutationPaths = new Set(['/oauth2/create-client', '/admin/oauth2/create-client',
   '/oauth2/update-client', '/admin/oauth2/update-client', '/oauth2/delete-client', '/oauth2/client/rotate-secret']);
@@ -22,6 +23,17 @@ async function clientSummary(pool: Pool, clientId: string) {
 export function operatorAuthHooks(pool: Pool, bootstrapIds: ReadonlySet<string>) {
   return {
     before: createAuthMiddleware(async ctx => {
+      // Reject outstanding provider email-change JWTs, including its legacy
+      // one-step form. Decoding here grants no authority; valid ordinary email
+      // verification still goes through the provider's signature validation.
+      if (ctx.path === '/verify-email') {
+        let payload;
+        try { payload = decodeJwt(String(ctx.query?.token ?? '')); }
+        catch { throw new APIError('BAD_REQUEST', { code: 'INVALID_TOKEN', message: 'Invalid token' }); }
+        if (payload.updateTo !== undefined || payload.requestType !== undefined) {
+          throw new APIError('BAD_REQUEST', { code: 'INVALID_TOKEN', message: 'Invalid token' });
+        }
+      }
       if (!mutationPaths.has(ctx.path) && !(ctx.path.startsWith('/admin/oauth2/resources') && ctx.method !== 'GET')) return;
       await bootstrapOperators(pool, bootstrapIds);
       const session = await getSessionFromCtx(ctx);

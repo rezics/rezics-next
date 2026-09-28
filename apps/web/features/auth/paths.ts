@@ -1,6 +1,7 @@
+import { safeReturnPath as accountReturnPath } from '../../../accounts/features/api/oauth-query.ts';
+
 export function safeReturnPath(value: string | null | undefined, fallback = '/studio'): string {
-  if (!value || !/^\/(?!\/)[^\\\r\n]*$/.test(value)) return fallback;
-  return value;
+  return accountReturnPath(value, fallback);
 }
 
 export function appCallback(requestUrl: string): string {

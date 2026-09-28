@@ -11,9 +11,10 @@ export const sensitiveAuthPaths = new Set([
   '/api/auth/passkey/verify-registration', '/api/auth/passkey/delete-passkey', '/api/auth/passkey/update-passkey',
   '/api/auth/two-factor/enable', '/api/auth/two-factor/disable',
   '/api/auth/two-factor/generate-backup-codes', '/api/auth/two-factor/get-totp-uri',
+  '/api/auth/revoke-session', '/api/auth/revoke-sessions', '/api/auth/revoke-other-sessions',
 ]);
 
-export async function requireStepUp(pool: Pool, session: { session: { id: string; createdAt: Date } }) {
+export async function requireStepUp(pool: Pool | PoolClient, session: { session: { id: string; createdAt: Date } }) {
   const current = await pool.query(`SELECT 1 FROM "session" s WHERE s.id = $1 AND s."expiresAt" > now()
     AND (s."createdAt" > now() - interval '5 minutes' OR EXISTS (
       SELECT 1 FROM rezics_account_step_up p WHERE p.session_id = s.id
