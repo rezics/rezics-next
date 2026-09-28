@@ -80,3 +80,13 @@ after graph start records a graph receipt and marks the unselected generation
 cancelled; it never changes the active head.
 Context-specific variant resolution and whole-Structure export remain separate
 work. The export clause belongs to G-092's export owner.
+
+A Book divides into groups one level deep (`maxDepth` 2 in its profile): a
+volume, part or extras group stands under the Book, and a chapter under the
+Book or one group. A group's division is a `book-group` qualifier validated by
+`structure-book-v1`; renaming or re-dividing it is one `update` change
+(`OccurrenceUpdate`). Reads follow reading order, depth first: the next chapter
+walk (`reading-order.ts`) spends at most eight exact page reads under one header,
+Contents numbers volumes and story chapters from one bounded top-group query,
+and the reader's previous and next compare one composite position across the
+generation. Extras stay unnumbered.
