@@ -89,7 +89,7 @@ test('IAM35: high branching, negative checks, bulk work and a reduced operationa
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const subjects = new Map<string, string>();
   try {
-    await accessPool.query(`INSERT INTO access.scope_gate (id) VALUES ($1)`, [SCOPE]);
+    await accessPool.query(`INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING`, [SCOPE]);
     const app = mainFor(accessPool, subjects);
     const discover = (bearer: string) => app.handle(new Request(
       'http://main.local/v1/me/acting-contexts?task=work.create', { headers: { authorization: bearer } }));
@@ -257,7 +257,7 @@ test('OPS05: discovery work stays within its derived bound across candidate and 
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const subjects = new Map<string, string>();
   try {
-    await accessPool.query(`INSERT INTO access.scope_gate (id) VALUES ($1)`, [SCOPE]);
+    await accessPool.query(`INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING`, [SCOPE]);
     const counted = countingPool(accessPool);
     const contexts = new AccessActingContexts(counted.pool);
     const target = await principal(accessPool, subjects);

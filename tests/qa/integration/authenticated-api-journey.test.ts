@@ -173,7 +173,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     };
     const marker = `s2journey${randomUUID().replaceAll('-', '')}`;
     const work = await post<{ work: string; mainVersion: string; workRevision: string;
-      mainRevision: string }>('/v1/works', { profile: 'metadata-only-v1',
+      mainRevision: string }>('/v1/works', { profile: 'metadata-only-v1', language: 'en',
         title: `S2 ${marker}`, actingSubject: actor });
     expect(work.work).not.toBe(work.mainVersion);
     expect(work.workRevision).not.toBe(work.mainRevision);
@@ -183,7 +183,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       return result.results?.bindings[0]?.sequence?.value;
     };
     const beforeOutages = await graphSequence();
-    const unavailableIntent = { profile: 'metadata-only-v1',
+    const unavailableIntent = { profile: 'metadata-only-v1', language: 'en',
       title: `Unavailable owner ${randomUUID()}`, actingSubject: actor };
     const unavailableRequest = () => new Request('http://main.local/v1/works', {
       method: 'POST', headers: { authorization: `Bearer ${token}`,
@@ -215,7 +215,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     } finally { await deadAccessPool.end(); }
     expect(await graphSequence()).toBe(beforeOutages);
     const typeKey = `multi-type-${randomUUID()}`;
-    const typeIntent = { profile: 'metadata-only-v1', title: `Multi-type ${randomUUID()}`,
+    const typeIntent = { profile: 'metadata-only-v1', language: 'en', title: `Multi-type ${randomUUID()}`,
       actingSubject: actor, semanticTypes: [
         'https://schema.org/DigitalDocument', 'https://schema.org/Book' ] };
     const typedResponse = await send('/v1/works', typeIntent, true, typeKey);
@@ -318,7 +318,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     expect((await readRelease(`https://rezics.com/id/${randomUUID()}`)).status).toBe(404);
     expect((await readRelease(actor, 'Bearer invalid')).status).toBe(401);
     for (let n = 0; n < 8; n++) {
-      await post('/v1/works', { profile: 'metadata-only-v1',
+      await post('/v1/works', { profile: 'metadata-only-v1', language: 'en',
         title: `Unrelated release cost ${n} ${randomUUID()}`, actingSubject: actor });
     }
     const grownCost = await observedGraphWork(`s2-release-grown-${randomUUID()}`);

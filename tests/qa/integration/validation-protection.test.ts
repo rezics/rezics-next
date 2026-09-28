@@ -73,7 +73,7 @@ async function fixture(apps: Record<string, string>) {
   await grant('work:create:root', 'work.create');
   const create = async () => {
     const written = await json<{ work: string; workRevision: string; mainVersion: string }>(await call('POST', '/v1/works',
-      { profile: 'metadata-only-v1', title: `Validation Work ${randomUUID()}`, actingSubject: actor }), 201);
+      { profile: 'metadata-only-v1', language: 'en', title: `Validation Work ${randomUUID()}`, actingSubject: actor }), 201);
     await grant(`work:read:${written.work}`, 'work.read');
     await grant(`work:edit:${written.work}`, 'work.edit');
     await grant(`work:protect:${written.work}`, 'work.protection.tighten');

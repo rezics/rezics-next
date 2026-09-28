@@ -15,7 +15,7 @@ test('WIKI05: Realm serving text and search keep its accepted draft while the so
     const space = await f.json<{ space: string; realm: string }>(await f.call('POST', '/v1/spaces', {
       profile: 'space-realm-v1', name: 'Accepted wiki', capabilities: ['realm'],
       actingSubject: f.actor }), 201);
-    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', {
+    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', { language: 'en',
       profile: 'metadata-only-v1', title: 'Accepted source', actingSubject: f.actor }), 201);
     await f.grant(`contribution:create:${work.work}`, 'contribution.create');
     const oldTerm = `acceptedwiki${randomUUID().replaceAll('-', '')}`;

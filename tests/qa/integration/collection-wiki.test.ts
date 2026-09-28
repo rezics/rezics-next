@@ -23,10 +23,10 @@ test('WIKI03/WIKI06/CTX08: a Collection keeps repeated occurrence history and hi
   await objects.initialize();
   (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
   try {
-    const visibleWork = await f.json<{ work: string }>(await f.call('POST', '/v1/works', {
+    const visibleWork = await f.json<{ work: string }>(await f.call('POST', '/v1/works', { language: 'en',
       profile: 'metadata-only-v1', title: 'Visible member', actingSubject: f.actor,
     }), 201);
-    const privateWork = await f.json<{ work: string }>(await f.call('POST', '/v1/works', {
+    const privateWork = await f.json<{ work: string }>(await f.call('POST', '/v1/works', { language: 'en',
       profile: 'metadata-only-v1', title: 'Private member', actingSubject: f.actor,
     }), 201);
     await f.grant(`work:read:${visibleWork.work}`, 'work.read');

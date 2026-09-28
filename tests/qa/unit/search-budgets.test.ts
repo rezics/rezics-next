@@ -254,7 +254,8 @@ test('SEARCH18: Content audits a later metadata cut and pins its phrase to that 
         resource: binding(work), variant: binding('urn:rezics:variant:one'),
         revision: binding('urn:rezics:content:revision:11111111-1111-4111-8111-111111111111'),
         decision: binding('urn:rezics:content:decision:one'),
-        eligibility: binding('urn:rezics:content:eligibility:one'), language: binding('en') }] } };
+        eligibility: binding('urn:rezics:content:eligibility:one'), language: binding('en'),
+        rightsBasis: binding('https://rezics.com/vocab/OriginalContribution') }] } };
     }
     return originalQuery(sparql, maxResponseBytes);
   };

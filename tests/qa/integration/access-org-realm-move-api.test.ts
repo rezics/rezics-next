@@ -259,7 +259,7 @@ test('IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history
     for (const retry of retries) expect(await must(retry)).toEqual({ ...result, replayed: true });
     expect(await effectState()).toEqual(committed);
     await must(await move({ ...input, target: { ...input.target, termsRevision: 'changed' } }, winner.key), 409);
-    await must(await post('/v1/works', { profile: 'metadata-only-v1', title: 'No move authority', actingSubject: f.org }), 403);
+    await must(await post('/v1/works', { profile: 'metadata-only-v1', language: 'en', title: 'No move authority', actingSubject: f.org }), 403);
     await pool.query('UPDATE access.org_realm_policy SET open = true, revision = revision + 1 WHERE realm = $1', [f.realm]);
     const returning = await issue(f.realm, '2');
     const returned = await must<OrgRealmMoveResult>(await move({ organizationSubject: f.org,

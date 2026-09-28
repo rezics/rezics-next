@@ -17,7 +17,7 @@ test('RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scal
   await objects.initialize();
   (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
   try {
-    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', {
+    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', { language: 'en',
       profile: 'metadata-only-v1', title: 'Recipe structure acceptance',
       semanticTypes: ['https://schema.org/Recipe'], actingSubject: f.actor,
     }), 201);

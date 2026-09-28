@@ -15,7 +15,7 @@ test('G-327 direct authoring commits one native author credit; source adoption d
     const agent = { kind: 'person' as const, displayName: 'Lin Mei' };
     await createAgentGraph(f.env, { id: randomUUID(), agent: f.actor,
       ...agent, digest: agentProvisionDigest(agent) });
-    const input = { profile: 'metadata-only-v1', authoring: 'own-work', title: 'An authored serial',
+    const input = { profile: 'metadata-only-v1', language: 'en', authoring: 'own-work', title: 'An authored serial',
       semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor };
     const key = randomUUID();
     const created = await f.json<{ work: string }>(await f.call('POST', '/v1/works', input, key), 201);
@@ -29,7 +29,7 @@ test('G-327 direct authoring commits one native author credit; source adoption d
     expect(credits).toHaveLength(1);
     expect(credits[0]?.agent?.value).toBe(f.actor);
     expect(credits[0]?.role?.value).toBe('author');
-    const curated = await f.json<{ work: string }>(await f.call('POST', '/v1/works', {
+    const curated = await f.json<{ work: string }>(await f.call('POST', '/v1/works', { language: 'en',
       profile: 'metadata-only-v1', title: 'A curated Work', actingSubject: f.actor,
     }), 201);
     expect(await queryCredits(curated.work)).toHaveLength(0);

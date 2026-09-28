@@ -205,7 +205,7 @@ test('OPS06: worker and broker saturation refuse new intents and lose no admitte
       const createWork = () => brokerApp.handle(new Request('http://main.local/v1/works', {
         method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer a.b.c',
           'idempotency-key': `work-${randomUUID()}` },
-        body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Broker lane', actingSubject: agent }) }));
+        body: JSON.stringify({ profile: 'metadata-only-v1', language: 'en', title: 'Broker lane', actingSubject: agent }) }));
 
       // The relay has handed off nothing: the graph outbox backlog saturates the lane.
       const pending = await brokerSnapshot();

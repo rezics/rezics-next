@@ -171,7 +171,7 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
     };
     await grant(0, 'work:create:root', 'work.create');
     const created = await read<{ work: string; workRevision: string }>(await call(app, 'POST', '/v1/works',
-      { profile: 'metadata-only-v1', title: 'Original protected title', actingSubject: actor }), 201);
+      { profile: 'metadata-only-v1', language: 'en', title: 'Original protected title', actingSubject: actor }), 201);
     const work = created.work;
     await grant(0, `work:read:${work}`, 'work.read');
     // The graph owner cut is stopped and copied before the later correction commits.

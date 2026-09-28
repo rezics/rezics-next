@@ -91,7 +91,7 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
     expect(Date.now() - preparation).toBeLessThan(600_000);
 
     const work = await success<{ work: string; mainVersion: string }>(await post('/v1/works',
-      { profile: 'metadata-only-v1', title: `Global target ${nonce}`, actingSubject: persona.a }));
+      { profile: 'metadata-only-v1', language: 'en', title: `Global target ${nonce}`, actingSubject: persona.a }));
     const realm = (await success<{ realm: string }>(await post('/v1/spaces', { profile: 'space-realm-v1',
       name: `Global comparison Realm ${nonce}`, capabilities: ['realm'], actingSubject: persona.a }))).realm;
     await grant(`rating:context:${realm}`, 'rating.context.create');
@@ -209,7 +209,7 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
 
     // Unrelated Contexts, MainVersions and history do not change the work.
     const other = await success<{ work: string; mainVersion: string }>(await post('/v1/works',
-      { profile: 'metadata-only-v1', title: `Unrelated ${nonce}`, actingSubject: persona.a }));
+      { profile: 'metadata-only-v1', language: 'en', title: `Unrelated ${nonce}`, actingSubject: persona.a }));
     for (const who of ['a', 'b', 'c'] as const) {
       await success(await post('/v1/global-rating-observations', { profile: 'global-rating-standing-observation-v1',
         context: globalContext, work: other.work, mainVersion: other.mainVersion, value: 1, expectedRevisionHead: null,

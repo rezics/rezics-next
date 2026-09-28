@@ -5,6 +5,7 @@ import { profileRegistry } from '../../../packages/model/src/generated/profiles.
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { ContentProjectionWorker } from '../src/content-projection-worker.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { RV } from '../src/modules/work/activate.ts';
 
 const graphEpoch = 'graph-epoch';
 const contentEpoch = 'content-epoch';
@@ -52,7 +53,9 @@ class SearchFuseki extends FusekiClient {
         ...(match ? { unit: binding('urn:rezics:match:1'), score: binding('2.5'),
           resource: binding('https://rezics.com/id/11111111-1111-4111-8111-111111111111'),
           variant: binding('urn:rezics:variant:1'), revision: binding('urn:rezics:content:revision:1'),
-          decision: binding('urn:rezics:decision:1'), language: binding('en') } : {}) }] } };
+          decision: binding('urn:rezics:decision:1'), language: binding('en'),
+          eligibility: binding('urn:rezics:content:eligibility:1'),
+          rightsBasis: binding(`${RV}OriginalContribution`) } : {}) }] } };
     }
     throw new Error(`unexpected query: ${sparql.slice(0, 80)}`);
   }

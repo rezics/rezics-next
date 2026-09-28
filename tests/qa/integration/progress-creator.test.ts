@@ -26,7 +26,7 @@ test('A verified creator reads a newly private Work without a manual work.read g
     const create = createMainApp(h.fuseki, { environment: h.env, account: h.verifier, access });
     const work = await create.handle(new Request('http://main.local/v1/works', { method: 'POST',
       headers: { authorization: `Bearer ${h.wrongScopeToken}`, 'content-type': 'application/json',
-        'idempotency-key': randomUUID() }, body: JSON.stringify({ profile: 'metadata-only-v1',
+        'idempotency-key': randomUUID() }, body: JSON.stringify({ profile: 'metadata-only-v1', language: 'en',
         title: 'New private Work', actingSubject: subject }) }));
     expect(work.status).toBe(201);
     const id = (await work.json() as { work: string }).work;

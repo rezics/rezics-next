@@ -53,7 +53,7 @@ async function fixture() {
   function work(key = `baseline-work-${randomUUID()}`, token = h.wrongScopeToken) {
     return app.handle(new Request('http://main.local/v1/works', { method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'idempotency-key': key },
-      body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Member Work', actingSubject: subject }) }));
+      body: JSON.stringify({ profile: 'metadata-only-v1', language: 'en', title: 'Member Work', actingSubject: subject }) }));
   }
   return { ...h, access, app, subject, agent, verified, work,
     close: async () => { await h.close(); await databases.close(); } };

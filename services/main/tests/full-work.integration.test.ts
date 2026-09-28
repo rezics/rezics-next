@@ -190,7 +190,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(await freshSearchReady.json()).toMatchObject({ status: 'ready',
       dataEpoch: lineage.dataEpoch, sequence: '0',
       indexGeneration: expect.stringMatching(/^urn:rezics:text-index-generation:/) });
-    const body = { profile: 'metadata-only-v1', title: 'Real authenticated Work', actingSubject: actor };
+    const body = { profile: 'metadata-only-v1', language: 'en', title: 'Real authenticated Work', actingSubject: actor };
     const command = (bearer: string, key: string) => fetch(`http://127.0.0.1:${mainPort}/v1/works`, {
       method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'idempotency-key': key,
         'content-type': 'application/json' }, body: JSON.stringify(body),

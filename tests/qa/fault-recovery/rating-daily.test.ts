@@ -131,7 +131,7 @@ test('RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive re
     const preparationMs = Date.now() - preparationStart;
     expect(preparationMs).toBeLessThan(600_000);
     const work = await success<{ work: string; mainVersion: string }>(await post('/v1/works',
-      { profile: 'metadata-only-v1', title: `Daily target ${nonce}`, actingSubject: personaA }));
+      { profile: 'metadata-only-v1', language: 'en', title: `Daily target ${nonce}`, actingSubject: personaA }));
     const realm = (await success<{ realm: string }>(await post('/v1/spaces',
       { profile: 'space-realm-v1', name: `Daily Realm ${nonce}`, capabilities: ['realm'], actingSubject: personaA }))).realm;
     await grant(`rating:context:${realm}`, 'rating.context.create');

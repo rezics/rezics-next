@@ -17,7 +17,7 @@ test('RECIPE04: two Realms independently adopt published Recipe variants of one 
   await objects.initialize();
   (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
   try {
-    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', {
+    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', { language: 'en',
       profile: 'metadata-only-v1', title: 'Realm recipe variants',
       semanticTypes: ['https://schema.org/Recipe'], actingSubject: f.actor,
     }), 201);

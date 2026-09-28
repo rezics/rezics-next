@@ -64,7 +64,7 @@ test('IAM33 partial: represented Work proof binds mandate, grant, actor and gene
       VALUES ($1, $2, $3)`, [principalId, issuer, subject]);
     await pool.query(`INSERT INTO access.authority_subject (id, kind)
       VALUES ($1, 'agent'), ($2, 'agent')`, [actor, otherActor]);
-    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
     await pool.query(`INSERT INTO access.representation
       (id, principal_id, subject_id, action, valid_until)
       VALUES ($1, $2, $3, 'work.create', now() + interval '1 hour')`,

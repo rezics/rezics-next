@@ -96,7 +96,7 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
     return data;
   };
   const createWork = async (title: string) => {
-    const response = await post('/v1/works', { profile: 'metadata-only-v1', title, actingSubject: actor });
+    const response = await post('/v1/works', { profile: 'metadata-only-v1', language: 'en', title, actingSubject: actor });
     const data = await response.json() as { work?: string };
     if (response.status !== 201 || !data.work) throw new Error(`evidence Work failed: ${response.status} ${JSON.stringify(data)}`);
     return data.work;

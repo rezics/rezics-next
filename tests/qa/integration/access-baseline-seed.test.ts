@@ -61,6 +61,7 @@ test('baseline demo seed: verified signups, Works, contributions, Spaces and per
     agentProvisioning: new AgentProvisioning(h.accessPool, h.env), structureObjects: objects });
   const main = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: request => app.handle(request) });
   writeFileSync(join(directory, 'dev.env'), `ACCOUNT_BASE_URL=${accountBase}\nMAIN_ORIGIN=http://127.0.0.1:${main.port}\nMAILPIT_HTTP_PORT=${compose.MAILPIT_HTTP_PORT}\n`);
+  writeFileSync(join(directory, 'compose.env'), `MAILPIT_HTTP_PORT=${compose.MAILPIT_HTTP_PORT}\n`);
   writeFileSync(join(directory, 'web-auth/public.json'), JSON.stringify({ clientId: h.client.client_id,
     redirectUris: [h.redirectUri], resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, scope: `openid ${scopes.join(' ')}` }));
   try {

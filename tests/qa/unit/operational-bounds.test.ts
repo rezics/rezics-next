@@ -136,10 +136,12 @@ test('OPS05/OPS06: snapshot work stays fixed while the backlog grows geometrical
 test('OPS06: saturated object uploads are refused at the Main boundary and none is lost', async () => {
   const releases: Array<() => void> = [];
   let verified = 0;
+  const admitted = Promise.withResolvers<void>();
   // The graph admission check is the command's first owner call; holding it
   // keeps each admitted request in flight until the test releases it.
   const fuseki = { query: async () => {
     verified += 1;
+    if (verified === BACKPRESSURE_PROFILE_V1.object.maxInFlight) admitted.resolve();
     await new Promise<void>(release => releases.push(release));
     throw new AccountAssertionDenied('held request');
   } } as unknown as FusekiClient;
@@ -153,26 +155,32 @@ test('OPS06: saturated object uploads are refused at the Main boundary and none 
   const post = (key: string) => app.handle(new Request('http://main.local/v1/works', {
     method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': key,
       authorization: 'Bearer a.b.c' },
-    body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Held', actingSubject: agent }) }));
+    body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Held', language: 'en', actingSubject: agent }) }));
   const read = async () => (await (await app.handle(
     new Request('http://main.local/v1/operations/backpressure'))).json()) as {
     lanes: [unknown, unknown, { state: string; counters: Record<string, number> }] };
   const limit = BACKPRESSURE_PROFILE_V1.object.maxInFlight;
   const held = Array.from({ length: limit }, (_, index) => post(`held-${index}`));
-  while (verified < limit) await Bun.sleep(1);
-  const saturated = await read();
-  expect(saturated.lanes[2].state).toBe('saturated');
-  expect(saturated.lanes[2].counters).toMatchObject({ inFlight: limit, admitted: limit, rejected: 0 });
+  let settled: Response[];
+  try {
+    await Promise.race([admitted.promise, ...held.map(async pending => {
+      const response = await pending;
+      throw new Error(`Request returned before admission: ${response.status} ${await response.text()}`);
+    })]);
+    const saturated = await read();
+    expect(saturated.lanes[2].state).toBe('saturated');
+    expect(saturated.lanes[2].counters).toMatchObject({ inFlight: limit, admitted: limit, rejected: 0 });
 
-  const refused = await post('over-budget');
-  expect(refused.status).toBe(503);
-  expect(refused.headers.get('retry-after')).toBe(String(BACKPRESSURE_PROFILE_V1.object.retryAfterSeconds));
-  expect((await refused.json() as { code: string }).code).toBe('backpressure_saturated');
-  // The refused request never reached the graph, Account or Access owners.
-  expect(verified).toBe(limit);
-
-  for (const release of releases) release();
-  const settled = await Promise.all(held);
+    const refused = await post('over-budget');
+    expect(refused.status).toBe(503);
+    expect(refused.headers.get('retry-after')).toBe(String(BACKPRESSURE_PROFILE_V1.object.retryAfterSeconds));
+    expect((await refused.json() as { code: string }).code).toBe('backpressure_saturated');
+    // The refused request never reached the graph, Account or Access owners.
+    expect(verified).toBe(limit);
+  } finally {
+    for (const release of releases) release();
+    settled = await Promise.all(held);
+  }
   const statuses = new Set(settled.map(response => response.status));
   expect(statuses.size).toBe(1);
   const [status] = [...statuses] as [number];

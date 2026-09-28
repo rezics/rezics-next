@@ -52,7 +52,7 @@ test('MODEL13: Annotation through the Content comment API retains OA type, targe
         ...(body ? { body: JSON.stringify(body) } : {}) }));
     };
     await grant('work:create:root', 'work.create');
-    const workResponse = await call('POST', '/v1/works', {
+    const workResponse = await call('POST', '/v1/works', { language: 'en',
       profile: 'metadata-only-v1', title: `Annotation ${randomUUID()}`, actingSubject: actor });
     expect(workResponse.status).toBe(201);
     const work = (await workResponse.json() as { work: string }).work;

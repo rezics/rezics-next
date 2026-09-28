@@ -73,7 +73,7 @@ export async function memberFixture() {
       headers: { authorization: `Bearer ${token}` } }));
     return { status: response.status, body: await response.json() as Record<string, any> };
   }
-  const workBody = { profile: 'metadata-only-v1', title: `Member Work ${randomUUID()}`, actingSubject: actor };
+  const workBody = { profile: 'metadata-only-v1', language: 'en', title: `Member Work ${randomUUID()}`, actingSubject: actor };
   const workKey = randomUUID();
   const created = await post('/v1/works', workBody, workKey);
   expect(created.status, JSON.stringify(created.body)).toBe(201);

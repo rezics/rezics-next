@@ -80,7 +80,7 @@ test('SYS02/SYS03/SYS10/SYS11/SYS14: protected Work correction uses one reviewed
     };
     await grant(0, 'work:create:root', 'work.create');
     const created = await json<{ work: string; workRevision: string }>(await call('POST', '/v1/works',
-      { profile: 'metadata-only-v1', title: 'Original title', actingSubject: actors[0] }), 201);
+      { profile: 'metadata-only-v1', language: 'en', title: 'Original title', actingSubject: actors[0] }), 201);
     const work = created.work;
     await grant(0, `work:read:${work}`, 'work.read');
     await grant(0, `work:edit:${work}`, 'work.edit');
@@ -105,7 +105,7 @@ test('SYS02/SYS03/SYS10/SYS11/SYS14: protected Work correction uses one reviewed
       await call('GET', `/v1/works/${work.split('/').at(-1)}/editorial-state?actingSubject=${encodeURIComponent(actors[0])}`), 200);
     expect(state).toMatchObject({ contentHead: created.workRevision,
       protectionHead: protection.protectionRevision, protectionMode: 'review-required' });
-    await json(await call('POST', '/v1/works', { profile: 'metadata-only-v1',
+    await json(await call('POST', '/v1/works', { profile: 'metadata-only-v1', language: 'en',
       title: 'Unrelated sequence advance', actingSubject: actors[0] }), 201);
     expect((await call('POST', '/v1/work-title-protections', protect)).status).toBe(409);
     expect(await json(await call('POST', '/v1/work-title-protections', { ...protect, reason: 'Different request' },
@@ -232,7 +232,7 @@ test('SYS02/SYS03/SYS10/SYS11/SYS14: protected Work correction uses one reviewed
       controlEpoch: String(BigInt(openState.controlEpoch) + 1n) });
     const costs: Array<{ queries: number; bytes: number; commandBytes: number }> = [];
     for (const size of [0, 4, 16]) {
-      for (let i = 0; i < size; i++) await json(await call('POST', '/v1/works', {
+      for (let i = 0; i < size; i++) await json(await call('POST', '/v1/works', { language: 'en',
         profile: 'metadata-only-v1', title: `Unrelated cost Work ${size}-${i}`, actingSubject: actors[0] }), 201);
       graphQueries = 0; graphReadBytes = 0; proposalCommandBytes = 0;
       await json(await call('POST', '/v1/work-title-corrections', {

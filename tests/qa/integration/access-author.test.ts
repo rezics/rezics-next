@@ -60,7 +60,7 @@ async function fixture() {
   const actor = await agent();
   const principal = await account.verify(request());
   async function work(actingSubject = actor) {
-    const response = await call('POST', '/v1/works', { profile: 'metadata-only-v1',
+    const response = await call('POST', '/v1/works', { profile: 'metadata-only-v1', language: 'en',
       title: 'Author Work', actingSubject });
     expect(response.status).toBe(201);
     return response.json() as Promise<{ work: string; mainVersion: string; workRevision: string }>;

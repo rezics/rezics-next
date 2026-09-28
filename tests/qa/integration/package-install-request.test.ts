@@ -107,7 +107,7 @@ test('WORK07: Main Version recommendations resolve eligible npm and Cargo artifa
     };
 
     const created = await parse<{ work: string; mainVersion: string; workRevision: string }>(
-      await call('POST', '/v1/works', { profile: 'metadata-only-v1', title: 'WORK07 package install',
+      await call('POST', '/v1/works', { profile: 'metadata-only-v1', language: 'en', title: 'WORK07 package install',
         actingSubject: actor }, `work-${randomUUID()}`), 201);
     const editScope = `work:edit:${created.work}`;
     const readScope = `work:read:${created.work}`;

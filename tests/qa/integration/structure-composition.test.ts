@@ -41,7 +41,7 @@ test('BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurr
       ...(body ? { body: JSON.stringify(body) } : {}) }));
   try {
     const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works',
-      { profile: 'metadata-only-v1', title: 'Book composition',
+      { profile: 'metadata-only-v1', language: 'en', title: 'Book composition',
         semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }), 201);
     const createBody = { profile: 'book-composition', work: work.work,
       mainVersion: work.mainVersion, actingSubject: f.actor };

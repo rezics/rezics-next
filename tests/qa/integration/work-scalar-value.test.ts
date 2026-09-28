@@ -22,7 +22,7 @@ test('MODEL02: real Account/Access/Main/Jena scalar write, exact read, denial an
     const health = await f.nativeFuseki.commandHealth();
     expect(health.profiles['work-metadata-v1']).toBe(profileRegistry['work-metadata-v1'].sha256);
     const created = await f.json<{ work: string; workRevision: string; mainVersion: string }>(
-      await f.call('POST', '/v1/works', { profile: 'metadata-only-v1', title: 'Scalar Work',
+      await f.call('POST', '/v1/works', { profile: 'metadata-only-v1', language: 'en', title: 'Scalar Work',
         actingSubject: f.actor }), 201);
     const path = `/v1/works/${shortId(created.work)}/scalar-value`;
     const readPath = `${path}?actingSubject=${encodeURIComponent(f.actor)}`;

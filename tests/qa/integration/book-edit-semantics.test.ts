@@ -163,7 +163,7 @@ async function startStack() {
         headers: { authorization: `Bearer ${token}` } }));
     };
     await grant('work:create:root', 'work.create');
-    const created = await send('/v1/works', { profile: 'metadata-only-v1',
+    const created = await send('/v1/works', { profile: 'metadata-only-v1', language: 'en',
       title: `BOOK ${name} ${randomUUID()}`, actingSubject: actor });
     expect(created.status).toBe(201);
     const work = (await created.json() as { work: string }).work;

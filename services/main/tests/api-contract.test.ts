@@ -215,7 +215,7 @@ describe('Main typed route contracts', () => {
     const send = (path: string, body: unknown) => app.handle(new Request(`http://localhost${path}`,
       { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body) }));
-    const work = await send('/v1/works', { profile: 'metadata-only-v1', title: '',
+    const work = await send('/v1/works', { profile: 'metadata-only-v1', language: 'en', title: '',
       actingSubject: id });
     expect(work.status).toBe(400);
     expect((await work.json() as { code: string }).code).toBe('invalid_request');
@@ -233,7 +233,7 @@ describe('Main typed route contracts', () => {
     });
     expect(invalidPath.status).toBe(400);
     const missingKey = await send('/v1/works', { profile: 'metadata-only-v1',
-      title: 'Work', actingSubject: id });
+      title: 'Work', language: 'en', actingSubject: id });
     expect(missingKey.status).toBe(400);
     expect((await missingKey.json() as { code: string }).code).toBe('invalid_idempotency_key');
     const query = await send('/v1/queries', { profile: 'public-main-phrase-v1',

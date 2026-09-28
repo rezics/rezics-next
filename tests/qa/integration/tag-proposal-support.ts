@@ -56,7 +56,7 @@ export async function authorProposalFixture() {
   const principal = await account.verify(new Request('http://main.test', { headers: { authorization: `Bearer ${h.token}` } }));
   const work = async (actingSubject = actor) => {
     const { work, mainVersion, workRevision } = await json<{ work: string; mainVersion: string; workRevision: string }>(
-      await call('POST', '/v1/works', { profile: 'metadata-only-v1', title: 'Whole serial', actingSubject }));
+      await call('POST', '/v1/works', { profile: 'metadata-only-v1', language: 'en', title: 'Whole serial', actingSubject }));
     return { work, mainVersion, workRevision };
   };
   const realm = async () => (await json<{ realm: string }>(await call('POST', '/v1/spaces', {

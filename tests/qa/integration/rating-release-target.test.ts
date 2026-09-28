@@ -120,7 +120,7 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
     await grant('work:create:root', 'work.create');
     await grant('space:create:root', 'space.create');
     expect(Date.now() - preparation).toBeLessThan(600_000);
-    const work = await success<Target>(await post('/v1/works', {
+    const work = await success<Target>(await post('/v1/works', { language: 'en',
       profile: 'metadata-only-v1', title: `Release rating ${randomUUID()}`, actingSubject: actor.a }));
     const realm = (await success<{ realm: string }>(await post('/v1/spaces', {
       profile: 'space-realm-v1', name: `Rating Realm ${randomUUID()}`,
