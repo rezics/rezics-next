@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { packageDigest, ZONE_PACKAGE_BUDGET, zonePresets, type ZoneTokens } from '@rezics/zone-sdk';
+import { packageDigest, workCoverProps, ZONE_PACKAGE_BUDGET, zonePresets, type ZoneTokens } from '@rezics/zone-sdk';
 import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { contrast, inkOn, mix, parseHex, readableOn, toHex } from '../features/zones/color.ts';
 import { isZonePage, zoneCsp, zoneNonce } from '../features/zones/csp.ts';
@@ -189,8 +189,8 @@ const officialSlugs = readdirSync(join(web, 'zones/official')).filter(name =>
   statSync(join(web, 'zones/official', name)).isDirectory());
 
 describe('Official Zone packages', () => {
-  test('the Fiction Zone is the first package', () => {
-    expect(officialSlugs).toEqual(['fiction']);
+  test('Fiction, Books, Mods and AI Workshop each ship a package', () => {
+    expect([...officialSlugs].sort()).toEqual(['ai-workshop', 'books', 'fiction', 'mods']);
   });
 
   test.each(officialSlugs)('%s imports only React, the SDK, Rezics UI, icons and its own files', slug => {
@@ -231,6 +231,23 @@ describe('Official Zone packages', () => {
     expect(gzipSync(css).byteLength).toBeLessThanOrEqual(ZONE_PACKAGE_BUDGET.cssGzipBytes);
     // Source, not the built chunk: a proxy until size-limit measures the build (see the handoff's proposed tasks).
     expect(gzipSync(code).byteLength).toBeLessThanOrEqual(ZONE_PACKAGE_BUDGET.jsGzipBytes);
+  });
+
+  test.each(officialSlugs)('%s: `task zones:digest` prints the digest the web computes for its build', async slug => {
+    const run = Bun.spawn(['bun', join(web, '../../scripts/zones/digest.ts'), slug], { stdout: 'pipe' });
+    expect((await new Response(run.stdout).text()).trim()).toBe(await packageDigest(packageFiles(slug)));
+    expect(await run.exited).toBe(0);
+  });
+
+  test('a package sets a Work’s cover as the platform card does', () => {
+    const work = { id: 'https://rezics.com/id/w', href: '/w/w', kind: 'package' as const, status: null, chapters: null,
+      words: null, updatedAt: null, decision: null, tagline: null,
+      title: { value: 'Lumen', lang: 'en', dir: 'ltr' as const }, author: { value: 'aurora', lang: '', dir: 'ltr' as const },
+      cover: { url: '/api/main/v1/media/c?actingSubject=a', width: 600, height: 600 } };
+    expect(workCoverProps(work)).toEqual({ title: 'Lumen', lang: 'en', dir: 'ltr', authors: ['aurora'], kind: 'package',
+      seed: 'https://rezics.com/id/w', image: { src: '/api/main/v1/media/c?actingSubject=a', width: 600, height: 600 } });
+    expect(workCoverProps({ ...work, title: null, author: null, cover: null })).toMatchObject({ title: '', authors: [],
+      image: null });
   });
 
   test('a package digest covers every byte and path, and nothing else', async () => {

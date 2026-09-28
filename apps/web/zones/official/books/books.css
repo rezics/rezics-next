@@ -1,0 +1,591 @@
+/*
+ * The Books Zone's art direction: a literary magazine on warm paper. Serif
+ * nameplate and headlines, hairline and double rules instead of panels,
+ * small-caps kickers in the Zone accent and numbered columns. Everything is
+ * scoped to the Zone's content box and reads the theme variables the platform
+ * derives from the Zone tokens, so light, dark and contrast stay the platform's.
+ */
+@layer zone {
+  @scope ([data-zone="books"]) {
+    :scope {
+      --bz-rule: color-mix(in oklab, var(--foreground) 30%, transparent);
+      --bz-hair: color-mix(in oklab, var(--foreground) 13%, transparent);
+      /* Warm paper in light; in dark the card itself, the surface the accent is made readable on. */
+      --bz-paper: light-dark(color-mix(in oklab, var(--zone-accent) 5%, var(--card)), var(--card));
+      /* A magazine is one paper: modules sit on it between rules, not on panels. */
+      background: light-dark(var(--bz-paper), var(--zone-page));
+    }
+
+    .bz-page {
+      inline-size: 100%;
+      max-inline-size: 72rem;
+      margin-inline: auto;
+      padding-inline: 1rem;
+    }
+
+    .bz-kicker {
+      color: var(--primary);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      line-height: 1.3;
+      text-transform: uppercase;
+    }
+
+    .bz-members {
+      color: var(--muted-foreground);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      text-transform: none;
+    }
+
+    .bz-members::before {
+      content: "·";
+      margin-inline: 0.6em;
+    }
+
+    /* Nameplate */
+
+    .bz-nameplate {
+      padding-block: 0.75rem 1.75rem;
+      border-block-end: 1px solid var(--bz-rule);
+      background: var(--bz-paper);
+    }
+
+    .bz-dateline {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem 1rem;
+      padding-block-end: 0.75rem;
+      border-block-end: 1px solid var(--bz-rule);
+    }
+
+    .bz-wordmark {
+      margin-block: 1.5rem 0.75rem;
+      font-family: var(--font-work-serif);
+      font-size: clamp(2.75rem, 1.4rem + 6vw, 5.75rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 0.95;
+      text-align: center;
+      text-wrap: balance;
+    }
+
+    /* The double rule under the name, as on a masthead. */
+    .bz-wordmark::after {
+      content: "";
+      display: block;
+      max-inline-size: 46rem;
+      block-size: 0.3125rem;
+      margin: 1.125rem auto 0;
+      border-block: 1px solid currentColor;
+    }
+
+    .bz-motto {
+      max-inline-size: 40rem;
+      margin-inline: auto;
+      color: var(--muted-foreground);
+      font-family: var(--font-work-serif);
+      font-size: 1.0625rem;
+      font-style: italic;
+      text-align: center;
+      text-wrap: balance;
+    }
+
+    /* Cover story and contents */
+
+    .bz-issue-grid {
+      display: grid;
+      gap: 1.5rem var(--zone-gap);
+    }
+
+    .bz-lead {
+      display: grid;
+      grid-template-columns: 7rem minmax(0, 1fr);
+      align-items: center;
+      gap: 1rem;
+      padding-block: 1.5rem;
+      border-block-end: 1px solid var(--bz-rule);
+    }
+
+    .bz-lead-cover {
+      display: block;
+      rotate: -2deg;
+      transition: rotate 0.3s ease-out;
+    }
+
+    .bz-lead:hover .bz-lead-cover {
+      rotate: 0deg;
+    }
+
+    .bz-lead-title {
+      margin-block: 0.5rem 0.375rem;
+      font-family: var(--font-work-serif);
+      font-size: clamp(1.625rem, 1.1rem + 2.4vw, 3.125rem);
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      line-height: 1.05;
+      text-wrap: balance;
+    }
+
+    .bz-byline {
+      color: var(--muted-foreground);
+      font-family: var(--font-work-serif);
+      font-size: 1.0625rem;
+      font-style: italic;
+    }
+
+    .bz-dek {
+      max-inline-size: 36rem;
+      margin-block-start: 0.75rem;
+      font-family: var(--font-work-serif);
+      font-size: clamp(1.0625rem, 1rem + 0.4vw, 1.3125rem);
+      line-height: 1.45;
+      text-wrap: pretty;
+    }
+
+    .bz-lead-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+      margin-block-start: 1.25rem;
+    }
+
+    .bz-stamp > a {
+      inline-size: 2.25rem;
+      block-size: 2.25rem;
+      border: 1px solid var(--bz-rule);
+    }
+
+    .bz-contents-title {
+      margin-block-end: 0.875rem;
+      padding-block-end: 0.5rem;
+      border-block-end: 1px solid currentColor;
+      font-family: var(--font-work-serif);
+      font-size: 1.125rem;
+      font-weight: 700;
+    }
+
+    /* The lead is No. I; the contents continue from II. */
+    .bz-contents-list {
+      display: grid;
+      gap: 1rem 1.5rem;
+      counter-reset: bz-issue 1;
+    }
+
+    .bz-contents-list > li,
+    .bz-column-list > li {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      align-items: start;
+    }
+
+    .bz-contents-list > li {
+      counter-increment: bz-issue;
+    }
+
+    .bz-contents-list > li::before,
+    .bz-column-list > li::before {
+      color: var(--primary);
+      font-family: var(--font-work-serif);
+      font-size: 1.125rem;
+      font-style: italic;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .bz-contents-list > li::before {
+      content: counter(bz-issue, upper-roman);
+    }
+
+    /* Modules: rules, not panels */
+
+    .zone-module {
+      padding: 0.75rem 0 0;
+      border-block-start: 3px double var(--bz-rule);
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .zone-module > header h2,
+    .bz-section-title {
+      font-family: var(--font-work-serif);
+      font-weight: 700;
+    }
+
+    .bz-section-head {
+      margin-block-end: 1rem;
+    }
+
+    .bz-section-title {
+      font-size: calc(1.375rem * var(--zone-heading-scale, 1));
+      letter-spacing: -0.01em;
+      line-height: 1.15;
+      text-wrap: balance;
+    }
+
+    .bz-more {
+      color: var(--primary);
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .bz-more:hover,
+    .bz-lead-title a:hover,
+    .bz-person:hover,
+    .bz-colophon a:hover {
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.18em;
+    }
+
+    /* Shelves that page like Goodreads' "Readers also enjoyed" */
+
+    .bz-shelf-title {
+      display: flex;
+      flex: 1;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.25rem 1rem;
+      min-inline-size: 0;
+    }
+
+    header.bz-shelf-title {
+      margin-block-end: 0.75rem;
+    }
+
+    .bz-tabs {
+      max-inline-size: 100%;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .bz-carousel {
+      container-type: inline-size;
+    }
+
+    .bz-carousel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-block-end: 0.75rem;
+    }
+
+    .bz-carousel-head:empty {
+      display: none;
+    }
+
+    .bz-pages {
+      display: flex;
+      flex: none;
+      gap: 0.25rem;
+      margin-inline-start: auto;
+    }
+
+    .bz-pages > span {
+      inline-size: 1.25rem;
+      block-size: 0.1875rem;
+      border-radius: 1px;
+      background: var(--bz-hair);
+    }
+
+    .bz-pages > span[data-current] {
+      background: var(--foreground);
+    }
+
+    .bz-carousel-body {
+      position: relative;
+    }
+
+    .bz-track {
+      --bz-tiles: 2.3;
+      --bz-gap: 1rem;
+      display: flex;
+      gap: var(--bz-gap);
+      margin-inline: -0.25rem;
+      padding: 0.25rem 0.25rem 0.5rem;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scroll-padding-inline: 0.25rem;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: none;
+    }
+
+    .bz-track > li {
+      flex: 0 0 calc((100% - (var(--bz-tiles) - 1) * var(--bz-gap)) / var(--bz-tiles));
+      min-inline-size: 0;
+      scroll-snap-align: start;
+    }
+
+    @container (min-width: 30rem) {
+      .bz-track {
+        --bz-tiles: 3.3;
+        --bz-gap: 1.25rem;
+      }
+    }
+
+    @container (min-width: 42rem) {
+      .bz-track {
+        --bz-tiles: 4;
+        --bz-gap: 1.5rem;
+      }
+    }
+
+    @container (min-width: 60rem) {
+      .bz-track {
+        --bz-tiles: 5;
+      }
+    }
+
+    .bz-turn {
+      position: absolute;
+      inset-block-start: 36%;
+      z-index: 30;
+      display: grid;
+      place-items: center;
+      inline-size: 2.75rem;
+      block-size: 2.75rem;
+      translate: 0 -50%;
+      border: 1px solid var(--bz-hair);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--foreground);
+      box-shadow: 0 2px 12px rgb(0 0 0 / 0.2);
+      cursor: pointer;
+      transition: scale 0.2s ease-out;
+    }
+
+    .bz-turn:hover {
+      scale: 1.06;
+    }
+
+    .bz-turn[data-edge="start"] {
+      inset-inline-start: -0.75rem;
+    }
+
+    .bz-turn[data-edge="end"] {
+      inset-inline-end: -0.75rem;
+    }
+
+    .bz-turn[hidden] {
+      display: none;
+    }
+
+    .bz-turn > svg {
+      inline-size: 1.25rem;
+      block-size: 1.25rem;
+    }
+
+    .bz-turn:dir(rtl) > svg {
+      rotate: 180deg;
+    }
+
+    /* Editors' lists as columns */
+
+    .bz-column + .bz-column {
+      margin-block-start: 1.75rem;
+      padding-block-start: 1.25rem;
+      border-block-start: 1px solid var(--bz-hair);
+    }
+
+    .bz-column-title {
+      font-family: var(--font-work-serif);
+      font-size: 1.25rem;
+      font-weight: 600;
+      line-height: 1.25;
+      text-wrap: balance;
+    }
+
+    .bz-standfirst {
+      margin-block-start: 0.25rem;
+      color: var(--muted-foreground);
+      font-family: var(--font-work-serif);
+      font-style: italic;
+      text-wrap: pretty;
+    }
+
+    .bz-column-list {
+      margin-block: 1rem 0.25rem;
+      column-gap: 2.5rem;
+      column-rule: 1px solid var(--bz-hair);
+      columns: 2 17rem;
+      counter-reset: bz-item;
+    }
+
+    .bz-column-list > li {
+      padding-block-end: 1.125rem;
+      break-inside: avoid;
+      counter-increment: bz-item;
+    }
+
+    .bz-column-list > li::before {
+      content: counter(bz-item, decimal-leading-zero);
+    }
+
+    /* Author spotlight */
+
+    .bz-spotlight-lead {
+      display: grid;
+      grid-template-columns: 5.5rem minmax(0, 1fr);
+      align-items: center;
+      gap: 1rem 1.25rem;
+    }
+
+    .bz-portrait,
+    .bz-portrait-small {
+      flex: none;
+      border-radius: 999px;
+      object-fit: cover;
+    }
+
+    .bz-portrait {
+      inline-size: 5.5rem;
+      block-size: 5.5rem;
+      box-shadow: 0 0 0 0.25rem var(--zone-page), 0 0 0 0.3125rem var(--bz-rule);
+      font-size: 2.25rem;
+    }
+
+    .bz-portrait-small {
+      inline-size: 2rem;
+      block-size: 2rem;
+      font-size: 0.875rem;
+    }
+
+    .bz-monogram {
+      display: grid;
+      place-items: center;
+      background: var(--primary);
+      color: var(--primary-foreground);
+      font-family: var(--font-work-serif);
+      font-weight: 700;
+    }
+
+    .bz-spotlight-more {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.625rem 1.25rem;
+      margin-block-start: 1rem;
+      padding-block-start: 0.75rem;
+      border-block-start: 1px solid var(--bz-hair);
+    }
+
+    .bz-person {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      max-inline-size: 14rem;
+      font-size: 0.875rem;
+    }
+
+    /* Colophon */
+
+    .bz-colophon {
+      margin-block-start: 1.5rem;
+      border-block-start: 3px double var(--bz-rule);
+      background: var(--bz-paper);
+    }
+
+    .bz-colophon-grid {
+      display: grid;
+      gap: 0.625rem 2rem;
+      padding-block: 2rem 2.5rem;
+    }
+
+    .bz-colophon-note {
+      max-inline-size: 38rem;
+      font-family: var(--font-work-serif);
+      font-size: 1.0625rem;
+      text-wrap: pretty;
+    }
+
+    /* Han and Hangul have no italic; setting them oblique only smears them. */
+    :is(.bz-motto, .bz-byline, .bz-standfirst):is(:lang(zh), :lang(ja), :lang(ko)) {
+      font-style: normal;
+    }
+
+    @media (min-width: 30rem) {
+      .bz-lead {
+        grid-template-columns: 9rem minmax(0, 1fr);
+        gap: 1.5rem;
+      }
+    }
+
+    @media (min-width: 40rem) {
+      .bz-page {
+        padding-inline: 1.5rem;
+      }
+
+      .bz-contents-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (min-width: 48rem) {
+      .bz-lead {
+        grid-template-columns: 12.5rem minmax(0, 1fr);
+        gap: 2.25rem;
+      }
+
+      .bz-colophon-grid {
+        grid-template-columns: 8rem minmax(0, 1fr) auto;
+        align-items: baseline;
+      }
+    }
+
+    @media (min-width: 64rem) {
+      .bz-page {
+        padding-inline: 2.5rem;
+      }
+
+      .bz-issue-grid {
+        grid-template-columns: minmax(0, 1fr) 18.5rem;
+        align-items: start;
+      }
+
+      .bz-lead {
+        border-block-end: 0;
+      }
+
+      .bz-contents {
+        padding-block-start: 1.5rem;
+      }
+
+      .bz-contents-list {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (pointer: coarse) {
+      .bz-turn {
+        display: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .bz-lead-cover,
+      .bz-turn {
+        transition: none;
+      }
+
+      .bz-lead-cover {
+        rotate: none;
+      }
+    }
+
+    @media print {
+      .bz-nameplate,
+      .bz-colophon {
+        background: none;
+      }
+
+      .bz-turn,
+      .bz-pages {
+        display: none;
+      }
+    }
+  }
+}
