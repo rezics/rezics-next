@@ -2,12 +2,9 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/avatar';
 import { initials } from '@rezics/ui/avatar-initials';
-import { Button } from '@rezics/ui/button';
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator,
   MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@rezics/ui/menu';
-import { Sheet, SheetClose, SheetContent, SheetTitle } from '@rezics/ui/sheet';
-import { XIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -69,12 +66,17 @@ function AccountIdentity({ session, messages, compact = false }: {
   </>;
 }
 
+// The phone sheet loads on first use; see account-sheet.tsx.
+const AccountSheet = lazy(() => import('./account-sheet.tsx'));
+const warmSheet = () => { void import('./account-sheet.tsx'); };
+
 /** The signed-in account menu uses submenus on desktop and a sheet on phones. */
 export function AccountMenu({ session, messages, accountOrigin }: {
   session: Session; messages: AuthMessages; accountOrigin: string;
 }) {
   const { locale, t, theme, setTheme } = useShell();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetMounted, setSheetMounted] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
   const localeForm = useRef<HTMLFormElement>(null);
@@ -153,20 +155,15 @@ export function AccountMenu({ session, messages, accountOrigin }: {
         </MenuContent>
       </Menu>
     </div>
-    <Sheet open={sheetOpen} onOpenChange={details => setSheetOpen(details.open)}>
-      <button type="button" aria-label={messages.accountMenu} data-hydrated={hydrated ? 'true' : undefined}
-        aria-haspopup="dialog"
-        aria-expanded={sheetOpen} onClick={() => setSheetOpen(true)}
-        className="inline-flex items-center rounded-full p-1 outline-none hover:bg-accent/60
-          focus-visible:ring-2 focus-visible:ring-ring sm:hidden">
-        <AccountIdentity session={session} messages={messages} compact />
-      </button>
-      <SheetContent placement="bottom" showCloseButton={false} className="max-h-[85dvh]">
-        <div className="flex items-center justify-between border-border/60 border-b px-5 py-4">
-          <SheetTitle>{messages.accountMenu}</SheetTitle>
-          <SheetClose asChild><Button variant="ghost" size="icon-sm" aria-label={t.close}>
-            <XIcon aria-hidden="true" /></Button></SheetClose>
-        </div>
+    <button type="button" aria-label={messages.accountMenu} data-hydrated={hydrated ? 'true' : undefined}
+      aria-haspopup="dialog" aria-expanded={sheetOpen} onPointerEnter={warmSheet} onFocus={warmSheet}
+      onTouchStart={warmSheet} onClick={() => { setSheetMounted(true); setSheetOpen(true); }}
+      className="inline-flex items-center rounded-full p-1 outline-none hover:bg-accent/60
+        focus-visible:ring-2 focus-visible:ring-ring sm:hidden">
+      <AccountIdentity session={session} messages={messages} compact />
+    </button>
+    {sheetMounted ? <Suspense fallback={null}>
+      <AccountSheet open={sheetOpen} onOpenChange={setSheetOpen} title={messages.accountMenu} closeLabel={t.close}>
         <div className="grid gap-5 overflow-y-auto px-5 py-4">
           <div><p className="font-medium">{displayName}</p>
             <p className="text-muted-foreground text-sm">{agent.text}
@@ -189,8 +186,8 @@ export function AccountMenu({ session, messages, accountOrigin }: {
           <a href={accountOrigin} className="text-sm">{messages.manageAccount}</a>
           <button type="button" onClick={signOut} className="text-start text-sm">{messages.signOut}</button>
         </div>
-      </SheetContent>
-    </Sheet>
+      </AccountSheet>
+    </Suspense> : null}
     <form ref={localeForm} method="post" action="/locale/select" hidden>
       <input ref={localeField} type="hidden" name="locale" defaultValue={locale} />
     </form>

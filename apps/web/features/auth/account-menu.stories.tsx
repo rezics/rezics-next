@@ -34,7 +34,8 @@ export const SignedIn: Story = {
     await expect(trigger).toHaveTextContent('@aster');
     await userEvent.click(trigger);
     if (window.matchMedia('(max-width: 639px)').matches) {
-      const dialog = await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: 'Account menu' });
+      const dialog = await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: 'Account menu' },
+        { timeout: 5000 });
       await expect(within(dialog).getByRole('button', { name: 'Switch Agent' })).toBeVisible();
       await expect(within(dialog).getByRole('link', { name: 'Profile settings' }))
         .toHaveAttribute('href', '/en/settings');
