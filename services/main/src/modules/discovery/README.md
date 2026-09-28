@@ -1,120 +1,90 @@
 # Discovery projection
 
-Discovery uses its own derived generation because recommendation scores sum
-signals across a different population. `contract.ts` owns the typed browse
-contract, `source.ts` verifies source records, and Access migrations 315 and 380
-own the projection, indexes and refresh queue. Existing phrase-query profiles
-are unchanged.
+Discovery owns a separate generation because recommendation scores aggregate
+different signals. Its population, ordering and response bounds live in
+[`contract.ts`](contract.ts); source admission lives in [`source.ts`](source.ts).
+The rating and classification owners retain their existing meaning, protection
+checks and evidence limits. Display hydration belongs to the browse read, so a
+build does not load titles, covers, metadata, language selections or serial counts
+unless a classification owner needs them for its own verification.
 
-Top-rated uses the selected standing Context's arithmetic mean, with Work IRI
-as the tie-breaker; unrated Works are excluded. An explicit Context avoids
-silently combining questions or scales. Global is the independent Global
-population, Realm uses that Realm's standing Context, and Mine uses only this
-Account principal's standing Global slot. Mine contains only public Works the
-principal has rated. Public/Realm recent browsing selects public Main Works;
-it is not a Realm adoption shelf. A classification `term` is a Sense IRI.
-Realm classification follows its existing resolver, including local rejection
-and Global inheritance. Mine has no personal classification semantics.
+## Operating a build
 
-`GET /v1/rating-contexts` lists standing Contexts for Global or a public Realm,
-without requiring a Work. Each result includes its question, recorded language,
-revision and scale. Questions currently come from the Context owner's English
-creation profile. Clients select a listed Context rather than combining scales.
-The collection uses the same graph-position cursor fence as Work reads.
+The typed `/v1/discovery` management operations require `work:read`. Shared builds
+also require the Access recommendation-management grant. Mine always belongs to
+the authenticated Account principal, independently of its acting Agent.
 
-Cards include the first three author credits in ordinal/IRI order and up to
-three accepted classifications in Sense IRI order. Public native Agent credits
-resolve their current display name and handle when the card is read. External
-Open Library references retain null names because the source conversion records
-only author keys. Concept names are hydrated in the requested language with the
-existing summary fallback policy. A term match includes its localized name;
-page-level `matchedTerm` is null when no admitted item matches.
+1. Register `generation-builds` with an idempotency key and a basis. Select an
+   explicit standing rating Context for top-rated or Mine.
+2. Advance the returned generation with its last checkpoint until complete.
+   Management advances one candidate at a time; the scheduler uses bounded
+   batches. A checkpoint race returns 409. A process lost during a step leaves a
+   30-second lease, after which another process can resume.
+3. Activate with the returned `activeHeadRevision` and a new idempotency key.
+   Activation compares the head revision atomically. A completed generation
+   retains its original source cut even when subsequent writes have occurred.
+   Recovery boundaries and inactive Mine principals still prevent activation.
 
-`GET /v1/discovery/popular-terms` reads the current generation's materialized
-Work counts by accepted Sense, optionally selecting a Realm and standing rating
-Context. It seeks at most 20 terms and hydrates Concept names in the requested
-language. Counts are built with the generation; a stale generation is withheld.
+The scheduler enrolls public browse populations and standing Contexts after the
+Main relay acknowledges the current graph cut. Existing operator-managed bases,
+including Mine, enroll on activation. GET never starts a build. Check the queue's
+`last_outcome`, `attempts` and `last_duration_ms` when diagnosing a delayed refresh;
+timing and work limits are defined in [`refresh-store.ts`](refresh-store.ts).
 
-The read chooses a bounded index page before hydrating current summaries. It
-returns an exact page count and a cumulative match count: a lower bound while
-continuation remains, exact when the generation's admitted population is
-exhausted. Suppressed candidate counts and private principal identities are
-never returned. Source positions, filter bindings and the active generation
-fence every cursor. An Access protection change or graph write requires a fresh
-build; this deliberately trades availability during writes for a simple current
-disclosure proof. An absent generation returns 503, a stale one 409.
+## Why reuse is conservative
 
-## Build and refresh
+[`changes.ts`](changes.ts) requires contiguous outbox batches, complete event
+counts and ordinals, and a known command whose discovery effects belong to one
+Work. Gaps, unknown commands and cross-Work definition/protection changes cause
+a full rebuild. Access source-fence changes also prevent reuse. A changed Work
+that is no longer public is removed from the new generation.
 
-Use the typed `/v1/discovery` operations in `management.ts`, with `work:read`
-OAuth scope. Shared builds require the existing Access recommendation-management
-grant. Anyone may build their own Mine population; an acting Agent cannot
-select another Account's population.
+Reuse copies unchanged SQL entries and hydrates only changed Works. The copy is
+bounded by `DISCOVERY_COST.reuseEntries`; larger populations use resumable full
+builds. This preserves the existing immutable generation and cursor semantics
+without introducing chains of dependent projections. It saves graph work, but
+still performs O(entries) SQL work within that fixed copy bound. Frequent writes
+and five-minute row retention need separate storage-capacity qualification.
 
-1. Register `generation-builds` with an idempotency key and the desired basis.
-   The basis includes a Context for top-rated or Mine; recent may omit it.
-2. Call the generation's `advance` operation with the last returned checkpoint
-   until `complete`. Each call verifies at most one Work. A checkpoint race
-   returns 409; read the generation before continuing. A crashed step's lease
-   expires after 30 seconds, so another process can resume it.
-3. Activate using the generation view's `activeHeadRevision` as the expected
-   revision and a new idempotency key. Activation is an exact-head CAS. A source
-   change prevents activation; cancel the building generation and register a
-   fresh snapshot. Cancel is repeatable and cannot cancel an active generation.
+A partial build can survive new-Work creation: complete outbox coverage proves
+that all intervening changes affect Works born after its cut, and enumeration
+excludes those births. It restarts for changes to existing Works because separate
+Fuseki HTTP queries do not share a retained transaction. This follows Jena's
+[remote transaction boundary](https://jena.apache.org/documentation/rdfconnection/#remote-transactions)
+(consulted 2026-09-28). Rows commit only after the read envelope validates its
+graph, principal, Realm and source-attribution fences. A moved read releases its
+own step lease and retries promptly; it cannot publish mixed-position rows.
 
-Main also runs `DiscoveryRefreshWorker` when its Main relay connection is
-configured. It waits for the acknowledged relay epoch/sequence to equal the
-current graph cut. Access-only changes are detected through the existing source
-fence even when that relay position stays unchanged. GET never starts a build or
-aggregates ratings.
+Completed generations may activate while newer changes wait for the next job.
+Browse responses mark old generations `stale`; current disclosure checks still
+filter Works, and stale classification/credit payloads are withheld. An absent
+generation returns 503. A retained cursor may continue through ordinary writes;
+an expired or recovered basis requires a restart. These are retained projection
+rows, not retained authorization.
 
-The scheduler enrolls Global browse, public Realms and standing rating Contexts
-through a resumable catalog scan. Activation enrolls existing operator-managed
-bases, including Mine with its exact Account owner. Each tick claims at most one
-due population and advances at most one Work, reusing management leases,
-checkpoints and activation CAS. A ready generation remains attached to its job
-before activation, so a restart resumes it. Obsolete builds are cancelled and
-replaced. Job claims expire after 30 seconds; concurrent Main processes cannot
-finish an older claim. An inactive Mine owner or unavailable source defers the
-job without relaxing disclosure.
+## Measurements and limits
 
-The due queue records attempts, last outcome and elapsed milliseconds for
-operations diagnosis. Polling runs every second; current populations and catalog
-pages are revisited after five seconds, failures after 30 seconds. Each tick
-also removes at most 1,000 entries from one terminal generation. Immutable
-generation/activation receipts remain retained. A full rebuild was chosen over
-incremental deltas because the current source fence covers graph writes and
-cross-Work Access protection changes; a changed Work event alone cannot prove
-the rest of the population remains admissible.
+The G-362 pre-change refresh fixture (QA `20260928t031801-3bc7ce`) measured 40
+ticks, at most 28 graph queries and 411 ms per measured tick, with one Work per
+tick. After the change, the corresponding refresh fixture (QA
+`20260928t033429-f9d5a9`) measured 14 ticks, at most 16 queries and 149 ms per
+measured tick. It exercises real relay delivery, Context enrollment, ratings,
+credits, Access invalidation, activation recovery and Mine isolation.
 
-## Cost evidence and limits
+The native load probe (QA `20260928t034147-00045f`) rebuilt 10,000 public Works in
+33.534 seconds (221 graph queries, 40 ticks) and refreshed one changed Work in
+721 ms (five queries, including the scheduler delay). It asserts targets of
+60 seconds and one second. That fixture uses one semantic type, no classification
+or credit fanout and no rating Context; it qualifies this projection workload,
+not dense rated/classified populations or the full retained medium corpus.
+Fixture creation is outside the measurement. The executable probe and its
+measurement artifact are owned by `tests/qa/load/discovery-build.test.ts`.
 
-The fanout materializes each type/term combination, including wildcards. This
-lets both orders use leading equality keys followed by a tuple continuation,
-as described by PostgreSQL's [multicolumn indexes](https://www.postgresql.org/docs/18/indexes-multicolumn.html)
-and [row comparisons](https://www.postgresql.org/docs/18/functions-comparisons.html#ROW-WISE-COMPARISON)
-(consulted 2026-09-28). The native discovery test measures first and deep pages
-for all four filter combinations under both orders, with 20,000 synthetic Works
-and 80,000 index entries. Each plan must use one index search, at most 21 rows,
-no separate sort or sequential scan, and no rows discarded by a residual filter.
-This qualifies the seek shape on that fixture, not deployment capacity.
-
-The native refresh test runs actual outbox delivery, automatic Global/Realm
-enrollment, Access invalidation, source restart, lease replacement, activation
-outage recovery and Mine isolation. QA `20260927t175547-c48e4c` measured 40 ticks
-over three public Works, a private Work, two public Realms, two standing Contexts
-and one Mine population: at most one projected Work, 25 graph queries and 348 ms
-per measured tick. The test writes its measurements under `.temp/` and asserts
-the logical ceilings in `DISCOVERY_REFRESH_COST`. It also checks the current
-generation is reused when nothing changes. These small-fixture measurements do
-not qualify large-corpus refresh latency. Sustained writes can restart full
-builds indefinitely; reads continue to return 409 until a current build activates.
-
-`DISCOVERY_COST` and the shared Work envelope bound output, fanout, graph calls,
-bytes and deadlines. Builds reuse verified Work classification/rating reads;
-more than 20 classification candidates or the rating owner's 100-slot ceiling
-withholds the build rather than publishing an incomplete population. Graph
-enumeration during a build can scan/sort the corpus and has no claimed indexed
-seek bound. The Access invalidation row serializes source changes; hot-writer
-capacity and large-corpus build duration remain unqualified. Existing restore
-and erasure owners remain responsible for their authenticated recovery cuts.
+One-Work deltas embed their exact Work IRI in graph patterns: an outer `VALUES`
+binding alone caused ARQ to traverse the public population before joining it,
+taking about 765 ms for that single-Work query in the 10,000-Work fixture.
+Candidate scans for full builds can still scan/sort the Work population and do
+not claim indexed keyset complexity. The existing browse seek-plan test covers
+both orders and all equality-filter combinations over 20,000 synthetic Works.
+The graph read envelope and owner evidence limits remain enforced; a source
+that exceeds them withholds the build instead of publishing a partial population.
