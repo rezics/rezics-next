@@ -106,7 +106,17 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
   vertical needs its own listing, browse and detail presentation, and the
   fields to fill them come from Main.
 - **One visual language.** Zones use REZICS's shared visual language for now.
-  A Zone changes colours or type only when it explicitly asks to.
+  A Zone changes colours or type only when it explicitly asks to; until one
+  can, the host applies only a Zone's structure tokens, and a test keeps
+  package CSS to the platform's colours and faces.
+- **Browse beside the home** (2026-09-28, after Modrinth's search). Every Zone
+  has `/r/<zone>/browse`: search, Facet Conditions (`type`, `concept` and the
+  facts Main reads, such as status, length and a mod's loader, game version
+  and environment), sort and a list or grid, each a link with its own URL.
+  The home leads with its search and those values; the Works tab became
+  Browse's grid. It reads the Realm's newest adoptions as one bounded window
+  and says so when a Zone outgrows it, until a listing projection replaces it.
+  REZICS counts no downloads, so nothing sorts or shows them.
 - **Customization tiers.** Every Zone gets theme-token presets and a module
   layout; filtered community CSS is deferred. **Official Zones** may ship full
   CSS and JS as reviewed first-party packages in this repository, rendered
