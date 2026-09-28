@@ -4,7 +4,9 @@ import { structureCreationValidations } from '../src/modules/structure/change.ts
 import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { GRAPHS, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
-test('Structure create validates Collection and Zone owner links under their owner shapes', async () => {
+// Structure create writes only the owner's link to its Structure, so it validates that link's shape; the
+// owner's full shape belongs to the owner's own commands.
+test('Structure create validates Collection and Zone owner links under their owner link shapes', async () => {
   const environment = { fuseki: { commandHealth: async () => ({
     profiles: Object.fromEntries(Object.entries(profileRegistry).map(([id, profile]) =>
       [id, profile.sha256])),
@@ -14,8 +16,8 @@ test('Structure create validates Collection and Zone owner links under their own
   const generation = 'https://rezics.com/id/33333333-3333-3333-3333-333333333333';
   const revision = 'https://rezics.com/id/44444444-4444-4444-4444-444444444444';
   for (const [profileId, ownerProfile, ownerShape] of [
-    ['collection-membership', 'collection-curation-v1', 'collection-shape'],
-    ['zone-navigation', 'zone-capability-v1', 'zone-shape'],
+    ['collection-membership', 'collection-curation-v1', 'structure-link-shape'],
+    ['zone-navigation', 'zone-capability-v1', 'navigation-link-shape'],
   ] as const) {
     const checks = await structureCreationValidations(environment, structureProfileFor(profileId),
       owner, structure, generation, revision);
