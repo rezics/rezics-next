@@ -7,9 +7,11 @@ import { seedReply, seedReplyId } from './replies.ts';
 import { refreshSeedTokens, type SeedState, type Session } from './state.ts';
 
 // Discussions in the community Realms as members write them: a reply rooted on
-// the Work's public text and written in the Realm, placed there by its author
-// (trusted members need no queue), then replies to it and members' votes.
-// A placed reply is read first, so a replay only reads.
+// the Work's public text, placed in the Realm by its author (trusted members
+// need no queue), then replies to it and members' votes. A placed reply is
+// read first, so a replay only reads. The replies do not name the Realm as
+// their origin: Main hides such a reply until it is placed, and placement needs
+// its digest, which no read gives its author before then.
 
 const short = (id: string) => id.slice(-36);
 interface Placed { reply: string; revisionId: string; placement: string }
@@ -32,11 +34,10 @@ async function replyRoot(state: SeedState, id: string, roots: Map<string, Root>)
 /** The author places their own reply; if the Realm asks for review, its owner approves it first. */
 async function place(api: SeedApi, realm: { realm: string; owner: Session }, author: Session,
   reply: { reply: string; revisionId: string }, root: Root, key: string): Promise<string> {
-  // A reply written in a Realm stays private until placed there; its author reads the exact revision's digest.
-  const exact = await readMain<{ reference: { byteDigest: string } }>(api, `/v1/content-revisions/${
-    reply.revisionId}?actingSubject=${encodeURIComponent(author.actingSubject)}`, author.token);
+  const exact = await readMain<{ revisionDigest: string }>(api,
+    `/v1/member-replies/${short(reply.reply)}?actingSubject=${encodeURIComponent(author.actingSubject)}`, author.token);
   if (!exact) throw new Error('Discussion reply is unreadable by its author');
-  const digest = exact.reference.byteDigest;
+  const digest = exact.revisionDigest;
   const body = { profile: 'realm-reply-placement-v1', realm: realm.realm, reply: reply.reply,
     revisionId: reply.revisionId, revisionDigest: digest, expectedHead: null };
   try {
@@ -59,13 +60,14 @@ async function place(api: SeedApi, realm: { realm: string; owner: Session }, aut
 
 async function discuss(state: SeedState, realm: { realm: string; owner: Session }, author: Session, root: Root,
   key: string, language: string, body: string, parent?: Placed): Promise<Placed> {
-  const reply = seedReplyId(`community:${key}`);
+  // `community:` ids were Realm-origin drafts an earlier seed could not place; these are their replacements.
+  const id = `community-thread:${key}`, reply = seedReplyId(id);
   const visible = await readMain<{ placement: string; revisionId: string }>(state.api,
     `/v1/realms/${encodeURIComponent(realm.realm)}/replies/${encodeURIComponent(reply)}?actingSubject=${
       encodeURIComponent(author.actingSubject)}`, author.token);
   if (visible) return { reply, revisionId: visible.revisionId, placement: visible.placement };
-  const written = await seedReply(state.api, author, { id: `community:${key}`, work: root.work,
-    revision: root.revision, language, originRealm: realm.realm }, body, parent);
+  const written = await seedReply(state.api, author, { id, work: root.work, revision: root.revision, language },
+    body, parent);
   return { ...written, placement: await place(state.api, realm, author, written, root, key) };
 }
 
