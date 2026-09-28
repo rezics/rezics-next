@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { BookOpenIcon, CookingPotIcon, FileTextIcon, HourglassIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useActionState, useId } from 'react';
@@ -70,12 +70,9 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
     </fieldset>
     <Field>
       <FieldLabel>{t.writingLanguage}</FieldLabel>
-      <NativeSelect name="language" defaultValue={values.language} required className="sm:max-w-72">
-        <NativeSelectOption value="">{t.chooseWritingLanguage}</NativeSelectOption>
-        <NativeSelectOption value="und">{t.languageUndetermined}</NativeSelectOption>
-        {languages.map(tag => <NativeSelectOption key={tag} value={tag} lang={tag}>
-          {languageName(tag, locale)}</NativeSelectOption>)}
-      </NativeSelect>
+      <ChoiceSelect name="language" defaultValue={values.language} required className="sm:max-w-72"
+        placeholder={t.chooseWritingLanguage} options={[{ value: 'und', label: t.languageUndetermined },
+          ...languages.map(tag => ({ value: tag, label: languageName(tag, locale), lang: tag }))]} />
       <FieldHelper>{t.languageError}</FieldHelper>
     </Field>
     {state.status === 'error' ? <Alert variant="destructive">

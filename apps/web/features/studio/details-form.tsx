@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { Textarea } from '@rezics/ui/textarea';
 import { CircleCheckIcon, InfoIcon, PlusIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -84,12 +84,9 @@ export function DetailsForm({ agent, work, book, initialState, save = saveWorkDe
   return <form onSubmit={event => void submit(event)} className="grid gap-6">
     {book ? <Field className="sm:max-w-72">
       <FieldLabel>{t.completionStatus}</FieldLabel>
-      <NativeSelect value={completion} onChange={event => setCompletion(event.target.value as DetailsValues['completion'])}>
-        <NativeSelectOption value="">{t.completionUnset}</NativeSelectOption>
-        <NativeSelectOption value="ongoing">{t.completionOngoing}</NativeSelectOption>
-        <NativeSelectOption value="completed">{t.completionCompleted}</NativeSelectOption>
-        <NativeSelectOption value="hiatus">{t.completionHiatus}</NativeSelectOption>
-      </NativeSelect>
+      <ChoiceSelect value={completion} onValueChange={value => setCompletion(value as DetailsValues['completion'])}
+        options={[{ value: '', label: t.completionUnset }, { value: 'ongoing', label: t.completionOngoing },
+          { value: 'completed', label: t.completionCompleted }, { value: 'hiatus', label: t.completionHiatus }]} />
       <FieldHelper>{t.completionHelp}</FieldHelper>
     </Field> : null}
     <ul className="grid gap-4">
@@ -97,12 +94,10 @@ export function DetailsForm({ agent, work, book, initialState, save = saveWorkDe
         <div className="flex flex-wrap items-end justify-between gap-3">
           <Field className="w-full sm:w-64">
             <FieldLabel>{t.detailsLanguage}</FieldLabel>
-            <NativeSelect value={entry.language} onChange={event => edit(index, { language: event.target.value })}
-              required={Boolean(entry.title || entry.description || entry.tagline)} size="sm">
-              <NativeSelectOption value="">—</NativeSelectOption>
-              {choices(entry.language).map(tag => <NativeSelectOption key={tag} value={tag} lang={tag}>
-                {languageName(tag, locale)}</NativeSelectOption>)}
-            </NativeSelect>
+            <ChoiceSelect value={entry.language} onValueChange={language => edit(index, { language })}
+              required={Boolean(entry.title || entry.description || entry.tagline)} size="sm"
+              options={[{ value: '', label: '—' }, ...choices(entry.language).map(tag =>
+                ({ value: tag, label: languageName(tag, locale), lang: tag }))]} />
           </Field>
           {entries.length > 1 ? <Button type="button" variant="ghost" size="sm"
             onClick={() => setEntries(current => current.filter((_, other) => other !== index))}>
@@ -138,12 +133,10 @@ export function DetailsForm({ agent, work, book, initialState, save = saveWorkDe
       </Field>
       <Field>
         <FieldLabel>{t.originalLanguage}</FieldLabel>
-        <NativeSelect value={original.language} required={Boolean(original.title)}
-          onChange={event => setOriginal(current => ({ ...current, language: event.target.value }))}>
-          <NativeSelectOption value="">—</NativeSelectOption>
-          {choices(original.language).map(tag => <NativeSelectOption key={tag} value={tag} lang={tag}>
-            {languageName(tag, locale)}</NativeSelectOption>)}
-        </NativeSelect>
+        <ChoiceSelect value={original.language} required={Boolean(original.title)}
+          onValueChange={language => setOriginal(current => ({ ...current, language }))}
+          options={[{ value: '', label: '—' }, ...choices(original.language).map(tag =>
+            ({ value: tag, label: languageName(tag, locale), lang: tag }))]} />
       </Field>
     </div>
     {state.status === 'saved' ? <p role="status" className="flex items-center gap-2 text-sm text-success-foreground">

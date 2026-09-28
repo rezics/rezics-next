@@ -119,11 +119,12 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     await page.getByRole('textbox', { name: 'Title' }).fill(title);
     await page.getByText('A book', { exact: true }).click();
     const writingLanguage = page.getByRole('combobox', { name: 'Language you’ll write in' });
-    await expect(writingLanguage).toHaveValue('');
+    await expect(writingLanguage).toHaveText('Choose a language');
     await page.getByRole('button', { name: 'Create as Studio Writer 书生' }).click();
     await expect(page).toHaveURL(`${studio}/new`);
     await expect(page.getByText('Choose the language of this work, or select Undetermined.')).toBeVisible();
-    await writingLanguage.selectOption('zh-Hans');
+    await writingLanguage.click();
+    await page.getByRole('option', { name: 'Simplified Chinese' }).click();
     await shoot(page, info, 'studio-new-work');
     await page.getByRole('button', { name: 'Create as Studio Writer 书生' }).click();
     await page.waitForURL(/\/works\/[0-9a-f-]{36}\?tab=chapters$/);
@@ -210,7 +211,8 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     // Details: tagline, serial status and description, saved by the Work's creator.
     await page.goto(`${workPage}?tab=details`);
     const details = page.getByRole('region', { name: 'Details' });
-    await details.getByRole('combobox', { name: 'Status' }).selectOption('ongoing');
+    await details.getByRole('combobox', { name: 'Status' }).click();
+    await page.getByRole('option', { name: 'Ongoing' }).click();
     await details.getByRole('textbox', { name: 'Tagline' }).fill('一封没有地址的信，把雨夜书店带向二十年前的秘密。');
     await details.getByRole('textbox', { name: 'Description' }).fill('雨夜里，一家书店和一封没有地址的信。');
     await details.getByRole('button', { name: 'Save details' }).click();

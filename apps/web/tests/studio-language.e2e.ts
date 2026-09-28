@@ -29,11 +29,12 @@ test('Studio requires a stated language and reads a chapter page', async ({ page
   await page.getByRole('textbox', { name: 'Title' }).fill('Language chosen by author');
   await page.getByText('A book', { exact: true }).click();
   const language = page.getByRole('combobox', { name: 'Language you’ll write in' });
-  await expect(language).toHaveValue('');
+  await expect(language).toHaveText('Choose a language');
   await page.getByRole('button', { name: 'Create as Language Writer' }).click();
   await expect(page).toHaveURL(`${studio}/new`);
   await expect(language).toBeFocused();
-  await language.selectOption('und');
+  await language.click();
+  await page.getByRole('option', { name: 'Undetermined' }).click();
   await page.getByRole('button', { name: 'Create as Language Writer' }).click();
   await page.waitForURL(/\/works\/[0-9a-f-]{36}\?tab=chapters$/);
   const work = /\/works\/([0-9a-f-]{36})/.exec(page.url())![1]!;

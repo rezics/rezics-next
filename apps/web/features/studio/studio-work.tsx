@@ -1,7 +1,7 @@
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { Skeleton } from '@rezics/ui/skeleton';
 import { cn } from '@rezics/ui/utils';
 import { ArrowLeftIcon, ExternalLinkIcon, InfoIcon, PenLineIcon, TagIcon } from 'lucide-react';
@@ -82,11 +82,10 @@ function Texts({ agent, work, language, texts, book, locale, t }: {
     </div> : null}
     {/* A plain GET form, so writing in another language works before the page hydrates. */}
     <form method="get" action={localizedPath(writeHref, locale)} className="flex flex-wrap items-end gap-2">
-      <label className="grid gap-1.5 text-sm"><span className="font-medium">{t.writeAnother}</span>
-        <NativeSelect name="language" defaultValue={next} size="sm" className="w-56">
-          {writingLanguages.map(tag => <NativeSelectOption key={tag} value={tag} lang={tag}>
-            {languageName(tag, locale)}</NativeSelectOption>)}
-        </NativeSelect></label>
+      <div className="grid gap-1.5 text-sm"><span className="font-medium">{t.writeAnother}</span>
+        <ChoiceSelect name="language" defaultValue={next} size="sm" className="w-56" label={t.writeAnother}
+          options={writingLanguages.map(tag => ({ value: tag, label: languageName(tag, locale), lang: tag }))} />
+      </div>
       <Button type="submit" variant="outline" size="sm"><PenLineIcon aria-hidden="true" />{t.startText}</Button>
     </form>
   </Section>;
