@@ -12,6 +12,7 @@ import { ReaderReviews } from '../../../services/main/src/modules/review/store.t
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
+import { RealmReplyThreadStore } from '../../../services/main/src/modules/realm-reply/thread-store.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import type { FeedItem } from '../../../services/main/src/modules/feed/contract.ts';
@@ -44,6 +45,7 @@ test('G324: text reviews become grouped, live, spoiler-safe Work cards', async (
       reviews: new ReaderReviews(stack.accessPool), profiles: new ProfilesAccess(stack.accessPool),
       realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content,
         stack.access, stack.env),
+      realmReplyThreads: new RealmReplyThreadStore(stack.contentPool, stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       relayPosition: new RelayHandoffPositions(relay, consumer) };
     const app = createMainApp(stack.fuseki, deps);

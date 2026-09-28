@@ -16,24 +16,27 @@ function member(): { email: string; password: string } {
 
 const posts = (page: Page) => page.getByRole('region', { name: 'Posts' });
 
-test('signed out, Home is All · Best with the sort in view and filters kept in the URL', async ({ page }) => {
+test('signed out, Home is All · Best with the sort menu in view and filters kept in the URL', async ({ page }) => {
   await page.goto('/en');
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeAttached();
   await expect(page.getByRole('navigation', { name: 'Feed' })).toHaveCount(0);
-  const sort = posts(page).getByRole('navigation', { name: 'Sort' });
-  await expect(sort.getByRole('link', { name: 'Best' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('link', { name: 'Join REZICS' })).toHaveAttribute('href', /\/auth\/start\?next=%2Fen&create=1$/);
 
-  await sort.getByRole('link', { name: 'Top' }).click();
+  // One control line: the sort is a menu, as Reddit's `Best ▾`. A press before hydration does nothing.
+  const top = page.getByRole('menuitemradio', { name: /^Top/ });
+  await expect(async () => {
+    if (await top.isVisible()) return;
+    await posts(page).getByRole('button', { name: 'Sort: Best' }).click();
+    await expect(top).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  await top.click();
   await expect(page).toHaveURL(/\/en\?sort=top$/);
-  const period = posts(page).getByRole('navigation', { name: 'Period' });
-  await expect(period.getByRole('link', { name: 'This week' })).toHaveAttribute('aria-current', 'page');
+  await expect(posts(page).getByRole('button', { name: 'Period: This week' })).toBeVisible();
 
-  // A filter is part of the address; changing the sort keeps it.
+  // A filter is part of the address, shown as a chip that removes only itself; the sort keeps it.
   await page.goto('/en?sort=top&t=month&lang=ja');
   await expect(posts(page).getByRole('button', { name: /1 filter on/ })).toBeVisible();
-  await expect(posts(page).getByRole('navigation', { name: 'Sort' }).getByRole('link', { name: 'New' }))
-    .toHaveAttribute('href', '/en?sort=new&lang=ja');
+  await expect(posts(page).getByRole('link', { name: 'Remove filter: Japanese' })).toHaveAttribute('href', '/en?sort=top&t=month');
   const empty = posts(page).getByRole('heading', { name: 'No posts match these filters' });
   if (await empty.isVisible()) {
     await expect(posts(page).getByText('Nothing in Japanese here yet.')).toBeVisible();
@@ -42,7 +45,7 @@ test('signed out, Home is All · Best with the sort in view and filters kept in 
   }
 });
 
-test('the Filters sheet loads the same view with the chosen languages', async ({ page }) => {
+test('the Filters popover loads the same view with the chosen languages', async ({ page }) => {
   await page.goto('/en?sort=new');
   const sheet = page.getByRole('dialog', { name: 'Filter your feed' });
   // A press that lands before hydration does nothing, so press until the sheet opens.

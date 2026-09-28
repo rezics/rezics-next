@@ -21,6 +21,7 @@ import type { FollowResult } from '../../../services/main/src/modules/follows/co
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
+import { RealmReplyThreadStore } from '../../../services/main/src/modules/realm-reply/thread-store.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { DATASET, GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
@@ -65,7 +66,9 @@ test('G282: follows and home feed use real receipts, relay progress, public read
         { status: 'available', ...(viewerNextUnread ? { nextUnread: viewerNextUnread } : {}), shelf: null, progress: null, spoiler: { policy: 'hide-unread', hidden: true } }]));
     } };
     const realmReplies = new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env);
-    const deps = { environment: stack.env, access: stack.access, account, feed, follows, realmReplies, feedViewerState,
+    const realmReplyThreads = new RealmReplyThreadStore(stack.contentPool, stack.accessPool);
+    const deps = { environment: stack.env, access: stack.access, account, feed, follows, realmReplies, realmReplyThreads,
+      feedViewerState,
       reviews: new ReaderReviews(stack.accessPool),
       homePersonal: new HomePersonalStore(stack.accessPool), libraryStatus: new ReaderLibraryStatusStore(stack.contentPool),
       progress: new StructureProgressStore(stack.contentPool),
@@ -439,19 +442,31 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     const accepted = await approve(discussion);
     const reply = await makeReply('A reviewed response', discussion);
     await approve(reply);
+    // A second discussion of the same Work in the same Realm on the same day is a post of its own.
+    const another = await makeReply('Another discussion\nOf the same Work, on the same day');
+    await approve(another);
     const unreviewed = await makeReply('Secret unreviewed reply text');
     await drain(); await refresh();
     const discussions = await collect('kinds=discussion');
-    expect(discussions).toHaveLength(1);
-    expect(discussions[0]?.target).toMatchObject({ id: discussion.reply, excerpt: 'A reviewed discussion', language: 'en' });
-    expect(discussions[0]?.comments).toEqual({ value: 2, kind: 'exact' });
-    expect((await collect('kinds=reply')).map(item => item.target.id)).toEqual([reply.reply]);
+    expect(discussions.map(item => item.target.id).sort()).toEqual([discussion.reply, another.reply].sort());
+    expect(discussions.every(item => item.group.count === 1)).toBe(true);
+    const opened = discussions.find(item => item.target.id === discussion.reply)!;
+    expect(opened.target).toMatchObject({ id: discussion.reply, excerpt: 'A reviewed discussion', language: 'en' });
+    // The post is titled by its first line, apart from its Work, and counts only its own thread's replies.
+    expect(opened.post).toEqual({ title: 'A reviewed discussion', excerpt: null, language: 'en' });
+    expect(opened.comments).toEqual({ value: 1, kind: 'exact' });
+    expect(discussions.find(item => item.target.id === another.reply)).toMatchObject({
+      post: { title: 'Another discussion', excerpt: 'Of the same Work, on the same day' }, comments: { value: 0, kind: 'exact' } });
+    const replies = await collect('kinds=reply');
+    expect(replies.map(item => item.target.id)).toEqual([reply.reply]);
+    expect(replies[0]?.post).toEqual({ title: null, excerpt: 'A reviewed response', language: 'en' });
     expect((await collect('interests=discussions')).map(item => item.target.id).sort())
-      .toEqual([discussion.reply, reply.reply].sort());
+      .toEqual([discussion.reply, another.reply, reply.reply].sort());
     expect((await collect('')).some(item => item.target.id === unreviewed.reply)).toBe(false);
     await json(await call('POST', '/v1/realm-reply-reviews', { ...accepted.review, outcome: 'revoked',
       expectedGeneration: '1', supersedes: accepted.approved.decisionId, reasonReference: 'review-revoked' }, a.token), 201);
-    expect(await collect('kinds=discussion')).toEqual([]); // Suppressed even before projection catches up.
+    // Suppressed even before projection catches up.
+    expect((await collect('kinds=discussion')).map(item => item.target.id)).toEqual([another.reply]);
 
     // A new selected contribution becomes activity; an unselected draft did not.
     const next = await stack.contribution(second.work, author, 'zh-Hans', 'Reviewed next chapter');

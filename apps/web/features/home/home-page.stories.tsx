@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import { everyKind, memoryFeed, NOW, page, post, realms, storyId, suggestion } from '../feed/fixtures.ts';
@@ -65,20 +65,20 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Signed out: the official Zones, why to join, and All · Best with its sort in view. */
+/** Signed out: why to join, and All · Best under one control line. The official Zones are in the navigation. */
 export const SignedOut: Story = {
   args: props({ signedIn: false }),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
-    const zones = canvas.getByRole('region', { name: /Official Zones/ });
-    await expect(within(zones).getByRole('link', { name: 'Fiction · 小说' })).toHaveAttribute('href', '/en/r/fiction');
+    await expect(canvas.queryByRole('region', { name: /Official Zones/ })).toBeNull();
     await expect(canvas.getByRole('link', { name: 'Join REZICS' })).toHaveAttribute('href', `${signInHref}&create=1`);
-    // There is no Following without an account; the sort is never hidden.
+    // There is no Following without an account; the sort is one menu, never hidden.
     await expect(canvas.queryByRole('navigation', { name: 'Feed' })).toBeNull();
-    const sort = canvas.getByRole('navigation', { name: 'Sort' });
-    await expect(within(sort).getByRole('link', { name: 'Best' })).toHaveAttribute('aria-current', 'page');
-    await expect(within(sort).getByRole('link', { name: 'Top' })).toHaveAttribute('href', '/en?sort=top');
+    await userEvent.click(canvas.getByRole('button', { name: 'Sort: Best' }));
+    await expect(await screen.findByRole('menuitemradio', { name: /^Best/ })).toBeChecked();
+    await expect(screen.getByRole('menuitemradio', { name: /^Top/ })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
     const rail = canvas.getByRole('complementary', { name: 'More on REZICS' });
     await expect(within(rail).getByRole('region', { name: 'Popular Realms' })).toBeVisible();
     await expect(within(rail).getByRole('region', { name: 'Trending this week' })).toBeVisible();
@@ -111,7 +111,10 @@ export const ReturningReader: Story = {
     const tabs = canvas.getByRole('navigation', { name: 'Feed' });
     await expect(within(tabs).getByRole('link', { name: 'Following' })).toHaveAttribute('aria-current', 'page');
     // Top ranks across REZICS, so Following offers Best and New.
-    await expect(within(canvas.getByRole('navigation', { name: 'Sort' })).queryByRole('link', { name: 'Top' })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Sort: Best' }));
+    await expect(await screen.findByRole('menuitemradio', { name: /^New/ })).toBeVisible();
+    await expect(screen.queryByRole('menuitemradio', { name: /^Top/ })).toBeNull();
+    await userEvent.keyboard('{Escape}');
     const queue = canvas.getByRole('region', { name: 'Your moderation queue' });
     await expect(queue).toHaveTextContent('20+ waiting');
     await expect(within(canvas.getByRole('region', { name: 'Trending in your Realms' })).getAllByRole('listitem'))
@@ -210,8 +213,9 @@ export const FiltersKeptAndEmpty: Story = {
     const realm = encodeURIComponent(realms.fiction.id);
     await expect(within(canvas.getByRole('navigation', { name: 'Feed' })).getByRole('link', { name: 'All' }))
       .toHaveAttribute('href', `/en?tab=all&sort=new&lang=ja&realm=${realm}`);
-    await expect(within(canvas.getByRole('navigation', { name: 'Sort' })).getByRole('link', { name: 'Best' }))
-      .toHaveAttribute('href', `/en?lang=ja&realm=${realm}`);
+    // Each active filter is a chip on the control line that removes only itself.
+    await expect(canvas.getByRole('link', { name: 'Remove filter: Japanese' }))
+      .toHaveAttribute('href', `/en?sort=new&realm=${realm}`);
     await expect(canvas.getByRole('button', { name: /2 filters on/ })).toBeVisible();
     await expect(canvas.getByRole('heading', { name: 'No posts match these filters' })).toBeVisible();
     await expect(canvas.getByText('Nothing in Japanese here yet.')).toBeVisible();

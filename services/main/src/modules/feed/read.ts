@@ -119,10 +119,10 @@ async function commentCounts(session: WorkReadSession, sources: readonly FeedSou
   for (const source of sources) {
     if (source.reply && source.realm) byRealm.set(source.realm, [...byRealm.get(source.realm) ?? [], source.reply]);
   }
-  const threadCounts = new Map([...byRealm].map(([realm, replies]) => [realm, settle((async () => {
-    if (!session.deps.realmReplyThreads) throw new WorkReadUnavailable('Thread count owner is unavailable');
-    return session.deps.realmReplyThreads.counts(realm, [...new Set(replies)]);
-  })())]));
+  // A composition without the thread owner still reads; its thread cards claim no more than none.
+  const threadCounts = new Map([...byRealm].map(([realm, replies]) => [realm, settle(
+    session.deps.realmReplyThreads?.counts(realm, [...new Set(replies)])
+      ?? Promise.resolve({ counts: new Map<string, number>(), complete: false }))]));
   const global = [...new Set(sources.flatMap(source => source.work && !source.realm ? [source.work] : []))];
   const threads = await settle(global.length ? session.query(`SELECT ?work (MIN(STR(?realm)) AS ?first)
     (MAX(STR(?realm)) AS ?last) WHERE { VALUES ?work { ${global.map(iri).join(' ')} }

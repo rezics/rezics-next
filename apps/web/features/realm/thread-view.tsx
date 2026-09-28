@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import { ShareButton, VoteControl } from '../feed/actions.tsx';
+import { LinkMenu } from '../feed/controls.tsx';
 import { SpoilerVeil } from '../feed/discussion-card.tsx';
 import { announcesSpoilers, threadPath } from '../feed/discussion.ts';
 import { useFeed } from '../feed/feed-context.tsx';
@@ -20,9 +21,6 @@ import LocalizedLink from '../shell/localized-link.tsx';
 
 const sortIcons: Record<ThreadSort, typeof FlameIcon> = { best: FlameIcon, top: TrophyIcon, new: ClockIcon };
 
-const segment = 'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 font-medium text-sm '
-  + 'text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground '
-  + 'focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-foreground aria-[current=page]:text-background';
 
 export interface ThreadViewProps {
   read: ThreadRead;
@@ -141,6 +139,7 @@ export function ThreadView({ read, realm, sort, sortHrefs, replyMode, language, 
     language, api: () => api.current ??= mainThreadApi() };
   const context: ThreadContext = { target, opener, replyHref: reply => threadPath(realm.path, reply) };
   const replies = opening ? tree.children : [tree];
+  const SortIcon = sortIcons[sort];
   const count = tree.descendants;
   return <div className="grid min-w-0 gap-6">
     <LocalizedLink href={`${realm.path}/discussions`} className="inline-flex w-fit items-center gap-1.5
@@ -153,14 +152,10 @@ export function ThreadView({ read, realm, sort, sortHrefs, replyMode, language, 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="comments-heading" className="font-semibold text-lg">
           {opening ? t.commentsHeading : t.replyIn}</h2>
-        <nav aria-label={t.sortComments} className="flex items-center gap-1">
-          {(['best', 'top', 'new'] as const).map(option => {
-            const Icon = sortIcons[option];
-            return <LocalizedLink key={option} href={`${sortHrefs[option]}#comments`} scroll={false}
-              aria-current={sort === option ? 'page' : undefined} className={segment}>
-              <Icon aria-hidden="true" className="size-4" />{t[option]}</LocalizedLink>;
-          })}
-        </nav>
+        <LinkMenu label={t.sortComments} value={sort} icon={<SortIcon aria-hidden="true" className="size-4" />}
+          options={(['best', 'top', 'new'] as const).map(option => ({ value: option, label: t[option],
+            help: option === 'best' ? t.bestHelp : option === 'top' ? t.topHelp : t.newHelp,
+            href: `${sortHrefs[option]}#comments` }))} />
       </div>
       {opening ? <ReplyComposer id="reply" target={target} parent={{ reply: focus.reply,
         revisionId: focus.revisionId }} /> : null}
