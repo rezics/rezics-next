@@ -1,3 +1,34 @@
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { ZoneMessages } from '../messages.ts';
 
-export default {} satisfies Partial<ZoneMessages>;
+export default {
+  more: '더 보기', shuffle: '무작위로 섞기',
+  whyHere: insert('{{title}}이(가) 여기에 있는 이유', { title: String }),
+  untitled: '제목 없는 작품',
+  rank: insert('{{rank}}위', { rank: String }),
+  day: '오늘', week: '이번 주', month: '이번 달', completed: '완결',
+  newChapter: insert('새 회차: {{chapter}}', { chapter: String }),
+  heroLabel: '추천', previous: '이전', next: '다음',
+  slide: insert('{{index}} / {{count}}', { index: String, count: String }),
+  read: '읽기 시작', readWork: '작품 보기',
+  dismiss: '닫기', announcement: '공지',
+  adopted: insert('{{title}} 추가됨', { title: String }), adoptedUnknown: '작품 추가됨',
+  classified: insert('{{title}} 분류됨', { title: String }), classifiedUnknown: '작품 분류됨',
+  classificationRejected: insert('{{title}} 분류 제안이 거절됨', { title: String }),
+  classificationRejectedUnknown: '분류 제안이 거절됨',
+  ruleChanged: '커뮤니티 규칙 변경됨',
+  quoteBy: insert('{{reader}}님의 글', { reader: String }),
+  replies: plural({ one: insert('답글 {{count}}개'), other: insert('답글 {{count}}개') },
+    { count: asValue(number()) }),
+  failed: insert('{{module}}을(를) 불러오지 못했습니다', { module: String }), retry: '다시 시도',
+  lookLabel: '페이지 스타일', lookZone: '커뮤니티 디자인', lookStandard: '표준 디자인',
+  lookHelp: '표준 디자인은 모든 커뮤니티에 적용됩니다.',
+  lookSaveFailed: '페이지 스타일을 저장하지 못했습니다. 다시 시도해 주세요.',
+  safeModeTitle: '커뮤니티의 표준 레이아웃을 표시하고 있습니다',
+  safeModeBody: '이 페이지에서는 맞춤 디자인이 꺼져 있어 REZICS의 기본 구성 요소로 표시됩니다.',
+  showDesign: '전체 디자인 보기',
+  // The default layout's module titles.
+  picks: '추천 작품', genres: '장르', latest: '최신 작품', newChapters: '새 회차',
+  newlyAdded: '새로 추가된 작품', recentlyCompleted: '완결 작품', rankings: '순위',
+  quotes: '독자들의 한마디', rising: '새롭게 주목받는 작품', decisions: '최근 결정',
+} satisfies Partial<ZoneMessages>;

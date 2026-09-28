@@ -39,6 +39,28 @@ const translations: Record<string, Strings> = {
     about: '關於與規則',
     works: '全部作品',
   },
+  ko: {
+    tagline: '웹 연재물, 라이트 노벨, 오리지널 작품을 소설 편집진이 공개적으로 선정합니다.',
+    official: 'REZICS 공식 Zone',
+    podium: '순위 상위 작품',
+    more: '전체 순위',
+    footerTitle: 'REZICS 소설',
+    footerNote: '이 Zone의 모든 추천 작품은 공개된 결정에 따라 선정되었습니다. 작품 옆의 도장을 누르면 선정 이유를 볼 수 있어요.',
+    decisions: '결정 내역',
+    about: '소개와 규칙',
+    works: '모든 작품',
+  },
+  de: {
+    tagline: 'Die Redaktion für Geschichten wählt Webserien, Light Novels und Originalwerke öffentlich aus.',
+    official: 'Offizielle REZICS Zone',
+    podium: 'Die Spitzenplätze der Rangliste',
+    more: 'Gesamte Rangliste',
+    footerTitle: 'Geschichten auf REZICS',
+    footerNote: 'Jede Empfehlung in dieser Zone beruht auf einer öffentlichen Entscheidung. Öffne den Stempel an einem Werk, um zu erfahren, warum es hier ist.',
+    decisions: 'Entscheidungsprotokoll',
+    about: 'Über die Zone und ihre Regeln',
+    works: 'Alle Werke',
+  },
 };
 
 export function strings(locale: string): Strings {

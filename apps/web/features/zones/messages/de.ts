@@ -1,3 +1,34 @@
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { ZoneMessages } from '../messages.ts';
 
-export default {} satisfies Partial<ZoneMessages>;
+export default {
+  more: 'Mehr', shuffle: 'Zufällig mischen',
+  whyHere: insert('Warum {{title}} hier ist', { title: String }),
+  untitled: 'Unbenanntes Werk',
+  rank: insert('Nr. {{rank}}', { rank: String }),
+  day: 'Heute', week: 'Diese Woche', month: 'Diesen Monat', completed: 'Abgeschlossen',
+  newChapter: insert('Neu: {{chapter}}', { chapter: String }),
+  heroLabel: 'Vorgestellt', previous: 'Zurück', next: 'Weiter',
+  slide: insert('{{index}} von {{count}}', { index: String, count: String }),
+  read: 'Jetzt lesen', readWork: 'Werk ansehen',
+  dismiss: 'Ausblenden', announcement: 'Ankündigung',
+  adopted: insert('{{title}} aufgenommen', { title: String }), adoptedUnknown: 'Werk aufgenommen',
+  classified: insert('{{title}} eingeordnet', { title: String }), classifiedUnknown: 'Werk eingeordnet',
+  classificationRejected: insert('Klassifikation von {{title}} abgelehnt', { title: String }),
+  classificationRejectedUnknown: 'Klassifikation abgelehnt',
+  ruleChanged: 'Community-Regel geändert',
+  quoteBy: insert('Zitat von {{reader}}', { reader: String }),
+  replies: plural({ one: insert('{{count}} Antwort'), other: insert('{{count}} Antworten') },
+    { count: asValue(number()) }),
+  failed: insert('{{module}} konnte nicht geladen werden', { module: String }), retry: 'Erneut versuchen',
+  lookLabel: 'Seitendarstellung', lookZone: 'Community-Design', lookStandard: 'Standardansicht',
+  lookHelp: 'Die Standardansicht gilt für alle Communities.',
+  lookSaveFailed: 'Dein Seitendesign konnte nicht gespeichert werden. Versuche es erneut.',
+  safeModeTitle: 'Standardlayout dieser Community wird angezeigt',
+  safeModeBody: 'Das eigene Design ist für diese Seite ausgeschaltet. Hier werden deshalb die Komponenten der Plattform verwendet.',
+  showDesign: 'Vollständiges Design anzeigen',
+  // The default layout's module titles.
+  picks: 'Empfehlungen', genres: 'Genres', latest: 'Neueste Werke', newChapters: 'Neue Kapitel',
+  newlyAdded: 'Neu hinzugefügt', recentlyCompleted: 'Abgeschlossen', rankings: 'Ranglisten',
+  quotes: 'Stimmen aus der Leserschaft', rising: 'Neu und im Aufwind', decisions: 'Aktuelle Entscheidungen',
+} satisfies Partial<ZoneMessages>;
