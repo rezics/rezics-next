@@ -290687,6 +290687,10 @@
                       ],
                       "type": "object"
                     },
+                    "generation": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -290728,12 +290732,23 @@
                               "basis"
                             ],
                             "type": "object"
+                          },
+                          "workCount": {
+                            "~elyTyp": 7,
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "nullable": true,
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
                           "id",
                           "concept",
-                          "name"
+                          "name",
+                          "workCount"
                         ],
                         "type": "object"
                       },
@@ -290751,6 +290766,21 @@
                     "profile": {
                       "const": "zone-genres-v1",
                       "type": "string"
+                    },
+                    "projectionPosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
                     },
                     "realm": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -290770,12 +290800,18 @@
                         "sequence"
                       ],
                       "type": "object"
+                    },
+                    "stale": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "profile",
                     "realm",
                     "context",
+                    "generation",
+                    "stale",
+                    "projectionPosition",
                     "items",
                     "nextCursor",
                     "sourcePosition",
