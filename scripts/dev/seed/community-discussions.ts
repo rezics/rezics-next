@@ -101,10 +101,10 @@ export async function seedCommunityDiscussions(state: SeedState) {
   const roots = new Map<string, Root>();
   const votes: { voter: string; placement: string; value: 1 | -1; key: string }[] = [];
   let threads = 0, replies = 0;
-  for (const thread of communityThreads) {
+  const post = async (thread: CommunityThread) => {
     await refreshSeedTokens(state);
     const realm = state.communityRealms.get(thread.realm);
-    if (!realm) continue;
+    if (!realm) return;
     await state.optional(`Community discussion ${thread.id}`, async () => {
       const root = await replyRoot(state, thread.work, roots);
       const top = await discuss(state, realm, person(state, thread.author), root, thread.id, thread.language, thread.body);
@@ -122,19 +122,26 @@ export async function seedCommunityDiscussions(state: SeedState) {
         }
       }
     });
-  }
+  };
+  // Each Realm's threads go in plan order; the Realms go side by side.
+  await Promise.all(communityRealms.map(async plan => {
+    for (const thread of communityThreads.filter(item => item.realm === plan.id)) await post(thread);
+  }));
   let voted = 0, waiting = 0;
-  const deadline = Date.now() + 90_000;
-  for (const item of votes) {
-    await refreshSeedTokens(state);
-    try {
-      await vote(state.api, person(state, item.voter), item.placement, item.value, item.key, deadline);
-      voted++;
-    } catch (error) {
-      if (error instanceof SeedApiError && error.status === 404) waiting++;
-      else state.findings.add(`Community discussion vote: ${error instanceof Error ? error.message : String(error)}`);
+  const deadline = Date.now() + 90_000, lanes = 4;
+  await Promise.all(Array.from({ length: lanes }, async (_, lane) => {
+    for (let index = lane; index < votes.length; index += lanes) {
+      const item = votes[index]!;
+      await refreshSeedTokens(state);
+      try {
+        await vote(state.api, person(state, item.voter), item.placement, item.value, item.key, deadline);
+        voted++;
+      } catch (error) {
+        if (error instanceof SeedApiError && error.status === 404) waiting++;
+        else state.findings.add(`Community discussion vote: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
-  }
+  }));
   if (waiting) state.findings.add(`Community discussions: ${waiting} votes wait for Home's projection; run the seed again`);
   state.commentCount += threads;
   state.replyCount += replies;

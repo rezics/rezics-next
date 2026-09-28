@@ -179,7 +179,8 @@ export async function seedCommunityRealms(state: SeedState) {
   const client = await realmProfileClient(operator);
   const tokens = new Map<string, string>();
   let joined = 0, adopted = 0;
-  for (const plan of communityRealms) {
+  // The Realms share nothing but their members' sessions, so they are made side by side.
+  await Promise.all(communityRealms.map(async plan => {
     await refreshSeedTokens(state);
     await state.optional(`Community Realm ${plan.id}`, async () => {
       const owner = person(state, plan.owner);
@@ -199,6 +200,6 @@ export async function seedCommunityRealms(state: SeedState) {
       }
       state.communityRealms.set(plan.id, { realm: receipt.realm, owner });
     });
-  }
+  }));
   console.log(`Community Realms: ${state.communityRealms.size}/${communityRealms.length}, ${joined} new members, ${adopted} adoptions.`);
 }
