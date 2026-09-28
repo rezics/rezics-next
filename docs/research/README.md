@@ -1,5 +1,8 @@
 # Implementation questions and experiments
 
+The [social-reading reference](reference-social-reading.md) compares public
+reading, community and feed experiences for the current frontend Goal.
+
 The maintainer selected **PostgreSQL + Jena/TDB2/jena-text/Lucene** on 2026-09-24
 after the [storage architecture evaluation](storage-architecture.md). The
 [architecture owner](../architecture/overview.md) and storage/search contracts
