@@ -47,7 +47,8 @@ async function read<T>(path: string, parse: (value: unknown) => T | null,
 export const readSession = cache(() => read('/api/auth/get-session', parseSession));
 export const readMethods = cache(() => read('/api/account/methods', parseMethods));
 export const readDisplayPreferences = cache(() => read('/api/account/display-preferences', parseDisplayPreferences));
-export const readSessions = cache(() => read('/api/account/sessions?limit=100', parseSessions));
+export const readSessions = cache((cursor?: string) => read(`/api/account/sessions?limit=100${
+  cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, parseSessions));
 export const readSecurityActivity = cache((cursor?: string) => read(`/api/account/security-activity?limit=50${
   cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, parseActivity));
 export const readConnectedApps = cache(() => read('/api/account/connected-apps?limit=100', parseConnectedApps));

@@ -4,8 +4,10 @@ import type { ActivityView } from './activity-list.tsx';
 import type { DeviceView } from './devices.tsx';
 import { DevicesPage } from './devices-page.tsx';
 import { SecurityOverview } from './security.tsx';
+import { sessionViews } from './views.ts';
 import { AccountFrame } from '../../.storybook/account-frame.tsx';
 import { chinese, dark, phone } from '../../.storybook/variants.ts';
+import type { DeviceSession } from '../api/account-data.ts';
 
 const devices: DeviceView[] = [
   { id: 's1', ids: [], count: 1, thisDevice: true, clientName: 'REZICS', browser: 'Chrome', platform: 'macOS',
@@ -78,14 +80,32 @@ export const SignOutADevice: Story = {
 };
 
 export const LimitedSessionList: Story = {
-  render: () => <DevicesPage devices={{ status: 'ok', items: devices, limited: true }} />,
+  render: () => <DevicesPage devices={{ status: 'ok', items: devices, limited: true, older: 'next-page' }} />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText(/Showing the 100 newest sessions/)).toBeVisible();
+    await expect(await canvas.findByText(/Showing up to 100 sessions per page/)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Show older sessions' }))
+      .toHaveAttribute('href', '/security/devices?cursor=next-page');
     await userEvent.click(canvas.getByRole('button', { name: 'Sign out of all other devices' }));
     const dialog = await screen.findByRole('alertdialog', { name: 'Sign out of all other devices?' });
     await expect(within(dialog).getByText(/including sessions not listed here/)).toBeVisible();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  },
+};
+
+export const OlderSessionPage: Story = {
+  render: () => {
+    const sessions: DeviceSession[] = ['old-1', 'old-2'].map(id => ({ id,
+      groupKey: 'same-device', createdAt: '2026-09-01T12:00:00Z', lastActiveAt: '2026-09-02T12:00:00Z',
+      browser: 'Safari', platform: 'iOS', network: null, thisDevice: false }));
+    return <DevicesPage devices={{ status: 'ok', items: sessionViews(sessions, new Date('2026-09-28T12:00:00Z'), 'en'),
+      paged: true }} />;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findAllByRole('button', { name: 'Sign out · Safari on iOS' })).toHaveLength(2);
+    await expect(canvas.getByRole('link', { name: 'Back to the newest sessions' }))
+      .toHaveAttribute('href', '/security/devices');
   },
 };
 

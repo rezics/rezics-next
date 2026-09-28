@@ -39,6 +39,12 @@ export function deviceViews(sessions: DeviceSession[], now: Date, locale: Accoun
     || Date.parse(b.lastActiveAt) - Date.parse(a.lastActiveAt));
 }
 
+/** A paged session list keeps each sign-out action bound to one visible session,
+ * including when the same device has sessions on different pages. */
+export function sessionViews(sessions: DeviceSession[], now: Date, locale: AccountLocale): DeviceView[] {
+  return sessions.flatMap(session => deviceViews([session], now, locale));
+}
+
 function activityViews(entries: ActivityEntry[], now: Date, locale: AccountLocale): ActivityView[] {
   return entries.map(entry => ({ ...entry, when: relativeTime(entry.occurredAt, now, locale) }));
 }
