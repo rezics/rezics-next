@@ -76,14 +76,15 @@ test('G262 admin panel: directory operators, exact jump, work queues and per-ope
     for (let attempt = 0; attempt < 5; attempt++) {
       await f.request('/api/auth/sign-in/email', { email: li.email, password: 'not the password at all' });
     }
-    const overview = await json<Record<'suspended' | 'passwordResetRequired' | 'unverified' | 'failedSignIns',
-      { count: number; capped: boolean; users: { id: string; reasonCode: string | null; until: string | null; count?: number }[] }>
-      & { recentActions: Entry[] | null }>(f.request('/api/account/admin/overview', undefined, owner.cookie));
+    const overview = await json<Record<'suspended' | 'passwordResetRequired' | 'unverified',
+      { count: number; capped: boolean; users: { id: string; reasonCode: string | null; until: string | null }[] }>
+      & { recentActions: Entry[] | null; signals: { items: { key: string; evidence: { failures?: number } }[] } }>(
+      f.request('/api/account/admin/overview', undefined, owner.cookie));
     expect(overview.suspended).toMatchObject({ count: 1, capped: false, users: [{ id: wang.id, reasonCode: 'spam' }] });
     expect(overview.suspended.users[0]!.until).toBeTruthy();
     expect(overview.passwordResetRequired).toMatchObject({ count: 1, users: [{ id: member.id, reasonCode: 'compromised' }] });
     expect(overview.unverified).toMatchObject({ count: 1, users: [{ id: pending.id }] });
-    expect(overview.failedSignIns).toMatchObject({ count: 1, users: [{ id: li.id, count: 5 }] });
+    expect(overview.signals.items).toEqual([expect.objectContaining({ key: `failed-sign-ins:${li.id}`, evidence: expect.objectContaining({ failures: 5 }) })]);
     expect(overview.recentActions?.[0]).toMatchObject({ action: 'require-password-reset', actorEmail: owner.email });
     const supportView = await json<{ recentActions: unknown }>(f.request('/api/account/admin/overview', undefined, support.cookie));
     expect(supportView.recentActions).toBeNull();

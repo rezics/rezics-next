@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createEmailVerificationToken } from 'better-auth/api';
 import type { Pool, PoolClient } from 'pg';
-import { AccountProblem, type AccountAuth } from './http.ts';
-import { requireOperator, rolePermits, writeAudit, type OperatorPermission, type OperatorRole } from './operators.ts';
+import { AccountProblem, accountSession, type AccountAuth } from './http.ts';
+import { operatorRole, requireOperator, rolePermits, writeAudit, type OperatorPermission, type OperatorRole } from './operators.ts';
 import { accountLocale, enqueueAccountEmail, type AccountLocale } from './email.ts';
 
 export const adminActions = ['suspend', 'unsuspend', 'revoke-sessions', 'require-password-reset',
@@ -13,6 +13,9 @@ export const bulkActions = ['suspend', 'unsuspend', 'revoke-sessions', 'require-
   'resend-verification'] as const satisfies readonly AdminAction[];
 export type BulkAction = typeof bulkActions[number];
 export const bulkLimit = 100;
+/** The longest undo window a bulk job may ask for: its items wait that long
+ * before the first runs, and its actor can cancel it meanwhile. */
+export const bulkUndoLimit = 30;
 export const reasonCodes = ['spam', 'abuse', 'fraud', 'impersonation', 'legal', 'compromised',
   'user-request', 'support', 'appeal', 'error-correction', 'other'] as const;
 export type ReasonCode = typeof reasonCodes[number];
@@ -170,12 +173,15 @@ export async function administerUser(auth: AccountAuth, pool: Pool, request: Req
  * job. Replaying the same command returns the same job; items then run in the
  * background (`runBulkItem`). */
 export async function createBulkJob(auth: AccountAuth, pool: Pool, request: Request, body: ActionInput & {
-  action: BulkAction; reasonCode: ReasonCode; userIds: string[]; commandId: string }) {
+  action: BulkAction; reasonCode: ReasonCode; userIds: string[]; commandId: string; undoSeconds?: number }) {
   validateAction(body);
   const userIds = [...new Set(body.userIds)];
   if (userIds.length !== body.userIds.length || !userIds.length || userIds.length > bulkLimit) throw new AccountProblem('invalid_request', 400);
+  const undoSeconds = body.undoSeconds ?? 0;
+  if (!Number.isInteger(undoSeconds) || undoSeconds < 0 || undoSeconds > bulkUndoLimit) throw new AccountProblem('invalid_request', 400);
   const actor = await requireOperator(auth, pool, request, actionPermissions[body.action]);
-  const digest = digestOf([body.action, userIds, body.reasonCode, body.reason, body.expiresAt, body.userMessage]);
+  const digest = digestOf([body.action, userIds, body.reasonCode, body.reason, body.expiresAt, body.userMessage,
+    ...(undoSeconds ? [undoSeconds] : [])]);
   const db = await pool.connect();
   try {
     await db.query('BEGIN');
@@ -187,15 +193,16 @@ export async function createBulkJob(auth: AccountAuth, pool: Pool, request: Requ
       await db.query('COMMIT'); return { jobId: existing.rows[0].id };
     }
     const job = await db.query<{ id: string }>(`INSERT INTO rezics_account_operator_job (actor_id, session_id, command_id,
-      digest, action, reason_code, reason, user_message, expires_at, locale)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`, [actor.userId, actor.sessionId, body.commandId, digest,
-      body.action, body.reasonCode, body.reason.trim(), body.userMessage?.trim() || null, body.expiresAt ?? null, accountLocale(request)]);
+      digest, action, reason_code, reason, user_message, expires_at, locale, starts_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, clock_timestamp() + make_interval(secs => $11)) RETURNING id`,
+    [actor.userId, actor.sessionId, body.commandId, digest, body.action, body.reasonCode, body.reason.trim(),
+      body.userMessage?.trim() || null, body.expiresAt ?? null, accountLocale(request), undoSeconds]);
     const jobId = job.rows[0]!.id;
     await db.query(`INSERT INTO rezics_account_operator_job_item (job_id, position, user_id)
       SELECT $1, ordinality - 1, user_id FROM unnest($2::text[]) WITH ORDINALITY AS item(user_id, ordinality)`, [jobId, userIds]);
     await writeAudit(db, { actorId: actor.userId, action: 'bulk_action_started', targetId: jobId, reason: body.reason.trim(),
       reasonCode: body.reasonCode, userMessage: body.userMessage?.trim() || null, before: null,
-      after: { action: body.action, users: userIds.length, expiresAt: body.expiresAt ?? null }, requestId: randomUUID() });
+      after: { action: body.action, users: userIds.length, expiresAt: body.expiresAt ?? null, undoSeconds }, requestId: randomUUID() });
     await db.query('COMMIT');
     return { jobId };
   } catch (error) { await db.query('ROLLBACK'); throw error; }
@@ -203,20 +210,23 @@ export async function createBulkJob(auth: AccountAuth, pool: Pool, request: Requ
 }
 
 /** Runs the job's next pending item: its effect, audit record and result
- * commit together. Returns false when nothing is left or another runner holds
- * the job. An actor who lost the permission or session fails the rest. */
-export async function runBulkItem(auth: AccountAuth, pool: Pool, jobId: string): Promise<boolean> {
+ * commit together. Returns true when it ran one, the job's start time while
+ * its undo window lasts, and false when nothing is left or another runner
+ * holds the job. An actor who lost the permission or session fails the rest. */
+export async function runBulkItem(auth: AccountAuth, pool: Pool, jobId: string): Promise<boolean | Date> {
   const db = await pool.connect();
   try {
     await db.query('BEGIN');
     await db.query("SET LOCAL lock_timeout = '3s'");
     await db.query("SELECT pg_advisory_xact_lock(hashtextextended('account-operator-roles', 0))");
     const job = await db.query<{ actor_id: string; session_id: string; action: BulkAction; reason_code: ReasonCode;
-      reason: string; user_message: string | null; expires_at: Date | null; locale: AccountLocale }>(`SELECT actor_id, session_id,
-      action, reason_code, reason, user_message, expires_at, locale FROM rezics_account_operator_job
+      reason: string; user_message: string | null; expires_at: Date | null; locale: AccountLocale; waiting: Date | null }>(`SELECT actor_id,
+      session_id, action, reason_code, reason, user_message, expires_at, locale,
+      CASE WHEN starts_at > clock_timestamp() THEN starts_at END AS waiting FROM rezics_account_operator_job
       WHERE id = $1 AND finished_at IS NULL FOR UPDATE SKIP LOCKED`, [jobId]);
     const current = job.rows[0];
     if (!current) { await db.query('COMMIT'); return false; }
+    if (current.waiting) { await db.query('COMMIT'); return current.waiting; }
     const item = await db.query<{ position: number; user_id: string }>(`SELECT position, user_id FROM rezics_account_operator_job_item
       WHERE job_id = $1 AND state = 'pending' ORDER BY position LIMIT 1 FOR UPDATE`, [jobId]);
     const next = item.rows[0];
@@ -246,6 +256,34 @@ export async function runBulkItem(auth: AccountAuth, pool: Pool, jobId: string):
     await db.query(`UPDATE rezics_account_operator_job_item SET state = $3, error = $4, request_id = $5, finished_at = now()
       WHERE job_id = $1 AND position = $2`, [jobId, next.position, result.state, result.error, result.requestId]);
     await db.query('COMMIT'); return true;
+  } catch (error) { await db.query('ROLLBACK'); throw error; }
+  finally { db.release(); }
+}
+
+/** Cancels what a job has not done yet: inside its undo window that is every
+ * item, later the rest of the list (items already done stay done). Its actor
+ * or an owner may stop it; stopping never needs a fresh sign-in, since it
+ * only withholds changes. Waits for the item in flight to commit. */
+export async function cancelBulkJob(auth: AccountAuth, pool: Pool, request: Request, jobId: string) {
+  const session = await accountSession(auth, request, true);
+  const role = await operatorRole(pool, session.user.id);
+  if (!role) throw new AccountProblem('forbidden', 403);
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query("SET LOCAL lock_timeout = '5s'");
+    const job = await db.query<{ actorId: string; finishedAt: Date | null }>(`SELECT actor_id AS "actorId", finished_at AS "finishedAt"
+      FROM rezics_account_operator_job WHERE id = $1 FOR UPDATE`, [jobId]);
+    const row = job.rows[0];
+    if (!row || (row.actorId !== session.user.id && !rolePermits(role, 'operators:manage'))) throw new AccountProblem('not_found', 404);
+    if (row.finishedAt) { await db.query('COMMIT'); return { cancelled: 0 }; }
+    const cancelled = await db.query(`UPDATE rezics_account_operator_job_item SET state = 'cancelled', finished_at = clock_timestamp()
+      WHERE job_id = $1 AND state = 'pending'`, [jobId]);
+    await db.query('UPDATE rezics_account_operator_job SET finished_at = clock_timestamp(), cancelled_at = clock_timestamp() WHERE id = $1', [jobId]);
+    await writeAudit(db, { actorId: session.user.id, action: 'bulk_action_cancelled', targetId: jobId, reason: 'Bulk action stopped',
+      before: null, after: { cancelled: cancelled.rowCount ?? 0 }, requestId: randomUUID() });
+    await db.query('COMMIT');
+    return { cancelled: cancelled.rowCount ?? 0 };
   } catch (error) { await db.query('ROLLBACK'); throw error; }
   finally { db.release(); }
 }

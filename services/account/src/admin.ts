@@ -10,11 +10,13 @@ import { readSecurityActivity, readSessions } from './security-activity.ts';
 import { readConnectedApps } from './connected-apps.ts';
 import { accountResponses, activityView, commandView, connectedAppView,
   operatorRoleView, pageView, sessionView } from './views.ts';
-import { actionReasonCodes, adminActions, administerUser, bulkActions, bulkLimit, checkActor, createBulkJob,
-  profile, reasonCodes, runBulkItem, setClientDisabled } from './admin-actions.ts';
-import { auditOutcomes, exportAudit, readAudit, readJob, readOverview, readSanctions } from './admin-audit.ts';
+import { actionReasonCodes, adminActions, administerUser, bulkActions, bulkLimit, bulkUndoLimit, cancelBulkJob, checkActor,
+  createBulkJob, profile, reasonCodes, runBulkItem, setClientDisabled } from './admin-actions.ts';
+import { auditExportFormats, auditOutcomes, exportAudit, readAudit, readJob, readOverview, readSanctions } from './admin-audit.ts';
+import { readSignals, reviewSignal, signalKeyPattern } from './admin-signals.ts';
+import { readTimeline, timelineCategories } from './admin-timeline.ts';
 import { adminClientView, adminUserDetailView, auditEntryView, directoryColumn, directoryView,
-  jobView, operatorsView, overviewView, preferencesView, savedView } from './admin-views.ts';
+  jobView, operatorsView, overviewView, preferencesView, savedView, signalsView, timelineView } from './admin-views.ts';
 
 export { adminActions, type AdminAction } from './admin-actions.ts';
 
@@ -121,17 +123,22 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
   const secret = String(auth.options.secret);
   const userParams = t.Object({ userId: t.String({ minLength: 1, maxLength: 128 }) });
   const reasonCode = literalUnion(reasonCodes);
-  const auditQuery = { actorId: t.Optional(t.String({ maxLength: 128 })), targetId: t.Optional(t.String({ maxLength: 256 })),
+  const auditQuery = { actorId: t.Optional(t.String({ maxLength: 320 })), targetId: t.Optional(t.String({ maxLength: 320 })),
     action: t.Optional(t.String({ maxLength: 128 })), outcome: t.Optional(literalUnion(auditOutcomes)),
-    from: t.Optional(t.String({ format: 'date-time' })), to: t.Optional(t.String({ format: 'date-time' })) };
-  // A process runs each job at most once at a time; a job whose runner died
-  // with its process resumes when anyone reads it.
+    from: t.Optional(t.String({ format: 'date-time' })), to: t.Optional(t.String({ format: 'date-time' })),
+    reasonCode: t.Optional(reasonCode), requestId: t.Optional(t.String({ format: 'uuid' })),
+    q: t.Optional(t.String({ maxLength: 200 })) };
+  // A process runs each job at most once at a time, after its undo window; a
+  // job whose runner died with its process resumes when anyone reads it.
   const running = new Map<string, Promise<void>>();
   const runJob = (jobId: string) => {
     if (running.has(jobId)) return;
     running.set(jobId, (async () => {
-      try { while (await runBulkItem(auth, pool, jobId)); }
-      catch { console.error('Account bulk action runner stopped; reading the job resumes it'); }
+      try {
+        for (let next = await runBulkItem(auth, pool, jobId); next; next = await runBulkItem(auth, pool, jobId)) {
+          if (next instanceof Date) await Bun.sleep(Math.max(0, next.getTime() - Date.now()) + 50);
+        }
+      } catch { console.error('Account bulk action runner stopped; reading the job resumes it'); }
       finally { running.delete(jobId); }
     })());
   };
@@ -150,21 +157,35 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
   return new Elysia()
     .get('/api/account/admin/me', { response: accountResponses(t.Object({ role: t.Nullable(operatorRoleView),
       permissions: t.Array(t.String()), secondFactor: t.Boolean(), stepUpUntil: t.Nullable(t.String()),
-      reasonCodes: t.Record(t.String(), t.Array(t.String())), bulkActions: t.Array(t.String()), bulkLimit: t.Integer() })) }, async ({ request }) => {
+      reasonCodes: t.Record(t.String(), t.Array(t.String())), bulkActions: t.Array(t.String()), bulkLimit: t.Integer(),
+      bulkUndoLimit: t.Integer() })) }, async ({ request }) => {
       try {
         const session = await accountSession(auth, request);
         const role = await operatorRole(pool, session.user.id);
         return accountJson({ role, permissions: role ? operatorPermissions[role] : [],
           secondFactor: !!(session.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled,
           stepUpUntil: role ? await stepUpUntil(pool, session.session.id) : null,
-          reasonCodes: actionReasonCodes, bulkActions, bulkLimit });
+          reasonCodes: actionReasonCodes, bulkActions, bulkLimit, bulkUndoLimit });
       } catch (error) { return accountFailure(error); }
     })
     .get('/api/account/admin/overview', { response: accountResponses(overviewView) }, async ({ request }) => {
       try {
         const actor = await requireOperator(auth, pool, request, 'users:read');
-        return accountJson(await readOverview(pool, actor.userId, rolePermits(actor.role, 'audit:read')));
+        return accountJson(await readOverview(pool, actor.userId, { canReadAudit: rolePermits(actor.role, 'audit:read'),
+          canManageClients: rolePermits(actor.role, 'clients:manage') }));
       } catch (error) { return accountFailure(error); }
+    })
+    .get('/api/account/admin/signals', { response: accountResponses(signalsView) }, async ({ request }) => {
+      try {
+        const actor = await requireOperator(auth, pool, request, 'users:read');
+        return accountJson(await readSignals(pool, { canManageClients: rolePermits(actor.role, 'clients:manage') }));
+      } catch (error) { return accountFailure(error); }
+    })
+    .post('/api/account/admin/signals/review', { response: accountResponses(commandView),
+      body: t.Object({ key: t.String({ pattern: signalKeyPattern, maxLength: 240 }), note: t.Optional(t.String({ maxLength: 1000 })),
+        commandId: t.String({ format: 'uuid' }) }, { additionalProperties: false }) }, async ({ request, body }) => {
+      try { return accountJson(await reviewSignal(auth, pool, request, body)); }
+      catch (error) { return accountFailure(error); }
     })
     .get('/api/account/admin/clients', { response: accountResponses(pageView(adminClientView)), query: t.Object(pageQuery) }, async ({ request, query }) => {
       try {
@@ -210,17 +231,27 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
     })
     .get('/api/account/admin/users/:userId', { response: accountResponses(adminUserDetailView), params: userParams }, async ({ request, params }) => {
       try {
-        await requireOperator(auth, pool, request, 'users:read');
+        const actor = await requireOperator(auth, pool, request, 'users:read');
         const user = await readAdminProfile(pool, params.userId);
-        const [methods, sessions, apps, activity, notes] = await Promise.all([
-          readMethods(pool, params.userId), readSessions(pool, secret, params.userId, '', { limit: 10 }),
+        const [methods, sessions, apps, activity, notes, timeline, signals] = await Promise.all([
+          readMethods(pool, params.userId), readSessions(pool, secret, params.userId, '', { limit: 50 }),
           readConnectedApps(pool, secret, params.userId, { limit: 10 }), readSecurityActivity(pool, secret, params.userId, { limit: 10 }),
           pool.query<{ id: string; authorId: string; body: string; createdAt: Date; authorName: string | null; authorEmail: string | null }>(`
             SELECT n.id, n.author_id AS "authorId", n.body, n.created_at AS "createdAt", a.name AS "authorName", a.email AS "authorEmail"
             FROM rezics_account_operator_note n LEFT JOIN "user" a ON a.id = n.author_id
             WHERE n.user_id = $1 ORDER BY n.created_at DESC, n.id DESC LIMIT 25`, [params.userId]),
+          readTimeline(pool, secret, params.userId, { limit: 20 }, rolePermits(actor.role, 'audit:read')),
+          readSignals(pool, { userId: params.userId, canManageClients: false }),
         ]);
-        return accountJson({ profile: user, methods, sessions, apps, activity, notes: notes.rows.map(noteRow) });
+        return accountJson({ profile: user, methods, sessions, apps, activity, notes: notes.rows.map(noteRow), timeline,
+          signals: signals.items });
+      } catch (error) { return accountFailure(error); }
+    })
+    .get('/api/account/admin/users/:userId/timeline', { response: accountResponses(timelineView), params: userParams,
+      query: t.Object({ ...pageQuery, category: t.Optional(literalUnion(timelineCategories)) }) }, async ({ request, params, query }) => {
+      try {
+        const actor = await requireOperator(auth, pool, request, 'users:read');
+        return accountJson(await readTimeline(pool, secret, params.userId, query, rolePermits(actor.role, 'audit:read')));
       } catch (error) { return accountFailure(error); }
     })
     .get('/api/account/admin/users/:userId/sessions', { response: accountResponses(pageView(sessionView)), params: userParams, query: t.Object(pageQuery) }, async ({ request, params, query }) => {
@@ -261,6 +292,7 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
         userIds: t.Array(t.String({ minLength: 1, maxLength: 128 }), { minItems: 1, maxItems: bulkLimit }),
         reason: t.String({ minLength: 3, maxLength: 1000 }), reasonCode, commandId: t.String({ format: 'uuid' }),
         userMessage: t.Optional(t.String({ minLength: 1, maxLength: 2000 })), expiresAt: t.Optional(t.String({ format: 'date-time' })),
+        undoSeconds: t.Optional(t.Integer({ minimum: 0, maximum: bulkUndoLimit })),
       }, { additionalProperties: false }) }, async ({ request, body }) => {
       try {
         const { jobId } = await createBulkJob(auth, pool, request, body);
@@ -276,6 +308,11 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
         if (!job.finishedAt) runJob(job.id);
         return accountJson(job);
       } catch (error) { return accountFailure(error); }
+    })
+    .post('/api/account/admin/bulk-actions/:jobId/cancel', { response: accountResponses(t.Object({ cancelled: t.Integer() })),
+      params: t.Object({ jobId: t.String({ format: 'uuid' }) }) }, async ({ request, params }) => {
+      try { return accountJson(await cancelBulkJob(auth, pool, request, params.jobId)); }
+      catch (error) { return accountFailure(error); }
     })
     .get('/api/account/admin/operators', { response: accountResponses(operatorsView) }, async ({ request }) => {
       try {
@@ -324,13 +361,14 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
         return accountJson(await readAudit(pool, secret, actor.userId, query));
       } catch (error) { return accountFailure(error); }
     })
-    .get('/api/account/admin/audit/export', { query: t.Object(auditQuery),
-      response: { ...accountResponses(t.Object({})), 200: t.String() } }, async ({ request, query }) => {
+    .get('/api/account/admin/audit/export', { query: t.Object({ ...auditQuery, format: t.Optional(literalUnion(auditExportFormats)) }),
+      response: { ...accountResponses(t.Object({})), 200: t.String() } }, async ({ request, query: { format = 'csv', ...query } }) => {
       try {
         const actor = await requireOperator(auth, pool, request, 'audit:read');
-        const { csv, rows, truncated } = await exportAudit(pool, actor.userId, query);
-        return new Response(csv, { headers: { 'content-type': 'text/csv; charset=utf-8', 'cache-control': 'no-store',
-          'content-disposition': `attachment; filename="rezics-account-audit-${new Date().toISOString().slice(0, 10)}.csv"`,
+        const { body, rows, truncated } = await exportAudit(pool, actor.userId, query, format);
+        return new Response(body, { headers: { 'content-type': format === 'csv' ? 'text/csv; charset=utf-8' : 'application/x-ndjson; charset=utf-8',
+          'cache-control': 'no-store',
+          'content-disposition': `attachment; filename="rezics-account-audit-${new Date().toISOString().slice(0, 10)}.${format}"`,
           'x-rezics-rows': String(rows), 'x-rezics-truncated': String(truncated) } });
       } catch (error) { return accountFailure(error); }
     })
