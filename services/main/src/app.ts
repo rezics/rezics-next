@@ -66,6 +66,7 @@ import { workRoutes } from './routes/works.ts';
 import { themeRoutes } from './routes/themes.ts';
 import { contentPrivateSearchRoutes } from './routes/content-private-search.ts';
 import { workReadRoutes } from './routes/work-reads.ts';
+import { alsoEnjoyedRoutes } from './routes/also-enjoyed.ts';
 import { realmReadRoutes } from './routes/realm-reads.ts';
 import { zoneModuleRoutes } from './routes/zone-modules.ts';
 import { rankingRoutes } from './routes/rankings.ts';
@@ -140,6 +141,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(memberReplyRoutes(work))
     .use(workMaintainerRoutes(work))
     .use(workReadRoutes(work))
+    .use(alsoEnjoyedRoutes(work))
     .use(realmReadRoutes(work))
     .use(zoneModuleRoutes(work));
 }

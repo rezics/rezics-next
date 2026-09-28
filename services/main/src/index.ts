@@ -7,6 +7,7 @@ import { createMainApp } from './app.ts';
 import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
+import { AlsoEnjoyedStore } from './modules/also-enjoyed/store.ts';
 import { FollowsStore } from './modules/follows/store.ts';
 import { FeedStore } from './modules/feed/store.ts';
 import { ReaderReviews } from './modules/review/store.ts';
@@ -309,6 +310,7 @@ const app = createMainApp(fuseki, {
   homePersonal: new HomePersonalStore(pool),
   homeTrending: new RankingHomeTrendingReader(readRankings),
   discovery: new DiscoveryProjection(pool),
+  alsoEnjoyed: new AlsoEnjoyedStore(pool, contentPool),
   profiles: new ProfilesAccess(pool),
   studioAccess: new StudioAccess(pool, fuseki),
   agentHandles: new AgentVanityHandles(pool),
