@@ -4,24 +4,30 @@ import { iri, GRAPHS, WORK_SEMANTIC_TYPES } from './activate.ts';
 import { workCard } from './read-contract.ts';
 import { WorkReadMissing, WorkReadUnavailable, publicWork, unerased, type WorkReadSession } from './read-session.ts';
 import { readMetadataHeader, recordedDisplayText, selectedMetadata } from './metadata-read.ts';
-import { chapterPlace } from '../structure/chapter-work.ts';
+import { chapterPlaceFromRows, chapterPlaceQuery } from '../structure/chapter-work.ts';
 
 export type WorkCard = Static<typeof workCard>;
 export interface WorkBasis { card: WorkCard; mainRevision: string; selectedLanguage: string | null;
   metadataRevision: string | null; metadata: Awaited<ReturnType<typeof readMetadataHeader>>;
-  disclosure: 'public' | 'restricted' }
+  disclosure: 'public' | 'restricted'; partOf?: ReturnType<typeof chapterPlaceFromRows> }
 
-export async function readWorkBasis(session: WorkReadSession, work: string): Promise<WorkBasis> {
-  const rows = await session.query(`SELECT ?head ?main ?mainHead ?metadataHead ?type ?public WHERE {
+export async function readWorkBasis(session: WorkReadSession, work: string, includeChapterPlace = false): Promise<WorkBasis> {
+  const types = `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(work)} a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } } }`;
+  // UNION adds at most eight placement rows instead of multiplying each semantic
+  // type by every placement. Other Work reads only need the original basis.
+  const maximumRows = includeChapterPlace ? 17 : 9;
+  const rows = await session.query(`SELECT ?head ?main ?mainHead ?metadataHead ?type ?public
+    ${includeChapterPlace ? '?book ?occurrence ?declared' : ''} WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ${iri(work)} a schema:CreativeWork ; rv:head ?head ; rv:mainVersion ?main .
       ?main a rv:MainVersion ; rv:work ${iri(work)} ; rv:head ?mainHead .
       OPTIONAL { ${iri(work)} rv:descriptiveMetadataHead ?metadataHead }
-      OPTIONAL { ${iri(work)} a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
     }
+    ${includeChapterPlace ? `{ ${types} } UNION { ${chapterPlaceQuery(work)} }` : types}
     ${unerased(iri(work))}
     BIND(EXISTS { ${publicWork(iri(work), '?main')} } AS ?public)
-  } LIMIT 10`, 9);
+  } LIMIT ${maximumRows + 1}`, maximumRows);
   const row = rows[0];
   if (!row) throw new WorkReadMissing('Work is unavailable');
   if (!row.head || !row.main || !row.mainHead || !row.public
@@ -48,7 +54,8 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
     lastUpdatedAt: stats?.lastUpdatedAt ?? null },
   mainRevision: row.mainHead.value, metadataRevision: row.metadataHead?.value ?? null, metadata,
   selectedLanguage: selected?.language ?? null,
-  disclosure: isPublic ? 'public' : 'restricted' };
+  disclosure: isPublic ? 'public' : 'restricted',
+  ...(includeChapterPlace ? { partOf: chapterPlaceFromRows(rows) } : {}) };
 }
 
 /** Repeat the admission after hydration; Access restrictions need not move the graph. */
@@ -62,10 +69,10 @@ export async function fenceWorkBasis(session: WorkReadSession, basis: WorkBasis)
 }
 
 export async function readWorkHeader(session: WorkReadSession, work: string) {
-  const basis = await readWorkBasis(session, work);
+  const basis = await readWorkBasis(session, work, true);
   const metadata = basis.metadata;
   const selected = selectedMetadata(metadata, session.options.language);
-  const partOf = await chapterPlace(session, work);
+  const partOf = basis.partOf;
   await fenceWorkBasis(session, basis);
   const path = `/v1/works/${work.slice(-36)}`;
   return { profile: 'work-read-v1' as const, ...basis.card, disclosure: basis.disclosure,

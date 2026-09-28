@@ -69,6 +69,19 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
       .toMatchObject({ disclosure: 'restricted', title: { value: restricted.title } });
     expect((await get(`${root}?actingSubject=${encodeURIComponent(a.actor)}`)).status).toBe(401);
 
+    // A chapter with several semantic types still takes the same six queries.
+    // Placement rows are unioned with type rows, so neither duplicates the other.
+    await stack.fuseki.update(`PREFIX schema: <https://schema.org/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(first.work)} schema:isPartOf ${iri(second.work)} ;
+        a schema:DigitalDocument, schema:Book . } }`);
+    const chapterBefore = stack.fuseki.queries;
+    expect(await json(await get(root))).toMatchObject({ partOf: { work: second.work, occurrence: null },
+      types: ['https://schema.org/Book', 'https://schema.org/DigitalDocument'] });
+    expect(stack.fuseki.queries - chapterBefore).toBe(6);
+    await stack.fuseki.update(`PREFIX schema: <https://schema.org/> DELETE DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(first.work)} schema:isPartOf ${iri(second.work)} ;
+        a schema:DigitalDocument, schema:Book . } }`);
+
     await refreshDiscovery();
     const discover = await json<Page<{ id: string }>>(await get('/v1/works?limit=1'));
     expect(discover.items.map(item => item.id)).toEqual([second.work]);

@@ -39,7 +39,12 @@ export async function canonicalChapterWorks(session: WorkReadSession, works: rea
  * one several Books place. One bounded graph query.
  */
 export async function chapterPlace(session: WorkReadSession, work: string) {
-  const rows = await session.query(`SELECT DISTINCT ?book ?occurrence ?declared WHERE {
+  return chapterPlaceFromRows(await session.query(chapterPlaceQuery(work), 8));
+}
+
+/** Also embedded in the Work basis read so the header needs no extra round trip. */
+export function chapterPlaceQuery(work: string): string {
+  return `SELECT DISTINCT ?book ?occurrence ?declared WHERE {
     { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} schema:isPartOf ?book . } BIND(true AS ?declared) }
     UNION
     { GRAPH ${iri(GRAPHS.current)} {
@@ -51,7 +56,10 @@ export async function chapterPlace(session: WorkReadSession, work: string) {
         FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
       } }
     FILTER(?book != ${iri(work)})
-  } LIMIT 8`, 8);
+  } LIMIT 8`;
+}
+
+export function chapterPlaceFromRows(rows: Awaited<ReturnType<WorkReadSession['query']>>) {
   const declared = rows.find(row => row.declared)?.book?.value;
   const books = new Set(rows.flatMap(row => row.book ? [row.book.value] : []));
   const book = declared ?? (books.size === 1 ? [...books][0]! : null);
