@@ -103,6 +103,10 @@ export const messages = {
   progressOf: insert('Progress in “{{title}}”', { title: String }),
   openWork: 'Open',
   currentlyReading: 'Currently reading',
+  authorsYouFollow: 'Authors you follow',
+  newestWork: 'Newest work',
+  noWorkYet: 'No works on REZICS yet',
+  authorsUnavailable: 'Couldn’t load the authors you follow',
 
   visibility: 'Who can see your reading shelves',
   visibilityShort: insert('Shelves: {{who}}', { who: String }),

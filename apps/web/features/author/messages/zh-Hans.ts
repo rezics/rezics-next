@@ -1,4 +1,4 @@
-import { insert, plural } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { AuthorMessages } from '../messages.ts';
 
 export default {
@@ -19,6 +19,14 @@ export default {
   ratingsLabel: plural({ other: '个评分' }),
   readersLabel: plural({ other: '位读者' }),
   noRatings: '暂无评分',
+
+  followers: plural({ other: insert('{{count}} 位关注者') }, { count: asValue(number()) }),
+  followersAtLeast: insert('{{count}}+ 位关注者', { count: String }),
+  follow: '关注',
+  following: '已关注',
+  unfollowName: insert('取消关注{{name}}', { name: String }),
+  signInToFollow: '登录后关注',
+  followFailed: '未能更新，请重试。',
 
   worksHeading: insert('{{name}}的作品', { name: String }),
   coAuthors: '合著',

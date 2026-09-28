@@ -13,6 +13,8 @@ export type AuthorFacts = NonNullable<ExternalAuthor['facts']>;
 export type AuthorDate = NonNullable<AuthorFacts['birthDate']>;
 export type AuthorIdentifier = AuthorFacts['identifiers'][number];
 export type AuthorTotals = ExternalAuthor['totals'];
+/** Followers of the author, and whether the reader follows them (`/v1/authors/open-library/{id}/follow`). */
+export type AuthorFollowState = Ok<OpenLibraryAuthor['follow']['get']>;
 
 /**
  * Why a region has no data; each region shows its own and the page stays.

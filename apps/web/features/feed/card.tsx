@@ -129,11 +129,32 @@ function excerptOf(item: FeedItem): string | null {
 }
 
 
+/**
+ * The followed author a card answers to, named as the card names them: one
+ * of its credited authors, or who posted it. Main puts an author's news under
+ * their follow before the Realm's, so this is the reason worth saying.
+ */
+function followedAuthor(item: FeedItem): string | null {
+  const reason = item.reason;
+  if (reason.kind !== 'followed') return null;
+  if (reason.targetKind === 'external-author') {
+    const id = reason.target.slice('open-library:'.length);
+    return item.authors.find(author => author.provider === 'open-library' && author.key === `/authors/${id}`)
+      ?.displayName ?? id;
+  }
+  if (reason.targetKind !== 'agent') return null;
+  return item.authors.find(author => author.agent === reason.target)?.displayName
+    ?? item.group.actors.find(actor => actor.id === reason.target)?.name
+    ?? (item.actor.id === reason.target ? item.actor.name : null);
+}
+
 function Byline({ item }: { item: FeedItem }) {
   const { t, locale, now, avatarQuery, tab, realmPath } = useFeed();
   const names = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' })
     .format(item.group.actors.map(actor => actor.name));
-  const reason = item.reason.kind === 'trending-in-realm' ? t.trending({ realm: item.realm?.name.value ?? '' })
+  const author = followedAuthor(item);
+  const reason = author ? t.becauseYouFollow({ name: author })
+    : item.reason.kind === 'trending-in-realm' ? t.trending({ realm: item.realm?.name.value ?? '' })
     : item.reason.kind === 'editorial' ? t.editorial
       // In All every post is REZICS-wide; only a suggestion inside Following is an exception worth naming.
       : item.reason.kind === 'recommended' && tab === 'following' ? t.suggested : null;

@@ -1,4 +1,4 @@
-import type { AuthorWork, AuthorWorksPage, ExternalAuthor } from './types.ts';
+import type { AuthorFollowState, AuthorWork, AuthorWorksPage, ExternalAuthor, Loaded } from './types.ts';
 
 // Story data shaped as Main answers `/v1/authors/open-library/{id}`, drawn
 // from the locked Open Library records the demo seed imports.
@@ -118,3 +118,19 @@ export const prolificAuthor = author('OL21594A', 'Jane Austen', janeAusten.facts
 
 export const austenWorksPage: AuthorWorksPage = { items: prolificAuthor.works.items, nextCursor: 'story-next',
   sourcePosition: position, count: { value: 10, kind: 'exact-page', total: null } };
+
+/**
+ * Main's follow read for an author: everyone's count, and the reader's own
+ * follow when signed in (`following` null signed out).
+ */
+export function authorFollow(author: ExternalAuthor, followers: number, following: boolean | null = null,
+  kind: 'exact' | 'lower-bound' = 'exact'): Loaded<AuthorFollowState> {
+  const id = author.key.slice('/authors/'.length);
+  return { ok: true, data: { profile: 'follow-state-v1', following,
+    revision: following ? '0192e0aa-0000-7000-8000-000000000001' : null,
+    target: { id: `open-library:${id}`, kind: 'external-author',
+      name: { value: author.name?.displayName ?? id, language: 'und', direction: 'ltr', basis: 'fallback' },
+      icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: `open-library:${id}`, resourceType: 'agent' },
+      realm: null, href: `/authors/open-library/${id}` },
+    followers: { value: followers, kind } } };
+}

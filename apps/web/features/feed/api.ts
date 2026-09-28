@@ -14,8 +14,11 @@ export interface FeedApi {
   page(query: FeedQuery): Promise<Loaded<FeedPage>>;
   vote(item: string, input: { value: Vote; expectedRevision: string | null; actingSubject: string },
     key: string): Promise<Loaded<VoteReceipt>>;
-  /** Follows or unfollows; reads the relation's revision first, as Main's CAS requires. */
-  follow(target: string, kind: FollowKind, following: boolean, actingSubject: string,
+  /**
+   * Follows or unfollows a REZICS target; reads the relation's revision first, as Main's CAS requires.
+   * Open Library authors are followed from their author page instead.
+   */
+  follow(target: string, kind: Exclude<FollowKind, 'external-author'>, following: boolean, actingSubject: string,
     key: string): Promise<Loaded<{ following: boolean }>>;
   /** Follows several at once, in one idempotent command. */
   batchFollow(targets: readonly { target: string; kind: FollowKind }[], actingSubject: string,

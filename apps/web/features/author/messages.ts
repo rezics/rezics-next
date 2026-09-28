@@ -1,4 +1,4 @@
-import { insert, plural } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 
 // Strings for `/authors/open-library/{id}`. English defines the contract; each
 // locale's file under `messages/` overrides what it translates.
@@ -20,6 +20,16 @@ export const messages = {
   ratingsLabel: plural({ one: 'rating', other: 'ratings' }),
   readersLabel: plural({ one: 'reader', other: 'readers' }),
   noRatings: 'No ratings yet',
+
+  // The follow control, worded as on a REZICS author's profile.
+  followers: plural({ one: insert('{{count}} follower'), other: insert('{{count}} followers') },
+    { count: asValue(number()) }),
+  followersAtLeast: insert('{{count}}+ followers', { count: String }),
+  follow: 'Follow',
+  following: 'Following',
+  unfollowName: insert('Unfollow {{name}}', { name: String }),
+  signInToFollow: 'Sign in to follow',
+  followFailed: 'Couldn’t update. Try again.',
 
   worksHeading: insert('Works by {{name}}', { name: String }),
   coAuthors: 'With',

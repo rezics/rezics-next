@@ -5,7 +5,7 @@ import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState } from '../auth/session.ts';
 import { type ReaderSeed, readReaderSeed } from '../catalogue/reader-store.ts';
 import type { UiLocale } from '../../i18n/define.ts';
-import { type AuthorWorksPage, type ExternalAuthor, failureOf, type Loaded } from './types.ts';
+import { type AuthorFollowState, type AuthorWorksPage, type ExternalAuthor, failureOf, type Loaded } from './types.ts';
 
 // Server reads for `/authors/open-library/{id}`. Each returns a `Loaded`
 // result instead of throwing. Reads are cached per request: the page and its
@@ -52,6 +52,16 @@ export const readOpenLibraryAuthorWorks = cache(async (key: string, locale: UiLo
   const { main, actingSubject } = await authorReader();
   return settle(() => main.v1.authors['open-library']({ author: key.slice('/authors/'.length) }).works
     .get({ query: { language: locale, actingSubject, limit, cursor } }), cursor);
+});
+
+/**
+ * Followers, and as a signed-in reader whether they follow the author, for
+ * the follow button. Main shows everyone the same count and never who.
+ */
+export const readAuthorFollow = cache(async (key: string, locale: UiLocale): Promise<Loaded<AuthorFollowState>> => {
+  const { main, actingSubject } = await authorReader();
+  return settle(() => main.v1.authors['open-library']({ author: key.slice('/authors/'.length) }).follow
+    .get({ query: { language: locale, actingSubject } }));
 });
 
 /** The reader's shelf state for the Works on the page, so shelf buttons render settled. */

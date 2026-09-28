@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { bookClub, comfortReads, libraryItems, libraryState, memoryLibraryApi, readingRows, storyNow, storyOverview,
-  storyReaderActions, storyView } from './fixtures.ts';
+import { bookClub, comfortReads, followedAuthors, libraryItems, libraryState, memoryLibraryApi, readingRows, storyNow,
+  storyOverview, storyReaderActions, storyView } from './fixtures.ts';
 import { LibraryPage } from './library-page.tsx';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
@@ -314,3 +314,65 @@ export const Chinese: Story = {
 
 export const ChinesePhoneDark: Story = { ...Chinese, play: undefined,
   globals: { locale: 'zh-Hans', theme: 'dark', viewport: { value: 'phone' } } };
+
+/**
+ * The authors the reader follows, REZICS and Open Library authors alike, each
+ * with their newest Work, newest first. One who is no longer public is left out.
+ */
+export const AuthorsYouFollow: Story = {
+  args: { authors: { ok: true, data: followedAuthors } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const region = canvas.getByRole('region', { name: 'Authors you follow' });
+    const authors = within(region);
+    const tiles = authors.getAllByRole('listitem');
+    await expect(tiles).toHaveLength(3);
+    // Lin Mei's serial is newer on REZICS than Pride and Prejudice; an author with nothing public comes last.
+    await expect(within(tiles[0]!).getByRole('link', { name: 'Lin Mei 林梅' })).toHaveAttribute('href', '/en/@lin_mei');
+    await expect(within(tiles[0]!).getByRole('link', { name: /^雨夜书店/ })).toBeVisible();
+    await expect(within(tiles[1]!).getByRole('link', { name: 'Jane Austen' }))
+      .toHaveAttribute('href', '/en/authors/open-library/OL21594A');
+    await expect(within(tiles[1]!).getByText('Newest work')).toBeVisible();
+    await expect(within(tiles[1]!).getByRole('link', { name: 'Pride and Prejudice' })).toBeVisible();
+    await expect(within(tiles[2]!).getByText('No works on REZICS yet')).toBeVisible();
+    // Between Currently reading and the shelf.
+    const reading = canvas.getByRole('region', { name: 'Currently reading' });
+    await expect(reading.compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  },
+};
+
+export const AuthorsYouFollowPhone: Story = {
+  args: { authors: { ok: true, data: followedAuthors } },
+  globals: { viewport: { value: 'phone' } },
+};
+
+export const AuthorsYouFollowChinese: Story = {
+  args: { authors: { ok: true, data: followedAuthors }, locale: 'zh-Hans', messages: zh },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  parameters: { route: { pathname: '/zh-Hans/library' } },
+  async play({ canvasElement }) {
+    const authors = within(within(canvasElement).getByRole('region', { name: '关注的作者' }));
+    await expect(authors.getAllByText('最新作品')).toHaveLength(2);
+    await expect(authors.getByText('REZICS 上还没有作品')).toBeVisible();
+  },
+};
+
+/** The authors could not be read: the rest of Library stays, with a way to try again. */
+export const AuthorsUnavailable: Story = {
+  args: { authors: { ok: false, failure: 'unavailable' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 2, name: 'Couldn’t load the authors you follow' })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: 'All 12' })).toBeVisible();
+  },
+};
+
+/** A reader who has shelved nothing yet still sees the authors they follow under the first steps. */
+export const AuthorsOnFirstUse: Story = {
+  args: { overview: { ok: true, data: storyOverview([], { customShelves: [] }) }, view: { ok: true, data: storyView(all, []) },
+    reading: [], authors: { ok: true, data: followedAuthors } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 2, name: 'Authors you follow' })).toBeVisible();
+  },
+};

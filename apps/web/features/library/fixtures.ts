@@ -5,7 +5,8 @@ import type { CatalogueWork } from '../catalogue/work.ts';
 import type { LibraryApi } from './api.ts';
 import type { ShelfView } from './read.ts';
 import { type LibraryState, pageOf, parseLibraryState, sortLibrary, statusShelves } from './state.ts';
-import type { CustomShelf, LibraryItem, LibraryOverview, LibraryRow, Loaded, Review, ShelfStatus } from './types.ts';
+import type { CustomShelf, FollowedAuthor, FollowedAuthors, LibraryItem, LibraryOverview, LibraryRow, Loaded, Review,
+  ShelfStatus } from './types.ts';
 
 // Story data shaped as Main answers it, and a Library API that keeps its
 // state in memory, standing in for Main's reader library, reviews and
@@ -142,3 +143,27 @@ export function memoryLibraryApi(options: { fail?: boolean; stale?: boolean } = 
     createShelf: (name, disclosure) => settle('createShelf', [name, disclosure], () => ({ id: shelf(63, name, disclosure).id })),
   };
 }
+
+const authorName = (value: string) => ({ value, language: 'und', direction: 'ltr' as const, basis: 'fallback' as const });
+function followed(id: string, kind: FollowedAuthor['kind'], name: string, href: string,
+  newest: CatalogueWork | null): FollowedAuthor {
+  return { id, kind, available: true, revision: '0192e0aa-0000-7000-8000-000000000001', name: authorName(name),
+    icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: id, resourceType: 'agent' }, realm: null, href,
+    newestWork: newest && { id: newest.id, title: newest.title!, cover: newest.cover!,
+      types: ['https://schema.org/Book'] } };
+}
+
+/**
+ * Authors the reader follows, as Main pages them (follow order): an Open
+ * Library author, a REZICS author with a serial, one with nothing public yet,
+ * and one who is no longer public, which Library leaves out.
+ */
+export const followedAuthors: FollowedAuthors = { profile: 'followed-authors-v1', items: [
+  followed('open-library:OL21594A', 'external-author', 'Jane Austen', '/authors/open-library/OL21594A',
+    byTitle(classics, 'Pride and Prejudice')),
+  followed('https://rezics.com/id/00000801-7c1d-4e2f-9a3b-5c6d7e8f9a0b', 'agent', 'Lin Mei 林梅', '/@lin_mei', serial),
+  followed('https://rezics.com/id/00000804-7c1d-4e2f-9a3b-5c6d7e8f9a0b', 'agent', 'Leo Sun', '/@leo_sun', null),
+  { id: 'open-library:OL1A', kind: 'external-author', available: false, revision: '0192e0aa-0000-7000-8000-000000000002',
+    name: null, icon: null, realm: null, href: null, newestWork: null },
+], nextCursor: null, sourcePosition: { dataEpoch: 'story', sequence: '42' },
+count: { value: 4, kind: 'exact-page', total: null } };

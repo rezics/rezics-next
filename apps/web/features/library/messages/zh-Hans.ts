@@ -97,6 +97,10 @@ export default {
   progressOf: insert('《{{title}}》的阅读进度', { title: String }),
   openWork: '打开',
   currentlyReading: '在读',
+  authorsYouFollow: '关注的作者',
+  newestWork: '最新作品',
+  noWorkYet: 'REZICS 上还没有作品',
+  authorsUnavailable: '未能加载你关注的作者',
 
   visibility: '谁可以看到你的阅读书架',
   visibilityShort: insert('书架：{{who}}', { who: String }),

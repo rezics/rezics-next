@@ -1,3 +1,4 @@
+import { initials } from '@rezics/ui/avatar-initials';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { BookMarkedIcon, BookOpenCheckIcon, BookOpenIcon, ChevronLeftIcon, ChevronRightIcon, CompassIcon, HouseIcon,
@@ -9,6 +10,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { ReaderActions } from '../catalogue/reader-actions.tsx';
 import { CoverLink, workTitle } from '../catalogue/work-tile.tsx';
+import { shelfCard } from '../profile/cards.ts';
 import { Notice } from '../discover/notice.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
@@ -22,7 +24,8 @@ import type { LibraryMessages } from './messages.ts';
 import type { ShelfView } from './read.ts';
 import { ReadingProgress } from './row-parts.tsx';
 import { type LibraryShelf, type LibraryState, libraryHref, shelfKey, statusShelves } from './state.ts';
-import type { CustomShelf, LibraryOverview, LibraryRow, Loaded, ShelfStatus } from './types.ts';
+import type { CustomShelf, FollowedAuthor, FollowedAuthors, LibraryOverview, LibraryRow, Loaded,
+  ShelfStatus } from './types.ts';
 
 type T = ReturnType<typeof materializeData<LibraryMessages>>;
 
@@ -110,6 +113,56 @@ function CurrentlyReading({ rows, total, state, avatarQuery, locale, messages }:
           <ReadingProgress row={row} locale={locale} messages={messages} />
         </div>
       </li>)}
+    </ul>
+  </section>;
+}
+
+type ShownAuthor = Extract<FollowedAuthor, { available: true }>;
+const newestFirst = (a: ShownAuthor, b: ShownAuthor) => {
+  // Main mints Works as UUIDv7, so the greater identifier is the newer Work.
+  const [x, y] = [a.newestWork?.id ?? '', b.newestWork?.id ?? ''];
+  return x === y ? 0 : x < y ? 1 : -1;
+};
+
+/**
+ * The authors the reader follows, REZICS authors and Open Library authors
+ * alike, each with their newest Work on REZICS, the most recent first. A row
+ * that scrolls, so the shelf below stays in reach. Following nobody, it is
+ * not drawn; authors who are no longer public are left out.
+ */
+function FollowedAuthorsSection({ authors, avatarQuery, locale, messages }: {
+  authors: Loaded<FollowedAuthors>; avatarQuery?: string; locale: UiLocale; messages: LibraryMessages;
+}) {
+  const t = materializeData(messages, { locale });
+  if (!authors.ok) {
+    return <Notice icon={TriangleAlertIcon} tone="destructive" headingLevel={2} title={t.authorsUnavailable}>
+      <Link href="/library" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+        <RotateCwIcon aria-hidden="true" />{t.retry}</Link>
+    </Notice>;
+  }
+  const shown = authors.data.items.filter((item): item is ShownAuthor => item.available).sort(newestFirst);
+  if (!shown.length) return null;
+  const link = 'rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring';
+  return <section aria-labelledby="library-authors" className="grid gap-4">
+    <h2 id="library-authors" className="font-semibold text-xl tracking-tight">{t.authorsYouFollow}</h2>
+    <ul className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none]
+      sm:mx-0 sm:px-0">
+      {shown.map(author => {
+        const work = author.newestWork ? shelfCard(author.newestWork) : null;
+        return <li key={author.id} className="group/tile flex w-64 shrink-0 snap-start gap-3 rounded-2xl bg-muted/50 p-3">
+          {work ? <CoverLink work={work} avatarQuery={avatarQuery} className="w-14 shrink-0 self-start" />
+            : <span aria-hidden="true" className="grid size-14 shrink-0 place-items-center rounded-full bg-accent
+              font-semibold font-work-title text-accent-foreground text-xl">{initials(author.name.value)}</span>}
+          <div className="grid min-w-0 content-start gap-1">
+            <Link href={author.href} className={cn('truncate font-medium', link)}>{author.name.value}</Link>
+            {work ? <>
+              <p className="text-muted-foreground text-xs">{t.newestWork}</p>
+              <Link href={work.href} lang={work.title?.language}
+                className={cn('line-clamp-2 font-work-title text-sm/snug', link)}>{workTitle(work, locale)}</Link>
+            </> : <p className="text-muted-foreground text-sm">{t.noWorkYet}</p>}
+          </div>
+        </li>;
+      })}
     </ul>
   </section>;
 }
@@ -247,6 +300,8 @@ export interface LibraryPageProps {
   view: Loaded<ShelfView>;
   /** Currently reading for the top of All; empty elsewhere. */
   reading: readonly LibraryRow[];
+  /** Authors the reader follows, on the first page of All; absent elsewhere. */
+  authors?: Loaded<FollowedAuthors> | null;
   /** The server's clock, so relative times print the same on both sides. */
   now: number;
   avatarQuery?: string;
@@ -262,7 +317,7 @@ export interface LibraryPageProps {
  * progress. Shelves beside the list, Currently reading first, and every
  * shelf sortable, as a list or a grid, with several Works moved at once.
  */
-export function LibraryPage({ state, overview, view, reading, now, avatarQuery, api, readerActions, locale,
+export function LibraryPage({ state, overview, view, reading, authors, now, avatarQuery, api, readerActions, locale,
   messages }: LibraryPageProps) {
   const t = materializeData(messages, { locale });
   if (!overview.ok) return <LibraryUnavailable failure={overview.failure} locale={locale} messages={messages} />;
@@ -284,13 +339,19 @@ export function LibraryPage({ state, overview, view, reading, now, avatarQuery, 
         </div>
         <VisibilityControl initial={data.visibility} locale={locale} messages={messages} />
       </header>
-      {firstUse ? <FirstUse locale={locale} messages={messages} />
+      {firstUse ? <>
+        <FirstUse locale={locale} messages={messages} />
+        {authors ? <FollowedAuthorsSection authors={authors} avatarQuery={avatarQuery} locale={locale}
+          messages={messages} /> : null}
+      </>
         : <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-12">
           <ShelfNav state={state} overview={data} locale={locale} messages={messages} />
           <div className="grid min-w-0 content-start gap-10">
             {state.shelf.kind === 'all' && reading.length && state.page === 1
               ? <CurrentlyReading rows={reading.slice(0, 3)} total={data.counts.reading} state={state}
                 avatarQuery={avatarQuery} locale={locale} messages={messages} /> : null}
+            {authors ? <FollowedAuthorsSection authors={authors} avatarQuery={avatarQuery} locale={locale}
+              messages={messages} /> : null}
             <ShelfSection state={state} view={view} overview={data} now={now} avatarQuery={avatarQuery}
               locale={locale} messages={messages} />
           </div>

@@ -1,18 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
+import { memoryFollowActions } from '../profile/fixtures.ts';
 import { AuthorPage, AuthorUnavailable, AuthorWorksListPage } from './author-page.tsx';
-import { austenWorksPage, caoXueqin, conanDoyle, janeAusten, lewisCarroll, prolificAuthor, storyId,
+import { austenWorksPage, authorFollow, caoXueqin, conanDoyle, janeAusten, lewisCarroll, prolificAuthor, storyId,
   unnamedAuthor } from './fixtures.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 
 const zh = { ...messages, ...zhHans };
 const signedOut = { signedIn: false };
+const signedIn = { signedIn: true, actingSubject: storyId(77), seed: {} };
 
 const meta = {
   title: 'Author/Page', component: AuthorPage,
-  args: { author: janeAusten, reader: signedOut, locale: 'en', messages },
+  args: { author: janeAusten, follow: authorFollow(janeAusten, 1), reader: signedOut, locale: 'en', messages },
   parameters: { route: { pathname: '/en/authors/open-library/OL21594A' } },
   globals: { viewport: { value: 'desktop' } },
 } satisfies Meta<typeof AuthorPage>;
@@ -52,8 +54,49 @@ export const OpenLibraryAuthor: Story = {
     await expect(records.getByRole('link', { name: /Open Library/ }))
       .toHaveAttribute('href', 'https://openlibrary.org/authors/OL21594A');
     await expect(canvas.getByText(/retrieved September 28, 2026/)).toBeVisible();
-    // No follow control: Main follows Agents, Works and communities, not Open Library authors.
-    await expect(canvas.queryByRole('button', { name: /Follow/ })).toBeNull();
+    // Signed out, Follow leads to sign-in and back here; the count is everyone's, never who.
+    await expect(canvas.getByText('1 follower')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: /^Follow/ }))
+      .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent('/en/authors/open-library/OL21594A')}`);
+  },
+};
+
+/** Following shows at once, as on a REZICS author's profile, and the count moves with it. */
+export const Follow: Story = {
+  args: { reader: signedIn, follow: authorFollow(janeAusten, 1, false), followActions: memoryFollowActions(),
+    readerActions: memoryReaderActions() },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Follow · Jane Austen' }));
+    await expect(canvas.getByRole('button', { name: 'Following · Unfollow Jane Austen' })).toBeVisible();
+    await expect(canvas.getByText('2 followers')).toBeVisible();
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^Following/ })).not.toHaveAttribute('aria-disabled', 'true'));
+    await userEvent.click(canvas.getByRole('button', { name: /^Following/ }));
+    await expect(canvas.getByRole('button', { name: 'Follow · Jane Austen' })).toBeVisible();
+    await expect(canvas.getByText('1 follower')).toBeVisible();
+  },
+};
+
+/** Main refused the follow: the press is taken back and a note says to try again. */
+export const FollowFails: Story = {
+  args: { reader: signedIn, follow: authorFollow(janeAusten, 1, false), followActions: memoryFollowActions({ fail: true }),
+    readerActions: memoryReaderActions() },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Follow · Jane Austen' }));
+    await expect(await canvas.findByRole('status')).toHaveTextContent('Couldn’t update. Try again.');
+    await expect(canvas.getByRole('button', { name: 'Follow · Jane Austen' })).toBeVisible();
+    await expect(canvas.getByText('1 follower')).toBeVisible();
+  },
+};
+
+/** The count could not be read: the button stays and no number is guessed. */
+export const FollowCountUnavailable: Story = {
+  args: { follow: { ok: false, failure: 'unavailable' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: /^Follow/ })).toBeVisible();
+    await expect(canvas.queryByText(/follower/)).toBeNull();
   },
 };
 
@@ -96,11 +139,14 @@ export const Chinese: Story = {
 };
 
 export const EnglishAuthorInChinese: Story = {
-  args: { locale: 'zh-Hans', messages: zh },
+  args: { locale: 'zh-Hans', messages: zh, reader: signedIn, follow: authorFollow(janeAusten, 1_000, true, 'lower-bound'),
+    followActions: memoryFollowActions() },
   globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
   parameters: { route: { pathname: '/zh-Hans/authors/open-library/OL21594A' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: '已关注 · 取消关注Jane Austen' })).toBeVisible();
+    await expect(canvas.getByText('1,000+ 位关注者')).toBeVisible();
     await expect(canvas.getByText('1775年—1817年')).toBeVisible();
     await expect(canvas.getByText('1775年12月16日')).toBeVisible();
     await expect(canvas.getByText(/获取于2026年9月28日/)).toBeVisible();

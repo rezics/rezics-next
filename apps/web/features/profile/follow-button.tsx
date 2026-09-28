@@ -9,8 +9,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import Link from '../shell/localized-link.tsx';
-import type { ProfileMessages } from './messages.ts';
-import { followerLabel } from './followers.ts';
+import { type FollowMessages, followerLabel } from './followers.ts';
 import type { FollowerCount } from './types.ts';
 
 /** What a follow write came to: saved with Main's new revision, stale (changed elsewhere first) or failed. */
@@ -32,19 +31,25 @@ export type FollowActions =
     refresh: () => Promise<{ following: boolean; revision: string | null } | null>;
   };
 
-/** Follows of an Agent through the BFF, as the session's Agent. Each press is its own idempotent command. */
+/** Who a follow names: a REZICS Agent by IRI, or an Open Library author as `open-library:OL…A`. */
+export type AuthorFollowKind = 'agent' | 'external-author';
+
+/** Follows of an author through the BFF, as the session's Agent. Each press is its own idempotent command. */
 export function mainFollowActions(target: string, actingSubject: string,
-  main: () => MainClient = browserMainApi): Extract<FollowActions, { kind: 'ready' }> {
+  main: () => MainClient = browserMainApi, kind: AuthorFollowKind = 'agent'): Extract<FollowActions, { kind: 'ready' }> {
   return {
     kind: 'ready',
     async send(following, expectedRevision) {
-      const { data, error } = await main().v1.follows.post({ profile: 'follow-command-v1', target, kind: 'agent',
+      const { data, error } = await main().v1.follows.post({ profile: 'follow-command-v1', target, kind,
         actingSubject, following, expectedRevision }, { headers: { 'idempotency-key': crypto.randomUUID() } });
       if (data) return { kind: 'saved', following: data.following, revision: data.revision };
       return error?.status === 409 ? { kind: 'stale' } : { kind: 'failed' };
     },
     async refresh() {
-      const { data } = await main().v1.follows({ id: target.slice(-36) }).get({ query: { kind: 'agent', actingSubject } });
+      const { data } = kind === 'agent'
+        ? await main().v1.follows({ id: target.slice(-36) }).get({ query: { kind: 'agent', actingSubject } })
+        : await main().v1.authors['open-library']({ author: target.slice('open-library:'.length) }).follow
+          .get({ query: { actingSubject } });
       return data ? { following: data.following ?? false, revision: data.revision } : null;
     },
   };
@@ -59,10 +64,10 @@ const bump = (followers: FollowerCount | null, by: number): FollowerCount | null
  * Main refuses; when the follow changed in another tab first, it reads the
  * follow again and applies the reader's choice once more.
  */
-export function FollowControl({ target, name, following, revision, followers, signedIn, actingSubject, signInHref,
-  actions, locale, messages, className }: {
-  /** The Agent IRI. */
-  target: string; name: string;
+export function FollowControl({ target, kind = 'agent', name, following, revision, followers, signedIn, actingSubject,
+  signInHref, actions, locale, messages, className }: {
+  /** The Agent IRI, or an Open Library author's `open-library:OL…A`. */
+  target: string; kind?: AuthorFollowKind; name: string;
   /** The reader's follow as the page read it; null when it could not be read or they are signed out. */
   following: boolean | null; revision: string | null;
   /** Null when Main could not count them; the count is then left out. */
@@ -70,11 +75,11 @@ export function FollowControl({ target, name, following, revision, followers, si
   signedIn: boolean; actingSubject?: string | null; signInHref: string;
   /** Stories supply these; pages derive them from the session. */
   actions?: FollowActions;
-  locale: UiLocale; messages: ProfileMessages; className?: string;
+  locale: UiLocale; messages: FollowMessages; className?: string;
 }) {
   const t = materializeData(messages, { locale });
   const [adapter] = useState<FollowActions>(() => actions ?? (!signedIn ? { kind: 'signed-out', signInHref }
-    : actingSubject ? mainFollowActions(target, actingSubject) : { kind: 'unavailable' }));
+    : actingSubject ? mainFollowActions(target, actingSubject, browserMainApi, kind) : { kind: 'unavailable' }));
   const [state, setState] = useState({ following: following ?? false, revision, followers });
   const [status, setStatus] = useState<'idle' | 'saving' | 'failed'>('idle');
 

@@ -17,10 +17,11 @@ import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { workHref } from '../work-page/route.ts';
+import { type FollowActions, FollowControl } from '../profile/follow-button.tsx';
 import { authorName, formatAuthorDate, lifespan, retrievedOn } from './facts.ts';
 import type { AuthorMessages } from './messages.ts';
-import { type AuthorView, openLibraryAuthorHref } from './route.ts';
-import type { AuthorIdentifier, AuthorTotals, AuthorWork, AuthorWorksPage, ExternalAuthor, Loaded,
+import { type AuthorView, externalAuthorFollow, openLibraryAuthorHref } from './route.ts';
+import type { AuthorFollowState, AuthorIdentifier, AuthorTotals, AuthorWork, AuthorWorksPage, ExternalAuthor, Loaded,
   ReadFailure } from './types.ts';
 
 type Text = ReturnType<typeof materializeData<AuthorMessages>>;
@@ -90,11 +91,13 @@ function Totals({ totals, locale, messages }: { totals: AuthorTotals; locale: Ui
   </dl>;
 }
 
-function AuthorHeader({ author, locale, messages }: { author: ExternalAuthor; locale: UiLocale;
+function AuthorHeader({ author, follow, reader, followActions, locale, messages }: { author: ExternalAuthor;
+  follow: Loaded<AuthorFollowState>; reader: AuthorReader; followActions?: FollowActions; locale: UiLocale;
   messages: AuthorMessages }) {
   const t = materializeData(messages, { locale });
   const name = authorName(author, t);
   const years = lifespan(author.facts, locale, messages);
+  const state = follow.ok ? follow.data : null;
   return <header className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-5 gap-y-6 sm:items-start
     sm:gap-x-10">
     <Portrait name={name} className="sm:row-span-2" />
@@ -104,7 +107,13 @@ function AuthorHeader({ author, locale, messages }: { author: ExternalAuthor; lo
         sm:text-5xl/tight">{name}</h1>
       {years ? <p className="text-lg text-muted-foreground tabular-nums">{years}</p> : null}
     </div>
-    <div className="col-span-2 sm:col-span-1 sm:col-start-2">
+    {/* Follow and its count sit where a REZICS author's profile has them, above what the Works add up to. */}
+    <div className="col-span-2 grid content-start gap-6 sm:col-span-1 sm:col-start-2">
+      <FollowControl target={externalAuthorFollow(author.key)} kind="external-author" name={name}
+        following={state?.following ?? null} revision={state?.revision ?? null} followers={state?.followers ?? null}
+        signedIn={reader.signedIn} actingSubject={reader.actingSubject}
+        signInHref={signInPath(localizedPath(openLibraryAuthorHref(author.key), locale))} actions={followActions}
+        locale={locale} messages={messages} />
       <Totals totals={author.totals} locale={locale} messages={messages} />
     </div>
   </header>;
@@ -205,6 +214,8 @@ function AuthorRecord({ author, locale, messages }: { author: ExternalAuthor; lo
 
 export interface AuthorPageProps {
   author: ExternalAuthor;
+  /** Followers and the reader's follow; a failed read leaves only the button. */
+  follow: Loaded<AuthorFollowState>;
   reader: AuthorReader;
   /**
    * "More from this author's readers": the slot for a row of Works the
@@ -213,6 +224,7 @@ export interface AuthorPageProps {
   alsoEnjoyed?: ReactNode;
   /** Stories supply these; pages derive them from the session. */
   readerActions?: ReaderActions;
+  followActions?: FollowActions;
   locale: UiLocale;
   messages: AuthorMessages;
 }
@@ -223,7 +235,8 @@ export interface AuthorPageProps {
  * up to here; the Works follow, most rated first, beside the record's facts
  * and the places to read them free or look them up.
  */
-export function AuthorPage({ author, reader, alsoEnjoyed, readerActions, locale, messages }: AuthorPageProps) {
+export function AuthorPage({ author, follow, reader, alsoEnjoyed, readerActions, followActions, locale,
+  messages }: AuthorPageProps) {
   const t = materializeData(messages, { locale });
   const name = authorName(author, t);
   const href = openLibraryAuthorHref(author.key);
@@ -232,7 +245,8 @@ export function AuthorPage({ author, reader, alsoEnjoyed, readerActions, locale,
     actingSubject={reader.seed === null ? null : reader.actingSubject} seed={reader.seed ?? undefined}>
     {/* Names and headings mix Latin and CJK; space them apart. */}
     <PageContainer className="grid gap-12 [text-autospace:normal]">
-      <AuthorHeader author={author} locale={locale} messages={messages} />
+      <AuthorHeader author={author} follow={follow} reader={reader} followActions={followActions} locale={locale}
+        messages={messages} />
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-16">
         <div className="grid min-w-0 content-start gap-12">
           <section aria-labelledby="author-works" className="grid gap-4">

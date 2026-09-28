@@ -213,6 +213,43 @@ export const SuggestionInFollowing: Story = {
   },
 };
 
+const title = (value: string, language = 'en') => ({ value, language, direction: 'ltr' as const, basis: 'requested' as const });
+const mei = { id: storyId(801, 'bbbb'), name: 'Lin Mei 林梅', handle: 'lin_mei' };
+/** An Open Library author's new Work and a REZICS author's new chapter, each in Following for its author. */
+const authorNews = page([
+  post(40, { kind: 'added', realm: null, reasons: [{ kind: 'added-to-rezics', actor: mei.id }],
+    authors: [{ id: storyId(40, '0a0a'), role: 'author', participantKind: 'external-reference', provider: 'open-library',
+      key: '/authors/OL21594A', ordinal: 0, agent: null, displayName: 'Jane Austen', handle: null }],
+    reason: { kind: 'followed', target: 'open-library:OL21594A', targetKind: 'external-author' },
+    target: { title: title('Sanditon') } }),
+  post(41, { kind: 'contribution', realm: realms.fiction, actor: mei,
+    authors: [{ id: storyId(41, '0b0b'), role: 'author', participantKind: 'agent', provider: null, key: null,
+      ordinal: null, agent: mei.id, displayName: mei.name, handle: mei.handle }],
+    reason: { kind: 'followed', target: mei.id, targetKind: 'agent' },
+    card: { kind: 'chapter', occurrence: storyId(411, 'dddd'), parent: storyId(41, 'eeee'), number: 3 },
+    target: { title: title('雨夜书店', 'zh-Hans'), language: 'zh-Hans' } }),
+  post(42, { target: { title: title('The Last Lantern') } }),
+]);
+
+/** In Following, an author's news says whose it is; a followed community's post needs no such note. */
+export const BecauseYouFollow: Story = {
+  args: { initial: { ok: true, data: authorNews } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(article(canvas, 'Sanditon')).toHaveTextContent('Because you follow Jane Austen');
+    await expect(article(canvas, '雨夜书店')).toHaveTextContent('Because you follow Lin Mei 林梅');
+    await expect(article(canvas, 'The Last Lantern')).not.toHaveTextContent('Because you follow');
+  },
+};
+
+export const BecauseYouFollowChinese: Story = {
+  args: { initial: { ok: true, data: authorNews }, locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    await expect(article(within(canvasElement), 'Sanditon')).toHaveTextContent('因为你关注了Jane Austen');
+  },
+};
+
 /** Signed out, taking part leads to sign-in and there is nothing to hide or mute. */
 export const SignedOut: Story = {
   args: { signedIn: false, tab: 'all', followedRealms: null },

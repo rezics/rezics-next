@@ -9,8 +9,8 @@ import { shellReader } from '../shell/communities-read.ts';
 import { workHref } from '../work-page/route.ts';
 import { dayText, momentText } from './format.ts';
 import { type LibraryShelf, type LibraryState, pageOf, sortLibrary, statusShelves } from './state.ts';
-import type { ContinueItem, CustomShelf, LibraryItem, LibraryOverview, LibraryRow, Loaded, ReaderStateItem,
-  ReadingProgress, Review, ShelfStatus, StatusShelfItem } from './types.ts';
+import type { ContinueItem, CustomShelf, FollowedAuthors, LibraryItem, LibraryOverview, LibraryRow, Loaded,
+  ReaderStateItem, ReadingProgress, Review, ShelfStatus, StatusShelfItem } from './types.ts';
 
 // Server reads for `/library`, as the session's Agent. Each region returns
 // its own `Loaded` outcome, so a shelf that cannot load leaves the rest.
@@ -330,4 +330,18 @@ export async function readCurrentlyReading(locale: UiLocale): Promise<LibraryRow
     .slice(0, 6);
   const progress = await readProgress(shown, locale);
   return shown.map(item => ({ ...item, progress: progress.get(item.work.id) ?? null }));
+}
+
+/**
+ * The first page of authors the reader follows (Main pages them eight at a
+ * time), each with their newest Work on REZICS. Main answers 409 when the
+ * follows changed during the read; it is read again, once.
+ */
+export async function readFollowedAuthors(locale: UiLocale): Promise<Loaded<FollowedAuthors>> {
+  const reader = await libraryReader();
+  if (!reader) return { ok: false, failure: 'sign-in' };
+  const read = () => settle(() => reader.main.v1.me.follows.authors.get({ query: {
+    actingSubject: reader.actingSubject, language: locale } }));
+  const first = await read();
+  return !first.ok && first.failure === 'moved' ? read() : first;
 }

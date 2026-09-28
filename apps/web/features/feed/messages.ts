@@ -46,6 +46,7 @@ export const messages = {
   suggested: 'Suggested', suggestedAll: 'Popular across REZICS',
   suggestedThin: 'Suggested while your communities are quiet',
   trending: insert('Trending in {{realm}}', { realm: String }), editorial: 'Editors’ pick',
+  becauseYouFollow: insert('Because you follow {{name}}', { name: String }),
   join: 'Join', joined: 'Joined', joinRealm: insert('Join {{realm}}', { realm: String }),
   joinFailed: 'Couldn’t join. Try again.',
   spoilerTitle: 'Hidden until you catch up',

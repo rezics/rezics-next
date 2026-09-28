@@ -39,6 +39,7 @@ export default {
   suggested: '推荐', suggestedAll: 'REZICS 上的热门内容',
   suggestedThin: '你关注的社区较安静时的推荐',
   trending: insert('{{realm}} 热门', { realm: String }), editorial: '编辑精选',
+  becauseYouFollow: insert('因为你关注了{{name}}', { name: String }),
   join: '加入', joined: '已加入', joinRealm: insert('加入 {{realm}}', { realm: String }),
   joinFailed: '未能加入，请重试。',
   spoilerTitle: '读到这里前先隐藏',

@@ -20,6 +20,11 @@ export function openLibraryAuthorHref(key: string, view: AuthorView = { kind: 'o
   return cursor ? `${path}?${new URLSearchParams({ cursor })}` : path;
 }
 
+/** How Main names an Open Library author as a follow target: `open-library:OL21594A` for `/authors/OL21594A`. */
+export function externalAuthorFollow(key: string): string {
+  return `open-library:${key.replace(/^\/authors\//, '')}`;
+}
+
 /**
  * Where an author's name leads: a REZICS Agent's profile (`/@handle`), or the
  * author page of someone Open Library lists. Work pages, cards and search
