@@ -192,6 +192,8 @@ export interface MainWorkDependencies {
   packageNixResolutions?: NixResolutionStore;
   packageModResolutions?: ModResolutionStore;
   gameFacts?: import('../modules/game-facts/store.ts').RevisionedFactsStore<import('../modules/game-facts/contract.ts').GameFacts>;
+  /** Explicit provider retention decision for a web content location's origin. */
+  webSnapshotRetention?: (origin: string) => Promise<boolean>;
   softwareFacts?: import('../modules/game-facts/store.ts').RevisionedFactsStore<import('../modules/software-facts/contract.ts').SoftwareFacts>;
   packageLocks?: PackageLockStore;
   packageInstallations?: PackageInstallationStore;

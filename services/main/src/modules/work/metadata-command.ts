@@ -10,8 +10,10 @@ import { PendingAdmittedWork } from './create-admitted.ts';
 import { sealMetadataWorkEditAdmission, workEditReceiptIri } from './edit.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { unerased } from './read-session.ts';
-import { checkedMetadataIntent, metadataComponent, metadataDigest, METADATA_PROFILE,
-  StaleWorkMetadata, WorkMetadataUnavailable, WORK_METADATA_COST, type MetadataIntent } from './metadata-schema.ts';
+import { languageListLiteral } from '../release/languages.ts';
+import { checkedEditionV2, checkedMetadataIntent, editionLanguageLiteral, editionV2Digest, metadataComponent,
+  metadataDigest, METADATA_DETAILS_V2, METADATA_PROFILE, StaleWorkMetadata, WorkMetadataUnavailable,
+  WORK_METADATA_COST, type MetadataEditionStateV2, type MetadataIntent, type MetadataState } from './metadata-schema.ts';
 
 export interface MetadataReceipt {
   outcome: 'succeeded' | 'cancelled'; receipt: string; admissionId: string;
@@ -173,8 +175,15 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
 /** Reuses the work.edit receipt identity, so strong closure races the same terminal
  * cancellation. Header, edition and relevance revisions do not rewrite a Work title. */
 export async function setWorkMetadata(deps: MainWorkDependencies, request: Request,
-  input: MetadataIntent & { actingSubject: string; idempotencyKey: string }) {
-  const intent = checkedMetadataIntent(input), digest = metadataDigest(intent);
+  input: { profile?: string; work: string; expectedHead: string | null; state: MetadataState | MetadataEditionStateV2;
+    actingSubject: string; idempotencyKey: string }) {
+  if (input.profile === 'work-metadata-details-v2') {
+    return setEditionV2(deps, request, { work: input.work, expectedHead: input.expectedHead,
+      state: input.state as MetadataEditionStateV2, actingSubject: input.actingSubject,
+      idempotencyKey: input.idempotencyKey });
+  }
+  const intent = checkedMetadataIntent({ work: input.work, expectedHead: input.expectedHead,
+    state: input.state as MetadataState }), digest = metadataDigest(intent);
   const signal = AbortSignal.timeout(WORK_METADATA_COST.deadlineMs);
   return fusekiReadBudget.run({ signal, callsLeft: WORK_METADATA_COST.commandGraphCalls,
     bytesLeft: WORK_METADATA_COST.commandGraphBytes }, async () => {
@@ -208,6 +217,162 @@ export async function setWorkMetadata(deps: MainWorkDependencies, request: Reque
       if (error instanceof WorkMetadataUnavailable || error instanceof IdempotencyConflict
         || error instanceof CommandRejected || error instanceof StaleWorkMetadata) throw error;
       // Once admitted, a failed claim/receipt/Access read cannot prove that no effect occurred.
+      throw new PendingAdmittedWork(registered.id, 'work-edit');
+    }
+  });
+}
+
+async function commitEditionV2(env: WorkActivationEnvironment, admission: RegisteredAdmission,
+  input: { work: string; expectedHead: string | null; state: MetadataEditionStateV2 }): Promise<boolean> {
+  const state = checkedEditionV2(input.state);
+  const intent = { work: input.work, expectedHead: input.expectedHead, state };
+  const digest = editionV2Digest(intent);
+  const component = state.id;
+  if (admission.action !== 'work.edit' || admission.scope !== `work:edit:${intent.work}`
+    || admission.requestDigest !== digest) throw new IdempotencyConflict('Metadata admission differs');
+  const receipt = workEditReceiptIri(admission.id);
+  await assertNotInvalidProfileReceipt(env.fuseki, receipt);
+  if (await readMetadataReceipt(env, admission.id)) return false;
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?head ?sequence ?componentHead ?owner ?kind WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?sequence .
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} a <https://schema.org/CreativeWork> ; rv:head ?head .
+        OPTIONAL { ${iri(component)} rv:metadataHead ?componentHead ; rv:work ?owner ; rv:metadataKind ?kind }
+      } } LIMIT 2`, 8192)).results?.bindings ?? [];
+  const row = rows[0];
+  if (rows.length !== 1 || !row?.head || !row.sequence) throw new WorkMetadataUnavailable('Work metadata is unavailable');
+  if ((row.componentHead?.value ?? null) !== intent.expectedHead
+    || row.owner && (row.owner.value !== intent.work || row.kind?.value !== 'edition')) {
+    await sealMetadataWorkEditAdmission(env, admission);
+    return false;
+  }
+  const revision = ID + Bun.randomUUIDv7();
+  const validations = await profileValidations(env.fuseki, 'work-metadata-details-v2', [
+    { shape: `${METADATA_DETAILS_V2}/component-shape`, focus: [component], graphs: [GRAPHS.current, GRAPHS.revisions] },
+    { shape: `${METADATA_DETAILS_V2}/revision-shape`, focus: [revision], graphs: [GRAPHS.current, GRAPHS.revisions] },
+  ]);
+  const manifest = env.workObjects
+    ? await prepareWorkComponent(env.workObjects, component, { intent, revision }, METADATA_DETAILS_V2)
+    : prepareComponent(env.objectDirectory, component, { intent, revision }, METADATA_DETAILS_V2);
+  if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingAdmittedWork(admission.id, 'work-edit');
+  const batch = `urn:rezics:outbox:${hash(receipt)}`;
+  const event = `urn:rezics:event:${hash(receipt)}`;
+  const languages = editionLanguageLiteral(state);
+  const originals = languageListLiteral(state.originalLanguages);
+  const single = state.contentLanguages.length === 1 ? state.contentLanguages[0] : null;
+  const prior = intent.expectedHead;
+  const update = `PREFIX rv: <${RV}>
+    DELETE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(component)} rv:metadataHead ${prior ? iri(prior) : '?absentHead'} ;
+        rv:editionState ?oldStatus ; rv:editionLanguage ?oldLanguage ; rv:contentLanguages ?oldLanguages ;
+        rv:titleLanguage ?oldTitle ; rv:tracklistLanguage ?oldTrack ; rv:originalLanguages ?oldOriginals ;
+        rv:isTranslation ?oldTranslation . }
+    }
+    INSERT {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(component)} a rv:EditionRecord ; rv:work ${iri(intent.work)} ;
+        rv:metadataKind "edition" ; rv:metadataHead ${iri(revision)} ;
+        rv:editionState rv:${state.status === 'active' ? 'Active' : 'Withdrawn'} .
+        ${languages ? `${iri(component)} rv:contentLanguages ${lit(languages)} .` : ''}
+        ${single ? `${iri(component)} rv:editionLanguage ${lit(single)} .` : ''}
+        ${state.titleLanguage ? `${iri(component)} rv:titleLanguage ${lit(state.titleLanguage)} .` : ''}
+        ${state.tracklistLanguage ? `${iri(component)} rv:tracklistLanguage ${lit(state.tracklistLanguage)} .` : ''}
+        ${originals ? `${iri(component)} rv:originalLanguages ${lit(originals)} .` : ''}
+        ${state.isTranslation ? `${iri(component)} rv:isTranslation "true" .` : ''} }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:WorkMetadataDetailsV2Revision, rv:RevisionAnchor ;
+        rv:component ${iri(component)} ; rv:metadataState ${lit(JSON.stringify(state))} ;
+        ${prior ? `rv:predecessor ${iri(prior)} ;` : ''}
+        rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ; rv:modelRevision ${iri(METADATA_DETAILS_V2)} ;
+        rv:shapeRevision ${iri(METADATA_DETAILS_V2)} ; rv:datasetId ${iri(DATASET)} ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(admission.id)} ;
+        rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(admission.scope)} ;
+        rv:work ${iri(intent.work)} ; rv:metadataComponent ${iri(component)} ; rv:metadataRevision ${iri(revision)} ;
+        rv:workRevision ${iri(revision)} ; rv:expectedHead ${iri(prior ?? component)} ;
+        rv:action "work.edit" ; rv:commandFamily "work-metadata-details-v2" ;
+        rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
+        ${iri(event)} a rv:WorkMetadataRevisedEvent ; rv:ordinal 0 ; rv:action "work.edit" ; rv:receipt ${iri(receipt)} . }
+    }
+    WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . FILTER(?n = ${row.sequence.value}) }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(row.head.value)} .
+        OPTIONAL { ${iri(component)} rv:editionState ?oldStatus }
+        OPTIONAL { ${iri(component)} rv:editionLanguage ?oldLanguage }
+        OPTIONAL { ${iri(component)} rv:contentLanguages ?oldLanguages }
+        OPTIONAL { ${iri(component)} rv:titleLanguage ?oldTitle }
+        OPTIONAL { ${iri(component)} rv:tracklistLanguage ?oldTrack }
+        OPTIONAL { ${iri(component)} rv:originalLanguages ?oldOriginals }
+        OPTIONAL { ${iri(component)} rv:isTranslation ?oldTranslation }
+        ${prior ? `${iri(component)} a rv:EditionRecord ; rv:work ${iri(intent.work)} ;
+          rv:metadataKind "edition" ; rv:metadataHead ${iri(prior)} .`
+          : `FILTER NOT EXISTS { ${iri(component)} ?occupiedProperty ?occupiedValue }`} }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
+      BIND(?n + 1 AS ?next)
+    }`;
+  const result = await validatedCommand(env, { receipt, digest, update, validations,
+    deadlineMs: WORK_METADATA_COST.deadlineMs }, admission);
+  if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
+  if (!await readMetadataReceipt(env, admission.id)) {
+    await sealMetadataWorkEditAdmission(env, admission);
+    return false;
+  }
+  return true;
+}
+
+async function setEditionV2(deps: MainWorkDependencies, request: Request,
+  input: { work: string; expectedHead: string | null; state: MetadataEditionStateV2;
+    actingSubject: string; idempotencyKey: string }) {
+  const state = checkedEditionV2(input.state);
+  const intent = { work: input.work, expectedHead: input.expectedHead, state };
+  const digest = editionV2Digest(intent);
+  const signal = AbortSignal.timeout(WORK_METADATA_COST.deadlineMs);
+  return fusekiReadBudget.run({ signal, callsLeft: WORK_METADATA_COST.commandGraphCalls,
+    bytesLeft: WORK_METADATA_COST.commandGraphBytes }, async () => {
+    const env = deps.environment;
+    await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+    const principal = await deps.account.verify(request, ['work:edit']);
+    const registered = await deps.access.register({ principal, actingSubject: input.actingSubject,
+      action: 'work.edit', scope: `work:edit:${intent.work}`, idempotencyKey: input.idempotencyKey,
+      requestDigest: digest });
+    try {
+      let admission = registered;
+      if (registered.state !== 'sealed' && registered.dispatchEligible) {
+        try { admission = await deps.access.claim(registered.id, digest, principal); }
+        catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
+      }
+      let committed = false, failure: unknown;
+      try {
+        if (admission.state === 'sealed') { /* retry */ }
+        else if (!admission.dispatchEligible || admission.state === 'registered') await sealMetadataWorkEditAdmission(env, admission);
+        else committed = await commitEditionV2(env, admission, intent);
+      } catch (error) { failure = error; }
+      const terminal = await readMetadataReceipt(env, admission.id);
+      if (!terminal) {
+        if (failure instanceof WorkMetadataUnavailable || failure instanceof IdempotencyConflict || failure instanceof CommandRejected) throw failure;
+        throw new PendingAdmittedWork(admission.id, 'work-edit');
+      }
+      await deps.access.recordGraphOutcome(admission.id, terminal);
+      await assertNotInvalidProfileReceipt(env.fuseki, terminal.receipt);
+      if (failure instanceof CommandRejected) throw failure;
+      if (terminal.outcome === 'cancelled') throw new StaleWorkMetadata('Edition command was cancelled; refresh its basis');
+      if (terminal.work !== intent.work || terminal.component !== state.id) {
+        throw new IdempotencyConflict('Metadata receipt targets another component');
+      }
+      return { work: terminal.work, component: terminal.component, revision: terminal.revision!,
+        receipt: terminal.receipt, sourcePosition: { dataEpoch: terminal.dataEpoch, sequence: terminal.sequence },
+        replayed: !committed };
+    } catch (error) {
+      if (error instanceof WorkMetadataUnavailable || error instanceof IdempotencyConflict
+        || error instanceof CommandRejected || error instanceof StaleWorkMetadata) throw error;
       throw new PendingAdmittedWork(registered.id, 'work-edit');
     }
   });

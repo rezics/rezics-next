@@ -12,6 +12,13 @@ tracks and chapters need distinct occurrences even when they share one member.
 
 ## Release kinds and status
 
+The release record, its kind and status, and a web publication's closed snapshots
+are carried by [`release-v1`](../../model/definitions/release-v1.ts),
+[`web-publication-v1`](../../model/definitions/web-publication-v1.ts),
+[`web-snapshot-v1`](../../model/definitions/web-snapshot-v1.ts) and
+`services/main/src/modules/release/`. Edition language lists are
+[`work-metadata-details-v2`](../../model/definitions/work-metadata-details-v2.ts).
+
 A release says what it is. It is a formal edition or physical release, a web
 publication, a REZICS fixed release or a virtual release. Every kind except the
 virtual release is a [closed record](work-and-release.md#closed-records-and-open-axes).

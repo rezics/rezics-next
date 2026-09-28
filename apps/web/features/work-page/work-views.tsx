@@ -24,7 +24,9 @@ import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { readContentsGroup } from './contents-actions.ts';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
+import { editionMessages, EditionsSection } from './editions.tsx';
 import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readAlsoEnjoyed, readClassifications,
+  readReleases,
   readContents, readCredits, readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm,
   readReviewer, readReviews, readStart, readVersions, readWorkStats, readRecipeWorkPage,
   readHubWorkPage, readText } from './read.ts';
@@ -231,6 +233,12 @@ async function Classification(props: ScopedProps) {
 }
 
 /** Works to read next, beside the ones this Work's readers also enjoyed. */
+async function Editions({ id, locale, messages }: Common & { id: string }) {
+  const releases = await readReleases(id);
+  if (!releases.ok) return <EditionsSection items={null} failure={releases.failure} locale={locale} messages={messages} />;
+  return <EditionsSection items={releases.data.items} failure={null} locale={locale} messages={messages} />;
+}
+
 async function AlsoEnjoyed({ id, work, locale, messages }: Common & { id: string; work: Header }) {
   const [alsoEnjoyed, realms, { avatarQuery }] = await Promise.all([readAlsoEnjoyed(id, locale),
     scopeRealms(id, null, locale), browseReader()]);
@@ -277,6 +285,9 @@ export function WorkOverview({ workRef, id, work, scope, context, locale, messag
       id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
       <TypeExperience id={id} work={work} locale={locale} messages={messages} /></Suspense>}
     <WorkAbout work={work} messages={messages} />
+    <Suspense fallback={<RegionSkeleton id="work-editions-loading" title={editionMessages[locale].editions}
+      label={loading} lines={4} />}>
+      <Editions id={id} locale={locale} messages={messages} /></Suspense>
     <Suspense fallback={null}><WorkTypeSections work={id} types={work.types} locale={locale} /></Suspense>
   </div>}
     scopeBar={<Suspense fallback={<ScopeBarSkeleton label={loading} />}>

@@ -17,6 +17,10 @@ import { readVndbConceptRun, VndbConceptRunInvalid, VndbConceptRunUnavailable }
   from '../source/vndb-concept-run.ts';
 
 const PROFILE = 'https://rezics.com/definition/fixed-native-text-release-v1';
+/** A sealed native text release is a closed REZICS fixed release. Its v1 manifest
+ * stays one contribution, one language and one body digest. */
+export const FIXED_RELEASE_KIND = 'fixed' as const;
+export const FIXED_RELEASE_DEFAULT_STATUS = 'official' as const;
 const SHAPE = `${PROFILE}/release-shape`;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 

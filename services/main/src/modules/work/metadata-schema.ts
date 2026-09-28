@@ -1,9 +1,12 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { Value } from 'typebox/value';
+import { contentLanguages, originalLanguages, textLanguage, languageListLiteral,
+  InvalidContentLanguages } from '../release/languages.ts';
 import { hash } from './activate.ts';
 
 export const METADATA_PROFILE = 'https://rezics.com/definition/work-metadata-details-v1';
+export const METADATA_DETAILS_V2 = 'https://rezics.com/definition/work-metadata-details-v2';
 /** Per command: one component, ≤20 locales, ≤64 KiB UTF-8. Edition pages select ≤20
  * identities before payload hydration. These are logical bounds, not Jena seek guarantees. */
 export const WORK_METADATA_COST = { locales: 20, stateBytes: 64 * 1024,
@@ -41,13 +44,24 @@ export const metadataRelevanceState = t.Object({ kind: t.Literal('relevance'), s
     t.Object({ kind: t.Literal('realm-classification'), id: native }, closed)]),
   decision: native, level: t.Nullable(relevanceLevel) }, closed);
 export const metadataState = t.Union([metadataHeaderState, metadataEditionState, metadataRelevanceState]);
-export const metadataWrite = t.Object({ profile: t.Literal('work-metadata-details-v1'),
+export const metadataEditionStateV2 = t.Object({ kind: t.Literal('edition'), id: native,
+  status: t.Union([t.Literal('active'), t.Literal('withdrawn')]), title: recordedText,
+  contentLanguages: t.Array(language, { maxItems: 8 }), isTranslation: t.Boolean(),
+  originalLanguages: t.Array(language, { maxItems: 4 }), titleLanguage: t.Nullable(language),
+  tracklistLanguage: t.Nullable(language), editionStatement: t.Nullable(text(200)),
+  publisher: t.Nullable(text(300)), publicationYear: t.Nullable(t.Integer({ minimum: 1, maximum: 9999 })),
+  isbn13: t.Nullable(t.String({ pattern: '^97[89][0-9]{10}$' })) }, closed);
+export const metadataWriteV1 = t.Object({ profile: t.Literal('work-metadata-details-v1'),
   expectedHead: t.Nullable(native), state: metadataState, actingSubject: native }, closed);
+export const metadataWriteV2 = t.Object({ profile: t.Literal('work-metadata-details-v2'),
+  expectedHead: t.Nullable(native), state: metadataEditionStateV2, actingSubject: native }, closed);
+export const metadataWrite = t.Union([metadataWriteV1, metadataWriteV2]);
 export const recordedRelevance = t.Object({ level: relevanceLevel,
   policy: t.Literal(RELEVANCE_POLICY), basis: t.Literal('work-editor-assessment'), revision: native }, closed);
 export type MetadataState = Static<typeof metadataState>;
 export type MetadataHeaderState = Static<typeof metadataHeaderState>;
 export type MetadataEditionState = Static<typeof metadataEditionState>;
+export type MetadataEditionStateV2 = Static<typeof metadataEditionStateV2>;
 export type MetadataRelevanceState = Static<typeof metadataRelevanceState>;
 export interface MetadataIntent { work: string; expectedHead: string | null; state: MetadataState }
 export class InvalidWorkMetadata extends Error {}
@@ -106,5 +120,38 @@ export function checkedMetadataIntent(input: MetadataIntent): MetadataIntent {
   }
   return { work: input.work, expectedHead: input.expectedHead, state: checkedMetadataState(input.state) };
 }
+export function checkedEditionV2(input: unknown): MetadataEditionStateV2 {
+  if (!Value.Check(metadataEditionStateV2, input)) throw new InvalidWorkMetadata('Edition does not match its schema');
+  if (input.isbn13 && [...input.isbn13].reduce((sum, digit, index) =>
+    sum + Number(digit) * (index % 2 === 0 ? 1 : 3), 0) % 10 !== 0) {
+    throw new InvalidWorkMetadata('ISBN-13 checksum is invalid');
+  }
+  let state: MetadataEditionStateV2;
+  try {
+    state = { kind: 'edition', id: input.id, status: input.status, title: canonicalText(input.title),
+      contentLanguages: contentLanguages(input.contentLanguages), isTranslation: input.isTranslation,
+      originalLanguages: originalLanguages(input.originalLanguages, input.isTranslation),
+      titleLanguage: textLanguage(input.titleLanguage), tracklistLanguage: textLanguage(input.tracklistLanguage),
+      editionStatement: input.editionStatement, publisher: input.publisher, publicationYear: input.publicationYear,
+      isbn13: input.isbn13 };
+  } catch (error) {
+    if (error instanceof InvalidContentLanguages) throw new InvalidWorkMetadata(error.message);
+    throw error;
+  }
+  if (Buffer.byteLength(JSON.stringify(state)) > WORK_METADATA_COST.stateBytes) {
+    throw new InvalidWorkMetadata('Metadata exceeds its byte budget');
+  }
+  return state;
+}
+export function editionLanguageLiteral(state: MetadataEditionStateV2): string | null {
+  return languageListLiteral(state.contentLanguages);
+}
+export function isEditionV2(state: MetadataState | MetadataEditionStateV2): state is MetadataEditionStateV2 {
+  return state.kind === 'edition' && 'contentLanguages' in state;
+}
 export const metadataDigest = (input: MetadataIntent) => hash(JSON.stringify({ profile: METADATA_PROFILE,
   ...checkedMetadataIntent(input) }));
+export function editionV2Digest(input: { work: string; expectedHead: string | null; state: MetadataEditionStateV2 }): string {
+  return hash(JSON.stringify({ profile: METADATA_DETAILS_V2, work: input.work, expectedHead: input.expectedHead,
+    state: checkedEditionV2(input.state) }));
+}

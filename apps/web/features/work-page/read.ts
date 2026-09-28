@@ -144,6 +144,11 @@ export async function loadWork(ref: string, locale: UiLocale):
   return work.kind === 'work' ? { ok: true, id: work.id, header: work.header } : { ok: false };
 }
 
+export const readReleases = cache(async (id: string) => {
+  const { main, actingSubject } = await reader();
+  return settle(() => main.v1.works({ id }).releases.get({ query: { limit: 20, actingSubject } }));
+});
+
 export const readCredits = cache(async (id: string): Promise<Loaded<CreditPage>> => {
   const { main, actingSubject } = await reader();
   return settle(() => main.v1.works({ id }).credits.get({ query: { actingSubject } }));

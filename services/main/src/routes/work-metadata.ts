@@ -6,7 +6,7 @@ import { stateWorkType } from '../modules/work/type-command.ts';
 import { WorkTypeConflict, WORK_TYPE_OPTIONS, WORK_TYPE_OPTIONS_V1 } from '../modules/work/type-schema.ts';
 import { InvalidWorkSemanticTypes, MAX_WORK_SEMANTIC_TYPES } from '../modules/work/activate.ts';
 import { readWorkEdition, readWorkEditions, readWorkMetadata } from '../modules/work/metadata-read.ts';
-import { metadataWrite, metadataEditionState, metadataHeaderState, InvalidWorkMetadata,
+import { metadataWrite, metadataEditionState, metadataEditionStateV2, metadataHeaderState, InvalidWorkMetadata,
   StaleWorkMetadata, WorkMetadataUnavailable } from '../modules/work/metadata-schema.ts';
 import { pageFields, pageQuery, readId, readLanguage, readPosition, readQuery, readUuid }
   from '../modules/work/read-contract.ts';
@@ -100,7 +100,8 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
     .get('/v1/works/:id/editions/:edition', { params: t.Object({ id: readUuid, edition: readUuid }), detail,
       query: t.Object(readQuery, { additionalProperties: false }),
       response: { 200: t.Object({ id: readId, revision: readId, status: metadataEditionState.properties.status,
-        record: t.Nullable(metadataEditionState), sourcePosition: readPosition }), ...workReadProblems },
+        record: t.Nullable(t.Union([metadataEditionState, metadataEditionStateV2])), sourcePosition: readPosition }),
+        ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,
         session => readWorkEdition(session, `https://rezics.com/id/${path.id}`, `https://rezics.com/id/${path.edition}`)), { headers }); }
@@ -108,7 +109,9 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/works/:id/editions', { params, detail,
       query: t.Object({ ...pageQuery, contentLanguage: t.Optional(readLanguage) }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(t.Object({ ...metadataEditionState.properties, revision: readId }),
+      response: { 200: t.Object({ items: t.Array(t.Union([
+        t.Object({ ...metadataEditionState.properties, revision: readId }),
+        t.Object({ ...metadataEditionStateV2.properties, revision: readId })]),
         { maxItems: 20 }), ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,

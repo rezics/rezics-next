@@ -29,6 +29,7 @@ import { seedRecipes } from './recipes-step.ts';
 import { seedCoReaders } from './reading-lives-coreaders.ts';
 import { seedReadingLives } from './reading-lives-step.ts';
 import { seedRealms } from './realms-step.ts';
+import { seedReleases } from './releases-step.ts';
 import { printSeedReport } from './report-step.ts';
 import { seedReviews } from './reviews-step.ts';
 import { refreshSeedTokens, type SeedState, type SeedStep } from './state.ts';
@@ -112,7 +113,7 @@ function describe(error: unknown): string {
 // the classics readable and publish the Works they discuss and rate. Votes wait
 // a few steps for Home's projection; co-readers are built from all of it, last.
 export const steps: readonly SeedStep[] = [
-  seedAccounts, seedClassics, seedWorks, seedContributions, seedRealms, seedAdoptions,
+  seedAccounts, seedClassics, seedWorks, seedReleases, seedContributions, seedRealms, seedAdoptions,
   seedLibrary, seedChapters, seedModeration, seedHomeFeed,
   seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedRecipes, seedBookConcepts,
   seedOfficialThemes,

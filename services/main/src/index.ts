@@ -423,6 +423,7 @@ const app = createMainApp(fuseki, {
   packageNixResolutions: new NixResolutionStore(contentPool),
   packageModResolutions: new ModResolutionStore(contentPool, pool),
   gameFacts: new RevisionedFactsStore(pool, 'game'),
+  webSnapshotRetention: (origin: string) => rightsStore.rawRetentionPermitted('web-location', origin),
   softwareFacts: new RevisionedFactsStore(pool, 'software'),
   packageLocks,
   packageInstallations,

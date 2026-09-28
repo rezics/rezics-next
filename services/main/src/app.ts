@@ -88,6 +88,8 @@ import { studioRoutes } from './routes/studio.ts';
 import { libraryRoutes } from './routes/library.ts';
 import { realmProfileRoutes } from './routes/realm-profile.ts';
 import { workMetadataRoutes } from './routes/work-metadata.ts';
+import { releaseRoutes } from './routes/releases.ts';
+import { webPublicationRoutes } from './routes/web-publications.ts';
 import { discoveryRoutes } from './routes/discovery.ts';
 import { followsRoutes } from './routes/follows.ts';
 import { feedRoutes } from './routes/feed.ts';
@@ -152,6 +154,10 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(memberReplyRoutes(work))
     .use(workMaintainerRoutes(work))
     .use(workReadRoutes(work));
+    .use(workReadRoutes(work))
+    .use(alsoEnjoyedRoutes(work))
+    .use(releaseRoutes(work))
+    .use(webPublicationRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

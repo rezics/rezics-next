@@ -4,12 +4,17 @@ import { GRAPHS, iri, lit } from './activate.ts';
 import { fenceWorkBasis, readWorkBasis } from './read-header.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadMissing, WorkReadUnavailable,
   type WorkReadSession } from './read-session.ts';
-import { checkedMetadataState, metadataComponent, METADATA_PROFILE, RELEVANCE_POLICY,
-  type MetadataHeaderState, type MetadataState, type recordedRelevance } from './metadata-schema.ts';
+import { recordedLanguageTag } from '../release/languages.ts';
+import { checkedEditionV2, checkedMetadataState, metadataComponent, METADATA_DETAILS_V2, METADATA_PROFILE,
+  RELEVANCE_POLICY, type MetadataEditionStateV2, type MetadataHeaderState, type MetadataState,
+  type recordedRelevance } from './metadata-schema.ts';
 
-export function parsedMetadataState(raw: string): MetadataState {
-  try { return checkedMetadataState(JSON.parse(raw)); }
-  catch { throw new WorkReadUnavailable('Recorded metadata is invalid'); }
+export function parsedMetadataState(raw: string): MetadataState | MetadataEditionStateV2 {
+  try {
+    const value = JSON.parse(raw) as { kind?: string; contentLanguages?: unknown };
+    if (value?.kind === 'edition' && Array.isArray(value.contentLanguages)) return checkedEditionV2(value);
+    return checkedMetadataState(value);
+  } catch { throw new WorkReadUnavailable('Recorded metadata is invalid'); }
 }
 /** Exact head lookup, one ≤64 KiB state. Missing data behind a pointer is damage, not absence. */
 export async function readMetadataHeader(session: WorkReadSession, work: string, revision: string | null) {
@@ -54,12 +59,15 @@ export async function readWorkMetadata(session: WorkReadSession, work: string) {
 export async function readWorkEditions(session: WorkReadSession, work: string, contentLanguage?: string) {
   const basis = await readWorkBasis(session, work), limit = session.options.limit ?? 20;
   const language = contentLanguage?.toLowerCase();
+  let listed = language ?? null;
+  if (contentLanguage) { try { listed = recordedLanguageTag(contentLanguage); } catch { listed = language ?? null; } }
   const binding = ['editions', work, language ?? null, session.options.language ?? null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const rows = await session.query(`SELECT ?edition ?revision WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ?edition a rv:WorkMetadataComponent ; rv:metadataKind "edition" ;
-      rv:work ${iri(work)} ; rv:editionState rv:Active ; rv:metadataHead ?revision .
-      ${language ? `?edition rv:editionLanguage ${lit(language)} .` : ''}
+    GRAPH ${iri(GRAPHS.current)} { { ?edition a rv:WorkMetadataComponent } UNION { ?edition a rv:EditionRecord } .
+      ?edition rv:metadataKind "edition" ; rv:work ${iri(work)} ; rv:editionState rv:Active ; rv:metadataHead ?revision .
+      ${language ? `FILTER(EXISTS { ?edition rv:editionLanguage ${lit(language)} } || EXISTS { ?edition rv:contentLanguages ?langs .
+        FILTER(CONTAINS(CONCAT(" ", STR(?langs), " "), ${lit(` ${listed} `)})) })` : ''}
     } ${cursor ? `FILTER(STR(?edition) > ${lit(cursor.after)})` : ''}
   } ORDER BY STR(?edition) LIMIT ${limit + 1}`, limit + 1);
   if (rows.some(row => !row.edition || !row.revision)
@@ -69,8 +77,8 @@ export async function readWorkEditions(session: WorkReadSession, work: string, c
   const page = rows.slice(0, limit);
   const hydrated = page.length ? await session.query(`SELECT ?edition ?revision ?state WHERE {
     VALUES (?edition ?revision) { ${page.map(row => `(${iri(row.edition!.value)} ${iri(row.revision!.value)})`).join(' ')} }
-    GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:WorkMetadataRevision ; rv:component ?edition ;
-      rv:modelRevision ${iri(METADATA_PROFILE)} ; rv:shapeRevision ${iri(METADATA_PROFILE)} ; rv:metadataState ?state }
+    GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ?edition ; rv:metadataState ?state ; rv:modelRevision ?model .
+      FILTER(?model IN (${iri(METADATA_PROFILE)}, ${iri(METADATA_DETAILS_V2)})) }
   } LIMIT ${limit + 1}`, limit + 1) : [];
   if (hydrated.length !== page.length || new Set(hydrated.map(row => row.edition?.value)).size !== page.length) {
     throw new WorkReadUnavailable('Edition revisions are incomplete');
@@ -80,8 +88,12 @@ export async function readWorkEditions(session: WorkReadSession, work: string, c
     const record = byEdition.get(row.edition!.value);
     if (!record?.state) throw new WorkReadUnavailable('Edition payload is missing');
     const state = parsedMetadataState(record.state.value);
-    if (state.kind !== 'edition' || state.id !== row.edition!.value || state.status !== 'active'
-      || language && state.contentLanguage !== language) throw new WorkReadUnavailable('Edition projection differs');
+    const matches = !language || state.kind === 'edition' && ('contentLanguages' in state
+      ? state.contentLanguages.includes(listed ?? language)
+      : state.contentLanguage === language);
+    if (state.kind !== 'edition' || state.id !== row.edition!.value || state.status !== 'active' || !matches) {
+      throw new WorkReadUnavailable('Edition projection differs');
+    }
     return { ...state, revision: row.revision!.value };
   });
   await fenceWorkBasis(session, basis);
@@ -94,10 +106,11 @@ export async function readWorkEditions(session: WorkReadSession, work: string, c
 export async function readWorkEdition(session: WorkReadSession, work: string, edition: string) {
   const basis = await readWorkBasis(session, work);
   const rows = await session.query(`SELECT ?revision ?status ?state WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(edition)} a rv:WorkMetadataComponent ; rv:metadataKind "edition" ;
+    GRAPH ${iri(GRAPHS.current)} { { ${iri(edition)} a rv:WorkMetadataComponent } UNION { ${iri(edition)} a rv:EditionRecord } .
+      ${iri(edition)} rv:metadataKind "edition" ;
       rv:work ${iri(work)} ; rv:editionState ?status ; rv:metadataHead ?revision }
-    OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:WorkMetadataRevision ; rv:component ${iri(edition)} ;
-      rv:modelRevision ${iri(METADATA_PROFILE)} ; rv:shapeRevision ${iri(METADATA_PROFILE)} ; rv:metadataState ?state } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ${iri(edition)} ; rv:metadataState ?state ;
+      rv:modelRevision ?model . FILTER(?model IN (${iri(METADATA_PROFILE)}, ${iri(METADATA_DETAILS_V2)})) } }
   } LIMIT 2`, 2);
   if (!rows.length) throw new WorkReadMissing('Edition is unavailable');
   const row = rows[0];

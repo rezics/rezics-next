@@ -23,6 +23,10 @@ languages follow from them. This is the expression/manifestation split in
 (language is an Expression attribute; a Manifestation has none), and it lets one
 language version appear in several releases without copying its language.
 
+An external edition states those languages through
+[`work-metadata-details-v2`](../../model/definitions/work-metadata-details-v2.ts)
+and the release record in `services/main/src/modules/release/languages.ts`.
+
 Where a release record must state languages itself, such as an external edition
 whose content REZICS does not host, it keeps a list: a parallel-text edition
 lists both languages. `zxx` marks no linguistic content, an empty value means not

@@ -14,6 +14,9 @@ the Work. A release announcement is a separate utterance.
 
 ## Closed records and open axes
 
+Closed release corrections are enforced by `services/main/src/modules/release/schema.ts`
+and `ReleasePolicy`: evidence may replace a record, and a later translation is a new one.
+
 What REZICS records about the world is closed; what REZICS maintains is open. A
 Main Version and a [virtual release](distribution.md#release-kinds-and-status)
 accept new content versions. An external edition or physical release, each web
