@@ -84,8 +84,9 @@ export async function arrangeBook(api: Pick<SeedApi, 'get' | 'getPublic' | 'post
     const owner = groupOf(group.title)!;
     const wanted = group.chapters.map(work => outline.items.find(item => item.role === 'chapter'
       && item.target === work)?.occurrence).filter((occurrence): occurrence is string => Boolean(occurrence));
-    const current = outline.items.filter(item => item.role === 'chapter' && item.parent === owner.occurrence)
-      .map(item => item.occurrence);
+    // Planned chapters stand in the group in order; any other chapter already there is left where it is.
+    const current = outline.items.filter(item => item.role === 'chapter' && item.parent === owner.occurrence
+      && wanted.includes(item.occurrence)).map(item => item.occurrence);
     if (wanted.length === current.length && wanted.every((occurrence, at) => current[at] === occurrence)) continue;
     // Main applies a change's moves in order, so each lands after the one before it.
     await change(wanted.slice(0, 16).map((occurrence, at) => ({ op: 'move', occurrence, parent: owner.occurrence,

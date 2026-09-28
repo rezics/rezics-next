@@ -61,6 +61,9 @@ test('a Book is divided into its planned volumes in place, and a replay sends no
   expect(outline.items.map(item => item.label?.value ?? item.target)).toEqual(['Letters', prologue,
     'Volume I', one, two, 'Volume II', three]);
   expect(await arrangeBook(main.api, input)).toEqual({ changes: 0 });
+  // A plan that names fewer chapters leaves the others where they stand, and sends nothing.
+  expect(await arrangeBook(main.api, { ...input, groups: groups.map(group => ({ ...group, chapters: [] })) }))
+    .toEqual({ changes: 0 });
   expect(main.posts).toHaveLength(6);
 });
 
