@@ -1,9 +1,13 @@
+import { createHash } from 'node:crypto';
 import { SeedApiError } from './api.ts';
 import { bookConcepts, freeConcepts, genreConcepts, seededBookIds, type BookConcept } from './genres-plan.ts';
 import { fictionWorks } from './official-plan.ts';
 import { grantHomeSeedAuthority } from './operator.ts';
 import { seedKey } from './plan.ts';
 import { refreshSeedTokens, type SeedState } from './state.ts';
+
+/** Idempotency keys are at most 128 characters; IRIs enter them as short digests. */
+const digest = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 16);
 
 interface Proposition { scheme: string; schemeHead: string; concept: string; sense: string }
 interface Resolution { state: string; source: string; decision: string | null }
@@ -16,15 +20,17 @@ async function accept(state: SeedState, work: { work: string; mainVersion: strin
   proposition: Proposition, context: { kind: 'global' } | { kind: 'realm-classification'; id: string },
   steward: SeedState['sessions'][number], key: string) {
   const selection = { context, work: work.work, mainVersion: work.mainVersion, sense: proposition.sense };
+  // Keys name the Sense: G-425's English-only Senses used the same Book and Concept keys.
+  const senseKey = `${key}:${digest(proposition.sense)}`;
   const current = await state.api.post<Resolution>('/v1/classification-resolutions',
     { profile: 'classification-resolution-v1', ...selection }, steward.token,
-    seedKey('book-concept-resolution', key));
+    seedKey('book-concept-resolution', senseKey));
   if (current.state === 'accepted' && (context.kind === 'global' || current.source === 'local')) return;
   const expectedDecisionHead = current.source === 'local' ? current.decision : null;
   await state.api.post('/v1/classification-decisions', {
     profile: 'classification-direct-decision-v1', ...selection, expectedDecisionHead,
     outcome: 'accepted', actingSubject: steward.actingSubject }, steward.token,
-  seedKey('book-concept-decision', `${key}:${expectedDecisionHead ?? 'first'}`));
+  seedKey('book-concept-decision', `${senseKey}:${expectedDecisionHead ? digest(expectedDecisionHead) : 'first'}`));
 }
 
 async function rejectLegacy(state: SeedState, work: { work: string; mainVersion: string },
@@ -38,7 +44,7 @@ async function rejectLegacy(state: SeedState, work: { work: string; mainVersion:
   await state.api.post('/v1/classification-decisions', {
     profile: 'classification-direct-decision-v1', ...selection,
     expectedDecisionHead: current.decision, outcome: 'rejected', actingSubject: steward.actingSubject,
-  }, steward.token, seedKey('book-legacy-concept-rejection', `${key}:${current.decision}`));
+  }, steward.token, seedKey('book-legacy-concept-rejection', `${key}:${digest(current.decision ?? 'none')}`));
 }
 
 /** Accept two to four Concepts on every demo Book, in Global and its editorial Realm. */

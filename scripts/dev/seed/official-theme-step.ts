@@ -115,7 +115,8 @@ export async function seedOfficialThemes(state: SeedState) {
       }
       if (await officialSourceDigest(slug) !== digest) throw new Error(`${slug} source changed during web build`);
       const bundle = await officialBuildBundle(slug, digest, zone, manifest);
-      const key = seedKey('theme-revision', `${slug}:${digest}`);
+      // A worktree's seed may have moved the live revision; the key names the head it replaces.
+      const key = seedKey('theme-revision', `${slug}:${digest.slice(-24)}:${(view.revision ?? 'none').slice(-12)}`);
       await operator.api.post(`/v1/themes/${id(theme)}/revisions`, {
         expectedRevision: view.revision, bundle, actingSubject: input.actingSubject,
         idempotencyKey: key }, operator.token, key);

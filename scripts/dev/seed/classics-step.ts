@@ -110,8 +110,8 @@ export async function seedClassics(state: SeedState): Promise<void> {
         baseSupport: null, correspondence: null, confirmedUse: 'factual-reference-only',
       }, token, seedKey('source-author-credit', `${classic.id}-${ordinal}`));
     }
-    await ensureClassicBookType({ read: () => api.get(
-      `/v1/works/${shortId(receipt.work)}?actingSubject=${encodeURIComponent(actor)}`, token),
+    // The operator's token is not a reader assertion; the public read carries the head and types.
+    await ensureClassicBookType({ read: () => state.api.getPublic(`/v1/works/${shortId(receipt.work)}`),
     api, book: classic.id, work: receipt.work, actor, token });
     console.log(`Classic ${classic.id}: ${receipt.work} via ${classic.work}; acquisition ${
       shortId(observation.observation)}${capture.replayed ? ' (replayed)' : ''}`);
