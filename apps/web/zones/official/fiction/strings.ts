@@ -17,6 +17,7 @@ type Strings = typeof en;
 
 const translations: Record<string, Strings> = {
   en,
+  },
   'zh-Hans': {
     tagline: '网络连载、轻小说与原创作品，由小说编辑部公开甄选。',
     official: 'REZICS 官方专区',
@@ -71,6 +72,28 @@ const translations: Record<string, Strings> = {
     decisions: '決定ログ',
     about: '概要とルール',
     works: 'すべての作品',
+  },
+  fr: {
+    tagline: 'Séries en ligne, light novels et œuvres originales, sélectionnés publiquement par l’équipe éditoriale de Fiction.',
+    official: 'Zone officielle REZICS',
+    podium: 'Sur le podium',
+    more: 'Tout le classement',
+    footerTitle: 'Fiction sur REZICS',
+    footerNote: 'Chaque sélection de cette Zone fait suite à une décision publique. Ouvrez le sceau d’une œuvre pour découvrir pourquoi elle est ici.',
+    decisions: 'Journal des décisions',
+    about: 'Présentation et règles',
+    works: 'Toutes les œuvres',
+  },
+  es: {
+    tagline: 'Novelas por entregas, novelas ligeras y obras originales, seleccionadas públicamente por el equipo editorial de Ficción.',
+    official: 'Zone oficial de REZICS',
+    podium: 'En el podio',
+    more: 'Ver la clasificación completa',
+    footerTitle: 'Ficción en REZICS',
+    footerNote: 'Cada selección de esta Zone responde a una decisión pública. Abre el sello de una obra para saber por qué está aquí.',
+    decisions: 'Registro de decisiones',
+    about: 'Información y normas',
+    works: 'Todas las obras',
   },
 };
 

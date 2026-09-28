@@ -1,3 +1,34 @@
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { ZoneMessages } from '../messages.ts';
 
-export default {} satisfies Partial<ZoneMessages>;
+export default {
+  more: 'Voir plus', shuffle: 'Mélanger',
+  whyHere: insert('Pourquoi « {{title}} » se trouve ici', { title: String }),
+  untitled: 'Œuvre sans titre',
+  rank: insert('N° {{rank}}', { rank: String }),
+  day: 'Aujourd’hui', week: 'Cette semaine', month: 'Ce mois-ci', completed: 'Terminées',
+  newChapter: insert('Nouveau chapitre : {{chapter}}', { chapter: String }),
+  heroLabel: 'À la une', previous: 'Précédent', next: 'Suivant',
+  slide: insert('{{index}} sur {{count}}', { index: String, count: String }),
+  read: 'Commencer à lire', readWork: 'Voir l’œuvre',
+  dismiss: 'Ignorer', announcement: 'Annonce',
+  adopted: insert('Œuvre ajoutée : « {{title}} »', { title: String }), adoptedUnknown: 'Œuvre ajoutée',
+  classified: insert('Classification de « {{title}} »', { title: String }), classifiedUnknown: 'Classification d’une œuvre',
+  classificationRejected: insert('Classification refusée pour « {{title}} »', { title: String }),
+  classificationRejectedUnknown: 'Classification refusée',
+  ruleChanged: 'Règle de la communauté modifiée',
+  quoteBy: insert('Citation de {{reader}}', { reader: String }),
+  replies: plural({ one: insert('{{count}} réponse'), other: insert('{{count}} réponses') },
+    { count: asValue(number()) }),
+  failed: insert('Impossible de charger {{module}}', { module: String }), retry: 'Réessayer',
+  lookLabel: 'Style de page', lookZone: 'Design de la communauté', lookStandard: 'Apparence standard',
+  lookHelp: 'L’apparence standard s’applique à toutes les communautés.',
+  lookSaveFailed: 'Impossible d’enregistrer le style de page. Réessayez.',
+  safeModeTitle: 'Affichage de la mise en page standard de cette communauté',
+  safeModeBody: 'Le design personnalisé de cette communauté est désactivé sur cette page ; tout le contenu utilise donc les composants de la plateforme.',
+  showDesign: 'Afficher le design complet',
+  // The default layout's module titles.
+  picks: 'À la une', genres: 'Genres', latest: 'Nouveautés', newChapters: 'Nouveaux chapitres',
+  newlyAdded: 'Ajouts récents', recentlyCompleted: 'Œuvres terminées', rankings: 'Classements',
+  quotes: 'Citations récentes', rising: 'En hausse', decisions: 'Décisions récentes',
+} satisfies Partial<ZoneMessages>;
