@@ -27,7 +27,7 @@ type Kind = NonNullable<StreamItem['display']>['kind'];
 const icons: Record<Kind, LucideIcon> = { reply: MessageSquareReplyIcon, submission_decision: FileCheckIcon,
   moderation_outcome: ShieldIcon, realm_role_change: UserRoundCogIcon, follow: UserPlusIcon,
   claim_correction: CircleCheckIcon, review: MessageSquareQuoteIcon, review_helpful: ThumbsUpIcon,
-  realm_invitation: UserPlusIcon };
+  realm_invitation: UserPlusIcon, chapter: MessageSquareQuoteIcon, post_vote: ThumbsUpIcon };
 
 const uuid = (iri: string | null) => iri?.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)?.[0];
 
@@ -63,6 +63,8 @@ function sentence(item: StreamItem, t: T): string {
     case 'claim_correction': return title ? t.correctionOn({ title }) : t.correctionMade;
     case 'review': return title ? t.reviewedWork({ name, title }) : t.reviewedYourWork({ name });
     case 'review_helpful': return title ? t.reviewHelpful({ title }) : t.reviewHelpfulAny;
+    case 'chapter': return title ? t.newChapterOn({ title }) : t.newChapter;
+    case 'post_vote': return title ? t.votedOnPost({ name, title }) : t.votedOnYourPost({ name });
   }
 }
 
@@ -79,6 +81,10 @@ function destination(item: StreamItem): string | null {
   const display = item.display;
   if (!display || item.state !== 'active') return null;
   if (display.kind === 'submission_decision') {
+    const work = uuid(display.target.linkTarget);
+    return work ? `/w/${work}` : null;
+  }
+  if (display.kind === 'chapter' || display.kind === 'post_vote') {
     const work = uuid(display.target.linkTarget);
     return work ? `/w/${work}` : null;
   }

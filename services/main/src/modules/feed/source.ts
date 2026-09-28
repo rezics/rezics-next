@@ -11,7 +11,9 @@ export interface FeedSource { id: string; sequence: string; kind: FeedKind; targ
   occurrence: string | null; contentTarget: string | null; reply: string | null; contentRevision: string | null; review: string | null;
   readerReview?: ReviewRow }
 export interface FeedCut { epoch: string; through: string; afterSequence: string; afterId: string }
-export interface FeedReference { id: string; sequence: string; kind: FeedKind; work?: string | null; realm?: string | null; target?: string; groupKind?: 'chapter' | 'hub' }
+export interface FeedReference { id: string; sequence: string; kind: FeedKind; work?: string | null;
+  realm?: string | null; target?: string; actor?: string; occurrence?: string;
+  contentRevision?: string; groupKind?: 'chapter' | 'hub' }
 
 export const reviewActivityId = (review: string) => `https://rezics.com/id/${review}`;
 

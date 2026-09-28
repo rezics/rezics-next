@@ -12,7 +12,8 @@ const cursorName = 'notification-producer-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type AccessKind = 'submission_decision' | 'moderation_outcome' | 'realm_role_change'
-  | 'realm_membership_change' | 'review_created' | 'review_helpful_milestone' | 'realm_invitation';
+  | 'realm_membership_change' | 'review_created' | 'review_helpful_milestone' | 'realm_invitation'
+  | 'chapter_published' | 'feed_post_vote';
 interface AccessEvent { position: string; kind: AccessKind; event_id: string }
 interface RelayEnvelope { id: string; type: string; data: { receipt?: Record<string, unknown> } }
 
@@ -50,6 +51,41 @@ export class NotificationProducer {
 
   /** Source and recipient identities are read after their owner commits. */
   private async accessNotification(event: AccessEvent): Promise<NotificationEvent | null> {
+    if (event.kind === 'chapter_published') {
+      const row = (await this.access.query<{ activity: string; work: string; author: string;
+        content_revision: string }>(`SELECT activity, work, author, content_revision
+        FROM access.chapter_notification_event WHERE id = $1`, [event.event_id])).rows[0];
+      if (!row) return null;
+      const authors = new Set(await represented(this.access, row.author, null));
+      const followed = (await this.access.query<{ id: string }>(`SELECT DISTINCT p.id::text AS id
+        FROM access.follow f JOIN access.principal p ON p.id = f.principal_id AND p.active
+        WHERE f.following AND ((f.kind = 'work' AND f.target = $1)
+          OR (f.kind = 'agent' AND f.target = $2)) ORDER BY id LIMIT $3`,
+      [row.work, row.author, PRODUCER_COST.recipientsPerEvent + 1])).rows;
+      if (followed.length > PRODUCER_COST.recipientsPerEvent) throw new Error('chapter follower bound exceeded');
+      const recipients = followed.map(item => item.id).filter(id => !authors.has(id));
+      if (!recipients.length) return null;
+      return { sourceOwner: 'access', sourceEvent: `chapter:${event.event_id}`,
+        purpose: 'subscription', topic: 'followed-chapter',
+        subject: { owner: 'graph', ref: row.activity, revision: row.content_revision },
+        disclosureBasis: 'followed-chapter-v1', recipients,
+        display: { kind: 'chapter', actorAgent: row.author, realm: null, groupKey: row.work } };
+    }
+    if (event.kind === 'feed_post_vote') {
+      const row = (await this.access.query<{ target: string; author: string; voter: string;
+        voter_principal: string; vote_revision: string }>(`SELECT e.target, e.author, e.voter,
+          e.voter_principal::text, e.vote_revision::text FROM access.feed_post_vote_event e
+          JOIN access.feed_vote v ON v.principal_id = e.voter_principal AND v.target = e.target
+            AND v.revision = e.vote_revision AND v.value = 1 WHERE e.id = $1`, [event.event_id])).rows[0];
+      if (!row) return null;
+      const recipients = await represented(this.access, row.author, row.voter_principal);
+      if (!recipients.length) return null;
+      return { sourceOwner: 'access', sourceEvent: `post-vote:${event.event_id}`,
+        purpose: 'social', topic: 'post-vote',
+        subject: { owner: 'graph', ref: row.target, revision: row.vote_revision },
+        disclosureBasis: 'post-vote-v1', recipients,
+        display: { kind: 'post_vote', actorAgent: row.voter, realm: null, groupKey: row.target } };
+    }
     if (event.kind === 'realm_invitation') {
       const row = (await this.access.query<{ realm: string; member: string; inviter: string;
         principal_id: string }>(`SELECT realm, member, inviter, principal_id

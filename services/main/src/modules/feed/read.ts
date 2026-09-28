@@ -3,7 +3,7 @@ import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { followTarget } from '../follows/contract.ts';
 import { readFollowTarget, readFollowTargets } from '../follows/read.ts';
-import { readAgent, readAgentCards, type AgentCard } from '../profiles/read.ts';
+import { readAgentCards, type AgentCard } from '../profiles/read.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { readWorkClassifications } from '../work/read-classifications.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadMissing,
@@ -224,10 +224,13 @@ export async function admitFeedVote(session: WorkReadSession, target: string) {
   const kind = (await session.deps.feed?.members(session.position.dataEpoch, [target]))?.[0]?.kind;
   const source = (await visibleFeedSources(session, [{ id: target, kind: kind ?? '' }]))[0];
   if (!source) throw new WorkReadMissing('Feed activity unavailable');
-  await readAgent(session, source.actor);
+  if (!(await readAgentCards(session, [source.actor])).has(source.actor)) {
+    throw new WorkReadMissing('Feed actor unavailable');
+  }
   if (source.work) await readFollowTarget(session, source.work, 'work');
   if (source.realm) await readFollowTarget(session, source.realm, 'realm');
   await replyExcerpt(session, source);
+  return { actor: source.actor, work: source.work };
 }
 
 /** URL grammar is one comma-separated set, with no implicit fallback kind. */

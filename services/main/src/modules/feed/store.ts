@@ -92,6 +92,16 @@ export class FeedStore {
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$5)`,
         [expected.data_epoch, source.id, source.sequence, source.kind, time, basis, bestKey(0, time.getTime()),
           source.realm ?? null, bucket, groupKey, !group, [source.id]]);
+        if (source.groupKind === 'chapter' && source.work && source.actor && source.occurrence
+          && source.contentRevision) {
+          const eventId = randomUUID();
+          const inserted = await client.query(`INSERT INTO access.chapter_notification_event
+            (id, activity, work, author, occurrence, content_revision)
+            VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (activity) DO NOTHING`,
+          [eventId, source.id, source.work, source.actor, source.occurrence, source.contentRevision]);
+          if (inserted.rowCount) await client.query(`SELECT access.append_notification_producer_event($1,$2)`,
+            ['chapter_published', eventId]);
+        }
         if (group) await client.query(`UPDATE access.feed_item SET group_members = array_append(group_members,$3) WHERE data_epoch = $1 AND id = $2`,
         [expected.data_epoch, group.id, source.id]);
       }
@@ -217,7 +227,7 @@ export class FeedStore {
    * delayed every other vote and refresh behind that lock, which is how the
    * seed's votes ran past their read deadline. A replay needs no admission. */
   async vote(principal: VerifiedPrincipal, target: string, epoch: string, input: FeedVoteCommand,
-    key: string, disclose: () => Promise<void>): Promise<FeedVoteResult> {
+    key: string, disclose: () => Promise<{ actor: string; work: string | null } | void>): Promise<FeedVoteResult> {
     commandKey(key);
     const intent = digest({ target, ...input });
     const prior = await controlRead(this.pool, async client => {
@@ -230,7 +240,7 @@ export class FeedStore {
       if (prior.request_digest !== intent) throw new ControlConflict('Idempotency key has a different vote intent');
       return { ...prior.result, replayed: true };
     }
-    await disclose();
+    const source = await disclose();
     return controlTransaction(this.pool, async client => {
       const owner = await followPrincipal(client, principal, input.actingSubject);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`feed-vote:${owner}`]);
@@ -262,6 +272,14 @@ export class FeedStore {
       const result: FeedVoteResult = { profile: 'feed-vote-receipt-v1', target, value: input.value, revision, score, replayed: false };
       await client.query(`INSERT INTO access.feed_vote_receipt (principal_id, idempotency_key, request_digest, result)
         VALUES ($1,$2,$3,$4)`, [owner, key, intent, result]);
+      if (input.value === 1 && prior?.value !== 1 && source && source.actor !== input.actingSubject) {
+        const eventId = randomUUID();
+        await client.query(`INSERT INTO access.feed_post_vote_event
+          (id, target, author, voter, voter_principal, vote_revision, work)
+          VALUES ($1,$2,$3,$4,$5,$6,$7)`, [eventId, target, source.actor, input.actingSubject,
+          owner, revision, source.work]);
+        await client.query(`SELECT access.append_notification_producer_event($1,$2)`, ['feed_post_vote', eventId]);
+      }
       return result;
     });
   }

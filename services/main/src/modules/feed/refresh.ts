@@ -31,7 +31,9 @@ export class FeedRefreshWorker {
           .map(item => [item.id, item]));
         const grouped = sources.map(item => {
           const source = admitted.get(item.id);
-          return source ? { ...item, kind: source.kind, work: source.work, realm: source.realm, target: source.target,
+          return source ? { ...item, kind: source.kind, work: source.work, realm: source.realm,
+            target: source.target, actor: source.actor, occurrence: source.occurrence ?? undefined,
+            contentRevision: source.contentRevision ?? undefined,
             ...(source.occurrence ? { groupKind: 'chapter' as const } : source.contentTarget ? { groupKind: 'hub' as const } : {}) } : item;
         });
         // Legacy events without UUIDv7 time use the acknowledged relay timestamp.

@@ -12,6 +12,8 @@ export default {
   notificationEmail: '邮件',
   notificationReply: '回复',
   notificationMention: '提及',
+  notificationPostVote: '我的帖子获得投票',
+  notificationFollowedChapter: '关注的作品和作者发布新章节',
   notificationReviewHelpful: '书评获得有帮助投票',
   notificationReview: '新书评',
   notificationSubmissionDecision: '投稿决定',

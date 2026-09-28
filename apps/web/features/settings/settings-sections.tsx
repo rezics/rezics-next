@@ -28,6 +28,8 @@ const previewPerson: PersonPreferences = { profile: 'person-preferences-v1', pro
 const topics = [
   ['social', 'reply', 'notificationReply'],
   ['social', 'mention', 'notificationMention'],
+  ['social', 'post-vote', 'notificationPostVote'],
+  ['subscription', 'followed-chapter', 'notificationFollowedChapter'],
   ['social', 'review-helpful', 'notificationReviewHelpful'],
   ['social', 'review', 'notificationReview'],
   ['governance', 'submission-decision', 'notificationSubmissionDecision'],

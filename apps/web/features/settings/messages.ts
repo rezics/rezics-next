@@ -14,6 +14,8 @@ const en = {
   notificationEmail: 'Email',
   notificationReply: 'Replies',
   notificationMention: 'Mentions',
+  notificationPostVote: 'Votes on my posts',
+  notificationFollowedChapter: 'New chapters from followed Works and authors',
   notificationReviewHelpful: 'Helpful votes on reviews',
   notificationReview: 'New reviews',
   notificationSubmissionDecision: 'Submission decisions',

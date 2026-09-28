@@ -128,6 +128,7 @@ import { NotificationDispatcher } from './modules/notification/dispatcher.ts';
 import { NotificationDeliveryWorker } from './modules/notification/delivery-worker.ts';
 import { NotificationProducer, NotificationProducerWorker } from './modules/notification-producers/producer.ts';
 import { notificationProducerSubjectReader } from './modules/notification-producers/subjects.ts';
+import { feedNotificationSubjectReader } from './modules/notification-producers/feed-subjects.ts';
 import { HttpDeliveryProvider } from './modules/notification/http-provider.ts';
 import { RightsStore } from './modules/rights/store.ts';
 import { ThemeStore } from './modules/theme/store.ts';
@@ -261,8 +262,10 @@ notificationStore.setReadAgentReader(currentNotificationAgentReader(fuseki, envi
 notificationStore.registerReadSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 const notificationSourceReader = notificationProducerSubjectReader(pool, contentPool, environment);
+const notificationFeedReader = feedNotificationSubjectReader(pool, environment, content, new ReaderReviews(pool));
 for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-outcome-v1',
   'realm-role-change-v1', 'review-created-v1', 'review-helpful-v1']) notificationStore.registerReadSubjectReader(basis, notificationSourceReader);
+for (const basis of ['followed-chapter-v1', 'post-vote-v1']) notificationStore.registerReadSubjectReader(basis, notificationFeedReader);
 if (relayPool) await notificationStore.reconcileRetainedErasures(relayPool);
 const notificationProviderConfig = {
   url: config.MAIN_NOTIFICATION_PROVIDER_URL,
@@ -286,6 +289,7 @@ notificationDispatcher?.registerSubjectReader('verification-correction-subscript
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-outcome-v1',
   'realm-role-change-v1', 'review-created-v1', 'review-helpful-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationSourceReader);
+for (const basis of ['followed-chapter-v1', 'post-vote-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationFeedReader);
 const notificationProducerWorker = new NotificationProducerWorker(new NotificationProducer(
   pool, relayPool ? erasureRelayPool! : null, contentPool, fuseki,
   notificationStore, config.MAIN_RELAY_CONSUMER ?? null, relayPool ?? null));
