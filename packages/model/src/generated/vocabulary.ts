@@ -1255,6 +1255,7 @@ export const iri = {
   "schema:TVSeries": "https://schema.org/TVSeries",
   "schema:unitCode": "https://schema.org/unitCode",
   "schema:value": "https://schema.org/value",
+  "schema:VideoGame": "https://schema.org/VideoGame",
   "schema:VideoObject": "https://schema.org/VideoObject",
   "skos:altLabel": "http://www.w3.org/2004/02/skos/core#altLabel",
   "skos:broader": "http://www.w3.org/2004/02/skos/core#broader",

@@ -460,6 +460,8 @@ export const WorkEditorialFieldV1ControlShapeArbitrary = fc.record({ "@id": fc.i
 
 export const WorkKindV1WorkShapeArbitrary = fc.record({ "@id": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:WorkKindV1WorkShape:" + value), "rdf:type": fc.constant("https://schema.org/CreativeWork").map(value => [value]), "rv:mainVersion": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:mainVersion:" + value).map(value => [value]) });
 
+export const WorkKindV2WorkShapeArbitrary = fc.record({ "@id": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:WorkKindV2WorkShape:" + value), "rdf:type": fc.constant("https://schema.org/CreativeWork").map(value => [value]), "rv:mainVersion": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:mainVersion:" + value).map(value => [value]) });
+
 export const WorkMetadataDetailsV1WorkShapeArbitrary = fc.record({ "@id": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:WorkMetadataDetailsV1WorkShape:" + value), "rdf:type": fc.constant("https://schema.org/CreativeWork").map(value => [value]), "rv:descriptiveMetadataHead": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:descriptiveMetadataHead:" + value).map(value => [value]) });
 
 export const WorkMetadataDetailsV1ComponentShapeArbitrary = fc.record({ "@id": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:WorkMetadataDetailsV1ComponentShape:" + value), "rdf:type": fc.constant("https://rezics.com/vocab/WorkMetadataComponent").map(value => [value]), "rv:work": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:work:" + value).map(value => [value]), "rv:metadataKind": fc.constantFrom("header", "edition", "relevance").map(value => [value]), "rv:metadataHead": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:metadataHead:" + value).map(value => [value]) });
@@ -479,6 +481,10 @@ export const WorkTitleControlV1ControlShapeArbitrary = fc.record({ "@id": fc.int
 export const WorkTypeV1WorkShapeArbitrary = fc.record({ "@id": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:WorkTypeV1WorkShape:" + value), "rdf:type": fc.constant("https://schema.org/CreativeWork").map(value => [value]), "rv:mainVersion": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:mainVersion:" + value).map(value => [value]) });
 
 export const WorkTypeV1WorkRevisionShapeArbitrary = fc.record({ "@id": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:WorkTypeV1WorkRevisionShape:" + value), "rdf:type": fc.constant("https://rezics.com/vocab/RevisionAnchor").map(value => [value]), "rv:component": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:component:" + value).map(value => [value]), "rv:operation": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:operation:" + value).map(value => [value]), "rv:manifest": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:manifest:" + value).map(value => [value]), "rv:modelRevision": fc.constant("https://rezics.com/definition/work-metadata-v1").map(value => [value]), "rv:shapeRevision": fc.constant("https://rezics.com/definition/work-metadata-v1").map(value => [value]), "rv:datasetId": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:datasetId:" + value).map(value => [value]), "rv:dataEpoch": fc.string({ minLength: 1, maxLength: 20 }).map(value => [value]), "rv:sequence": fc.integer({ min: 1, max: 100 }).map(value => [value]) });
+
+export const WorkTypeV2WorkShapeArbitrary = fc.record({ "@id": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:WorkTypeV2WorkShape:" + value), "rdf:type": fc.constant("https://schema.org/CreativeWork").map(value => [value]), "rv:mainVersion": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:mainVersion:" + value).map(value => [value]) });
+
+export const WorkTypeV2WorkRevisionShapeArbitrary = fc.record({ "@id": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:WorkTypeV2WorkRevisionShape:" + value), "rdf:type": fc.constant("https://rezics.com/vocab/RevisionAnchor").map(value => [value]), "rv:component": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:component:" + value).map(value => [value]), "rv:operation": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:operation:" + value).map(value => [value]), "rv:manifest": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:manifest:" + value).map(value => [value]), "rv:modelRevision": fc.constant("https://rezics.com/definition/work-metadata-v1").map(value => [value]), "rv:shapeRevision": fc.constant("https://rezics.com/definition/work-metadata-v1").map(value => [value]), "rv:datasetId": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:datasetId:" + value).map(value => [value]), "rv:dataEpoch": fc.string({ minLength: 1, maxLength: 20 }).map(value => [value]), "rv:sequence": fc.integer({ min: 1, max: 100 }).map(value => [value]) });
 
 export const ZoneCapabilityV1NavigationLinkShapeArbitrary = fc.record({ "@id": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:ZoneCapabilityV1NavigationLinkShape:" + value), "rdf:type": fc.constant("https://rezics.com/vocab/Zone").map(value => [value]), "rv:navigation": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:rv:navigation:" + value).map(value => [value]) });
 
@@ -720,6 +726,7 @@ export const shapeArbitraries = {
   "https://rezics.com/definition/work-editorial-field-v1/value-shape": WorkEditorialFieldV1ValueShapeArbitrary,
   "https://rezics.com/definition/work-editorial-field-v1/control-shape": WorkEditorialFieldV1ControlShapeArbitrary,
   "https://rezics.com/definition/work-kind-v1/work-shape": WorkKindV1WorkShapeArbitrary,
+  "https://rezics.com/definition/work-kind-v2/work-shape": WorkKindV2WorkShapeArbitrary,
   "https://rezics.com/definition/work-metadata-details-v1/work-shape": WorkMetadataDetailsV1WorkShapeArbitrary,
   "https://rezics.com/definition/work-metadata-details-v1/component-shape": WorkMetadataDetailsV1ComponentShapeArbitrary,
   "https://rezics.com/definition/work-metadata-details-v1/revision-shape": WorkMetadataDetailsV1RevisionShapeArbitrary,
@@ -730,6 +737,8 @@ export const shapeArbitraries = {
   "https://rezics.com/definition/work-title-control-v1/control-shape": WorkTitleControlV1ControlShapeArbitrary,
   "https://rezics.com/definition/work-type-v1/work-shape": WorkTypeV1WorkShapeArbitrary,
   "https://rezics.com/definition/work-type-v1/work-revision-shape": WorkTypeV1WorkRevisionShapeArbitrary,
+  "https://rezics.com/definition/work-type-v2/work-shape": WorkTypeV2WorkShapeArbitrary,
+  "https://rezics.com/definition/work-type-v2/work-revision-shape": WorkTypeV2WorkRevisionShapeArbitrary,
   "https://rezics.com/definition/zone-capability-v1/navigation-link-shape": ZoneCapabilityV1NavigationLinkShapeArbitrary,
   "https://rezics.com/definition/zone-capability-v1/zone-shape": ZoneCapabilityV1ZoneShapeArbitrary,
   "https://rezics.com/definition/zone-capability-v1/mount-shape": ZoneCapabilityV1MountShapeArbitrary,
