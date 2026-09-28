@@ -474,9 +474,23 @@ function aspireCli(args: string[], env: NodeJS.ProcessEnv = process.env, capture
   return result.stdout ?? '';
 }
 
-/** Print each running resource with its URL, state and health. */
+/** Print each running resource with its URL, state and health. A worktree
+ * without its own AppHost points at the main checkout's shared stack instead. */
 function devUrls(): void {
-  const described = JSON.parse(aspireCli(['describe', '--format', 'Json'], process.env, true)) as
+  const output = aspireCli(['describe', '--format', 'Json'], process.env, true).trim();
+  if (!output) {
+    const { worktree, mainRoot } = checkout();
+    const envFile = join(mainRoot, '.temp', 'stack', 'rezics-dev', 'dev.env');
+    if (!worktree || !existsSync(envFile)) throw new Error('No AppHost is running for this checkout; start it with `task dev`');
+    const shared = readEnv(envFile);
+    console.log(`No AppHost runs in this worktree; the shared stack from ${mainRoot}:`);
+    for (const [name, port] of [['web', '3000'], ['main', shared.MAIN_PORT], ['account', shared.ACCOUNT_PORT],
+      ['accounts', shared.ACCOUNTS_PORT], ['storybook', '6006']] as const) {
+      console.log(`  ${name.padEnd(12)} http://localhost:${port}`);
+    }
+    return;
+  }
+  const described = JSON.parse(output) as
     { resources?: Array<{ name: string; displayName?: string; resourceType?: string; state?: string;
       healthStatus?: string; urls?: Array<{ url: string }> }> };
   for (const resource of described.resources ?? []) {
