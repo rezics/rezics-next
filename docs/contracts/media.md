@@ -32,4 +32,4 @@ ratios, item counts and viewports. Full-image and article views remain separate.
 
 Independent compositions follow [art direction](https://developer.mozilla.org/en-US/docs/Web/HTML/Guides/Responsive_images),
 while contextual crops follow [Sanity's image model](https://www.sanity.io/docs/studio/image-type).
-Pending cases and the Feed candidate are in [presentation acceptance](../testing/presentation-and-addressing.md).
+Pending cases and the Feed candidate are typed in [presentation cases](../../scripts/qa/cases/presentation-and-addressing.ts).

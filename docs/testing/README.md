@@ -21,7 +21,7 @@ Use [the plan](../plan/README.md#acceptance-gates) for gate definitions and
 | [Editorial protection](../../scripts/qa/cases/editorial-protection.ts) | Pending subcases of existing MODEL/LIVE/FACT/GOV/SYS/OPS coverage: atomic protection, independent review, source control, bypass rejection and recovery. |
 | [Operations](operations.md) | Installation, failures, upgrades, restore and practical load. |
 | [Complexity verification](complexity.md) | Path inventory, derived cost contracts, work counters, engine plans and small multi-scale counterexamples across owners. |
-| [Presentation/addressing](presentation-and-addressing.md), [governance/delivery](governance-and-delivery.md) | Route/rendering boundaries, exact reports, rights, notification and erasure cases. |
+| [Presentation/addressing](../../scripts/qa/cases/presentation-and-addressing.ts), [governance/delivery](governance-and-delivery.md) | Route/rendering boundaries, exact reports, rights, notification and erasure cases. |
 
 ## Execution levels
 
