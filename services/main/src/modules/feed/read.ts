@@ -10,7 +10,7 @@ import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkRe
 import { FEED_COST, feedViewerState, type FeedItem, type FeedQuery } from './contract.ts';
 import { feedReviewSources, feedSources, type FeedSource } from './source.ts';
 import type { FeedRow } from './store.ts';
-import { feedCardData } from './cards.ts';
+import { feedCardData, fenceListCard } from './cards.ts';
 import { diversityAllows, FEED_RANKING, recommendationAllowed } from './ranking.ts';
 import { digest } from '../recommendation/derived-generation.ts';
 import type { HomeExclusion } from './personal.ts';
@@ -326,7 +326,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     [...new Set(final.filter(source => matchingActivityKinds(source.kind).length === 0)
       .flatMap(source => source.work ? [source.work] : []))]) : new Map();
   const valid = new Set(final.map(source => source.id));
-  const fenced = new Map((await session.summaries(summaryIds)).map(summary => [summary.reference, summary]));
+  // List cards' preview Works join the page's one final summary batch.
+  const fenced = new Map((await session.summaries([...new Set([...summaryIds, ...items.flatMap(item =>
+    item.card.kind === 'list' ? item.card.works.map(work => work.id) : [])])])).map(summary => [summary.reference, summary]));
   await presentationBatch.fence();
   const disclosed: FeedItem[] = [];
   for (const item of items) {
@@ -360,8 +362,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
           throw new WorkReadMoved('Chapter content changed');
         }
       }
-      if (item.card.kind === 'prompt' || item.card.kind === 'release' || item.card.kind === 'review'
-        || item.card.kind === 'list') {
+      if (item.card.kind === 'list') await fenceListCard(session, item.card, fenced);
+      if (item.card.kind === 'prompt' || item.card.kind === 'release' || item.card.kind === 'review') {
         const card = await feedCardData(session, finalSource, item.target, item.links.target);
         if (JSON.stringify(card.card) !== JSON.stringify(item.card)
           || JSON.stringify(card.primaryAction) !== JSON.stringify(item.primaryAction)) throw new WorkReadMoved('Card content changed');
