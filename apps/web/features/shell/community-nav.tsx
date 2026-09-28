@@ -82,7 +82,8 @@ export function CommunityNav({ data }: { data: CommunityNavigation }) {
         className={cn(row, collapsed && 'justify-center px-0')}>
         <ShieldCheckIcon aria-hidden="true" className="size-5 shrink-0" />
         <span className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{t.manage}</span>
-        {open ? <span className={cn('rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-[11px] text-primary',
+        {/* Solid, like the unread badge: a tint under 11px text fell below 4.5:1 once the row itself was tinted. */}
+        {open ? <span className={cn('rounded-full bg-primary px-2 py-0.5 font-semibold text-[11px] text-primary-foreground',
           collapsed && 'sr-only')}>{t.queueWaiting({ count: `${open}${more ? '+' : ''}` })}</span> : null}
       </Link>
     </Section> : null}

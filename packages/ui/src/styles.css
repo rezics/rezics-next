@@ -325,7 +325,7 @@
   --info: #65bae1;
   --info-foreground: #1f6f93;
   --success: #4aa651;
-  --success-foreground: #2c7a33;
+  --success-foreground: #28722f; /* 4.8:1 on its 12% tint over every light surface */
   --warning: #e6b55d;
   --warning-foreground: #8a5a00;
 
