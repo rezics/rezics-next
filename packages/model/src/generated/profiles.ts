@@ -160,6 +160,24 @@ export const profileRegistry = {
       "sense"
     ]
   },
+  "classification-proposition-v2": {
+    "sha256": "22b3c0f677296e5c268514d0f87cb0dabdd2ae9900873e28b1540e27a87e01a6",
+    "file": "shapes/classification-proposition-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/classification-proposition-v2/scheme-shape",
+      "https://rezics.com/definition/classification-proposition-v2/concept-shape",
+      "https://rezics.com/definition/classification-proposition-v2/path-shape",
+      "https://rezics.com/definition/classification-proposition-v2/expression-shape",
+      "https://rezics.com/definition/classification-proposition-v2/sense-shape"
+    ],
+    "focusRoles": [
+      "scheme",
+      "concept",
+      "path",
+      "expression",
+      "sense"
+    ]
+  },
   "collection-curation-v1": {
     "sha256": "f89da51e411b4d1dc4f402ba2059b63a123bd3093f865b527d751a3dfa3468fe",
     "file": "shapes/collection-curation-v1.ttl",
@@ -176,6 +194,16 @@ export const profileRegistry = {
       "revision",
       "definition",
       "definition-revision"
+    ]
+  },
+  "concept-scheme-revision-v1": {
+    "sha256": "d09696e2138aff8599880e1f445b8342679f1d6736a90596de97d881dd5801ff",
+    "file": "shapes/concept-scheme-revision-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/concept-scheme-revision-v1/anchor-shape"
+    ],
+    "focusRoles": [
+      "anchor"
     ]
   },
   "content-match-unit-v1": {

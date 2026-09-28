@@ -1,0 +1,106 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "skos": {
+      "@id": "http://www.w3.org/2004/02/skos/core#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:assertedConcept": {
+      "@id": "https://rezics.com/vocab/assertedConcept",
+      "@type": "@id"
+    },
+    "rv:conceptState": {
+      "@id": "https://rezics.com/vocab/conceptState",
+      "@type": "@id"
+    },
+    "rv:definitionProfile": {
+      "@id": "https://rezics.com/vocab/definitionProfile",
+      "@type": "@id"
+    },
+    "rv:expression": {
+      "@id": "https://rezics.com/vocab/expression",
+      "@type": "@id"
+    },
+    "rv:expressionState": {
+      "@id": "https://rezics.com/vocab/expressionState",
+      "@type": "@id"
+    },
+    "rv:head": {
+      "@id": "https://rezics.com/vocab/head",
+      "@type": "@id"
+    },
+    "rv:interpretationScope": {
+      "@id": "https://rezics.com/vocab/interpretationScope",
+      "@type": "@id"
+    },
+    "rv:path": {
+      "@id": "https://rezics.com/vocab/path",
+      "@type": "@id"
+    },
+    "rv:pathKind": {
+      "@id": "https://rezics.com/vocab/pathKind",
+      "@type": "@id"
+    },
+    "rv:pathLength": {
+      "@id": "https://rezics.com/vocab/pathLength",
+      "@type": "xsd:integer"
+    },
+    "rv:pathState": {
+      "@id": "https://rezics.com/vocab/pathState",
+      "@type": "@id"
+    },
+    "rv:propositionKind": {
+      "@id": "https://rezics.com/vocab/propositionKind",
+      "@type": "@id"
+    },
+    "rv:schemeRevisionHead": {
+      "@id": "https://rezics.com/vocab/schemeRevisionHead",
+      "@type": "@id"
+    },
+    "rv:schemeState": {
+      "@id": "https://rezics.com/vocab/schemeState",
+      "@type": "@id"
+    },
+    "rv:senseState": {
+      "@id": "https://rezics.com/vocab/senseState",
+      "@type": "@id"
+    },
+    "rv:terminalConcept": {
+      "@id": "https://rezics.com/vocab/terminalConcept",
+      "@type": "@id"
+    },
+    "skos:altLabel": {
+      "@id": "http://www.w3.org/2004/02/skos/core#altLabel"
+    },
+    "skos:broader": {
+      "@id": "http://www.w3.org/2004/02/skos/core#broader",
+      "@type": "@id"
+    },
+    "skos:inScheme": {
+      "@id": "http://www.w3.org/2004/02/skos/core#inScheme",
+      "@type": "@id"
+    },
+    "skos:narrower": {
+      "@id": "http://www.w3.org/2004/02/skos/core#narrower",
+      "@type": "@id"
+    },
+    "skos:prefLabel": {
+      "@id": "http://www.w3.org/2004/02/skos/core#prefLabel"
+    }
+  }
+}

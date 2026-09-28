@@ -1,0 +1,44 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:manifest": {
+      "@id": "https://rezics.com/vocab/manifest",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:recordedBy": {
+      "@id": "https://rezics.com/vocab/recordedBy",
+      "@type": "@id"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    }
+  }
+}

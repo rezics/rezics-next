@@ -120,9 +120,36 @@
       }
     },
     {
+      "id": "classification-proposition-v2",
+      "sha256": "22b3c0f677296e5c268514d0f87cb0dabdd2ae9900873e28b1540e27a87e01a6",
+      "file": "shapes/classification-proposition-v2.ttl",
+      "binding": {
+        "required": [
+          "scheme",
+          "concept",
+          "path",
+          "expression",
+          "sense"
+        ],
+        "optional": [],
+        "roles": [
+          "scheme",
+          "concept",
+          "path",
+          "expression",
+          "sense"
+        ]
+      }
+    },
+    {
       "id": "collection-curation-v1",
       "sha256": "f89da51e411b4d1dc4f402ba2059b63a123bd3093f865b527d751a3dfa3468fe",
       "file": "shapes/collection-curation-v1.ttl"
+    },
+    {
+      "id": "concept-scheme-revision-v1",
+      "sha256": "d09696e2138aff8599880e1f445b8342679f1d6736a90596de97d881dd5801ff",
+      "file": "shapes/concept-scheme-revision-v1.ttl"
     },
     {
       "id": "content-match-unit-v1",
@@ -1195,6 +1222,16 @@
       "type": "https://rezics.com/vocab/ClassificationSense",
       "routes": [
         {
+          "profile": "classification-proposition-v2",
+          "shape": "https://rezics.com/definition/classification-proposition-v2/sense-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/classification-proposition-v2"
+            }
+          ]
+        },
+        {
           "profile": "classification-proposition-v1",
           "shape": "https://rezics.com/definition/classification-proposition-v1/sense-shape",
           "when": []
@@ -1265,6 +1302,16 @@
       "type": "http://www.w3.org/2004/02/skos/core#ConceptScheme",
       "routes": [
         {
+          "profile": "classification-proposition-v2",
+          "shape": "https://rezics.com/definition/classification-proposition-v2/scheme-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/classification-proposition-v2"
+            }
+          ]
+        },
+        {
           "profile": "classification-proposition-v1",
           "shape": "https://rezics.com/definition/classification-proposition-v1/scheme-shape",
           "when": []
@@ -1274,6 +1321,16 @@
     {
       "type": "http://www.w3.org/2004/02/skos/core#Concept",
       "routes": [
+        {
+          "profile": "classification-proposition-v2",
+          "shape": "https://rezics.com/definition/classification-proposition-v2/concept-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/classification-proposition-v2"
+            }
+          ]
+        },
         {
           "profile": "classification-proposition-v1",
           "shape": "https://rezics.com/definition/classification-proposition-v1/concept-shape",
@@ -1285,6 +1342,16 @@
       "type": "https://rezics.com/vocab/ConceptPath",
       "routes": [
         {
+          "profile": "classification-proposition-v2",
+          "shape": "https://rezics.com/definition/classification-proposition-v2/path-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/classification-proposition-v2"
+            }
+          ]
+        },
+        {
           "profile": "classification-proposition-v1",
           "shape": "https://rezics.com/definition/classification-proposition-v1/path-shape",
           "when": []
@@ -1294,6 +1361,16 @@
     {
       "type": "https://rezics.com/vocab/ClassificationExpression",
       "routes": [
+        {
+          "profile": "classification-proposition-v2",
+          "shape": "https://rezics.com/definition/classification-proposition-v2/expression-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/classification-proposition-v2"
+            }
+          ]
+        },
         {
           "profile": "classification-proposition-v1",
           "shape": "https://rezics.com/definition/classification-proposition-v1/expression-shape",
@@ -2646,6 +2723,10 @@
       "profile": "classification-context-v1"
     },
     {
+      "type": "https://rezics.com/vocab/VocabularyDefinition",
+      "profile": "classification-proposition-v2"
+    },
+    {
       "type": "https://rezics.com/vocab/ClassificationSense",
       "profile": "classification-proposition-v1"
     },
@@ -2711,7 +2792,9 @@
     "contexts/classification-direct-decision-v1.jsonld": "0047318fab769e767f13971aebbf24013212cdc1002104ab3642b403efd5943a",
     "contexts/classification-global-context-v1.jsonld": "f593ba44aca5034c5805bb6ef22773e1ed5a20d348b64076f4badb2bebedde74",
     "contexts/classification-proposition-v1.jsonld": "7ab9c49c7ef448e67b8f4b76ba43a74437d60ef7953ed82b02b5c0057e7b75e9",
+    "contexts/classification-proposition-v2.jsonld": "0b02354fd28beaeb492c28e844e721816c2d7199f7ddaf1436476b0186f4a335",
     "contexts/collection-curation-v1.jsonld": "94386b01056b31206b3bc6c68dd1e964fa457c0b40d67f5910e56986951a25ef",
+    "contexts/concept-scheme-revision-v1.jsonld": "076512dfe78d1ac90d4abd223348ac7c10ebdc5c5bee666dff6c5260800784fa",
     "contexts/content-match-unit-v1.jsonld": "b44765b92ad6ce55a282bdb5aea5fceffa4543d079f53726ebe3a691af0055fd",
     "contexts/content-private-match-unit-v1.jsonld": "05e9e12365b96c24f6bc2e201db8f4e80953031a3318d83f8b3083d49054c12c",
     "contexts/content-publication-v1.jsonld": "82eed979cbf46281029903d58d8b3ff51a1e58f989d861cedeb8ce7a5a0c2e0c",
@@ -2803,7 +2886,9 @@
     "shapes/classification-direct-decision-v1.ttl": "c33d12713979c86a3d29aa2fc6ebd4952f37bdece02a5aa6ba485fc48bda468b",
     "shapes/classification-global-context-v1.ttl": "b54360592563a2f10b526fc9f8f6441727da2b941d351d31720e675df9242f07",
     "shapes/classification-proposition-v1.ttl": "8bc799783d7d2c43da737b01d2b1f10bba4dc643716f1ac09524d1ef0e86dbd0",
+    "shapes/classification-proposition-v2.ttl": "22b3c0f677296e5c268514d0f87cb0dabdd2ae9900873e28b1540e27a87e01a6",
     "shapes/collection-curation-v1.ttl": "f89da51e411b4d1dc4f402ba2059b63a123bd3093f865b527d751a3dfa3468fe",
+    "shapes/concept-scheme-revision-v1.ttl": "d09696e2138aff8599880e1f445b8342679f1d6736a90596de97d881dd5801ff",
     "shapes/content-match-unit-v1.ttl": "c21cad7776103f50a982a1820fd5719da156d97edf07e8c856dd00bcd2f18478",
     "shapes/content-private-match-unit-v1.ttl": "4842523abc660d6edd620947dc2c0e8fdf85031268bff6c71d8de6f5599c7288",
     "shapes/content-publication-v1.ttl": "19f83eac251b0e11dcae8cfe4d69a02f311133d979bf4fabb4f92f4dc0b5736f",
@@ -2883,9 +2968,9 @@
     "shapes/work-type-v1.ttl": "e8ad5bd6e3e4bb4754e530c53f4caa5b60ec6e064e0d7b4a66bcdd23c7d7c6a4",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "a78ea30ce3a89dbabda88c2869b176e4f042700f576942d5627f7c1d1aed8aa2",
-    "packages/model/src/generated/profiles.ts": "611eb0af4bdf6872d7b439c77eab598387365f9e5d953f22d288ff3fd7f249ea",
-    "packages/model/src/generated/schemas.ts": "0ba202e609dcd7a2241369fa981c59cf3627d8547d5212c751af98c530539c9f",
-    "packages/model/src/generated/vocabulary.ts": "80ef020a6aea666dfa9e7308c2a7aedb499775f289c1d9137cde5a26a769e78d"
+    "packages/model/src/generated/arbitraries.ts": "5ac4856dfe50f1910b96fbfd47acd78c6c7d9bd9f75dd9ffac48e2f773c83580",
+    "packages/model/src/generated/profiles.ts": "169c3a9be42a065abd2ec9f7d8fedb989c6d61ecf7153637356ec7752c249d79",
+    "packages/model/src/generated/schemas.ts": "7926b47e524f748180963d3d94112f5123cbecf15c677395eff99e16347ce720",
+    "packages/model/src/generated/vocabulary.ts": "971e83ce557223b761b6de43f83373e8175d39b2643f78837ef93a7bc880b46d"
   }
 }
