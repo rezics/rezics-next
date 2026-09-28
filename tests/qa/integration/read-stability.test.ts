@@ -40,7 +40,7 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
         'idempotency-key': randomUUID() },
       body: JSON.stringify({ profile: 'agent-provision-v1', kind: 'person', displayName: 'Stable reader' }),
     })), 201);
-    const first = await stack.publicWork(agent.agent, ['en'], 'First stable Work');
+    const first = await stack.publicWork(agent.agent, ['en', 'fr'], 'First stable Work');
     await stack.publicWork(agent.agent, ['en'], 'Second stable Work');
     await member.grant('space:create:root', 'space.create');
     const realm = await json<{ realm: string; space: string }>(await member.send('POST', '/v1/spaces', {
@@ -67,6 +67,9 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
     const page = await json<Page>(await get('/v1/works?limit=1'));
     expect(page.stale).toBe(false);
     expect(page.nextCursor).not.toBeNull();
+    const versionsPath = `/v1/works/${first.work.slice(-36)}/versions`;
+    const versions = await json<{ nextCursor: string }>(await get(`${versionsPath}?limit=1`));
+    expect(versions.nextCursor).toBeString();
 
     // A command burst lands after the first graph position was captured. The
     // relay is deliberately not drained before reading the completed projection.
@@ -95,6 +98,12 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
       await writes;
     } finally { stack.fuseki.query = originalQuery; }
 
+    // G336 characterization, not retained-snapshot acceptance: even unrelated
+    // writes expire ordinary graph cursors. Removing this check without retaining
+    // their relation/order would silently return a page from a different basis.
+    const moved = await json<{ code: string }>(await get(`${versionsPath}?cursor=${versions.nextCursor}`), 409);
+    expect(moved.code).toBe('read_basis_changed');
+
     const stale = await json<Page>(await get('/v1/works?limit=5'));
     expect(stale.stale).toBe(true);
     expect(stale.generation).toBe(page.generation);
@@ -109,6 +118,29 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
     expect(continued.generation).toBe(page.generation);
     expect(continued.items).toHaveLength(1);
     expect(continued.items[0]!.id).not.toBe(page.items[0]!.id);
+
+    // Keep committing after EVERY captured position, including retry attempts.
+    // Discovery retains rows, but its current-disclosure hydration still needs a
+    // quiet graph interval. A bounded failure must contain no partial page.
+    let churn = 0;
+    stack.fuseki.query = async (sparql, bytes) => {
+      const result = await originalQuery(sparql, bytes);
+      if (sparql.includes('SELECT ?epoch ?sequence WHERE')) {
+        await fusekiReadBudget.exit(() => stack.privateWork(agent.agent, `Sustained private Work ${++churn}`));
+      }
+      return result;
+    };
+    try {
+      const response = await get(`/v1/works?cursor=${page.nextCursor}`);
+      expect([503, 422]).toContain(response.status);
+      const failure = await response.json() as { code: string; items?: unknown };
+      expect(['work_read_unavailable', 'work_read_budget_exceeded']).toContain(failure.code);
+      expect(failure.items).toBeUndefined();
+      expect(churn).toBeGreaterThan(1);
+    } finally { stack.fuseki.query = originalQuery; }
+    const resumed = await json<Page>(await get(`/v1/works?cursor=${page.nextCursor}`));
+    expect(resumed.generation).toBe(page.generation);
+    expect(resumed.items.map(item => item.id)).toEqual(continued.items.map(item => item.id));
     const hidden = continued.items[0]!.id;
     await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} { <urn:rezics:stability-variant> rv:resource ${iri(hidden)} ;
