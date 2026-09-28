@@ -12,7 +12,7 @@ import { AccountAssertionVerifier } from '../../../services/main/src/modules/acc
 // owner clones, a real Account issuer, retained relay envelopes and SQL meters.
 
 const root = resolve(import.meta.dir, '../../..');
-type Owner = 'access' | 'relay' | 'content';
+type Owner = 'account' | 'access' | 'relay' | 'content';
 
 export function requireQa(): string {
   const runId = Bun.env.REZICS_QA_RUN_ID;
@@ -70,63 +70,75 @@ export interface AccountUser { id: string; email: string; password: string; cook
 
 /** Real Better Auth issuer with PKCE tokens; the grant API test's fixture pattern. */
 export async function startAccount(scope: string) {
-  const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
-  const port = await freePort();
-  const base = `http://127.0.0.1:${port}`;
-  const operators = new Set<string>();
-  const auth = createAccountAuth({ baseURL: base, secret: Bun.env.ACCOUNT_SECRET!,
-    resource: Bun.env.ACCOUNT_MAIN_RESOURCE, pool: accountPool, operatorUserIds: operators });
-  const account = createAccountApp(auth, accountPool).listen({ hostname: '127.0.0.1', port });
-  const signUp = async (name: string): Promise<AccountUser> => {
-    const email = `g058-${name}-${randomUUID()}@example.test`;
-    const password = randomBytes(24).toString('base64url');
-    const response = await account.handle(new Request(`${base}/api/auth/sign-up/email`, {
-      method: 'POST', headers: { 'content-type': 'application/json', origin: base },
-      body: JSON.stringify({ name, email, password }),
-    }));
-    expect(response.status).toBe(200);
-    const body = await response.json() as { user: { id: string } };
-    return { id: body.user.id, email, password, cookie: response.headers.get('set-cookie')! };
-  };
-  const operator = await signUp('operator');
-  operators.add(operator.id);
-  const headers = new Headers({ cookie: operator.cookie, origin: base });
-  const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
-    client_name: 'G-058 verifier', scope, token_endpoint_auth_method: 'client_secret_post',
-    grant_types: ['client_credentials'], client_credentials_scopes: scope.split(' ') } });
-  const redirectUri = 'http://localhost:3000/auth/callback';
-  const client = await auth.api.adminCreateOAuthClient({ headers, body: {
-    client_name: 'G-058 native client', application_type: 'native', redirect_uris: [redirectUri],
-    token_endpoint_auth_method: 'none', grant_types: ['authorization_code'],
-    scope: `openid ${scope}`, skip_consent: true, require_pkce: true } });
-  const tokenFor = async (user: AccountUser, requested: string): Promise<string> => {
-    const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
-      headers: { 'content-type': 'application/json', origin: base },
-      body: JSON.stringify({ email: user.email, password: user.password }) });
-    expect(signIn.status).toBe(200);
-    const verifier = randomBytes(32).toString('base64url');
-    const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code', client_id: client.client_id,
-      redirect_uri: redirectUri, scope: requested, state: randomUUID(), resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-    const authorized = await fetch(authorize, { headers: { cookie: signIn.headers.get('set-cookie')! },
-      redirect: 'manual' });
-    expect(authorized.status).toBe(302);
-    const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-    const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: client.client_id, code,
-        redirect_uri: redirectUri, code_verifier: verifier, resource: Bun.env.ACCOUNT_MAIN_RESOURCE! }) });
-    expect(exchange.status).toBe(200);
-    return (await exchange.json() as { access_token: string }).access_token;
-  };
-  const verifier = new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
-    audience: Bun.env.ACCOUNT_MAIN_RESOURCE!, jwksUrl: `${base}/api/auth/jwks`,
-    introspectUrl: `${base}/api/auth/oauth2/introspect`,
-    clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! });
-  return { issuer: `${base}/api/auth`, signUp, tokenFor, verifier,
-    close: async () => { await account.stop(); await accountPool.end(); } };
+  // Operator bootstrap is once per database, not once per issuer. Each issuer
+  // needs its own owner so an earlier file cannot consume its bootstrap or fence it.
+  const owners = await cloneOwners(requireQa(), ['account']);
+  const accountPool = new Pool({ connectionString: owners.urls.account });
+  let account: ReturnType<typeof createAccountApp> | undefined;
+  try {
+    const port = await freePort();
+    const base = `http://127.0.0.1:${port}`;
+    const operators = new Set<string>();
+    const auth = createAccountAuth({ baseURL: base, secret: Bun.env.ACCOUNT_SECRET!,
+      resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, pool: accountPool, operatorUserIds: operators });
+    const app = createAccountApp(auth, accountPool).listen({ hostname: '127.0.0.1', port });
+    account = app;
+    const signUp = async (name: string): Promise<AccountUser> => {
+      const email = `g058-${name}-${randomUUID()}@example.test`;
+      const password = randomBytes(24).toString('base64url');
+      const response = await app.handle(new Request(`${base}/api/auth/sign-up/email`, {
+        method: 'POST', headers: { 'content-type': 'application/json', origin: base },
+        body: JSON.stringify({ name, email, password }),
+      }));
+      expect(response.status).toBe(200);
+      const body = await response.json() as { user: { id: string } };
+      return { id: body.user.id, email, password, cookie: response.headers.get('set-cookie')! };
+    };
+    const operator = await signUp('operator');
+    operators.add(operator.id);
+    const headers = new Headers({ cookie: operator.cookie, origin: base });
+    const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
+      client_name: 'G-058 verifier', scope, token_endpoint_auth_method: 'client_secret_post',
+      grant_types: ['client_credentials'], client_credentials_scopes: scope.split(' ') } });
+    const redirectUri = 'http://localhost:3000/auth/callback';
+    const client = await auth.api.adminCreateOAuthClient({ headers, body: {
+      client_name: 'G-058 native client', application_type: 'native', redirect_uris: [redirectUri],
+      token_endpoint_auth_method: 'none', grant_types: ['authorization_code'],
+      scope: `openid ${scope}`, skip_consent: true, require_pkce: true } });
+    const tokenFor = async (user: AccountUser, requested: string): Promise<string> => {
+      const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
+        headers: { 'content-type': 'application/json', origin: base },
+        body: JSON.stringify({ email: user.email, password: user.password }) });
+      expect(signIn.status).toBe(200);
+      const verifier = randomBytes(32).toString('base64url');
+      const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
+      for (const [key, value] of Object.entries({ response_type: 'code', client_id: client.client_id,
+        redirect_uri: redirectUri, scope: requested, state: randomUUID(), resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
+        code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+        code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
+      const authorized = await fetch(authorize, { headers: { cookie: signIn.headers.get('set-cookie')! },
+        redirect: 'manual' });
+      expect(authorized.status).toBe(302);
+      const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
+      const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: client.client_id, code,
+          redirect_uri: redirectUri, code_verifier: verifier, resource: Bun.env.ACCOUNT_MAIN_RESOURCE! }) });
+      expect(exchange.status).toBe(200);
+      return (await exchange.json() as { access_token: string }).access_token;
+    };
+    const verifier = new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
+      audience: Bun.env.ACCOUNT_MAIN_RESOURCE!, jwksUrl: `${base}/api/auth/jwks`,
+      introspectUrl: `${base}/api/auth/oauth2/introspect`,
+      clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! });
+    return { issuer: `${base}/api/auth`, signUp, tokenFor, verifier,
+      close: async () => { await app.stop(); await accountPool.end(); await owners.close(); } };
+  } catch (error) {
+    await account?.stop();
+    await accountPool.end();
+    await owners.close();
+    throw error;
+  }
 }
 
 /** An active Access principal representing a fresh Agent for `action`, granted on `scope`. */

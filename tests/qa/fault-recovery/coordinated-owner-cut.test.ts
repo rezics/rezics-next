@@ -34,6 +34,7 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecove
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { publishAdmittedContent }
   from '../../../services/main/src/modules/content-publication/publish-admitted.ts';
+import { accessStateTables } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { assertContentRecoveryCoverage, captureContentRecoveryCoverage }
   from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
 import { initializeFreshGraph, type WorkActivationEnvironment }
@@ -189,6 +190,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
       headers: { authorization: bearer } });
     const principal = await account.verify(request, ['work:create']);
     expect(principal).toEqual({ issuer: `${base}/api/auth`, subject: member.id,
+      accountDisplayName: undefined, currentAssertion: expect.any(Function),
       accountAudiences: [apps.ACCOUNT_MAIN_RESOURCE!, `${base}/api/auth/oauth2/userinfo`],
       accountAuthMode: 'trusted', accountClientId: browserClient.client_id,
       accountConsentGeneration: undefined, accountConsentId: undefined,
@@ -220,7 +222,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     await initializeFreshGraph(fuseki, lineage);
     const access = new AccessAdmissionRegistry(accessPool);
     const work = await createAdmittedMetadataWork(env, account, access, request,
-      { title: 'Coordinated owner cut', actingSubject: actor,
+      { title: 'Coordinated owner cut', language: 'en', actingSubject: actor,
         idempotencyKey: `owner-cut-work-${randomUUID()}` });
     expect(work.sequence).toBe('1');
     const variantId = `urn:rezics:variant:${randomUUID()}`;
@@ -363,7 +365,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     expect(packageOnlyCoverage.tables['pkg.go_sumdb_verification']!.count).toBe('1');
     expect(packageOnlyCoverage.tables['pkg.cargo_resolution']!.count).toBe('3');
     expect(packageOnlyCoverage.tables['pkg.npm_resolution']!.count).toBe('10');
-    await grant(`content:publish:${variantId}`, 'content.publish');
+    await grant(`content:publish:${work.work}`, 'content.publish');
     const published = await publishAdmittedContent(env, content, account, access,
       new Request(request.url, { headers: { authorization: bearer } }), {
         preparationId: `owner-cut-prepare-${randomUUID()}`,
@@ -392,6 +394,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
       }
     }
     if (!coverage?.content) throw new Error('coordinated Content coverage is absent');
+    const capturedAccess = await accessStateTables(accessPool);
     expect(coverage).toMatchObject({ priorDataEpoch: lineage.dataEpoch,
       priorSequence: '2', content: { dataEpoch: saved.position.dataEpoch } });
     expect(Number(coverage.content.graphReferencesCount)).toBeGreaterThan(0);
@@ -464,7 +467,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     expect(await accessStateCoverage(restoredAccess)).toEqual(await accessStateCoverage(accessPool));
     await assertContentRecoveryCoverage(restoredContent, fuseki, coverage.content);
     const restoredPackageCaptures = new GoProxyCaptureStore(restoredContent,
-      (async () => { throw new Error('restored exact read fetched provider'); }) as typeof fetch);
+      (async () => { throw new Error('restored exact read fetched provider'); }) as unknown as typeof fetch);
     const restoredPackageTrust = new GoSumdbTrustStore(restoredContent,
       restoredPackageCaptures,
       (async () => { throw new Error('restored replay fetched checksum database'); }) as
@@ -527,15 +530,22 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     expect(extraSet.status).toBe(201);
     expect(await extraSet.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
     expect((await restoreRequest(extraSetKey)).status).toBe(409);
+    expect((await accessStateTables(restoredAccess)).tables).toEqual(capturedAccess.tables);
 
     // Each mismatch is committed in the disposable replay copy, then reversed
     // before the successful release. The source primary and its fences stay put.
     const extraSubject = `https://rezics.com/id/${randomUUID()}`;
+    const sourceRevision = (await restoredAccess.query<{ revision: string }>(
+      'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id')).rows[0]!.revision;
     await restoredAccess.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')",
       [extraSubject]);
     await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
       nextLineage, restoredEvidence)).rejects.toThrow('Access state differs from recovery coverage');
     await restoredAccess.query('DELETE FROM access.authority_subject WHERE id = $1', [extraSubject]);
+    // Inserting and deleting the fault also invalidates recommendations. Restore
+    // that fixture side effect before testing an independent Account mismatch.
+    await restoredAccess.query('UPDATE access.also_enjoyed_source_fence SET revision = $1 WHERE id', [sourceRevision]);
+    expect((await accessStateTables(restoredAccess)).tables).toEqual(capturedAccess.tables);
     const originalName = (await restoredAccount.query<{ name: string }>(
       'SELECT name FROM public."user" WHERE id = $1', [member.id])).rows[0]?.name;
     if (!originalName) throw new Error('restored Account user is absent');
@@ -588,7 +598,8 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
       for (const { id, receipt, request } of npmIdentityReceipts) {
         const hasWorkspace = request.workspaces.length > 0;
         const corrupted = { ...receipt.outcome, instances: receipt.outcome.instances.map(node =>
-          hasWorkspace && 'linkTarget' in node && node.linkTarget ? { ...node, linkTarget: { ...node.linkTarget, path: 'packages/wrong' } }
+          hasWorkspace && 'linkTarget' in node && node.linkTarget && typeof node.linkTarget === 'object'
+            ? { ...node, linkTarget: { ...node.linkTarget, path: 'packages/wrong' } }
             : !hasWorkspace && node.path === 'node_modules/renamed' ? { ...node, name: 'wrong-package' } : node) };
         await restoredContent.query('UPDATE pkg.npm_resolution SET outcome = $2 WHERE id = $1', [id, JSON.stringify(corrupted)]);
         await expect(restoredNpm.read(principalId, id)).rejects.toBeInstanceOf(NpmResolutionUnavailable);
@@ -710,7 +721,8 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     await accountApp.stop();
     accountApp = createAccountApp(createAccountAuth({ ...accountConfig,
       pool: restoredAccount }), restoredAccount).listen({ hostname: '127.0.0.1', port });
-    expect(await account.verify(request, ['work:create'])).toEqual(principal);
+    expect(await account.verify(request, ['work:create']))
+      .toEqual({ ...principal, currentAssertion: expect.any(Function) });
     const releasedApp = createMainApp(fuseki, { environment: heldEnv,
       account, access: new AccessAdmissionRegistry(restoredAccess),
       content: new ContentCore(restoredContent), contentAuthoring: new ContentCore(restoredContent) });

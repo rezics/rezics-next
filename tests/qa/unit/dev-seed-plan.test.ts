@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { dryRunLines, parseOptions, steps } from '../../../scripts/dev/seed/cli.ts';
-import { people, realms, seedKey, semanticTypes, works } from '../../../scripts/dev/seed/plan.ts';
+import { firstSeedTypes, people, realms, seedKey, semanticTypes, works } from '../../../scripts/dev/seed/plan.ts';
 import { type SeedApi, SeedApiError } from '../../../scripts/dev/seed/api.ts';
 import { devResetPlan, devResetTarget } from '../../../scripts/dev/reset.ts';
 import { seedWorks } from '../../../scripts/dev/seed/works-step.ts';
@@ -151,9 +151,16 @@ describe('dev seed plan', () => {
 
   test('replays a Work an earlier seed recorded without language and kind', async () => {
     const calls: Array<Record<string, unknown>> = [];
-    const api = { post: async (_path: string, body: Record<string, unknown>) => {
+    const attempted = new Set<string>();
+    const api = { post: async (_path: string, body: Record<string, unknown>, _token: string, key: string) => {
       calls.push(body);
-      if ('language' in body) throw new SeedApiError('Main /v1/works', 409, '{"code":"idempotency_conflict"}');
+      if (!attempted.has(key)) {
+        attempted.add(key);
+        throw new SeedApiError('Main /v1/works', 409, '{"code":"idempotency_conflict"}');
+      }
+      const work = works.find(work => seedKey('work', work.id) === key)!;
+      // Main requires language now; the old missing language was digested as English.
+      expect(body).toMatchObject({ language: 'en', semanticTypes: firstSeedTypes(work.type) });
       return { work: `https://rezics.com/id/${'1'.repeat(36)}`, mainVersion: 'v', workRevision: 'r',
         mainRevision: 'm', replayed: true } satisfies WorkReceipt;
     } } as unknown as SeedApi;
@@ -162,7 +169,7 @@ describe('dev seed plan', () => {
     penAgents: new Map([['moonlight', 'https://rezics.com/id/moonlight']]),
     created: new Map(), optional: async () => null } as unknown as SeedState;
     await seedWorks(state);
-    const retried = calls.filter(body => !('language' in body));
+    const retried = calls.filter((_body, index) => index % 2 === 1);
     expect(retried.find(body => body.title === 'Bilingual book club discussion prompt'))
       .toMatchObject({ semanticTypes: ['https://schema.org/DigitalDocument'] });
     expect(state.created.size).toBe(works.length - demoClassics.length);
@@ -194,7 +201,8 @@ describe('dev seed plan', () => {
         sessions: [{ id: 'mei', token: 'token', actingSubject: 'https://rezics.com/id/mei' }],
         api: { get: async (path: string) => ({ items: path.includes('22222222')
           && path.includes('/agent-credits') ? [{ role: 'author' }] : [] }) },
-        optional: async (_label: string, operation: () => Promise<unknown>) => operation(),
+        optional: async (label: string, operation: () => Promise<unknown>) =>
+          label.startsWith('Work author check ') ? operation() : null,
       } as unknown as SeedState;
       await checkPublicReads(state);
       expect(findings).toContain('Work pride has no credited author');

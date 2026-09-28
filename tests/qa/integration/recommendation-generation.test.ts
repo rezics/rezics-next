@@ -44,6 +44,10 @@ beforeAll(async () => {
   relay = new Pool({ connectionString: owners.urls.relay, max: 4 });
   registry = new AccessAdmissionRegistry(access);
   fuseki = new FusekiClient(Bun.env.FUSEKI_URL!);
+  // Consume one issuer's operator bootstrap first, just as a preceding file does
+  // in the shared tier. The next issuer must still provision its own clients.
+  const previousIssuer = await startAccount('rating:read');
+  await previousIssuer.close();
   account = await startAccount('rating:configure rating:read');
   const [manager, reader, secondReader, stranger, ratingUser] = await Promise.all(
     ['manager', 'reader', 'second-reader', 'stranger', 'rater'].map(name => account.signUp(name)));
