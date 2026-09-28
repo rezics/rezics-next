@@ -202,7 +202,8 @@ export const realmPicks: AlsoEnjoyedItem[] = [
     { type: 'https://rezics.com/vocab/PromptTemplate' }),
   pick('Recipe scaling assistant skill', 'Lin Mei 林梅', 'realm', null, { type: 'https://rezics.com/vocab/SkillPackage' }),
 ];
-export const alsoEnjoyed = (items: AlsoEnjoyedItem[]) => ok<AlsoEnjoyedPage>({ profile: 'also-enjoyed-v1', ...page(items) });
+export const alsoEnjoyed = (items: AlsoEnjoyedItem[]) => ok<AlsoEnjoyedPage>({ profile: 'also-enjoyed-v1',
+  ...page(items), stale: false, projectionPosition: page(items).sourcePosition });
 
 export const versions = ok<VersionPage>(page([
   { id: iri('11a3c5e7-9b0d-4f2a-8c4e-6a8c0e2a4c61'), kind: 'text-variant', language: 'en',

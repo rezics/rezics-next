@@ -43221,6 +43221,584 @@
         ]
       }
     },
+    "/v1/authors/open-library/{author}/follow": {
+      "get": {
+        "operationId": "getV1AuthorsOpen-libraryByAuthorFollow",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "author",
+            "required": true,
+            "schema": {
+              "pattern": "^OL[1-9][0-9]{0,11}A$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "maxLength": 35,
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "followers": {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "exact",
+                            "lower-bound"
+                          ],
+                          "type": "string"
+                        },
+                        "value": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    "following": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "follow-state-v1",
+                      "type": "string"
+                    },
+                    "revision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "target": {
+                      "properties": {
+                        "href": {
+                          "type": "string"
+                        },
+                        "icon": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "fallback",
+                                  "type": "string"
+                                },
+                                "policy": {
+                                  "type": "string"
+                                },
+                                "resourceType": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "policy",
+                                "key",
+                                "resourceType"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "basis": {
+                                  "properties": {
+                                    "context": {
+                                      "type": "string"
+                                    },
+                                    "policy": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "policy",
+                                    "context"
+                                  ],
+                                  "type": "object"
+                                },
+                                "crop": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "height": {
+                                  "type": "integer"
+                                },
+                                "kind": {
+                                  "const": "image",
+                                  "type": "string"
+                                },
+                                "mediaType": {
+                                  "type": "string"
+                                },
+                                "selection": {
+                                  "type": "string"
+                                },
+                                "url": {
+                                  "type": "string"
+                                },
+                                "width": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "selection",
+                                "url",
+                                "mediaType",
+                                "width",
+                                "height",
+                                "crop",
+                                "basis"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "anyOf": [
+                            {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "kind": {
+                          "enum": [
+                            "realm",
+                            "zone",
+                            "work",
+                            "agent",
+                            "external-author"
+                          ],
+                          "type": "string"
+                        },
+                        "name": {
+                          "properties": {
+                            "basis": {
+                              "enum": [
+                                "requested",
+                                "fallback"
+                              ],
+                              "type": "string"
+                            },
+                            "direction": {
+                              "enum": [
+                                "ltr",
+                                "rtl"
+                              ],
+                              "type": "string"
+                            },
+                            "language": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language",
+                            "direction",
+                            "basis"
+                          ],
+                          "type": "object"
+                        },
+                        "realm": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "kind",
+                        "name",
+                        "icon",
+                        "realm",
+                        "href"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "target",
+                    "following",
+                    "revision",
+                    "followers"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/authors/open-library/{author}/works": {
       "get": {
         "operationId": "getV1AuthorsOpen-libraryByAuthorWorks",
@@ -105243,15 +105821,24 @@
                                     "type": "string"
                                   },
                                   "target": {
-                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                    "type": "string"
+                                    "anyOf": [
+                                      {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                                        "type": "string"
+                                      }
+                                    ]
                                   },
                                   "targetKind": {
                                     "enum": [
                                       "realm",
                                       "zone",
                                       "work",
-                                      "agent"
+                                      "agent",
+                                      "external-author"
                                     ],
                                     "type": "string"
                                   }
@@ -108455,7 +109042,8 @@
                       "realm",
                       "zone",
                       "work",
-                      "agent"
+                      "agent",
+                      "external-author"
                     ],
                     "type": "string"
                   },
@@ -108464,8 +109052,16 @@
                     "type": "string"
                   },
                   "target": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                        "type": "string"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -108504,7 +109100,8 @@
                       "realm",
                       "zone",
                       "work",
-                      "agent"
+                      "agent",
+                      "external-author"
                     ],
                     "type": "string"
                   },
@@ -108513,8 +109110,16 @@
                     "type": "string"
                   },
                   "target": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                        "type": "string"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -108553,7 +109158,8 @@
                       "realm",
                       "zone",
                       "work",
-                      "agent"
+                      "agent",
+                      "external-author"
                     ],
                     "type": "string"
                   },
@@ -108562,8 +109168,16 @@
                     "type": "string"
                   },
                   "target": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                        "type": "string"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -108598,7 +109212,8 @@
                         "realm",
                         "zone",
                         "work",
-                        "agent"
+                        "agent",
+                        "external-author"
                       ],
                       "type": "string"
                     },
@@ -108614,8 +109229,16 @@
                       "type": "string"
                     },
                     "target": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                          "type": "string"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -109138,15 +109761,24 @@
                           ]
                         },
                         "id": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                              "type": "string"
+                            }
+                          ]
                         },
                         "kind": {
                           "enum": [
                             "realm",
                             "zone",
                             "work",
-                            "agent"
+                            "agent",
+                            "external-author"
                           ],
                           "type": "string"
                         },
@@ -132665,7 +133297,8 @@
                 "realm",
                 "zone",
                 "work",
-                "agent"
+                "agent",
+                "external-author"
               ],
               "type": "string"
             }
@@ -132805,15 +133438,24 @@
                                 ]
                               },
                               "id": {
-                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                "type": "string"
+                                "anyOf": [
+                                  {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                                    "type": "string"
+                                  }
+                                ]
                               },
                               "kind": {
                                 "enum": [
                                   "realm",
                                   "zone",
                                   "work",
-                                  "agent"
+                                  "agent",
+                                  "external-author"
                                 ],
                                 "type": "string"
                               },
@@ -132940,15 +133582,24 @@
                                 "type": "null"
                               },
                               "id": {
-                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                "type": "string"
+                                "anyOf": [
+                                  {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                                    "type": "string"
+                                  }
+                                ]
                               },
                               "kind": {
                                 "enum": [
                                   "realm",
                                   "zone",
                                   "work",
-                                  "agent"
+                                  "agent",
+                                  "external-author"
                                 ],
                                 "type": "string"
                               },
@@ -133341,6 +133992,818 @@
         ]
       }
     },
+    "/v1/me/follows/authors": {
+      "get": {
+        "operationId": "getV1MeFollowsAuthors",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "maxLength": 35,
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "properties": {
+                        "kind": {
+                          "const": "exact-page",
+                          "type": "string"
+                        },
+                        "total": {
+                          "type": "null"
+                        },
+                        "value": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "kind",
+                        "total"
+                      ],
+                      "type": "object"
+                    },
+                    "items": {
+                      "items": {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "available": {
+                                "const": true,
+                                "type": "boolean"
+                              },
+                              "href": {
+                                "type": "string"
+                              },
+                              "icon": {
+                                "anyOf": [
+                                  {
+                                    "properties": {
+                                      "key": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "fallback",
+                                        "type": "string"
+                                      },
+                                      "policy": {
+                                        "type": "string"
+                                      },
+                                      "resourceType": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "policy",
+                                      "key",
+                                      "resourceType"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "properties": {
+                                      "basis": {
+                                        "properties": {
+                                          "context": {
+                                            "type": "string"
+                                          },
+                                          "policy": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "policy",
+                                          "context"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "crop": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "height": {
+                                        "type": "integer"
+                                      },
+                                      "kind": {
+                                        "const": "image",
+                                        "type": "string"
+                                      },
+                                      "mediaType": {
+                                        "type": "string"
+                                      },
+                                      "selection": {
+                                        "type": "string"
+                                      },
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "width": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "selection",
+                                      "url",
+                                      "mediaType",
+                                      "width",
+                                      "height",
+                                      "crop",
+                                      "basis"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "id": {
+                                "anyOf": [
+                                  {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "kind": {
+                                "enum": [
+                                  "agent",
+                                  "external-author"
+                                ],
+                                "type": "string"
+                              },
+                              "name": {
+                                "properties": {
+                                  "basis": {
+                                    "enum": [
+                                      "requested",
+                                      "fallback"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "enum": [
+                                      "ltr",
+                                      "rtl"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language",
+                                  "direction",
+                                  "basis"
+                                ],
+                                "type": "object"
+                              },
+                              "newestWork": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "properties": {
+                                  "cover": {
+                                    "anyOf": [
+                                      {
+                                        "properties": {
+                                          "key": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "fallback",
+                                            "type": "string"
+                                          },
+                                          "policy": {
+                                            "type": "string"
+                                          },
+                                          "resourceType": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "policy",
+                                          "key",
+                                          "resourceType"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "properties": {
+                                          "basis": {
+                                            "properties": {
+                                              "context": {
+                                                "type": "string"
+                                              },
+                                              "policy": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "policy",
+                                              "context"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "crop": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "height": {
+                                            "type": "integer"
+                                          },
+                                          "kind": {
+                                            "const": "image",
+                                            "type": "string"
+                                          },
+                                          "mediaType": {
+                                            "type": "string"
+                                          },
+                                          "selection": {
+                                            "type": "string"
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "width": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "selection",
+                                          "url",
+                                          "mediaType",
+                                          "width",
+                                          "height",
+                                          "crop",
+                                          "basis"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "id": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "properties": {
+                                      "basis": {
+                                        "enum": [
+                                          "requested",
+                                          "fallback"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "direction": {
+                                        "enum": [
+                                          "ltr",
+                                          "rtl"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "language": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "language",
+                                      "direction",
+                                      "basis"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "types": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "maxItems": 8,
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "title",
+                                  "cover",
+                                  "types"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "realm": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "revision": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "name",
+                              "icon",
+                              "realm",
+                              "href",
+                              "available",
+                              "revision",
+                              "newestWork"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "available": {
+                                "const": false,
+                                "type": "boolean"
+                              },
+                              "href": {
+                                "type": "null"
+                              },
+                              "icon": {
+                                "type": "null"
+                              },
+                              "id": {
+                                "anyOf": [
+                                  {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "kind": {
+                                "enum": [
+                                  "agent",
+                                  "external-author"
+                                ],
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "null"
+                              },
+                              "newestWork": {
+                                "type": "null"
+                              },
+                              "realm": {
+                                "type": "null"
+                              },
+                              "revision": {
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "available",
+                              "revision",
+                              "name",
+                              "icon",
+                              "realm",
+                              "href",
+                              "newestWork"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "maxItems": 8,
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "profile": {
+                      "const": "followed-authors-v1",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "items",
+                    "nextCursor",
+                    "sourcePosition",
+                    "count"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/me/follows/batch": {
       "post": {
         "operationId": "postV1MeFollowsBatch",
@@ -133380,13 +134843,22 @@
                             "realm",
                             "zone",
                             "work",
-                            "agent"
+                            "agent",
+                            "external-author"
                           ],
                           "type": "string"
                         },
                         "target": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                              "type": "string"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -133429,13 +134901,22 @@
                             "realm",
                             "zone",
                             "work",
-                            "agent"
+                            "agent",
+                            "external-author"
                           ],
                           "type": "string"
                         },
                         "target": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                              "type": "string"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -133478,13 +134959,22 @@
                             "realm",
                             "zone",
                             "work",
-                            "agent"
+                            "agent",
+                            "external-author"
                           ],
                           "type": "string"
                         },
                         "target": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                              "type": "string"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -133531,7 +135021,8 @@
                               "realm",
                               "zone",
                               "work",
-                              "agent"
+                              "agent",
+                              "external-author"
                             ],
                             "type": "string"
                           },
@@ -133540,8 +135031,16 @@
                             "type": "string"
                           },
                           "target": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^open-library:OL[1-9][0-9]{0,11}A$",
+                                "type": "string"
+                              }
+                            ]
                           }
                         },
                         "required": [
