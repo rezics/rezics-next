@@ -47,7 +47,7 @@ describe('dev seed plan', () => {
     expect(realms.every(realm => realm.featured.length > 0
       && realm.featured.every(id => works.some(work => work.id === id)))).toBe(true);
     expect(new Set(works.map(work => work.language))).toEqual(new Set(['en', 'zh-Hans']));
-    expect(new Set(works.map(work => work.type))).toEqual(new Set(['book', 'document', 'recipe']));
+    expect(new Set(works.map(work => work.type))).toEqual(new Set(['book', 'document', 'recipe', 'prompt', 'skill']));
     expect(works.filter(work => work.excerpt).length).toBeGreaterThanOrEqual(5);
   });
 
@@ -58,6 +58,8 @@ describe('dev seed plan', () => {
     expect(semanticTypes('book')).toEqual(['https://schema.org/Book']);
     expect(semanticTypes('recipe')).toEqual(['https://schema.org/Recipe']);
     expect(semanticTypes('document')).toEqual(['https://schema.org/DigitalDocument']);
+    expect(semanticTypes('prompt')).toEqual(['https://rezics.com/vocab/PromptTemplate']);
+    expect(semanticTypes('skill')).toEqual(['https://rezics.com/vocab/SkillPackage']);
   });
 
   test('attributes original Works to their creators and leaves imported classics unclaimed by demo authors', () => {
@@ -139,6 +141,30 @@ describe('dev seed plan', () => {
       .toMatchObject({ authoring: 'own-work', actingSubject: 'https://rezics.com/id/daniel' });
     expect(calls.filter(call => call.key === seedKey('work', 'serial')).map(call => call.body.authoring))
       .toEqual(['own-work']);
+    // Each Work names its language and kind, so a Chinese serial is not recorded as English.
+    expect(calls.find(call => call.key === seedKey('work', 'serial'))?.body)
+      .toMatchObject({ language: 'zh-Hans', semanticTypes: ['https://schema.org/Book'] });
+    expect(calls.find(call => call.key === seedKey('work', 'prompt'))?.body)
+      .toMatchObject({ language: 'en', semanticTypes: ['https://rezics.com/vocab/PromptTemplate'] });
+    expect(state.created.size).toBe(works.length - demoClassics.length);
+  });
+
+  test('replays a Work an earlier seed recorded without language and kind', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const api = { post: async (_path: string, body: Record<string, unknown>) => {
+      calls.push(body);
+      if ('language' in body) throw new SeedApiError('Main /v1/works', 409, '{"code":"idempotency_conflict"}');
+      return { work: `https://rezics.com/id/${'1'.repeat(36)}`, mainVersion: 'v', workRevision: 'r',
+        mainRevision: 'm', replayed: true } satisfies WorkReceipt;
+    } } as unknown as SeedApi;
+    const state = { api, sessions: people.map(person => ({ id: person.id, accountId: person.id,
+      token: person.id, actingSubject: `https://rezics.com/id/${person.id}` })),
+    penAgents: new Map([['moonlight', 'https://rezics.com/id/moonlight']]),
+    created: new Map(), optional: async () => null } as unknown as SeedState;
+    await seedWorks(state);
+    const retried = calls.filter(body => !('language' in body));
+    expect(retried.find(body => body.title === 'Bilingual book club discussion prompt'))
+      .toMatchObject({ semanticTypes: ['https://schema.org/DigitalDocument'] });
     expect(state.created.size).toBe(works.length - demoClassics.length);
   });
 

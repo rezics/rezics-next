@@ -1,4 +1,5 @@
-import { seedKey, semanticTypes, works } from './plan.ts';
+import { SeedApiError } from './api.ts';
+import { firstSeedTypes, seedKey, semanticTypes, works } from './plan.ts';
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
 import type { SeedState, WorkReceipt } from './state.ts';
 
@@ -16,10 +17,17 @@ export async function seedWorks(state: SeedState) {
     if (work.author && !author) throw new Error(`Work author ${work.author} is unavailable`);
     const body = {
       profile: 'metadata-only-v1', title: work.title, semanticTypes: semanticTypes(work.type),
-      actingSubject: author ?? owner.actingSubject };
-    const receipt: WorkReceipt = await api.post<WorkReceipt>('/v1/works', {
-      ...body, ...(author ? { authoring: 'own-work' } : {}) },
-    session.token, seedKey('work', work.id));
+      language: work.language, actingSubject: author ?? owner.actingSubject,
+      ...(author ? { authoring: 'own-work' } : {}) };
+    const receipt: WorkReceipt = await api.post<WorkReceipt>('/v1/works', body, session.token, seedKey('work', work.id))
+      .catch((error: unknown) => {
+        // Stacks seeded before Works named their language and kind recorded these intents without them;
+        // replay that exact body to reuse them. A clean `task dev:reset` gives every Work both.
+        if (!(error instanceof SeedApiError) || error.status !== 409) throw error;
+        const { language: _language, ...first } = body;
+        return api.post<WorkReceipt>('/v1/works', { ...first, semanticTypes: firstSeedTypes(work.type) },
+          session.token, seedKey('work', work.id));
+      });
     created.set(work.id, receipt);
     if (work.tagline) await state.optional('Work serial summary', () => api.put(
       `/v1/works/${receipt.work.slice(-36)}/metadata`, {
