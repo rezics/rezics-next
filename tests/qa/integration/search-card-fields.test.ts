@@ -6,6 +6,7 @@ import { AgentProvisioning } from '../../../services/main/src/modules/agent/prov
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 async function json(response: Response, status = 200): Promise<Record<string, any>> {
   const body = await response.text();
@@ -19,7 +20,7 @@ test('search cards use public native credit names and sealed standing ratings; h
     const actor = await stack.member('card-author');
     let restricted = new Set<string>();
     const deps = { environment: stack.env, access: stack.access,
-      account: { verify: async () => actor.principal }, profiles: new ProfilesAccess(stack.accessPool),
+      account: { verify: async () => actor.principal }, profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env) };
     const app = createMainApp(stack.fuseki, deps);
     const call = (path: string, body?: unknown) => app.handle(new Request(`http://main.local${path}`, {

@@ -19,6 +19,7 @@ import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/
 import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { WORK_READ_COST } from '../../../services/main/src/modules/work/read-contract.ts';
 import { startMediaStack } from './media-support.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 async function json<T>(response: Response, expected = 200): Promise<T> {
@@ -56,7 +57,7 @@ test('G-377: a home page of four list cards shows their first Works within one W
       reviews: new ReaderReviews(stack.accessPool), homePersonal: new HomePersonalStore(stack.accessPool),
       libraryStatus: new ReaderLibraryStatusStore(stack.contentPool), progress: new StructureProgressStore(stack.contentPool),
       content: stack.content, contentAuthoring: stack.content, media: stack.media, structureObjects,
-      profiles: new ProfilesAccess(stack.accessPool), agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
+      profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool), agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       relayPosition: new RelayHandoffPositions(relay, consumer) };
     const app = createMainApp(stack.fuseki, deps);
     const call = (method: string, path: string, body?: unknown) => app.handle(

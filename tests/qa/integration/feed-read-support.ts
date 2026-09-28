@@ -21,6 +21,7 @@ import { ReaderReviews } from '../../../services/main/src/modules/review/store.t
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/src/modules/work/select-realm.ts';
 import { startMediaStack } from './media-support.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 /** The Home reads whose cost the budget and load tests hold. */
 export const HOME_READS = {
@@ -143,7 +144,7 @@ export async function startHomeStack(label: string) {
     reviews: new ReaderReviews(stack.accessPool), homePersonal: new HomePersonalStore(stack.accessPool),
     libraryStatus: new ReaderLibraryStatusStore(stack.contentPool), progress: new StructureProgressStore(stack.contentPool),
     content: stack.content, contentAuthoring: stack.content, media: stack.media, structureObjects,
-    profiles: new ProfilesAccess(stack.accessPool), agentHandles: new AgentVanityHandles(stack.accessPool),
+    profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool), agentHandles: new AgentVanityHandles(stack.accessPool),
     agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
     relayPosition: new RelayHandoffPositions(relay, consumer) };
   const app = createMainApp(stack.fuseki, deps);

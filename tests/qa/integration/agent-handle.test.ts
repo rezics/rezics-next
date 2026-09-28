@@ -8,6 +8,7 @@ import { ProfilesAccess } from '../../../services/main/src/modules/profiles/acce
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccessSessionAgents } from '../../../services/main/src/modules/access/session-agent.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 const short = (agent: string) => agent.slice(-36);
 async function json(response: Response, status: number) {
@@ -34,7 +35,7 @@ test('G284: first sign-in and vanity handles preserve authority, claims and reti
     } };
     const contexts = new AccessActingContexts(stack.accessPool, stack.env);
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, account,
-      profiles: new ProfilesAccess(stack.accessPool),
+      profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       agentHandles: new AgentVanityHandles(stack.accessPool),
       sessionAgents: new AccessSessionAgents(stack.accessPool, contexts) });

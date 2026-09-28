@@ -18,6 +18,7 @@ import { publishAdmittedTextContribution } from '../../../services/main/src/modu
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
 import { startMediaStack, png, sha } from './media-support.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -42,7 +43,7 @@ async function fixture() {
     content: storage.content, contentAuthoring: storage.content, media: storage.media,
     mediaAccess: new MediaAccessBatchReader(h.accessPool, h.fuseki),
     studioAccess: new StudioAccess(h.accessPool, h.fuseki),
-    profiles: new ProfilesAccess(h.accessPool), actingContexts: new AccessActingContexts(h.accessPool, h.env),
+    profiles: new ProfilesAccess(h.accessPool), personPreferences: new PersonPreferencesStore(h.accessPool), actingContexts: new AccessActingContexts(h.accessPool, h.env),
     realmSubmissions: new RealmSubmissionStore(h.accessPool, access, h.env),
     realmSubmissionReads: new RealmSubmissionReads(h.accessPool) });
   const request = () => new Request('http://main.test', { headers: { authorization: `Bearer ${h.token}` } });

@@ -18,6 +18,7 @@ import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox
 import type { FeedItem } from '../../../services/main/src/modules/feed/contract.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { startMediaStack } from './media-support.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
@@ -42,7 +43,7 @@ test('G324: text reviews become grouped, live, spoiler-safe Work cards', async (
     const consumer = `feed-review-${randomUUID()}`;
     const deps = { environment: stack.env, access: stack.access, account,
       feed, follows: new FollowsStore(stack.accessPool), homePersonal: new HomePersonalStore(stack.accessPool),
-      reviews: new ReaderReviews(stack.accessPool), profiles: new ProfilesAccess(stack.accessPool),
+      reviews: new ReaderReviews(stack.accessPool), profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content,
         stack.access, stack.env),
       realmReplyThreads: new RealmReplyThreadStore(stack.contentPool, stack.accessPool),

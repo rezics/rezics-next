@@ -5,6 +5,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 async function json(response: Response, status = 200): Promise<Record<string, any>> {
   const body = await response.text();
@@ -20,7 +21,7 @@ test('G-377: typeahead suggestions carry the Work’s types and its public autho
   try {
     const actor = await stack.member('typeahead-author');
     const deps = { environment: stack.env, access: stack.access,
-      account: { verify: async () => actor.principal }, profiles: new ProfilesAccess(stack.accessPool),
+      account: { verify: async () => actor.principal }, profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env) };
     const app = createMainApp(stack.fuseki, deps);
     const call = (path: string, body?: unknown) => app.handle(new Request(`http://main.local${path}`, {

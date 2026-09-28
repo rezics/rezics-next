@@ -10,6 +10,7 @@ import { DATASET, GRAPHS, RV, iri } from '../src/modules/work/activate.ts';
 import { activateTextContribution, textContributionDigest } from '../src/modules/contribution/draft.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../src/modules/rating/global.ts';
 import { readMainOutboxEnvelope, readNextMainOutboxBatch } from '../src/modules/outbox/relay.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const short = (value: string) => value.slice(-36);
@@ -48,7 +49,7 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
     await structureObjects.initialize();
     const deps = { environment: stack.env, access: stack.access, account, media: stack.media,
       structureObjects,
-      profiles: new ProfilesAccess(stack.accessPool), agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env) };
+      profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool), agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env) };
     const app = createMainApp(stack.fuseki, deps);
     const call = (method: string, path: string, body?: unknown, token?: string, key = randomUUID(), headers = {}) => app.handle(
       new Request(`http://main.local${path}`, { method, headers: { ...headers,

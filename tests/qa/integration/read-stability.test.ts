@@ -14,6 +14,7 @@ import { projectDiscoveryWork } from '../../../services/main/src/modules/discove
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { sha, startMediaStack } from './media-support.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
@@ -30,7 +31,7 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
     const projection = new DiscoveryProjection(stack.accessPool);
     const deps = { environment: stack.env, access: stack.access, media: stack.media,
       account: { verify: async () => ({ ...member.principal, emailVerified: true }) }, discovery: projection,
-      profiles: new ProfilesAccess(stack.accessPool),
+      profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       libraryStatus: new ReaderLibraryStatusStore(stack.contentPool),
       libraryRatings: new ReaderLibraryRatings(stack.accessPool), follows: new FollowsStore(stack.accessPool) };

@@ -19,6 +19,7 @@ import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
 import { InvalidLibraryStatus, LibraryStatusConflict, ReaderLibraryStatusStore,
   StaleLibraryStatus } from '../../../services/main/src/modules/library/status.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
@@ -81,7 +82,7 @@ test.each(['initial context', 'retained context'])(
         if (!principal) throw new Error('unknown bearer');
         return principal;
       } }, libraryStatus: status, libraryRatings: new ReaderLibraryRatings(stack.accessPool),
-      profiles: new ProfilesAccess(stack.accessPool),
+      profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       media: stack.media, mediaAccess: stack.mediaAccess, structureObjects };
     const app = createMainApp(stack.fuseki, deps);
