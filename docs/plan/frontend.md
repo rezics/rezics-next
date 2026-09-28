@@ -51,9 +51,10 @@ next chapter, then to keep up with communities, then to discover.
 - **One compact control line** under the tabs, as Reddit's: a `Best ▾` menu
   (Best, New, Top; Top adds its period menu on the same line), a `Filters`
   popover (a sheet on phones) with active filters as removable chips on the
-  same line, and the card/compact view switch. Sorts are not spread into
-  separate buttons. The maintainer revised this on 2026-09-28: the separate
-  sort pills and chip rows cost two rows of density.
+  same line. Sorts are not spread into separate buttons. The maintainer
+  revised this on 2026-09-28: the separate sort pills and chip rows cost two
+  rows of density. Home has one view and no card/compact switch (maintainer,
+  later that day): copying Reddit's view modes adds a choice nobody needs.
 - **Best** rewards real readers and recent activity but keeps small Realms
   visible: scores are normalised within each Realm and no Realm fills a page.
   The versioned constants live in `services/main/src/modules/feed/ranking.ts`.
@@ -69,8 +70,13 @@ next chapter, then to keep up with communities, then to discover.
   "Chapter 212 · its title", a review. Main's feed item has a single `target`
   today, so a discussion shows its Work's title and its own title as the
   excerpt; the API separates the post from the Work it is about. A text post
-  measured 237–303 px tall on desktop with seven stacked rows; aim for about
-  120–150 px. A compact one-line view follows. Repeated updates collapse into
+  measured 237–303 px tall on desktop with seven stacked rows. The first
+  rework went too far, to about 80–110 px, and the maintainer found it cramped:
+  posts breathe like X's, with X's padding, type size and line height, and
+  generous space between meta, title, preview, attachment and actions.
+  Comfort wins over fitting more rows. Dense lists belong to catalogues
+  (search results, shelves), which may offer a list or grid of Works; they are
+  not a feed mode. Repeated updates collapse into
   one post; shelving and ratings without text never become posts; chapter
   posts hide spoilers past the reader's position.
 - **Never empty.** Signed out: All · Best. A new person picks languages and
