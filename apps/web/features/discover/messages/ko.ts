@@ -43,4 +43,11 @@ export default {
   badLinkHelp: '주소에 둘러보기에서 필터로 인식하지 못하는 항목이 있습니다.',
   realmMissingTitle: '이 커뮤니티는 비공개이거나 존재하지 않습니다',
   browseEverything: '전체 둘러보기',
+  preparingAll: '이 목록들은 준비 중입니다',
+  somePreparing: '일부 목록은 아직 준비 중입니다',
+  preparingMeanwhile: '다음 업데이트 후에 나타납니다. 그동안 독자들이 읽는 작품을 둘러보세요.',
+  emptyMeanwhile: '그동안 독자들이 읽는 작품을 둘러보세요.',
+  trending: '이번 주 트렌드',
+  trendingIn: insert('{{realm}} 트렌드', { realm: String }),
+  fromEveryone: 'REZICS의 모든 사람에게서',
 } satisfies Partial<DiscoverMessages>;

@@ -3,9 +3,11 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { getMessages } from '../../i18n/server.ts';
 import { signInPath } from '../auth/paths.ts';
 import { readReaderSeed } from '../catalogue/reader-store.ts';
-import type { DiscoverPageProps, LoadedShelf } from './discover-view.tsx';
-import { readDiscovery, readRealm, readStandingContext } from './read.ts';
-import type { SearchParams } from './scope.ts';
+import { type CatalogueWork, coverKindOf } from '../catalogue/work.ts';
+import type { DiscoverFallback, DiscoverPageProps, LoadedShelf } from './discover-view.tsx';
+import { fills } from './fills.ts';
+import { readDiscovery, readRealm, readStandingContext, settle } from './read.ts';
+import { type SearchParams, workHref } from './scope.ts';
 import { browseReader } from './server.ts';
 import { type DiscoverState, discoverHref, discoveryQuery, genreTerms, parseDiscoverState, type ShelfSpec, shelvesFor,
   termShelf } from './state.ts';
@@ -82,7 +84,29 @@ export async function loadDiscoverState(state: DiscoverState | null, locale: UiL
   const favorites = first.filter(shelf => shelf.spec.topic.kind === 'favorites');
   const shelves = genre.length
     ? [...favorites, ...genre, ...first.filter(shelf => !favorites.includes(shelf))] : first;
-  return { state, realm: realmView, shelves, ...common, ...await readerState(reader, shelves) };
+  // When no list here can be shown, the page still offers what readers are reading, and in a
+  // community, everyone's lists; never a column of identical "being prepared" boxes.
+  const fallback = overview && !first.some(fills) ? await readFallback(reader, state, locale) : undefined;
+  return { state, realm: realmView, shelves, fallback, ...common,
+    ...await readerState(reader, [...shelves, ...fallback?.shelves ?? []]) };
+}
+
+/** What an overview shows when none of its own rows can: trending here, and everyone's lists in a community. */
+async function readFallback(reader: Reader, state: DiscoverState, language: string): Promise<DiscoverFallback> {
+  const { scope } = state;
+  const trending = settle(() => scope.kind === 'realm'
+    ? reader.anonymous.v1.realms({ realm: scope.realm }).rankings.get({ query: { limit: ROW_PAGE, language } })
+    : reader.anonymous.v1.rankings.trending.get({ query: { limit: ROW_PAGE, language } }));
+  const everyone: Promise<LoadedShelf[]> = scope.kind === 'realm' ? (async () => {
+    const global: DiscoverState = { scope: { kind: 'global' }, context: null, type: null, term: null };
+    const listed = await readStandingContext(reader.anonymous, { kind: 'global' });
+    const context = listed.ok ? listed.data : null;
+    const specs = shelvesFor(global, context !== null).filter(spec => spec.type === 'book');
+    return (await Promise.all(specs.map(spec => readShelf(reader, global, spec, context, ROW_PAGE, language))))
+      .filter(fills);
+  })() : Promise.resolve([]);
+  const [ranked, shelves] = await Promise.all([trending, everyone]);
+  return { trending: ranked.ok ? ranked.data.items.map(item => rankedWork(item)) : [], shelves };
 }
 
 /** The signed-in reader's shelf and rating state for every Work on the page's first pages, in Main's batches. */
@@ -92,4 +116,13 @@ async function readerState(reader: Reader, shelves: readonly LoadedShelf[]) {
   const seed = works.length ? await readReaderSeed(reader.personal, reader.actingSubject, works) : {};
   // Denied a reader library, the page draws no shelf control rather than one that cannot act.
   return seed ? { actingSubject: reader.actingSubject, readerSeed: seed } : {};
+}
+
+type RankedItem = Extract<Awaited<ReturnType<Reader['anonymous']['v1']['rankings']['trending']['get']>>['data'],
+  { items: unknown }>['items'][number];
+
+/** A trending Work as a card. Rankings carry the Work card without credits or ratings, so it shows neither. */
+function rankedWork(item: RankedItem): CatalogueWork {
+  return { id: item.id, href: workHref(item.id, { kind: 'global' }), title: item.title, cover: item.cover,
+    kind: coverKindOf(item.types), authors: [], rating: null, tagline: item.tagline, completion: item.completionStatus };
 }

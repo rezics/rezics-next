@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
+import { discoveryWork } from './cards.ts';
 import { Providers } from '../shell/providers.tsx';
 import { DiscoverView, type LoadedShelf } from './discover-view.tsx';
 import { failed, loader, ok, page, works } from './fixtures.ts';
@@ -127,9 +128,39 @@ export const Preparing: Story = {
   args: { shelves: shelves(global, key => key === 'recent-recipe' ? overviewPages(key) : failed('unbuilt')) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const favorites = canvas.getByRole('region', { name: 'Readers’ favorites' });
-    await expect(within(favorites).getByText('This list is being prepared')).toBeVisible();
+    // Rows that cannot show are left out and the page says so once, after the rows that can.
     await expect(canvas.getByRole('region', { name: 'Recipes to try' })).toBeVisible();
+    await expect(canvas.queryByRole('region', { name: 'Readers’ favorites' })).toBeNull();
+    await expect(canvas.getAllByText(/being prepared/)).toHaveLength(1);
+    await expect(canvas.getByRole('heading', { name: 'Some lists are still being prepared' })).toBeVisible();
+  },
+};
+
+const trending = [works.serial, works.chamber, works.journey, works.bun].map(item => discoveryWork(item, { kind: 'global' }));
+export const AllPreparingOffersTrending: Story = {
+  args: { shelves: shelves(global, () => failed('unbuilt')), fallback: { trending, shelves: [] } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByText(/being prepared/)).toHaveLength(1);
+    await expect(canvas.getByRole('heading', { name: 'These lists are being prepared' })).toBeVisible();
+    await expect(canvas.getByText('They appear after the next update. Meanwhile, here is what readers are reading.'))
+      .toBeVisible();
+    const row = canvas.getByRole('region', { name: 'Trending this week' });
+    await expect(within(row).getAllByRole('article')).toHaveLength(4);
+  },
+};
+
+export const CommunityPreparingOffersEveryone: Story = {
+  args: { state: realmState, realm: { id: realm, name: realmName },
+    shelves: shelves(realmState, () => failed('unbuilt')),
+    fallback: { trending: [], shelves: shelves(global, overviewPages).filter(shelf => shelf.spec.type === 'book') } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: 'These lists are being prepared' })).toBeVisible();
+    const everyone = canvas.getByRole('region', { name: 'Readers’ favorites' });
+    await expect(within(everyone).getByText('From everyone on REZICS')).toBeVisible();
+    await expect(within(everyone).getByRole('link', { name: 'Pride and Prejudice' }))
+      .toHaveAttribute('href', '/en/w/00000001-3855-42be-84bb-88da77a5b247');
   },
 };
 
@@ -138,9 +169,10 @@ export const ShelfFailures: Story = {
     : key === 'recent-book' ? failed('budget') : overviewPages(key)) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('alert')).toHaveTextContent('Couldn’t load Readers’ favorites');
+    // One notice for the rows that could not load, the one that needs the reader first.
+    await expect(canvas.getByRole('alert')).toHaveTextContent('Couldn’t load Discover');
     await expect(canvas.getByRole('button', { name: 'Try again' })).toBeVisible();
-    await expect(canvas.getByText('This list is too large to show right now')).toBeVisible();
+    await expect(canvas.queryByRole('region', { name: 'Readers’ favorites' })).toBeNull();
     await expect(canvas.getByRole('region', { name: 'Recipes to try' })).toBeVisible();
   },
 };

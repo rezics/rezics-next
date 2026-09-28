@@ -43,4 +43,11 @@ export default {
   badLinkHelp: 'Die Adresse enthält einen Filter, den Entdecken nicht kennt.',
   realmMissingTitle: 'Diese Community ist nicht öffentlich oder existiert nicht',
   browseEverything: 'Alles entdecken',
+  preparingAll: 'Diese Listen werden vorbereitet',
+  somePreparing: 'Einige Listen werden noch vorbereitet',
+  preparingMeanwhile: 'Sie erscheinen nach dem nächsten Update. Bis dahin: was andere gerade lesen.',
+  emptyMeanwhile: 'Bis dahin: was andere gerade lesen.',
+  trending: 'Im Trend diese Woche',
+  trendingIn: insert('Im Trend in {{realm}}', { realm: String }),
+  fromEveryone: 'Von allen auf REZICS',
 } satisfies Partial<DiscoverMessages>;

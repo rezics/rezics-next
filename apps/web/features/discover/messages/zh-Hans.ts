@@ -41,4 +41,11 @@ export default {
   badLinkHelp: '地址中有发现页不认识的筛选条件。',
   realmMissingTitle: '这个社区不公开或不存在',
   browseEverything: '浏览全部',
+  preparingAll: '这些列表正在准备中',
+  somePreparing: '部分列表仍在准备中',
+  preparingMeanwhile: '下次更新后就会出现。先看看读者们在读什么。',
+  emptyMeanwhile: '先看看读者们在读什么。',
+  trending: '本周热门',
+  trendingIn: insert('{{realm}} 热门', { realm: String }),
+  fromEveryone: '来自 REZICS 上的所有人',
 } satisfies Partial<DiscoverMessages>;

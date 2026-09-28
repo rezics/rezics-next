@@ -1,22 +1,29 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { CircleSlashIcon, LibraryBigIcon, LinkIcon, StarIcon, XIcon } from 'lucide-react';
+import { CircleSlashIcon, HourglassIcon, LibraryBigIcon, LinkIcon, StarIcon, XIcon } from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderActions, ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import type { ReaderSeed } from '../catalogue/reader-store.ts';
+import type { CatalogueWork } from '../catalogue/work.ts';
+import { WorkShelf } from '../catalogue/work-shelf.tsx';
+import { RetryButton } from '../work-page/retry-button.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { DiscoverMessages } from './messages.ts';
-import { Notice } from './notice.tsx';
+import { fills } from './fills.ts';
+import { failureNotice, Notice } from './notice.tsx';
 import type { DiscoveryLoader } from './query.ts';
 import { type BrowseScope, sameScope, shortId } from './scope.ts';
 import { DiscoverShelf } from './shelf.tsx';
 import { type DiscoverState, discoverHref, type ShelfSpec, type WorkTypeKey, workTypes } from './state.ts';
-import type { DiscoveryPage, DiscoveryQuery, Loaded, WorkName } from './types.ts';
+import type { DiscoveryPage, DiscoveryQuery, Loaded, ReadFailure, WorkName } from './types.ts';
 
 /** A shelf with Main's query for it, its server-rendered first page and, for a genre, the genre's name. */
 export interface LoadedShelf { spec: ShelfSpec; query: DiscoveryQuery; initial: Loaded<DiscoveryPage>; genre?: WorkName }
+
+/** Rows an overview shows when none of its own can: what is trending, and in a community, everyone's lists. */
+export interface DiscoverFallback { trending: CatalogueWork[]; shelves: LoadedShelf[] }
 
 /** A Realm a page can name: its public name when Main gave one. */
 export interface ScopeRealm { id: string; name: WorkName | null }
@@ -28,6 +35,7 @@ export interface DiscoverPageProps {
   /** The Realm in the URL is not public or does not exist. */
   realmMissing?: boolean;
   shelves: readonly LoadedShelf[];
+  fallback?: DiscoverFallback;
   signedIn: boolean;
   signInHref: string;
   avatarQuery?: string;
@@ -88,13 +96,70 @@ function CommunitySwitch({ state, realm, t }: { state: DiscoverState; realm: Sco
   </nav>;
 }
 
+/** The failure an overview names once for the rows it left out: one that needs the reader's action first. */
+function leadingFailure(shelves: readonly LoadedShelf[]): ReadFailure | null {
+  const failures = shelves.flatMap(shelf => shelf.initial.ok ? [] : [shelf.initial.failure]);
+  const order: ReadFailure[] = ['unavailable', 'sign-in', 'moved', 'budget', 'invalid', 'missing', 'stale', 'unbuilt'];
+  return order.find(failure => failures.includes(failure)) ?? null;
+}
+
+/**
+ * The overview's rows. A row that could not load or holds fewer than two
+ * Works is left out, and the page says once why lists are missing. When none
+ * of its own rows can show, it offers what readers are reading instead: the
+ * trending list here and, in a community, everyone's favorites and newest.
+ */
+function Overview({ shelves, fallback, realm, state, neighbour, seeAll, signInHref, avatarQuery, locale, messages }: {
+  shelves: readonly LoadedShelf[]; fallback?: DiscoverFallback; realm: ScopeRealm | null; state: DiscoverState;
+  neighbour?: { href: string; label: string }; seeAll: (shelf: LoadedShelf) => { href: string } | undefined;
+  signInHref: string; avatarQuery?: string; locale: UiLocale; messages: DiscoverMessages;
+}) {
+  const t = materializeData(messages, { locale });
+  const rows = shelves.filter(fills);
+  const failure = leadingFailure(shelves);
+  const substitutes = rows.length ? null : <>
+    {fallback?.trending.length ? <WorkShelf heading={{ title: state.scope.kind === 'realm' && realm
+      ? t.trendingIn({ realm: realmName(realm, t) }) : t.trending }} works={fallback.trending}
+      avatarQuery={avatarQuery} locale={locale} /> : null}
+    {fallback?.shelves.map(shelf => <DiscoverShelf key={`everyone-${shelf.spec.key}`} mode="row" scope={{ kind: 'global' }}
+      heading={{ title: shelfTitle(shelf, t), subtitle: t.fromEveryone, seeAll: { href: discoverHref({ scope: { kind:
+        'global' }, context: null, type: shelf.spec.type, term: null }) } }} query={shelf.query} initial={shelf.initial}
+      signInHref={signInHref} avatarQuery={avatarQuery} locale={locale} messages={messages} />)}
+  </>;
+  const fell = Boolean(fallback?.trending.length || fallback?.shelves.length);
+  const notice = failure && failure !== 'unbuilt' && failure !== 'stale'
+    ? <Notice {...failureNotice(failure, t.title, t)} headingLevel={2}>
+      {failure === 'unavailable' ? <RetryButton label={t.retry} pendingLabel={t.loadingMore} /> : null}
+      {failure === 'sign-in' ? <Link href={signInHref} className={buttonVariants({ size: 'sm' })}>{t.signIn}</Link> : null}
+    </Notice>
+    : failure ? <Notice icon={HourglassIcon} headingLevel={2} title={rows.length ? t.somePreparing : t.preparingAll}
+      description={fell ? t.preparingMeanwhile : t.preparingHelp}>
+      {neighbour && !fell ? <Link href={neighbour.href} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+        {neighbour.label}</Link> : null}
+    </Notice>
+      : !rows.length ? <Notice icon={LibraryBigIcon} headingLevel={2} title={t.empty}
+        description={fell ? t.emptyMeanwhile : t.emptyHelp}>
+        {neighbour && !fell ? <Link href={neighbour.href} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+          {neighbour.label}</Link> : null}
+      </Notice> : null;
+  return <>
+    {rows.length ? null : notice}
+    {rows.map(shelf => <DiscoverShelf key={shelf.spec.key} heading={{ title: shelfTitle(shelf, t), seeAll: seeAll(shelf) }}
+      mode="row" scope={state.scope} query={shelf.query} initial={shelf.initial} signInHref={signInHref}
+      avatarQuery={avatarQuery} locale={locale} messages={messages} />)}
+    {substitutes}
+    {/* Some rows showed: the note about the missing ones comes after them, quietly. */}
+    {rows.length ? notice : null}
+  </>;
+}
+
 /**
  * `/discover`: shelves by meaning — readers' favorites, genres, recently
  * added books, guides and recipes — rather than by storage type. The overview
  * shows sideways rows; choosing a kind or genre shows its full lists. Scope
  * appears only once the reader picks a community or their own ratings.
  */
-export function DiscoverView({ state, realm, realmMissing, shelves, signedIn, signInHref, avatarQuery, load,
+export function DiscoverView({ state, realm, realmMissing, shelves, fallback, signedIn, signInHref, avatarQuery, load,
   actingSubject, readerSeed, readerActions, locale, messages }: DiscoverPageProps) {
   const t = materializeData(messages, { locale });
   if (!state) {
@@ -149,16 +214,12 @@ export function DiscoverView({ state, realm, realmMissing, shelves, signedIn, si
       {realmMissing ? <Notice icon={CircleSlashIcon} headingLevel={2} title={t.realmMissingTitle}>
         <Link href={hrefIn(state, { kind: 'global' })} className={buttonVariants({ size: 'sm' })}>{t.browseEverything}</Link>
       </Notice> : !shelves.length ? <Notice icon={StarIcon} headingLevel={2} title={t.noRatingsYet}
-        description={t.noRatingsHelp} /> : overview && shelves.every(shelf => shelf.initial.ok
-          && !shelf.initial.data.items.length)
-        // Empty rows hide themselves; when all are empty, say so rather than show a bare page.
-        ? <Notice icon={LibraryBigIcon} headingLevel={2} title={t.empty} description={t.emptyHelp}>
-          {neighbour ? <Link href={neighbour.href} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
-            {neighbour.label}</Link> : null}
-        </Notice> : shelves.map(shelf => <DiscoverShelf key={shelf.spec.key}
-        heading={{ title: shelfTitle(shelf, t), seeAll: seeAll(shelf) }}
-        mode={overview ? 'row' : 'grid'} scope={scope} query={shelf.query} initial={shelf.initial} load={load}
-        neighbour={neighbour} signInHref={signInHref} avatarQuery={avatarQuery} locale={locale} messages={messages} />)}
+        description={t.noRatingsHelp} /> : overview
+        ? <Overview shelves={shelves} fallback={fallback} realm={realm} state={state} neighbour={neighbour}
+          seeAll={seeAll} signInHref={signInHref} avatarQuery={avatarQuery} locale={locale} messages={messages} />
+        : shelves.map(shelf => <DiscoverShelf key={shelf.spec.key} heading={{ title: shelfTitle(shelf, t) }} mode="grid"
+          scope={scope} query={shelf.query} initial={shelf.initial} load={load} neighbour={neighbour}
+          signInHref={signInHref} avatarQuery={avatarQuery} locale={locale} messages={messages} />)}
     </PageContainer>
   </ReaderActionsProvider>;
 }

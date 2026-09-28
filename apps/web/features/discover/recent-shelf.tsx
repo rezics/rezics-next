@@ -7,6 +7,7 @@ import { Providers } from '../shell/providers.tsx';
 import { shelfTitle } from './discover-view.tsx';
 import { loadDiscover } from './load.ts';
 import { DiscoverShelf } from './shelf.tsx';
+import { fills } from './fills.ts';
 import { discoverHref } from './state.ts';
 
 /**
@@ -18,7 +19,8 @@ export async function RecentShelf({ locale }: { locale: UiLocale }) {
   const t = materializeData(page.messages, { locale });
   // Sign-in from a shelf control returns to the home page.
   const signInHref = signInPath(localizedPath('/', locale));
-  const shelves = page.shelves.filter(shelf => shelf.spec.type === 'book' && !shelf.spec.term).slice(0, 2);
+  // A row that cannot fill is left out; the home page has its own content around it.
+  const shelves = page.shelves.filter(shelf => shelf.spec.type === 'book' && !shelf.spec.term && fills(shelf)).slice(0, 2);
   return <Providers>
     <ReaderActionsProvider signedIn={page.signedIn} signInHref={signInHref} actingSubject={page.actingSubject}
       seed={page.readerSeed}>

@@ -43,4 +43,11 @@ export default {
   badLinkHelp: '網址中有探索頁面不認得的篩選條件。',
   realmMissingTitle: '此社群未公開或不存在',
   browseEverything: '瀏覽所有作品',
+  preparingAll: '這些清單正在準備中',
+  somePreparing: '部分清單仍在準備中',
+  preparingMeanwhile: '下次更新後就會出現。先看看讀者們在讀什麼。',
+  emptyMeanwhile: '先看看讀者們在讀什麼。',
+  trending: '本週熱門',
+  trendingIn: insert('{{realm}} 熱門', { realm: String }),
+  fromEveryone: '來自 REZICS 上的所有人',
 } satisfies Partial<DiscoverMessages>;

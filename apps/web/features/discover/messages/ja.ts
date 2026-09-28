@@ -43,4 +43,11 @@ export default {
   badLinkHelp: 'URL に「見つける」ページで使えない絞り込み条件があります。',
   realmMissingTitle: 'このコミュニティは公開されていないか、存在しません',
   browseEverything: 'すべての作品を見る',
+  preparingAll: 'これらのリストは準備中です',
+  somePreparing: '一部のリストはまだ準備中です',
+  preparingMeanwhile: '次の更新後に表示されます。それまでは、読者が読んでいる作品をどうぞ。',
+  emptyMeanwhile: 'それまでは、読者が読んでいる作品をどうぞ。',
+  trending: '今週のトレンド',
+  trendingIn: insert('{{realm}}のトレンド', { realm: String }),
+  fromEveryone: 'REZICS のみんなから',
 } satisfies Partial<DiscoverMessages>;

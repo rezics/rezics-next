@@ -43,4 +43,11 @@ export default {
   badLinkHelp: 'L’adresse contient un filtre que la page Découvrir ne reconnaît pas.',
   realmMissingTitle: 'Cette communauté est privée ou n’existe pas',
   browseEverything: 'Tout parcourir',
+  preparingAll: 'Ces listes sont en préparation',
+  somePreparing: 'Certaines listes sont encore en préparation',
+  preparingMeanwhile: 'Elles apparaîtront après la prochaine mise à jour. En attendant, voici ce que lisent les lecteurs.',
+  emptyMeanwhile: 'En attendant, voici ce que lisent les lecteurs.',
+  trending: 'Tendances de la semaine',
+  trendingIn: insert('Tendances dans {{realm}}', { realm: String }),
+  fromEveryone: 'De tout le monde sur REZICS',
 } satisfies Partial<DiscoverMessages>;
