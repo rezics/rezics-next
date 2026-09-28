@@ -11,7 +11,8 @@ import type { AvatarDescriptor } from '../media/summary.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { HomeInterestKind } from './contract.ts';
 import { ONBOARDING_COST } from './contract.ts';
-import { interestKinds, interestSources, matchingActivityKinds, matchingWorkKinds } from './kinds.ts';
+import { interestKinds, interestSources, matchingActivityKinds, matchingWorkKinds,
+  officialZoneInterests } from './kinds.ts';
 
 const languages = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
 const workTypes = [...new Set(interestKinds.flatMap(kind => interestSources[kind].workTypes))];
@@ -102,6 +103,40 @@ export function rankSuggestedFollows<T>(candidates: readonly { value: T; matchin
     || b.score - a.score || a.index - b.index).slice(0, limit).map(item => item.value);
 }
 
+type InterestCandidate<T> = { value: T; matches: readonly HomeInterestKind[];
+  languageMatches: number; official: boolean; score: number; index: number };
+
+/** Give each selected interest a place before filling spare places with other
+ * matches. Only then use popular candidates; a Zone is not an interest match
+ * merely because it is official. This ranks at most twelve scanned Realms. */
+export function selectInterestSuggestions<T>(candidates: readonly InterestCandidate<T>[],
+  interests: readonly HomeInterestKind[], limit: number): { value: T; interest: HomeInterestKind | null }[] {
+  const order = (a: InterestCandidate<T>, b: InterestCandidate<T>) =>
+    b.languageMatches - a.languageMatches || Number(b.official) - Number(a.official)
+      || b.score - a.score || a.index - b.index;
+  const choiceOrder = (a: InterestCandidate<T>, b: InterestCandidate<T>) =>
+    Number(b.official) - Number(a.official) || order(a, b);
+  const chosen = new Map<InterestCandidate<T>, HomeInterestKind | null>();
+  for (const interest of interests) {
+    const candidate = candidates.filter(item => item.matches.includes(interest) && !chosen.has(item))
+      .sort(choiceOrder)[0];
+    if (candidate && chosen.size < limit) chosen.set(candidate, interest);
+  }
+  for (const candidate of candidates.filter(item => interests.some(interest => item.matches.includes(interest))
+    && !chosen.has(item)).sort(order)) {
+    if (chosen.size >= limit) break;
+    chosen.set(candidate, interests.find(interest => candidate.matches.includes(interest))!);
+  }
+  for (const candidate of candidates.filter(item => !interests.some(interest => item.matches.includes(interest)))
+    .sort(order)) {
+    if (chosen.size >= limit) break;
+    chosen.set(candidate, null);
+  }
+  return [...chosen].sort((a, b) => a[1] === null && b[1] !== null ? 1
+    : a[1] !== null && b[1] === null ? -1 : order(a[0], b[0]))
+    .map(([candidate, interest]) => ({ value: candidate.value, interest }));
+}
+
 export async function readInterests(session: WorkReadSession) {
   // Only accepted global Senses with public sample Works are offered. The
   // bounded catalog can be empty without inventing a topic or a cover.
@@ -159,6 +194,8 @@ export async function readSuggestedFollows(session: WorkReadSession,
   const official = await listOfficialZones(session.deps.environment, { limit: ONBOARDING_COST.officialRealms });
   if (official.next) throw new WorkReadUnavailable('Official Zone candidate bound exceeded');
   const zoneByRealm = new Map(official.items.map(item => [item.realm, item.zone]));
+  const officialInterestByRealm = new Map(official.items.map(item =>
+    [item.realm, officialZoneInterests[item.routeSegment] ?? null]));
   const candidateRealms: Pick<typeof directory.items[number], 'id' | 'name' | 'icon' | 'membership'>[] =
     directory.items.filter(realm => !zoneByRealm.has(realm.id)).slice(0, ONBOARDING_COST.nonOfficialRealms);
   const officialSummaries = await session.summaries(official.items.map(item => item.realm));
@@ -176,11 +213,11 @@ export async function readSuggestedFollows(session: WorkReadSession,
     reader.agent, candidateRealms.map(item => [item.id])) : null;
   const items: { id: string; kind: 'realm' | 'zone'; realm: string; name: typeof directory.items[number]['name'];
     icon: typeof directory.items[number]['icon']; membership: typeof directory.items[number]['membership'];
-    reason: { kind: 'popular' | 'matching-kind' | 'official'; interest: HomeInterestKind | null };
+    reason: { kind: 'popular' | 'matching-kind' | 'official'; interest: HomeInterestKind | null;
+      language?: string };
     sampleWorks: { id: string; title: typeof directory.items[number]['name'];
       cover: typeof directory.items[number]['icon'] }[] }[] = [];
-  const ranked: { value: typeof items[number]; score: number; index: number;
-    matchingOfficial: boolean }[] = [];
+  const ranked: InterestCandidate<typeof items[number]>[] = [];
   for (const [index, realm] of candidateRealms.entries()) {
     if (muted.has(realm.id) || followed?.matches[index]) continue;
     if (personal?.exclusions.some(rule => rule.kind === 'realm' && rule.target === realm.id
@@ -189,9 +226,7 @@ export async function readSuggestedFollows(session: WorkReadSession,
     const works = await readRealmWorks(new WorkReadSession(session.deps, session.request,
       { language: session.options.language, limit: ONBOARDING_COST.workScan }, session.position), realm.id);
     if (!works.items.length) continue;
-    const candidates = works.items.filter(work => (!effectiveLanguages.length
-      || effectiveLanguages.some(language => language.toLowerCase() === work.language.toLowerCase()))
-      && !personal?.exclusions.some(rule => rule.kind === 'work' && rule.target === work.id
+    const candidates = works.items.filter(work => !personal?.exclusions.some(rule => rule.kind === 'work' && rule.target === work.id
         && (rule.strength === 'hide' || rule.strength === 'not-interested' || rule.strength === 'fewer'
           && Number.parseInt(digest([work.id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0)));
     const kindMatches = await readWorkKindMatches(session, candidates.map(work => work.id));
@@ -210,22 +245,36 @@ export async function readSuggestedFollows(session: WorkReadSession,
       samples.push(work);
     }
     if (!samples.length) continue;
-    const matched = selectedKinds.find(kind => samples.some(work => kindMatches.get(work.id)?.includes(kind))
+    const matches = selectedKinds.filter(kind => officialInterestByRealm.get(realm.id) === kind
+      || samples.some(work => kindMatches.get(work.id)?.includes(kind))
       || kind === 'discussions' && hasDiscussion
         && matchingActivityKinds('discussion').includes(kind));
-    const sampleWorks = samples.slice(0, ONBOARDING_COST.samples).map(work => ({ id: work.id,
+    const relevant = (work: typeof samples[number]) => matches.some(kind => kindMatches.get(work.id)?.includes(kind));
+    const matchingWorks = samples.filter(relevant);
+    const rankingWorks = matchingWorks.length ? matchingWorks : samples;
+    const preferred = (work: typeof samples[number]) => effectiveLanguages.some(language =>
+      language.toLowerCase() === work.language.toLowerCase());
+    const languageMatches = rankingWorks.filter(preferred).length;
+    const sampleWorks = [...samples].sort((a, b) => Number(relevant(b)) - Number(relevant(a))
+      || Number(preferred(b)) - Number(preferred(a)))
+      .slice(0, ONBOARDING_COST.samples).map(work => ({ id: work.id,
       title: work.title, cover: work.cover }));
     const zone = zoneByRealm.get(realm.id);
+    const popularLanguage = !matches.length && languageMatches ? effectiveLanguages.find(language =>
+      samples.some(work => language.toLowerCase() === work.language.toLowerCase())) : undefined;
     const suggestion = { id: zone ?? realm.id, kind: zone ? 'zone' as const : 'realm' as const, realm: realm.id,
       name: realm.name, icon: realm.icon, membership: realm.membership,
-      reason: { kind: matched ? 'matching-kind' : zone ? 'official' : 'popular', interest: matched ?? null },
+      reason: { kind: matches.length ? 'matching-kind' : 'popular', interest: matches[0] ?? null,
+        ...(popularLanguage ? { language: popularLanguage } : {}) },
       sampleWorks } as typeof items[number];
     const activityRank = directory.items.findIndex(item => item.id === realm.id);
-    ranked.push({ value: suggestion, matchingOfficial: !!zone && !!matched,
-      score: (matched ? 1_000 : 0) + Math.min(samples.length, ONBOARDING_COST.workScan) * 10
+    ranked.push({ value: suggestion, matches, languageMatches, official: !!zone,
+      score: Math.min(rankingWorks.length, ONBOARDING_COST.workScan) * 10
         + (activityRank < 0 ? 0 : directory.items.length - activityRank), index });
   }
-  items.push(...rankSuggestedFollows(ranked, ONBOARDING_COST.suggestions));
+  items.push(...selectInterestSuggestions(ranked, selectedKinds, ONBOARDING_COST.suggestions)
+    .map(({ value, interest }) => ({ ...value, reason: { ...value.reason,
+      kind: interest ? 'matching-kind' as const : 'popular' as const, interest } })));
   if (reader && personal && (await session.deps.homePersonal!.read(reader.principal, reader.agent)).revision !== personal.revision) {
     throw new WorkReadMoved('Home suggestions changed');
   }

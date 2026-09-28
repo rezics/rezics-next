@@ -21,7 +21,8 @@ export const suggestedFollow = t.Object({ id: readId,
   kind: t.Union([t.Literal('realm'), t.Literal('zone')]), realm: readId,
   name: readName, icon: readAvatar, membership: realmDirectoryItem.properties.membership,
   reason: t.Object({ kind: t.Union([t.Literal('popular'), t.Literal('matching-kind'),
-    t.Literal('official')]), interest: t.Nullable(homeInterestKind) }),
+    t.Literal('official')]), interest: t.Nullable(homeInterestKind),
+    language: t.Optional(readLanguage) }),
   sampleWorks: t.Array(sampleWork, { maxItems: 3 }) });
 export const suggestionsResult = t.Object({ profile: t.Literal('home-suggested-follows-v1'),
   items: t.Array(suggestedFollow, { maxItems: 6 }), sourcePosition: readPosition });
