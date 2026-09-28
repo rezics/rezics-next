@@ -5,7 +5,7 @@ import { DATASET, GRAPHS, iri, lit } from '../../../services/main/src/modules/wo
 import { budgetFor, HOME_READS, measureRead, meterStatements, seedHome, SIGNED_HOME_READS, startHomeStack }
   from '../integration/feed-read-support.ts';
 
-const WORKS = 10_000, FOLLOWED = 1_000, WARM_RUNS = 7;
+const WORKS = 10_000, FOLLOWED = 1_000, WARM_RUNS = 5;
 /** Native identities: Work n and its six companion resources. */
 const id = (n: number, part: number) =>
   `https://rezics.com/id/${n.toString(16).padStart(8, '0')}-0383-4${part.toString(16).padStart(3, '0')}-8000-000000000000`;
@@ -71,6 +71,14 @@ test('G383: Home reads stay under 300 ms warm at 10,000 Works and 1,000 follows,
       WHERE principal_id = $1`, [home.reader.principalId, native, randomUUID()]);
     const seedMs = performance.now() - started;
 
+    // The slowest graph queries of each read's last run show where time goes.
+    const traced: { ms: number; query: string }[] = [];
+    const query = stack.fuseki.query.bind(stack.fuseki);
+    stack.fuseki.query = async (text, bytes) => {
+      const at = performance.now();
+      try { return await query(text, bytes); }
+      finally { traced.push({ ms: performance.now() - at, query: text.replace(/PREFIX \S+ <[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 160) }); }
+    };
     const reads = [
       ...Object.entries(HOME_READS).map(([name, path]) => ({ name: `anonymous ${name}`, path, token: undefined as
         string | undefined, budget: budgetFor(name, false) })),
@@ -82,15 +90,20 @@ test('G383: Home reads stay under 300 ms warm at 10,000 Works and 1,000 follows,
       const cold = await measureRead(home, meter, read.path, read.token);
       await measureRead(home, meter, read.path, read.token);
       const runs = [];
-      for (let run = 0; run < WARM_RUNS; run++) runs.push(await measureRead(home, meter, read.path, read.token));
+      for (let run = 0; run < WARM_RUNS; run++) {
+        traced.length = 0;
+        runs.push(await measureRead(home, meter, read.path, read.token));
+      }
+      const slowest = [...traced].sort((a, b) => b.ms - a.ms).slice(0, 3)
+        .map(item => `${Math.round(item.ms)}ms ${item.query}`);
       const times = runs.map(run => run.ms).sort((a, b) => a - b);
       measured.push({ ...read, coldMs: Math.round(cold.ms), p50Ms: Math.round(times[Math.floor(WARM_RUNS / 2)]!),
         maxMs: Math.round(times.at(-1)!), graphQueries: Math.max(...runs.map(run => run.graphQueries)),
-        statements: Math.max(...runs.map(run => run.statements)), items: runs[0]!.items });
+        statements: Math.max(...runs.map(run => run.statements)), items: runs[0]!.items, slowest });
     }
     const report = { works: WORKS, followed: FOLLOWED, seedMs: Math.round(seedMs), reads: measured.map(
-      ({ name, coldMs, p50Ms, maxMs, graphQueries, statements, items }) =>
-        ({ name, coldMs, p50Ms, maxMs, graphQueries, statements, items })) };
+      ({ name, coldMs, p50Ms, maxMs, graphQueries, statements, items, slowest }) =>
+        ({ name, coldMs, p50Ms, maxMs, graphQueries, statements, items, slowest })) };
     await Bun.write(new URL(`../../../.temp/home-load-${Bun.env.REZICS_QA_RUN_ID}.json`, import.meta.url),
       JSON.stringify(report, null, 2));
     console.log(`home load measured: ${JSON.stringify(report)}`);

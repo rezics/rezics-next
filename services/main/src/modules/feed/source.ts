@@ -76,17 +76,18 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
   if ('ids' in selection && selection.ids.length === 0) return [];
   const limit = 'ids' in selection ? selection.ids.length : FEED_COST.refreshItems;
   if (limit > 20) throw new WorkReadUnavailable('Feed source budget exceeded');
-  const select = 'ids' in selection ? `VALUES ?id { ${selection.ids.map(iri).join(' ')} }`
+  // Each UNION branch starts from the admitted references. Jena evaluates a
+  // branch before joining it, so a selection outside the UNION would scan every
+  // branch's whole relation (about 1 s per call at 10,000 Works).
+  const anchor = 'ids' in selection ? `VALUES ?id { ${selection.ids.map(iri).join(' ')} }` : '';
+  const cut = 'ids' in selection ? ''
     : `FILTER(?epoch = ${lit(selection.epoch)} && ?sequence <= ${selection.through})
        FILTER(?sequence > ${selection.afterSequence} || (?sequence = ${selection.afterSequence}
          && STR(?id) > ${lit(selection.afterId)}))`;
   const rows = await session.query(`SELECT DISTINCT ?id ?sequence ?kind ?target ?work ?actor ?realm ?zone
     ?language ?excerpt ?title ?reply ?contentRevision ?review ?occurrence ?contentTarget WHERE {
-    ${select}
     {
-      GRAPH ${iri(GRAPHS.current)} {
-        ?main a rv:MainVersion ; rv:work ?work .
-        ?contribution a rv:TextContribution ; rv:work ?work ; rv:author ?actor ; rv:publicationHead ?decision . }
+      ${anchor}
       GRAPH ${iri(GRAPHS.revisions)} {
         ?id a rv:PublicationSelection ; rv:context ?main ; rv:work ?work ; rv:contribution ?contribution ;
           rv:publicationDecision ?decision ; rv:selectedDraft ?draft ; rv:language ?language ;
@@ -94,12 +95,17 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         ?decision rv:disclosure rv:Public ; rv:selectedDraft ?draft .
         FILTER NOT EXISTS { ?draft a rv:ErasedRevision }
         BIND(EXISTS { ?id rv:predecessor ?previous } AS ?successor) }
+      GRAPH ${iri(GRAPHS.current)} {
+        ?main a rv:MainVersion ; rv:work ?work .
+        ?contribution a rv:TextContribution ; rv:work ?work ; rv:author ?actor ; rv:publicationHead ?decision . }
       ${publicWork('?work', '?main')}
       BIND(IF(?successor, "contribution", "work") AS ?kind)
       BIND(IF(?successor, ?contribution, ?work) AS ?target)
       OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:selection ?id ; rv:revision ?draft ; rv:searchBody ?body }
         BIND(SUBSTR(STR(?body),1,400) AS ?excerpt) }
+      ${cut}
     } UNION {
+      ${anchor}
       GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmPublicationSlot ; rv:realm ?realm ;
         rv:work ?work ; rv:selectionHead ?id .
         ?contribution a rv:TextContribution ; rv:work ?work ; rv:publicationHead ?decision . }
@@ -110,7 +116,9 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         FILTER NOT EXISTS { ?draft a rv:ErasedRevision } }
       ${publicRealm} ${publicWork('?work', '?main')}
       BIND("adoption" AS ?kind) BIND(?work AS ?target)
+      ${cut}
     } UNION {
+      ${anchor}
       GRAPH ${iri(GRAPHS.current)} { ?application a rv:ClassificationApplication ; rv:decisionHead ?id ;
         rv:targetMainVersion ?main ; rv:classificationContext ?context ; rv:applicationState rv:Active .
         ?context a rv:ClassificationContext ; rv:realm ?realm ; rv:contextState rv:Active .
@@ -120,7 +128,9 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         FILTER(?outcome IN (rv:Accepted, rv:Rejected)) }
       ${publicRealm} ${publicWork('?work', '?main')}
       BIND("decision" AS ?kind) BIND(?work AS ?target)
+      ${cut}
     } UNION {
+      ${anchor}
       GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmReplySlot ; rv:realm ?realm ;
         rv:rootTarget ?work ; rv:reply ?reply ; rv:replyPlacementHead ?id . }
       GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:RealmReplyPlacement ; rv:rootTarget ?work ; rv:realm ?realm ;
@@ -129,7 +139,9 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         BIND(EXISTS { ?id rv:parentReply ?parent } AS ?isReply) }
       ${publicRealm} ${publicWork('?work', '?main')}
       BIND(IF(?isReply, "reply", "discussion") AS ?kind) BIND(?reply AS ?target)
+      ${cut}
     } UNION {
+      ${anchor}
       GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ContentSearchEligibilityDecision ;
         rv:publicationDecision ?contentPublication ; rv:disclosure rv:Public ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         ?contentPublication a rv:ContentPublicationDecision ; rv:component ?variant ;
@@ -159,7 +171,9 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         FILTER(CONCAT(STR(?otherWork), STR(?otherOccurrence)) < CONCAT(STR(?work), STR(?occurrence)))
       } ${canonicalWork} }
       BIND("contribution" AS ?kind) BIND(?contentTarget AS ?target)
+      ${cut}
     } UNION {
+      ${anchor}
       GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ContentSearchEligibilityDecision ;
         rv:publicationDecision ?contentPublication ; rv:disclosure rv:Public ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         ?contentPublication a rv:ContentPublicationDecision ; rv:component ?variant ; rv:resource ?work ;
@@ -170,7 +184,9 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
         ?work a ?hubKind . VALUES ?hubKind { rv:PromptTemplate rv:SkillPackage } }
       ${publicWork('?work', '?main')}
       BIND(?work AS ?contentTarget) BIND(?work AS ?target) BIND("contribution" AS ?kind)
+      ${cut}
     } UNION {
+      ${anchor}
       GRAPH ${iri(GRAPHS.current)} { ?target a rv:Collection ; rv:collectionHead ?id ; rv:curator ?actor ;
         rv:disclosure rv:Public ; rv:collectionState rv:Active ; rv:structure ?structure ; schema:name ?title .
         FILTER NOT EXISTS { ?target rv:disclosure rv:Private }
@@ -178,6 +194,7 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
       GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:CollectionRevision ; rv:component ?target ;
         rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
       BIND("collection" AS ?kind)
+      ${cut}
     }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ErasedRevision } }
   } ORDER BY ?sequence STR(?id) LIMIT ${limit + 1}`, limit + 1);

@@ -126,12 +126,13 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
   if (missing.length) {
     const bodies = await session.query(`SELECT ?work ?language (SUBSTR(STR(?body), 1, 400) AS ?preview) WHERE {
       VALUES ?work { ${missing.map(iri).join(' ')} }
-      GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main . ?main rv:selectionHead ?selection .
-        ?contribution rv:publicationHead ?decision . }
+      GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main . ?main rv:selectionHead ?selection . }
       GRAPH ${iri(GRAPHS.revisions)} { ?selection a rv:PublicationSelection ; rv:mainVersion ?main ;
         rv:contribution ?contribution ; rv:publicationDecision ?decision ; rv:selectedDraft ?draft ; rv:language ?language .
         ?decision rv:disclosure rv:Public ; rv:selectedDraft ?draft .
         FILTER NOT EXISTS { ?draft a rv:ErasedRevision } }
+      # Joined from the bound selection: on its own this pattern names every contribution.
+      GRAPH ${iri(GRAPHS.current)} { ?contribution rv:publicationHead ?decision . }
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:selection ?selection ; rv:revision ?draft ; rv:searchBody ?body }
     } ORDER BY ?work ?language LIMIT ${missing.length * 64 + 1}`, missing.length * 64 + 1);
     const grouped = new Map<string, typeof bodies>();
