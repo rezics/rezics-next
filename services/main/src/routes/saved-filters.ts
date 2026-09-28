@@ -4,7 +4,8 @@ import { savedFilterCreate, savedFilterDelete, savedFilterOrder, savedFilterRece
   savedFiltersQuery, savedFilterUpdate } from '../modules/saved-filter/contract.ts';
 import { SavedFilterInvalid } from '../modules/saved-filter/admit.ts';
 import { homeAvailable } from '../modules/saved-filter/feed.ts';
-import { SavedFilterFollowed, SavedFilterMissing, type SavedFilterRow } from '../modules/saved-filter/store.ts';
+import { SavedFilterFollowed, SavedFilterMissing, type SavedFilterRow, SavedFilterTabsFull }
+  from '../modules/saved-filter/store.ts';
 import { QueryRejected } from '../modules/query/compile.ts';
 import { readUuid } from '../modules/work/read-contract.ts';
 import { workRead, WorkReadUnavailable } from '../modules/work/read-session.ts';
@@ -28,6 +29,7 @@ export function savedFilterError(error: unknown): Response {
   }
   if (error instanceof SavedFilterMissing) return problem(404, 'saved_filter_unavailable', error.message, homeHeaders);
   if (error instanceof SavedFilterFollowed) return problem(409, 'saved_filter_followed', error.message, homeHeaders);
+  if (error instanceof SavedFilterTabsFull) return problem(409, 'home_tabs_full', error.message, homeHeaders);
   return homeError(error);
 }
 

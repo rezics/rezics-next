@@ -6,7 +6,6 @@ import { agentPattern, controlRead, controlTransaction, ControlConflict, Control
   from '../access/topology-control.ts';
 import { followPrincipal } from '../follows/authority.ts';
 import { commandKey } from '../follows/store.ts';
-import { QueryRejected } from '../query/compile.ts';
 import { admitSavedFilter } from './admit.ts';
 import { SAVED_FILTER_COST, type SavedFilterCreate, type SavedFilterDelete, type SavedFilterOrder,
   type SavedFilterReceipt, type SavedFilterUpdate } from './contract.ts';
@@ -16,6 +15,8 @@ import { homeFeedConditions } from './feed.ts';
 export class SavedFilterMissing extends Error {}
 /** A followed Concept's filter is removed by unfollowing the Concept, which owns it. */
 export class SavedFilterFollowed extends ControlConflict {}
+/** Home already shows eight pinned tabs; one must be unpinned first. */
+export class SavedFilterTabsFull extends ControlConflict {}
 
 export interface SavedFilterRow {
   id: string; name: string | null; document: FilterDocument; facets: string[]; context: 'global';
@@ -31,14 +32,8 @@ function checkName(name: string) {
   }
 }
 
-/** Refuses a pin Home's feed could not show, before any row changes. */
-function pinnable(document: FilterDocument) {
-  try { homeFeedConditions(document); }
-  catch (error) {
-    if (error instanceof QueryRejected) throw new ControlInvalid(`Home cannot show this filter: ${error.message}`);
-    throw error;
-  }
-}
+/** Refuses, as the Query's typed refusal, a pin Home's feed could not show, before any row changes. */
+const pinnable = (document: FilterDocument) => { homeFeedConditions(document); };
 
 type Command = { kind: 'create'; input: SavedFilterCreate } | { kind: 'update'; id: string; input: SavedFilterUpdate }
   | { kind: 'order'; input: SavedFilterOrder } | { kind: 'delete'; id: string; input: SavedFilterDelete };
@@ -161,7 +156,7 @@ export class SavedFilterStore {
   private async freeTab(client: PoolClient, owner: string) {
     const pinned = Number((await client.query<{ count: string }>(`SELECT count(*)::text AS count
       FROM access.saved_filter WHERE principal_id = $1 AND pin_position IS NOT NULL`, [owner])).rows[0]!.count);
-    if (pinned >= SAVED_FILTER_COST.pinned) throw new ControlInvalid('Home already has eight pinned tabs');
+    if (pinned >= SAVED_FILTER_COST.pinned) throw new SavedFilterTabsFull('Home already has eight pinned tabs');
     return pinned;
   }
 

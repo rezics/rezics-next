@@ -64,7 +64,7 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
     expect(unknown.status).toBe(422);
     expect(await unknown.json()).toMatchObject({ code: 'unknown_facet' });
     const books = { all: [{ facet: 'type', any: ['https://schema.org/Book'] }] };
-    expect((await create({ name: 'Books', filter: books })).status).toBe(400);
+    expect((await create({ name: 'Books', filter: books })).status).toBe(422);
     expect((await create({ name: ' English ', filter: { all: [{ facet: 'language', any: ['en'] }] } })).status).toBe(400);
 
     // Create: the current Filters saved as a tab keep exact DefinitionRefs; a replay returns its receipt.
@@ -109,7 +109,7 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
 
     // Unpin and pin: positions stay contiguous; Home cannot pin what it cannot show.
     expect((await update(unpinnedBooks.id!, { expectedRevision: byId(page, unpinnedBooks.id!).revision, pinned: true }))
-      .status).toBe(400);
+      .status).toBe(422);
     await json(await update(puzzles.id, { expectedRevision: byId(await list(), puzzles.id).revision, pinned: false }));
     expect(pinned(await list())).toEqual([magic.id, created.id]);
     await json(await update(puzzles.id, { expectedRevision: byId(await list(), puzzles.id).revision, pinned: true }));
@@ -160,7 +160,9 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
     for (let index = 0; index < 7; index++) {
       await json(await create({ name: `Tab ${index}`, filter: { all: [{ facet: 'language', any: ['en'] }] } }), 201);
     }
-    expect((await create({ name: 'Ninth', filter: { all: [{ facet: 'language', any: ['ja'] }] } })).status).toBe(400);
+    const ninth = await create({ name: 'Ninth', filter: { all: [{ facet: 'language', any: ['ja'] }] } });
+    expect(ninth.status).toBe(409);
+    expect(await ninth.json()).toMatchObject({ code: 'home_tabs_full' });
     await json(await follow(fantasy.concept, true, (await json<{ revision: string | null }>(await call('GET',
       signed(`/v1/follows/${fantasy.concept.slice(-36)}?kind=concept`), undefined, token))).revision));
     page = await list();

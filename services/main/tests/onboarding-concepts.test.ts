@@ -46,7 +46,7 @@ test('G-431: at most 24 Concepts show, those with most examples first, in scheme
     works: new Map(Array.from({ length: n % 3 + 1 }, (_, w) => [id(100 + n * 4 + w), book] as const)) }));
   const [group] = groupChoices(concepts);
   expect(group!.members).toHaveLength(12);
-  const shown = group!.members.map(member => concepts.indexOf(member.concept));
+  const shown = group!.members.map(member => concepts.findIndex(item => item.concept === member.concept.concept));
   expect(shown).toEqual([...shown].sort((a, b) => a - b));
   expect(group!.members.every(member => member.works.length <= 3)).toBe(true);
 });
