@@ -118,7 +118,8 @@ and any isolated stack (`task dev:stop`) before you hand off. The host is
 memory-bound; a leaked stack or dev server holds gigabytes, and on 2026-09-28
 five frontend workers each running web, Storybook and the Accounts app made
 the kernel kill Docker. Run one dev server at a time and only while you are
-checking a screen. Backend tasks run no dev servers at all; they verify through
+checking a screen: `task web:dev`, `task accounts:dev` or `task storybook`
+on its own against the shared backend, not `task dev`, which starts all three. Backend tasks run no dev servers at all; they verify through
 `goalctl test` and the shared backend's HTTP API.
 
 Before the handoff, `bun scripts/goal/goalctl.ts test --affected --list` prints
