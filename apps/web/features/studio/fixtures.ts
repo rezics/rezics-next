@@ -60,7 +60,7 @@ export const curated: InventoryView = {
 };
 
 const submission = (n: number, work: string, realm: string, state: Submission['state'], publicReason: string | null = null):
-  Submission => ({ id: id(500 + n).slice(-36), realm, kind: 'contribution', work, mainVersion: id(601),
+  Submission => ({ id: id(500 + n).slice(-36), realm, kind: 'contribution', work, mainVersion: id(601), target: null,
   contribution: ids.texts.serial, publicationDecision: id(950), selectedDraft: id(303), correctionOf: null,
   submittingAgent: agents[0]!.iri, state, revision: id(800 + n).slice(-36), generation: '1', reviewer: null, publicReason,
   selection: null, adoptionReceipt: null, openedAt: at(20 + n), updatedAt: at(22 + n) });

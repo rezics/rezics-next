@@ -48,7 +48,7 @@ export const messages = {
   filterLabel: 'Kind', filterAll: 'All', filterReports: 'Reports', filterRights: 'Rights complaints',
   filterContributions: 'Contributions', filterCorrections: 'Corrections',
   kindContentReport: 'Report', kindRightsComplaint: 'Rights complaint',
-  kindContribution: 'Contribution', kindCorrection: 'Correction',
+  kindContribution: 'Contribution', kindCorrection: 'Correction', kindWork: 'Work', kindPublication: 'Publication',
   reportedBy: insert('Reported by {{agent}}', { agent: String }),
   complainedBy: insert('Complaint from {{agent}}', { agent: String }),
   submittedBy: insert('Submitted by {{agent}}', { agent: String }),

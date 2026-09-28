@@ -44,7 +44,7 @@ export default {
   filterLabel: '類型', filterAll: '全部', filterReports: '檢舉', filterRights: '權利申訴',
   filterContributions: '投稿', filterCorrections: '更正',
   kindContentReport: '檢舉', kindRightsComplaint: '權利申訴',
-  kindContribution: '投稿', kindCorrection: '更正',
+  kindContribution: '投稿', kindCorrection: '更正', kindWork: '作品', kindPublication: '發布',
   reportedBy: insert('由 {{agent}} 檢舉', { agent: String }),
   complainedBy: insert('來自 {{agent}} 的申訴', { agent: String }),
   submittedBy: insert('由 {{agent}} 投稿', { agent: String }), unknownAuthor: '有人',

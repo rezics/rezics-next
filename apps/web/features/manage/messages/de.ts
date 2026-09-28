@@ -49,7 +49,7 @@ export default {
   filterLabel: 'Art', filterAll: 'Alle', filterReports: 'Meldungen', filterRights: 'Rechtebeschwerden',
   filterContributions: 'Einreichungen', filterCorrections: 'Korrekturen',
   kindContentReport: 'Meldung', kindRightsComplaint: 'Rechtebeschwerde',
-  kindContribution: 'Einreichung', kindCorrection: 'Korrektur',
+  kindContribution: 'Einreichung', kindCorrection: 'Korrektur', kindWork: 'Werk', kindPublication: 'Veröffentlichung',
   reportedBy: insert('Gemeldet von {{agent}}', { agent: String }),
   complainedBy: insert('Beschwerde von {{agent}}', { agent: String }),
   submittedBy: insert('Eingereicht von {{agent}}', { agent: String }),

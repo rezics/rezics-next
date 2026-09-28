@@ -49,7 +49,7 @@ export default {
   filterLabel: 'Tipo', filterAll: 'Todo', filterReports: 'Denuncias', filterRights: 'Reclamaciones de derechos',
   filterContributions: 'Propuestas', filterCorrections: 'Correcciones',
   kindContentReport: 'Denuncia', kindRightsComplaint: 'Reclamación de derechos',
-  kindContribution: 'Propuesta', kindCorrection: 'Corrección',
+  kindContribution: 'Propuesta', kindCorrection: 'Corrección', kindWork: 'Obra', kindPublication: 'Publicación',
   reportedBy: insert('Denunciado por {{agent}}', { agent: String }),
   complainedBy: insert('Reclamación de {{agent}}', { agent: String }),
   submittedBy: insert('Enviado por {{agent}}', { agent: String }),

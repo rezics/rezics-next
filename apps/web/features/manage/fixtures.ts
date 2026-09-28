@@ -119,10 +119,11 @@ export function queueApi(options: { stale?: readonly string[]; reload?: Moderati
   return {
     page: async () => ({ ok: true, data: { ...queuePage, items: options.reload ?? queue } }),
     names: async () => ({ agents, works }),
-    draft: async item => item.submission && drafts[item.submission.selectedDraft]
-      ? { ok: true, data: { text: drafts[item.submission.selectedDraft]!, language: /\p{Script=Han}/u
-        .test(drafts[item.submission.selectedDraft]!) ? 'zh-Hans' : 'en' } }
-      : { ok: false, failure: 'unavailable' },
+    draft: async item => {
+      const text = item.submission?.selectedDraft ? drafts[item.submission.selectedDraft] : undefined;
+      return text ? { ok: true, data: { text, language: /\p{Script=Han}/u.test(text) ? 'zh-Hans' : 'en' } }
+        : { ok: false, failure: 'unavailable' };
+    },
     basis: async item => item.kind === 'content_report' ? { ok: true, data: basisFor(item, options.rules ?? true) }
       : { ok: false, failure: 'missing' },
     people: async () => agents,

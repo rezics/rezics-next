@@ -39,7 +39,8 @@ export function bffQueueApi(realm: string, actingSubject: string, language: stri
         readWorks(main, works, { language, actingSubject })]);
       return { agents: agentNames, works: workNames };
     },
-    draft: item => item.submission
+    // Whole-Work and publication submissions carry no contribution draft to read.
+    draft: item => item.submission?.contribution && item.submission.selectedDraft
       ? readDraftText(browserMainApi(), item.submission.contribution, item.submission.selectedDraft, actingSubject)
       : Promise.resolve({ ok: false, failure: 'missing' }),
     basis: item => readDecisionBasis(browserMainApi(), realm, item.id, actingSubject),

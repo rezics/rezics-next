@@ -13,6 +13,8 @@ export function kindLabel(kind: ModerationItem['kind'], t: T): string {
     case 'rights_complaint': return t.kindRightsComplaint;
     case 'contribution_submission': return t.kindContribution;
     case 'correction_submission': return t.kindCorrection;
+    case 'work_submission': return t.kindWork;
+    case 'content-publication_submission': return t.kindPublication;
   }
 }
 
