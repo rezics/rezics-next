@@ -114,9 +114,27 @@ export class SeedApi {
   }
 
   async get<T>(path: string, token: string): Promise<T> {
-    const response = await fetch(`${this.endpoints.main}${path}`, {
-      headers: { authorization: `Bearer ${token}` } });
-    return payload<T>(response, `Main ${path}`);
+    return this.read(path, { authorization: `Bearer ${token}` });
+  }
+
+  async getPublic<T>(path: string): Promise<T> {
+    return this.read(path);
+  }
+
+  private async read<T>(path: string, headers?: HeadersInit): Promise<T> {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const response = await fetch(`${this.endpoints.main}${path}`, { headers });
+      if ([409, 503].includes(response.status) && attempt < 9) {
+        const detail = await response.clone().json().catch(() => null) as { code?: string } | null;
+        if (detail?.code === 'read_basis_changed' || detail?.code === 'work_read_unavailable') {
+          await response.body?.cancel();
+          await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+          continue;
+        }
+      }
+      return payload<T>(response, `Main ${path}`);
+    }
+    throw new Error(`Main ${path}: read retries exhausted`);
   }
 
   async post<T>(path: string, body: unknown, token: string, key: string): Promise<T> {

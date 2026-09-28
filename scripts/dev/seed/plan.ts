@@ -1,7 +1,8 @@
 export interface DemoPerson { id: string; name: string; handle: string; email: string; password: string }
 export interface DemoWork { id: string; title: string; type: 'book' | 'document' | 'recipe';
   language: 'en' | 'zh-Hans'; excerpt?: string; tagline?: string;
-  completionStatus?: 'ongoing' | 'completed' | 'hiatus' }
+  completionStatus?: 'ongoing' | 'completed' | 'hiatus';
+  author?: 'mei' | 'daniel' | 'an' | 'sophie' | 'jun' | 'aria' | 'leo' | 'moonlight' }
 
 export const people: readonly DemoPerson[] = [
   { id: 'mei', handle: 'lin_mei', name: 'Lin Mei 林梅', email: 'rezics-demo-mei@example.test', password: 'Rezics-demo-2026-mei' },
@@ -41,31 +42,36 @@ export const works: readonly DemoWork[] = [
   { id: 'painted-skin', title: '聊斋志异 · 画皮', type: 'document', language: 'zh-Hans' },
   { id: 'three-kingdoms', title: '三国演义', type: 'book', language: 'zh-Hans' },
   { id: 'water-margin', title: '水浒传', type: 'book', language: 'zh-Hans' },
-  { id: 'serial', title: '雨夜书店 · 连载小说', type: 'book', language: 'zh-Hans',
+  { id: 'serial', title: '雨夜书店 · 连载小说', type: 'book', language: 'zh-Hans', author: 'mei',
     tagline: '一封没有地址的信，把雨夜书店带向二十年前的秘密。', completionStatus: 'ongoing',
     excerpt: '第一章 雨夜\n雨停在书店打烊前。林梅在门口发现一封没有地址的信。' },
-  { id: 'serial-ch2', title: '雨夜书店 · 第二章 未寄出的信', type: 'document', language: 'zh-Hans',
+  { id: 'serial-ch1', title: '雨夜书店 · 第一章 雨夜', type: 'document', language: 'zh-Hans', author: 'mei',
+    excerpt: '第一章 雨夜\n雨停在书店打烊前。林梅在门口发现一封没有地址的信。' },
+  { id: 'serial-ch2', title: '雨夜书店 · 第二章 未寄出的信', type: 'document', language: 'zh-Hans', author: 'mei',
     excerpt: '第二章 未寄出的信\n信封里只有一张旧车票，日期是二十年前。' },
-  { id: 'serial-ch3', title: '雨夜书店 · 第三章 最后一班车', type: 'document', language: 'zh-Hans',
+  { id: 'serial-ch3', title: '雨夜书店 · 第三章 最后一班车', type: 'document', language: 'zh-Hans', author: 'mei',
     excerpt: '第三章 最后一班车\n末班车到站时，整座站台只有她一个人。' },
+  { id: 'moonlight-story', title: '月下书生 · 夜归人', type: 'book', language: 'zh-Hans', author: 'moonlight',
+    tagline: '雨停以后，归来的人敲开了旧书店的门。', completionStatus: 'ongoing',
+    excerpt: '第一章 夜归人\n雨停以后，有人敲响了旧书店的门。' },
   { id: 'pride-zh', title: '傲慢与偏见 · 中文译读', type: 'book', language: 'zh-Hans' },
-  { id: 'bun', title: 'Bun — JavaScript runtime', type: 'document', language: 'en',
+  { id: 'bun', title: 'Bun — JavaScript runtime', type: 'document', language: 'en', author: 'daniel',
     excerpt: 'Bun is a JavaScript runtime. Start with a small script, then compare its tooling with the needs of your project.' },
-  { id: 'elysia', title: 'Elysia — TypeScript web framework', type: 'document', language: 'en',
+  { id: 'elysia', title: 'Elysia — TypeScript web framework', type: 'document', language: 'en', author: 'daniel',
     excerpt: 'Elysia provides a way to define HTTP routes with TypeScript. Check the request and response contract before adding a handler.' },
-  { id: 'react', title: 'React — user interface library', type: 'document', language: 'en',
+  { id: 'react', title: 'React — user interface library', type: 'document', language: 'en', author: 'sophie',
     excerpt: 'React builds interfaces from components. A small component is a useful place to test states and keyboard behavior.' },
-  { id: 'typescript', title: 'TypeScript — typed JavaScript', type: 'document', language: 'en',
+  { id: 'typescript', title: 'TypeScript — typed JavaScript', type: 'document', language: 'en', author: 'daniel',
     excerpt: 'TypeScript adds static types to JavaScript. Describe the data shape at an API boundary, then check callers against it.' },
-  { id: 'dumplings', title: '韭菜鸡蛋饺子', type: 'recipe', language: 'zh-Hans' },
-  { id: 'noodles', title: '番茄鸡蛋面', type: 'recipe', language: 'zh-Hans' },
-  { id: 'pancakes', title: 'Weekend buttermilk pancakes', type: 'recipe', language: 'en' },
-  { id: 'tea', title: 'Ginger lemon tea', type: 'recipe', language: 'en' },
-  { id: 'prompt', title: 'Bilingual book club discussion prompt', type: 'document', language: 'en',
+  { id: 'dumplings', title: '韭菜鸡蛋饺子', type: 'recipe', language: 'zh-Hans', author: 'an' },
+  { id: 'noodles', title: '番茄鸡蛋面', type: 'recipe', language: 'zh-Hans', author: 'an' },
+  { id: 'pancakes', title: 'Weekend buttermilk pancakes', type: 'recipe', language: 'en', author: 'aria' },
+  { id: 'tea', title: 'Ginger lemon tea', type: 'recipe', language: 'en', author: 'aria' },
+  { id: 'prompt', title: 'Bilingual book club discussion prompt', type: 'document', language: 'en', author: 'mei',
     excerpt: 'Ask each reader to choose one passage, explain its meaning in their preferred language, and compare interpretations.' },
-  { id: 'skill', title: 'Recipe scaling assistant skill', type: 'document', language: 'en',
+  { id: 'skill', title: 'Recipe scaling assistant skill', type: 'document', language: 'en', author: 'mei',
     excerpt: 'Ask for the original servings and the desired servings. Show the new quantities and flag ingredients that need judgment.' },
-  { id: 'mod-guide', title: 'Mod setup checklist', type: 'document', language: 'en',
+  { id: 'mod-guide', title: 'Mod setup checklist', type: 'document', language: 'en', author: 'mei',
     excerpt: 'Record the game version, required dependencies, load order, and a way to restore the previous setup before changing mods.' },
 ];
 
@@ -98,8 +104,8 @@ export const penNames = [
  */
 export const profilePlan = {
   credits: [
-    ...['serial', 'prompt', 'skill', 'mod-guide'].map(work => ({ agent: 'mei', work, role: 'author' })),
-    ...['journey-west', 'red-chamber'].map(work => ({ agent: 'moonlight', work, role: 'author' })),
+    ...works.filter(work => work.author && work.author !== 'moonlight')
+      .map(work => ({ agent: work.author!, work: work.id, role: 'author' as const })),
     ...['pride', 'alice'].map(work => ({ agent: 'northstar', work, role: 'editor' })),
     { agent: 'mei', work: 'pride-ch2', role: 'translator' },
   ] as ReadonlyArray<{ agent: string; work: string; role: 'author' | 'translator' | 'editor' }>,

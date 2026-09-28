@@ -35,11 +35,16 @@ async function selectedChapterRevisions(api: SeedApi, serial: string): Promise<M
  * the Book composition. The local operator only provisions fixture authority. */
 export async function prepareHomeV2Chapters(api: SeedApi, author: Session, created: Map<string, Work>,
   operatorInput: Parameters<typeof grantHomeSeedAuthority>[0]) {
-  const serial = created.get('serial'), second = created.get('serial-ch2');
-  if (!serial || !second) throw new Error('Home seed needs the serial and second chapter');
-  const targets = [{ id: 'serial', work: serial.work }, { id: 'serial-ch2', work: second.work }];
-  await grantHomeSeedAuthority(operatorInput, [
-    { action: 'work.edit', scope: `work:edit:${serial.work}` },
+  const serial = created.get('serial');
+  if (!serial) throw new Error('Home seed needs the serial');
+  const targets = ['serial-ch1', 'serial-ch2', 'serial-ch3'].map(id => {
+    const chapter = created.get(id);
+    if (!chapter) throw new Error(`Home seed needs ${id}`);
+    return { id, work: chapter.work };
+  });
+  const grants = [
+    { action: 'work.edit' as const, scope: `work:edit:${serial.work}` },
+    { action: 'work.read' as const, scope: `work:read:${serial.work}` },
     ...targets.flatMap(target => [
       { action: 'work.read' as const, scope: `work:read:${target.work}` },
       { action: 'content.draft' as const, scope: `content:draft:${target.work}` },
@@ -47,7 +52,10 @@ export async function prepareHomeV2Chapters(api: SeedApi, author: Session, creat
       { action: 'content.search-eligibility' as const,
         scope: `content:search-eligibility:${target.work}` },
     ]),
-  ]);
+  ] as const;
+  for (let offset = 0; offset < grants.length; offset += 9) {
+    await grantHomeSeedAuthority(operatorInput, grants.slice(offset, offset + 9));
+  }
   const selected = await selectedChapterRevisions(api, serial.work);
   for (const { id, work } of targets) {
     const child = created.get(id);
@@ -102,5 +110,5 @@ export async function seedHomeV2(api: SeedApi, sessions: Session[], created: Map
   if (!navigation.items.some(item => item.newSince?.state === 'new')) {
     throw new Error('Home Realm navigation has no new activity');
   }
-  return { chapters: 2, watermarks: realms.length + 1 };
+  return { chapters: 3, watermarks: realms.length + 1 };
 }

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { type SeedApi, SeedApiError } from './api.ts';
+import type { SeedApi } from './api.ts';
 import { profilePlan, seedKey } from './plan.ts';
 
 interface Session { id: string; token: string; actingSubject: string }
@@ -20,11 +20,7 @@ function stableId(id: string): string {
 export function profileSteps(api: SeedApi, owner: Session, sessions: Session[],
   agents: ReadonlyMap<string, string>, works: ReadonlyMap<string, string>) {
   // Public reads go anonymously: with a bearer token Main would also want an acting Agent.
-  const read = async <T>(path: string): Promise<T> => {
-    const response = await fetch(`${api.endpoints.main}${path}`);
-    if (!response.ok) throw new SeedApiError(`Main ${path}`, response.status, (await response.text()).slice(0, 300));
-    return await response.json() as T;
-  };
+  const read = <T>(path: string): Promise<T> => api.getPublic<T>(path);
   const agentOf = (id: string) => agents.get(id) ?? sessions.find(session => session.id === id)?.actingSubject;
 
   async function credits() {
@@ -34,9 +30,11 @@ export function profileSteps(api: SeedApi, owner: Session, sessions: Session[],
       const work = works.get(workKey);
       if (!agent || !work) continue;
       const id = work.slice(-36);
-      const listed = await read<{ items: Array<{ agent: string; role: string }> }>(`/v1/works/${id}/agent-credits`);
+      const query = `?actingSubject=${encodeURIComponent(owner.actingSubject)}`;
+      const listed = await api.get<{ items: Array<{ agent: string; role: string }> }>(
+        `/v1/works/${id}/agent-credits${query}`, owner.token);
       if (!listed.items.some(item => item.agent === agent && item.role === role)) {
-        const { revision } = await read<{ revision: string }>(`/v1/works/${id}`);
+        const { revision } = await api.get<{ revision: string }>(`/v1/works/${id}${query}`, owner.token);
         await api.post(`/v1/works/${id}/agent-credits`, { profile: 'native-agent-credit-v1',
           credit: stableId(`credit:${key}:${workKey}:${role}`), agent, role, expectedWorkHead: revision,
           actingSubject: owner.actingSubject }, owner.token,
