@@ -1,4 +1,3 @@
-import { mainSearchMatches } from './selection-search.ts';
 import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
@@ -17,6 +16,7 @@ import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE, decisionSlotIri,
 import { exactDecisionSupports, readSearchDecisionSupports } from './search-supports.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 import { querySearchFields, rankedSearchMatches, type SearchFieldOwners } from '../search/fields.ts';
+import { publicWork } from './public-patterns.ts';
 
 export class InvalidPublicQuery extends Error {}
 export { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
@@ -49,9 +49,10 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
     SELECT ?candidateCount ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
-      ?revision ?selection ?language WHERE {
+      ?revision ?selection ?language ?resultWork ?resultMain ?chapterTitle WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
           rv:textIndexGeneration ?indexGeneration .
@@ -73,11 +74,16 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
             rv:work ?work ; rv:mainVersion ?main ; rv:contribution ?contribution ;
             rv:context ?main ; rv:revision ?revision ;
             rv:selection ?selection ; rv:language ?language .
+          OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
+            rv:searchChapterTitle ?chapterTitle . }
         }
         GRAPH ${iri(GRAPHS.current)} {
           ?main rv:selectionHead ?selection .
           ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
         }
+        FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })
+        FILTER(BOUND(?resultWork) || NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+          ?work schema:isPartOf ?parentWork } })
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
       }
     }`, MAX_SEARCH_RESPONSE_BYTES);
@@ -104,22 +110,32 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   if (candidateCount >= PHRASE_HIT_PROBE) {
     throw new PublicQueryBudgetExceeded('public phrase exceeds complete candidate budget');
   }
+  const sourceHeads = new Set<string>();
   const matches = rows.filter(row => row.unit).map(row => {
     if (!row.unit || !row.score || !row.work || !row.main || !row.contribution
       || !row.revision || !row.selection || !row.language) {
       throw new PublicQueryUnavailable('public query result is incomplete');
     }
+    if (row.resultWork && (!row.resultMain || !row.chapterTitle)) {
+      throw new PublicQueryUnavailable('chapter search identity is incomplete');
+    }
     const score = Number(row.score.value);
     if (!Number.isFinite(score)) throw new PublicQueryUnavailable('public query score is invalid');
-    return { matchUnit: row.unit.value, work: row.work.value, mainVersion: row.main.value,
+    const head = `${row.main.value}\0${row.language.value.toLowerCase()}`;
+    if (sourceHeads.has(head)) throw new PublicQueryUnavailable('Main language search heads are ambiguous');
+    sourceHeads.add(head);
+    return { matchUnit: row.unit.value, work: row.resultWork?.value ?? row.work.value,
+      mainVersion: row.resultMain?.value ?? row.main.value,
       contribution: row.contribution.value, revision: row.revision.value,
-      selection: row.selection.value, language: row.language.value, score };
+      selection: row.selection.value, language: row.language.value, score,
+      ...(row.resultWork ? { matchedChapter: { work: row.work.value,
+        title: row.chapterTitle!.value } } : {}) };
   });
   const unique = new Set(matches.map(match => match.matchUnit));
   if (unique.size !== matches.length) throw new PublicQueryUnavailable('public query has duplicate units');
   const fields = input.publicFields ? await querySearchFields(env, input,
     { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, input.publicFields) : [];
-  const results = fields.length ? rankedSearchMatches([...matches, ...fields]) : mainSearchMatches(matches);
+  const results = rankedSearchMatches([...matches, ...fields]);
   if (results.length > 512) throw new PublicQueryBudgetExceeded('Combined search candidates exceed their bound');
   return { contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: 'main-version-default' as const, complete: true as const, population: index.population,
@@ -148,7 +164,7 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
     SELECT ?candidateCount ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
-      ?revision ?selection ?language ?reason WHERE {
+      ?revision ?selection ?language ?reason ?resultWork ?resultMain ?chapterTitle WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
           rv:textIndexGeneration ?indexGeneration .
@@ -175,6 +191,8 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
             rv:work ?work ; rv:mainVersion ?main ; rv:context ?unitContext ;
             rv:contribution ?contribution ; rv:revision ?revision ;
             rv:selection ?selection ; rv:language ?language .
+          OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
+            rv:searchChapterTitle ?chapterTitle . }
         }
         GRAPH ${iri(GRAPHS.current)} {
           ?work a schema:CreativeWork ; rv:mainVersion ?main .
@@ -191,6 +209,9 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
         BIND(IF(BOUND(?local), ${iri(realm)}, ?main) AS ?effectiveContext)
         BIND(IF(BOUND(?local), "realm-adoption", "main-fallback") AS ?reason)
         FILTER(?selection = ?effectiveSelection && ?unitContext = ?effectiveContext)
+        FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })
+        FILTER(BOUND(?resultWork) || NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+          ?work schema:isPartOf ?parentWork } })
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
       }
     }`, MAX_SEARCH_RESPONSE_BYTES);
@@ -218,20 +239,29 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
   if (candidateCount >= PHRASE_HIT_PROBE) {
     throw new PublicQueryBudgetExceeded('Realm phrase exceeds complete candidate budget');
   }
+  const sourceHeads = new Set<string>();
   const matches = rows.filter(row => row.unit).map(row => {
     if (!row.unit || !row.score || !row.work || !row.main || !row.contribution
       || !row.revision || !row.selection || !row.language || !row.reason) {
       throw new PublicQueryUnavailable('Realm query result is incomplete');
+    }
+    if (row.resultWork && (!row.resultMain || !row.chapterTitle)) {
+      throw new PublicQueryUnavailable('chapter search identity is incomplete');
     }
     const score = Number(row.score.value);
     if (!Number.isFinite(score)
       || !['realm-adoption', 'main-fallback'].includes(row.reason.value)) {
       throw new PublicQueryUnavailable('Realm query score or selection is invalid');
     }
-    return { matchUnit: row.unit.value, work: row.work.value,
-      mainVersion: row.main.value, contribution: row.contribution.value,
+    const head = `${row.main.value}\0${row.language.value.toLowerCase()}`;
+    if (sourceHeads.has(head)) throw new PublicQueryUnavailable('Realm language search heads are ambiguous');
+    sourceHeads.add(head);
+    return { matchUnit: row.unit.value, work: row.resultWork?.value ?? row.work.value,
+      mainVersion: row.resultMain?.value ?? row.main.value, contribution: row.contribution.value,
       revision: row.revision.value, selection: row.selection.value,
-      language: row.language.value, reason: row.reason.value, score };
+      language: row.language.value, reason: row.reason.value, score,
+      ...(row.resultWork ? { matchedChapter: { work: row.work.value,
+        title: row.chapterTitle!.value } } : {}) };
   });
   const unique = new Set(matches.map(match => match.matchUnit));
   if (unique.size !== matches.length || (matches.length === 0 && rows.length !== 1)) {
@@ -239,7 +269,7 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
   }
   const fields = input.publicFields ? await querySearchFields(env, input,
     { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, input.publicFields) : [];
-  const results = fields.length ? rankedSearchMatches([...matches, ...fields]) : mainSearchMatches(matches);
+  const results = rankedSearchMatches([...matches, ...fields]);
   if (results.length > 512) throw new PublicQueryBudgetExceeded('Combined search candidates exceed their bound');
   return { contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: { kind: 'realm-local' as const, id: realm },

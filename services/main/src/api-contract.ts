@@ -89,6 +89,7 @@ const phraseMatch = t.Object({
   language: t.String(), score: t.Number(), types: t.Array(t.String(), { maxItems: 3 }),
   matchedField: t.Optional(t.Union(['title', 'credit', 'tagline', 'body'].map(value => t.Literal(value)))),
   matchedText: t.Optional(t.String()), matchedLanguage: t.Optional(t.Nullable(t.String())),
+  matchedChapter: t.Optional(t.Object({ work: t.String(), title: t.String() })),
   title: t.Optional(readName), cover: t.Optional(readAvatar),
   primaryCredits: t.Optional(t.Array(discoveryCredit, { maxItems: 3 })),
   rating: t.Optional(t.Nullable(discoveryRating)), tagline: t.Optional(t.Nullable(readName)),

@@ -73,6 +73,14 @@ export async function readZoneWorks(session: WorkReadSession, realm: string, kin
       ?evidence a ${status ? 'rv:WorkMetadataRevision' : 'rv:PublicationSelection'} ;
         rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . }
     ${publicWork('?work', '?main')}
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work schema:isPartOf ?book } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+      ?chapterStructure a rv:Structure ; rv:structureProfile rv:BookComposition ;
+        rv:selectedGeneration ?chapterGeneration .
+      ?chapterPlacement a rv:OccurrencePlacement ; rv:generation ?chapterGeneration ;
+        rv:occurrenceRole rv:ChapterRole ; schema:item ?work .
+      FILTER NOT EXISTS { ?chapterPlacement rv:removedBy ?chapterRemoval }
+    } }
     ${order && cursor ? `FILTER(?epochOrder > ${order[0]} || (?epochOrder = ${order[0]}
       && (?sequence < ${order[1]} || (?sequence = ${order[1]}
         && STR(?evidence) > ${lit(cursor.after)}))))` : ''}

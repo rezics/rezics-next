@@ -22,7 +22,7 @@ final class CommandPolicy {
     private static final List<String> MAINTENANCE_RECEIPTS = List.of(
         "urn:rezics:receipt:bootstrap:", "urn:rezics:receipt:restore-cutover:",
         "urn:rezics:receipt:restore-release:", "urn:rezics:receipt:retained-zero:",
-        "urn:rezics:receipt:content-rebuild:");
+        "urn:rezics:receipt:content-rebuild:", "urn:rezics:receipt:chapter-search-index:");
     static final String CONTROL = "urn:rezics:graph:control";
     static final String CURRENT = "urn:rezics:graph:current";
     static final String REVISIONS = "urn:rezics:graph:revisions";
@@ -33,6 +33,8 @@ final class CommandPolicy {
     static final String PRIVATE_SEARCH = "urn:rezics:search:private";
     static final String PROBE_SEARCH = "urn:rezics:search:probe";
     static final String PUBLIC_ANCHOR = "urn:rezics:search:public:anchor";
+    private static final String RV = "https://rezics.com/vocab/";
+    private static final String PRODUCT = "urn:rezics:dataset:product";
     static final Set<String> GRAPHS = Set.of(CONTROL, CURRENT, REVISIONS, SOURCE, RECEIPTS,
         OUTBOX, PUBLIC_SEARCH, PRIVATE_SEARCH, PROBE_SEARCH);
 
@@ -99,6 +101,7 @@ final class CommandPolicy {
         boolean bootstrap = receipt.startsWith("urn:rezics:receipt:bootstrap:")
             && graphs.stream().allMatch(name -> Set.of(CONTROL, RECEIPTS, PUBLIC_SEARCH, PROBE_SEARCH).contains(name));
         boolean rebuild = receipt.startsWith("urn:rezics:receipt:content-rebuild:");
+        boolean chapterBackfill = receipt.matches("urn:rezics:receipt:chapter-search-index:[0-9a-f]{64}");
         boolean sourceProjection = receipt.matches("urn:rezics:receipt:source-projection:[0-9a-f]{64}");
         if (graphs.contains(SOURCE) != sourceProjection) {
             throw new IllegalArgumentException("source graph requires its fixed receipt family");
@@ -111,8 +114,23 @@ final class CommandPolicy {
         if (dataInsert && !bootstrap) throw new IllegalArgumentException("unguarded INSERT DATA not admitted");
         if (graphs.contains(PROBE_SEARCH) && !bootstrap)
             throw new IllegalArgumentException("search probe graph is bootstrap only");
-        if (graphs.contains(PUBLIC_SEARCH) && !bootstrap && !rebuild && current.isEmpty() && revisions.isEmpty())
+        if (graphs.contains(PUBLIC_SEARCH) && !bootstrap && !rebuild && !chapterBackfill
+            && current.isEmpty() && revisions.isEmpty())
             throw new IllegalArgumentException("search projection requires a product change");
+        if (chapterBackfill) {
+            List<Quad> publicInserts = insert.stream()
+                .filter(quad -> PUBLIC_SEARCH.equals(quad.getGraph().getURI())).toList();
+            if (!graphs.equals(Set.of(CONTROL, RECEIPTS, OUTBOX, PUBLIC_SEARCH))
+                || !current.isEmpty() || !revisions.isEmpty() || publicInserts.size() != 3
+                || delete.stream().anyMatch(quad -> !isControlSequence(quad))
+                || insert.stream().filter(quad -> CONTROL.equals(quad.getGraph().getURI()))
+                    .anyMatch(quad -> !isControlSequence(quad))
+                || !publicInserts.stream().allMatch(CommandPolicy::isChapterIdentity)
+                || publicInserts.stream().map(quad -> quad.getPredicate().getURI())
+                    .distinct().count() != 3) {
+                throw new IllegalArgumentException("chapter search backfill footprint differs");
+            }
+        }
         boolean erasure = receipt.matches("urn:rezics:receipt:erasure-graph:[0-9a-f]{64}");
         if (graphs.contains(PRIVATE_SEARCH) && (bootstrap || rebuild || revisions.isEmpty()
             || current.isEmpty() && !erasure))
@@ -156,6 +174,24 @@ final class CommandPolicy {
         return quad.getSubject().isURI() && PUBLIC_ANCHOR.equals(quad.getSubject().getURI())
             && RDF.type.asNode().equals(quad.getPredicate())
             && NodeFactory.createURI("https://rezics.com/vocab/SearchGraphAnchor").equals(quad.getObject());
+    }
+
+    private static boolean isControlSequence(Quad quad) {
+        return CONTROL.equals(quad.getGraph().getURI()) && quad.getSubject().isURI()
+            && PRODUCT.equals(quad.getSubject().getURI()) && quad.getPredicate().isURI()
+            && (RV + "sequence").equals(quad.getPredicate().getURI());
+    }
+
+    private static boolean isChapterIdentity(Quad quad) {
+        if (!quad.getSubject().isVariable() || !"unit".equals(quad.getSubject().getName())
+            || !quad.getPredicate().isURI() || !quad.getObject().isVariable()) return false;
+        String expected = switch (quad.getPredicate().getURI()) {
+            case RV + "searchResultWork" -> "book";
+            case RV + "searchResultMain" -> "bookMain";
+            case RV + "searchChapterTitle" -> "title";
+            default -> "";
+        };
+        return expected.equals(quad.getObject().getName()) && !expected.isEmpty();
     }
 
     private CommandPolicy() {}

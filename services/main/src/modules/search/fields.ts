@@ -9,6 +9,7 @@ import { MAX_SEARCH_RESPONSE_BYTES, SearchSnapshotMoved } from '../work/search-r
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../work/search-budget.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { knownSearchPosition } from './snapshot-state.ts';
+import { publicWork } from '../work/public-patterns.ts';
 
 /** Native body search bounds the public population at 20,000 units. This live
  * field join has no derived freshness gap: at most 513 candidate rows / 1 MiB,
@@ -45,7 +46,8 @@ export async function fenceSearchFields(owners: SearchFieldOwners) {
 export interface FieldMatch { work: string; mainVersion: string; matchUnit: string;
   contribution: string; revision: string; selection: string; language: string;
   score: number; matchedField: SearchField; matchedText: string;
-  matchedLanguage: string | null; reason?: string }
+  matchedLanguage: string | null; reason?: string;
+  matchedChapter?: { work: string; title: string } }
 export const normalizedSearchText = (value: string) => value.normalize('NFC').toLowerCase().trim().replace(/\s+/gu, ' ');
 export function matchesSearchText(text: string, term: string, prefix: boolean) {
   const value = normalizedSearchText(text), query = normalizedSearchText(term);
@@ -86,15 +88,22 @@ export async function querySearchFields(env: WorkActivationEnvironment,
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     SELECT DISTINCT ?epoch ?sequence ?work ?main ?unit ?contribution ?revision ?selection ?language
-      ?field ?text ?state ?key ?reason ?head WHERE {
+      ?field ?text ?state ?key ?reason ?head ?resultWork ?resultMain ?chapterTitle WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
       FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
     GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
       rv:work ?work ; rv:mainVersion ?main ; rv:context ?unitContext ;
-      rv:contribution ?contribution ; rv:revision ?revision ; rv:selection ?selection ; rv:language ?language . }
-    GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork ; rv:mainVersion ?main ; rv:head ?head .
+      rv:contribution ?contribution ; rv:revision ?revision ; rv:selection ?selection ; rv:language ?language .
+      OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
+        rv:searchChapterTitle ?chapterTitle . } }
+    GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork ; rv:mainVersion ?main .
       ?contribution rv:publicationHead ?publication .
       ${input.author ? `?contribution rv:author ${iri(input.author)} .` : ''} }
+    BIND(COALESCE(?resultWork, ?work) AS ?targetWork)
+    GRAPH ${iri(GRAPHS.current)} { ?targetWork rv:head ?head }
+    FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })
+    FILTER(BOUND(?resultWork) || NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+      ?work schema:isPartOf ?parentWork } })
     GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:publicationDecision ?publication ; rv:selectedDraft ?revision .
       ?publication rv:disclosure rv:Public . FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
     ${unerased('?work')}
@@ -127,7 +136,8 @@ export async function querySearchFields(env: WorkActivationEnvironment,
   } LIMIT ${SEARCH_FIELD_COST.candidates + 1}`, SEARCH_FIELD_COST.responseBytes)).results?.bindings ?? [];
   if (rows.length > SEARCH_FIELD_COST.candidates) throw new PublicQueryBudgetExceeded('Search field candidates exceed their bound');
   const heads = [...new Map(rows.filter(row => row.work && row.head)
-    .map(row => [row.work!.value, { work: row.work!.value, revision: row.head!.value }])).values()];
+    .map(row => [row.resultWork?.value ?? row.work!.value,
+      { work: row.resultWork?.value ?? row.work!.value, revision: row.head!.value }])).values()];
   const restricted = await titleRestrictions(owners, heads);
   fieldReads.set(owners, { sourceGeneration: sourceRead?.generation ?? null, heads, restricted });
   const matches: FieldMatch[] = [];
@@ -138,7 +148,10 @@ export async function querySearchFields(env: WorkActivationEnvironment,
     if (!row.work || !row.main || !row.unit || !row.contribution || !row.revision || !row.selection || !row.language) {
       throw new PublicQueryUnavailable('Search field selection is incomplete');
     }
-    if (restricted.has(row.work.value) && row.field?.value !== 'credit') continue;
+    if (row.resultWork && (!row.resultMain || !row.chapterTitle)) {
+      throw new PublicQueryUnavailable('chapter search identity is incomplete');
+    }
+    if (restricted.has(row.resultWork?.value ?? row.work.value) && row.field?.value !== 'credit') continue;
     const values: Array<{ field: SearchField; text: string; language: string | null }> = [];
     if (row.field?.value === 'metadata') {
       const state = parsedMetadataState(row.state?.value ?? '');
@@ -154,11 +167,14 @@ export async function querySearchFields(env: WorkActivationEnvironment,
       values.push({ field: row.field!.value as 'title' | 'credit', text, language: row.text?.['xml:lang'] ?? null });
     }
     for (const value of values.filter(value => matchesSearchText(value.text, term, prefix))) {
-      matches.push({ work: row.work.value, mainVersion: row.main.value, matchUnit: row.unit.value,
+      matches.push({ work: row.resultWork?.value ?? row.work.value,
+        mainVersion: row.resultMain?.value ?? row.main.value, matchUnit: row.unit.value,
         contribution: row.contribution.value, revision: row.revision.value, selection: row.selection.value,
         language: row.language.value, score: 1, matchedField: value.field,
         matchedText: value.text, matchedLanguage: value.language,
-        ...(row.reason ? { reason: row.reason.value } : {}) });
+        ...(row.reason ? { reason: row.reason.value } : {}),
+        ...(row.resultWork ? { matchedChapter: { work: row.work.value,
+          title: row.chapterTitle!.value } } : {}) });
     }
   }
   await fenceSearchFields(owners);

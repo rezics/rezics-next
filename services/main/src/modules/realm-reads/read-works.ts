@@ -30,6 +30,14 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
       ?decision rv:disclosure rv:Public .
       FILTER NOT EXISTS { ?draft a rv:ErasedRevision } }
     ${publicWork('?work', '?main')}
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work schema:isPartOf ?book } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+      ?chapterStructure a rv:Structure ; rv:structureProfile rv:BookComposition ;
+        rv:selectedGeneration ?chapterGeneration .
+      ?chapterPlacement a rv:OccurrencePlacement ; rv:generation ?chapterGeneration ;
+        rv:occurrenceRole rv:ChapterRole ; schema:item ?work .
+      FILTER NOT EXISTS { ?chapterPlacement rv:removedBy ?chapterRemoval }
+    } }
     ${cursor ? `FILTER(STR(?work) > ${lit(cursor.after)})` : ''}
   } ORDER BY STR(?work) LIMIT ${limit + 1}`, limit + 1);
   if (rows.some(row => !row.work || !row.head || !row.main || !row.selection

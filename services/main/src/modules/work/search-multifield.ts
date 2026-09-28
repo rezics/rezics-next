@@ -1,4 +1,5 @@
-import { mainSearchMatches } from './selection-search.ts';
+import { rankedSearchMatches } from '../search/fields.ts';
+import { publicWork } from './public-patterns.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
@@ -39,9 +40,11 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const index = await assertPublicTitleReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
     SELECT ?epoch ?sequence ?indexGeneration ?titleCount ?bodyCount
-      ?unit ?titleScore ?bodyScore ?work ?main ?contribution ?revision ?selection ?language WHERE {
+      ?unit ?titleScore ?bodyScore ?work ?main ?contribution ?revision ?selection ?language
+      ?resultWork ?resultMain ?chapterTitle WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ;
         rv:sequence ?sequence ; rv:textIndexGeneration ?indexGeneration .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
@@ -67,11 +70,16 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
             rv:contribution ?contribution ; rv:revision ?revision ;
             rv:selection ?selection ; rv:language ?language ;
             rv:publicTitle ?publicTitle ; rv:searchBody ?publicBody .
+          OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
+            rv:searchChapterTitle ?chapterTitle . }
         }
         GRAPH ${iri(GRAPHS.current)} {
           ?main rv:selectionHead ?selection .
           ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
         }
+        FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })
+        FILTER(BOUND(?resultWork) || NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+          ?work schema:isPartOf ?parentWork } })
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
       }
     }`, MAX_SEARCH_RESPONSE_BYTES);
@@ -102,19 +110,25 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
       || !row.contribution || !row.revision || !row.selection || !row.language) {
       throw new PublicQueryUnavailable('title/body result is incomplete');
     }
+    if (row.resultWork && (!row.resultMain || !row.chapterTitle)) {
+      throw new PublicQueryUnavailable('chapter search identity is incomplete');
+    }
     const titleScore = Number(row.titleScore.value), bodyScore = Number(row.bodyScore.value);
     if (!Number.isFinite(titleScore) || !Number.isFinite(bodyScore)) {
       throw new PublicQueryUnavailable('title/body score is invalid');
     }
-    return { matchUnit: row.unit.value, work: row.work.value, mainVersion: row.main.value,
+    return { matchUnit: row.unit.value, work: row.resultWork?.value ?? row.work.value,
+      mainVersion: row.resultMain?.value ?? row.main.value,
       contribution: row.contribution.value, revision: row.revision.value,
       selection: row.selection.value, language: row.language.value,
-      score: titleScore + bodyScore };
+      score: titleScore + bodyScore,
+      ...(row.resultWork ? { matchedChapter: { work: row.work.value,
+        title: row.chapterTitle!.value } } : {}) };
   });
   if (new Set(matches.map(match => match.matchUnit)).size !== matches.length) {
     throw new PublicQueryUnavailable('title/body relation has duplicate units');
   }
-  const results = mainSearchMatches(matches);
+  const results = rankedSearchMatches(matches);
   return { profile: 'public-main-title-body-v1' as const, contractVersion: '1' as const,
     resultGrain: 'mainVersion' as const, context: 'main-version-default' as const,
     complete: true as const, population: index.population, indexGeneration: index.generation,

@@ -296,7 +296,8 @@ final class CommandService extends ActionService {
             Map<String, Object> result = committed(dataset, receipt);
             if (!result.containsKey("position")) return Map.of("status", "invalid", "report", "receipt position incomplete");
             if (delta != null) {
-                if (!plan.bootstrap() && !plan.rebuild()) {
+                if (!plan.bootstrap() && !plan.rebuild()
+                    && !receipt.startsWith("urn:rezics:receipt:chapter-search-index:")) {
                     String claimed = receiptValue(dataset, receipt, "matchUnit");
                     if (!SearchDeltaJournal.matchesClaim(delta.changes(), claimed))
                         return invalid("public MatchUnit differs from receipt claim");
@@ -324,7 +325,7 @@ final class CommandService extends ActionService {
         boolean productData = !plan.current().isEmpty() || !plan.revisions().isEmpty()
             || !plan.source().isEmpty()
             || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH) && !plan.bootstrap();
-        if (plan.rebuild()) {
+        if (plan.rebuild() || receipt.startsWith("urn:rezics:receipt:chapter-search-index:")) {
             if (!validations.isEmpty()) return invalid("rebuild does not admit product profile validation");
             return null;
         }

@@ -353,6 +353,8 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
           rv:field rv:Body ; rv:disclosure rv:Public ;
           rv:searchBody ${lit(exact.body)}@${exact.language} ;
           rv:publicTitle ${publicTitleProjection(row.title!.value, row.title!['xml:lang'])} .
+        ${iri(unit)} rv:searchResultWork ?parentWork ; rv:searchResultMain ?parentMain ;
+          rv:searchChapterTitle ?chapterTitle .
       }
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
@@ -388,6 +390,11 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
           rv:publicationHead ${iri(input.publicationDecision)} .
         ${languagePrior(input.context.id, input.publicationDecision)}
       }
+      OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(input.work)} schema:isPartOf ?parentWork .
+        ?parentWork a schema:Book ; rv:mainVersion ?parentMain .
+        ${iri(input.work)} <http://www.w3.org/2000/01/rdf-schema#label> ?chapterTitle .
+      } }
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(row.mainHead!.value)} a rv:RevisionAnchor ;
           rv:component ${iri(input.context.id)} .
