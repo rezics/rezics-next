@@ -166,7 +166,8 @@ export function StudioWorkFrame({ agent, work, languages, tab, locale, messages,
       <Link href={studioHref(agent)} className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'justify-self-start' })}>
         <ArrowLeftIcon aria-hidden="true" />{t.backToStudio}</Link>
       <header className="flex items-start gap-5">
-        <StudioCover id={header.id} title={header.title} cover={header.cover} types={header.types} actingSubject={agent.iri}
+        <StudioCover id={header.id} title={header.title} cover={header.cover} types={header.types}
+          authors={agent.label ? [agent.label] : []} actingSubject={agent.iri}
           size="md" loading="eager" className="max-sm:w-20" />
         <div className="grid min-w-0 gap-3">
           <h1 lang={header.title.language} className="text-balance break-words font-semibold font-work-title text-3xl/tight
@@ -174,7 +175,7 @@ export function StudioWorkFrame({ agent, work, languages, tab, locale, messages,
           {header.tagline ? <p lang={header.tagline.language} className="text-pretty text-muted-foreground">
             {header.tagline.value}</p> : null}
           <p className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
-            <span>{kindLabel(header.types, t)}</span><span aria-hidden="true">·</span>
+            <span>{kindLabel(header.types, locale, t)}</span><span aria-hidden="true">·</span>
             <span>{languages.map(language => languageName(language, locale)).join(', ')}</span>
             {completion ? <><span aria-hidden="true">·</span><span>{completion}</span></> : null}
           </p>

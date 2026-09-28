@@ -7,7 +7,7 @@ import { workCoverRatio } from '@rezics/ui/work-cover';
 import { CircleCheckIcon, ImageUpIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
-import { type ChangeEvent, lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
+import { type ChangeEvent, lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { coverKindOf } from '../catalogue/work.ts';
@@ -53,6 +53,7 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
   const input = useRef<HTMLInputElement>(null);
   const crop = useRef<(() => Promise<Blob | null>) | null>(null);
   const [source, setSource] = useState<{ url: string; width: number; height: number } | null>(null);
+  const [cropReady, setCropReady] = useState(false);
   const [busy, setBusy] = useState<'upload' | 'remove' | null>(null);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [current, setCurrent] = useState(cover);
@@ -61,6 +62,11 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
   const kind = coverKindOf(work.types);
   const ratio = workCoverRatio[kind];
   const selection = current?.kind === 'image' ? current.selection : null;
+  const close = () => { crop.current = null; setCropReady(false); setSource(null); };
+  const ready = useCallback((value: () => Promise<Blob | null>) => {
+    crop.current = value;
+    setCropReady(true);
+  }, []);
 
   const choose = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -69,6 +75,8 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
     if (!file) return;
     if (!(coverTypes as readonly string[]).includes(file.type)) { setResult({ ok: false, message: t.coverUnsupported }); return; }
     const url = URL.createObjectURL(file);
+    crop.current = null;
+    setCropReady(false);
     void measure(url).then(measured => {
       if (measured) setSource(measured);
       else { URL.revokeObjectURL(url); setResult({ ok: false, message: t.coverUnsupported }); }
@@ -77,13 +85,14 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
   const message = (outcome: CoverOutcome['outcome']) => outcome === 'denied' ? t.coverDenied
     : outcome === 'too-large' ? t.coverTooLarge : outcome === 'unsupported' ? t.coverUnsupported : t.coverFailed;
   const save = async () => {
+    if (!cropReady || !crop.current) return;
     setBusy('upload');
-    const image = await crop.current?.().catch(() => null);
+    const image = await crop.current().catch(() => null);
     const outcome = image ? await uploadCover({ actingSubject: agent.iri, work: work.id, image, expected: selection,
       key: crypto.randomUUID() }, send) : { outcome: 'failed' as const };
     setBusy(null);
     if (outcome.outcome === 'done') {
-      setSource(null);
+      close();
       setResult({ ok: true, message: t.coverSaved });
       router.refresh();
     } else setResult({ ok: false, message: message(outcome.outcome) });
@@ -106,7 +115,8 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
       <p className="text-muted-foreground text-sm">{t.coverHelp}</p>
     </div>
     <div className="flex items-end gap-4">
-      <StudioCover id={work.id} title={work.title} cover={current} types={work.types} actingSubject={agent.iri} size="md" />
+      <StudioCover id={work.id} title={work.title} cover={current} types={work.types} actingSubject={agent.iri}
+        authors={agent.label ? [agent.label] : []} size="md" />
       <div className="grid gap-2">
         <input ref={input} id={inputId} type="file" accept={coverTypes.join(',')} className="sr-only" onChange={choose}
           aria-label={t.chooseCover} />
@@ -121,18 +131,18 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
       : <Alert variant="destructive"><TriangleAlertIcon aria-hidden="true" />
         <AlertDescription role="alert" className="text-destructive-foreground">{result.message}</AlertDescription></Alert>
       : null}
-    <Dialog open={source !== null} onOpenChange={details => { if (!details.open && busy === null) setSource(null); }}>
+    <Dialog open={source !== null} onOpenChange={details => { if (!details.open && busy === null) close(); }}>
       <DialogContent size="md">
         <DialogHeader title={t.cropHeading} description={t.cropHelp} />
         <DialogBody>
           {source ? <Suspense fallback={<div aria-hidden="true" className="mx-auto w-full rounded-2xl bg-muted"
             style={{ aspectRatio: String(source.width / source.height), maxWidth: `min(100%, calc(60dvh * ${source.width / source.height}))` }} />}>
-            <Cropper source={source} ratio={ratio} label={t.cropLabel} onReady={value => { crop.current = value; }} />
+            <Cropper source={source} ratio={ratio} label={t.cropLabel} onReady={ready} />
           </Suspense> : null}
         </DialogBody>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setSource(null)} disabled={busy !== null}>{t.cancel}</Button>
-          <Button type="button" onClick={() => void save()} isLoading={busy === 'upload'} disabled={busy !== null}>
+          <Button type="button" variant="outline" onClick={close} disabled={busy !== null}>{t.cancel}</Button>
+          <Button type="button" onClick={() => void save()} isLoading={busy === 'upload'} disabled={busy !== null || !cropReady}>
             {busy === 'upload' ? t.savingCover : t.saveCover}</Button>
         </DialogFooter>
       </DialogContent>

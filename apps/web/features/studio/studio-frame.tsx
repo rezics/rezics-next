@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback } from '@rezics/ui/avatar';
+import { initials } from '@rezics/ui/avatar-initials';
 import { buttonVariants } from '@rezics/ui/button';
 import { ChevronRightIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -26,8 +27,6 @@ function agentKind(kind: AgentOption['kind'], t: Pick<StudioMessages, 'person' |
   }
 }
 
-const initial = (name: string) => [...name.trim()].find(char => /[\p{L}\p{N}]/u.test(char))?.toUpperCase() ?? '·';
-
 /** The Studio Agent as a compact identity: initial, name and kind. */
 export function AgentIdentity({ agent, messages, locale, size = 'md' }: {
   agent: AgentOption; messages: StudioMessages; locale: UiLocale; size?: 'sm' | 'md';
@@ -37,7 +36,7 @@ export function AgentIdentity({ agent, messages, locale, size = 'md' }: {
   const kind = agentKind(agent.kind, t);
   return <span className="flex min-w-0 items-center gap-2.5">
     <Avatar size={size === 'sm' ? 'sm' : 'md'}>
-      <AvatarFallback className="bg-primary/10 font-semibold text-primary text-sm">{initial(name)}</AvatarFallback>
+      <AvatarFallback className="bg-primary/10 font-semibold text-primary text-sm">{initials(name, '·')}</AvatarFallback>
     </Avatar>
     <span className="flex min-w-0 flex-col leading-tight">
       <span className="truncate font-medium text-sm">{name}</span>

@@ -178,18 +178,22 @@ interface Chapter {
  * to its writer, a published one to everyone, in the language asked or the Main Version's), the Main Version's
  * public texts, and a chapter's Content variants, which Main lists only to the chapter's writer.
  */
-function chaptersMain({ chapters, mainLanguage, mainTexts }: {
+function chaptersMain({ chapters, mainLanguage, mainTexts, bookWriter = self, refuseOther = false }: {
   chapters: Chapter[]; mainLanguage: string | null; mainTexts: Array<{ language: string; author: string }>;
+  bookWriter?: string; refuseOther?: boolean;
 }) {
   const calls: string[] = [];
   const ok = (data: unknown) => ({ data, error: null });
   const missing = () => ({ data: null, error: { status: 404, value: { code: 'work_unavailable' } } });
+  const denied = () => ({ data: null, error: { status: 403, value: { code: 'studio_denied' } } });
   const published = (chapter: Chapter) => `urn:rezics:content:revision:${chapter.target.slice(-36)}`;
   const main = { v1: {
-    me: { agents: () => ({ works: () => ({ chapters: { get: async ({ query }: {
+    me: { agents: ({ agent }: { agent: string }) => ({ works: () => ({ chapters: { get: async ({ query }: {
       query: { language: string; cursor?: string } }) => {
       const language = query.language.toLowerCase();
+      calls.push(`chapter-agent ${agent}`);
       calls.push(`chapters ${language}`);
+      if (agent !== bookWriter.slice(-36)) return refuseOther ? denied() : missing();
       const items = chapters.map((chapter, index) => {
         const visible = chapter.published || chapter.writer === self;
         const readable = chapter.published && language === (chapter.language ?? 'zh-hans');
@@ -203,7 +207,7 @@ function chaptersMain({ chapters, mainLanguage, mainTexts }: {
         const disclosed = controlled || chapter.published;
         const selected = published(chapter).slice('urn:rezics:content:revision:'.length);
         return { occurrence: iri(200 + index), writer: disclosed ? chapter.writer : null,
-          otherIdentity: chapter.writer === pen,
+          otherIdentity: chapter.writer.slice(-36) !== agent,
           state: !disclosed ? null : !controlled ? 'published' : !chapter.draft ? 'empty'
             : chapter.published ? chapter.draft === selected ? 'published' : 'changed' : 'draft',
           target: disclosed ? chapter.target : null,
@@ -216,6 +220,11 @@ function chaptersMain({ chapters, mainLanguage, mainTexts }: {
         count: { value: chapters.length, kind: 'exact-page', total: null }, items }, facts });
     } } }) }) },
     works: (params: { id: string }) => ({
+      'agent-credits': { get: async () => {
+        calls.push('credits');
+        return ok({ items: [{ id: iri(400), role: 'author', agent: bookWriter,
+          displayName: 'Writer', handle: null }], nextCursor: null });
+      } },
       contents: { get: async ({ query }: { query: { actingSubject: string; language?: string } }) => {
         const language = query.language?.toLowerCase() ?? mainLanguage;
         calls.push(`contents ${query.actingSubject.slice(-1)} ${language}`);
@@ -284,6 +293,29 @@ describe('Studio chapters in the language they are written in', () => {
     const read = await readChapters(self, serialHeader('en'), { main });
     expect(read.language).toBe('zh-Hans');
     expect(read.page.ok && read.page.data.language).toBe('zh-hans');
+  });
+
+  test('a Book opened as another controlled identity reads chapters as its credited writer', async () => {
+    const { main, calls } = chaptersMain({ chapters: [chapter(1, { writer: pen })], bookWriter: pen,
+      refuseOther: true,
+      mainLanguage: 'zh-hans', mainTexts: [{ language: 'zh-Hans', author: pen }] });
+    const agents = [person(self, 'Reader'), person(pen, 'Writer')];
+    const read = await readChapters(self, serialHeader(), { main, agents });
+    expect(read.page.ok && read.page.data.items[0]?.label?.value).toBe('第1章');
+    expect(calls.filter(call => call.startsWith('chapter-agent'))).toEqual([
+      `chapter-agent ${self.slice(-36)}`, `chapter-agent ${pen.slice(-36)}`]);
+    expect(calls).toContain('credits');
+    const facts = await readChapterFacts(agents[0]!, agents, iri(100), read);
+    expect(Object.values(facts)[0]?.writer).toEqual({ kind: 'agent', agent: agents[1] });
+  });
+
+  test('another identity without the author credit does not disclose the Book’s chapters', async () => {
+    const { main, calls } = chaptersMain({ chapters: [chapter(1, { writer: pen, published: false })],
+      bookWriter: pen, mainLanguage: null, mainTexts: [] });
+    const read = await readChapters(self, serialHeader(), { main,
+      agents: [person(self, 'Reader'), person(stranger, 'Unrelated')] });
+    expect(read.page).toEqual({ ok: false, failure: 'none' });
+    expect(calls.filter(call => call.startsWith('chapter-agent'))).toEqual([`chapter-agent ${self.slice(-36)}`]);
   });
 });
 

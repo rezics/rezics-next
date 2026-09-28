@@ -3,10 +3,12 @@ import { Badge } from '@rezics/ui/badge';
 import { TriangleAlertIcon } from 'lucide-react';
 import type { ContractOf } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
+import { messages as catalogueMessages } from '../catalogue/messages.ts';
+import { workTypeLabel } from '../catalogue/work.ts';
 import { RetryButton } from '../work-page/retry-button.tsx';
 import type { ManuscriptLength } from './counts.ts';
 import type { StudioMessages } from './messages.ts';
-import { type InventoryState, type ReviewMode, type SubmissionState, workLabel } from './types.ts';
+import type { InventoryState, ReviewMode, SubmissionState } from './types.ts';
 
 // Small pieces every Studio page shares: addresses, names and badges.
 
@@ -18,19 +20,10 @@ export function languageName(tag: string, locale: UiLocale): string {
   catch { return tag; }
 }
 
-/** A Work's kind in the catalogue's words: Book, Guide, Recipe, Prompt, Skill, Mod. */
-export function kindLabel(types: readonly string[], t: T): string {
-  switch (workLabel(types)) {
-    case 'book': return t.kindBook;
-    case 'guide': return t.kindGuide;
-    case 'recipe': return t.kindRecipe;
-    case 'prompt': return t.kindPrompt;
-    case 'skill': return t.kindSkill;
-    case 'mod': return t.kindMod;
-    case 'software': return t.kindSoftware;
-    case 'media': return t.kindMedia;
-    case 'chapter': return t.kindChapter;
-  }
+/** A Work's kind uses the same name and type precedence as the catalogue. */
+export function kindLabel(types: readonly string[], locale: UiLocale, t: T): string {
+  const key = workTypeLabel(types);
+  return key ? catalogueMessages[locale][key] : t.kindChapter;
 }
 
 export function StateBadge({ state, t }: { state: InventoryState; t: T }) {

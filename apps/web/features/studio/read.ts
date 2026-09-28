@@ -241,13 +241,23 @@ export interface BookChaptersView {
  * One request carries the language Studio writes in and the page cursor.
  */
 export async function readChapters(actingSubject: string, header: Pick<WorkHeader, 'id' | 'mainVersion' | 'title'>,
-  { cursor, main: client }: { cursor?: string; main?: MainClient } = {}):
+  { cursor, main: client, agents = [] }: { cursor?: string; main?: MainClient; agents?: readonly AgentOption[] } = {}):
   Promise<BookChaptersView> {
   const main = client ?? await mainApi();
   const { own: language } = await readWorkLanguages(actingSubject, header, main);
-  const loaded = await settle(() => main.v1.me.agents({ agent: idOf(actingSubject) })
-    .works({ id: idOf(header.id) }).chapters.get({ query: { language,
-      ...(cursor ? { cursor } : {}) } }));
+  const chapterPage = (agent: string) => settle(() => main.v1.me.agents({ agent: idOf(agent) })
+    .works({ id: idOf(header.id) }).chapters.get({ query: { language, ...(cursor ? { cursor } : {}) } }));
+  let loaded = await chapterPage(actingSubject);
+  // The same person may open a writer's Book through another of their identities.
+  // Main's Studio chapter read is fenced to the Book's maintainer, so resolve one credited
+  // author among the identities this person controls when the current identity is refused.
+  if (!loaded.ok && (loaded.failure === 'missing' || loaded.failure === 'denied') && agents.length > 1) {
+    const credits = await settle(() => main.v1.works({ id: idOf(header.id) })['agent-credits']
+      .get({ query: { actingSubject } }));
+    const writer = credits.ok && credits.data.items.find(credit => credit.role === 'author'
+      && credit.agent !== actingSubject && agents.some(agent => agent.iri === credit.agent));
+    if (writer) loaded = await chapterPage(writer.agent);
+  }
   const page = loaded.ok ? { ok: true as const, data: loaded.data.page }
     : !cursor && loaded.failure === 'missing' ? { ok: false as const, failure: 'none' as const } : loaded;
   return { language, page, facts: loaded.ok ? loaded.data.facts : [] };
@@ -275,7 +285,9 @@ export async function readChapterFacts(agent: AgentOption, agents: readonly Agen
   chapters: BookChaptersView): Promise<ChapterFacts> {
   void book;
   return Object.fromEntries(chapters.facts.map(fact => {
-    const other = fact.otherIdentity ? agents.find(option => option.iri === fact.writer) : undefined;
+    // A chapter page may have been read as another controlled writer; Main's
+    // otherIdentity flag is relative to that reader, not the Studio page's Agent.
+    const other = agents.find(option => option.iri === fact.writer && option.iri !== agent.iri);
     const writer: ChapterWriter = fact.writer === agent.iri ? { kind: 'self' }
       : other ? { kind: 'agent', agent: other } : { kind: 'unknown' };
     const hidden = chapters.page.ok && !chapters.page.data.items.find(item => item.occurrence === fact.occurrence)?.target;

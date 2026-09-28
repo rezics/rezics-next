@@ -15,6 +15,10 @@ export function CoverCropper({ source, ratio, label, onReady }: {
 }) {
   const cropper = useImageCropper({ aspectRatio: ratio });
   useEffect(() => {
+    // Zag can mount the frame before the image and viewport have been measured.
+    // Its export returns null until both are ready.
+    if (!cropper.naturalSize.width || !cropper.naturalSize.height
+      || !cropper.viewportRect.width || !cropper.viewportRect.height) return;
     onReady(async () => {
       const size = ratio >= 1 ? { width: LONG_SIDE, height: Math.round(LONG_SIDE / ratio) }
         : { width: Math.round(LONG_SIDE * ratio), height: LONG_SIDE };

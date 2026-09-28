@@ -27,12 +27,15 @@ type Story = StoryObj<typeof meta>;
 export const Works: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('region', { name: 'Writing as' })).toHaveTextContent('Lin Mei 林梅');
+    const identity = canvas.getByRole('region', { name: 'Writing as' });
+    await expect(identity).toHaveTextContent('Lin Mei 林梅');
+    await expect(identity).toHaveTextContent('LM');
     await expect(canvas.getByRole('link', { name: 'New work' })).toHaveAttribute('href', `${home}/new`);
     const list = canvas.getByRole('region', { name: 'All works' });
     const items = within(list).getAllByRole('listitem');
     await expect(items).toHaveLength(3);
     await expect(items[0]).toHaveTextContent(/Book·3 chapters·2 published/);
+    await expect(items[0]!.querySelector('[data-slot="work-cover"]')).toHaveTextContent('Lin Mei 林梅');
     // Studio names each kind as the catalogue does: a DigitalDocument is a Guide.
     await expect(items[1]).toHaveTextContent(/Guide·English/);
     await expect(items[2]).toHaveTextContent(/Recipe·English/);
@@ -132,6 +135,7 @@ export const Chinese: Story = {
     await expect(canvas.getByRole('heading', { level: 1, name: '创作室' })).toBeInTheDocument();
     await expect(canvas.getByText('3 章')).toBeInTheDocument();
     await expect(canvas.getByText('已发布 2 章')).toBeInTheDocument();
+    await expect(canvas.getByRole('heading', { name: 'Ginger lemon tea' }).closest('li')).toHaveTextContent('菜谱');
   },
 };
 

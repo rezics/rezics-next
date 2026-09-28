@@ -40,12 +40,13 @@ function WorkItem({ work, chapters, agent, now, locale, t }: {
   const languages = [...new Set(work.texts.map(text => languageName(text.language, locale)))];
   return <li className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-4 gap-y-3 rounded-2xl border
     border-border/60 bg-card p-3 shadow-(--aura-shadow-card) sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:items-center sm:p-4">
-    <StudioCover id={work.id} title={work.title} cover={work.cover} types={work.types} actingSubject={agent.iri} />
+    <StudioCover id={work.id} title={work.title} cover={work.cover} types={work.types}
+      authors={own && agent.label ? [agent.label] : []} actingSubject={agent.iri} />
     <div className="grid min-w-0 gap-1.5">
       <h2 lang={work.title.language} className="font-medium font-work-title text-lg/snug [overflow-wrap:anywhere]">
         <Link href={workHref(agent, work.id)} className="rounded-sm hover:underline">{work.title.value}</Link></h2>
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-sm">
-        <span>{kindLabel(work.types, t)}</span>
+        <span>{kindLabel(work.types, locale, t)}</span>
         {chapters ? <><span aria-hidden="true">·</span><span>{chapters.more ? t.chapterCountMore(chapters.count)
           : t.chapterCount(chapters.count)}</span></> : null}
         {chapters?.published ? <><span aria-hidden="true">·</span><span>{t.publishedCount(chapters.published)}</span></>

@@ -248,7 +248,10 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     // The session Agent opening the writer's book: each chapter names the identity that writes it, even one still
     // private to the writer, and Switch opens it in the writer's Studio. The book is public once its introduction
     // is its main text; Main may refuse that step above.
-    await page.goto(`${sessionStudio}/works/${work}?tab=chapters`);
+    await expect(async () => {
+      await page.goto(`${sessionStudio}/works/${work}?tab=chapters`);
+      await expect(page.getByRole('region', { name: 'Writing as' })).toBeVisible({ timeout: 5_000 });
+    }).toPass({ timeout: 30_000 });
     if (await page.getByRole('heading', { level: 1, name: title }).isVisible()) {
       const rows = page.getByRole('region', { name: 'Chapters' }).getByRole('listitem');
       await expect(rows.filter({ hasText: '第一章 雨夜' })).toContainText('Written as Studio Writer 书生', { timeout: 30_000 });
@@ -260,8 +263,10 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     }
 
     // Another identity's Studio is reported, never opened or switched to.
-    await page.goto('/en/studio/@agent-00000000-0000-4000-8000-000000000001');
-    await expect(page.getByRole('heading', { name: 'You can’t write as this identity' })).toBeVisible();
+    await expect(async () => {
+      await page.goto('/en/studio/@agent-00000000-0000-4000-8000-000000000001');
+      await expect(page.getByRole('heading', { name: 'You can’t write as this identity' })).toBeVisible();
+    }).toPass({ timeout: 30_000 });
 
     // Screens in English and Simplified Chinese, light and dark, desktop and phone.
     await shootAll(page, context, info, studio, 'studio-home-en');

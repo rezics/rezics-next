@@ -12,9 +12,10 @@ import type { WorkCover as MainCover } from '../discover/types.ts';
  * its writer, so an image that fails to load gives way to the generated cover
  * instead of a broken picture.
  */
-export function StudioCover({ id, title, cover, types, actingSubject, size = 'sm', loading, className }: {
+export function StudioCover({ id, title, cover, types, authors, actingSubject, size = 'sm', loading, className }: {
   id: string; title: { value: string; language: string }; cover: MainCover | null; types: readonly string[];
-  actingSubject: string; size?: 'xs' | 'sm' | 'md' | 'lg'; loading?: 'lazy' | 'eager'; className?: string;
+  authors: readonly string[]; actingSubject: string; size?: 'xs' | 'sm' | 'md' | 'lg';
+  loading?: 'lazy' | 'eager'; className?: string;
 }) {
   const image = coverImage(cover, `?actingSubject=${encodeURIComponent(actingSubject)}`);
   const [failed, setFailed] = useState<string | null>(null);
@@ -25,6 +26,6 @@ export function StudioCover({ id, title, cover, types, actingSubject, size = 'sm
     probe.src = image.src;
     return () => { probe.onerror = null; };
   }, [image?.src]);
-  return <WorkCover title={title.value} lang={title.language} kind={coverKindOf(types)} seed={id} size={size}
+  return <WorkCover title={title.value} lang={title.language} kind={coverKindOf(types)} id={id} authors={authors} size={size}
     image={image && failed !== image.src ? image : null} loading={loading} className={className} />;
 }

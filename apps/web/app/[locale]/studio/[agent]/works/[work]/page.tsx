@@ -101,8 +101,9 @@ export default async function StudioWorkPage(props: Params) {
       </Suspense>
     </StudioWorkFrame>;
   }
-  const [chapters, languages, { agents }] = await Promise.all([readChapters(agent.iri, header, { cursor }),
-    readWorkLanguages(agent.iri, header), studioContext(segment)]);
+  const { agents } = await studioContext(segment);
+  const [chapters, languages] = await Promise.all([readChapters(agent.iri, header, { cursor, agents }),
+    readWorkLanguages(agent.iri, header)]);
   // Who writes each chapter and where it stands streams in after the list.
   const facts = readChapterFacts(agent, agents, header.id, chapters);
   const offset = cursor ? Math.max(0, Number.parseInt(query.from ?? '0', 10) || 0) : 0;
