@@ -17,7 +17,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const [work, { t }] = await Promise.all([resolveWork(ref, locale), getTranslation('workPage', [locale])]);
   if (work.kind !== 'work') return { title: t.notFoundTitle };
   const language = parseReaderLanguage(query);
-  const text = language === null ? null : await readText(work.header.mainVersion, language);
+  const text = language === null ? null
+    : await readText(work.header.mainVersion, language ?? work.header.selectedLanguage ?? undefined);
   if (!text?.ok) return { title: `${t.textNotFoundTitle} · ${work.header.title.value}`, robots: { index: false } };
   return { title: work.header.title.value, ...await workPageMetadata(work, { tab: 'text' }, query, locale) };
 }
@@ -30,7 +31,9 @@ export default async function TextPage({ params, searchParams }: Props) {
   const [work, messages, jar, agent] = await Promise.all([loadWork(ref, locale), getMessages('workPage', locale),
     cookies(), readingAgent()]);
   if (!work.ok) return <WorkUnavailable messages={messages} />;
-  const text = language === null ? null : await readText(work.header.mainVersion, language);
+  // The reader's own language when Main has a text in it; otherwise the text Main selects.
+  const text = language === null ? null
+    : await readText(work.header.mainVersion, language ?? work.header.selectedLanguage ?? undefined);
   if (!text || (!text.ok && text.failure === 'missing')) return <TextNotFound workRef={ref} messages={messages} />;
   if (!text.ok) return <TextUnavailable workRef={ref} messages={messages} />;
   return <TextReader workRef={ref} work={work.header} text={text.data} language={language ?? undefined}

@@ -239,14 +239,29 @@ export async function readContents(id: string, query: ContentsQuery): Promise<Lo
 }
 
 /**
+ * The language of the one text a Work without contents is read as: the one
+ * Main selects for the reader's language (`selected`), else the Main
+ * Version's selected text in any language, as Main's Versions read marks it
+ * (English first, as Main picks). Null when the Work has no selected text.
+ */
+export const oneTextLanguage = cache(async (id: string, locale: UiLocale, selected: string | null):
+  Promise<string | null> => {
+  if (selected) return selected;
+  const versions = await readVersions(id, locale, { kind: 'text-variant' });
+  const languages = versions.ok ? versions.data.items.filter(item => item.selected).map(item => item.language) : [];
+  return languages.find(language => language === 'en') ?? languages.sort()[0] ?? null;
+});
+
+/**
  * Where "Read" leads. A reader already in the Work continues at the next
  * chapter they have not read, as Main's Continue read gives it; anyone else
  * starts at chapter 1, found by descending the first parts of the contents
  * (at most three levels, one page each). A Work with no contents but a
- * selected text (`oneText`) is read as that one text. Null when the Work has
- * nothing to read; `contents` when Main could not say, so Contents explains.
+ * selected text is read as that one text. Null when the Work has nothing to
+ * read; `contents` when Main could not say, so Contents explains.
  */
-export const readStart = cache(async (id: string, work: string, oneText: boolean): Promise<ReadStart> => {
+export const readStart = cache(async (id: string, work: string, locale: UiLocale, selected: string | null):
+  Promise<ReadStart> => {
   const { main, actingSubject } = await reader();
   if (actingSubject) {
     const next = await settle(() => main.v1.me.continue.get({ query: { actingSubject, limit: 6 } }));
@@ -255,14 +270,15 @@ export const readStart = cache(async (id: string, work: string, oneText: boolean
       return { kind: item.lastPosition ? 'continue' : 'start', href: item.nextUnread.href, chapter: item.nextUnread.title };
     }
   }
-  const nothing: ReadStart = oneText ? { kind: 'start', href: textHref(id), chapter: null } : null;
+  const nothing = async (): Promise<ReadStart> => await oneTextLanguage(id, locale, selected)
+    ? { kind: 'start', href: textHref(id), chapter: null } : null;
   let parent: string | undefined;
   for (let depth = 0; depth < 3; depth += 1) {
     const level = await readContents(id, { parent });
-    if (!level.ok) return depth === 0 && level.failure === 'missing' ? nothing : { kind: 'contents' };
+    if (!level.ok) return depth === 0 && level.failure === 'missing' ? nothing() : { kind: 'contents' };
     const first = level.data.items.find(item => item.availability === 'available');
     const occurrence = first ? idOf(first.occurrence) : null;
-    if (!first || !occurrence) return depth === 0 && !level.data.items.length ? nothing : { kind: 'contents' };
+    if (!first || !occurrence) return depth === 0 && !level.data.items.length ? nothing() : { kind: 'contents' };
     if (first.role === 'chapter') return { kind: 'start', href: chapterHref(id, occurrence), chapter: first.label?.value ?? null };
     parent = occurrence;
   }

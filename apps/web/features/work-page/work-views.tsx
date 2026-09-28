@@ -4,6 +4,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import { browseReader } from '../discover/server.ts';
+import { coverKindOf } from '../catalogue/work.ts';
 import { AdoptionRegion } from './adoption.tsx';
 import { AuthorSection } from './author.tsx';
 import { ClassificationRegion } from './classification.tsx';
@@ -13,9 +14,9 @@ import type { WorkPageMessages } from './messages.ts';
 import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
-import { readAdoptions, readAgentCredits, readAgentWorks, readClassifications, readContents, readCredits,
-  readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm, readReviewer, readReviews,
-  readStart, readVersions } from './read.ts';
+import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readClassifications, readContents,
+  readCredits, readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm, readReviewer,
+  readReviews, readStart, readVersions } from './read.ts';
 import { RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
 import { type ContentsQuery, EVERYONE, type HistoryFilter, idOf, type VersionQuery, type WorkScope, workHref }
@@ -58,9 +59,9 @@ async function RatingLineSlot({ id, locale, messages }: Common & { id: string })
 }
 
 /** "Read": the next unread chapter, chapter 1 or the one text, read after the page has started to stream. */
-async function ReadSlot({ workRef, id, work, messages }: { workRef: string; id: string; work: Header;
-  messages: WorkPageMessages }) {
-  return <ReadButton workRef={workRef} start={await readStart(id, work.id, work.selectedLanguage !== null)}
+async function ReadSlot({ workRef, id, work, locale, messages }: Common & { workRef: string; id: string;
+  work: Header }) {
+  return <ReadButton workRef={workRef} start={await readStart(id, work.id, locale, work.selectedLanguage)}
     messages={messages} />;
 }
 
@@ -81,7 +82,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, child
       <Credits id={id} locale={locale} messages={messages} /></Suspense>}
     ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} locale={locale} messages={messages} /></Suspense>}
     readAction={<Suspense fallback={<ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} />}>
-      <ReadSlot workRef={workRef} id={id} work={work} messages={messages} /></Suspense>}>
+      <ReadSlot workRef={workRef} id={id} work={work} locale={locale} messages={messages} /></Suspense>}>
     {children}</WorkFrame>;
 }
 
@@ -246,9 +247,11 @@ export async function WorkContents({ workRef, id, work, query, locale, messages 
   workRef: string; id: string; work: Header; query: ContentsQuery | null;
 }) {
   const contents = query ? await readContents(id, query) : { ok: false as const, failure: 'invalid' as const };
-  // Main's selected language exists only when the Main Version has a public selected text.
-  const oneText = work.selectedLanguage ? { title: work.title, language: work.selectedLanguage,
-    book: work.types.includes('https://schema.org/Book') } : null;
+  const none = contents.ok ? !contents.data.items.length && !query?.parent && !query?.cursor
+    : contents.failure === 'missing';
+  const language = none ? await oneTextLanguage(id, locale, work.selectedLanguage) : null;
+  // Called a book as its cover draws it: a Work with no type, such as an imported classic, is shown as one.
+  const oneText = language ? { title: work.title, language, book: coverKindOf(work.types) === 'book' } : null;
   return <ContentsRegion contents={contents} workRef={workRef} query={query ?? {}} oneText={oneText} locale={locale}
     messages={messages} />;
 }
