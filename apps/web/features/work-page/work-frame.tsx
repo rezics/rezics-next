@@ -27,9 +27,11 @@ import { WorkTabs } from './work-tabs.tsx';
 export function WorkPageCover({ work, authors = [], avatarQuery }: {
   work: Header; authors?: readonly CatalogueAuthor[]; avatarQuery?: string;
 }) {
+  // Goodreads' size: on a wide screen the cover is narrower than the actions under it, so Read stays in the first
+  // screen; on a phone it leaves room for the title and actions.
   return <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover,
     kind: coverKindOf(work.types), authors }} avatarQuery={avatarQuery} loading="eager"
-    className="w-44 sm:w-52 lg:w-full" />;
+    className="w-40 sm:w-48 lg:w-full xl:w-60" />;
 }
 
 export function WorkFrame({ workRef, work, credits, authors = [], cover, ratingLine, readAction,
@@ -105,14 +107,15 @@ export function ReadButton({ workRef, start, messages }: {
 }
 
 /**
- * The Overview's order: the description, genres and the folded details, then
- * ratings (whose ratings is switched beside their heading) and readers'
- * reviews, the communities that feature the Work and its author. An unknown scope is reported in
+ * The Overview's order, as Goodreads' book page: the description, genres and
+ * the folded details, what readers also enjoyed, then ratings (whose ratings
+ * is switched beside their heading) and readers' reviews, the communities
+ * that feature the Work and its author. An unknown scope is reported in
  * place of the scoped sections, with the switch to choose another; it is
  * never replaced by everyone's view.
  */
-export function OverviewLayout({ about, scopeBar, ratings, reviews, classification, adoption, record, author,
-  messages }: {
+export function OverviewLayout({ about, scopeBar, ratings, reviews, classification, adoption, record, alsoEnjoyed,
+  author, messages }: {
   /** The Work's description; it does not change with scope, so it comes first. */
   about?: ReactNode;
   /** Shown on its own only when the URL names no known scope; the ratings section carries it otherwise. */
@@ -121,15 +124,21 @@ export function OverviewLayout({ about, scopeBar, ratings, reviews, classificati
   ratings: ReactNode | null; classification: ReactNode; adoption: ReactNode; record: ReactNode;
   /** Readers' reviews, under the rating summary they share a question with. */
   reviews?: ReactNode;
+  /** Works to read next; they do not depend on the scope, so an unknown one still shows them. */
+  alsoEnjoyed?: ReactNode;
   /** About the author and more by them, when the Work has a native author credit. */
   author?: ReactNode;
   messages: WorkPageMessages;
 }) {
   return <div className="grid min-w-0 gap-10">
     {about}
-    {ratings === null ? <div className="grid gap-4">{scopeBar}<InvalidScope messages={messages} /></div> : <>
+    {ratings === null ? <>
+      <div className="grid gap-4">{scopeBar}<InvalidScope messages={messages} /></div>
+      {alsoEnjoyed}
+    </> : <>
       {classification}
       {record}
+      {alsoEnjoyed}
       {ratings}
       {reviews}
       {adoption}

@@ -251,12 +251,10 @@ export function WorkOverview({ workRef, id, work, scope, context, locale, messag
       label={loading} lines={2} />}>
       <Adoption workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />
     </Suspense> : null}
-    // Goodreads sets "Readers also enjoyed" before ratings and reviews; it follows the details it reads beside.
-    record={<>
-      <Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
-        <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} /></Suspense>
-      <Suspense fallback={null}><AlsoEnjoyed id={id} work={work} locale={locale} messages={messages} /></Suspense>
-    </>}
+    record={<Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
+      <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} /></Suspense>}
+    alsoEnjoyed={<Suspense fallback={null}>
+      <AlsoEnjoyed id={id} work={work} locale={locale} messages={messages} /></Suspense>}
     author={<Suspense fallback={null}><Author id={id} locale={locale} messages={messages} /></Suspense>} />;
 }
 

@@ -62,12 +62,10 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
       classification={view ? <ClassificationRegion classifications={classifications} view={view}
         communities={communities} locale={locale} messages={t} /> : null}
       adoption={view ? <AdoptionRegion adoptions={adoptions} view={view} locale={locale} messages={t} /> : null}
-      record={<>
-        <WorkRecord work={work} locale={locale} messages={t}
-          citation={`${work.title.value}. Maren Osei. REZICS. https://rezics.com/${locale}/w/${fixture.workRef}`} />
-        {alsoEnjoyed ? <AlsoEnjoyedSection alsoEnjoyed={alsoEnjoyed} book realms={realms} locale={locale} messages={t} />
-          : null}
-      </>}
+      record={<WorkRecord work={work} locale={locale} messages={t}
+        citation={`${work.title.value}. Maren Osei. REZICS. https://rezics.com/${locale}/w/${fixture.workRef}`} />}
+      alsoEnjoyed={alsoEnjoyed ? <AlsoEnjoyedSection alsoEnjoyed={alsoEnjoyed} book realms={realms} locale={locale}
+        messages={t} /> : null}
       author={authorOverride ? <AuthorSection author={authorOverride} work={fixture.workRef} locale={locale}
         messages={t} /> : author ? <AuthorSection author={{ kind: 'agent', name: author.displayName,
         handle: author.handle, works: fixture.agentWorks }} work={fixture.workRef} locale={locale} messages={t} /> : null} />
@@ -340,6 +338,8 @@ export const InvalidScope: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('alert')).toHaveTextContent('This view isn’t available');
     await expect(canvas.queryByRole('region', { name: 'Ratings' })).toBeNull();
+    // Works to read next don't depend on the scope.
+    await expect(canvas.getByRole('region', { name: 'Readers also enjoyed' })).toBeVisible();
     for (const link of within(canvas.getByRole('navigation', { name: 'Community' })).getAllByRole('link')) {
       await expect(link).not.toHaveAttribute('aria-current');
     }
@@ -454,6 +454,7 @@ export const SomeCreditsUnavailable: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('alert')).toHaveTextContent('Some credits could not load.');
-    await expect(canvas.getByRole('link', { name: /^Idris Vale/ })).toBeVisible();
+    const byline = canvas.getByRole('heading', { level: 1 }).parentElement!;
+    await expect(within(byline).getByRole('link', { name: /^Idris Vale/ })).toBeVisible();
   },
 };
