@@ -19,6 +19,6 @@ export default async function WorkContentsPage({ params, searchParams }: Props) 
   const [{ ref }, query, locale] = await Promise.all([params, searchParams, requestLocale()]);
   const [work, messages] = await Promise.all([loadWork(ref, locale), getMessages('workPage', locale)]);
   if (!work.ok) return null;
-  return <WorkContents workRef={ref} id={work.id} query={parseContentsQuery(query)} locale={locale}
+  return <WorkContents workRef={ref} id={work.id} work={work.header} query={parseContentsQuery(query)} locale={locale}
     messages={messages} />;
 }

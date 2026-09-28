@@ -57,10 +57,11 @@ async function RatingLineSlot({ id, locale, messages }: Common & { id: string })
   return <RatingLine ratings={await readRatings(id, EVERYONE, undefined)} locale={locale} messages={messages} />;
 }
 
-/** "Read": the next unread chapter or chapter 1, read after the page has started to stream. */
-async function ReadSlot({ workRef, id, work, messages }: { workRef: string; id: string; work: string;
+/** "Read": the next unread chapter, chapter 1 or the one text, read after the page has started to stream. */
+async function ReadSlot({ workRef, id, work, messages }: { workRef: string; id: string; work: Header;
   messages: WorkPageMessages }) {
-  return <ReadButton workRef={workRef} start={await readStart(id, work)} messages={messages} />;
+  return <ReadButton workRef={workRef} start={await readStart(id, work.id, work.selectedLanguage !== null)}
+    messages={messages} />;
 }
 
 /** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
@@ -80,7 +81,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, child
       <Credits id={id} locale={locale} messages={messages} /></Suspense>}
     ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} locale={locale} messages={messages} /></Suspense>}
     readAction={<Suspense fallback={<ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} />}>
-      <ReadSlot workRef={workRef} id={id} work={work.id} messages={messages} /></Suspense>}>
+      <ReadSlot workRef={workRef} id={id} work={work} messages={messages} /></Suspense>}>
     {children}</WorkFrame>;
 }
 
@@ -241,9 +242,13 @@ export function WorkDiscussion({ workRef, id, scope, cursor, locale, messages }:
   </>;
 }
 
-export async function WorkContents({ workRef, id, query, locale, messages }: Common & {
-  workRef: string; id: string; query: ContentsQuery | null;
+export async function WorkContents({ workRef, id, work, query, locale, messages }: Common & {
+  workRef: string; id: string; work: Header; query: ContentsQuery | null;
 }) {
   const contents = query ? await readContents(id, query) : { ok: false as const, failure: 'invalid' as const };
-  return <ContentsRegion contents={contents} workRef={workRef} query={query ?? {}} locale={locale} messages={messages} />;
+  // Main's selected language exists only when the Main Version has a public selected text.
+  const oneText = work.selectedLanguage ? { title: work.title, language: work.selectedLanguage,
+    book: work.types.includes('https://schema.org/Book') } : null;
+  return <ContentsRegion contents={contents} workRef={workRef} query={query ?? {}} oneText={oneText} locale={locale}
+    messages={messages} />;
 }

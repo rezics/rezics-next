@@ -1,6 +1,8 @@
-import { buttonVariants } from '@rezics/ui/button';
+import { Button, buttonVariants } from '@rezics/ui/button';
+import { Popover, PopoverContent, PopoverHeader, PopoverTrigger } from '@rezics/ui/popover';
 import { cn } from '@rezics/ui/utils';
-import { FilePenIcon, HistoryIcon, MessageSquareReplyIcon, type LucideIcon, SendIcon } from 'lucide-react';
+import { CircleHelpIcon, FilePenIcon, HistoryIcon, MessageSquareReplyIcon, type LucideIcon, SendIcon }
+  from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -18,10 +20,22 @@ const kinds = {
 } as const satisfies Record<HistoryKind, { icon: LucideIcon; label: keyof WorkPageMessages;
   filter: keyof WorkPageMessages }>;
 
+/** What History leaves out, behind a help button beside the order note, so the list itself reads plainly. */
+function HistoryHelp({ label, text }: { label: string; text: string }) {
+  return <Popover>
+    <PopoverTrigger asChild>
+      <Button type="button" variant="ghost" size="icon-sm" aria-label={label} className="text-muted-foreground">
+        <CircleHelpIcon aria-hidden="true" /></Button>
+    </PopoverTrigger>
+    <PopoverContent className="w-72"><PopoverHeader title={label} description={text} /></PopoverContent>
+  </Popover>;
+}
+
 /**
  * The Work's public activity, newest first, as Main's history read gives it:
  * metadata revisions (each opens its exact revision), version publications and
- * replies placed in public Realms. Who acted and earlier text stay private.
+ * replies placed in public Realms. Who acted and earlier text stay private,
+ * which a help tip says.
  */
 export function HistoryRegion({ history, workRef, kind, cursor, locale, messages }: {
   history: Loaded<HistoryPage>; workRef: string; kind: HistoryFilter | undefined; cursor: string | undefined;
@@ -43,7 +57,8 @@ export function HistoryRegion({ history, workRef, kind, cursor, locale, messages
   }
   const { items, nextCursor } = history.data;
   return <Region id="work-history" title={t.history}>
-    <p className="text-muted-foreground text-sm">{t.historyOrder}</p>
+    <p className="flex items-center gap-1 text-muted-foreground text-sm">{t.historyOrder}
+      <HistoryHelp label={t.aboutHistory} text={t.historyPrivacy} /></p>
     {filter}
     {items.length ? <ol className="grid divide-y divide-border/60 border-border/60 border-y">
       {items.map(item => {

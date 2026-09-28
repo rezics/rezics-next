@@ -20,6 +20,8 @@ export type DiscussionItem = DiscussionPage['items'][number];
 export type ContentsPage = Ok<Work['contents']['get']>;
 export type ContentsItem = ContentsPage['items'][number];
 export type ChapterRead = Ok<ReturnType<Main['v1']['chapters']>['get']>;
+/** A Main Version's selected text: the one text a Work without contents is read as. */
+export type WorkText = Ok<ReturnType<Main['v1']['main-versions']>['selection']['get']>;
 export type Progress = Ok<ReturnType<ReturnType<Main['v1']['compositions']>['occurrences']>['progress']['get']>;
 export type AgentCreditPage = Ok<Work['agent-credits']['get']>;
 export type AgentCredit = AgentCreditPage['items'][number];

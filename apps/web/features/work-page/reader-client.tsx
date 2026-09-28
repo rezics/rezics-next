@@ -200,10 +200,19 @@ export function ReaderSurface({ initial, actingSubject, labels, toolbar, childre
   </div>;
 }
 
+/** Whether a tap on the page is meant for the text rather than a control or a selection. */
+function tapsText(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[data-reader-text]') !== null
+    && target.closest('a, button, input, select, textarea, [role="button"]') === null
+    && !window.getSelection()?.toString();
+}
+
 /**
  * While reading on a phone, the site's header and tab bar step aside as the
  * reader scrolls down and come back when they scroll up or reach the end, as
- * e-book apps do. The shell hides them for `html[data-reading=hidden]`.
+ * e-book apps do; a tap on the text shows or hides them, so a short chapter
+ * can be read without them too. Keyboard focus outside the text brings them
+ * back. The shell hides them for `html[data-reading=hidden]` on narrow screens.
  */
 export function ReaderChrome() {
   useEffect(() => {
@@ -217,9 +226,20 @@ export function ReaderChrome() {
       root.dataset.reading = y > last && y > 64 && !end ? 'hidden' : 'shown';
       last = y;
     };
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || !tapsText(event.target)) return;
+      root.dataset.reading = root.dataset.reading === 'hidden' ? 'shown' : 'hidden';
+    };
+    const onFocus = (event: FocusEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest('[data-reader-text]')) root.dataset.reading = 'shown';
+    };
     window.addEventListener('scroll', onScroll, { passive: true });
+    document.addEventListener('click', onClick);
+    document.addEventListener('focusin', onFocus);
     return () => {
       window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('click', onClick);
+      document.removeEventListener('focusin', onFocus);
       delete root.dataset.reading;
     };
   }, []);

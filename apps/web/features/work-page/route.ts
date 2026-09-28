@@ -159,6 +159,21 @@ export function parseCursor(params: SearchParams): string | undefined {
 export const chapterHref = (ref: string, chapter: string, language?: string) =>
   withQuery(`/w/${encodeURIComponent(ref)}/read/${chapter}`, { language });
 
+/** The reader of a Work read as one text: its Main Version's selected text, with no contents to choose from. */
+export const textHref = (ref: string, language?: string) =>
+  withQuery(`/w/${encodeURIComponent(ref)}/read`, { language });
+
+/**
+ * Where a chapter Work is read: at its place in its Book's reader, or the Book's Contents when it has no
+ * place there now. A chapter is never shown as a Work of its own.
+ */
+export function chapterPlaceHref(partOf: { work: string; occurrence: string | null }): string | null {
+  const book = idOf(partOf.work);
+  const chapter = partOf.occurrence ? idOf(partOf.occurrence) : null;
+  if (!book) return null;
+  return chapter ? chapterHref(book, chapter) : workHref(book, 'contents');
+}
+
 /** The Contents tab's level, language and page. */
 export interface ContentsQuery { parent?: string; language?: string; cursor?: string }
 

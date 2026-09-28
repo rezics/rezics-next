@@ -5,7 +5,7 @@ import type { WorkScope } from './route.ts';
 import type { ScopeRealm, ScopeView } from './scope-bar.tsx';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, ChapterRead, ClassificationPage, ContentsPage, CreditPage,
   DiscussionPage, HistoryPage, Loaded, Progress, RatingContext, RatingRead, Review, Reviewer, ReviewPage, VersionPage,
-  WorkHeader, WorkName } from './types.ts';
+  WorkHeader, WorkName, WorkText } from './types.ts';
 
 const iri = (uuid: string) => `https://rezics.com/id/${uuid}`;
 const name = (value: string, language = 'en'): WorkName => ({ value, language, direction: 'ltr', basis: 'requested' });
@@ -210,6 +210,18 @@ export const contents = ok(contentsPage([entry(1, 'group', 'Part One: The Delta'
   entry(3, 'chapter', 'The Surveyor’s Chain'), entry(4, 'chapter', null), entry(5, 'chapter', 'Neap Tide', false)],
 'contents-next-cursor'));
 export const noContents: Loaded<ContentsPage> = { ok: false, failure: 'missing' };
+
+/** A classic read as one text: no chapters, one selected publication. */
+export const oneTextWork: WorkHeader = { ...work, title: name('Pride and Prejudice'), tagline: null, originalTitle: null,
+  description: null, completionStatus: 'completed', chapterCount: null, wordCount: null, lastUpdatedAt: null };
+
+export const text: WorkText = { work: workId, mainVersion, selection: iri('5e7a9c1b-3d5f-4a7b-9c1d-3e5f7a9b1c3d'),
+  contribution: iri('6f8b0d2c-4e6a-4b8c-8d2e-4f6a8b0c2d4e'), selectedDraft: iri('7a9c1e3d-5f7b-4c9d-9e3f-5a7b9c1d3e5f'),
+  language: 'en', body: ['Pride and Prejudice',
+    'It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.',
+    'However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth '
+      + 'is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some '
+      + 'one or other of their daughters.'].join('\n') };
 
 const chapterText = ['The tide went out at four and took the eastern bank with it.',
   'Maren had learned not to trust anything the river left behind: sandbars that looked like streets, streets '

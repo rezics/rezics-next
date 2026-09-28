@@ -3,16 +3,16 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import type { WorkResolution } from '../work-page/read.ts';
 import { chapterHref, idOf, iriOf, parseContentsQuery, parseHistoryQuery, parseReaderLanguage, parseScope,
-  parseVersionQuery, type WorkTab, workHref } from '../work-page/route.ts';
+  parseVersionQuery, textHref, type WorkTab, workHref } from '../work-page/route.ts';
 import { localeAlternates, pageUrl } from './address.ts';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
-/** A page of a Work: one of its tabs, or a chapter in the reader. */
-export type WorkView = { tab: WorkTab } | { tab: 'read'; chapter: string };
+/** A page of a Work: one of its tabs, a chapter in the reader, or the one text a Work without chapters is read as. */
+export type WorkView = { tab: WorkTab } | { tab: 'read'; chapter: string } | { tab: 'text' };
 
 const basePath = (id: string, view: WorkView) =>
-  view.tab === 'read' ? chapterHref(id, view.chapter) : workHref(id, view.tab);
+  view.tab === 'read' ? chapterHref(id, view.chapter) : view.tab === 'text' ? textHref(id) : workHref(id, view.tab);
 
 /**
  * The address a Work view is known by. It names the Work by its native ID: a
@@ -51,6 +51,10 @@ export function workViewAddress(id: string, view: WorkView, query: SearchParams)
       case 'read': {
         const language = parseReaderLanguage(query);
         return language === null ? null : { path: chapterHref(id, view.chapter, language), indexable: true };
+      }
+      case 'text': {
+        const language = parseReaderLanguage(query);
+        return language === null ? null : { path: textHref(id, language), indexable: true };
       }
     }
   })();

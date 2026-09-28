@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
-import { ChapterNotFound, ChapterReader, ChapterUnavailable } from './reader.tsx';
+import { ChapterNotFound, ChapterReader, ChapterUnavailable, TextNotFound, TextReader } from './reader.tsx';
 import { defaultReaderSettings } from './reader-settings.ts';
 import { ChapterSkeleton } from './work-states.tsx';
 
@@ -145,6 +145,53 @@ export const ChinesePhoneDark: Story = {
     await expect(canvas.getByRole('link', { name: '下一章' })).toBeVisible();
     await expect(canvas.getByTitle('这是第一章')).toHaveAttribute('aria-disabled', 'true');
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+/** On a phone, a tap on the text puts the site's header and tab bar away and a second brings them back. */
+export const PhoneChromeTap: Story = {
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const root = document.documentElement;
+    await waitFor(() => expect(root.dataset.reading).toBe('shown'));
+    const paragraph = canvasElement.querySelector<HTMLElement>('p[data-paragraph]')!;
+    await userEvent.click(paragraph);
+    await expect(root.dataset.reading).toBe('hidden');
+    await userEvent.click(paragraph);
+    await expect(root.dataset.reading).toBe('shown');
+    // A tap on a control is the control's.
+    await userEvent.click(paragraph);
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Reading settings' }));
+    await expect(root.dataset.reading).toBe('shown');
+  },
+};
+
+/** A Work with no chapters opens as its one text under the Work's title, with no chapters to step through. */
+export const OneText: Story = {
+  render: () => <TextReader workRef={fixture.workRef} work={fixture.oneTextWork} text={fixture.text} language={undefined}
+    settings={defaultReaderSettings} actingSubject={null} locale="en" messages={messages.en} />,
+  parameters: { route: { pathname: `/w/${fixture.workRef}/read` } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: 'Pride and Prejudice' })).toBeVisible();
+    const article = canvas.getByRole('article');
+    await expect(article).toHaveAttribute('lang', 'en');
+    // The body's first line only repeated the title.
+    const paragraphs = canvasElement.querySelectorAll<HTMLElement>('p[data-paragraph]');
+    await expect(paragraphs).toHaveLength(2);
+    await expect(paragraphs[0]).toHaveTextContent(/^It is a truth universally acknowledged/);
+    await expect(canvas.queryByRole('navigation', { name: 'Chapters' })).toBeNull();
+    await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
+    await expect(canvas.getByRole('button', { name: 'Reading settings' })).toBeVisible();
+  },
+};
+
+export const OneTextNotFound: Story = {
+  render: () => <TextNotFound workRef={fixture.workRef} messages={messages.en} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: 'Nothing to read here' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
   },
 };
 

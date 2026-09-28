@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound, permanentRedirect, redirect } from 'next/navigation';
 import { cache } from 'react';
 import { failureOf } from './failure.ts';
 import { mainApiWithToken } from '../api/main.ts';
@@ -8,11 +8,11 @@ import { sessionAgentState } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { chapterHref, type ContentsQuery, idOf, iriOf, mainScope, parseWorkRef, type VersionQuery, type WorkRef,
-  type WorkScope, workHref } from './route.ts';
+import { chapterHref, chapterPlaceHref, type ContentsQuery, idOf, iriOf, mainScope, parseWorkRef, textHref,
+  type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, ChapterRead, ClassificationPage, ContentsPage, CreditPage,
   DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingContextPage, RatingRead, ReadFailure,
-  RealmHeader, Reviewer, ReviewPage, ReviewQuery, VersionPage, WorkHeader } from './types.ts';
+  RealmHeader, Reviewer, ReviewPage, ReviewQuery, VersionPage, WorkHeader, WorkText } from './types.ts';
 
 // Server reads for the Work page. Each returns a `Loaded` result instead of
 // throwing, so one region's failure never takes down another. Reads are
@@ -110,13 +110,16 @@ export const resolveWork = cache(async (ref: string, locale: UiLocale): Promise<
 /**
  * The Work for a layout or view. A missing or invisible Work is a 404 and a
  * renamed slug moves to the current one; when Main cannot answer, the page
- * says the Work is unavailable rather than pretending it does not exist.
+ * says the Work is unavailable rather than pretending it does not exist. A
+ * chapter is read in its Book: its address opens the Book's reader there.
  */
 export async function loadWork(ref: string, locale: UiLocale):
   Promise<{ ok: true; id: string; header: WorkHeader } | { ok: false }> {
   const work = await resolveWork(ref, locale);
   if (work.kind === 'missing') notFound();
   if (work.kind === 'moved') permanentRedirect(localizedPath(workHref(work.slug), locale));
+  const place = work.kind === 'work' && work.header.partOf ? chapterPlaceHref(work.header.partOf) : null;
+  if (place) redirect(localizedPath(place, locale));
   return work.kind === 'work' ? { ok: true, id: work.id, header: work.header } : { ok: false };
 }
 
@@ -239,10 +242,11 @@ export async function readContents(id: string, query: ContentsQuery): Promise<Lo
  * Where "Read" leads. A reader already in the Work continues at the next
  * chapter they have not read, as Main's Continue read gives it; anyone else
  * starts at chapter 1, found by descending the first parts of the contents
- * (at most three levels, one page each). Null when the Work has no contents
- * to read; `contents` when Main could not say, so Contents explains.
+ * (at most three levels, one page each). A Work with no contents but a
+ * selected text (`oneText`) is read as that one text. Null when the Work has
+ * nothing to read; `contents` when Main could not say, so Contents explains.
  */
-export const readStart = cache(async (id: string, work: string): Promise<ReadStart> => {
+export const readStart = cache(async (id: string, work: string, oneText: boolean): Promise<ReadStart> => {
   const { main, actingSubject } = await reader();
   if (actingSubject) {
     const next = await settle(() => main.v1.me.continue.get({ query: { actingSubject, limit: 6 } }));
@@ -251,13 +255,14 @@ export const readStart = cache(async (id: string, work: string): Promise<ReadSta
       return { kind: item.lastPosition ? 'continue' : 'start', href: item.nextUnread.href, chapter: item.nextUnread.title };
     }
   }
+  const nothing: ReadStart = oneText ? { kind: 'start', href: textHref(id), chapter: null } : null;
   let parent: string | undefined;
   for (let depth = 0; depth < 3; depth += 1) {
     const level = await readContents(id, { parent });
-    if (!level.ok) return depth === 0 && level.failure === 'missing' ? null : { kind: 'contents' };
+    if (!level.ok) return depth === 0 && level.failure === 'missing' ? nothing : { kind: 'contents' };
     const first = level.data.items.find(item => item.availability === 'available');
     const occurrence = first ? idOf(first.occurrence) : null;
-    if (!first || !occurrence) return depth === 0 && !level.data.items.length ? null : { kind: 'contents' };
+    if (!first || !occurrence) return depth === 0 && !level.data.items.length ? nothing : { kind: 'contents' };
     if (first.role === 'chapter') return { kind: 'start', href: chapterHref(id, occurrence), chapter: first.label?.value ?? null };
     parent = occurrence;
   }
@@ -268,6 +273,17 @@ export type ReadStart =
   | { kind: 'start' | 'continue'; href: string; chapter: string | null }
   | { kind: 'contents' }
   | null;
+
+/**
+ * The text a Work is read as when it has no contents: its Main Version's selected publication, in the
+ * named language or the one Main selects.
+ */
+export const readText = cache(async (mainVersion: string, language: string | undefined): Promise<Loaded<WorkText>> => {
+  const { main } = await reader();
+  const id = idOf(mainVersion);
+  if (!id) return { ok: false, failure: 'missing' };
+  return settle(() => main.v1['main-versions']({ mainVersion: id }).selection.get({ query: { language } }));
+});
 
 /** One chapter's exact body with its neighbours, in the Work's selected language unless one is named. */
 export const readChapter = cache(async (chapter: string, language: string | undefined):

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
-import { expect, within } from 'storybook/test';
+import { expect, screen, userEvent, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { WorkCredits } from './credits.tsx';
 import * as fixture from './fixtures.ts';
@@ -123,6 +123,11 @@ export const History: Story = {
   async play({ canvasElement }) {
     const region = within(canvasElement).getByRole('region', { name: 'History' });
     await expect(region).toHaveTextContent('Newest first.');
+    // What History leaves out is a help tip, not a sentence in the list's way.
+    await expect(region).not.toHaveTextContent('Who made each change');
+    await userEvent.click(within(region).getByRole('button', { name: 'About this history' }));
+    await expect(await screen.findByText(/Who made each change, and the text before it, are not shown/)).toBeVisible();
+    await userEvent.keyboard('{Escape}');
     const items = within(region).getAllByRole('listitem');
     await expect(items.map(item => item.querySelector('p')?.textContent)).toEqual(['A reply was placed in a community',
       'Details edited', 'A version was published', 'Details edited']);
@@ -200,7 +205,42 @@ export const ContentsEmpty: Story = {
   render: () => <Framed work={fixture.metadataOnlyWork}><ContentsRegion contents={fixture.noContents}
     workRef={fixture.workRef} query={{}} locale="en" messages={messages.en} /></Framed>,
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('heading', { name: 'No contents yet' })).toBeVisible();
+    const region = within(canvasElement).getByRole('region', { name: 'Contents' });
+    await expect(within(region).getByRole('heading', { name: 'Nothing to read yet' })).toBeVisible();
+    // Readers are told what they can do, not how the record is modelled.
+    await expect(region).not.toHaveTextContent(/Main Version|arranged/);
+  },
+};
+
+const oneText = { title: fixture.oneTextWork.title, book: true, language: 'en' };
+
+/** A book with no chapters is read as its one text: a one-entry Contents that opens it. */
+export const ContentsOneText: Story = {
+  parameters: at('contents'),
+  render: () => <Framed work={fixture.oneTextWork}><ContentsRegion contents={fixture.noContents}
+    workRef={fixture.workRef} query={{}} oneText={oneText} locale="en" messages={messages.en} /></Framed>,
+  async play({ canvasElement }) {
+    const region = within(canvasElement).getByRole('region', { name: 'Contents' });
+    await expect(region).toHaveTextContent('This book is read as one text.');
+    await expect(within(region).getByRole('link', { name: 'Start reading' }))
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/read`);
+    await expect(within(region).getAllByRole('listitem')).toHaveLength(1);
+    await expect(within(region).getByRole('link', { name: /Pride and Prejudice.*The whole text/ }))
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/read`);
+    await expect(region).not.toHaveTextContent(/Main Version|No contents/);
+  },
+};
+
+export const ContentsOneTextChinesePhone: Story = {
+  parameters: at('contents'),
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  render: () => <Framed work={fixture.oneTextWork} locale="zh-Hans"><ContentsRegion contents={fixture.noContents}
+    workRef={fixture.workRef} query={{}} oneText={oneText} locale="zh-Hans" messages={messages['zh-Hans']} /></Framed>,
+  async play({ canvasElement }) {
+    const region = within(canvasElement).getByRole('region', { name: '目录' });
+    await expect(region).toHaveTextContent('这本书是一篇完整的正文，不分章节。');
+    await expect(within(region).getByRole('link', { name: '开始阅读' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
 
