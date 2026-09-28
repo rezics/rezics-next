@@ -188,7 +188,9 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
           })}
         </ul> : null}
 
-    <footer className="sticky bottom-0 -mx-4 flex flex-wrap items-center gap-2 border-border/60 border-t bg-background/95
+    {/* Above the phone's bottom bar, as other sticky action bars sit. */}
+    <footer className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 -mx-4 flex flex-wrap items-center gap-2
+      border-border/60 border-t bg-background/95
       px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:backdrop-blur-none">
       {step > 1 ? <Button variant="ghost" onClick={() => setStep(step === 3 ? 2 : 1)}>
         <ArrowLeftIcon aria-hidden="true" className="rtl:rotate-180" />{t.back}</Button> : null}

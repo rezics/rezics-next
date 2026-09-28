@@ -116,6 +116,7 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
             ? t.tabUnsupported : t.pinFailed}</p> : null}
         <TopicSearch t={t} locale={locale} api={client} disabled={full} busy={busy}
           pinned={filters.pinned.flatMap(filter => filter.concept ? [filter.concept.id] : [])}
+          known={[...filters.pinned, ...filters.unpinned].flatMap(filter => filter.concept ? [filter.concept.id] : [])}
           unpinned={filters.unpinned} onPin={topic => void pinConcept(topic)} onPinFilter={filter => void pinFilter(filter)} />
         {current ? <SaveCurrent t={t} labels={current.labels} disabled={full} busy={busy === 'current'}
           onSave={name => void saveCurrent(name)} /> : null}
@@ -129,10 +130,12 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
  * unpinned topics and popular ones before a search, and one Concept's broader
  * and narrower neighbours to refine a choice before pinning it.
  */
-function TopicSearch({ t, locale, api, disabled, busy, pinned, unpinned, onPin, onPinFilter }: { t: T; locale: UiLocale;
-  api: () => SavedFilterApi; disabled: boolean; busy: string | null;
-  /** Concepts already pinned as tabs: not offered again, and opened rather than pinned. */
+function TopicSearch({ t, locale, api, disabled, busy, pinned, known, unpinned, onPin, onPinFilter }: { t: T;
+  locale: UiLocale; api: () => SavedFilterApi; disabled: boolean; busy: string | null;
+  /** Concepts already pinned as tabs: opened rather than pinned again. */
   pinned: readonly string[];
+  /** Concepts the reader already has a filter for, pinned or listed under their own topics: not offered as popular. */
+  known: readonly string[];
   unpinned: readonly SavedFilter[];
   onPin: (topic: Topic) => void; onPinFilter: (filter: SavedFilter) => void }) {
   const [phrase, setPhrase] = useState('');
@@ -236,10 +239,10 @@ function TopicSearch({ t, locale, api, disabled, busy, pinned, unpinned, onPin, 
             })}
           </ul>
         </section> : null}
-        {popular?.some(topic => !pinned.includes(topic.id)) ? <section aria-label={t.popularTopics} className="grid gap-2">
+        {popular?.some(topic => !known.includes(topic.id)) ? <section aria-label={t.popularTopics} className="grid gap-2">
           <h3 className="font-medium text-muted-foreground text-xs">{t.popularTopics}</h3>
           <ul className="flex flex-wrap gap-2">
-            {popular.filter(topic => !pinned.includes(topic.id)).map(topic => <li key={topic.id}><button type="button" className={chip} lang={topic.name.language}
+            {popular.filter(topic => !known.includes(topic.id)).map(topic => <li key={topic.id}><button type="button" className={chip} lang={topic.name.language}
               onClick={() => setSelected(topic)}>{topic.name.value}</button></li>)}
           </ul>
         </section> : null}

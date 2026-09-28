@@ -62,15 +62,29 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
 
   // Main's list is the truth once it answers.
   useEffect(() => setOrder(null), [serverKey]);
-  // The current tab, with its menu, stays in view on a narrow strip; the page itself never scrolls for it.
+  // The current tab, with its menu, stays in view on a narrow strip (the page itself never scrolls for
+  // it), and tabs past either edge fade out there, so a strip that scrolls says so.
   useEffect(() => {
     const list = strip.current;
-    const tab = list?.querySelector('[aria-current="page"]')?.closest('li');
-    if (!list || !tab) return;
-    const end = tab.offsetLeft + tab.offsetWidth;
-    if (tab.offsetLeft < list.scrollLeft) list.scrollLeft = tab.offsetLeft;
-    else if (end > list.scrollLeft + list.clientWidth) list.scrollLeft = end - list.clientWidth;
-  }, [state.tab, state.filter]);
+    if (!list) return;
+    const mark = () => {
+      // Right-to-left strips scroll to negative offsets; the distance from the start is the same.
+      const from = Math.abs(list.scrollLeft);
+      list.toggleAttribute('data-before', from > 1);
+      list.toggleAttribute('data-after', from + list.clientWidth < list.scrollWidth - 1);
+    };
+    const tab = list.querySelector('[aria-current="page"]')?.closest('li');
+    if (tab) {
+      const end = tab.offsetLeft + tab.offsetWidth;
+      if (tab.offsetLeft < list.scrollLeft) list.scrollLeft = tab.offsetLeft;
+      else if (end > list.scrollLeft + list.clientWidth) list.scrollLeft = end - list.clientWidth;
+    }
+    mark();
+    const resized = new ResizeObserver(mark);
+    resized.observe(list);
+    list.addEventListener('scroll', mark, { passive: true });
+    return () => { resized.disconnect(); list.removeEventListener('scroll', mark); };
+  }, [state.tab, state.filter, shown.length]);
 
   async function settle<R>(result: Promise<CommandResult<R>>, after?: () => void) {
     const done = await result;
@@ -99,7 +113,11 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
 
   return <><nav aria-label={feed.views} className="flex min-w-0 items-stretch border-border/60 border-b">
     <ul ref={strip} className="relative flex min-w-0 flex-1 snap-x overflow-x-auto [scrollbar-width:none]
-      [&::-webkit-scrollbar]:hidden">
+      [&::-webkit-scrollbar]:hidden data-after:[mask-image:linear-gradient(to_right,black_calc(100%-3rem),transparent)]
+      data-before:[mask-image:linear-gradient(to_left,black_calc(100%-3rem),transparent)]
+      data-before:data-after:[mask-image:linear-gradient(to_right,transparent,black_3rem,black_calc(100%-3rem),transparent)]
+      rtl:data-after:[mask-image:linear-gradient(to_left,black_calc(100%-3rem),transparent)]
+      rtl:data-before:[mask-image:linear-gradient(to_right,black_calc(100%-3rem),transparent)]">
       {(['following', 'all'] as const).map(tab => <li key={tab} className="flex shrink-0 snap-start">
         <Link href={href(withChange(state, { tab }))} aria-current={state.tab === tab ? 'page' : undefined}
           className={tabLink}>{tab === 'following' ? feed.following : feed.all}</Link>
@@ -120,7 +138,7 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
           }}>
           <Link href={href(pinnedTab(state, filter.id))} aria-current={current ? 'page' : undefined}
             lang={title?.language} draggable={false}
-            className={cn(tabLink, 'max-w-56 pe-9 sm:pe-10')}>
+            className={cn(tabLink, 'max-w-56 sm:pe-10', current && 'pe-9')}>
             <span className="truncate">{name}</span></Link>
           <TabMenu t={t} name={name} filter={filter} first={index === 0} last={index === shown.length - 1}
             visible={current} onSelect={action => {
@@ -151,7 +169,8 @@ function TabMenu({ t, name, filter, first, last, visible, onSelect }: { t: T; na
       '-translate-y-1/2 place-items-center rounded-full text-muted-foreground outline-none transition-opacity',
       'hover:bg-foreground/[0.06] hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2',
       'focus-visible:ring-ring data-[state=open]:opacity-100 sm:end-2',
-      visible ? 'opacity-100' : 'opacity-0 group-hover/tab:opacity-100 pointer-coarse:opacity-100')}>
+      // Phones show only the current tab's menu; wider screens show the others on hover or touch.
+      visible ? 'opacity-100' : 'opacity-0 group-hover/tab:opacity-100 max-sm:hidden sm:pointer-coarse:opacity-100')}>
       <EllipsisIcon aria-hidden="true" className="size-4" />
     </MenuTrigger>
     <MenuContent className="w-60">
