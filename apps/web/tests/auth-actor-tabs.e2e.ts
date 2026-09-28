@@ -35,3 +35,16 @@ test('declined consent keeps the requested destination for a fresh sign-in', asy
   await expect(page.getByRole('link', { name: 'Try signing in again' }))
     .toHaveAttribute('href', '/auth/start?next=%2Fen%2Fstudio');
 });
+
+test('a client sign-in link opens Accounts through a document navigation', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/en/identity/consent?next=%2Fen%2Fstudio');
+  const document = page.waitForRequest(request => new URL(request.url()).pathname === '/auth/authorize'
+    && request.isNavigationRequest());
+  await page.getByRole('link', { name: 'Try signing in again' }).click();
+  expect((await document).isNavigationRequest()).toBe(true);
+  const accountOrigin = new URL(process.env.ACCOUNT_ORIGIN ?? 'http://127.0.0.1:3004').origin;
+  await page.waitForURL(url => url.origin === accountOrigin && url.pathname === '/sign-in');
+  expect(errors).toEqual([]);
+});

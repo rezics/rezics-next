@@ -9,7 +9,7 @@ import { MAIN_SITE_SCOPE } from '../../../features/auth/scopes.ts';
 import { pathLocale, resolveLocale, LOCALE_COOKIE } from '../../../i18n/locale.ts';
 import { cookies } from 'next/headers';
 
-/** Starts authorization-code + PKCE in the browser on the Accounts origin. */
+/** Starts authorization-code + PKCE after a full-document browser navigation. */
 export async function GET(request: Request) {
   const input = new URL(request.url);
   const next = safeReturnPath(input.searchParams.get('next'));

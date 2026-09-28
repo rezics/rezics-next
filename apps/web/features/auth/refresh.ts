@@ -14,10 +14,18 @@ export type SessionRefresh =
 export interface CookieReader { get(name: string): { value: string } | undefined }
 
 /** One refresh at most per request, before anything reads the session. */
-export async function refreshSession(cookies: CookieReader, client: AccountClient):
+export async function refreshSession(cookies: CookieReader, client: AccountClient | null):
   Promise<SessionRefresh> {
   const refreshToken = cookies.get(REFRESH_COOKIE)?.value;
-  if (!refreshToken || cookies.get(ACCESS_COOKIE)?.value) return { kind: 'current' };
+  const accessToken = cookies.get(ACCESS_COOKIE)?.value;
+  if (accessToken) {
+    // The shell and feature readers must name the same person. End a partial
+    // or mismatched session before either can read it.
+    const record = decodeSessionRecord(cookies.get(SESSION_COOKIE)?.value);
+    return record && record.user.id === tokenSubject(accessToken)
+      ? { kind: 'current' } : { kind: 'ended' };
+  }
+  if (!refreshToken || !client) return { kind: 'current' };
   const result = await refreshTokens(client, refreshToken);
   if (result.status === 'unavailable') return { kind: 'current' };
   if (result.status === 'rejected') return { kind: 'ended' };

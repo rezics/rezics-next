@@ -21,8 +21,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     destination.pathname = `/${locale}${pathname === '/' ? '' : pathname}`;
     return NextResponse.redirect(destination);
   }
-  const client = accountClient();
-  const outcome = client ? await refreshSession(request.cookies, client) : { kind: 'current' as const };
+  const outcome = await refreshSession(request.cookies, accountClient());
   const signedIn = Boolean(request.cookies.get(ACCESS_COOKIE)?.value
     || request.cookies.get(REFRESH_COOKIE)?.value);
   const sessionKey = outcome.kind !== 'ended' && signedIn

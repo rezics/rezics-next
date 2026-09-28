@@ -61,6 +61,33 @@ test('IAM01: a request still carrying the rotated cookie reuses the rotation for
   expect(exchanges).toHaveLength(2);
 });
 
+test('IAM01: two browser contexts with the same expired cookies receive one rotation', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const { fetcher, exchanges } = account(async () => { await gate; return issued(); });
+  configure(fetcher);
+  const stale = crypto.randomUUID();
+  const sessionKey = crypto.randomUUID();
+  const record = encodeSessionRecord({ user: { id: 'user-1', name: 'Ada', email: '', image: null },
+    expiresAt: '2030-01-01T00:00:00Z' });
+  const request = () => proxy(new NextRequest('http://web.test/en/w/book', { headers: {
+    cookie: `rezics_refresh=${stale}; rezics_session=${record}; rezics_session_key=${sessionKey}` } }));
+  const first = request();
+  const second = request();
+  release();
+  const responses = await Promise.all([first, second]);
+  expect(exchanges).toHaveLength(1);
+  const forwarded = responses.map(response => response.headers.get('x-middleware-request-cookie'));
+  const cookie = (value: string | null, name: string) => value?.split('; ')
+    .find(part => part.startsWith(`${name}=`));
+  expect(cookie(forwarded[0], 'rezics_access')).toBe(cookie(forwarded[1], 'rezics_access'));
+  expect(cookie(forwarded[0], 'rezics_refresh')).toBe(cookie(forwarded[1], 'rezics_refresh'));
+  expect(cookie(forwarded[0], 'rezics_refresh')).not.toContain(stale);
+  expect(cookie(forwarded[0], 'rezics_session_key')).toBe(`rezics_session_key=${sessionKey}`);
+  expect(responses.every(response => response.headers.getSetCookie()
+    .some(line => line.startsWith('rezics_refresh=')))).toBe(true);
+});
+
 test('IAM01: an unavailable Account is retried by the next request; a refused grant ends the session', async () => {
   let answer: () => Response = () => new Response('down', { status: 503 });
   const { client, exchanges } = account(() => answer());
@@ -77,8 +104,12 @@ test('IAM01: refresh runs only when the access cookie is gone and keeps the sign
   const { client, exchanges } = account(() => issued('user-1'));
   const user = { id: 'user-1', name: 'Ada', email: 'ada@example.test', image: null };
   const record = encodeSessionRecord({ user, expiresAt: new Date().toISOString() });
-  expect(await refreshSession(jar({ rezics_access: 'a', rezics_refresh: 'r' }), client))
+  expect(await refreshSession(jar({ rezics_access: token('user-1'), rezics_refresh: 'r', rezics_session: record }), client))
     .toEqual({ kind: 'current' });
+  expect(await refreshSession(jar({ rezics_access: 'a', rezics_refresh: 'r' }), client))
+    .toEqual({ kind: 'ended' });
+  expect(await refreshSession(jar({ rezics_access: token('user-2'), rezics_session: record }), client))
+    .toEqual({ kind: 'ended' });
   expect(await refreshSession(jar({}), client)).toEqual({ kind: 'current' });
   expect(exchanges).toHaveLength(0);
   const refreshed = await refreshSession(jar({ rezics_refresh: crypto.randomUUID(), rezics_session: record }), client);
@@ -183,15 +214,45 @@ test('IAM01: a refused refresh signs the browser out cleanly instead of failing 
   // Signed out or current: no Account call and no changes.
   let calls = 0;
   configure((async () => { calls += 1; return issued(); }) as unknown as typeof fetch);
+  const record = encodeSessionRecord({ user: { id: 'user-1', name: 'Ada', email: '', image: null },
+    expiresAt: '2030-01-01T00:00:00Z' });
   const untouched = await proxy(new NextRequest('http://web.test/en', { headers: {
-    cookie: `rezics_access=a; rezics_session_key=${crypto.randomUUID()}` } }));
+    cookie: `rezics_access=${token('user-1')}; rezics_session=${record}; rezics_session_key=${crypto.randomUUID()}` } }));
   expect(calls).toBe(0);
   expect(untouched.headers.getSetCookie()).toEqual([]);
   const migrated = await proxy(new NextRequest('http://web.test/en', { headers: {
-    cookie: 'rezics_access=a; rezics_subject=old' } }));
+    cookie: `rezics_access=${token('user-1')}; rezics_session=${record}; rezics_subject=old` } }));
   expect(migrated.headers.getSetCookie().some(line => line.startsWith('rezics_session_key='))).toBe(true);
   expect(migrated.headers.getSetCookie().find(line => line.startsWith('rezics_subject=')))
     .toMatch(/Max-Age=0/);
   expect(migrated.headers.get('x-middleware-request-cookie')).toContain('rezics_session_key=');
   expect(migrated.headers.get('x-middleware-request-cookie')).not.toContain('rezics_subject=');
+});
+
+test('IAM01: an unavailable refresh signs out this request and retries the next one', async () => {
+  let available = false;
+  const { fetcher, exchanges } = account(() => available
+    ? issued() : new Response('Account unavailable', { status: 503 }));
+  configure(fetcher);
+  const stale = crypto.randomUUID();
+  const record = encodeSessionRecord({ user: { id: 'user-1', name: 'Ada', email: '', image: null },
+    expiresAt: '2030-01-01T00:00:00Z' });
+  const request = () => proxy(new NextRequest('http://web.test/en/w/book', { headers: {
+    cookie: `rezics_refresh=${stale}; rezics_session=${record}` } }));
+  const first = await request();
+  expect(first.headers.get('x-middleware-request-cookie')).not.toContain('rezics_access=');
+  expect(first.headers.getSetCookie().some(line => line.startsWith('rezics_refresh='))).toBe(false);
+  available = true;
+  const second = await request();
+  expect(second.headers.get('x-middleware-request-cookie')).toContain('rezics_access=');
+  expect(exchanges).toHaveLength(2);
+});
+
+test('IAM01: a partial access session is removed from both page and browser', async () => {
+  configure(account(() => { throw new Error('partial sessions must not refresh'); }).fetcher);
+  const response = await proxy(new NextRequest('http://web.test/en/w/book', { headers: {
+    cookie: `rezics_access=orphan; rezics_refresh=${crypto.randomUUID()}; rezics_session_key=${crypto.randomUUID()}` } }));
+  expect(response.headers.get('x-middleware-request-cookie') ?? '').not.toContain('rezics_');
+  expect(response.headers.getSetCookie().filter(line => line.startsWith('rezics_'))
+    .every(line => line.includes('Max-Age=0'))).toBe(true);
 });

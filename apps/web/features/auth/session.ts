@@ -4,7 +4,7 @@ import { mainApiWithToken } from '../api/main.ts';
 import type { AccountUser } from './account.ts';
 import { type ActingContextDiscovery, type AgentOption, agentOptions, resolveSessionAgent,
   type SessionAgent } from './acting-identity.ts';
-import { ACCESS_COOKIE, isSessionKey, REFRESH_COOKIE, SESSION_COOKIE,
+import { ACCESS_COOKIE, isSessionKey, SESSION_COOKIE,
   SESSION_KEY_COOKIE } from './cookies.ts';
 import { decodeSessionRecord } from './session-state.ts';
 import { readAgentProfile } from './agent-profile.ts';
@@ -65,10 +65,10 @@ export const sessionAgentState = cache(async (): Promise<MainSessionAgentState |
 export const readSession = cache(async (): Promise<Session | null> => {
   const jar = await cookies();
   const record = decodeSessionRecord(jar.get(SESSION_COOKIE)?.value);
-  const signedIn = Boolean(jar.get(ACCESS_COOKIE)?.value || jar.get(REFRESH_COOKIE)?.value);
-  if (!record || !signedIn) return null;
-  const [discovery, state] = jar.get(ACCESS_COOKIE)?.value
-    ? await Promise.all([sessionDiscovery(), sessionAgentState()]) : [null, null];
+  // Proxy has already tried to refresh this request. A refresh cookie alone
+  // cannot make the header signed in while page readers have no access token.
+  if (!record || !jar.get(ACCESS_COOKIE)?.value) return null;
+  const [discovery, state] = await Promise.all([sessionDiscovery(), sessionAgentState()]);
   const agents = discovery ? agentOptions(discovery) : null;
   const agent = state ? resolveSessionAgent(agents, state.sessionAgent.actingSubject)
     : { status: 'unverified', previous: null } as const;
