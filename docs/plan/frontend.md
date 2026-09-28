@@ -96,7 +96,10 @@ The UI ships eight locales, as the old site did: English, 繁體中文, 简体�
 日本語, 한국어, Deutsch, Français, Español (BCP 47 `en`, `zh-Hant`, `zh-Hans`,
 `ja`, `ko`, `de`, `fr`, `es`). Content languages are separate from the UI
 locale. Missing translations fall back per key to English; translation work
-runs on cheap models. Signed out, a language select and a theme button sit in
+runs on cheap models. "Realm" stays a product name in English, like Reddit's
+"subreddit"; every other locale uses its plain word for a community (社区,
+社群, コミュニティ, 커뮤니티, Community, communauté, comunidad), since readers
+should not have to learn the model's vocabulary. Signed out, a language select and a theme button sit in
 the header; signed in, "Language" and "Display mode" live in the avatar menu
 and in settings. Display mode is system, light or dark; Zones may carry their
 own themes (presets and a small set of tokens), which people can turn off.
