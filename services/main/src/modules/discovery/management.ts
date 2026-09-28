@@ -80,13 +80,14 @@ export function discoveryManagementRoutes(work: MainWorkDependencies) {
         const context = await operator(work, request, body.actingSubject);
         const { row, lease } = await owner().beginStep(context, params.generation, body.expectedCheckpoint);
         const basis: DiscoveryBasis = { scope: row.scope, realm: row.realm, context: row.context };
-        const result = await sourceRead(work, request, context, basis, async session => {
+        const projected = await sourceRead(work, request, context, basis, async session => {
           if (row.source_epoch !== session.position.dataEpoch || row.source_sequence !== session.position.sequence) {
             throw new RecommendationRestart('Discovery graph changed');
           }
-          const projected = await projectDiscoveryWork(session, basis, row.checkpoint);
-          return owner().commitStep(context, row.generation_id, lease, row.checkpoint, projected, session.position);
+          return projectDiscoveryWork(session, basis, row.checkpoint);
         });
+        const result = await owner().commitStep(context, row.generation_id, lease, row.checkpoint, projected,
+          { dataEpoch: row.source_epoch, sequence: row.source_sequence });
         return Response.json(view(result), noStore);
       } catch (error) { return discoveryError(error); }
     })

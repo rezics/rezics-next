@@ -7,7 +7,7 @@ test('G323 activation between head lookup and generation lookup retains the firs
   const row: DiscoveryGeneration = { generation_id: '00000000-0000-4000-8000-000000000001',
     scope: 'global', realm: null, context: null, principal_id: null, source_epoch: 'epoch',
     source_sequence: '7', access_revision: '3', recovery_generation: 'recovery', checkpoint: '',
-    complete: true, state: 'superseded', work_count: '2', active_head: '2' };
+    complete: true, state: 'superseded', work_count: '2', active_head: '2', changed_works: null };
   let retained = true;
   const projection = new DiscoveryProjection({ connect: async () => ({
     query: async (sql: string) => {

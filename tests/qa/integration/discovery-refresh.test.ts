@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { DiscoveryProjection, discoveryScopeKey } from '../../../services/main/src/modules/discovery/store.ts';
 import { DiscoveryRefreshWorker } from '../../../services/main/src/modules/discovery/refresh.ts';
+import { automaticDiscovery } from '../../../services/main/src/modules/discovery/automation.ts';
 import { DISCOVERY_REFRESH_COST, DiscoveryRefreshStore } from '../../../services/main/src/modules/discovery/refresh-store.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
@@ -80,15 +81,6 @@ test('Discovery scheduled refresh: relay gating, automatic enrollment, restart, 
       expect(outcome).not.toBe('retry');
       return outcome;
     };
-    expect(await tick()).toBe('advanced');
-    const obsolete = (await stack.accessPool.query('SELECT generation_id FROM access.discovery_generation')).rows[0].generation_id;
-    // Write between checkpoints: the old partial population must never activate.
-    const third = await stack.publicWork(a.actor, ['en'], 'Third');
-    await drain();
-    expect(await tick()).toBe('advanced');
-    expect((await stack.accessPool.query('SELECT state FROM access.derived_generation WHERE id = $1', [obsolete])).rows[0].state)
-      .toBe('cancelled');
-    expect(await tick()).toBe('advanced');
     // Crash/outage after the last checkpoint: the exact ready generation survives.
     const activate = projection.activate.bind(projection);
     projection.activate = async () => { throw new WorkReadUnavailable('Fixture activation outage'); };
@@ -97,10 +89,17 @@ test('Discovery scheduled refresh: relay gating, automatic enrollment, restart, 
     const ready = (await stack.accessPool.query(`SELECT g.id, g.state FROM access.discovery_refresh j
       JOIN access.derived_generation g ON g.id = j.generation_id WHERE j.scope_key = $1`, [key])).rows[0];
     expect(ready.state).toBe('ready');
+    // A later write cannot cancel the completed, pinned population. Activate
+    // that exact cut, then refresh only the newly public Work from the outbox.
+    const third = await stack.publicWork(a.actor, ['en'], 'Third');
+    await drain();
     expect(await tick()).toBe('activated');
     expect((await stack.accessPool.query('SELECT active_generation FROM access.derived_generation_head WHERE scope_key = $1', [key])).rows[0].active_generation)
       .toBe(ready.id);
-    for (let i = 0; i < 8 && (await read()).status !== 200; i++) await tick();
+    expect(await json(await read())).toMatchObject({ stale: true, items: expect.any(Array) });
+    expect(await tick()).toBe('activated');
+    const delta = (await stack.accessPool.query('SELECT changed_works FROM access.discovery_generation WHERE generation_id <> $1', [ready.id])).rows[0];
+    expect(delta.changed_works).toEqual([third.work]);
     const page = await json<Page>(await read('?limit=1'));
     expect(page.items[0]?.id).toBe(third.work);
     const all = await json<Page>(await read());
@@ -174,8 +173,17 @@ test('Discovery scheduled refresh: relay gating, automatic enrollment, restart, 
     await due();
     const outcomes = await Promise.all([worker().tick(), worker().tick()]);
     expect(outcomes).not.toContain('retry');
+    const obsolete = (await projection.register(automaticDiscovery(null), base,
+      { dataEpoch: stack.env.lineage.dataEpoch, sequence: '0' },
+      { idempotencyKey: 'purge-cancelled', requestDigest: 'a'.repeat(64) })).generation_id;
+    await stack.accessPool.query(`INSERT INTO access.discovery_entry
+      (generation_id, work, work_type, term, recent_order, rating_count, rating_sum, payload)
+      SELECT $1, work, work_type, term, recent_order, rating_count, rating_sum, payload
+      FROM access.discovery_entry WHERE generation_id = $2`, [obsolete, ready.id]);
+    await projection.cancel(automaticDiscovery(null), obsolete);
+    for (let i = 0; i < 8; i++) await store.purge();
     expect((await stack.accessPool.query('SELECT count(*) FROM access.discovery_entry WHERE generation_id = $1', [obsolete])).rows[0].count).toBe('0');
-    const measurements = { ticks, maxQueries, maxMs: Math.ceil(maxMs), worksPerTick: 1 };
+    const measurements = { ticks, maxQueries, maxMs: Math.ceil(maxMs), worksPerTick: DISCOVERY_REFRESH_COST.worksPerTick };
     await Bun.write(new URL(`../../../.temp/discovery-refresh-${Bun.env.REZICS_QA_RUN_ID}.json`, import.meta.url),
       JSON.stringify(measurements));
     console.log(`discovery refresh measured: ${JSON.stringify(measurements)}`);

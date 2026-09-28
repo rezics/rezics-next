@@ -8,8 +8,8 @@ import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
  * happens only in bounded management or scheduler steps.
  * Native graph enumeration during builds is separately bounded by the Work read
  * envelope; it is not claimed to have the PostgreSQL seek complexity. */
-export const DISCOVERY_COST = { pageSize: 20, buildWorks: 1, termsPerWork: 20, cardTags: 3, primaryCredits: 3,
-  entriesPerWork: 84, projectionBytes: 256 * 1024, leaseMs: 30_000 } as const;
+export const DISCOVERY_COST = { pageSize: 20, buildWorks: 250, termsPerWork: 20, cardTags: 3, primaryCredits: 3,
+  entriesPerWork: 84, reuseEntries: 20_000, projectionBytes: 256 * 1024, leaseMs: 30_000 } as const;
 export const discoveryType = t.Union(WORK_SEMANTIC_TYPES.map(value => t.Literal(value)));
 export const discoveryQuery = t.Object({ ...pageQuery, ...scopeQuery,
   sort: t.Optional(t.Union([t.Literal('recent'), t.Literal('top-rated')])),

@@ -6,15 +6,15 @@ import { workRead, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } fr
 import { automaticDiscovery } from './automation.ts';
 import type { OwnedDiscoveryBasis } from './contract.ts';
 import { DISCOVERY_REFRESH_COST, DiscoveryRefreshStore, type RefreshJob } from './refresh-store.ts';
-import { admitDiscoveryBasis, projectDiscoveryWork } from './source.ts';
+import { admitDiscoveryBasis, projectDiscoveryBatch } from './source.ts';
+import { discoveryChanges } from './changes.ts';
 import type { DiscoveryProjection } from './store.ts';
 
 export type RefreshOutcome = 'idle' | 'relay-behind' | 'current' | 'inactive' | 'advanced' | 'activated' | 'retry';
 const request = () => new Request('http://main.internal/discovery-refresh');
 
-/** Scheduled full rebuilds coalesce writes at the relay checkpoint. A tick
- * advances one Work; no browse request starts work. Continuous writes may
- * postpone activation: stale disclosure remains fenced, never served as fresh. */
+/** Bounded source batches and conservative outbox deltas. Immutable completed
+ * cuts may activate while later writes wait for the next refresh. */
 export class DiscoveryRefreshWorker {
   private timer: ReturnType<typeof setInterval> | undefined;
   private running: Promise<unknown> | undefined;
@@ -68,8 +68,10 @@ export class DiscoveryRefreshWorker {
     const started = performance.now();
     let generationId = job.generation_id;
     let outcome: RefreshOutcome = 'retry';
+    const held: { step?: { id: string; lease: string } } = {};
+    let moved = false;
     try {
-      outcome = await workRead(this.deps, request(), { scope: job.basis.scope, realm: job.basis.realm ?? undefined },
+      const prepared = await workRead(this.deps, request(), { scope: job.basis.scope, realm: job.basis.realm ?? undefined },
         async session => {
           if (!await this.caughtUp(session)) return 'relay-behind';
           const state = await this.store.inspect(job, session.position);
@@ -78,31 +80,60 @@ export class DiscoveryRefreshWorker {
           session.principal = state.principal;
           await admitDiscoveryBasis(session, job.basis);
           const operator = automaticDiscovery(job.basis.owner);
-          let row = state.row ?? await this.projection.register(operator, job.basis, session.position,
-            { idempotencyKey: `refresh:${job.scope_key}:${job.lease_epoch}`, requestDigest: digest([job.basis, session.position]) });
+          if (state.row && !state.row.complete && state.row.source_sequence !== session.position.sequence) {
+            const changes = await discoveryChanges(session, state.row.source_sequence);
+            // Appending new Works does not change the pinned population. Its
+            // enumeration excludes births after the cut; existing-Work writes
+            // require a new snapshot because HTTP cannot retain a transaction.
+            if (!changes || changes.works.some(work => !changes.created.includes(work))) {
+              await this.projection.cancel(operator, state.row.generation_id);
+              generationId = null;
+              return 'advanced';
+            }
+          }
+          const changes = !state.row && state.reuse ? await discoveryChanges(session, state.reuse.source_sequence) : null;
+          const row = state.row ?? await this.projection.register(operator, job.basis, session.position,
+            { idempotencyKey: `refresh:${job.scope_key}:${job.lease_epoch}`, requestDigest: digest([job.basis, session.position]) },
+            changes && state.reuse ? { generation: state.reuse.generation_id, works: changes.works } : undefined);
           generationId = row.generation_id;
           await this.store.attach(job, generationId);
           if (!row.complete) {
             const step = await this.projection.beginStep(operator, row.generation_id, row.checkpoint);
-            const projected = await projectDiscoveryWork(session, job.basis, row.checkpoint);
-            row = await this.projection.commitStep(operator, row.generation_id, step.lease, row.checkpoint,
-              projected, session.position);
+            held.step = { id: row.generation_id, lease: step.lease };
+            const projected = await projectDiscoveryBatch(session, job.basis, row.checkpoint,
+              { works: row.changed_works ?? undefined, sequence: row.source_sequence });
+            return { row, step, projected, position: session.position };
           }
-          if (!row.complete) return 'advanced';
-          const activated = await this.projection.activate(operator, row.generation_id, row.active_head, session.position,
+          return { row, step: null, projected: null, position: session.position };
+        });
+      if (typeof prepared === 'string') outcome = prepared;
+      else {
+        // Only commit after workRead has checked the graph, principal, Realm
+        // and source-attribution fences. A moved multi-query snapshot has no rows.
+        const operator = automaticDiscovery(job.basis.owner);
+        const row = prepared.step && prepared.projected
+          ? await this.projection.commitBatch(operator, prepared.row.generation_id, prepared.step.lease,
+            prepared.row.checkpoint, prepared.projected,
+            { dataEpoch: prepared.row.source_epoch, sequence: prepared.row.source_sequence }) : prepared.row;
+        if (!row.complete) outcome = 'advanced';
+        else {
+          const activated = await this.projection.activate(operator, row.generation_id, row.active_head, prepared.position,
             { idempotencyKey: `refresh-activate:${row.generation_id}:${row.active_head ?? 'none'}`,
               requestDigest: digest([row.generation_id, row.active_head]) });
           if (activated.outcome !== 'succeeded') throw new RecommendationStale('Discovery activation head changed');
           generationId = null;
-          return 'activated';
-        });
+          outcome = 'activated';
+        }
+      }
     } catch (error) {
+      moved = error instanceof WorkReadMoved;
+      if (moved && held.step) await this.projection.releaseStep(automaticDiscovery(job.basis.owner), held.step.id, held.step.lease);
       if (!(error instanceof RecommendationRestart || error instanceof RecommendationStale || error instanceof WorkReadMoved)) {
         console.error('discovery refresh deferred', error);
       }
     }
     await this.store.finish(job, generationId, outcome, performance.now() - started,
-      outcome === 'advanced' ? DISCOVERY_REFRESH_COST.intervalMs
+      outcome === 'advanced' || moved ? DISCOVERY_REFRESH_COST.intervalMs
         : outcome === 'retry' || outcome === 'inactive' ? DISCOVERY_REFRESH_COST.retryMs : DISCOVERY_REFRESH_COST.idleMs);
     return outcome;
   }

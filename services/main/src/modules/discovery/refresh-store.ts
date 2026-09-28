@@ -4,11 +4,11 @@ import { inAccess, RecommendationStale, requireRecoveryOpen } from '../recommend
 import type { ReadPosition } from '../work/read-session.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
 import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
-import type { OwnedDiscoveryBasis } from './contract.ts';
+import { DISCOVERY_COST, type OwnedDiscoveryBasis } from './contract.ts';
 import { discoveryScopeKey, generation, sourceFence, type DiscoveryGeneration } from './store.ts';
 
-export const DISCOVERY_REFRESH_COST = { intervalMs: 1000, idleMs: 5000, retryMs: 30_000,
-  leaseMs: 30_000, catalogSize: 20, jobsPerTick: 1, worksPerTick: 1, purgeEntries: 1000,
+export const DISCOVERY_REFRESH_COST = { intervalMs: 100, idleMs: 100, retryMs: 30_000,
+  leaseMs: 30_000, catalogSize: 20, jobsPerTick: 1, worksPerTick: DISCOVERY_COST.buildWorks, purgeEntries: 1000,
   graphCalls: WORK_READ_COST.graphCalls + 3 } as const;
 export interface RefreshJob { scope_key: string; basis: OwnedDiscoveryBasis; generation_id: string | null; lease_epoch: string }
 const current = (row: DiscoveryGeneration, position: ReadPosition, fence: { revision: string; generation: string }) =>
@@ -90,7 +90,8 @@ export class DiscoveryRefreshStore {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`discovery:${job.scope_key}`]);
       const active = (await client.query<{ active_generation: string }>(`SELECT active_generation
         FROM access.derived_generation_head WHERE family = 'discovery' AND scope_key = $1`, [job.scope_key])).rows[0];
-      if (active && current(await generation(client, active.active_generation), position, fence)) {
+      const prior = active ? await generation(client, active.active_generation) : null;
+      if (prior && current(prior, position, fence)) {
         return { fresh: true, row: null, principal: null };
       }
       let principal: VerifiedPrincipal | null = null;
@@ -103,14 +104,17 @@ export class DiscoveryRefreshStore {
         WHERE family = 'discovery' AND scope_key = $1 AND
           (state = 'building' OR (id = $2 AND state = 'ready'))
         ORDER BY created_at, id LIMIT 1 FOR UPDATE`, [job.scope_key, job.generation_id])).rows[0];
-      if (!pending) return { fresh: false, row: null, principal };
+      const reuse = prior?.state === 'ready' && prior.source_epoch === position.dataEpoch
+        && prior.access_revision === fence.revision && prior.recovery_generation === fence.generation ? prior : null;
+      if (!pending) return { fresh: false, row: null, principal, reuse };
       const row = await generation(client, pending.id);
-      if (current(row, position, fence)) return { fresh: false, row, principal };
+      if (row.source_epoch === position.dataEpoch && row.recovery_generation === fence.generation
+        && (row.complete || row.access_revision === fence.revision)) return { fresh: false, row, principal, reuse };
       // Obsolete work can never activate. Closing it releases the one-building
       // constraint and fences a delayed manager/worker commit through its state.
       await client.query(`UPDATE access.derived_generation SET state = 'cancelled', lease_expires_at = NULL,
         finished_at = clock_timestamp(), failure_reason = 'discovery-source-changed' WHERE id = $1`, [row.generation_id]);
-      return { fresh: false, row: null, principal };
+      return { fresh: false, row: null, principal, reuse };
     });
   }
 

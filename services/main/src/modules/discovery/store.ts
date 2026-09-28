@@ -17,6 +17,7 @@ export interface DiscoveryGeneration {
   principal_id: string | null; source_epoch: string; source_sequence: string;
   access_revision: string; recovery_generation: string; checkpoint: string; complete: boolean;
   state: string; work_count: string; active_head: string | null;
+  changed_works: string[] | null;
 }
 export interface DiscoveryReadGeneration extends DiscoveryGeneration { stale: boolean }
 const basisOf = (row: DiscoveryGeneration): OwnedDiscoveryBasis => ({ scope: row.scope,
@@ -94,7 +95,8 @@ const manager = (client: PoolClient, context: DiscoveryOperator, row: DiscoveryG
 export class DiscoveryProjection {
   constructor(private readonly pool: Pool) {}
 
-  async register(context: DiscoveryOperator, basis: DiscoveryBasis, position: ReadPosition, key: ReceiptKey) {
+  async register(context: DiscoveryOperator, basis: DiscoveryBasis, position: ReadPosition, key: ReceiptKey,
+    reuse?: { generation: string; works: string[] }) {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
       const principal = await operatorPrincipal(client, context, basis.scope);
@@ -119,6 +121,33 @@ export class DiscoveryProjection {
          access_revision, recovery_generation) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [id, basis.scope, basis.realm, basis.context, owned.owner, position.dataEpoch, position.sequence,
         fence.revision, fence.generation]);
+      // Reuse saves graph hydration, but immutable generations still copy SQL
+      // rows. Bound that copy; larger populations use resumable source batches.
+      const reusable = reuse && Number((await client.query<{ count: string }>(`SELECT count(*)::text FROM (
+        SELECT 1 FROM access.discovery_entry WHERE generation_id = $1 LIMIT $2) bounded`,
+      [reuse.generation, DISCOVERY_COST.reuseEntries + 1])).rows[0]!.count) <= DISCOVERY_COST.reuseEntries;
+      if (reuse && reusable) {
+        const prior = await generation(client, reuse.generation);
+        if (prior.state !== 'ready' || prior.source_epoch !== position.dataEpoch
+          || prior.access_revision !== fence.revision || prior.recovery_generation !== fence.generation
+          || digest(basisOf(prior)) !== digest(owned) || reuse.works.length > 2000
+          || BigInt(prior.source_sequence) > BigInt(position.sequence)) {
+          throw new RecommendationRestart('Discovery reuse basis changed');
+        }
+        await client.query(`INSERT INTO access.discovery_entry
+          (generation_id, work, work_type, term, recent_order, rating_count, rating_sum, payload)
+          SELECT $1, work, work_type, term, recent_order, rating_count, rating_sum, payload
+          FROM access.discovery_entry WHERE generation_id = $2 AND NOT (work = ANY($3::text[]))`,
+        [id, reuse.generation, reuse.works]);
+        await client.query(`INSERT INTO access.discovery_term_count (generation_id, term, concept, work_count)
+          SELECT $1, term, payload->'classification'->>'concept', count(*)
+          FROM access.discovery_entry WHERE generation_id = $1 AND work_type = '' AND term <> ''
+          GROUP BY term, payload->'classification'->>'concept'`, [id]);
+        await client.query(`UPDATE access.discovery_generation SET changed_works = $2,
+          work_count = (SELECT count(*) FROM access.discovery_entry
+            WHERE generation_id = $1 AND work_type = '' AND term = '') WHERE generation_id = $1`,
+        [id, JSON.stringify(reuse.works)]);
+      }
       await client.query(`INSERT INTO access.derived_generation_input
         (generation_id, source, data_epoch, pinned_sequence, checkpoint_sequence)
         VALUES ($1, 'main-graph', $2, $3, $3)`, [id, position.dataEpoch, position.sequence]);
@@ -151,6 +180,21 @@ export class DiscoveryProjection {
 
   async commitStep(context: DiscoveryOperator, id: string, lease: string, checkpoint: string,
     result: { after: string; complete: boolean; item: ProjectedWork | null }, position: ReadPosition) {
+    return this.commitBatch(context, id, lease, checkpoint,
+      { ...result, items: result.item ? [result.item] : [] }, position);
+  }
+
+  async releaseStep(context: DiscoveryOperator, id: string, lease: string) {
+    await inAccess(this.pool, async client => {
+      await requireRecoveryOpen(client);
+      await manager(client, context, await generation(client, id));
+      await client.query(`UPDATE access.derived_generation SET lease_expires_at = clock_timestamp()
+        WHERE id = $1 AND lease_epoch = $2 AND state = 'building'`, [id, lease]);
+    });
+  }
+
+  async commitBatch(context: DiscoveryOperator, id: string, lease: string, checkpoint: string,
+    result: { after: string; complete: boolean; items: ProjectedWork[] }, position: ReadPosition) {
     return inAccess(this.pool, async client => {
       await requireRecoveryOpen(client);
       await fenceLease(client, id, lease, DISCOVERY_COST.leaseMs);
@@ -161,37 +205,52 @@ export class DiscoveryProjection {
       if (row.checkpoint !== checkpoint || (result.after <= checkpoint && !result.complete)) {
         throw new RecommendationStale('Build checkpoint changed');
       }
-      const item = result.item;
-      if (item) {
-        if (item.work !== result.after || item.types.length > 3
+      if (result.items.length > DISCOVERY_COST.buildWorks
+        || new Set(result.items.map(item => item.work)).size !== result.items.length) {
+        throw new RecommendationUnavailable('Discovery batch exceeds its bound');
+      }
+      const entries = result.items.flatMap(item => {
+        if (item.work <= checkpoint || item.work > result.after || item.types.length > 3
           || item.classifications.length > DISCOVERY_COST.termsPerWork
           || new Set(item.classifications.map(term => term.sense)).size !== item.classifications.length
           || item.primaryCredits.length > DISCOVERY_COST.primaryCredits) {
           throw new RecommendationUnavailable('Discovery projection exceeds its fanout');
         }
-        const entries = ['', ...item.types].flatMap(type => [null, ...item.classifications].map(term => ({
+        return ['', ...item.types].flatMap(type => [null, ...item.classifications].map(term => ({
+          work: item.work, recent: item.recentOrder, count: item.rating?.count ?? 0, sum: item.rating?.sum ?? 0,
           type, term: term?.sense ?? '', payload: { revision: item.revision, mainVersion: item.mainVersion,
             types: item.types, rating: item.rating, classification: term,
             primaryCredits: item.primaryCredits, classifications: item.classifications.slice(0, DISCOVERY_COST.cardTags) } })));
+      });
+      if (entries.length) {
         await client.query(`INSERT INTO access.discovery_entry
           (generation_id, work, work_type, term, recent_order, rating_count, rating_sum, payload)
-          SELECT $1,$2,e.type,e.term,$3,$4,$5,e.payload
-          FROM jsonb_to_recordset($6::jsonb) e(type text, term text, payload jsonb)`,
-        [id, item.work, item.recentOrder, item.rating?.count ?? 0, item.rating?.sum ?? 0, JSON.stringify(entries)]);
-        if (item.classifications.length) {
+          SELECT $1,e.work,e.type,e.term,e.recent::numeric,e.count,e.sum,e.payload
+          FROM jsonb_to_recordset($2::jsonb) e(work text, type text, term text, recent text, count smallint, sum smallint, payload jsonb)`,
+        [id, JSON.stringify(entries)]);
+        const terms = result.items.flatMap(item => item.classifications.map(({ sense, concept }) => ({ term: sense, concept })));
+        if (terms.length) {
+          const meanings = new Map<string, string>();
+          for (const term of terms) {
+            if (meanings.has(term.term) && meanings.get(term.term) !== term.concept) {
+              throw new RecommendationUnavailable('Discovery term meaning changed within a batch');
+            }
+            meanings.set(term.term, term.concept);
+          }
           const counts = await client.query(`INSERT INTO access.discovery_term_count (generation_id, term, concept, work_count)
-            SELECT $1, t.term, t.concept, 1 FROM jsonb_to_recordset($2::jsonb) t(term text, concept text)
+            SELECT $1, t.term, t.concept, count(*) FROM jsonb_to_recordset($2::jsonb) t(term text, concept text)
+            GROUP BY t.term, t.concept
             ON CONFLICT (generation_id, term) DO UPDATE
-              SET work_count = access.discovery_term_count.work_count + 1
+              SET work_count = access.discovery_term_count.work_count + EXCLUDED.work_count
               WHERE access.discovery_term_count.concept = EXCLUDED.concept`,
-          [id, JSON.stringify(item.classifications.map(({ sense, concept }) => ({ term: sense, concept })))]);
-          if (counts.rowCount !== item.classifications.length) {
+          [id, JSON.stringify(terms)]);
+          if (counts.rowCount !== meanings.size) {
             throw new RecommendationUnavailable('Discovery term meaning changed within a build');
           }
         }
       }
       await client.query(`UPDATE access.discovery_generation SET checkpoint = $2, complete = $3,
-        work_count = work_count + $4 WHERE generation_id = $1`, [id, result.after, result.complete, item ? 1 : 0]);
+        work_count = work_count + $4 WHERE generation_id = $1`, [id, result.after, result.complete, result.items.length]);
       await client.query(`UPDATE access.derived_generation_input SET snapshot_cursor = $2,
         snapshot_complete = $3 WHERE generation_id = $1 AND source = 'main-graph'`,
       [id, result.complete ? null : result.after, result.complete]);
@@ -225,8 +284,18 @@ export class DiscoveryProjection {
       const principal = await manager(client, context, row);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         [`discovery-receipt:${principal}:${key.idempotencyKey}`]);
-      assertPosition(row, position);
-      await assertFence(client, row);
+      // A completed population is immutable at its source cut. Concurrent
+      // writes affect freshness, not eligibility to activate that pinned cut.
+      const fence = await sourceFence(client);
+      if (row.source_epoch !== position.dataEpoch || row.recovery_generation !== fence.generation
+        || BigInt(row.source_sequence) > BigInt(position.sequence)) {
+        throw new RecommendationRestart('Discovery recovery basis changed');
+      }
+      if ((await client.query(`SELECT 1 FROM access.derived_generation_head
+        WHERE family = 'discovery' AND active_generation = $1`, [id])).rowCount
+        && !await replayReceipt(client, principal, key, 'activate')) {
+        throw new RecommendationStale('Discovery generation is already active');
+      }
       return activateHead(client, principal, key, id, expected);
     });
   }
