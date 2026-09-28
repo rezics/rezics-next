@@ -129,7 +129,7 @@ function statusItem(item: StatusShelfItem): LibraryItem {
   const work = item.card ? shelfCard(item.card)
     : { id: item.work, href: workHref(item.work.slice(-36)), title: null, cover: null, kind: 'book', authors: [],
       rating: null } satisfies CatalogueWork;
-  return { work, status: item.status, version: item.version, shelvedAt: momentText(item.changedAt),
+  return { work, types: item.card?.types ?? [], status: item.status, version: item.version, shelvedAt: momentText(item.changedAt),
     startedOn: dayText(item.startedOn), finishedOn: dayText(item.finishedOn), rating: null, lastReadAt: null,
     customShelves: [] };
 }
@@ -282,7 +282,8 @@ async function memberItem(member: { work: string; occurrence: string }, locale: 
       kind: coverKindOf(read.data.types), authors: [], rating: null, completion: read.data.completionStatus }
     : { id: member.work, href: workHref(member.work.slice(-36)), title: null, cover: null, kind: 'book', authors: [],
       rating: null };
-  return { work, status: null, version: 0, shelvedAt: null, startedOn: null, finishedOn: null, rating: null,
+  return { work, types: read.ok ? read.data.types : [], status: null, version: 0, shelvedAt: null,
+    startedOn: null, finishedOn: null, rating: null,
     lastReadAt: null, customShelves: [], occurrence: member.occurrence };
 }
 

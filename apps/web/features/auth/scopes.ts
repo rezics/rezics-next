@@ -35,7 +35,7 @@ export const MAIN_SITE_SCOPES = [
   // Shared Contexts and the reader's private selections.
   'context:read', 'context:write', 'context:select',
   // Sources as a reader and as an editor adopting them into native Works.
-  'source:read', 'source:adopt',
+  'source:read', 'source:acquire', 'source:convert', 'source:propose', 'source:adopt',
   // Packages a person installs, revokes or recommends for a Work.
   'package:read', 'package:install', 'package:revoke', 'package:recommendation-set',
   // Governance: reports and decisions, polls and ballots.
@@ -58,7 +58,7 @@ export const SCOPES_NOT_REQUESTED = [
   // Realm public-role edits have no site UI yet.
   'realm:public-role',
   // Source pipelines: intake, acquisition, conversion, correspondence, proposals.
-  'source:intake', 'source:acquire', 'source:convert', 'source:correspond', 'source:propose',
+  'source:intake', 'source:correspond',
   // Package tooling: capture, verification and resolution.
   'package:capture', 'package:verify', 'package:resolve',
   // A connected App's own calls, made with its own token.

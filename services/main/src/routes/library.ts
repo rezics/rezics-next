@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { problemResult } from '../api-contract.ts';
+import { pendingOperation, problemResult } from '../api-contract.ts';
 import { readMyShelves, readReaderStates, readStatusShelf, READER_LIBRARY_COST }
   from '../modules/library/read.ts';
 import { readPublicShelves, readPublicStatusShelf } from '../modules/library/public.ts';
@@ -13,6 +13,9 @@ import { shelfWork } from '../modules/profiles/read-contract.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { checkedOpenLibraryWorkId, fetchOpenLibraryWork } from '../modules/source/open-library.ts';
+import { OpenLibraryImportSearchUnavailable, searchOpenLibraryImport }
+  from '../modules/library-import/open-library-search.ts';
 
 const status = t.Union([t.Literal('want-to-read'), t.Literal('reading'), t.Literal('read'), t.Null()]);
 const statusState = t.Object({ work: readId, status,
@@ -85,6 +88,8 @@ export const openApiOperations = {
   '/v1/me/reading-stats': { get: { bearer: true } },
   '/v1/me/import-reviews': { get: { bearer: true } },
   '/v1/me/import-reviews/{id}': { put: { bearer: true, idempotencyKey: true } },
+  '/v1/me/library-import/open-library': { get: { bearer: true } },
+  '/v1/me/library-import/open-library/adoptions': { post: { bearer: true, idempotencyKey: true } },
 } as const;
 
 function failure(error: unknown) {
@@ -258,6 +263,77 @@ export function libraryRoutes(work: MainWorkDependencies) {
           text: body.text, language: body.language, spoiler: body.spoiler,
           expectedVersion: body.expectedVersion, idempotencyKey }), { headers: privateHeaders });
       } catch (error) { return failure(error); }
+    })
+    .get('/v1/me/library-import/open-library', {
+      query: t.Object({ actingSubject: readId, isbn: t.Optional(t.String({ pattern: '^\\d{13}$' })),
+        title: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+        author: t.Optional(t.String({ maxLength: 200 })) }, { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(t.Object({ workId: t.String(), title: t.String(),
+        authors: t.Array(t.String()), coverId: t.Nullable(t.Integer()) }), { maxItems: 6 }) }), ...errors },
+    }, async ({ request, query }) => {
+      try {
+        if (!await reader(request, query.actingSubject)) {
+          return problem(403, 'reader_library_denied', 'Reader library unavailable');
+        }
+        if (!query.isbn && !query.title) return problem(400, 'invalid_request', 'Search for an ISBN or title');
+        return Response.json({ items: await searchOpenLibraryImport(query, work.openLibraryFetch ?? fetch) },
+          { headers: privateHeaders });
+      } catch (error) {
+        if (error instanceof OpenLibraryImportSearchUnavailable) {
+          return problem(503, 'source_search_unavailable', 'Open Library search is unavailable');
+        }
+        return commandError(error);
+      }
+    })
+    .post('/v1/me/library-import/open-library/adoptions', {
+      body: t.Object({ actingSubject: readId, workId: t.String({ pattern: '^OL[1-9][0-9]{0,11}W$' }),
+        titleLanguage: t.Optional(t.String({ minLength: 2, maxLength: 35 })) },
+      { additionalProperties: false }),
+      response: { 200: t.Object({ work: readId, replayed: t.Boolean() }),
+        202: pendingOperation, ...errors, 422: problemResult(422), 429: problemResult(429) },
+    }, async ({ request, body }) => {
+      const key = request.headers.get('idempotency-key') ?? '';
+      if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      }
+      if (!work.sourceIntake || !work.sourceConversions || !work.sourceGraph || !work.sourceProposals
+        || !work.sourceAdoptions) return problem(503, 'source_unavailable', 'Source owner is unavailable');
+      try {
+        const principal = await work.account.verify(request,
+          ['source:acquire', 'source:convert', 'source:propose', 'source:adopt', 'work:create']);
+        if (!await work.access.canReadAsBaselineMember?.(principal, body.actingSubject)) {
+          return problem(403, 'reader_library_denied', 'Reader library unavailable');
+        }
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const workId = checkedOpenLibraryWorkId(body.workId);
+        let observation = await work.sourceIntake.replay(principalId, key);
+        if (observation) {
+          if (observation.provider !== 'open-library' || observation.namespace !== 'work'
+            || observation.externalId !== workId
+            || observation.capture?.profile !== 'open-library-work-acquisition-v1') {
+            return problem(409, 'source_intent_conflict', 'Import key changed Work');
+          }
+        } else {
+          await work.sourceIntake.reserveOpenLibrarySlot();
+          const captured = await fetchOpenLibraryWork(workId, work.openLibraryFetch ?? fetch);
+          observation = (await work.sourceIntake.submit(principalId, key,
+            captured.input, captured.capture)).observation;
+        }
+        const conversion = await work.sourceConversions.convert(principalId, observation.observation.slice(-36));
+        if (!conversion) return problem(503, 'source_unavailable', 'Source conversion is unavailable');
+        const conversionId = conversion.conversion.conversion.slice(-36);
+        await work.sourceGraph.project(principalId, conversionId);
+        const proposal = await work.sourceProposals.propose(principalId, conversionId);
+        if (!proposal) return problem(503, 'source_unavailable', 'Source proposal is unavailable');
+        const adopted = await work.sourceAdoptions.adopt(principalId, request,
+          proposal.proposal.proposal.slice(-36), { actingSubject: body.actingSubject,
+            authorityPath: 'represented-agent', confirmedTitle: proposal.proposal.candidateTitle,
+            titleLanguage: body.titleLanguage });
+        if (!adopted) return problem(503, 'source_unavailable', 'Work adoption is unavailable');
+        return Response.json({ work: adopted.adoption.work, replayed: adopted.replayed },
+          { headers: privateHeaders });
+      } catch (error) { return commandError(error); }
     })
     .get('/v1/me/reading-stats', {
       query: t.Object({ actingSubject: readId, year: t.Numeric({ minimum: 1900, maximum: 2100 }) },

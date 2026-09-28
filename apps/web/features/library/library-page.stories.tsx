@@ -94,6 +94,30 @@ export const ReadHistory: Story = {
   },
 };
 
+/** Stored Read dates describe usage for apps and prompts. */
+export const UsedWorks: Story = {
+  args: (() => {
+    const state = libraryState({ shelf: 'read' });
+    const basis = libraryItems.find(row => row.status === 'read')!;
+    const app = { ...basis, work: { ...basis.work, kind: 'package' as const,
+      title: { value: 'Field Notes', language: 'en', direction: 'ltr' as const, basis: 'requested' as const } },
+    types: ['https://schema.org/SoftwareApplication'], startedOn: '2026-08-01', finishedOn: '2026-08-03' };
+    const prompt = { ...basis, work: { ...basis.work,
+      id: 'https://rezics.com/id/0194f314-9280-767f-89a6-000000000099', kind: 'document' as const,
+      title: { value: 'Draft Helper', language: 'en', direction: 'ltr' as const, basis: 'requested' as const } },
+    types: ['https://rezics.com/vocab/PromptTemplate'], startedOn: '2026-08-01', finishedOn: '2026-08-03' };
+    const items = [app, prompt];
+    return { state, overview: { ok: true as const, data: storyOverview(items) },
+      view: { ok: true as const, data: storyView(state, items) }, reading: [] };
+  })(),
+  parameters: { route: { pathname: '/en/library', search: '?shelf=read' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByText('Used Aug 1 – 3, 2026')).toHaveLength(2);
+    await expect(canvas.getAllByText('Used', { exact: true }).length).toBeGreaterThanOrEqual(2);
+  },
+};
+
 /** Imported private review text stays in Library and is labelled with its disclosure. */
 export const PrivateImportedReview: Story = {
   args: (() => {

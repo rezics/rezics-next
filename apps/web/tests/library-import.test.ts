@@ -77,3 +77,49 @@ test('G414: re-importing a reviewed book leaves its status and private note unch
   expect((await save()).issues).toEqual([]);
   expect([statusWrites, noteWrites]).toEqual([1, 1]);
 });
+
+test('G428: matching Read status fills missing dates once and re-import is a no-op', async () => {
+  const agent = 'https://rezics.com/id/0194f314-9280-767f-89a6-000000000099';
+  const work = 'https://rezics.com/id/0194f314-9280-767f-89a6-000000000001';
+  const book = parseLibraryImport('Book Id,Title,Author,Exclusive Shelf,Date Read\n'
+    + '1,Pride and Prejudice,Jane Austen,read,2026/01/04\n').books[0]!;
+  let finishedOn: string | null = null;
+  let version = 2;
+  const writes: Array<{ expectedVersion: number; finishedOn: string | null }> = [];
+  const main = { v1: { works: () => ({
+    'reader-state': { get: async () => ({ data: { status: { status: 'read', version,
+      startedOn: null, finishedOn }, rating: { global: null }, customShelves: [] } }) },
+    'reader-status': { put: async (body: { expectedVersion: number; finishedOn: string | null }) => {
+      writes.push(body); finishedOn = body.finishedOn; version++;
+      return { data: { version } };
+    } },
+  }) } } as unknown as MainClient;
+  const save = () => importSelectedBook(agent, book, { work, rating: null, reviewVisibility: 'private' },
+    null, 'en', new Map(), () => main);
+  expect((await save()).issues).toEqual([]);
+  expect((await save()).issues).toEqual([]);
+  expect(writes).toMatchObject([{ expectedVersion: 2, finishedOn: '2026-01-04' }]);
+});
+
+test('G428: conflicting dates keep the reader’s edit unless Use imported is chosen', async () => {
+  const agent = 'https://rezics.com/id/0194f314-9280-767f-89a6-000000000099';
+  const work = 'https://rezics.com/id/0194f314-9280-767f-89a6-000000000001';
+  const book = parseLibraryImport('Book Id,Title,Author,Exclusive Shelf,Date Read\n'
+    + '1,Pride and Prejudice,Jane Austen,read,2026/01/04\n').books[0]!;
+  let finishedOn = '2026-01-05';
+  let writes = 0;
+  const main = { v1: { works: () => ({
+    'reader-state': { get: async () => ({ data: { status: { status: 'read', version: 2,
+      startedOn: null, finishedOn }, rating: { global: null }, customShelves: [] } }) },
+    'reader-status': { put: async (body: { finishedOn: string }) => {
+      writes++; finishedOn = body.finishedOn; return { data: { version: 3 } };
+    } },
+  }) } } as unknown as MainClient;
+  const save = (conflictChoice?: 'keep' | 'replace') => importSelectedBook(agent, book,
+    { work, rating: null, reviewVisibility: 'private', conflictChoice }, null, 'en', new Map(), () => main);
+  expect((await save()).issues).toEqual(['status-changed']);
+  expect((await save('keep')).issues).toEqual([]);
+  expect(writes).toBe(0);
+  expect((await save('replace')).issues).toEqual([]);
+  expect([writes, finishedOn]).toEqual([1, '2026-01-04']);
+});

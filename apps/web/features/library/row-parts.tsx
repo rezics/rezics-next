@@ -16,6 +16,7 @@ import Link from '../shell/localized-link.tsx';
 import { workTitle } from '../catalogue/work-tile.tsx';
 import type { ReviewDraft } from './api.ts';
 import { formatDayRange, today } from './format.ts';
+import { isUseWork } from './labels.ts';
 import { useLibrary } from './library-context.tsx';
 import type { LibraryMessages } from './messages.ts';
 import type { LibraryRow, Review } from './types.ts';
@@ -78,6 +79,7 @@ export function ReadDates({ row, now, locale, messages }: {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const range = formatDayRange(saved.startedOn, saved.finishedOn, locale);
+  const useWork = isUseWork(row);
   const latest = today(now);
 
   function openEditor(next: boolean) {
@@ -98,22 +100,22 @@ export function ReadDates({ row, now, locale, messages }: {
 
   return <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
     <CalendarIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-    {range ? <span>{t.readDates({ range })}</span> : null}
+    {range ? <span>{useWork ? t.usedDates({ range }) : t.readDates({ range })}</span> : null}
     <Popover open={open} onOpenChange={details => openEditor(details.open)}>
       <PopoverTrigger className={cn(buttonVariants({ variant: range ? 'ghost' : 'outline', size: 'sm', pill: true }),
         range && '-ms-1.5 text-muted-foreground')}>
         {range ? t.editDates : t.addDates}<span className="sr-only"> — {title}</span></PopoverTrigger>
       <PopoverContent className="w-80 max-w-[calc(100vw-2rem)]">
         <form noValidate onSubmit={event => { event.preventDefault(); void save(); }} className="contents">
-          <PopoverHeader title={t.datesFor({ title })} />
+          <PopoverHeader title={useWork ? t.useDatesFor({ title }) : t.datesFor({ title })} />
           <PopoverBody className="grid gap-4">
             <Field>
-              <FieldLabel>{t.started}</FieldLabel>
+              <FieldLabel>{useWork ? t.startedUsing : t.started}</FieldLabel>
               <Input type="date" value={draft.startedOn} max={draft.finishedOn || latest}
                 onChange={event => { setDraft({ ...draft, startedOn: event.currentTarget.value }); setError(null); }} />
             </Field>
             <Field invalid={error !== null}>
-              <FieldLabel>{t.finished}</FieldLabel>
+              <FieldLabel>{useWork ? t.finishedUsing : t.finished}</FieldLabel>
               <Input type="date" value={draft.finishedOn} min={draft.startedOn || undefined} max={latest}
                 onChange={event => { setDraft({ ...draft, finishedOn: event.currentTarget.value }); setError(null); }} />
               {error ? <FieldError>{error}</FieldError> : null}

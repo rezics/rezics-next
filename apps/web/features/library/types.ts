@@ -35,6 +35,8 @@ export type ShelfMembership = ReaderStateItem['customShelves'][number];
  */
 export interface LibraryItem {
   work: CatalogueWork;
+  /** Main's semantic types preserve the distinction between a prompt and other documents. */
+  types?: readonly string[];
   status: ShelfStatus | null;
   /** The status's compare-and-set version; 0 when it has none. */
   version: number;

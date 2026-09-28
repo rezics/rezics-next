@@ -4,6 +4,7 @@ import { LibraryImport } from './library-import.tsx';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import type { ImportedBook } from './import-csv.ts';
+import type { ImportIssue, ImportSelection } from './import-api.ts';
 
 const csv = `Book Id,Title,Author,ISBN13,My Rating,Date Read,Bookshelves,Exclusive Shelf,My Review
 1,Pride and Prejudice,Jane Austen,9780141439518,5,2026/01/03,"classics, favorites",read,"A favorite."
@@ -27,6 +28,8 @@ const lookup = async (book: ImportedBook) => book.title === 'Unknown Book' ? []
 const meta = { title: 'Library/Import', component: LibraryImport,
   args: { agent: id(99), context: id(100), locale: 'en', messages, lookup,
     ensureShelf: async () => id(1000),
+    inspectRow: async (_agent: string, _book: ImportedBook, _selection: ImportSelection,
+      _context: string | null): Promise<ImportIssue[]> => [],
     importRow: async (_agent, _book, selection) => ({ work: selection.work, applied: ['status'], issues: [] }) },
   parameters: { route: { pathname: '/en/library' } },
 } satisfies Meta<typeof LibraryImport>;
@@ -39,8 +42,11 @@ export const TenBookReview: Story = { async play({ canvasElement }) {
   const file = new File([csv], 'goodreads_library_export.csv', { type: 'text/csv' });
   await userEvent.upload(canvas.getByLabelText('Library CSV file'), file);
   await waitFor(() => expect(canvas.queryByText(/Checking matches:/)).toBeNull(), { timeout: 5000 });
-  await expect(canvas.getByText('Pride and Prejudice')).toBeVisible();
-  await expect(canvas.getByText('雨夜书店')).toBeVisible();
+  await expect(canvas.getAllByText('Pride and Prejudice').some(node => node.classList.contains('font-medium')))
+    .toBe(true);
+  await expect(canvas.getAllByText('雨夜书店').some(node => node.classList.contains('font-medium'))).toBe(true);
+  await expect(canvas.getByText('8 found')).toBeVisible();
+  await expect(canvas.getByText('2 need a match')).toBeVisible();
   await expect(canvas.getByText('No match found')).toBeVisible();
   await expect(canvas.getByText('Choose a Work')).toBeVisible();
   await userEvent.click(canvas.getByRole('button', { name: 'Import selected books' }));
@@ -55,3 +61,42 @@ export const Chinese: Story = { args: { locale: 'zh-Hans', messages: { ...messag
     await expect(canvas.getByText('选择 Goodreads 或 StoryGraph 导出的 CSV 文件。保存前请核对每本书的匹配结果。'))
       .toBeVisible();
   } };
+
+export const ChineseDarkReview: Story = { args: { locale: 'zh-Hans', messages: { ...messages, ...zhHans } },
+  globals: { theme: 'dark', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByText('导入书架'));
+    await userEvent.upload(canvas.getByLabelText('书架 CSV 文件'),
+      new File([csv], 'goodreads.csv', { type: 'text/csv' }));
+    await waitFor(() => expect(canvas.queryByText(/正在匹配：/)).toBeNull());
+    await expect(canvas.getByText('已找到 8 本')).toBeVisible();
+    await expect(canvas.getByText('2 本待匹配')).toBeVisible();
+  },
+};
+
+/** The first press preserves a newer personal edit and creates no stray imported shelf. */
+export const ConflictChoice: Story = { args: (() => {
+  let shelfWrites = 0;
+  return { lookup: async (book: ImportedBook) => [{ work: id(1), title: book.title,
+    authors: [book.author], isbn13: [] }],
+  inspectRow: async (_agent: string, _book: ImportedBook, selection: { conflictChoice?: 'keep' | 'replace' }) =>
+    selection.conflictChoice ? [] : ['status-changed' as const],
+  ensureShelf: async () => { shelfWrites++; return id(1000); },
+  importRow: async (_agent: string, _book: ImportedBook, selection: { work: string }) => {
+    if (shelfWrites !== 1) throw new Error('Shelf must be created only after the conflict choice');
+    return { work: selection.work, applied: [], issues: [] };
+  } };
+})(), async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByText('Import your books'));
+  const file = new File(['Book Id,Title,Author,Exclusive Shelf,Bookshelves\n1,Pride and Prejudice,Jane Austen,read,classics\n'],
+    'goodreads.csv', { type: 'text/csv' });
+  await userEvent.upload(canvas.getByLabelText('Library CSV file'), file);
+  await waitFor(() => expect(canvas.queryByText(/Checking matches:/)).toBeNull());
+  await userEvent.click(canvas.getByRole('button', { name: 'Import selected books' }));
+  await expect(await canvas.findByRole('button', { name: 'Keep mine' })).toBeVisible();
+  await userEvent.click(canvas.getByRole('button', { name: 'Keep mine' }));
+  await userEvent.click(canvas.getByRole('button', { name: 'Import selected books' }));
+  await expect(await canvas.findByText('Imported 1 book.')).toBeVisible();
+} };

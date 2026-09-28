@@ -18,7 +18,7 @@ import { slotRatio } from '../catalogue/work.ts';
 import { CoverLink, WorkTile, workTitle } from '../catalogue/work-tile.tsx';
 import Link from '../shell/localized-link.tsx';
 import { formatDay } from './format.ts';
-import { statusLabel } from './labels.ts';
+import { isUseWork, rowStatusLabel, statusLabel } from './labels.ts';
 import { useLibrary } from './library-context.tsx';
 import type { LibraryMessages } from './messages.ts';
 import { OwnRating, PrivateReviewCell, ReadDates, ReadingProgress, ReviewCell } from './row-parts.tsx';
@@ -32,7 +32,8 @@ const shelfHref = (id: string) => libraryHref(parseLibraryState({}), { shelf: { 
 /** "Added Sep 3, 2026 · Last read 2 days ago", and the reader's own shelves the Work is on. */
 function RowMeta({ row, now, locale, t }: { row: LibraryRow; now: number; locale: UiLocale; t: T }) {
   const facts = [row.shelvedAt ? t.added({ date: formatDay(row.shelvedAt, locale) }) : null,
-    row.lastReadAt ? t.lastRead({ date: relativeTime(row.lastReadAt, now, locale, 'long') }) : null]
+    row.lastReadAt ? (isUseWork(row) ? t.lastUsed : t.lastRead)({
+      date: relativeTime(row.lastReadAt, now, locale, 'long') }) : null]
     .filter(fact => fact !== null);
   if (!facts.length && !row.customShelves.length) return null;
   return <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
@@ -81,6 +82,8 @@ function Row({ row, selecting, selected, onSelect, now, avatarQuery, locale, mes
           </h3>
           {row.work.authors.length ? <p className="text-muted-foreground">
             <AuthorNames authors={row.work.authors} /></p> : null}
+          {isUseWork(row) && row.status ? <p className="text-muted-foreground text-xs">
+            {rowStatusLabel(row, t)}</p> : null}
         </div>
         {row.status === 'reading' ? <ReadingProgress row={row} locale={locale} messages={messages} /> : null}
         {row.status === 'read' ? <ReadDates row={row} now={now} locale={locale} messages={messages} /> : null}

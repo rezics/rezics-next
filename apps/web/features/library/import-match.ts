@@ -1,8 +1,11 @@
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
+import { coverKindOf, type CatalogueWork } from '../catalogue/work.ts';
 import type { ImportedBook } from './import-csv.ts';
 
-export interface ImportCandidate { work: string; title: string; authors: string[]; isbn13: string[] }
+export interface ImportCandidate { work: string; title: string; authors: string[]; isbn13: string[];
+  cover?: CatalogueWork['cover']; kind?: CatalogueWork['kind'] }
+export interface OpenLibraryCandidate { workId: string; title: string; authors: string[]; coverId: number | null }
 export type ImportMatch = { kind: 'matched' | 'ambiguous' | 'not-found';
   selected: string | null; candidates: ImportCandidate[]; reason: 'isbn' | 'title-author' | 'review' | null };
 
@@ -29,7 +32,7 @@ export async function lookupImportedBook(book: ImportedBook, locale: string,
   main: () => MainClient = browserMainApi): Promise<ImportCandidate[]> {
   const query = await main().v1.search.typeahead.get({ query: { prefix: book.title.slice(0, 80), language: locale } });
   if (!query.data) throw new Error('Search unavailable');
-  const candidates = query.data.items.filter(item => item.matchedField === 'title').slice(0, 10);
+  const candidates = query.data.items.slice(0, 10);
   const result: ImportCandidate[] = [];
   // At most ten editions reads, only when the export has an ISBN-13.
   for (const item of candidates) {
@@ -39,7 +42,23 @@ export async function lookupImportedBook(book: ImportedBook, locale: string,
       if (editions.data) isbn13.push(...editions.data.items.flatMap(edition => edition.isbn13 ? [edition.isbn13] : []));
     }
     result.push({ work: item.work, title: item.title?.value ?? '',
-      authors: item.authors.flatMap(author => author.displayName ? [author.displayName] : []), isbn13 });
+      authors: item.authors.flatMap(author => author.displayName ? [author.displayName] : []),
+      cover: item.cover, kind: coverKindOf(item.types), isbn13 });
   }
   return result;
+}
+
+/** Main performs both source lookups; title/author is a fallback when an ISBN has no result. */
+export async function lookupOpenLibraryBook(agent: string, book: ImportedBook,
+  main: () => MainClient = browserMainApi): Promise<OpenLibraryCandidate[]> {
+  const get = (query: { actingSubject: string; isbn?: string; title?: string; author?: string }) =>
+    main().v1.me['library-import']['open-library'].get({ query });
+  if (book.isbn) {
+    const found = await get({ actingSubject: agent, isbn: book.isbn });
+    if (!found.data) throw new Error('Open Library search unavailable');
+    if (found.data.items.length) return found.data.items;
+  }
+  const found = await get({ actingSubject: agent, title: book.title, author: book.author });
+  if (!found.data) throw new Error('Open Library search unavailable');
+  return found.data.items;
 }
