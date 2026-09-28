@@ -56,4 +56,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/agent-handle.test.ts',
   // Directory assertions need an empty Realm population; scale probes inject raw heads and a global restore hold.
   'tests/qa/integration/realm-directory.test.ts',
+  // Discovery refresh replays outboxes from zero and starts with no active population.
+  'tests/qa/integration/discovery-refresh.test.ts',
+  // Incremental discovery pins the exact initial Work population before appending writers.
+  'tests/qa/integration/discovery-incremental.test.ts',
 ] as const;
