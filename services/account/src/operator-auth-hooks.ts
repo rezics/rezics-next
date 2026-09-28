@@ -8,7 +8,7 @@ import { decodeJwt } from 'jose';
 const mutationPaths = new Set(['/oauth2/create-client', '/admin/oauth2/create-client',
   '/oauth2/update-client', '/admin/oauth2/update-client', '/oauth2/delete-client', '/oauth2/client/rotate-secret']);
 interface AuditContext { actorId: string; action: string; targetId: string; reason: string;
-  before: unknown; requestId: string }
+  before: unknown; requestId: string; requested?: { name: string } }
 
 async function clientSummary(pool: Pool, clientId: string) {
   const result = await pool.query(`SELECT "clientId", name, disabled, scopes, "grantTypes", "skipConsent"
@@ -44,19 +44,20 @@ export function operatorAuthHooks(pool: Pool, bootstrapIds: ReadonlySet<string>)
       catch { throw new APIError('FORBIDDEN', { code: 'STEP_UP_REQUIRED', message: 'Sign in again to continue' }); }
       const reason = ctx.headers?.get('x-account-reason')?.trim() ?? (ctx.request ? '' : 'Server-side OAuth client administration');
       if (reason.length < 3 || reason.length > 1000) throw new APIError('BAD_REQUEST', { code: 'REASON_REQUIRED', message: 'Provide x-account-reason' });
-      const body = ctx.body as { client_id?: unknown } | undefined;
+      const body = ctx.body as { client_id?: unknown; client_name?: unknown } | undefined;
       const targetId = typeof body?.client_id === 'string' ? body.client_id : 'new-client';
       const audit: AuditContext = { actorId: session.user.id, action: ctx.path, targetId, reason,
-        before: await clientSummary(pool, targetId), requestId: randomUUID() };
+        before: await clientSummary(pool, targetId), requestId: randomUUID(),
+        ...(targetId === 'new-client' && typeof body?.client_name === 'string' ? { requested: { name: body.client_name } } : {}) };
       (ctx.context as typeof ctx.context & { operatorAudit?: AuditContext }).operatorAudit = audit;
-      await writeAudit(pool, { ...audit, after: null, outcome: 'attempted' });
+      await writeAudit(pool, { ...audit, after: audit.requested ?? null, outcome: 'attempted' });
     }),
     after: createAuthMiddleware(async ctx => {
       const audit = (ctx.context as typeof ctx.context & { operatorAudit?: AuditContext }).operatorAudit;
       if (!audit) return;
       const output = ctx.context.returned as { client_id?: unknown } | undefined;
       const targetId = typeof output?.client_id === 'string' ? output.client_id : audit.targetId;
-      await writeAudit(pool, { ...audit, targetId, after: await clientSummary(pool, targetId),
+      await writeAudit(pool, { ...audit, targetId, after: await clientSummary(pool, targetId) ?? audit.requested ?? null,
         outcome: ctx.context.returned instanceof APIError ? 'failed' : 'succeeded' });
     }),
   };

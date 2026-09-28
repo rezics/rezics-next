@@ -18,16 +18,24 @@ interface AuditRow { id: string; actorId: string; targetId: string; action: stri
   outcome: string; occurredAt: Date; cursorKey: string; actorName: string | null; actorEmail: string | null;
   targetKind: 'user' | 'client' | 'other'; targetName: string | null; targetEmail: string | null }
 
-// Actor and target are named from their current rows (PK lookups per page row);
-// a deleted user or client keeps only its ID in the append-only record.
-const auditSelect = `SELECT a.id, a.actor_id AS "actorId", a.target_id AS "targetId", a.action, a.reason,
+// Actor and target are named from their current rows. A creation intent precedes
+// the client ID: one bounded request-index probe resolves its completed target
+// without rewriting the append-only history. Deleted clients keep their recorded name.
+const auditSelect = `SELECT a.id, a.actor_id AS "actorId", coalesce(created.target_id, a.target_id) AS "targetId", a.action, a.reason,
   a.reason_code AS "reasonCode", a.user_message AS "userMessage", a.before_summary AS before, a.after_summary AS after,
   a.request_id AS "requestId", a.outcome, a.occurred_at AS "occurredAt", a.occurred_at::text AS "cursorKey",
   actor.name AS "actorName", actor.email AS "actorEmail",
-  CASE WHEN target.id IS NOT NULL THEN 'user' WHEN client."clientId" IS NOT NULL THEN 'client' ELSE 'other' END AS "targetKind",
-  coalesce(target.name, client.name) AS "targetName", target.email AS "targetEmail"
+  CASE WHEN target.id IS NOT NULL THEN 'user' WHEN client."clientId" IS NOT NULL OR created.target_id IS NOT NULL
+    OR a.action IN ('/oauth2/create-client', '/admin/oauth2/create-client') THEN 'client' ELSE 'other' END AS "targetKind",
+  coalesce(target.name, client.name, created.after_summary->>'name', a.after_summary->>'name') AS "targetName", target.email AS "targetEmail"
   FROM rezics_account_operator_audit a LEFT JOIN "user" actor ON actor.id = a.actor_id
-  LEFT JOIN "user" target ON target.id = a.target_id LEFT JOIN "oauthClient" client ON client."clientId" = a.target_id`;
+  LEFT JOIN LATERAL (SELECT completed.target_id, completed.after_summary FROM rezics_account_operator_audit completed
+    WHERE a.target_id = 'new-client' AND a.action IN ('/oauth2/create-client', '/admin/oauth2/create-client')
+      AND completed.request_id = a.request_id AND completed.actor_id = a.actor_id AND completed.action = a.action
+      AND completed.outcome = 'succeeded' AND completed.target_id <> 'new-client'
+    ORDER BY completed.occurred_at DESC, completed.id DESC LIMIT 1) created ON true
+  LEFT JOIN "user" target ON target.id = a.target_id
+  LEFT JOIN "oauthClient" client ON client."clientId" = coalesce(created.target_id, a.target_id)`;
 const entryView = ({ cursorKey: _key, ...row }: AuditRow) => ({ ...row, occurredAt: row.occurredAt.toISOString() });
 
 // An email names the account it belongs to (one probe of the email index);

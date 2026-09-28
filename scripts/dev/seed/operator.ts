@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
+import { setClientDisabled } from '../../../services/account/src/admin-actions.ts';
 import { SeedApi, type Credentials, type SeedEndpoints } from './api.ts';
 
 export interface LocalOperatorInput { endpoints: SeedEndpoints; credentials: Credentials;
@@ -23,9 +24,18 @@ export async function reusableSeedClient(pool: Pool, ownerId: string, redirectUr
       AND c."redirectUris" @> jsonb_build_array($2::text)
       AND c.scopes @> $3::jsonb AND i.scopes @> $3::jsonb
       AND c."grantTypes" @> '["authorization_code"]'::jsonb
-    ORDER BY c."createdAt" DESC LIMIT 1`,
+    ORDER BY c."createdAt" DESC, c."clientId" DESC LIMIT 1`,
   [ownerId, redirectUri, JSON.stringify(scope.split(' '))]);
   return reused.rows[0]?.clientId;
+}
+
+/** Retire only this operator's superseded seed clients through the audited API. */
+export async function disableSupersededSeedClients(pool: Pool, ownerId: string, keptId: string,
+  disable: (clientId: string) => Promise<unknown>) {
+  const duplicates = await pool.query<{ clientId: string }>(`SELECT "clientId" FROM "oauthClient"
+    WHERE name = 'Local official Zone seed' AND "userId" = $1 AND "clientId" <> $2 AND disabled IS NOT TRUE
+    ORDER BY "clientId"`, [ownerId, keptId]);
+  for (const duplicate of duplicates.rows) await disable(duplicate.clientId);
 }
 
 /** Reuse the fixture operator's installed seed client across repeated seed runs. */
@@ -34,15 +44,20 @@ export async function operatorSeedSession(input: LocalOperatorInput) {
   const signed = await new SeedApi(input.endpoints).signInOrUp(input.credentials);
   if (signed.id !== input.accountSubject) throw new Error('Seed fixture operator identity changed');
   const pool = new Pool({ connectionString: input.accountDatabaseUrl });
+  const lock = await pool.connect();
   try {
+    // Serialize selection, creation and retirement across repeated seed processes.
+    await lock.query("SET lock_timeout = '5s'");
+    await lock.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [`zone-seed:${signed.id}`]);
     const scope = 'openid owner:operate zone:edit theme:approve theme:read source:acquire source:convert source:propose source:adopt source:read work:create work:edit';
+    const auth = createAccountAuth({ baseURL: input.endpoints.account,
+      secret: input.accountSecret, resource: input.endpoints.resource,
+      pool, operatorUserIds: new Set([signed.id]) });
+    const headers = new Headers({ cookie: signed.cookie, origin: input.endpoints.account });
     let clientId = await reusableSeedClient(pool, signed.id, input.endpoints.redirectUri, scope);
     if (!clientId) {
-      const auth = createAccountAuth({ baseURL: input.endpoints.account,
-        secret: input.accountSecret, resource: input.endpoints.resource,
-        pool, operatorUserIds: new Set([signed.id]) });
       const client = await auth.api.adminCreateOAuthClient({
-        headers: new Headers({ cookie: signed.cookie, origin: input.endpoints.account }),
+        headers,
         body: { client_name: 'Local official Zone seed', application_type: 'native',
           redirect_uris: [input.endpoints.redirectUri], token_endpoint_auth_method: 'none',
           grant_types: ['authorization_code'], skip_consent: true, require_pkce: true,
@@ -50,10 +65,13 @@ export async function operatorSeedSession(input: LocalOperatorInput) {
       clientId = client.client_id;
     }
     if (!clientId) throw new Error('Account did not register the seed operator client');
+    await disableSupersededSeedClients(pool, signed.id, clientId, duplicate =>
+      setClientDisabled(auth, pool, new Request(input.endpoints.account, { headers }), duplicate,
+        { action: 'disable', reason: 'Superseded local Zone seed client', commandId: randomUUID() }));
     const api = new SeedApi({ ...input.endpoints, clientId, scope });
     return { api, token: await api.token(signed.cookie), cookie: signed.cookie,
       issuedAt: Date.now() };
-  } finally { await pool.end(); }
+  } finally { lock.release(true); await pool.end(); }
 }
 
 type ImportedGrant = { action: string; scope: string };
