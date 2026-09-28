@@ -15,7 +15,7 @@ import type { Outcome } from './commands.ts';
 import { agentLabel, isoTime, relativeTime } from './format.ts';
 import { actionLabel, decidedText, kindLabel, reasonText, shortcutActions, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
-import { Pill, Thumb } from './parts.tsx';
+import { Pill, WorkThumb } from './parts.tsx';
 import { bffQueueApi, type QueueApi, reporters } from './queue-api.ts';
 import { actionOrder, QueueDetail, type RulesState } from './queue-detail.tsx';
 import { actionsFor, commonActions, type Decision, fullAuthority, initialTriage, itemsFor, needsReason, type PendingDecision,
@@ -288,7 +288,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
         aria-current={isCurrent ? 'true' : undefined} aria-expanded={isCurrent && expanded ? true : undefined}
         className="flex min-w-0 flex-1 items-start gap-3 rounded-lg text-start outline-none focus-visible:ring-2
           focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-        <Thumb image={work?.cover ?? null} label={title} fallbackKey={item.target.resource} shape="cover" />
+        <WorkThumb iri={item.target.resource} work={work} label={title} />
         <span className="grid min-w-0 flex-1 gap-0.5">
           <span className="flex min-w-0 items-baseline gap-2">
             <span className="truncate font-medium">{work ? <span lang={work.title.language}>{title}</span> : title}</span>

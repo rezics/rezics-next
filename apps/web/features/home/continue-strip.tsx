@@ -2,12 +2,12 @@
 
 import { Button } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { WorkCover } from '@rezics/ui/work-cover';
 import { Undo2Icon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { coverImage } from '../catalogue/work.ts';
+import { CatalogueCover } from '../catalogue/cover.tsx';
+import { coverKindOf } from '../catalogue/work.ts';
 import { commandKey } from '../feed/api.ts';
 import { useFeed } from '../feed/feed-context.tsx';
 import type { ContinueItem } from '../feed/types.ts';
@@ -53,9 +53,8 @@ export function ContinueStrip({ items, locale, messages }: { items: readonly Con
           <LocalizedLink href={item.nextUnread.href} aria-label={t.continueWork({ title })}
             className="grid gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <span className="relative">
-              <WorkCover title={title} lang={item.title.language} dir={item.title.direction}
-                seed={item.cover.kind === 'fallback' ? item.cover.key : item.work} image={coverImage(item.cover, avatarQuery)}
-                size="fill" />
+              <CatalogueCover work={{ id: item.work, title: { ...item.title, value: title }, cover: item.cover,
+                kind: coverKindOf(item.types), authors: [] }} avatarQuery={avatarQuery} size="fill" />
               <span className="absolute start-1.5 bottom-1.5 z-20 rounded-full bg-primary px-2 py-0.5 font-semibold
                 text-[11px] text-primary-foreground shadow">{unread}</span>
             </span>

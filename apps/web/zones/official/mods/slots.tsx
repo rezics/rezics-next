@@ -56,10 +56,10 @@ const updatedThisWeek = (works: readonly ZoneWork[], locale: string) =>
     return at && freshness(at, locale)?.thisWeek;
   }).length;
 
-/** Square tiles, as mod icons are, whatever kind of cover the Work has. */
+/** The Work's own cover, as on every other page: a mod's package tile, a guide's poster. */
 function Thumb({ work, Link, eager }: { work: ZoneWork; Link: ComponentType<ZoneLinkProps>; eager?: boolean }) {
   return <Link href={work.href} tabIndex={-1} aria-hidden="true" className="mh-thumb">
-    <WorkCover {...workCoverProps(work)} kind="package" loading={eager ? 'eager' : 'lazy'} /></Link>;
+    <WorkCover {...workCoverProps(work)} loading={eager ? 'eager' : 'lazy'} /></Link>;
 }
 
 function Get({ work, title, t, Link, large }: {

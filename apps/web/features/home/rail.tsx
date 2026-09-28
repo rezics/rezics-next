@@ -1,11 +1,11 @@
 import { cn } from '@rezics/ui/utils';
-import { WorkCover } from '@rezics/ui/work-cover';
 import { ShieldCheckIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { coverImage } from '../catalogue/work.ts';
+import { CatalogueCover } from '../catalogue/cover.tsx';
+import { coverKindOf } from '../catalogue/work.ts';
 import type { SuggestedFollow } from '../feed/types.ts';
 import type { FeedPage } from '../feed/types.ts';
 import { manageHref, type Moderated } from '../shell/communities.ts';
@@ -82,8 +82,8 @@ export function Rail({ data, signedIn, locale, messages, kinds, avatarQuery = ''
         {data.trending.items.map(({ item, realm }, index) => <li key={item.work}
           className="group/trend relative grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)] items-center gap-3">
           <span className="text-center font-semibold text-muted-foreground text-sm tabular-nums">{index + 1}</span>
-          <WorkCover title={item.title.value} lang={item.title.language} size="xs"
-            seed={item.cover.kind === 'fallback' ? item.cover.key : item.work} image={coverImage(item.cover, avatarQuery)} />
+          <CatalogueCover work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
+            authors: [] }} avatarQuery={avatarQuery} size="xs" />
           <span className="grid min-w-0 gap-0.5">
             <LocalizedLink href={`/w/${item.work.slice(-36)}`} lang={item.title.language}
               className="line-clamp-2 font-medium font-work-title text-sm/snug outline-none after:absolute

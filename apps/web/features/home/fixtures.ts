@@ -8,17 +8,18 @@ import type { RailData } from './rail.tsx';
 const name = (value: string, language = 'en') => ({ value, language, direction: 'ltr' as const, basis: 'requested' as const });
 const cover = (key: string) => ({ kind: 'fallback' as const, policy: 'avatar-fallback-v1', key, resourceType: 'work' });
 const ago = (hours: number) => new Date(NOW - hours * 3_600_000).toISOString();
+const book = 'https://schema.org/Book';
 
 export const continueItems: ContinueItem[] = [
-  { work: storyId(61, 'cccc'), title: name('雨夜书店', 'zh-Hans'), cover: cover('rain'), source: 'reading',
+  { work: storyId(61, 'cccc'), title: name('雨夜书店', 'zh-Hans'), cover: cover('rain'), types: [book], source: 'reading',
     lastPosition: { occurrence: storyId(611, 'dddd'), position: null, completed: true, updatedAt: ago(20) },
     nextUnread: { occurrence: storyId(612, 'dddd'), title: '第三章 最后一班车', href: `/w/${storyId(61, 'cccc').slice(-36)}/read/${storyId(612, 'dddd').slice(-36)}` },
     unreadCount: { value: 3, kind: 'exact' }, updatedAt: ago(2) },
-  { work: storyId(62, 'cccc'), title: name('The Last Lantern'), cover: cover('lantern'), source: 'followed',
+  { work: storyId(62, 'cccc'), title: name('The Last Lantern'), cover: cover('lantern'), types: [book], source: 'followed',
     lastPosition: null, nextUnread: { occurrence: storyId(621, 'dddd'), title: 'Chapter 58 · The Siege',
       href: `/w/${storyId(62, 'cccc').slice(-36)}/read/${storyId(621, 'dddd').slice(-36)}` },
     unreadCount: { value: 20, kind: 'lower-bound' }, updatedAt: ago(5) },
-  { work: storyId(63, 'cccc'), title: name('Middlemarch'), cover: cover('middlemarch'), source: 'reading',
+  { work: storyId(63, 'cccc'), title: name('Middlemarch'), cover: cover('middlemarch'), types: [book], source: 'reading',
     lastPosition: { occurrence: storyId(631, 'dddd'), position: null, completed: false, updatedAt: ago(30) },
     nextUnread: { occurrence: storyId(632, 'dddd'), title: null,
       href: `/w/${storyId(63, 'cccc').slice(-36)}/read/${storyId(632, 'dddd').slice(-36)}` },
@@ -54,16 +55,17 @@ export const suggestions: SuggestedFollow[] = [
     membership: { count: { kind: 'unknown', value: null } }, reason: { kind: 'popular', interest: null }, sampleWorks: [] },
 ];
 
-const trend = (n: number, title: string, realm: typeof followedCommunities.realms[number], language = 'en') => ({
-  item: { work: storyId(n, 'cccc'), realm: realm.id, title: name(title, language), cover: cover(`trend-${n}`), rank: n - 80,
-    reason: 'growth-in-realm' as const }, realm });
+const trend = (n: number, title: string, realm: typeof followedCommunities.realms[number], language = 'en',
+  types = [book]) => ({
+  item: { work: storyId(n, 'cccc'), realm: realm.id, title: name(title, language), cover: cover(`trend-${n}`), types,
+    rank: n - 80, reason: 'growth-in-realm' as const }, realm });
 
 export const railData: RailData = {
   trending: { scope: 'followed', items: [
     trend(81, '雨夜书店', followedCommunities.realms[0]!, 'zh-Hans'),
     trend(82, 'Middlemarch', followedCommunities.realms[1]!),
     trend(83, '三国演义', followedCommunities.realms[0]!, 'zh-Hans'),
-    trend(84, 'Weekend buttermilk pancakes', followedCommunities.realms[2]!),
+    trend(84, 'Weekend buttermilk pancakes', followedCommunities.realms[2]!, 'en', ['https://schema.org/Recipe']),
   ] },
   suggestions,
   moderated: [{ realm: realms.classics.id, name: realms.classics.name.value, open: 8, more: false,

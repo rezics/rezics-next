@@ -63,9 +63,11 @@ describe('profile cards', () => {
     expect(creditedCard(translation!, 'Lin Mei', 'en', messages).authors).toEqual(['Lin Mei (Translator)']);
     expect(creditedCard(prompt!, 'Lin Mei', 'en', messages).kind).toBe('document');
     expect(creditedCard(dumplings!, 'Lin Mei', 'en', messages).kind).toBe('recipe');
-    // Main's shelf read names only a title and cover.
-    expect(shelfCard({ id: serial!.id, title: serial!.title, cover: serial!.cover }))
+    // Main's shelf read names a title, cover and types, so a shelf draws the Work's usual cover.
+    expect(shelfCard({ id: serial!.id, title: serial!.title, cover: serial!.cover, types: serial!.types }))
       .toMatchObject({ kind: 'book', authors: [], rating: null });
+    expect(shelfCard({ id: prompt!.id, title: prompt!.title, cover: prompt!.cover, types: prompt!.types }).kind)
+      .toBe('document');
   });
 
   test('the works summary averages every rating only when the whole list is loaded', () => {

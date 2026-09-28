@@ -33,12 +33,12 @@ export function creditedCard(item: CreditedWork, name: string, locale: UiLocale,
 }
 
 /**
- * A Work on someone's status shelf. Main's shelf read names only the title
- * and cover, so these cards carry no author or rating and draw a book cover.
+ * A Work on someone's status shelf. Main's shelf read names its title, cover
+ * and types, so it wears its usual cover, but no author or rating.
  */
 export function shelfCard(card: ShelfCard): CatalogueWork {
-  return { id: card.id, href: workHref(card.id.slice(-36)), title: card.title, cover: card.cover, kind: 'book',
-    authors: [], rating: null };
+  return { id: card.id, href: workHref(card.id.slice(-36)), title: card.title, cover: card.cover,
+    kind: coverKindOf(card.types), authors: [], rating: null };
 }
 
 /**

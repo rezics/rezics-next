@@ -137,7 +137,7 @@ export async function readWorks(main: MainClient, iris: readonly string[], query
   const unique = [...new Set(iris)].slice(0, NAME_BUDGET);
   const works = await bounded(unique, 8, async iri => {
     const read = await settle(() => main.v1.works({ id: uuidOf(iri) }).get({ query }));
-    return read.ok ? { iri, title: read.data.title, cover: read.data.cover,
+    return read.ok ? { iri, title: read.data.title, cover: read.data.cover, types: read.data.types,
       originalTitle: read.data.originalTitle?.value ?? null } satisfies WorkSummary : null;
   });
   return Object.fromEntries(works.filter(work => work !== null).map(work => [work.iri, work]));

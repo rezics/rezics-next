@@ -9,7 +9,7 @@ const work = (n: number) => `https://rezics.com/id/0000000${n}-4b5a-4c6d-8e7f-9a
 const item = (n: number, title: string, field: 'title' | 'credit' = 'title', matched = title): TypeaheadItem => ({
   work: work(n), mainVersion: work(n), title: { value: title, language: 'en', direction: 'ltr', basis: 'requested' },
   cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: `k${n}`, resourceType: 'work' },
-  matchedField: field, matchedText: matched, matchedLanguage: 'en' });
+  types: ['https://schema.org/Book'], authors: [], matchedField: field, matchedText: matched, matchedLanguage: 'en' });
 
 describe('search suggestions', () => {
   test('the typeahead is asked for a CJK title’s first character, or a Latin word’s first letters', () => {

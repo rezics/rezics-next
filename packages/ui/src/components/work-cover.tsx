@@ -83,9 +83,20 @@ export function coverHash(seed: string): number {
   return hash >>> 0;
 }
 
-/** The swatch and layout a seed picks for a kind; the same seed always picks the same pair. */
-export function coverDesign(kind: WorkCoverKind, seed: string): { swatch: WorkCoverSwatch; layout: number } {
-  const hash = coverHash(seed);
+const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
+
+/**
+ * What a Work's generated cover hashes: the last UUID in its id, so the IRI
+ * (`https://rezics.com/id/<uuid>`), a `/w/<uuid>` path and the bare UUID pick
+ * one design. A key without a UUID is used as given.
+ */
+export function coverSeed(id: string): string {
+  return id.match(uuid)?.at(-1)?.toLowerCase() ?? id;
+}
+
+/** The swatch and layout a Work's id picks for a kind; the same Work always picks the same pair. */
+export function coverDesign(kind: WorkCoverKind, id: string): { swatch: WorkCoverSwatch; layout: number } {
+  const hash = coverHash(coverSeed(id));
   const set = swatches[kind];
   return { swatch: set[hash % set.length]!, layout: (hash >>> 8) % 4 };
 }
@@ -154,7 +165,14 @@ export interface WorkCoverProps extends VariantProps<typeof workCoverVariants> {
   /** Author names in credit order; the first two are set on a generated cover. */
   authors?: readonly string[];
   kind?: WorkCoverKind;
-  /** Picks the generated colors and layout; use a stable key such as the Work ID. */
+  /**
+   * The Work's IRI or UUID. Only its UUID picks the generated colors and
+   * layout, so a Work wears one cover on every surface. Never pass a key a
+   * single read chose, such as Main's fallback avatar key: another surface
+   * would draw another cover.
+   */
+  id?: string;
+  /** @deprecated Pass the Work's `id`. */
   seed?: string;
   /** A selected cover image. The generated cover stays underneath while it loads or if it fails. */
   image?: WorkCoverImage | null;
@@ -291,12 +309,16 @@ const designs = { book: BookDesign, document: DocumentDesign, recipe: RecipeDesi
  * A Work's cover at a standard size and the right proportions for its kind.
  * With an image it shows the image; without one it generates a typographic
  * cover (title and authors in the Work-title face on colors picked by the
- * kind and `seed`), never a single-letter monogram. Covers keep their colors
- * in dark mode, as printed objects do.
+ * kind and the Work's `id`), never a single-letter monogram. Covers keep
+ * their colors in dark mode, as printed objects do.
+ *
+ * A Zone may wash its generated covers with one translucent color through
+ * `--work-cover-tint` (at most about 15% opacity, so the set type keeps its
+ * contrast); nothing else about a cover is a Zone's to change.
  */
-export function WorkCover({ title, lang, dir, authors = [], kind = 'book', seed = title, image, alt, size,
+export function WorkCover({ title, lang, dir, authors = [], kind = 'book', id, seed, image, alt, size,
   loading = 'lazy', className, style }: WorkCoverProps) {
-  const { swatch, layout } = coverDesign(kind, seed);
+  const { swatch, layout } = coverDesign(kind, id ?? seed ?? title);
   const Design = designs[kind];
   const named = alt !== undefined && alt !== '';
   return <div data-slot="work-cover" data-kind={kind}
@@ -308,6 +330,7 @@ export function WorkCover({ title, lang, dir, authors = [], kind = 'book', seed 
       {/* A faint sheen and foot shadow give the flat color some paper. */}
       <span className="absolute inset-0 bg-[linear-gradient(180deg,rgb(255_255_255/0.07),transparent_38%,rgb(0_0_0/0.09))]" />
       <Design title={title} lang={lang} dir={dir} authors={authors} swatch={swatch} layout={layout} />
+      <span data-slot="work-cover-tint" className="absolute inset-0 bg-(--work-cover-tint)" />
     </div>
     {image ? <img src={image.src} width={image.width} height={image.height} alt={named ? alt : ''} loading={loading}
       decoding="async" fetchPriority={loading === 'eager' ? 'high' : undefined}

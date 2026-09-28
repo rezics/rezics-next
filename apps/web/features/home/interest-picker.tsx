@@ -3,14 +3,13 @@
 import { Button } from '@rezics/ui/button';
 import { Spinner } from '@rezics/ui/spinner';
 import { cn } from '@rezics/ui/utils';
-import { WorkCover } from '@rezics/ui/work-cover';
 import { ArrowLeftIcon, BookOpenIcon, BotIcon, CheckIcon, ChefHatIcon, ClapperboardIcon, MessagesSquareIcon,
   PuzzleIcon, SparklesIcon, type LucideIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { coverImage } from '../catalogue/work.ts';
+import { CatalogueCover } from '../catalogue/cover.tsx';
 import { commandKey } from '../feed/api.ts';
 import { useFeed } from '../feed/feed-context.tsx';
 import type { SuggestedFollow } from '../feed/types.ts';
@@ -157,9 +156,9 @@ export function InterestPicker({ locale, messages, kindNames, initial, collapsed
                   ? t.reasonOfficial : item.reason.interest ? t.reasonKind({ kind: kindNames[item.reason.interest] })
                     : t.reasonPopular, members].filter(Boolean).join(' · ')}</span>
                 {item.sampleWorks.length ? <span aria-hidden="true" className="mt-1 flex gap-1.5">
-                  {item.sampleWorks.map(work => <WorkCover key={work.id} title={work.title.value}
-                    lang={work.title.language} size="xs" image={coverImage(work.cover, avatarQuery)}
-                    seed={work.cover.kind === 'fallback' ? work.cover.key : work.id} />)}
+                  {/* Main's samples name no types yet, so they are drawn as books. */}
+                  {item.sampleWorks.map(work => <CatalogueCover key={work.id} work={{ id: work.id, title: work.title,
+                    cover: work.cover, kind: 'book', authors: [] }} avatarQuery={avatarQuery} size="xs" />)}
                 </span> : null}
               </span>
             </label></li>;

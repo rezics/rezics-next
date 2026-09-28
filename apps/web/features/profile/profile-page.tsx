@@ -38,6 +38,10 @@ export interface ProfileReader {
   seed?: ReaderSeed | null;
 }
 
+/** Whether the reader is looking at their own profile, as the Agent they act as. */
+export const ownProfile = (reader: ProfileReader, profile: Pick<AgentProfile, 'id'>) =>
+  Boolean(reader.actingSubject) && reader.actingSubject === profile.id;
+
 export function shelfLabel(status: ShelfStatus, t: Text): string {
   return status === 'reading' ? t.shelfReading : status === 'read' ? t.shelfRead : t.shelfWantToRead;
 }
@@ -68,7 +72,7 @@ function ProfileHeader({ profile, credited, follow, reader, followActions, local
   followActions?: FollowActions; locale: UiLocale; messages: ProfileMessages;
 }) {
   const t = materializeData(messages, { locale });
-  const own = Boolean(reader.actingSubject) && reader.actingSubject === profile.id;
+  const own = ownProfile(reader, profile);
   const followers = follow.ok ? follow.data.followers : null;
   return <header className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-5 gap-y-6 sm:items-start
     sm:gap-x-10">
@@ -105,10 +109,13 @@ const completionText = (completion: AgentWorksPage['items'][number]['completionS
   completion === 'ongoing' ? t.serialOngoing : completion === 'hiatus' ? t.serialHiatus
     : completion === 'completed' ? t.serialCompleted : null;
 
-/** Works as Goodreads lists an author's books: cover rows with the rating, pitch and shelf button. */
-function WorkRows({ page, profile, headingLevel, avatarQuery, locale, messages }: {
-  page: AgentWorksPage; profile: AgentProfile; headingLevel: 2 | 3; avatarQuery?: string; locale: UiLocale;
-  messages: ProfileMessages;
+/**
+ * Works as Goodreads lists an author's books: cover rows with the rating,
+ * pitch and a quiet shelf button, which the author does not get on their own.
+ */
+function WorkRows({ page, profile, own, headingLevel, avatarQuery, locale, messages }: {
+  page: AgentWorksPage; profile: AgentProfile; own: boolean; headingLevel: 2 | 3; avatarQuery?: string;
+  locale: UiLocale; messages: ProfileMessages;
 }) {
   const t = materializeData(messages, { locale });
   return <ol className="grid divide-y divide-border/70">
@@ -116,7 +123,7 @@ function WorkRows({ page, profile, headingLevel, avatarQuery, locale, messages }
       const serial = completionText(item.completionStatus, t);
       return <li key={item.id} className="py-6 first:pt-2">
         <WorkRow work={creditedCard(item, profile.displayName, locale, messages)} headingLevel={headingLevel}
-          avatarQuery={avatarQuery} locale={locale}>{serial}</WorkRow>
+          avatarQuery={avatarQuery} locale={locale} shelf={own ? 'none' : 'secondary'}>{serial}</WorkRow>
       </li>;
     })}
   </ol>;
@@ -144,8 +151,8 @@ function WorksSummaryLine({ page, locale, messages }: { page: AgentWorksPage; lo
   </p>;
 }
 
-function WorksSection({ profile, works, avatarQuery, locale, messages }: {
-  profile: AgentProfile; works: Loaded<AgentWorksPage>; avatarQuery?: string; locale: UiLocale;
+function WorksSection({ profile, works, own, avatarQuery, locale, messages }: {
+  profile: AgentProfile; works: Loaded<AgentWorksPage>; own: boolean; avatarQuery?: string; locale: UiLocale;
   messages: ProfileMessages;
 }) {
   const t = materializeData(messages, { locale });
@@ -164,7 +171,7 @@ function WorksSection({ profile, works, avatarQuery, locale, messages }: {
       </div>
       <WorksSummaryLine page={works.data} locale={locale} messages={messages} />
     </header>
-    <WorkRows page={works.data} profile={profile} headingLevel={3} avatarQuery={avatarQuery} locale={locale}
+    <WorkRows page={works.data} profile={profile} own={own} headingLevel={3} avatarQuery={avatarQuery} locale={locale}
       messages={messages} />
   </section>;
 }
@@ -250,8 +257,8 @@ export function ProfilePage({ profile, works, follow, library, reader, readerAct
   const credited = works.ok && works.data.items.length > 0;
   const hasShelves = library?.kind === 'shelves' && library.shelves.some(shelf => shelf.count > 0);
   const worksRegion = !works.ok || credited
-    ? <WorksSection profile={profile} works={works} avatarQuery={reader.avatarQuery} locale={locale}
-      messages={messages} /> : null;
+    ? <WorksSection profile={profile} works={works} own={ownProfile(reader, profile)} avatarQuery={reader.avatarQuery}
+      locale={locale} messages={messages} /> : null;
   const libraryRegion = library && (library.kind !== 'shelves' || hasShelves || library.own)
     ? <LibrarySection profile={profile} library={library} avatarQuery={reader.avatarQuery} locale={locale}
       messages={messages} /> : null;
@@ -332,7 +339,8 @@ export function ProfileWorksPage({ profile, works, cursor, reader, readerActions
     messages={messages}>
     {!works.ok ? <Failure failure={works.failure} title={t.worksUnavailable} retryHref={profileHref(profile.handle, view)}
       t={t} />
-      : works.data.items.length ? <WorkRows page={works.data} profile={profile} headingLevel={2}
+      : works.data.items.length ? <WorkRows page={works.data} profile={profile} own={ownProfile(reader, profile)}
+        headingLevel={2}
         avatarQuery={reader.avatarQuery} locale={locale} messages={messages} />
         : <p className="text-muted-foreground">{t.noWorks}</p>}
   </ListFrame>;

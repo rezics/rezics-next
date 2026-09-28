@@ -1,0 +1,13 @@
+import { WorkCover, type WorkCoverProps } from '@rezics/ui/work-cover';
+import { type CoverWork, coverProps } from './work.ts';
+
+/**
+ * A Work's one cover, as every surface draws it: home, Discover, search,
+ * Library, profiles, Zones, Manage, the Work page and Studio. Build `work`
+ * from any read that names the Work's id, types (`coverKindOf`), title and
+ * credited authors; the same Work then looks the same everywhere.
+ */
+export function CatalogueCover({ work, avatarQuery, ...props }: { work: CoverWork; avatarQuery?: string }
+  & Pick<WorkCoverProps, 'size' | 'loading' | 'alt' | 'className' | 'style'>) {
+  return <WorkCover {...coverProps(work, avatarQuery)} {...props} />;
+}

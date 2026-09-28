@@ -5,7 +5,9 @@ import { gzipSync } from 'node:zlib';
 import { packageDigest, workCoverProps, ZONE_PACKAGE_BUDGET, zonePresets, type ZoneTokens } from '@rezics/zone-sdk';
 import type { ReactNode } from 'react';
 import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
+import { coverProps } from '../features/catalogue/work.ts';
 import { zoneWorkCards } from '../features/zones/adapt-cards.ts';
+import { catalogueWork } from '../features/zones/card.tsx';
 import { contrast, inkOn, mix, parseHex, readableOn, toHex } from '../features/zones/color.ts';
 import { isZonePage, zoneCsp, zoneNonce } from '../features/zones/csp.ts';
 import { decideExecution, isSafeMode, zoneLookEnabled } from '../features/zones/execution.ts';
@@ -290,15 +292,31 @@ describe('Official Zone packages', () => {
     expect(await run.exited).toBe(0);
   });
 
-  test('a package sets a Work’s cover as the platform card does', () => {
-    const work = { id: 'https://rezics.com/id/w', href: '/w/w', kind: 'package' as const, status: null, chapters: null,
+  test('a package sets a Work’s cover exactly as the platform card does', () => {
+    const id = 'https://rezics.com/id/0192f3a4-5b6c-7d8e-9f01-23456789abcd';
+    const work = { id, href: '/w/w', kind: 'package' as const, status: null, chapters: null,
       words: null, updatedAt: null, decision: null, tagline: null,
       title: { value: 'Lumen', lang: 'en', dir: 'ltr' as const }, author: { value: 'aurora', lang: '', dir: 'ltr' as const },
       cover: { url: '/api/main/v1/media/c?actingSubject=a', width: 600, height: 600 } };
     expect(workCoverProps(work)).toEqual({ title: 'Lumen', lang: 'en', dir: 'ltr', authors: ['aurora'], kind: 'package',
-      seed: 'https://rezics.com/id/w', image: { src: '/api/main/v1/media/c?actingSubject=a', width: 600, height: 600 } });
-    expect(workCoverProps({ ...work, title: null, author: null, cover: null })).toMatchObject({ title: '', authors: [],
-      image: null });
+      id, image: { src: '/api/main/v1/media/c?actingSubject=a', width: 600, height: 600 } });
+    expect(coverProps(catalogueWork(work), '?actingSubject=a')).toEqual(workCoverProps(work));
+    const bare = { ...work, title: null, author: null, cover: null };
+    expect(workCoverProps(bare)).toMatchObject({ title: '', authors: [], image: null });
+    expect(coverProps(catalogueWork(bare))).toEqual(workCoverProps(bare));
+  });
+
+  test.each(officialSlugs)('%s may size and tint a Work’s cover but never change it', slug => {
+    for (const [path, source] of Object.entries(packageFiles(slug)).filter(([path]) => path.endsWith('.tsx'))) {
+      for (const [element] of source.matchAll(/<WorkCover\b[^>]*>/g)) {
+        expect(element, `${slug}/${path}`).toContain('{...workCoverProps(');
+        // Spread props first and override only these: the face is the Work's.
+        const own = element.split(/\{\.\.\.workCoverProps\([^)]*\)\}/)[1] ?? '';
+        for (const [, prop] of own.matchAll(/\b([a-zA-Z]+)=/g)) {
+          expect(['size', 'loading', 'alt', 'className', 'style'], `${slug}/${path}: ${prop}`).toContain(prop);
+        }
+      }
+    }
   });
 
   test('a package digest covers every byte and path, and nothing else', async () => {

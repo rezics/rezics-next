@@ -2,7 +2,6 @@
 
 import { Input, type InputProps } from '@rezics/ui/input';
 import { cn } from '@rezics/ui/utils';
-import { WorkCover } from '@rezics/ui/work-cover';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
 import { type CompositionEvent, type FocusEvent, type InputEvent, type KeyboardEvent, type Ref, useEffect, useId,
@@ -10,7 +9,9 @@ import { type CompositionEvent, type FocusEvent, type InputEvent, type KeyboardE
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
-import { coverImage } from '../catalogue/work.ts';
+import { CatalogueCover } from '../catalogue/cover.tsx';
+import { messages as catalogueMessages } from '../catalogue/messages.ts';
+import { coverKindOf, workTypeLabel } from '../catalogue/work.ts';
 import { normalizePhrase, PHRASE } from './state.ts';
 import { isWideText, type TypeaheadItem } from './suggest.ts';
 import { typeaheadMessages } from './typeahead-messages.ts';
@@ -37,6 +38,19 @@ export function suggestionHref(item: TypeaheadItem): string {
     : `/w/${item.work.slice(-36)}`;
 }
 
+/**
+ * Text with the part the reader typed marked, matched without regard to
+ * case. Text whose lower case changes its length is left unmarked rather
+ * than marked in the wrong place.
+ */
+export function Highlighted({ text, phrase }: { text: string; phrase: string }) {
+  const folded = text.toLocaleLowerCase();
+  const at = phrase && folded.length === text.length ? folded.indexOf(phrase.toLocaleLowerCase()) : -1;
+  if (at < 0) return text;
+  return <>{text.slice(0, at)}<mark className="rounded-[0.1875rem] bg-primary/12 font-semibold text-inherit">
+    {text.slice(at, at + phrase.length)}</mark>{text.slice(at + phrase.length)}</>;
+}
+
 const composingKey = (event: KeyboardEvent<HTMLInputElement>) =>
   // Safari reports the Enter that commits a composition with isComposing false but keyCode 229.
   event.nativeEvent.isComposing || event.keyCode === 229;
@@ -57,6 +71,7 @@ export function TypeaheadInput({ locale, load = mainTypeahead, ref, onKeyDown, o
   const router = useRouter();
   const listId = useId();
   const [items, setItems] = useState<readonly TypeaheadItem[]>([]);
+  const [phrase, setPhrase] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const composing = useRef(false);
@@ -65,8 +80,9 @@ export function TypeaheadInput({ locale, load = mainTypeahead, ref, onKeyDown, o
   const answers = useRef(new Map<string, readonly TypeaheadItem[]>());
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  function show(next: readonly TypeaheadItem[]) {
+  function show(next: readonly TypeaheadItem[], typed = '') {
     setItems(next);
+    setPhrase(typed);
     setActive(-1);
     setOpen(next.length > 0);
   }
@@ -76,12 +92,12 @@ export function TypeaheadInput({ locale, load = mainTypeahead, ref, onKeyDown, o
     const request = ++asked.current;
     if (!prefix) { show([]); return; }
     const known = answers.current.get(`${locale}\u0000${prefix}`);
-    if (known) { show(known); return; }
+    if (known) { show(known, prefix); return; }
     // Wait for a pause in typing; an answer to an older prefix is dropped.
     timer.current = setTimeout(() => {
       load(prefix, locale).then(found => {
         answers.current.set(`${locale}\u0000${prefix}`, found);
-        if (request === asked.current && !composing.current) show(found);
+        if (request === asked.current && !composing.current) show(found, prefix);
       }, () => { if (request === asked.current) show([]); });
     }, 150);
   }
@@ -142,8 +158,12 @@ export function TypeaheadInput({ locale, load = mainTypeahead, ref, onKeyDown, o
       className="absolute inset-x-0 top-full z-50 mt-2 grid max-h-[min(26rem,60dvh)] overflow-y-auto overscroll-contain
         rounded-2xl border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-(--aura-shadow-card)">
       {items.map((item, index) => {
-        const hint = item.matchedField === 'credit' ? t.byAuthor({ name: item.matchedText })
-          : item.matchedText !== item.title.value ? t.alsoTitled({ title: item.matchedText }) : null;
+        const authors = item.authors.flatMap(author => author.displayName ? [author.displayName] : []);
+        const type = workTypeLabel(item.types);
+        // A credit that matched is named even when it is not among the Work's first authors.
+        const credit = item.matchedField === 'credit' && !authors.includes(item.matchedText) ? item.matchedText : null;
+        const byline = [...authors.slice(0, 2), ...credit ? [credit] : []];
+        const also = item.matchedField === 'title' && item.matchedText !== item.title.value ? item.matchedText : null;
         return <li key={`${item.work}-${item.matchedField}-${item.matchedText}`} id={`${listId}-${index}`} role="option"
           aria-selected={index === active}
           // Keep focus in the box, so the list stays open until the click chooses.
@@ -151,13 +171,19 @@ export function TypeaheadInput({ locale, load = mainTypeahead, ref, onKeyDown, o
           onMouseMove={() => setActive(index)}
           className={cn('flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 text-start',
             'aria-selected:bg-accent aria-selected:text-accent-foreground')}>
-          <WorkCover title={item.title.value} lang={item.title.language} size="xs"
-            seed={item.cover.kind === 'fallback' ? item.cover.key : item.work} image={coverImage(item.cover)} />
+          <CatalogueCover work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
+            authors }} size="xs" />
           <span className="grid min-w-0">
             <span lang={item.title.language} dir={item.title.direction}
-              className="truncate font-medium font-work-title text-[0.9375rem]">{item.title.value}</span>
-            {hint ? <span lang={item.matchedLanguage ?? undefined}
-              className="truncate text-muted-foreground text-xs">{hint}</span> : null}
+              className="truncate font-medium font-work-title text-[0.9375rem]">
+              <Highlighted text={item.title.value} phrase={phrase} /></span>
+            {type || byline.length ? <span className="truncate text-muted-foreground text-xs">
+              {type ? catalogueMessages[locale][type] : null}{type && byline.length ? ' · ' : null}
+              {byline.length ? <Highlighted text={t.byAuthor({ name: new Intl.ListFormat(locale,
+                { type: 'conjunction' }).format(byline) })} phrase={item.matchedField === 'credit' ? phrase : ''} />
+                : null}</span> : null}
+            {also ? <span lang={item.matchedLanguage ?? undefined} className="truncate text-muted-foreground text-xs">
+              <Highlighted text={t.alsoTitled({ title: also })} phrase={phrase} /></span> : null}
           </span>
         </li>;
       })}

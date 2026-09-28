@@ -250,13 +250,16 @@ export function defineZonePackage<const Package extends ZonePackage>(pkg: Packag
 }
 
 /**
- * The props `WorkCover` (`@rezics/ui/work-cover`) takes for a Work, as the
- * platform card sets them: its image when it has one, otherwise the cover
- * generated from its title, author and kind.
+ * The props `WorkCover` (`@rezics/ui/work-cover`) takes for a Work: exactly
+ * what the platform's cards pass, so a Work wears one cover in a Zone and on
+ * every other surface. Its image when it has one, otherwise the cover
+ * generated from its kind, id, title and author. Spread it last but for
+ * `size`, `loading`, `alt` and `className`; a Zone may tint covers through
+ * `--work-cover-tint` in its stylesheet, never change their kind or design.
  */
 export function workCoverProps(work: ZoneWork) {
   return { title: work.title?.value ?? '', lang: work.title?.lang, dir: work.title?.dir,
-    authors: work.author ? [work.author.value] : [], kind: work.kind, seed: work.id,
+    authors: work.author ? [work.author.value] : [], kind: work.kind, id: work.id,
     image: work.cover ? { src: work.cover.url, width: work.cover.width, height: work.cover.height } : null };
 }
 

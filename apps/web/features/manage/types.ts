@@ -93,7 +93,9 @@ export function problemCode(value: unknown): string | undefined {
 /** A person or organization as the workspace names them; `label` is null until Main answers. */
 export interface AgentSummary { iri: string; label: string | null; handle: string | null }
 /** A Work as a queue item shows it: its title in the reader's language and its cover. */
-export interface WorkSummary { iri: string; title: LocalizedName; cover: Avatar; originalTitle: string | null }
+export interface WorkSummary { iri: string; title: LocalizedName; cover: Avatar; originalTitle: string | null;
+  /** Main's semantic types, which choose the Work's cover. */
+  types: readonly string[] }
 
 export const uuidOf = (iri: string) => iri.slice(-36);
 export const iriOf = (uuid: string) => `https://rezics.com/id/${uuid}`;

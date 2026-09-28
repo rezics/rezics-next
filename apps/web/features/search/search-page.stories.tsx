@@ -153,9 +153,13 @@ export const EmptyOffersWiderSearch: Story = {
   },
 };
 
-const suggestion = (n: number, title: string, field: 'title' | 'credit' = 'title', matched = title) => ({
+const suggestion = (n: number, title: string, field: 'title' | 'credit' = 'title', matched = title,
+  { types = ['https://schema.org/Book'], authors = [] as string[] } = {}) => ({
   work: id(n), mainVersion: id(n + 100), title: name(title),
   cover: { kind: 'fallback' as const, policy: 'avatar-fallback-v1', key: `work-${n}`, resourceType: 'work' },
+  types, authors: authors.map((displayName, index) => ({ id: id(n + 200 + index), role: 'author' as const,
+    participantKind: 'external-reference' as const, provider: 'open-library' as const, key: `OL${n}A`, ordinal: index,
+    agent: null, displayName, handle: null })),
   matchedField: field, matchedText: matched, matchedLanguage: 'en' });
 
 export const EmptySuggestsCloseTitles: Story = {
@@ -179,8 +183,10 @@ export const EmptySuggestsCloseTitles: Story = {
 };
 
 const suggestions: TypeaheadLoader = async prefix => prefix.toLowerCase().startsWith('pri') ? [
-  suggestion(1, 'Pride and Prejudice'), suggestion(3, '傲慢与偏见', 'title', 'Pride and Prejudice (Chinese reading)'),
-  suggestion(2, 'Letters on Prejudice', 'credit', 'Pride Reading Circle')] : [];
+  suggestion(1, 'Pride and Prejudice', 'title', 'Pride and Prejudice', { authors: ['Jane Austen'] }),
+  suggestion(3, '傲慢与偏见', 'title', 'Pride and Prejudice (Chinese reading)', { authors: ['简·奥斯汀'] }),
+  suggestion(2, 'Letters on Prejudice', 'credit', 'Pride Reading Circle',
+    { types: ['https://schema.org/DigitalDocument'] })] : [];
 
 export const TypeaheadSuggestsTitles: Story = {
   args: { parsed: state(''), initial: null, suggest: suggestions },
@@ -190,9 +196,15 @@ export const TypeaheadSuggestsTitles: Story = {
     await userEvent.type(box, 'pri');
     const list = await canvas.findByRole('listbox', { name: 'Suggested works' });
     await expect(box).toHaveAttribute('aria-expanded', 'true');
-    await expect(within(list).getAllByRole('option')).toHaveLength(3);
-    await expect(within(list).getByText('by Pride Reading Circle')).toBeVisible();
-    await expect(within(list).getByText('Also titled Pride and Prejudice (Chinese reading)')).toBeVisible();
+    const options = within(list).getAllByRole('option');
+    await expect(options).toHaveLength(3);
+    // Each suggestion says what the Work is and who wrote it, with the typed part marked.
+    await expect(options[0]).toHaveTextContent('Pride and PrejudiceBook · by Jane Austen');
+    await expect(options[0]!.querySelector('mark')).toHaveTextContent('Pri');
+    await expect(options[1]).toHaveTextContent('Also titled Pride and Prejudice (Chinese reading)');
+    // A credit that matched is named, and marked there.
+    await expect(options[2]).toHaveTextContent('Guide · by Pride Reading Circle');
+    await expect(options[2]!.querySelector('mark')).toHaveTextContent('Pri');
     await userEvent.keyboard('{ArrowDown}{ArrowDown}');
     const second = within(list).getAllByRole('option')[1]!;
     await expect(second).toHaveAttribute('aria-selected', 'true');

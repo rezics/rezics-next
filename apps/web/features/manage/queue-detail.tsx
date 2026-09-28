@@ -14,7 +14,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { agentLabel, dateTime, isoTime, relativeTime, shownHandle } from './format.ts';
 import { actionLabel, componentLabel, kindLabel, reasonText, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
-import { AgentMark, Named, Thumb } from './parts.tsx';
+import { AgentMark, Named, WorkThumb } from './parts.tsx';
 import { isReport, type QueueAction, type QueueAuthority } from './queue-state.ts';
 import { type AgentSummary, type DecisionBasis, type Loaded, type ModerationItem, uuidOf, type WorkSummary } from './types.ts';
 
@@ -120,7 +120,7 @@ export function QueueDetail({ item, agents, works, draft, basis, allowed, author
         : null}
     </header>
     <div className="flex gap-4">
-      <Thumb image={work?.cover ?? null} label={title} fallbackKey={item.target.resource} shape="cover" className="w-16" />
+      <WorkThumb iri={item.target.resource} work={work} label={title} className="w-16" />
       <div className="min-w-0 space-y-1.5">
         <h3 id={`queue-detail-${item.id}`} className="font-work-title text-xl leading-snug">
           {work ? <Named name={work.title} /> : title}</h3>
@@ -168,7 +168,10 @@ export function QueueDetail({ item, agents, works, draft, basis, allowed, author
           variant={action === 'approve' || action === 'keep' ? 'default'
             : action === 'reject' || action === 'remove' ? 'destructive' : 'outline'}
           aria-keyshortcuts={shortcutKeys[action]}>
-          {actionLabel(action, t)}<Kbd className="ms-1 bg-transparent" aria-hidden="true">{shortcutKeys[action].toUpperCase()}</Kbd>
+          {actionLabel(action, t)}
+          {/* The key that does the same, in the button's own color so it reads on a filled button. */}
+          <Kbd className="ms-1 border-current/40 bg-transparent text-current opacity-85 shadow-none" aria-hidden="true">
+            {shortcutKeys[action].toUpperCase()}</Kbd>
         </Button>)}
       </div> : null}
       {report && item.state === 'open' ? <ReportNote item={item} authority={authority} rules={rules} rulesHref={rulesHref}

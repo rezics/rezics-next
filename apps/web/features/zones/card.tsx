@@ -2,9 +2,9 @@ import { cn } from '@rezics/ui/utils';
 import type { ZoneText, ZoneWork } from '@rezics/zone-sdk';
 import { StampIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import type { CatalogueWork } from '../catalogue/work.ts';
 import { CoverLink, WorkTile } from '../catalogue/work-tile.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -12,8 +12,9 @@ import type { ZoneMessages } from './messages.ts';
 
 // Zone modules draw Works with the catalogue's tiles and covers, so a Work
 // looks the same in a Zone as on Discover, Search and its own page. The
-// Zone adds two marks on the cover: the chart position and the stamp that
-// opens the Decision behind the pick.
+// Zone's own marks, the chart position and the stamp that opens the
+// Decision behind the pick, sit beside the title and never on the cover,
+// whose own title they would hide.
 
 /** A Work's title in its own language, or the untitled stand-in. */
 export function workTitle(work: Pick<ZoneWork, 'title'>, messages: ZoneMessages): string {
@@ -40,35 +41,31 @@ export function catalogueWork(work: ZoneWork): CatalogueWork {
 }
 
 /**
- * The link to the public Decision that placed a Work here. It sits outside
- * package slots, so a Zone design can restyle a card but never hide why a
- * pick is in the Zone.
+ * The link to the public Decision that placed a Work here: a stamp that says
+ * "Why it's here" on hover and focus. It sits outside package slots, so a
+ * Zone design can restyle a card but never hide why a pick is in the Zone.
  */
 export function WhyHere({ work, locale, messages, className }: {
   work: Pick<ZoneWork, 'title' | 'decision'>; locale: UiLocale; messages: ZoneMessages; className?: string;
 }) {
   if (!work.decision) return null;
   const t = materializeData(messages, { locale });
-  const label = t.whyHere({ title: workTitle(work, messages) });
-  return <LocalizedLink href={work.decision} aria-label={label} title={label}
-    className={cn('pointer-events-auto relative z-10 inline-grid size-7 shrink-0 place-items-center rounded-full',
+  return <LocalizedLink href={work.decision} aria-label={t.whyHere({ title: workTitle(work, messages) })}
+    className={cn('group/why pointer-events-auto relative z-10 inline-grid size-7 shrink-0 place-items-center rounded-full',
       'text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground',
       'focus-visible:ring-2 focus-visible:ring-ring', className)}>
     <StampIcon aria-hidden="true" className="size-3.5" />
+    <span aria-hidden="true" className="pointer-events-none absolute end-0 bottom-full z-20 mb-1 w-max max-w-48
+      rounded-md bg-foreground px-2 py-1 font-medium text-background text-xs opacity-0 shadow-md transition-opacity
+      group-hover/why:opacity-100 group-focus-visible/why:opacity-100 motion-reduce:transition-none">
+      {catalogueMessages[locale].whyItsHere}</span>
   </LocalizedLink>;
 }
 
 function RankBadge({ rank, label, className }: { rank: number; label: string; className?: string }) {
-  return <span className={cn('pointer-events-none grid h-6 min-w-6 place-items-center rounded-full px-1.5',
-    'font-semibold text-xs tabular-nums shadow-[0_1px_4px_rgb(0_0_0/0.25)]',
-    rank <= 3 ? 'bg-primary text-primary-foreground' : 'bg-background/92 text-foreground backdrop-blur', className)}>
+  return <span className={cn('grid h-6 min-w-6 shrink-0 place-items-center rounded-full px-1.5 font-semibold text-xs',
+    'tabular-nums', rank <= 3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground', className)}>
     <span className="sr-only">{label}</span><span aria-hidden="true">{rank}</span></span>;
-}
-
-/** The cover area of a tile, for marks placed on its corners. */
-function CoverMarks({ slot, children }: { slot: number; children: ReactNode }) {
-  return <div className="pointer-events-none absolute inset-x-0 top-0 z-30" style={{ aspectRatio: String(slot) }}>
-    {children}</div>;
 }
 
 export interface ZoneCardProps {
@@ -84,7 +81,7 @@ export interface ZoneCardProps {
 
 /**
  * A Work in a shelf, chart or grid: the catalogue's tile, with the chart
- * position on the cover's top corner and the "Why here?" stamp on its foot.
+ * position before its title and the "Why here?" stamp after it.
  */
 export function ZoneWorkCard({ work, rank, slot = 2 / 3, locale, messages, avatarQuery, headingLevel = 3,
   whyHere = true }: ZoneCardProps & {
@@ -92,22 +89,16 @@ export function ZoneWorkCard({ work, rank, slot = 2 / 3, locale, messages, avata
   slot?: number;
 }) {
   const t = materializeData(messages, { locale });
-  return <div className="relative min-w-0">
-    <WorkTile work={catalogueWork(work)} slot={slot} headingLevel={headingLevel} avatarQuery={avatarQuery}
-      locale={locale} />
-    <CoverMarks slot={slot}>
-      {rank ? <RankBadge rank={rank} label={t.rank({ rank: String(rank) })} className="absolute start-2 top-2" /> : null}
-      {whyHere ? <WhyHere work={work} locale={locale} messages={messages}
-        className="absolute end-2 bottom-2 bg-background/92 text-foreground shadow-[0_1px_4px_rgb(0_0_0/0.18)]
-          backdrop-blur hover:bg-background" /> : null}
-    </CoverMarks>
-  </div>;
+  return <WorkTile work={catalogueWork(work)} slot={slot} headingLevel={headingLevel} avatarQuery={avatarQuery}
+    locale={locale}
+    titleStart={rank ? <RankBadge rank={rank} label={t.rank({ rank: String(rank) })} className="mt-px" /> : null}
+    titleEnd={whyHere ? <WhyHere work={work} locale={locale} messages={messages} className="-me-1 -mt-0.5" /> : null} />;
 }
 
 /**
  * A Work as a compact row, for rails, charts past the podium and editor
- * lists: a small catalogue cover, the title in the Work-title face, the
- * author and the one-line hook. Covers stay wide enough (4.5rem) for a
+ * lists: the chart position, a small catalogue cover, the title in the
+ * Work-title face, the author and the one-line hook. Covers stay wide enough (4.5rem) for a
  * generated cover to set its title, so no row shows a blank block.
  */
 export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, headingLevel = 3, whyHere = true,
@@ -118,12 +109,12 @@ export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, heading
   const t = materializeData(messages, { locale });
   const Heading = `h${headingLevel}` as const;
   const title = workTitle(work, messages);
-  return <article className={cn('group/tile relative grid items-start gap-x-3',
-    compact ? 'grid-cols-[4.5rem_minmax(0,1fr)_auto]' : 'grid-cols-[5rem_minmax(0,1fr)_auto]')}>
-    <CoverLink work={catalogueWork(work)} avatarQuery={avatarQuery}>
-      {rank ? <RankBadge rank={rank} label={t.rank({ rank: String(rank) })} className="absolute -start-1.5 -top-1.5 z-20" />
-        : null}
-    </CoverLink>
+  // A chart's position leads the row in its own column, clear of the cover.
+  return <article className={cn('group/tile relative grid items-start gap-x-3', rank
+    ? compact ? 'grid-cols-[auto_4.5rem_minmax(0,1fr)_auto]' : 'grid-cols-[auto_5rem_minmax(0,1fr)_auto]'
+    : compact ? 'grid-cols-[4.5rem_minmax(0,1fr)_auto]' : 'grid-cols-[5rem_minmax(0,1fr)_auto]')}>
+    {rank ? <RankBadge rank={rank} label={t.rank({ rank: String(rank) })} className="mt-1" /> : null}
+    <CoverLink work={catalogueWork(work)} avatarQuery={avatarQuery} />
     <div className="grid min-w-0 content-start gap-0.5">
       <Heading lang={work.title?.lang} dir={work.title?.dir}
         className={cn('text-pretty font-medium font-work-title', compact ? 'line-clamp-1 text-[0.9375rem]/snug'

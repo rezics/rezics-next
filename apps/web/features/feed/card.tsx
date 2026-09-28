@@ -1,14 +1,14 @@
 'use client';
 
 import { cn } from '@rezics/ui/utils';
-import { WorkCover, type WorkCoverKind } from '@rezics/ui/work-cover';
-import { BookOpenIcon, BookPlusIcon, EyeOffIcon, FileTextIcon, LibraryBigIcon, MessageSquareQuoteIcon,
+import { BookCheckIcon, BookOpenIcon, BookPlusIcon, EyeOffIcon, FileTextIcon, LibraryBigIcon, MessageSquareQuoteIcon,
   MessageSquareTextIcon, MessagesSquareIcon, PackageIcon, SparklesIcon, StampIcon, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useId, useState } from 'react';
 import { localizedPath } from '../../i18n/locale.ts';
 import { StarMeter } from '../catalogue/rating.tsx';
-import { coverImage } from '../catalogue/work.ts';
+import { CatalogueCover } from '../catalogue/cover.tsx';
+import { type CoverWork, coverKindOf } from '../catalogue/work.ts';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { type Dismissal, DismissedPost, EngagementBar, JoinButton } from './actions.tsx';
@@ -32,34 +32,49 @@ function titleLanguage(item: FeedItem): string | undefined {
   return title.basis === 'requested' ? title.language : language ?? undefined;
 }
 
-function coverKind(item: FeedItem): WorkCoverKind {
-  return item.card.kind === 'recipe' ? 'recipe' : item.card.kind === 'release' ? 'package'
-    : item.card.kind === 'prompt' || item.card.kind === 'media' ? 'document' : 'book';
+/** How long a Work is "new" after it is published; later its card says only that it was published. */
+const NEW_WORK_MS = 3 * 86_400_000;
+
+/** The Work's one cover, drawn from the same facts as on every other page. */
+function coverWork(item: FeedItem, title: string, lang: string | undefined): CoverWork {
+  return { id: item.target.work ?? item.target.id, title: { ...item.target.title, value: title,
+    language: lang ?? item.target.title.language }, cover: item.target.cover, kind: coverKindOf(item.target.types),
+  authors: item.authors.flatMap(author => author.displayName ? [author.displayName] : []) };
 }
 
-/** One reason Main gives for a Work's card, in words: a Realm pick names the Realm, never its curator. */
-function reasonText(reason: FeedItem['reasons'][number], item: FeedItem, t: T): string {
-  switch (reason.kind) {
-    case 'new-work': return t.newWork;
-    case 'added-to-rezics': return t.addedToRezics;
-    case 'realm-pick': return item.realm?.id === reason.realm ? t.picked({ realm: item.realm.name.value }) : t.pickedByRealm;
-  }
-}
-
-const reasonIcons = { 'new-work': SparklesIcon, 'added-to-rezics': BookPlusIcon, 'realm-pick': StampIcon } as const;
+type Reason = FeedItem['reasons'][number];
 
 /**
- * The small line above a title that says what happened, in words. A Work
- * created and picked on the same page arrives as one card with every reason
- * ("Picked by Fiction · New work"); other kinds say what they are.
+ * The one reason a Work's card is here, in words. A Realm's pick outranks the
+ * Work's creation, and names the Realm, never its curator; a created Work is
+ * "new" only for its first days.
  */
-function kicker(item: FeedItem, t: T): { icon: LucideIcon; text: string } {
-  const { card, group, reasons } = item;
-  if (reasons.length) {
-    return { icon: reasonIcons[reasons[0]!.kind], text: reasons.map(reason => reasonText(reason, item, t)).join(' · ') };
+function reasonOf(item: FeedItem, now: number, t: T): { icon: LucideIcon; text: string } | null {
+  const reason = item.reasons.find(candidate => candidate.kind === 'realm-pick') ?? item.reasons[0];
+  if (!reason) return null;
+  return reasonWords(reason, item, now, t);
+}
+
+function reasonWords(reason: Reason, item: FeedItem, now: number, t: T): { icon: LucideIcon; text: string } {
+  switch (reason.kind) {
+    case 'new-work': return now - Date.parse(item.time) < NEW_WORK_MS ? { icon: SparklesIcon, text: t.newWork }
+      : { icon: BookCheckIcon, text: t.published };
+    case 'added-to-rezics': return { icon: BookPlusIcon, text: t.addedToRezics };
+    case 'realm-pick': return { icon: StampIcon, text: item.realm?.id === reason.realm
+      ? t.picked({ realm: item.realm.name.value }) : t.pickedByRealm };
   }
+}
+
+/**
+ * The small line above a title that says what happened, in words: one
+ * reason for a Work (a pick, or that it is new), and what other kinds are.
+ */
+function kicker(item: FeedItem, now: number, t: T): { icon: LucideIcon; text: string } {
+  const { card, group } = item;
+  const reason = reasonOf(item, now, t);
+  if (reason) return reason;
   switch (item.kind) {
-    case 'work': return { icon: SparklesIcon, text: t.newWork };
+    case 'work': return reasonWords({ kind: 'new-work', actor: item.actor.id }, item, now, t);
     case 'added': return { icon: BookPlusIcon, text: t.addedToRezics };
     case 'contribution':
       if (card.kind === 'release') return { icon: PackageIcon, text: t.newRelease };
@@ -200,15 +215,37 @@ function ReviewBody({ card, lang }: { card: Extract<FeedItem['card'], { kind: 'r
  * Main and read as one post ("Chapters 212–214"); a chapter past the reader's
  * position keeps its text hidden.
  */
+/**
+ * A list's first Works as small covers, each leading to its page, and how
+ * many the list holds, so a list reads as its contents rather than a title.
+ */
+function ListPreview({ card }: { card: Extract<FeedItem['card'], { kind: 'list' }> }) {
+  const { t, avatarQuery } = useFeed();
+  if (!card.works.length) return null;
+  return <div className="mt-1 grid gap-2">
+    <ul aria-label={t.listPreview} className="flex items-end gap-2.5">
+      {card.works.map(work => <li key={work.id}>
+        <LocalizedLink href={`/w/${work.id.slice(-36)}`} aria-label={work.title.value} className="block rounded-[0.25rem]
+          outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
+            authors: [] }} avatarQuery={avatarQuery} size="sm" className="sm:w-[4.5rem]" />
+        </LocalizedLink>
+      </li>)}
+    </ul>
+    <p className="text-muted-foreground text-sm">{card.count.kind === 'exact' ? t.listWorks(card.count.value)
+      : t.listWorksAtLeast(card.count.value)}</p>
+  </div>;
+}
+
 export function FeedCard({ item, position, total }: { item: FeedItem; position?: number; total?: number }) {
-  const { t, locale, avatarQuery } = useFeed();
+  const { t, locale, now, avatarQuery } = useFeed();
   const titleId = useId();
   const [dismissed, setDismissed] = useState<Dismissal | null>(null);
   if (dismissed) return <DismissedPost dismissal={dismissed} onUndo={() => setDismissed(null)} />;
   const href = targetHref(item);
   const title = item.target.title.value || t.untitled;
   const lang = titleLanguage(item);
-  const { icon: Icon, text } = kicker(item, t);
+  const { icon: Icon, text } = kicker(item, now, t);
   const facts = details(item, t, locale);
   const hidden = spoilerHidden(item);
   const excerpt = hidden ? null : excerptOf(item);
@@ -238,6 +275,7 @@ export function FeedCard({ item, position, total }: { item: FeedItem; position?:
           <p><span className="font-medium">{t.spoilerTitle}</span>
             <span className="block text-muted-foreground">{t.spoilerBody}</span></p>
         </div> : null}
+        {item.card.kind === 'list' ? <ListPreview card={item.card} /> : null}
         {item.card.kind === 'review' ? <ReviewBody card={item.card} lang={item.target.language ?? undefined} />
           : item.card.kind === 'prompt' && item.card.preview
           ? <figure className="mt-1 grid gap-1">
@@ -249,9 +287,7 @@ export function FeedCard({ item, position, total }: { item: FeedItem; position?:
             'text-pretty text-muted-foreground text-sm/relaxed', readableText)}>{excerpt}</p> : null}
       </div>
       {coverHref ? <LocalizedLink href={coverHref} tabIndex={-1} aria-hidden="true" className="self-start">
-        <WorkCover title={title} lang={lang} kind={coverKind(item)}
-          seed={item.target.cover.kind === 'fallback' ? item.target.cover.key : item.target.id}
-          image={coverImage(item.target.cover, avatarQuery)} size="sm" className="sm:w-20" />
+        <CatalogueCover work={coverWork(item, title, lang)} avatarQuery={avatarQuery} size="sm" className="sm:w-20" />
       </LocalizedLink> : null}
     </div>
     <EngagementBar item={item} title={title} href={href} onDismiss={setDismissed} />

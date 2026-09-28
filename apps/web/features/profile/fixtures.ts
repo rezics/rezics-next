@@ -63,8 +63,8 @@ export const organizationWorks: AgentWorksPage = {
 export const noWorks: AgentWorksPage = { items: [], nextCursor: null, sourcePosition: position,
   count: { value: 0, kind: 'exact-page', total: null } };
 
-const card = (n: number, title: string, language: string): ShelfCard =>
-  ({ id: storyId(600 + n), title: name(title, language), cover: cover(600 + n) });
+const card = (n: number, title: string, language: string, types = ['https://schema.org/Book']): ShelfCard =>
+  ({ id: storyId(600 + n), title: name(title, language), cover: cover(600 + n), types });
 
 export const shelfCards = {
   reading: [card(1, '雨夜书店 · 连载小说', 'zh-Hans'), card(2, 'Alice’s Adventures in Wonderland', 'en')],

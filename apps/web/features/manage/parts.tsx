@@ -6,10 +6,12 @@ import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { CatalogueCover } from '../catalogue/cover.tsx';
+import { coverKindOf } from '../catalogue/work.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import type { ManageMessages } from './messages.ts';
-import type { Avatar, LocalizedName, ReadFailure } from './types.ts';
+import type { Avatar, LocalizedName, ReadFailure, WorkSummary } from './types.ts';
 
 // Tints for images that are missing. They sit on highlighted rows too, so only
 // tones that keep 4.5:1 there; the logo red never sits behind text
@@ -29,20 +31,32 @@ export function Named({ name, className }: { name: LocalizedName; className?: st
 }
 
 /**
- * A Realm icon or Work cover at list size. Image URLs are Main paths, fetched
- * through the BFF; without an image, a tinted tile with the first letter.
+ * A Realm icon at list size. Image URLs are Main paths, fetched through the
+ * BFF; without an image, a tinted tile with the Realm's initials. Works use
+ * `WorkThumb`, never initials.
  */
-export function Thumb({ image, label, fallbackKey, shape = 'square', className }: {
-  image: Avatar | null; label: string; fallbackKey: string; shape?: 'square' | 'cover'; className?: string;
+export function Thumb({ image, label, fallbackKey, className }: {
+  image: Avatar | null; label: string; fallbackKey: string; className?: string;
 }) {
-  const frame = cn('shrink-0 overflow-hidden border border-border/60',
-    shape === 'cover' ? 'aspect-[2/3] w-10 rounded-md' : 'size-10 rounded-xl', className);
+  const frame = cn('size-10 shrink-0 overflow-hidden rounded-xl border border-border/60', className);
   if (image?.kind === 'image') {
     return <img src={`${BFF_PREFIX}${image.url}`} alt="" width={image.width} height={image.height}
       loading="lazy" decoding="async" className={cn(frame, 'bg-muted object-cover')} />;
   }
   return <span aria-hidden="true" className={cn(frame, 'grid place-items-center font-semibold text-sm',
     tintOf(image?.key ?? fallbackKey))}>{initials(label)}</span>;
+}
+
+/**
+ * A Work at list size: its one cover, the same as on every other page. Until
+ * Main names the Work, the cover is drawn from what the queue knows of it.
+ */
+export function WorkThumb({ iri, work, label, className }: {
+  iri: string; work: WorkSummary | undefined; label: string; className?: string;
+}) {
+  return <CatalogueCover work={{ id: iri, title: work?.title ?? { value: label, language: 'und', direction: 'ltr',
+    basis: 'fallback' }, cover: work?.cover ?? null, kind: coverKindOf(work?.types ?? []), authors: [] }}
+    className={cn('w-10', className)} />;
 }
 
 /** A person's initials in a circle; names come from their public profile. */

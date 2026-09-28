@@ -38,7 +38,8 @@ const titles = ['Pride and Prejudice', 'Jane Eyre', '西游记', 'Frankenstein; 
 export const works: Record<string, WorkSummary> = Object.fromEntries(titles.map((title, index) => {
   const work = iri(100 + index);
   const language = /\p{Script=Han}/u.test(title) ? 'zh-Hans' : 'en';
-  return [work, { iri: work, title: name(title, language), cover: fallback(work), originalTitle: null }];
+  return [work, { iri: work, title: name(title, language), cover: fallback(work), originalTitle: null,
+    types: title === '聊斋志异 · 画皮' ? ['https://schema.org/DigitalDocument'] : ['https://schema.org/Book'] }];
 }));
 
 export const header: RealmHeader = { profile: 'realm-read-v1', id: iri(1), space: iri(2), revision: iri(3),

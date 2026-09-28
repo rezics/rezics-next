@@ -37,6 +37,12 @@ export const messages = {
   moreReviews: plural({ one: insert('+{{count}} more review'), other: insert('+{{count}} more reviews') },
     { count: asValue(number()) }),
   decision: 'Realm decision', discussion: 'Discussion', reply: 'Reply', list: 'List',
+  // A Work past its first days is no longer new; its card says it was published.
+  published: 'Published',
+  listWorks: plural({ one: insert('{{count}} work'), other: insert('{{count}} works') }, { count: asValue(number()) }),
+  listWorksAtLeast: plural({ one: insert('{{count}}+ work'), other: insert('{{count}}+ works') },
+    { count: asValue(number()) }),
+  listPreview: 'In this list',
   suggested: 'Suggested', suggestedAll: 'Popular across REZICS',
   suggestedThin: 'Suggested while your communities are quiet',
   trending: insert('Trending in {{realm}}', { realm: String }), editorial: 'Editors’ pick',

@@ -1,12 +1,16 @@
+import { initials } from '@rezics/ui/avatar-initials';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import type { ZoneBanner, ZoneCardOptions, ZoneDecision, ZoneModule, ZoneModuleData, ZoneModuleType, ZoneWork }
   from '@rezics/zone-sdk';
-import { BookOpenIcon, MessageCircleIcon, PlusIcon, ScaleIcon, TagIcon, XIcon } from 'lucide-react';
+import { BookOpenIcon, CookingPotIcon, DownloadIcon, MessageCircleIcon, PlusIcon, ScaleIcon, TagIcon, XIcon }
+  from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { CopyTextButton } from '../catalogue/copy-button.tsx';
+import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import { slotRatio } from '../catalogue/work.ts';
 import { CoverLink } from '../catalogue/work-tile.tsx';
 import { catalogueWork, WhyHere, workTitle } from './card.tsx';
@@ -27,6 +31,21 @@ export interface ModuleProps<Type extends ZoneModuleType> {
   messages: ZoneMessages;
   /** The reader's Agent on Main media reads, when signed in. */
   avatarQuery?: string;
+}
+
+/**
+ * A pick's one action, in its kind's verb: copy a published prompt, install
+ * a package or Skill, open a recipe, or start reading anything else.
+ */
+function PrimaryAction({ work, locale, messages }: { work: ZoneWork; locale: UiLocale; messages: ZoneMessages }) {
+  const t = catalogueMessages[locale];
+  if (work.hub?.kind === 'prompt') {
+    return <CopyTextButton text={work.hub.copyText} label={t.copyPrompt} copied={t.promptCopied} failed={t.copyFailed} />;
+  }
+  const [Icon, label] = work.hub?.kind === 'skill' || work.mod || work.kind === 'package' ? [DownloadIcon, t.install]
+    : work.kind === 'recipe' ? [CookingPotIcon, t.openRecipe] : [BookOpenIcon, messages.read];
+  return <LocalizedLink href={work.href} className={buttonVariants({ size: 'sm', pill: true })}>
+    <Icon aria-hidden="true" />{label}</LocalizedLink>;
 }
 
 function PickSlide({ banner, work, locale, messages, avatarQuery }: {
@@ -52,8 +71,7 @@ function PickSlide({ banner, work, locale, messages, avatarQuery }: {
         {work.tagline ? <p lang={work.tagline.lang} className="line-clamp-3 text-pretty text-sm/relaxed">
           {work.tagline.value}</p> : null}
         <div className="mt-auto flex items-center gap-2 pt-2">
-          <LocalizedLink href={work.href} className={buttonVariants({ size: 'sm', pill: true })}>
-            <BookOpenIcon aria-hidden="true" />{messages.read}</LocalizedLink>
+          <PrimaryAction work={work} locale={locale} messages={messages} />
           <WhyHere work={work} locale={locale} messages={messages} className="size-8" />
         </div>
       </div>
@@ -179,7 +197,7 @@ export function QuoteModule({ module, data, locale, messages }: ModuleProps<'quo
         <figure className="flex flex-1 flex-col gap-2">
           <figcaption className="flex items-center gap-2 text-muted-foreground text-xs">
             <span aria-hidden="true" className="grid size-7 place-items-center rounded-full bg-accent font-semibold
-              text-accent-foreground">{quote.reader.slice(0, 1)}</span>
+              text-accent-foreground">{initials(quote.reader)}</span>
             <span className="truncate">{t.quoteBy({ reader: quote.reader })}</span>
           </figcaption>
           <blockquote lang={quote.body.lang} dir={quote.body.dir} className="relative flex-1 rounded-2xl
@@ -262,7 +280,7 @@ export function PeopleModule({ module, data, messages }: ModuleProps<'people'>) 
           hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring">
           {person.avatar ? <img src={person.avatar.url} alt="" className="size-9 rounded-full object-cover" />
             : <span aria-hidden="true" className="grid size-9 place-items-center rounded-full bg-accent font-semibold
-              text-accent-foreground">{person.name.value.slice(0, 1)}</span>}
+              text-accent-foreground">{initials(person.name.value)}</span>}
           <span className="min-w-0">
             <span lang={person.name.lang} className="block truncate font-medium text-sm">{person.name.value}</span>
             {person.note ? <span lang={person.note.lang} className="block truncate text-muted-foreground text-xs">
