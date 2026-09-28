@@ -1,6 +1,6 @@
 import { type AccountClient, type IssuedTokens, refreshTokens } from './account.ts';
 import { ACCESS_COOKIE, REFRESH_COOKIE, SESSION_COOKIE } from './cookies.ts';
-import { decodeSessionRecord, type SessionRecord, tokenSubject } from './session-state.ts';
+import { currentSessionRecord, decodeSessionRecord, type SessionRecord, tokenSubject } from './session-state.ts';
 
 export type SessionRefresh =
   /** Nothing to do: signed out, the access token is still current, or Account
@@ -21,9 +21,7 @@ export async function refreshSession(cookies: CookieReader, client: AccountClien
   if (accessToken) {
     // The shell and feature readers must name the same person. End a partial
     // or mismatched session before either can read it.
-    const record = decodeSessionRecord(cookies.get(SESSION_COOKIE)?.value);
-    return record && record.user.id === tokenSubject(accessToken)
-      ? { kind: 'current' } : { kind: 'ended' };
+    return currentSessionRecord(cookies) ? { kind: 'current' } : { kind: 'ended' };
   }
   if (!refreshToken || !client) return { kind: 'current' };
   const result = await refreshTokens(client, refreshToken);

@@ -33,6 +33,13 @@ export function decodeSessionRecord(value: string | undefined): SessionRecord | 
   } catch { return null; }
 }
 
+/** The identity shared by the shell and feature readers after proxy refresh. */
+export function currentSessionRecord(jar: { get(name: string): { value: string } | undefined }): SessionRecord | null {
+  const accessToken = jar.get(ACCESS_COOKIE)?.value;
+  const record = decodeSessionRecord(jar.get(SESSION_COOKIE)?.value);
+  return accessToken && record?.user.id === tokenSubject(accessToken) ? record : null;
+}
+
 /** Unverified claims of a JWT; only for matching identities the server already
  * trusts (Main verifies every token it receives). */
 export function tokenSubject(token: string): string | null {

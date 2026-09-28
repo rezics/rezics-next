@@ -15,6 +15,7 @@ import { currentVanityHandle } from '../onboarding/handle.ts';
 import { agentName, type SessionAgent } from './acting-identity.ts';
 import type { AuthMessages } from './messages.ts';
 import type { Session } from './session.ts';
+import { useSessionSync } from './session-sync.ts';
 
 
 /** What the menu says about the session Agent. */
@@ -75,6 +76,7 @@ export function AccountMenu({ session, messages, accountOrigin }: {
   session: Session; messages: AuthMessages; accountOrigin: string;
 }) {
   const { locale, t, theme, setTheme } = useShell();
+  useSessionSync(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMounted, setSheetMounted] = useState(false);
   const [hydrated, setHydrated] = useState(false);

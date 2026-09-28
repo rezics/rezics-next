@@ -48,3 +48,23 @@ test('a client sign-in link opens Accounts through a document navigation', async
   await page.waitForURL(url => url.origin === accountOrigin && url.pathname === '/sign-in');
   expect(errors).toEqual([]);
 });
+
+test('the cached header follows a session changed between client navigations', async ({ page, context }) => {
+  const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
+  test.skip(!path, 'REZICS_WEB_AUTH_PRIVATE_PATH names the isolated web-auth fixture');
+  const fixture = JSON.parse(readFileSync(path!, 'utf8')) as {
+    member: { email: string; password: string } };
+  await signInAtAccounts(page, '/en/identity', fixture.member);
+  const names = ['rezics_access', 'rezics_refresh', 'rezics_session', 'rezics_session_key'];
+  const original = (await context.cookies(page.url())).filter(cookie => names.includes(cookie.name));
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Account menu' })).toBeVisible();
+  for (const name of names) await context.clearCookies({ name });
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Home' }).click();
+  await expect(page).toHaveURL('/en');
+  await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible();
+
+  await context.addCookies(original);
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Discover' }).click();
+  await expect(page).toHaveURL('/en/discover');
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Account menu' })).toBeVisible();
+});
