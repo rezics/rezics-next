@@ -29,7 +29,9 @@ export default async function RealmLogRoute({ params, searchParams }: {
     const page = await readAudit(main, realm, { actingSubject, kind: view.kind });
     if (!page.ok) return <ManageFailure failure={page.failure} locale={locale} messages={messages}
       signInHref={signInHref} retryHref={retryHref} />;
-    const agents = await readAgents(anonymous, page.data.items.map(item => item.actingSubject));
+    const agents = await readAgents(anonymous, page.data.items.flatMap(item => [item.actingSubject,
+      ...(item.detail?.member ? [item.detail.member] : []),
+      ...(item.detail?.changes.map(change => change.member) ?? [])]));
     return <LogView realm={realm} address={address} actingSubject={actingSubject} view={view} first={{ kind: 'audit', page: page.data }}
       agents={agents} works={{}} now={Date.now()} locale={locale} messages={messages} />;
   }

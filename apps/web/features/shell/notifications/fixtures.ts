@@ -16,12 +16,12 @@ function item(sequence: number, display: StreamItem['display'], read = false, mi
     state: display ? 'active' : 'withdrawn', subject: null, display, createdAt: new Date(NOW - minutes * 60_000).toISOString() };
 }
 
-const target = (title: string | null, excerpt: string | null, linkTarget: string | null, language = 'en') =>
-  ({ title, excerpt, language, linkTarget });
+const target = (title: string | null, excerpt: string | null, linkTarget: string | null, language = 'en',
+  reviewId: string | null = null) => ({ title, excerpt, language, linkTarget, reviewId });
 // Where each notification happened, as Main names it (G-329).
-const nowhere = { realmName: null, realmRouteSegment: null, roleName: null };
-const fiction = { realmName: 'Fiction · 小说', realmRouteSegment: 'fiction', roleName: null };
-const classics = { realmName: 'Classic Literature', realmRouteSegment: id(902), roleName: null };
+const nowhere = { realmName: null, realmRouteSegment: null, roleName: null, roleChange: null };
+const fiction = { realmName: 'Fiction · 小说', realmRouteSegment: 'fiction', roleName: null, roleChange: null };
+const classics = { realmName: 'Classic Literature', realmRouteSegment: id(902), roleName: null, roleChange: null };
 
 /** Sequences 101–108, oldest first as Main pages them; three replies share a thread. */
 export const inbox: StreamItem[] = [
@@ -29,6 +29,7 @@ export const inbox: StreamItem[] = [
   item(102, { kind: 'follow', actor: aria, realm: null, ...nowhere, groupKey: null, target: target(null, null, null) },
     true, 2000),
   item(103, { kind: 'realm_role_change', actor: daniel, realm: iri(901), ...fiction, roleName: 'Community moderators',
+    roleChange: 'given',
     groupKey: null, target: target(null, null, iri(901)) }, true, 1500),
   item(104, { kind: 'reply', actor: aria, realm: iri(901), ...fiction, groupKey: 'thread-1',
     target: target('雨夜书店', '第三章的结尾太好了，那张车票到底是谁寄的？', iri(701), 'zh-Hans') }, false, 300),
@@ -45,10 +46,18 @@ export const inbox: StreamItem[] = [
 /** Reviews: someone reviewed your Work (its opening shows unless it discusses the plot), and one of yours helps readers. */
 export const reviews: StreamItem[] = [
   item(111, { kind: 'review', actor: aria, realm: null, ...nowhere, groupKey: null,
-    target: target('雨夜书店', 'Quiet, rainy and exactly as sad as it should be.', id(801)) }, false, 30),
+    target: target('雨夜书店', 'Quiet, rainy and exactly as sad as it should be.', iri(801), 'en', id(111)) }, false, 30),
   item(112, { kind: 'review_helpful', actor: null, realm: iri(902), ...classics, groupKey: null,
-    target: target('Middlemarch: A Study of Provincial Life', null, id(802)) }, false, 5),
+    target: target('Middlemarch: A Study of Provincial Life', null, iri(802), 'en', id(112)) }, false, 5),
 ];
+
+export const invitationNotice: StreamItem = { ...item(113, { kind: 'realm_invitation', actor: daniel,
+  realm: iri(901), ...fiction, groupKey: null, target: target(null, null, iri(901)) }),
+  subject: { owner: 'access', ref: id(501), revision: null } };
+
+export const roleTaken: StreamItem = item(114, { kind: 'realm_role_change', actor: daniel,
+  realm: iri(901), ...fiction, roleName: 'Community moderators', roleChange: 'taken', groupKey: null,
+  target: target(null, null, iri(901)) });
 
 /** An open invitation from Daniel to join Fiction. */
 export const invitations: PendingInvitation[] = [{ id: id(501), realm: iri(901), realmName: 'Fiction · 小说',

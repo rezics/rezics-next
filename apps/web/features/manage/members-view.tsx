@@ -23,7 +23,7 @@ import type { ManageMessages } from './messages.ts';
 import { AgentMark } from './parts.tsx';
 import { mergeAgents } from './read.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
-import type { AgentSummary, Member, MemberPage, Role, RoleChange } from './types.ts';
+import type { AgentSummary, InvitationPage, Loaded, Member, MemberPage, Role, RoleChange } from './types.ts';
 
 /** Ban lengths moderators choose from (Main allows up to 366 days, or no end). */
 export const banDurations = [['duration1d', 86_400], ['duration3d', 259_200], ['duration7d', 604_800],
@@ -56,8 +56,9 @@ export function failureText(failure: CommandFailure | 'changed', t: ReturnType<t
  * and unban them, and give or take roles with the impact shown first.
  */
 export function MembersView({ realm, actingSubject, first, agents: initialAgents, roles, now, locale, messages,
-  api: givenApi }: {
+  invitations: firstInvitations, api: givenApi }: {
   realm: string; actingSubject: string; first: MemberPage; agents: Record<string, AgentSummary>;
+  invitations: Loaded<InvitationPage>;
   /** Roles the person may give, or null without the Manage roles permission. */
   roles: readonly Role[] | null; now: number; locale: UiLocale; messages: ManageMessages; api?: AdminApi;
 }) {
@@ -65,6 +66,8 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
   const api = useMemo(() => givenApi ?? bffAdminApi(realm, actingSubject), [givenApi, realm, actingSubject]);
   const router = useRouter();
   const [page, setPage] = useState(first);
+  const [invitations, setInvitations] = useState(firstInvitations);
+  const [invitationBusy, setInvitationBusy] = useState<string | null>(null);
   const [agents, setAgents] = useState(initialAgents);
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState('');
@@ -95,6 +98,29 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
     setStatus(message);
     router.refresh();
     await load(searched);
+    const refreshed = await api.invitations(null);
+    setInvitations(refreshed);
+  }
+
+  async function loadInvitations(after: string) {
+    setInvitationBusy(after);
+    const read = await api.invitations(after);
+    setInvitationBusy(null);
+    if (!read.ok) { setStatus(t.unavailableTitle); return; }
+    setInvitations(current => current.ok ? { ok: true, data: { ...read.data,
+      items: [...current.data.items, ...read.data.items] } } : read);
+    const found = await api.names(read.data.items.map(item => item.member));
+    setAgents(known => mergeAgents(known, found));
+  }
+
+  async function cancelInvitation(id: string) {
+    setInvitationBusy(id);
+    const result = await api.revoke(id, newKey());
+    setInvitationBusy(null);
+    if (!result.ok) { setStatus(result.failure === 'stale' ? t.invitationStale : t.invitationCancelFailed); return; }
+    setInvitations(current => current.ok ? { ok: true, data: { ...current.data,
+      items: current.data.items.map(item => item.id === id ? result.data.invitation : item) } } : current);
+    setStatus(t.invitationCancelled({ name: nameOf(result.data.invitation.member) }));
   }
 
   const target = (member: Member): Target => ({ iri: member.member, membershipGeneration: member.membershipGeneration,
@@ -130,7 +156,7 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
         {page.items.map(member => {
           const name = nameOf(member.member);
           const handle = shownHandle(agents[member.member]?.handle ?? null);
-          return <li key={member.member} className="grid gap-3 px-4 py-3.5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto]
+          return <li key={member.member} className="relative grid gap-3 py-3.5 ps-4 pe-12 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto] sm:pe-4
             sm:items-center">
             <div className="flex min-w-0 items-center gap-3">
               <AgentMark name={name} iri={member.member} />
@@ -138,7 +164,7 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
                 <p className="truncate font-medium">{name}</p>
                 <p className="truncate text-muted-foreground text-xs">{[handle, member.state === 'joined'
                   ? member.joinedAt ? `${t.memberJoined} · ${date(member.joinedAt, locale)}` : t.memberJoined
-                  : t.memberLeft].filter(Boolean).join(' · ')}</p>
+                  : member.state === 'not_joined' ? t.memberNotJoined : t.memberLeft].filter(Boolean).join(' · ')}</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -160,7 +186,8 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
               }
             }}>
               <MenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" aria-label={t.memberActions({ name })}>
+                <Button variant="ghost" size="icon-sm" aria-label={t.memberActions({ name })}
+                  className="absolute end-3 top-3 sm:static">
                   <EllipsisIcon aria-hidden="true" /></Button>
               </MenuTrigger>
               <MenuContent>
@@ -178,6 +205,28 @@ export function MembersView({ realm, actingSubject, first, agents: initialAgents
       </ul>}
     {page.nextCursor ? <div><Button variant="outline" size="sm" isLoading={searching}
       onClick={() => void load(searched, page.nextCursor)}>{t.loadMore}</Button></div> : null}
+    <section aria-labelledby="outgoing-invitations" className="grid gap-3">
+      <h2 id="outgoing-invitations" className="font-semibold text-lg">{t.outgoingInvitations}</h2>
+      {!invitations.ok ? <p role="alert" className="text-muted-foreground text-sm">{t.invitationsUnavailable}</p>
+        : invitations.data.items.length ? <ul className="grid divide-y divide-border/60 rounded-2xl border border-border/60 bg-card">
+          {invitations.data.items.map(invitation => <li key={invitation.id}
+            className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+            <div className="min-w-0">
+              <p className="font-medium">{nameOf(invitation.member)}</p>
+              <p className="text-muted-foreground text-sm">{{ pending: t.invitationPending, expired: t.invitationExpired,
+                accepted: t.invitationAccepted, declined: t.invitationDeclined, revoked: t.invitationRevoked }[invitation.state]} · {t.invitationExpiry({
+                date: date(invitation.expiresAt, locale) })}</p>
+            </div>
+            {invitation.state === 'pending' && Date.parse(invitation.expiresAt) > now
+              ? <Button variant="outline" size="sm" isLoading={invitationBusy === invitation.id}
+                disabled={invitationBusy !== null} onClick={() => void cancelInvitation(invitation.id)}>
+                {t.cancelInvitation}</Button> : null}
+          </li>)}
+        </ul> : <p className="text-muted-foreground text-sm">{t.noOutgoingInvitations}</p>}
+      {invitations.ok && invitations.data.nextCursor ? <Button variant="outline" size="sm"
+        className="justify-self-start" isLoading={invitationBusy === invitations.data.nextCursor}
+        onClick={() => void loadInvitations(invitations.data.nextCursor!)}>{t.loadMore}</Button> : null}
+    </section>
     {open?.kind === 'give' || open?.kind === 'take'
       ? <RoleDialog open={open} generation={page.generation} roles={roles ?? []} api={api} actingSubject={actingSubject}
         agents={agents} name={nameOf(open.target.iri)} now={now} locale={locale} messages={messages}

@@ -120,7 +120,7 @@ export const EscalateReport: Story = {
   },
 };
 
-/** An owner is who escalations reach, so an owner decides instead: no Escalate, and complaints say so. */
+/** An owner is who escalations reach, so an owner decides instead. */
 export const OwnerDecides: Story = {
   args: { authority: { decideReports: true, escalate: false } },
   async play({ canvasElement }) {
@@ -134,7 +134,9 @@ export const OwnerDecides: Story = {
     await userEvent.keyboard('e');
     await expect(canvas.getByText('“Escalate” isn’t available for this item.')).toBeVisible();
     await userEvent.click(within(list(canvas)).getByRole('button', { name: /Sherlock Holmes/ }));
-    await expect(canvas.getAllByText('Rights complaints can’t be decided here yet.')[0]).toBeInTheDocument();
+    const rights = (await canvas.findAllByRole('group', { name: 'Decision' })).find(group => group.checkVisibility())!;
+    await expect(within(rights).getByRole('button', { name: 'Interim restriction' })).toBeVisible();
+    await expect(within(rights).getByRole('button', { name: 'Final restriction' })).toBeVisible();
   },
 };
 

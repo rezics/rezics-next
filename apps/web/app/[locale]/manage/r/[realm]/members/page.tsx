@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { MembersView } from '../../../../../../features/manage/members-view.tsx';
 import { ManageFailure } from '../../../../../../features/manage/parts.tsx';
-import { readAgents, readMembers, readRoles } from '../../../../../../features/manage/read.ts';
+import { readAgents, readMembers, readOutgoingInvitations, readRoles } from '../../../../../../features/manage/read.ts';
 import { realmHref } from '../../../../../../features/manage/routes.ts';
 import { managedAddress, manager } from '../../../../../../features/manage/server.ts';
 import { localizedPath } from '../../../../../../i18n/locale.ts';
@@ -19,11 +19,13 @@ export default async function RealmMembersRoute({ params }: { params: Promise<{ 
   const { id: realm, address } = target;
   const locale = await requestLocale();
   const { actingSubject, main, anonymous, signInHref } = await manager(locale, realmHref(address, 'members'));
-  const [messages, page, roles] = await Promise.all([getMessages('manage', locale),
-    readMembers(main, realm, { actingSubject }), readRoles(main, realm, actingSubject)]);
+  const [messages, page, roles, invitations] = await Promise.all([getMessages('manage', locale),
+    readMembers(main, realm, { actingSubject }), readRoles(main, realm, actingSubject),
+    readOutgoingInvitations(main, realm, actingSubject)]);
   if (!page.ok) return <ManageFailure failure={page.failure} locale={locale} messages={messages} signInHref={signInHref}
     retryHref={localizedPath(realmHref(address, 'members'), locale)} />;
-  const agents = await readAgents(anonymous, page.data.items.map(item => item.member));
+  const agents = await readAgents(anonymous, [...page.data.items.map(item => item.member),
+    ...(invitations.ok ? invitations.data.items.map(item => item.member) : [])]);
   return <MembersView realm={realm} actingSubject={actingSubject} first={page.data} agents={agents}
-    roles={roles.ok ? roles.data.roles : null} now={Date.now()} locale={locale} messages={messages} />;
+    invitations={invitations} roles={roles.ok ? roles.data.roles : null} now={Date.now()} locale={locale} messages={messages} />;
 }

@@ -32,6 +32,7 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
   const invitations = reader.actingSubject
     ? await readInvitations(reader.main, reader.anonymous, reader.actingSubject, locale, official) : [];
   return <NotificationsView initial={latest.data} now={Date.now()} avatarQuery={reader.avatarQuery}
+    actingSubject={reader.actingSubject ?? undefined}
     invitations={reader.actingSubject && invitations.length
       ? <RealmInvitations invitations={invitations} actingSubject={reader.actingSubject} /> : null} />;
 }

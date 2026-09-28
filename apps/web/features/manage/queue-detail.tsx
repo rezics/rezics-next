@@ -19,7 +19,8 @@ import { isReport, type QueueAction, type QueueAuthority } from './queue-state.t
 import { type AgentSummary, type DecisionBasis, type Loaded, type ModerationItem, uuidOf, type WorkSummary } from './types.ts';
 
 /** The order decisions are offered in, everywhere: yes, no, back to the author, then to the owners. */
-export const actionOrder: readonly QueueAction[] = ['approve', 'keep', 'reject', 'remove', 'request-changes', 'escalate'];
+export const actionOrder: readonly QueueAction[] = ['approve', 'keep', 'reject', 'remove',
+  'interim-restrict', 'final-restrict', 'request-changes', 'escalate'];
 
 /** Whether the Realm has published rules a keep or remove decision can cite, as the reports read so far say. */
 export type RulesState = 'published' | 'missing' | 'unknown';
@@ -31,9 +32,7 @@ function ReportNote({ item, authority, rules, rulesHref, t }: { item: Moderation
   rules: RulesState; rulesHref: string | null; t: T }) {
   let text: string | null = null;
   let link: ReactNode = null;
-  if (item.kind === 'rights_complaint') {
-    text = !authority.escalate ? t.rightsDecisionsOwner : item.escalation ? t.alreadyEscalated : t.rightsDecisionsLater;
-  } else if (authority.decideReports && rules === 'missing') {
+  if (authority.decideReports && rules === 'missing') {
     text = rulesHref ? t.rulesNeeded : `${t.rulesNeeded} ${t.askOwnerRules}`;
     link = rulesHref ? <LocalizedLink href={rulesHref} className="font-medium text-primary hover:underline">
       {t.publishRules}</LocalizedLink> : null;

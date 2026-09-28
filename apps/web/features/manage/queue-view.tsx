@@ -178,7 +178,8 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
 
   // The current report's reports and rules, read once, when this person could decide it.
   useEffect(() => {
-    if (current?.kind !== 'content_report' || !authority.decideReports || bases[current.id] !== undefined) return;
+    if (current?.kind !== 'content_report' && current?.kind !== 'rights_complaint'
+      || !authority.decideReports || bases[current.id] !== undefined) return;
     const item = current;
     setBases(known => ({ ...known, [item.id]: 'loading' }));
     void api.basis(item).then(async read => {
@@ -234,7 +235,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
         case 'j': focusCurrent.current = true; dispatch({ type: 'move', delta: 1 }); break;
         case 'k': focusCurrent.current = true; dispatch({ type: 'move', delta: -1 }); break;
         case 'x': if (latest.current.current) dispatch({ type: 'toggle', id: latest.current.current }); break;
-        case 'a': case 'r': case 'c': case 'e': act(shortcutActions(key)); break;
+        case 'a': case 'r': case 'c': case 'e': case 'i': case 'f': act(shortcutActions(key)); break;
         case 'z': case 'u': if (latest.current.pending.length) { focusCurrent.current = true; dispatch({ type: 'undo' }); }
           break;
         case '?': setHelp(true); break;
@@ -411,6 +412,8 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
           <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2.5 text-sm">
             {([['J', t.shortcutNext], ['K', t.shortcutPrevious], ['X', t.shortcutSelect],
               [shortcutKeys.approve.toUpperCase(), t.shortcutApprove], [shortcutKeys.reject.toUpperCase(), t.shortcutReject],
+              [shortcutKeys['interim-restrict'].toUpperCase(), t.shortcutInterim],
+              [shortcutKeys['final-restrict'].toUpperCase(), t.shortcutFinal],
               [shortcutKeys['request-changes'].toUpperCase(), t.shortcutChanges],
               [shortcutKeys.escalate.toUpperCase(), t.shortcutEscalate], ['Z', t.shortcutUndo],
               ['Esc', t.shortcutClear], ['?', t.shortcutHelp]] as const).map(([key, label]) =>

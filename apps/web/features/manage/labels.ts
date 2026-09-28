@@ -1,5 +1,6 @@
 import type { ContractOf } from 'native-i18n';
-import { readableCode } from './format.ts';
+import type { UiLocale } from '../../i18n/define.ts';
+import { date, readableCode } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import type { QueueAction } from './queue-state.ts';
 import type { AuditItem, ModerationItem, PublicDecision } from './types.ts';
@@ -55,6 +56,8 @@ export function actionLabel(action: QueueAction, t: T): string {
     case 'request-changes': return t.requestChanges;
     case 'keep': return t.keep;
     case 'remove': return t.remove;
+    case 'interim-restrict': return t.interimRestrict;
+    case 'final-restrict': return t.finalRestrict;
     case 'escalate': return t.escalate;
   }
 }
@@ -69,6 +72,8 @@ export function decidedText(action: QueueAction, titles: readonly string[], t: T
       case 'request-changes': return t.changesOne({ title });
       case 'keep': return t.keptOne({ title });
       case 'remove': return t.removedOne({ title });
+      case 'interim-restrict': return t.interimRestrictedOne({ title });
+      case 'final-restrict': return t.finalRestrictedOne({ title });
       case 'escalate': return t.escalatedOne({ title });
     }
   }
@@ -79,13 +84,15 @@ export function decidedText(action: QueueAction, titles: readonly string[], t: T
     case 'request-changes': return t.changesMany(count);
     case 'keep': return t.keptMany(count);
     case 'remove': return t.removedMany(count);
+    case 'interim-restrict': return t.interimRestrictedMany(count);
+    case 'final-restrict': return t.finalRestrictedMany(count);
     case 'escalate': return t.escalatedMany(count);
   }
 }
 
 /** One key per kind of answer: A says yes (approve, or keep reported content), R says no (reject, or remove it). */
 export const shortcutKeys: Record<QueueAction, string> = { approve: 'a', keep: 'a', reject: 'r', remove: 'r',
-  'request-changes': 'c', escalate: 'e' };
+  'interim-restrict': 'i', 'final-restrict': 'f', 'request-changes': 'c', escalate: 'e' };
 
 /** The actions a shortcut key stands for, in the order they are tried against what the items allow. */
 export function shortcutActions(key: string): QueueAction[] {
@@ -105,6 +112,18 @@ export function auditOutcome(item: Pick<AuditItem, 'kind' | 'outcome'>, t: T): s
   return item.kind === 'organization_publication_rejection' ? t.auditReject : readableCode(item.outcome);
 }
 
+/** The role, recipient and end date from Main's structured audit detail. */
+export function auditDetail(item: AuditItem, t: T, nameOf: (iri: string) => string, locale: UiLocale): string | null {
+  const detail = item.detail;
+  if (!detail) return null;
+  if (detail.kind === 'assignment' && detail.member && detail.assigned !== null) {
+    if (!detail.assigned) return t.auditRoleTaken({ member: nameOf(detail.member), role: detail.role.name });
+    return detail.validUntil ? t.auditRoleGivenUntil({ member: nameOf(detail.member), role: detail.role.name,
+      date: date(detail.validUntil, locale) }) : t.auditRoleGiven({ member: nameOf(detail.member), role: detail.role.name });
+  }
+  return t.auditRoleUpdated({ role: detail.role.name });
+}
+
 /** Consecutive management entries that record one act, shown once with how many changes it made. */
 export interface AuditRun { item: AuditItem; count: number; latest: string }
 
@@ -121,7 +140,8 @@ export function auditRuns(items: readonly AuditItem[]): AuditRun[] {
   const runs: AuditRun[] = [];
   for (const item of items) {
     const last = runs.at(-1);
-    if (last && item.kind === 'realm_management' && last.item.kind === item.kind && last.item.outcome === item.outcome
+    if (last && !item.detail && !last.item.detail && item.kind === 'realm_management'
+      && last.item.kind === item.kind && last.item.outcome === item.outcome
       && last.item.reason === item.reason && last.item.actingSubject === item.actingSubject
       && Date.parse(item.decidedAt) - Date.parse(last.latest) <= RUN_WINDOW_MS) {
       last.count++;

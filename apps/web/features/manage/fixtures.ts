@@ -3,7 +3,7 @@ import type { AdminApi } from './admin-api.ts';
 import type { Outcome } from './commands.ts';
 import type { LogApi } from './log-view.tsx';
 import type { QueueApi } from './queue-api.ts';
-import type { AgentSummary, AuditItem, DecisionBasis, Loaded, Member, ModerationItem, ModerationPage, PublicDecision,
+import type { AgentSummary, AuditItem, DecisionBasis, InvitationPage, Loaded, Member, ModerationItem, ModerationPage, PublicDecision,
   RealmHeader, RealmRule, Role, RoleImpact, SettingsView, WorkSummary } from './types.ts';
 
 // Story data for the Manage workspace: the demo's Classic Literature Realm,
@@ -135,16 +135,19 @@ export function queueApi(options: { stale?: readonly string[]; reload?: Moderati
 
 export const audit: AuditItem[] = [
   { id: id(1001), caseId: null, kind: 'realm_management', outcome: 'realm.initialize', reason: 'Initialize Realm management',
-    actingSubject: people.mei, decidedAt: ago(72), caseSequence: null },
+    actingSubject: people.mei, decidedAt: ago(72), caseSequence: null, detail: null },
   { id: id(1002), caseId: null, kind: 'realm_management', outcome: 'realm.roles.manage',
-    reason: 'Set up the Classic Literature moderation team', actingSubject: people.mei, decidedAt: ago(71), caseSequence: null },
+    reason: 'Set up the Classic Literature moderation team', actingSubject: people.mei, decidedAt: ago(71), caseSequence: null,
+    detail: { kind: 'assignment', role: { id: id(2001), name: 'Community moderators' }, member: people.daniel,
+      assigned: true, validUntil: new Date(now + 30 * 86_400_000).toISOString(), changes: [] } },
   { id: id(1003), caseId: id(1203), kind: 'content_moderation', outcome: 'dismiss', reason: null,
-    actingSubject: people.daniel, decidedAt: ago(30), caseSequence: '2' },
+    actingSubject: people.daniel, decidedAt: ago(30), caseSequence: '2', detail: null },
   { id: id(1004), caseId: null, kind: 'realm_management', outcome: 'realm.members.manage',
-    reason: 'Repeated off-topic posts after two warnings', actingSubject: people.an, decidedAt: ago(4), caseSequence: null },
+    reason: 'Repeated off-topic posts after two warnings', actingSubject: people.an, decidedAt: ago(4), caseSequence: null,
+    detail: null },
   { id: id(1005), caseId: null, kind: 'realm_management', outcome: 'governance.moderate',
     reason: 'The same account filed eight reports in a minute; owners should look.', actingSubject: people.an,
-    decidedAt: ago(2), caseSequence: null },
+    decidedAt: ago(2), caseSequence: null, detail: null },
 ];
 export const decisions: PublicDecision[] = [
   { id: iri(1101), kind: 'adoption', dataEpoch: 'fixture', sequence: '40', work: iri(100), subject: iri(401), outcome: null },
@@ -176,7 +179,13 @@ export const members: Member[] = [
   { member: people.jun, joinedAt: ago(120), membershipGeneration: '3', banned: true,
     bannedUntil: new Date(now + 7 * 86_400_000).toISOString(), state: 'joined', roles: [] },
   { member: people.aria, joinedAt: null, membershipGeneration: '2', banned: false, bannedUntil: null, state: 'left', roles: [] },
+  { member: people.mei, joinedAt: null, membershipGeneration: '0', banned: false, bannedUntil: null,
+    state: 'not_joined', roles: [{ id: roles[0]!.id, name: roles[0]!.name, validUntil: until }] },
 ];
+
+export const outgoingInvitations: InvitationPage = { items: [{ id: id(3020), realm: iri(1), member: people.aria,
+  inviter: people.daniel, state: 'pending', createdAt: ago(3), expiresAt: new Date(now + 3 * 86_400_000).toISOString(),
+  policyRevision: '1', termsRevision: 'terms-1', membershipGeneration: '2' }], nextCursor: null };
 
 export const rules: RealmRule[] = [
   { id: 'no-spoilers', governanceRule: null, title: { en: 'No spoilers in titles', 'zh-CN': '标题中不要剧透' },
@@ -221,6 +230,11 @@ export function adminApi(options: { record?: AdminRecord; settingsFailure?: 'sta
         || `@${agents[member.member]!.handle}`.includes(search.toLowerCase()) || member.member === search)
       : members }),
     names: async () => agents,
+    invitations: async () => ok(outgoingInvitations),
+    revoke: async (invitation, key) => {
+      record.members.push({ invitation, key, action: 'revoke' });
+      return { ok: true, data: { replayed: false, invitation: { ...outgoingInvitations.items[0]!, state: 'revoked' } } };
+    },
     lookup: async handle => {
       const found = Object.values(agents).find(agent => `@${agent.handle}` === handle.trim() || agent.handle === handle.trim());
       return found ? ok(found) : { ok: false, failure: 'missing' };
@@ -229,7 +243,8 @@ export function adminApi(options: { record?: AdminRecord; settingsFailure?: 'sta
       record.members.push({ ...command, key });
       if (options.memberFailure) return { ok: false, failure: options.memberFailure };
       return { ok: true, data: { replayed: false, invitation: { id: id(3004), realm: iri(1), member: command.member,
-        inviter: command.actingSubject, state: 'pending', expiresAt: new Date(now + command.expiresInSeconds * 1000).toISOString(),
+        inviter: command.actingSubject, state: 'pending', createdAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + command.expiresInSeconds * 1000).toISOString(),
         policyRevision: '1', termsRevision: 'terms-1', membershipGeneration: '0' } } };
     },
     changeMember: async (command, key) => {

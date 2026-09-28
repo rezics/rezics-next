@@ -37,7 +37,7 @@ export const PermissionBundles: Story = {
   },
 };
 
-/** "2 members gain: Publish rules" before the change can be saved; saving binds the previewed impact. */
+/** Every role holder, including someone who has not joined, appears in the impact preview. */
 export const EditWithImpactPreview: Story = {
   async play({ canvasElement }) {
     reset();
@@ -47,8 +47,8 @@ export const EditWithImpactPreview: Story = {
     await expect(dialog.getByRole('button', { name: 'Save role' })).toBeDisabled();
     await userEvent.click(dialog.getByRole('checkbox', { name: /Publish rules/ }));
     const impact = dialog.getByRole('region', { name: 'Who this affects' });
-    await expect(await within(impact).findByText('2 members gain: Publish rules')).toBeInTheDocument();
-    await expect(impact).toHaveTextContent('Daniel Chen 陈丹尼, An Wu 吴安');
+    await expect(await within(impact).findByText('3 members gain: Publish rules')).toBeInTheDocument();
+    await expect(impact).toHaveTextContent('Daniel Chen 陈丹尼, An Wu 吴安, Lin Mei 林梅');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Moderators maintain the rules too.');
     await waitFor(() => expect(dialog.getByRole('button', { name: 'Save role' })).toBeEnabled());
     await userEvent.click(dialog.getByRole('button', { name: 'Save role' }));

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { acting, adminApi, type AdminRecord, agents, header, members, now, people, realm, roles } from './fixtures.ts';
+import { acting, adminApi, type AdminRecord, agents, header, members, now, outgoingInvitations, people, realm, roles } from './fixtures.ts';
 import { MembersView } from './members-view.tsx';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
@@ -15,7 +15,8 @@ const meta = {
   title: 'Manage/Members',
   component: MembersView,
   parameters: { route: { pathname: `/en/manage/r/${realm}/members` } },
-  args: { realm, actingSubject: acting.iri, first, agents, roles, now, locale: 'en', messages, api: adminApi({ record }) },
+  args: { realm, actingSubject: acting.iri, first, agents, roles, invitations: { ok: true, data: outgoingInvitations },
+    now, locale: 'en', messages, api: adminApi({ record }) },
   render: (args: ComponentProps<typeof MembersView>) => <RealmFrame realm={realm} header={header} agent={acting}
     locale={args.locale} messages={args.messages}><MembersView {...args} /></RealmFrame>,
 } satisfies Meta<typeof MembersView>;
@@ -37,6 +38,20 @@ export const Roster: Story = {
     await expect(rows[0]).toHaveTextContent('Community moderators');
     await expect(rows[3]).toHaveTextContent(/Banned until/);
     await expect(rows[4]).toHaveTextContent('Left');
+    await expect(rows[5]).toHaveTextContent('Has not joined');
+    await expect(canvas.getByRole('heading', { name: 'Outgoing invitations' })).toBeVisible();
+    await expect(canvas.getByText(/Waiting · Expires Oct 1, 2026/)).toBeVisible();
+  },
+};
+
+export const CancelOutgoingInvitation: Story = {
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Cancel invitation' }));
+    await expect(await canvas.findByText('Cancelled the invitation to Aria Wang 王雅.')).toBeVisible();
+    await expect(canvas.getByText(/Cancelled · Expires/)).toBeVisible();
+    await expect(record.members).toEqual([expect.objectContaining({ action: 'revoke', invitation: outgoingInvitations.items[0]!.id })]);
   },
 };
 

@@ -32,6 +32,7 @@ export const AuditLog: Story = {
     await expect(canvas.getByRole('link', { name: 'Everything' })).toHaveAttribute('aria-current', 'page');
     const entries = canvas.getAllByRole('listitem').filter(item => item.closest('ol'));
     await expect(entries).toHaveLength(audit.length);
+    await expect(entries[1]).toHaveTextContent('Gave Daniel Chen 陈丹尼 Community moderators until Oct 28, 2026');
     await expect(entries[3]).toHaveTextContent('Changed membership');
     await expect(entries[3]).toHaveTextContent('An Wu 吴安');
     await expect(entries[3]).toHaveTextContent('“Repeated off-topic posts after two warnings”');

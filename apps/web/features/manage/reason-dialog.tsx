@@ -39,9 +39,11 @@ export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, loc
     if (action) { setShown(action); setReason(''); setNote(''); setError(null); }
   }
   const escalating = shown === 'escalate';
-  const removing = shown === 'remove';
+  const removing = shown === 'remove' || shown === 'interim-restrict' || shown === 'final-restrict';
   const title = shown === 'reject' ? t.reasonRejectTitle(count) : shown === 'request-changes' ? t.reasonChangesTitle(count)
-    : removing ? t.reasonRemoveTitle(count) : t.reasonEscalateTitle(count);
+    : shown === 'interim-restrict' ? t.reasonInterimTitle(count)
+      : shown === 'final-restrict' ? t.reasonFinalTitle(count)
+        : removing ? t.reasonRemoveTitle(count) : t.reasonEscalateTitle(count);
   const close = () => onClose();
   const submit = () => {
     const text = reason.trim();

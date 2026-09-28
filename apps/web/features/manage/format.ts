@@ -25,7 +25,9 @@ export const dateTime = (iso: string, locale: UiLocale) =>
   new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
 
 export const date = (iso: string, locale: UiLocale) =>
-  new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(iso));
+  // The server cannot know the browser's time zone. Use one date on both sides
+  // so the member list and invitation expiry hydrate without changing days.
+  new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(iso));
 
 /** The eight-character stand-in for an Agent without a public name. */
 export const agentShort = (iri: string) => iri.slice(-36, -28);
@@ -46,4 +48,3 @@ export function readableCode(code: string): string {
   const words = code.replace(/[_.-]+/g, ' ').trim();
   return words ? words[0]!.toUpperCase() + words.slice(1) : code;
 }
-

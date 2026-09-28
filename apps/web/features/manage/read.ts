@@ -55,6 +55,11 @@ export function readMembers(main: MainClient, realm: string, query: { actingSubj
     ...search ? { search } : {}, ...query.after ? { after: query.after } : {} } }), { management: true });
 }
 
+export function readOutgoingInvitations(main: MainClient, realm: string, actingSubject: string, after?: string | null) {
+  return settle(() => main.v1.realms({ realm }).invitations.get({ query: { actingSubject,
+    ...after ? { after } : {} } }), { management: true });
+}
+
 export function readRoles(main: MainClient, realm: string, actingSubject: string) {
   return settle(() => main.v1.realms({ realm }).roles.get({ query: { actingSubject } }), { management: true });
 }

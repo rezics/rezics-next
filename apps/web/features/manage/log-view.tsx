@@ -10,7 +10,7 @@ import { browserMainApi } from '../api/browser.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { agentLabel, dateTime, isoTime, relativeTime, shownHandle } from './format.ts';
-import { auditKindLabel, auditOutcome, auditRuns, publicDecisionLabel } from './labels.ts';
+import { auditDetail, auditKindLabel, auditOutcome, auditRuns, publicDecisionLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark, Named, Pill } from './parts.tsx';
 import { mergeAgents, readAgents, readAudit, readPublicDecisions, readWorks } from './read.ts';
@@ -74,7 +74,9 @@ export function LogView({ realm, address = realm, actingSubject, view, first, ag
       if (!read.ok) { setPaging(read.failure === 'moved' ? 'moved' : 'failed'); return; }
       setAudit(items => [...items, ...read.data.items]);
       setCursor(read.data.nextCursor);
-      const found = await api.names(read.data.items.map(item => item.actingSubject), []);
+      const found = await api.names(read.data.items.flatMap(item => [item.actingSubject,
+        ...(item.detail?.member ? [item.detail.member] : []),
+        ...(item.detail?.changes.map(change => change.member) ?? [])]), []);
       setNames(known => ({ ...known, agents: mergeAgents(known.agents, found.agents) }));
     } else {
       const read = await api.decisions(cursor);
@@ -114,7 +116,7 @@ export function LogView({ realm, address = realm, actingSubject, view, first, ag
             <AgentMark name={name} iri={item.actingSubject} />
             <div className="grid min-w-0 flex-1 gap-1">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <p className="font-medium">{auditOutcome(item, t)}
+                <p className="font-medium">{auditDetail(item, t, agentName, locale) ?? auditOutcome(item, t)}
                   {count > 1 ? <span className="font-normal text-muted-foreground"> · {t.auditRepeated(count)}</span> : null}</p>
                 <time dateTime={isoTime(latest)} title={dateTime(latest, locale)} suppressHydrationWarning
                   className="text-muted-foreground text-xs">{relativeTime(latest, now, locale)}</time>

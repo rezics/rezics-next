@@ -48,6 +48,8 @@ export type SettingsReceipt = Ok<Realm['settings']['put']>;
 export type EscalationReceipt = Ok<Realm['escalations']['post']>;
 export type InvitationCommand = Body<Realm['invitations']['post']>;
 export type InvitationResult = Ok<Realm['invitations']['post']>;
+export type InvitationPage = Ok<Realm['invitations']['get']>;
+export type Invitation = InvitationPage['items'][number];
 /** What a keep or remove decision must cite: the case, its retained reports and evidence, and the Realm's rules. */
 export type DecisionBasis = Ok<ReturnType<Realm['moderation']>['get']>;
 export type ModerationDecisionCommand = Body<MainClient['v1']['moderation']['decisions']['post']>;

@@ -5,7 +5,8 @@ import type { ModerationItem, ReadFailure } from './types.ts';
 // pure reducer so keyboard, bulk and undo behavior is testable without a browser.
 
 /** Submissions are approved, rejected or sent back; reported content is kept or removed; either can go to the owners. */
-export type QueueAction = 'approve' | 'reject' | 'request-changes' | 'keep' | 'remove' | 'escalate';
+export type QueueAction = 'approve' | 'reject' | 'request-changes' | 'keep' | 'remove'
+  | 'interim-restrict' | 'final-restrict' | 'escalate';
 
 /**
  * What the acting Agent may decide in this Realm, from the permissions Main
@@ -56,8 +57,7 @@ export const itemsFor = (items: readonly ModerationItem[], state: 'open' | 'clos
 /**
  * What a moderator can do with an item now. A report is kept or removed
  * (citing its decision basis) and stays decidable after it was escalated.
- * Rights complaints only escalate: Main's decision route does not take their
- * interim or final restrictions yet.
+ * Rights complaints use the rights restriction route for interim or final decisions.
  */
 export function actionsFor(item: ModerationItem, authority: QueueAuthority = fullAuthority): ReadonlySet<QueueAction> {
   if (item.state === 'closed' || isDecidedReport(item)) return new Set();
@@ -65,7 +65,8 @@ export function actionsFor(item: ModerationItem, authority: QueueAuthority = ful
   if (item.kind === 'content_report') {
     return new Set<QueueAction>([...authority.decideReports ? ['keep', 'remove'] as const : [], ...escalate]);
   }
-  if (item.kind === 'rights_complaint') return new Set(escalate);
+  if (item.kind === 'rights_complaint') return new Set<QueueAction>([
+    ...authority.decideReports ? ['keep', 'interim-restrict', 'final-restrict'] as const : [], ...escalate]);
   if (item.submission?.state !== 'pending') return new Set();
   return new Set<QueueAction>(['approve', 'reject', 'request-changes', ...escalate]);
 }

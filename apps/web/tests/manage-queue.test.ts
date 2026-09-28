@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { commandFailure, reportDecision } from '../features/manage/commands.ts';
+import { materializeData } from 'native-i18n';
+import { commandFailure, decideReport, reportDecision } from '../features/manage/commands.ts';
 import { basisFor } from '../features/manage/fixtures.ts';
-import { auditRuns, shortcutActions } from '../features/manage/labels.ts';
+import { auditDetail, auditRuns, shortcutActions } from '../features/manage/labels.ts';
+import { messages } from '../features/manage/messages.ts';
 import { impactLines, positionOf, removesOwnRoleManagement, sortPermissions } from '../features/manage/permissions.ts';
 import { actionsFor, authorityFrom, commonActions, initialTriage, itemsFor, needsReason, targetIds, triage, type TriageState,
   UNDO_WINDOW_MS, visibleIds } from '../features/manage/queue-state.ts';
 import { logHref, parseLogView, parseQueueView, queueHref, realmHref } from '../features/manage/routes.ts';
-import type { AuditItem, ModerationItem } from '../features/manage/types.ts';
+import type { AuditItem, MainClient, ModerationItem } from '../features/manage/types.ts';
 
 const iri = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const uuid = (n: number) => iri(n).slice(-36);
@@ -33,8 +35,8 @@ describe('what a moderator can decide', () => {
     expect([...actionsFor(report(2))]).toEqual(['keep', 'remove', 'escalate']);
     expect([...actionsFor(report(3, { escalation }))]).toEqual(['keep', 'remove']);
     expect([...actionsFor(submission(4, { escalation }))]).toEqual(['approve', 'reject', 'request-changes']);
-    // Main's decision route does not take a rights complaint's restrictions yet.
-    expect([...actionsFor(report(5, { kind: 'rights_complaint' }))]).toEqual(['escalate']);
+    expect([...actionsFor(report(5, { kind: 'rights_complaint' }))]).toEqual([
+      'keep', 'interim-restrict', 'final-restrict', 'escalate']);
     expect(needsReason('keep')).toBe(false);
     expect(needsReason('remove')).toBe(true);
   });
@@ -53,7 +55,8 @@ describe('what a moderator can decide', () => {
     expect(owner).toEqual({ decideReports: true, escalate: false });
     expect([...actionsFor(report(1), owner)]).toEqual(['keep', 'remove']);
     expect([...actionsFor(submission(2), owner)]).toEqual(['approve', 'reject', 'request-changes']);
-    expect(actionsFor(report(3, { kind: 'rights_complaint' }), owner).size).toBe(0);
+    expect([...actionsFor(report(3, { kind: 'rights_complaint' }), owner)]).toEqual([
+      'keep', 'interim-restrict', 'final-restrict']);
     // A reviewer without the moderation permission can only hand reports on.
     expect([...actionsFor(report(4), authorityFrom(['review.decide']))]).toEqual(['escalate']);
     // When Main could not say, every choice shows and Main refuses what the Agent may not do.
@@ -280,6 +283,30 @@ describe('G330 keep or remove reported content', () => {
     expect(reportDecision(basisFor(item, false), 'keep', null, iri(11), 'k')).toBeNull();
     expect(reportDecision({ ...basisFor(item), reports: [] }, 'keep', null, iri(11), 'k')).toBeNull();
   });
+
+  test('rights complaints cite the same retained evidence for interim and final restrictions', () => {
+    const basis = basisFor({ ...item, kind: 'rights_complaint' });
+    expect(reportDecision(basis, 'interim-restrict', 'Pending review', iri(11), 'r1')?.outcome)
+      .toBe('interim_restrict');
+    expect(reportDecision(basis, 'final-restrict', 'Claim upheld', iri(11), 'r2')?.outcome)
+      .toBe('final_restrict');
+    expect(reportDecision(basis, 'keep', null, iri(11), 'r3')?.outcome).toBe('dismiss');
+  });
+
+  test('a rights decision goes to the rights restriction route with its idempotency key', async () => {
+    const complaint = { ...item, kind: 'rights_complaint' as const };
+    const calls: unknown[] = [];
+    const main = { v1: { realms: () => ({ moderation: () => ({ get: async () =>
+      ({ data: basisFor(complaint), error: null }) }) }), rights: { restrictions: { post: async (
+      body: unknown, options: unknown) => {
+      calls.push({ body, options });
+      return { data: { saved: true }, error: null };
+    } } } } } as unknown as MainClient;
+    expect(await decideReport(main, uuid(1), complaint, { action: 'final-restrict', reason: 'Claim upheld', note: null },
+      iri(11), 'rights-key')).toEqual({ ok: true, data: { saved: true } });
+    expect(calls).toEqual([{ body: expect.objectContaining({ profile: 'rights-restriction-v1',
+      outcome: 'final_restrict', caseId: item.id }), options: { headers: { 'idempotency-key': 'rights-key' } } }]);
+  });
 });
 
 describe('G330 Manage landing and log', () => {
@@ -291,7 +318,7 @@ describe('G330 Manage landing and log', () => {
   });
 
   const entry = (n: number, minutes: number, overrides: Partial<AuditItem> = {}): AuditItem => ({ id: uuid(n), caseId: null,
-    kind: 'realm_management', outcome: 'realm.roles.manage', reason: 'Set up the Fiction moderation team',
+    kind: 'realm_management', outcome: 'realm.roles.manage', reason: 'Set up the Fiction moderation team', detail: null,
     actingSubject: iri(11), decidedAt: new Date(Date.UTC(2026, 8, 27, 21, minutes)).toISOString(), caseSequence: null,
     ...overrides });
 
@@ -303,5 +330,15 @@ describe('G330 Manage landing and log', () => {
     expect(runs.map(run => [run.item.id, run.count])).toEqual([[uuid(1), 1], [uuid(2), 3], [uuid(5), 1], [uuid(6), 1],
       [uuid(7), 1]]);
     expect(runs[1]!.latest).toBe(entry(4, 2).decidedAt);
+  });
+
+  test('role audit detail names the recipient, role and end date without grouping separate assignments', () => {
+    const t = materializeData(messages, { locale: 'en' });
+    const detail = { kind: 'assignment' as const, role: { id: uuid(10), name: 'Community moderators' },
+      member: iri(12), assigned: true, validUntil: '2026-10-28T00:00:00.000Z', changes: [] };
+    const first = entry(1, 0, { detail });
+    expect(auditDetail(first, t, () => 'Lin Mei', 'en'))
+      .toBe('Gave Lin Mei Community moderators until Oct 28, 2026');
+    expect(auditRuns([first, entry(2, 1, { detail: { ...detail, member: iri(13) } })])).toHaveLength(2);
   });
 });

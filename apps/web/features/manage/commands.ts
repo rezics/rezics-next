@@ -100,13 +100,13 @@ const isComponent = (value: string): value is DecisionTarget['component'] =>
  * the basis read. Both cite the Realm's published rules and a retained
  * evidence set; null when there is nothing to cite or nothing left to remove.
  */
-export function reportDecision(basis: DecisionBasis, action: 'keep' | 'remove', rationale: string | null,
+export function reportDecision(basis: DecisionBasis, action: 'keep' | 'remove' | 'interim-restrict' | 'final-restrict', rationale: string | null,
   actingSubject: string, key: string): ModerationDecisionCommand | null {
   const rule = basis.ruleBasis;
   const evidenceDigest = basis.reports[0]?.evidenceDigest;
   if (!rule || !evidenceDigest) return null;
   const targets = new Map<string, DecisionTarget>();
-  if (action === 'remove') {
+  if (action !== 'keep') {
     for (const evidence of basis.reports.flatMap(report => report.evidence)) {
       const { owner, component } = evidence;
       if (evidence.state !== 'available' || !isOwner(owner) || !isComponent(component)) continue;
@@ -118,7 +118,8 @@ export function reportDecision(basis: DecisionBasis, action: 'keep' | 'remove', 
     if (!targets.size) return null;
   }
   return { profile: 'moderation-decision-v1', caseId: basis.caseId, expectedGeneration: basis.generation, actingSubject,
-    outcome: action === 'remove' ? 'restrict' : 'dismiss', targets: [...targets.values()],
+    outcome: action === 'remove' ? 'restrict' : action === 'interim-restrict' ? 'interim_restrict'
+      : action === 'final-restrict' ? 'final_restrict' : 'dismiss', targets: [...targets.values()],
     rule: { ref: rule.ref, revision: rule.revision, digest: rule.digest }, evidenceDigest,
     reversesDecisionId: null, answersStepId: null, rationale: rationale?.trim() || null,
     // The reporter and the author learn the outcome; it is not published on the Realm's page.
@@ -135,14 +136,23 @@ const basisFailure = (failure: ReadFailure): CommandFailure => failure === 'move
  */
 export async function decideReport(main: MainClient, realm: string, item: ModerationItem, decision: Decision,
   actingSubject: string, key: string): Promise<Outcome<unknown>> {
-  if (decision.action !== 'keep' && decision.action !== 'remove') return { ok: false, failure: 'invalid' };
+  if (!['keep', 'remove', 'interim-restrict', 'final-restrict'].includes(decision.action))
+    return { ok: false, failure: 'invalid' };
+  if (item.kind === 'rights_complaint' && decision.action === 'remove'
+    || item.kind !== 'rights_complaint' && (decision.action === 'interim-restrict' || decision.action === 'final-restrict'))
+    return { ok: false, failure: 'invalid' };
   const basis = await readDecisionBasis(main, realm, item.id, actingSubject);
   if (!basis.ok) return { ok: false, failure: basisFailure(basis.failure) };
   if (!basis.data.ruleBasis) return { ok: false, failure: 'invalid', code: 'rules_unpublished' };
-  const command = reportDecision(basis.data, decision.action, decision.reason, actingSubject, key);
+  const command = reportDecision(basis.data, decision.action as 'keep' | 'remove' | 'interim-restrict' | 'final-restrict',
+    decision.reason, actingSubject, key);
   // Everything reported is already hidden: another decision got there first.
   if (!command) return { ok: false, failure: 'stale' };
-  return send(() => main.v1.moderation.decisions.post(command, keyed(key)));
+  return item.kind === 'rights_complaint'
+    ? send(() => main.v1.rights.restrictions.post({ ...command, profile: 'rights-restriction-v1',
+      // Main's `literals()` helper currently reads as `never` through Eden.
+      outcome: command.outcome as never }, keyed(key)))
+    : send(() => main.v1.moderation.decisions.post(command, keyed(key)));
 }
 
 /**
@@ -186,7 +196,8 @@ export async function escalate(main: MainClient, realm: string, item: Moderation
 export function commitDecision(main: MainClient, realm: string, item: ModerationItem, decision: Decision,
   actingSubject: string, key: string) {
   if (decision.action === 'escalate') return escalate(main, realm, item, decision.reason ?? '', actingSubject, key);
-  if (decision.action === 'keep' || decision.action === 'remove') {
+  if (decision.action === 'keep' || decision.action === 'remove'
+    || decision.action === 'interim-restrict' || decision.action === 'final-restrict') {
     return decideReport(main, realm, item, decision, actingSubject, key);
   }
   return decideSubmission(main, realm, item, decision, actingSubject, key);
