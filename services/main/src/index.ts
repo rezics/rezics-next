@@ -317,7 +317,7 @@ const app = createMainApp(fuseki, {
   agentHandles: new AgentVanityHandles(pool),
   agentProfiles: new AgentPublicProfiles(pool, environment, media.store),
   libraryStatus: new ReaderLibraryStatusStore(contentPool),
-  authorReaders: new AuthorReaders(contentPool),
+  authorReaders: new AuthorReaders(contentPool, pool),
   libraryRatings: new ReaderLibraryRatings(pool),
   agentProvisioning: new AgentProvisioning(pool, environment),
   environment,

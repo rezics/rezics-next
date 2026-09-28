@@ -7,11 +7,27 @@ import { authorJsonLd, authorMetadata } from '../features/author/metadata.ts';
 import { authorHref, openLibraryAuthorHref, parseCursor, parseOpenLibraryAuthor } from '../features/author/route.ts';
 import { materializeData } from 'native-i18n';
 import { isPublicPagePath } from '../i18n/locale.ts';
+import { discoveryWork } from '../features/discover/cards.ts';
+import { works as discoveryFixtures } from '../features/discover/fixtures.ts';
 
 const zh = { ...messages, ...zhHans };
 const facts = (author: typeof janeAusten) => author.facts!;
 
 describe('author addresses', () => {
+  test('discovery credits retain author destinations for the shared card renderer', () => {
+    const item = { ...discoveryFixtures.pride, primaryCredits: [
+      { id: discoveryFixtures.pride.id, role: 'author' as const, participantKind: 'external-reference' as const,
+        provider: 'open-library' as const, key: '/authors/OL21594A', ordinal: 0, agent: null,
+        displayName: 'Jane Austen', handle: null, nameSource: undefined },
+      { id: discoveryFixtures.journey.id, role: 'author' as const, participantKind: 'agent' as const,
+        provider: null, key: null, ordinal: null, agent: discoveryFixtures.journey.id,
+        displayName: 'Lin Mei', handle: 'lin_mei' },
+    ] };
+    expect(discoveryWork(item, { kind: 'global' }).authorLinks).toEqual([
+      { name: 'Jane Austen', href: '/authors/open-library/OL21594A' },
+      { name: 'Lin Mei', href: '/@lin_mei' },
+    ]);
+  });
   test('a segment names an Open Library author only as Open Library writes their ID', () => {
     expect(parseOpenLibraryAuthor('OL21594A')).toBe('/authors/OL21594A');
     for (const segment of ['OL0A', 'OL21594W', 'ol21594a', 'OL21594A.json', '/authors/OL21594A', 'OL1234567890123A']) {

@@ -45,7 +45,8 @@ test('G-382 Open Library author pages list public credited Works with projected 
       return Response.json({ key: author, type: { key: '/type/author' }, revision: 3, ...records.get(author) });
     }) as typeof fetch);
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, media: stack.media,
-      sourceAuthorNames: names, sourceAdoptions: fixture.adoptions, authorReaders: new AuthorReaders(stack.contentPool),
+      sourceAuthorNames: names, sourceAdoptions: fixture.adoptions,
+      authorReaders: new AuthorReaders(stack.contentPool, stack.accessPool),
       account: { verify: async () => { throw new AccountAssertionDenied('Public reads only'); } } });
     const call = (target: string) => app.handle(new Request(`http://main.local${target}`));
     const read = async <T = AuthorRead>(target: string, status = 200): Promise<T> => {
@@ -100,12 +101,31 @@ test('G-382 Open Library author pages list public credited Works with projected 
       { kind: 'external', provider: 'open-library', key: coKey, displayName: 'Margaret Drabble' },
       { kind: 'external', provider: 'open-library', key, displayName: 'Jane Austen' }]);
 
-    // Readers are distinct people reading or finished with any of the Works; wanting to read is not reading.
-    const [first, second, third] = [id(), id(), id()];
+    // Only public Person libraries count; duplicates, private shelves, hidden Works and intentions do not.
+    const people = await Promise.all(['public', 'followers', 'private', 'intention'].map(name => stack.member(name)));
+    for (const [index, person] of people.entries()) {
+      const representation = (await stack.accessPool.query<{ id: string }>(`
+        SELECT id::text FROM access.representation WHERE principal_id = $1 AND subject_id = $2 LIMIT 1`,
+      [person.principalId, person.actor])).rows[0]!.id;
+      await stack.accessPool.query(`INSERT INTO access.agent_provision
+        (id, principal_id, idempotency_key, request_digest, agent_id, agent_kind,
+          display_name, principal_epoch, state, graph_data_epoch, graph_sequence, representation_id)
+        VALUES ($1,$2,$3,$4,$5,'person',$6,0,'active',$7,0,$8)`,
+      [randomUUID(), person.principalId, `author-${randomUUID()}`, 'a'.repeat(64), person.actor,
+        person.name, stack.env.lineage.dataEpoch, representation]);
+      await stack.accessPool.query(`INSERT INTO access.agent_library_visibility
+        (agent_id, visibility, version) VALUES ($1,$2,1)`,
+      [person.actor, ['public', 'followers', 'private', 'public'][index]]);
+    }
+    const [first, second, third, fourth] = people.map(person => person.actor);
     await stack.contentPool.query(`INSERT INTO reader.library_status (agent, work, status, version) VALUES
       ($1, $4, 'reading', 1), ($1, $5, 'read', 1), ($2, $5, 'read', 1), ($3, $4, 'want-to-read', 1),
-      ($3, $6, 'read', 1)`, [first, second, third, pride.work, sanditon.work, hidden.work]);
+      ($3, $6, 'read', 1), ($7, $4, 'read', 1)`,
+    [first, second, third, pride.work, sanditon.work, hidden.work, fourth]);
     expect((await read(path(key))).totals.readers).toEqual({ value: 2, kind: 'exact' });
+    await stack.accessPool.query(`UPDATE access.agent_library_visibility SET visibility = 'private', version = 2
+      WHERE agent_id = $1`, [first]);
+    expect((await read(path(key))).totals.readers).toEqual({ value: 1, kind: 'exact' });
 
     // Pages share one order and one basis; a cursor from another position restarts.
     const before = stack.fuseki.queries;
@@ -149,7 +169,8 @@ test('G-382 Open Library author pages list public credited Works with projected 
       expect(await plan(`SELECT id FROM source.conversion WHERE projection -> 'authorRefs' @> $1::jsonb`,
         [JSON.stringify([{ sourceKey: key }])])).toContain('conversion_author_refs_idx');
       expect(await plan(`SELECT DISTINCT agent FROM reader.library_status WHERE work = ANY($1::text[])
-        AND status IN ('reading', 'read')`, [[pride.work]])).toContain('library_status_readers_idx');
+        AND status IN ('reading', 'read') ORDER BY agent LIMIT 10001`, [[pride.work]]))
+        .toMatch(/library_status_(?:readers_idx|also_enjoyed_work)/);
       await client.query('ROLLBACK');
     } finally { client.release(); }
 

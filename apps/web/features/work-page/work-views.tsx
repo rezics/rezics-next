@@ -1,9 +1,14 @@
 import { headers } from 'next/headers';
+import { materializeData } from 'native-i18n';
 import { type ReactNode, Suspense } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import { browseReader } from '../discover/server.ts';
+import { lifespan } from '../author/facts.ts';
+import { messages as authorMessages } from '../author/messages.ts';
+import authorZhHans from '../author/messages/zh-Hans.ts';
+import { readOpenLibraryAuthor, readOpenLibraryAuthorWorks } from '../author/read.ts';
 import { coverKindOf } from '../catalogue/work.ts';
 import { AdoptionRegion } from './adoption.tsx';
 import { AuthorSection } from './author.tsx';
@@ -120,12 +125,26 @@ async function Record({ id, workRef, work, locale, messages }: Common & { id: st
 }
 
 async function Author({ id, locale, messages }: Common & { id: string }) {
-  const credits = await readAgentCredits(id);
-  const author = credits.ok ? credits.data.items.find(credit => credit.role === 'author') : undefined;
-  if (!author) return null;
-  const [works, { avatarQuery }] = await Promise.all([readAgentWorks(author.agent, locale), browseReader()]);
-  return <AuthorSection credit={author} works={works} work={id} avatarQuery={avatarQuery} locale={locale}
-    messages={messages} />;
+  const [agents, external] = await Promise.all([readAgentCredits(id), readCredits(id)]);
+  const native = agents.ok ? agents.data.items.find(credit => credit.role === 'author') : undefined;
+  if (native) {
+    const [works, { avatarQuery }] = await Promise.all([readAgentWorks(native.agent, locale), browseReader()]);
+    return <AuthorSection author={{ kind: 'agent', name: native.displayName, handle: native.handle, works }}
+      work={id} avatarQuery={avatarQuery} locale={locale} messages={messages} />;
+  }
+  const credit = external.ok ? [...external.data.items].filter(item => item.role === 'author')
+    .sort((a, b) => a.ordinal - b.ordinal)[0] : undefined;
+  if (!credit || credit.provider !== 'open-library' || !credit.key) return null;
+  const [details, works, { avatarQuery }] = await Promise.all([
+    readOpenLibraryAuthor(credit.key, locale, 1), readOpenLibraryAuthorWorks(credit.key, locale, 12), browseReader(),
+  ]);
+  const name = details.ok ? details.data.name?.displayName ?? credit.displayName : credit.displayName;
+  const t = materializeData(messages, { locale });
+  return <AuthorSection author={{ kind: 'external', key: credit.key,
+    name: name ?? t.openLibraryAuthor({ key: credit.key.replace(/^\/authors\//, '') }),
+    years: details.ok ? lifespan(details.data.facts, locale,
+      locale === 'zh-Hans' ? { ...authorMessages, ...authorZhHans } : authorMessages) : null, works }}
+    work={id} avatarQuery={avatarQuery} locale={locale} messages={messages} />;
 }
 
 /**

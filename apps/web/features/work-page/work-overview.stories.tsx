@@ -4,7 +4,8 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import type { ReaderActions } from '../catalogue/reader-actions.tsx';
 import { AdoptionRegion } from './adoption.tsx';
-import { AuthorSection } from './author.tsx';
+import { AuthorSection, type WorkAuthor } from './author.tsx';
+import { janeAusten } from '../author/fixtures.ts';
 import { ClassificationRegion } from './classification.tsx';
 import { WorkCredits } from './credits.tsx';
 import * as fixture from './fixtures.ts';
@@ -24,13 +25,14 @@ interface OverviewArgs {
   realms: ScopeRealm[];
   ratings: Loaded<RatingRead>; classifications: Loaded<ClassificationPage> | null; adoptions: Loaded<AdoptionPage>;
   locale: UiLocale; readerActions?: ReaderActions;
+  authorOverride?: WorkAuthor;
   /** Where Read leads; the frame's Contents link when left out. */
   readAction?: ReadStart;
 }
 
 /** The Overview as the route composes it, with each region's Main answer given directly. */
 function Overview({ work, agentCredits, credits, scope, realms, ratings, classifications, adoptions,
-  locale, readerActions, readAction }: OverviewArgs) {
+  locale, readerActions, readAction, authorOverride }: OverviewArgs) {
   const t = messages[locale];
   const view = scope ? fixture.scopeView(scope, realms) : null;
   const scopeBar = <ScopeBar workRef={fixture.workRef} scope={scope} realms={realms} locale={locale} messages={t} />;
@@ -49,8 +51,9 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
       adoption={view ? <AdoptionRegion adoptions={adoptions} view={view} locale={locale} messages={t} /> : null}
       record={<WorkRecord work={work} locale={locale} messages={t}
         citation={`${work.title.value}. Maren Osei. REZICS. https://rezics.com/${locale}/w/${fixture.workRef}`} />}
-      author={author ? <AuthorSection credit={author} works={fixture.agentWorks} work={fixture.workRef} locale={locale}
-        messages={t} /> : null} />
+      author={authorOverride ? <AuthorSection author={authorOverride} work={fixture.workRef} locale={locale}
+        messages={t} /> : author ? <AuthorSection author={{ kind: 'agent', name: author.displayName,
+        handle: author.handle, works: fixture.agentWorks }} work={fixture.workRef} locale={locale} messages={t} /> : null} />
   </WorkFrame>;
 }
 
@@ -84,7 +87,7 @@ export const Global: Story = {
     const byline = canvas.getByRole('heading', { level: 1 }).parentElement!;
     await expect(within(byline).getByRole('link', { name: 'Maren Osei' })).toHaveAttribute('href', '/en/@maren');
     await expect(within(byline).getByRole('link', { name: /^Idris Vale/ }))
-      .toHaveAttribute('href', 'https://openlibrary.org/authors/OL2162284A');
+      .toHaveAttribute('href', '/en/authors/open-library/OL2162284A');
     await expect(within(byline).getByRole('link', { name: /Open Library author OL7654321A/ })).toBeVisible();
     await expect(canvas.getByText(/Translated by/)).toHaveTextContent('Translated by 林晓');
     await expect(canvas.getAllByText('La Cartographe des marées')[0]).toHaveAttribute('lang', 'fr');
@@ -135,6 +138,22 @@ export const Global: Story = {
     await userEvent.click(canvas.getByText('Identifiers'));
     await expect(canvas.getByText(fixture.work.id)).toBeVisible();
     await expect(canvas.queryByText(/Main Version/)).toBeNull();
+  },
+};
+
+export const ExternalAuthor: Story = {
+  args: { agentCredits: fixture.noAgentCredits,
+    authorOverride: { kind: 'external', key: janeAusten.key, name: 'Jane Austen', years: '1775–1817',
+      works: fixture.ok({ ...janeAusten.works, sourcePosition: janeAusten.sourcePosition,
+        count: { value: janeAusten.works.items.length, kind: 'exact-page', total: null } }) } },
+  async play({ canvasElement }) {
+    const author = within(canvasElement).getByRole('region', { name: 'About the author' });
+    await expect(within(author).getByRole('link', { name: /Jane Austen/ }))
+      .toHaveAttribute('href', '/en/authors/open-library/OL21594A');
+    await expect(author).toHaveTextContent('1775–1817');
+    await expect(within(author).getByRole('region', { name: 'More by Jane Austen' }))
+      .toHaveTextContent('Pride and Prejudice');
+    await noOverflow();
   },
 };
 

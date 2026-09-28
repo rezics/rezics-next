@@ -8,8 +8,9 @@ import { pageFields, readAvatar, readId, readName, readPosition, WORK_READ_COST 
  * One author read enumerates at most 64 public Works (one graph query after
  * one indexed source probe and its forward read), rates them in one batch
  * (the search page's sealed-inventory adapter: one context lookup, ≤64 Access
- * inventories, one graph query), counts readers with one indexed SQL probe of
- * ≤10,001 rows and hydrates only the page shown (≤20 Works: two summary
+ * inventories, one graph query), counts readers with one indexed Content probe
+ * of ≤10,001 rows and one Access eligibility query over ≤10,000 candidates,
+ * then hydrates only the page shown (≤20 Works: two summary
  * batches, one serial and one type batch, one credit query, one source name
  * batch and one Agent name query). Ordering and totals are O(W log W), W≤64.
  * More Works than that are counted as a lower bound and listed from the 64
@@ -42,8 +43,8 @@ export const authorWorksPage = t.Object({ items: t.Array(authorWork, { maxItems:
  * What the author's Works add up to on REZICS. The mean weighs every rating
  * given to the standing Global question alike, as Goodreads averages an
  * author; with no such question, or no rating yet, there is no rating total.
- * Readers are the distinct people reading or finished with any of the Works,
- * counted without naming anyone, whatever their shelves' visibility.
+ * Readers are distinct people with public libraries reading or finished with
+ * any of the Works. Private and followers-only shelves never add to the total.
  */
 export const authorTotals = t.Object({ works: count,
   ratings: t.Nullable(t.Object({ context: readId, count, mean: t.Number(),

@@ -60,8 +60,8 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await page.goto(`/en/w/${id}`);
   await expect(page).toHaveTitle(`${seed.title} · REZICS`);
   await expect(page.getByRole('heading', { level: 1, name: seed.title })).toHaveAttribute('lang', 'en');
-  // A source author links to the source, named as it lists them or by its reference until it names them.
-  await expect(page.locator('a[href="https://openlibrary.org/authors/OL2162284A"]')).toBeVisible();
+  // A source author opens their REZICS page, named as Open Library lists them or by ID until then.
+  await expect(page.locator('a[href="/en/authors/open-library/OL2162284A"]')).toBeVisible();
   await expect(page.getByText(/^Book · English/)).toBeVisible();
   await expect(page.getByText('Maren Osei').first()).toBeVisible();
   await expect(page.getByText('La Cartographe des marées').first()).toHaveAttribute('lang', 'fr');

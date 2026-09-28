@@ -3,6 +3,7 @@ import { cn } from '@rezics/ui/utils';
 import { TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
+import { authorHref } from '../author/route.ts';
 import Link from '../shell/localized-link.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { RetryButton } from './retry-button.tsx';
@@ -18,7 +19,7 @@ const authorLink = 'rounded-sm outline-none decoration-1 underline-offset-4 hove
  * Who made the Work, as Goodreads sets it under the title: authors in the
  * Work-title face, then "Translated by" and "Edited by" in smaller type.
  * Native authors link to their profile; authors an import brought from Open
- * Library are named as Open Library lists them and link there. A Work with
+ * Library are named as Open Library lists them and link to their REZICS page. A Work with
  * no credit shows none, rather than a line about credits. When one of the two
  * reads fails, the other still shows and the gap is said.
  */
@@ -45,16 +46,15 @@ export function WorkCredits({ agentCredits, credits, locale, messages }: {
     {authors.length || external.length ? <p className="flex flex-wrap items-baseline justify-center gap-x-3 gap-y-1
       font-work-title text-foreground/85 text-xl sm:text-2xl lg:justify-start">
       <span className="sr-only">{authors.length + external.length > 1 ? t.authors : t.author}: </span>
-      {authors.map(credit => <Link key={credit.id} href={`/@${credit.handle}`} title={`@${credit.handle}`}
+      {authors.map(credit => <Link key={credit.id} href={authorHref({ kind: 'agent', handle: credit.handle })}
+        title={`@${credit.handle}`}
         className={authorLink}>{credit.displayName}</Link>)}
       {external.map(credit => {
         const key = openLibraryAuthorKey(credit.key);
-        return <a key={credit.id} href={`https://openlibrary.org/authors/${encodeURIComponent(key)}`} rel="noreferrer"
+        return <Link key={credit.id} href={authorHref({ kind: 'external', key: credit.key })}
           title={credit.displayName ? t.openLibraryListed : undefined}
           className={cn(authorLink, !credit.displayName && 'font-sans font-medium text-primary text-sm')}>
-          {/* A text arrow joined by a no-break space wraps with the last word; an icon would not. */}
-          {credit.displayName ?? t.openLibraryAuthor({ key })}{'\u00a0'}<span aria-hidden="true"
-            className="text-muted-foreground text-[0.6em]">↗</span></a>;
+          {credit.displayName ?? t.openLibraryAuthor({ key })}</Link>;
       })}
     </p> : null}
     {others.length ? <p className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-muted-foreground text-sm
