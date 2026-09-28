@@ -45,7 +45,6 @@ createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUs
     await retainAccountSubjectDeletion(relayPool!, issuer, subject);
   } : undefined,
 }), pool, { operatorUserIds, displayPreferenceClientIds: new Set([config.WEB_OAUTH_CLIENT_ID].filter(Boolean)),
-  ...(config.ACCOUNT_MAIN_CLIENT_SECRET ? { notificationDigest: { accountSecret: secret,
-    mainSecret: config.ACCOUNT_MAIN_CLIENT_SECRET } } : {}) })
+  notificationDigest: { accountSecret: secret, mainSecret: config.ACCOUNT_MAIN_CLIENT_SECRET } })
   .cleanup(() => { clearInterval(deliveryTimer); })
   .listen({ hostname: '127.0.0.1', port });
