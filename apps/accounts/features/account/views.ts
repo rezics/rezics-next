@@ -97,7 +97,8 @@ export function checkupView(input: { user: AccountSession['user']; methods: Read
       && input.activity.status === 'ok' && input.apps.status === 'ok' && !input.apps.data.nextCursor,
     issues: securityCheckup({ emailVerified: user.emailVerified, methods, failedLast24Hours: failed, apps, now }),
     failedSignIns: failed ?? 0,
-    devices: input.sessions.status === 'ok' ? { status: 'ok', items: deviceViews(input.sessions.data.items, now, locale) }
+    devices: input.sessions.status === 'ok' ? { status: 'ok', items: deviceViews(input.sessions.data.items, now, locale),
+      limited: !!input.sessions.data.nextCursor }
       : { status: 'unavailable' },
     activity: input.activity.status === 'ok' ? { status: 'ok', apps: input.apps.status === 'ok' ? appNames(input.apps) : {},
       entries: activityPage(input.activity.data, now, locale).entries.slice(0, input.recent) } : { status: 'unavailable' },

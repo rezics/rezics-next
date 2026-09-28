@@ -7,6 +7,7 @@ export default async function YourDevicesPage() {
   return renderAccountPage('security', async ({ locale, now }) => {
     const sessions = await readSessions();
     return <DevicesPage devices={sessions.status === 'ok'
-      ? { status: 'ok', items: deviceViews(sessions.data.items, now, locale) } : { status: 'unavailable' }} />;
+      ? { status: 'ok', items: deviceViews(sessions.data.items, now, locale), limited: !!sessions.data.nextCursor }
+      : { status: 'unavailable' }} />;
   }, '/security/devices');
 }

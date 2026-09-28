@@ -77,6 +77,18 @@ export const SignOutADevice: Story = {
   },
 };
 
+export const LimitedSessionList: Story = {
+  render: () => <DevicesPage devices={{ status: 'ok', items: devices, limited: true }} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(/Showing the 100 newest sessions/)).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Sign out of all other devices' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Sign out of all other devices?' });
+    await expect(within(dialog).getByText(/including sessions not listed here/)).toBeVisible();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  },
+};
+
 export const ConfirmWithPasskeyAndCode: Story = {
   render: () => <DevicesPage devices={{ status: 'ok', items: devices }} />,
   parameters: { stepUp: { password: true, passkey: true, totp: true },

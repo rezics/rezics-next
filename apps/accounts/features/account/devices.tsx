@@ -28,7 +28,7 @@ export interface DeviceView {
   lastActiveAt: string;
 }
 
-export type DevicesView = { status: 'ok'; items: DeviceView[] } | { status: 'unavailable' };
+export type DevicesView = { status: 'ok'; items: DeviceView[]; limited?: boolean } | { status: 'unavailable' };
 
 const icons = { phone: SmartphoneIcon, computer: LaptopIcon, app: AppWindowIcon, unknown: MonitorIcon };
 const kind = (device: Pick<DeviceView, 'platform' | 'browser' | 'clientName'>) =>
@@ -102,7 +102,8 @@ export function DeviceSummary({ devices }: { devices: DevicesView }) {
       {devices.items.slice(0, DEVICE_SUMMARY).map(item => <DeviceRow key={item.id} item={item} detailed={false} />)}
     </ul>
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border/60 px-5 py-3 sm:px-6">
-      {others ? null : <p className="text-sm text-muted-foreground">{t.noOtherDevices}</p>}
+      {devices.limited ? <p className="text-sm text-muted-foreground">{t.devicesListLimited}</p>
+        : others ? null : <p className="text-sm text-muted-foreground">{t.noOtherDevices}</p>}
       <Button variant="link" className="px-0" asChild><a href={focusedPaths.devices}>
         {hidden > 0 ? t.manageAllDevicesMore(hidden) : t.manageAllDevices}<ChevronRightIcon aria-hidden="true" /></a></Button>
     </div>
@@ -145,11 +146,13 @@ export function Devices({ devices }: { devices: DevicesView }) {
           onClick={() => void run(item.id, () => api.revokeSessions(item.ids))}>{t.signOutDevice}</Button> : null} />)}
     </ul>
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-5 py-4 sm:px-6">
-      {others.length ? <Button variant="outline" isLoading={busy === 'others'} disabled={!!busy}
+      {others.length || devices.limited ? <Button variant="outline" isLoading={busy === 'others'} disabled={!!busy}
         onClick={() => setConfirming(true)}>{t.signOutAll}</Button>
         : <p className="text-sm text-muted-foreground">{t.noOtherDevices}</p>}
       <Button variant="link" className="px-0" asChild><a href={focusedPaths.secureAccount}>{t.unrecognizedDevice}</a></Button>
     </div>
+    {devices.limited ? <p className="border-t border-border/60 px-5 py-3 text-sm text-muted-foreground sm:px-6">
+      {t.devicesListLimited}</p> : null}
     {signedOut ? <Alert role="status" variant="success" className="mx-5 mb-4 w-auto sm:mx-6">
       <AlertDescription>{t.devicesSignedOut}</AlertDescription></Alert> : null}
     {failure ? <Alert role="alert" variant="destructive" className="mx-5 mb-4 w-auto sm:mx-6">
@@ -158,7 +161,8 @@ export function Devices({ devices }: { devices: DevicesView }) {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t.signOutAllTitle}</AlertDialogTitle>
-          <AlertDialogDescription>{t.signOutAllBody(others.length)}</AlertDialogDescription>
+          <AlertDialogDescription>{devices.limited ? t.signOutAllBodyUncounted
+            : t.signOutAllBody(others.length)}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={!!busy} onClick={() => setConfirming(false)}>{t.cancel}</AlertDialogCancel>
