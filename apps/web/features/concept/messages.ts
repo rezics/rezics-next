@@ -53,7 +53,6 @@ export const messages = {
 
   // Search within the Concept, on today's phrase search.
   searchWithin: insert('Search within {{name}}', { name: String }),
-  searchPlaceholder: 'Titles and text',
   searchSubmit: 'Search',
 
   // Works reaching the Concept.

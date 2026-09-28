@@ -186,7 +186,9 @@ export function ConditionBar({ state, page, values, suggestions, maxValues = DEF
     </div>
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
       {state.include.length ? <Match state={state} t={t} /> : null}
-      <AddConcept state={state} taken={taken} maxValues={maxValues} search={search} locale={locale} t={t} />
+      {/* A new address starts a new search: the chosen Concept is now a chip, not text in the field. */}
+      <AddConcept key={conceptHref(state)} state={state} taken={taken} maxValues={maxValues} search={search}
+        locale={locale} t={t} />
     </div>
     {offered.length ? <div className="grid gap-2">
       <p className="text-muted-foreground text-xs">{t.alsoOn}</p>

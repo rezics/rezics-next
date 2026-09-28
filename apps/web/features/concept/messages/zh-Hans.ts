@@ -46,7 +46,6 @@ export default {
   clearConditions: '清除',
 
   searchWithin: insert('在{{name}}中搜索', { name: String }),
-  searchPlaceholder: '标题与正文',
   searchSubmit: '搜索',
 
   works: '作品',

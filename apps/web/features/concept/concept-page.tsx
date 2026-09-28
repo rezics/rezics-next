@@ -102,13 +102,13 @@ function SearchWithin({ concept, state, locale, t }: { concept: ConceptRead; sta
   if (!term) return null;
   const label = t.searchWithin({ name: concept.name.value });
   return <form role="search" aria-label={label} action={localizedPath('/search', locale)} method="get"
-    className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+    className="flex w-full min-w-0 items-center gap-2 sm:ms-auto sm:w-auto">
     <input type="hidden" name="term" value={term} />
     {state.scope.kind === 'realm' ? <>
       <input type="hidden" name="scope" value="realm" /><input type="hidden" name="realm" value={state.scope.realm} />
     </> : null}
     <Input name="q" type="search" required minLength={2} maxLength={80} aria-label={label}
-      placeholder={t.searchPlaceholder} className="min-w-0 flex-1 sm:w-56" />
+      placeholder={label} className="min-w-0 flex-1 sm:w-64" />
     <Button type="submit" variant="outline" size="icon-md" aria-label={t.searchSubmit}>
       <SearchIcon aria-hidden="true" /></Button>
   </form>;
