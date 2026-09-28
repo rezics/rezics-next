@@ -60,6 +60,7 @@ const translations: Record<string, Strings> = {
     decisions: 'Entscheidungsprotokoll',
     about: 'Über die Zone und ihre Regeln',
     works: 'Alle Werke',
+  },
   ja: {
     tagline: 'ウェブ連載やライトノベル、オリジナル作品を、小説編集チームが公開の場で選び抜きます。',
     official: 'REZICS 公式 Zone',

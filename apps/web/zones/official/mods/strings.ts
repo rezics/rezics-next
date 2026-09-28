@@ -115,6 +115,7 @@ const translations: Record<string, Strings> = {
     works: 'Alle Mods und Anleitungen',
     decisions: 'Entscheidungsprotokoll',
     about: 'Über die Zone und ihre Regeln',
+  },
   ja: {
     official: 'REZICS 公式 Zone',
     tagline: 'ゲームMOD、ロードオーダー、セーブデータを安全に保つ導入ガイド。',

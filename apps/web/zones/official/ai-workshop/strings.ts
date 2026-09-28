@@ -105,6 +105,7 @@ const translations: Record<string, Strings> = {
     works: 'Alle Prompts und Skills',
     decisions: 'Entscheidungsprotokoll',
     about: 'Über die Zone und ihre Regeln',
+  },
   ja: {
     official: 'REZICS 公式 Zone',
     tagline: 'AIを使った読書や執筆に役立つプロンプト、スキル、小さなツール。',
