@@ -69,7 +69,8 @@ async function openRealm(api: SeedApi, plan: CommunityRealm, root: string, owner
   const rules = plan.rules.map(rule => ({ ...rule, governanceRule: null }));
   const current = await readMain<Settings>(api, `${root}/settings?${query(owner)}`, owner.token);
   if (!current) throw new Error(`Realm ${plan.id} settings are unavailable`);
-  const desired = { ...current.settings, visibility: 'public', selfJoin: true, reviewMode: 'trusted-members', rules };
+  const desired = { ...current.settings, visibility: 'public', selfJoin: true, reviewMode: 'trusted-members',
+    reviewRequired: false, rules };
   if (isDeepStrictEqual(desired, current.settings)) return;
   await api.put(`${root}/settings`, { actingSubject: owner.actingSubject, expectedGeneration: current.generation,
     reason: 'Open the community to readers and publish its rules', settings: desired,

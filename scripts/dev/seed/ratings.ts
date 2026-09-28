@@ -35,21 +35,14 @@ export function ratingPlan(): Map<string, Map<string, number | null>> {
   return plan;
 }
 
-/** A person's current global ratings by Main Version: at most a few pages. */
-async function currentRatings(api: SeedApi, reader: Session, context: string): Promise<Map<string, Current>> {
-  const found = new Map<string, Current>();
-  let cursor: string | null = null;
-  for (let page = 0; page < 10; page++) {
-    const result: { items: { context: string; mainVersion: string; revision: string; value: number | null }[];
-      nextCursor: string | null } = await api.get(`/v1/me/ratings?scope=global&limit=20&actingSubject=${
-      encodeURIComponent(reader.actingSubject)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, reader.token);
-    for (const item of result.items) {
-      if (item.context === context) found.set(item.mainVersion, { revision: item.revision, value: item.value });
-    }
-    cursor = result.nextCursor;
-    if (!cursor) return found;
-  }
-  throw new Error(`${reader.id} has more ratings than the seed reads`);
+/** A person's own global rating on a Work, as their reader state shows it (the web's rating control reads it too). */
+async function currentRating(api: SeedApi, reader: Session, work: string, context: string): Promise<Current | null> {
+  const state = await api.get<{ rating: { global: { context: string; value: number | null;
+    availability: 'available' | 'withdrawn'; revision: string } | null } }>(`/v1/works/${work.slice(-36)}/reader-state?actingSubject=${
+    encodeURIComponent(reader.actingSubject)}`, reader.token);
+  const own = state.rating.global;
+  if (own && own.context !== context) throw new Error(`${reader.id} rated under another global question`);
+  return own ? { revision: own.revision, value: own.availability === 'available' ? own.value : null } : null;
 }
 
 /**
@@ -72,11 +65,10 @@ export async function seedGlobalRatings(api: SeedApi, owner: Session, readers: r
     await grantHomeSeedAuthority({ ...operator, ownerAccountSubject: reader.accountId,
       actingSubject: reader.actingSubject },
     [{ action: 'rating.observation.set', scope: `rating:observe:${context}` }]);
-    const current = await currentRatings(api, reader, context);
     for (const [id, value] of planned) {
       const work = targets.get(id);
       if (!work) throw new Error(`Rating target ${id} is unavailable`);
-      const head = current.get(work.mainVersion);
+      const head = await currentRating(api, reader, work.work, context);
       if (value !== null) count++;
       if ((head?.value ?? null) === value) continue;
       await api.post('/v1/global-rating-observations', {

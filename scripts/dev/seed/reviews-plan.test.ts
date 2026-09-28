@@ -77,10 +77,8 @@ describe('Reading lives', () => {
       for (const entry of life.shelf) {
         expect(known.has(entry.work)).toBe(true);
         if (entry.status === 'want-to-read') expect([entry.startedOn, entry.finishedOn]).toEqual([null, null]);
-        if (entry.status === 'reading') {
-          expect(entry.finishedOn).toBeNull();
-          expect(entry.startedOn! <= today).toBe(true);
-        }
+        // Main records dates for finished reads only.
+        if (entry.status === 'reading') expect([entry.startedOn, entry.finishedOn]).toEqual([null, null]);
         if (entry.status === 'read') expect(entry.startedOn! <= entry.finishedOn! && entry.finishedOn! <= today).toBe(true);
       }
     }
