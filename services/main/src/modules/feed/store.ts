@@ -272,7 +272,7 @@ export class FeedStore {
       const result: FeedVoteResult = { profile: 'feed-vote-receipt-v1', target, value: input.value, revision, score, replayed: false };
       await client.query(`INSERT INTO access.feed_vote_receipt (principal_id, idempotency_key, request_digest, result)
         VALUES ($1,$2,$3,$4)`, [owner, key, intent, result]);
-      if (input.value === 1 && prior?.value !== 1 && source && source.actor !== input.actingSubject) {
+      if (input.value !== 0 && prior?.value !== input.value && source && source.actor !== input.actingSubject) {
         const eventId = randomUUID();
         await client.query(`INSERT INTO access.feed_post_vote_event
           (id, target, author, voter, voter_principal, vote_revision, work)

@@ -30,7 +30,7 @@ export function feedNotificationSubjectReader(access: Pool, env: WorkActivationE
     }
     const represented = await access.query(`SELECT 1 FROM access.feed_post_vote_event e
       JOIN access.feed_vote v ON v.principal_id = e.voter_principal AND v.target = e.target
-        AND v.revision = e.vote_revision AND v.value = 1
+        AND v.revision = e.vote_revision AND v.value <> 0
       JOIN access.representation r ON r.subject_id = e.author AND r.principal_id = $1
         AND r.active AND r.valid_until > clock_timestamp()
       JOIN access.principal p ON p.id = r.principal_id AND p.active
@@ -69,7 +69,7 @@ export function feedNotificationSubjectReader(access: Pool, env: WorkActivationE
       const row = (await access.query<{ author: string }>(`SELECT e.author
         FROM access.feed_post_vote_event e JOIN access.feed_vote v
           ON v.principal_id = e.voter_principal AND v.target = e.target
-          AND v.revision = e.vote_revision AND v.value = 1
+          AND v.revision = e.vote_revision AND v.value <> 0
         WHERE e.target = $1 AND e.vote_revision = $2`, [input.ref, input.revision])).rows[0];
       if (!row) return hidden;
       if (!await eligible(input.principalId, input.disclosureBasis, null,

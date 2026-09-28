@@ -76,7 +76,7 @@ export class NotificationProducer {
         voter_principal: string; vote_revision: string }>(`SELECT e.target, e.author, e.voter,
           e.voter_principal::text, e.vote_revision::text FROM access.feed_post_vote_event e
           JOIN access.feed_vote v ON v.principal_id = e.voter_principal AND v.target = e.target
-            AND v.revision = e.vote_revision AND v.value = 1 WHERE e.id = $1`, [event.event_id])).rows[0];
+            AND v.revision = e.vote_revision AND v.value <> 0 WHERE e.id = $1`, [event.event_id])).rows[0];
       if (!row) return null;
       const recipients = await represented(this.access, row.author, row.voter_principal);
       if (!recipients.length) return null;

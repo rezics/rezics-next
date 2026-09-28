@@ -19,8 +19,11 @@ async function produced(kind: 'chapter_published' | 'feed_post_vote', stale = fa
   const access = { connect: async () => client, query: async (sql: string) => {
     if (sql.includes('FROM access.chapter_notification_event')) return { rows: [{ activity: native(2),
       work: native(3), author: native(4), content_revision: `urn:rezics:content:revision:${id(5)}` }] };
-    if (sql.includes('FROM access.feed_post_vote_event')) return { rows: stale ? [] : [{ target: native(2),
-      author: native(4), voter: native(6), voter_principal: id(7), vote_revision: id(8) }] };
+    if (sql.includes('FROM access.feed_post_vote_event')) {
+      expect(sql).toContain('v.value <> 0');
+      return { rows: stale ? [] : [{ target: native(2), author: native(4),
+        voter: native(6), voter_principal: id(7), vote_revision: id(8) }] };
+    }
     if (sql.includes('FROM access.follow f')) return { rows: [{ id: id(9) }, { id: id(10) }] };
     if (sql.includes('FROM access.representation')) return { rows: kind === 'chapter_published'
       ? [{ id: id(9) }] : [{ id: id(10) }] };
@@ -37,7 +40,7 @@ test('a followed chapter notifies Work and author followers once, excluding the 
     topic: 'followed-chapter', recipients: [id(10)], subject: { ref: native(2) } }]);
 });
 
-test('a current upvote notifies the post author; a superseded vote emits nothing', async () => {
+test('a current nonzero vote notifies the post author; a superseded vote emits nothing', async () => {
   expect(await produced('feed_post_vote')).toMatchObject([{ purpose: 'social',
     topic: 'post-vote', recipients: [id(10)], subject: { ref: native(2), revision: id(8) } }]);
   expect(await produced('feed_post_vote', true)).toEqual([]);
@@ -93,29 +96,31 @@ test('a current follower sees only a chapter whose exact Content revision remain
   expect(sourceReads).toBe(2);
 });
 
-test('an upvote appends its notification fact and producer event in the vote transaction', async () => {
-  const statements: string[] = [];
-  let appendKind = '';
-  const client = { query: async (sql: string, args?: unknown[]) => {
-    statements.push(sql);
-    if (sql.includes('access.append_notification_producer_event')) appendKind = String(args?.[0]);
-    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
-    if (sql.includes('FROM access.principal WHERE account_issuer')) return { rows: [{ id: id(11) }] };
-    if (sql.includes('FROM access.agent_provision')) return { rows: [{ provision_id: id(12) }] };
-    if (sql.includes('SELECT * FROM access.feed_checkpoint')) return { rows: [{ data_epoch: 'epoch' }] };
-    if (sql.includes('SELECT score, occurred_at FROM access.feed_item')) {
-      return { rows: [{ score: 3, occurred_at: new Date('2026-09-28T00:00:00Z') }] };
-    }
-    return { rows: [], rowCount: 1 };
-  }, release: () => {} };
-  const store = new FeedStore({ connect: async () => client } as unknown as Pool);
-  const result = await store.vote({ issuer: 'account', subject: 'voter', emailVerified: true }, native(2),
-    'epoch', { profile: 'feed-vote-command-v1', actingSubject: native(6), value: 1,
-      expectedRevision: null }, 'vote:1', async () => ({ actor: native(4), work: native(3) }));
-  expect(result.score).toBe(4);
-  expect(statements.some(sql => sql.includes('INSERT INTO access.feed_post_vote_event'))).toBe(true);
-  expect(appendKind).toBe('feed_post_vote');
-  expect(statements.at(-1)).toBe('COMMIT');
+test('each direction of vote appends its notification fact in the vote transaction', async () => {
+  for (const value of [1, -1] as const) {
+    const statements: string[] = [];
+    let appendKind = '';
+    const client = { query: async (sql: string, args?: unknown[]) => {
+      statements.push(sql);
+      if (sql.includes('access.append_notification_producer_event')) appendKind = String(args?.[0]);
+      if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
+      if (sql.includes('FROM access.principal WHERE account_issuer')) return { rows: [{ id: id(11) }] };
+      if (sql.includes('FROM access.agent_provision')) return { rows: [{ provision_id: id(12) }] };
+      if (sql.includes('SELECT * FROM access.feed_checkpoint')) return { rows: [{ data_epoch: 'epoch' }] };
+      if (sql.includes('SELECT score, occurred_at FROM access.feed_item')) {
+        return { rows: [{ score: 3, occurred_at: new Date('2026-09-28T00:00:00Z') }] };
+      }
+      return { rows: [], rowCount: 1 };
+    }, release: () => {} };
+    const store = new FeedStore({ connect: async () => client } as unknown as Pool);
+    const result = await store.vote({ issuer: 'account', subject: 'voter', emailVerified: true }, native(2),
+      'epoch', { profile: 'feed-vote-command-v1', actingSubject: native(6), value,
+        expectedRevision: null }, 'vote:1', async () => ({ actor: native(4), work: native(3) }));
+    expect(result.score).toBe(3 + value);
+    expect(statements.some(sql => sql.includes('INSERT INTO access.feed_post_vote_event'))).toBe(true);
+    expect(appendKind).toBe('feed_post_vote');
+    expect(statements.at(-1)).toBe('COMMIT');
+  }
 });
 
 test('chapter projection appends a durable notification event with the newly projected post', async () => {

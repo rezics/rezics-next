@@ -4,7 +4,7 @@ import { Button, buttonVariants } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { cn } from '@rezics/ui/utils';
-import { BellIcon, CheckCheckIcon, CircleCheckIcon, FileCheckIcon, MessageSquareQuoteIcon, MessageSquareReplyIcon,
+import { ArrowUpDownIcon, BellIcon, CheckCheckIcon, CircleCheckIcon, FileCheckIcon, MessageSquareQuoteIcon, MessageSquareReplyIcon,
   RotateCwIcon, ShieldIcon, ThumbsUpIcon, TriangleAlertIcon, UserPlusIcon, UserRoundCogIcon, type LucideIcon }
   from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -27,7 +27,7 @@ type Kind = NonNullable<StreamItem['display']>['kind'];
 const icons: Record<Kind, LucideIcon> = { reply: MessageSquareReplyIcon, submission_decision: FileCheckIcon,
   moderation_outcome: ShieldIcon, realm_role_change: UserRoundCogIcon, follow: UserPlusIcon,
   claim_correction: CircleCheckIcon, review: MessageSquareQuoteIcon, review_helpful: ThumbsUpIcon,
-  realm_invitation: UserPlusIcon, chapter: MessageSquareQuoteIcon, post_vote: ThumbsUpIcon };
+  realm_invitation: UserPlusIcon, chapter: MessageSquareQuoteIcon, post_vote: ArrowUpDownIcon };
 
 const uuid = (iri: string | null) => iri?.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)?.[0];
 
