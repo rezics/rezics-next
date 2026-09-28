@@ -170,6 +170,7 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     await page.getByRole('link', { name: 'Write “第一章 雨夜”' }).click();
     await page.waitForURL(/\/chapters\/[0-9a-f-]{36}/);
     await expect(page.getByRole('textbox', { name: 'Chapter text' })).toHaveAttribute('lang', 'zh-Hans');
+    await page.waitForLoadState('networkidle');
     await append(page, '雨停在书店打烊前。');
     await expect(saveState(page)).toHaveText(/^Saved · /, { timeout: 30_000 });
     await expect(page).toHaveURL(/\/chapters\/[0-9a-f-]{36}\?revision=[0-9a-f-]{36}&language=zh-Hans$/);
@@ -223,15 +224,23 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
       await expect(chapters.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible({ timeout: 30_000 });
     };
     await volume('第一卷 雨夜');
-    // Into a volume from the Move menu, as the keyboard does it: the submenu opens with →.
+    // Into a volume from the Move menu, as the keyboard does it: ↓ to "Move to", → into its volumes, Enter.
+    const highlight = async (name: string) => {
+      const item = page.getByRole('menuitem', { name, exact: true });
+      await expect(item).toBeVisible();
+      for (let step = 0; step < 8 && await item.getAttribute('data-highlighted') === null; step++) {
+        await page.keyboard.press('ArrowDown');
+      }
+      await expect(item).toHaveAttribute('data-highlighted', '');
+    };
     await expect(async () => {
       await page.keyboard.press('Escape');
       await page.getByRole('button', { name: 'Move “第一章 雨夜”', exact: true }).click();
-      await page.getByRole('menuitem', { name: 'Move to' }).focus();
-      await page.keyboard.press('ArrowRight');
-      await expect(page.getByRole('menuitem', { name: '第一卷 雨夜' })).toBeVisible({ timeout: 3_000 });
+      await expect(page.getByRole('menuitem', { name: 'Move to' })).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 60_000 });
-    await page.getByRole('menuitem', { name: '第一卷 雨夜' }).focus();
+    await highlight('Move to');
+    await page.keyboard.press('ArrowRight');
+    await highlight('第一卷 雨夜');
     await page.keyboard.press('Enter');
     await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('1 chapter', { timeout: 30_000 });
     // A pointer drags the grip beside the Move button.
