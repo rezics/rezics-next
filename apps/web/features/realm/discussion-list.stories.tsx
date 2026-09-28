@@ -7,7 +7,6 @@ import { memoryFeed } from '../feed/fixtures.ts';
 import { messages } from '../feed/messages.ts';
 import zhHans from '../feed/messages/zh-Hans.ts';
 import { storyRealm, storyReply, storyThreads, THREAD_NOW } from '../feed/thread-fixtures.ts';
-import type { PostView } from '../feed/state.ts';
 import type { ThreadSort, ThreadSummary, ThreadWindow } from '../feed/thread.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { communityZone } from '../zones/fixtures.ts';
@@ -17,8 +16,7 @@ import { DiscussionColumns } from './thread-rail.tsx';
 
 // A Realm's Discussions tab, as a subreddit lists its posts, over story data.
 
-interface Args { items: ThreadSummary[]; sort: ThreadSort; window: ThreadWindow; next: boolean; locale: UiLocale;
-  view?: PostView }
+interface Args { items: ThreadSummary[]; sort: ThreadSort; window: ThreadWindow; next: boolean; locale: UiLocale }
 
 const base = `/en${storyRealm.path}/discussions`;
 const hrefs = {
@@ -26,11 +24,11 @@ const hrefs = {
   windows: { week: `${base}?sort=top`, month: `${base}?sort=top&t=month`, all: `${base}?sort=top&t=all` },
 };
 
-function Tab({ items, sort, window, next, locale, view }: Args) {
+function Tab({ items, sort, window, next, locale }: Args) {
   const t = locale === 'zh-Hans' ? { ...messages, ...zhHans } : messages;
   return <RealmPageStory zone={communityZone(locale)} locale={locale} members="10 members">
     <FeedProvider locale={locale} messages={t} now={THREAD_NOW} signedIn actingSubject={null} signInHref="/auth/start"
-      avatarQuery="" tab="all" followedRealms={null} api={memoryFeed()} view={view}>
+      avatarQuery="" tab="all" followedRealms={null} api={memoryFeed()}>
       <DiscussionColumns rail={null}>
         <DiscussionList items={items} realmPath={storyRealm.path} sort={sort} window={window} hrefs={hrefs}
           next={next ? `${base}?cursor=next` : null} first={null}
@@ -86,16 +84,6 @@ export const Empty: Story = {
   args: { items: [], next: false },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('heading', { name: 'No discussions yet' })).toBeVisible();
-  },
-};
-
-/** Compact view: one line per thread, still leading to it. */
-export const Compact: Story = {
-  args: { view: 'compact' },
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: 'Which edition of Jane Eyre for a first read?' })).toHaveAttribute('href',
-      `${base}/${storyReply(23).slice(-36)}`);
   },
 };
 
