@@ -8,7 +8,8 @@ import { useId, useState } from 'react';
 import { localizedPath } from '../../i18n/locale.ts';
 import { StarMeter } from '../catalogue/rating.tsx';
 import { CatalogueCover } from '../catalogue/cover.tsx';
-import { type CoverWork, coverKindOf } from '../catalogue/work.ts';
+import { authorSeparator, type CoverWork, coverKindOf } from '../catalogue/work.ts';
+import { authorHref } from '../author/route.ts';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { type Dismissal, DismissedPost, EngagementBar, JoinButton } from './actions.tsx';
@@ -39,7 +40,10 @@ const NEW_WORK_MS = 3 * 86_400_000;
 function coverWork(item: FeedItem, title: string, lang: string | undefined): CoverWork {
   return { id: item.target.work ?? item.target.id, title: { ...item.target.title, value: title,
     language: lang ?? item.target.title.language }, cover: item.target.cover, kind: coverKindOf(item.target.types),
-  authors: item.authors.flatMap(author => author.displayName ? [author.displayName] : []) };
+  authors: item.authors.flatMap(author => author.displayName ? [{ name: author.displayName,
+    href: author.handle ? authorHref({ kind: 'agent', handle: author.handle })
+      : author.provider === 'open-library' && author.key
+        ? authorHref({ kind: 'external', key: author.key }) : null }] : []) };
 }
 
 type Reason = FeedItem['reasons'][number];
@@ -168,21 +172,22 @@ function Byline({ item }: { item: FeedItem }) {
  * never named here.
  */
 function Authors({ authors }: { authors: FeedItem['authors'] }) {
-  const { t, locale } = useFeed();
+  const { t } = useFeed();
   const named = authors.filter((author): author is typeof author & { displayName: string } => author.displayName !== null);
   if (!named.length) return null;
+  const separator = authorSeparator(named.map(author => author.displayName));
   const marker = '\u2063';
   const [before = '', after = ''] = t.writtenBy({ names: marker }).split(marker);
-  let index = 0;
   return <p className="truncate text-muted-foreground text-sm">{before}
-    {new Intl.ListFormat(locale, { type: 'conjunction' }).formatToParts(named.map(author => author.displayName))
-      .map((part, position) => {
-        if (part.type !== 'element') return <span key={position}>{part.value}</span>;
-        const author = named[index++]!;
-        return author.handle ? <LocalizedLink key={position} href={`/@${author.handle}`} className="relative z-10
-          font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
-          {part.value}</LocalizedLink> : <span key={position} className="font-medium text-foreground">{part.value}</span>;
-      })}{after}</p>;
+    {named.map((author, index) => {
+      const href = author.handle ? authorHref({ kind: 'agent', handle: author.handle })
+        : author.provider === 'open-library' && author.key
+          ? authorHref({ kind: 'external', key: author.key }) : null;
+      return <span key={author.id}>{index ? separator : null}{href
+        ? <LocalizedLink href={href} className="relative z-10 font-medium text-foreground outline-none
+          hover:underline focus-visible:ring-2 focus-visible:ring-ring">{author.displayName}</LocalizedLink>
+        : <span className="font-medium text-foreground">{author.displayName}</span>}</span>;
+    })}{after}</p>;
 }
 
 /**

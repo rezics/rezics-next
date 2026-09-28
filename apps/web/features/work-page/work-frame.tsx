@@ -1,13 +1,13 @@
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { WorkCover } from '@rezics/ui/work-cover';
 import { BookOpenIcon, CircleAlertIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { RateWork, type ReaderActions, ReaderActionsProvider, ShelfButton } from '../catalogue/reader-actions.tsx';
 import type { RatingTarget, ReaderSeed } from '../catalogue/reader-store.ts';
-import { coverImage, coverKindOf } from '../catalogue/work.ts';
+import { coverKindOf, type CatalogueAuthor } from '../catalogue/work.ts';
+import { CatalogueCover } from '../catalogue/cover.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { WorkPageMessages } from './messages.ts';
@@ -24,9 +24,20 @@ import { WorkTabs } from './work-tabs.tsx';
  * beside it. On a phone the cover leads, centred, and the actions follow the
  * title. The left column stays in view while the page scrolls.
  */
-export function WorkFrame({ workRef, work, credits, ratingLine, readAction, signedIn = false, signInHref, actingSubject,
+export function WorkPageCover({ work, authors = [], avatarQuery }: {
+  work: Header; authors?: readonly CatalogueAuthor[]; avatarQuery?: string;
+}) {
+  return <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover,
+    kind: coverKindOf(work.types), authors }} avatarQuery={avatarQuery} loading="eager"
+    className="w-44 sm:w-52 lg:w-full" />;
+}
+
+export function WorkFrame({ workRef, work, credits, authors = [], cover, ratingLine, readAction,
+  signedIn = false, signInHref, actingSubject,
   readerSeed, ratingTarget, readerActions, avatarQuery, locale, messages, children }: {
-  workRef: string; work: Header; credits: ReactNode;
+  workRef: string; work: Header; credits: ReactNode; authors?: readonly CatalogueAuthor[];
+  /** A credited cover streamed separately from the rest of the frame. */
+  cover?: ReactNode;
   /** Where "Read" leads, streamed on its own; a link to Contents when left out. */
   readAction?: ReactNode;
   /** The rating summary under the title, streamed on its own. */
@@ -50,9 +61,7 @@ export function WorkFrame({ workRef, work, credits, ratingLine, readAction, sign
       <div className="contents lg:sticky lg:top-6 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:grid lg:content-start
         lg:gap-6 lg:self-start">
         <div className="order-1 flex justify-center lg:order-none">
-          <WorkCover title={work.title.value} lang={work.title.language} dir={work.title.direction}
-            kind={coverKindOf(work.types)} seed={work.cover.kind === 'fallback' ? work.cover.key : work.id}
-            image={coverImage(work.cover, avatarQuery)} loading="eager" className="w-44 sm:w-52 lg:w-full" />
+          {cover ?? <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />}
         </div>
         <div className="order-3 mx-auto grid w-full max-w-sm content-start gap-3 lg:order-none">
           {readAction === undefined ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} />

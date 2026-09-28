@@ -6,6 +6,7 @@ import type { ReaderActions } from '../catalogue/reader-actions.tsx';
 import { AdoptionRegion } from './adoption.tsx';
 import { AuthorSection, type WorkAuthor } from './author.tsx';
 import { janeAusten } from '../author/fixtures.ts';
+import { authorHref } from '../author/route.ts';
 import { ClassificationRegion } from './classification.tsx';
 import { WorkCredits } from './credits.tsx';
 import * as fixture from './fixtures.ts';
@@ -37,7 +38,13 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
   const view = scope ? fixture.scopeView(scope, realms) : null;
   const scopeBar = <ScopeBar workRef={fixture.workRef} scope={scope} realms={realms} locale={locale} messages={t} />;
   const author = agentCredits.ok ? agentCredits.data.items.find(credit => credit.role === 'author') : undefined;
-  return <WorkFrame workRef={fixture.workRef} work={work} locale={locale} messages={t} readerActions={readerActions}
+  const authors = [...agentCredits.ok ? agentCredits.data.items.filter(credit => credit.role === 'author')
+    .map(credit => ({ name: credit.displayName, href: authorHref({ kind: 'agent', handle: credit.handle }) })) : [],
+  ...credits.ok ? credits.data.items.filter(credit => credit.role === 'author')
+    .map(credit => ({ name: credit.displayName ?? credit.key,
+      href: authorHref({ kind: 'external', key: credit.key }) })) : []];
+  return <WorkFrame workRef={fixture.workRef} work={work} authors={authors} locale={locale} messages={t}
+    readerActions={readerActions}
     signedIn={Boolean(readerActions)} signInHref={`/auth/start?next=%2F${locale}%2Fw%2F${fixture.workRef}`}
     credits={<WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={t} />}
     ratingLine={scope?.kind === 'global' ? <RatingLine ratings={ratings} locale={locale} messages={t} /> : null}
@@ -124,7 +131,8 @@ export const Global: Story = {
     await expect(within(canvas.getByRole('region', { name: 'Communities' })).getByRole('link', { name: /Tidewater Readers/ }))
       .toHaveAttribute('href', `/en/w/${fixture.workRef}?scope=realm&realm=${fixture.realms[0]!.id}`);
     const author = canvas.getByRole('region', { name: 'About the author' });
-    await expect(within(author).getByRole('link', { name: /Maren Osei/ })).toHaveAttribute('href', '/en/@maren');
+    await expect(within(author).getAllByRole('link', { name: /Maren Osei/ })[0])
+      .toHaveAttribute('href', '/en/@maren');
     const more = within(author).getByRole('region', { name: 'More by Maren Osei' });
     // The Work itself is not offered again.
     await expect(within(more).getAllByRole('article')).toHaveLength(3);
@@ -148,7 +156,7 @@ export const ExternalAuthor: Story = {
         count: { value: janeAusten.works.items.length, kind: 'exact-page', total: null } }) } },
   async play({ canvasElement }) {
     const author = within(canvasElement).getByRole('region', { name: 'About the author' });
-    await expect(within(author).getByRole('link', { name: /Jane Austen/ }))
+    await expect(within(author).getAllByRole('link', { name: /Jane Austen/ })[0])
       .toHaveAttribute('href', '/en/authors/open-library/OL21594A');
     await expect(author).toHaveTextContent('1775–1817');
     await expect(within(author).getByRole('region', { name: 'More by Jane Austen' }))

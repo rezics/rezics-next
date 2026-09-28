@@ -6,10 +6,11 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import { browseReader } from '../discover/server.ts';
 import { lifespan } from '../author/facts.ts';
+import { authorHref } from '../author/route.ts';
 import { messages as authorMessages } from '../author/messages.ts';
 import authorZhHans from '../author/messages/zh-Hans.ts';
 import { readOpenLibraryAuthor, readOpenLibraryAuthorWorks } from '../author/read.ts';
-import { coverKindOf } from '../catalogue/work.ts';
+import { authorSeparator, coverKindOf } from '../catalogue/work.ts';
 import { AdoptionRegion } from './adoption.tsx';
 import { AuthorSection } from './author.tsx';
 import { ClassificationRegion } from './classification.tsx';
@@ -30,7 +31,7 @@ import { ScopeBar, ScopeBarSkeleton, type ScopeRealm, type ScopeView } from './s
 import { ReviewsSection } from './reviews.tsx';
 import type { WorkHeader as Header, Reviewer } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
-import { InvalidScope, OverviewLayout, ReadButton, WorkFrame } from './work-frame.tsx';
+import { InvalidScope, OverviewLayout, ReadButton, WorkFrame, WorkPageCover } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 
 // Server compositions for the `/w/[ref]` routes: each region reads Main on its
@@ -58,6 +59,23 @@ async function Credits({ id, locale, messages }: Common & { id: string }) {
   return <WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={messages} />;
 }
 
+/** The cover uses the same credited names as the header, without delaying the rest of the Work page. */
+async function Cover({ id, work, avatarQuery, locale, messages }: Common & {
+  id: string; work: Header; avatarQuery?: string;
+}) {
+  const [agentCredits, externalCredits] = await Promise.all([readAgentCredits(id), readCredits(id)]);
+  const t = materializeData(messages, { locale });
+  const authors = [
+    ...(agentCredits.ok ? agentCredits.data.items.filter(credit => credit.role === 'author')
+      .map(credit => ({ name: credit.displayName, href: authorHref({ kind: 'agent', handle: credit.handle }) })) : []),
+    ...(externalCredits.ok ? externalCredits.data.items.filter(credit => credit.role === 'author')
+      .sort((a, b) => a.ordinal - b.ordinal).map(credit => ({
+        name: credit.displayName ?? t.openLibraryAuthor({ key: credit.key.replace(/^\/authors\//, '') }),
+        href: credit.provider === 'open-library' ? authorHref({ kind: 'external', key: credit.key }) : null })) : []),
+  ];
+  return <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />;
+}
+
 /** Everyone's rating summary for the header, on the Work's first rating question. */
 async function RatingLineSlot({ id, locale, messages }: Common & { id: string }) {
   return <RatingLine ratings={await readRatings(id, EVERYONE, undefined)} locale={locale} messages={messages} />;
@@ -83,6 +101,8 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, child
   return <WorkFrame workRef={workRef} work={work} locale={locale} messages={messages} signedIn={signedIn}
     actingSubject={seed ? actingSubject : null} readerSeed={seed ?? undefined} ratingTarget={ratingTarget}
     signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
+    cover={<Suspense fallback={<WorkPageCover work={work} avatarQuery={avatarQuery} />}>
+      <Cover id={id} work={work} avatarQuery={avatarQuery} locale={locale} messages={messages} /></Suspense>}
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       <Credits id={id} locale={locale} messages={messages} /></Suspense>}
     ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} locale={locale} messages={messages} /></Suspense>}
@@ -120,7 +140,8 @@ async function Record({ id, workRef, work, locale, messages }: Common & { id: st
   const authors = credits.ok ? credits.data.items.filter(credit => credit.role === 'author').map(credit => credit.displayName)
     : [];
   const url = page ? new URL(localizedPath(workHref(workRef), locale), page).toString() : null;
-  const citation = url ? [work.title.value, authors.join(', '), 'REZICS', url].filter(Boolean).join('. ') : undefined;
+  const citation = url ? [work.title.value, authors.join(authorSeparator(authors)), 'REZICS', url]
+    .filter(Boolean).join('. ') : undefined;
   return <WorkRecord work={work} citation={citation} locale={locale} messages={messages} />;
 }
 

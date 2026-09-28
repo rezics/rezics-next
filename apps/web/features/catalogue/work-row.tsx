@@ -3,6 +3,7 @@ import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
+import { AuthorNames } from './author-names.tsx';
 import { messages } from './messages.ts';
 import { RatingInline } from './rating.tsx';
 import { ShelfButton } from './reader-actions.tsx';
@@ -38,7 +39,7 @@ export function WorkRow({ work, headingLevel = 2, avatarQuery, locale, shelf = '
           focus-visible:ring-2 focus-visible:ring-ring">{title}</Link>
       </Heading>
       {otherLanguageTitle(work.title, locale) ? <p className="sr-only">{t.fallbackTitle}</p> : null}
-      {work.authors.length ? <p className="text-muted-foreground">{work.authors.join(', ')}</p> : null}
+      {work.authors.length ? <p className="text-muted-foreground"><AuthorNames authors={work.authors} /></p> : null}
       {work.rating ? <RatingInline rating={work.rating} locale={locale} /> : null}
       {work.tagline ? <p lang={work.tagline.language} dir={work.tagline.direction}
         className="line-clamp-2 text-pretty text-muted-foreground">{work.tagline.value}</p> : null}

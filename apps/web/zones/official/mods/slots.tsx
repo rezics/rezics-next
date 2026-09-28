@@ -80,7 +80,11 @@ export function ModsCard({ zone, work, layout, rank, Link }: WorkCardSlotProps) 
     <div className="mh-card-body">
       <h3 lang={work.title?.lang} dir={work.title?.dir} className="mh-card-title">
         <Link href={work.href}>{title}</Link></h3>
-      {work.author ? <p lang={work.author.lang || undefined} className="mh-by">{t.by(work.author.value)}</p> : null}
+      {work.author ? <p lang={work.author.lang || undefined} className="mh-by">
+        {t.by('\u2063').split('\u2063')[0]}
+        {work.authorHref ? <Link href={work.authorHref} className="rounded-sm outline-none hover:underline
+          focus-visible:ring-2 focus-visible:ring-ring">{work.author.value}</Link> : work.author.value}
+        {t.by('\u2063').split('\u2063')[1]}</p> : null}
       {work.mod && layout === 'rail' ? <p className="mh-by" translate="no">
         {[gameLine(work.mod), ...work.mod.loaders].join(' · ')}</p> : null}
       {work.tagline && layout !== 'rail' ? <p lang={work.tagline.lang} dir={work.tagline.dir} className="mh-hook">
@@ -125,7 +129,11 @@ export function ModsHero({ zone, banners, card, whyHere, Link, fallback }: HeroS
           <h2 id="mh-featured" className="mh-eyebrow"><FlameIcon aria-hidden="true" />{t.featured}</h2>
           <h3 lang={lead.title?.lang} dir={lead.title?.dir} className="mh-spotlight-title">
             <Link href={lead.href}>{title}</Link></h3>
-          {lead.author ? <p lang={lead.author.lang || undefined} className="mh-by">{t.by(lead.author.value)}</p> : null}
+          {lead.author ? <p lang={lead.author.lang || undefined} className="mh-by">
+            {t.by('\u2063').split('\u2063')[0]}
+            {lead.authorHref ? <Link href={lead.authorHref} className="rounded-sm outline-none hover:underline
+              focus-visible:ring-2 focus-visible:ring-ring">{lead.author.value}</Link> : lead.author.value}
+            {t.by('\u2063').split('\u2063')[1]}</p> : null}
           {lead.tagline ? <p lang={lead.tagline.lang} dir={lead.tagline.dir} className="mh-hook">
             {lead.tagline.value}</p> : null}
           <Badges work={lead} locale={zone.locale} t={t} />

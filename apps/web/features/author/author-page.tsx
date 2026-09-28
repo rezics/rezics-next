@@ -10,6 +10,7 @@ import { signInPath } from '../auth/paths.ts';
 import { type ReaderActions, ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import type { ReaderSeed } from '../catalogue/reader-store.ts';
 import { type CatalogueWork, coverKindOf, formatCompact, formatMean } from '../catalogue/work.ts';
+import { authorHref } from './route.ts';
 import { WorkRow } from '../catalogue/work-row.tsx';
 import { Notice } from '../discover/notice.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
@@ -38,8 +39,10 @@ export interface AuthorReader {
 export function authorCard(item: AuthorWork): CatalogueWork {
   return { id: item.id, href: workHref(item.id.slice(-36)), title: item.title, cover: item.cover,
     kind: coverKindOf(item.types),
-    authors: item.authors.flatMap(credit => credit.displayName ? [credit.displayName]
-      : credit.kind === 'external' ? [credit.key.replace(/^\/authors\//, '')] : []),
+    authors: item.authors.flatMap(credit => {
+      const name = credit.displayName ?? (credit.kind === 'external' ? credit.key.replace(/^\/authors\//, '') : null);
+      return name ? [{ name, href: authorHref(credit) }] : [];
+    }),
     rating: item.rating ? { mean: item.rating.mean, count: item.rating.count, max: item.rating.scale.max } : null,
     tagline: item.tagline, completion: item.completionStatus };
 }

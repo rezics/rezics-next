@@ -3,6 +3,7 @@ import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
+import { AuthorNames } from './author-names.tsx';
 import { messages } from './messages.ts';
 import { RatingInline } from './rating.tsx';
 import { ShelfMark } from './reader-actions.tsx';
@@ -76,7 +77,8 @@ export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, lo
       {titleEnd}
     </div>
     {otherLanguageTitle(work.title, locale) ? <p className="sr-only">{t.fallbackTitle}</p> : null}
-    {work.authors.length ? <p className="mt-0.5 truncate text-muted-foreground text-sm">{work.authors.join(', ')}</p>
+    {work.authors.length ? <p className="mt-0.5 truncate text-muted-foreground text-sm">
+      <AuthorNames authors={work.authors} /></p>
       : null}
     {/* An unfinished serial says so beside its rating, clear of the cover's own title and author. */}
     {work.rating || unfinished ? <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">

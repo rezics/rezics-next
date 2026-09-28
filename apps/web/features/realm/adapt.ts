@@ -2,6 +2,7 @@ import type { ZoneDecision, ZoneImage, ZonePerson, ZoneText, ZoneWork } from '@r
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { profileHref } from '../profile/route.ts';
+import { authorHref } from '../author/route.ts';
 import { coverKindOf } from '../catalogue/work.ts';
 import { isoMoment, zoneWorkCards } from '../zones/adapt-cards.ts';
 import type { FallbackReason, MainExecution, PresentationBanner } from '../zones/presentation.ts';
@@ -44,13 +45,18 @@ export interface AdaptContext {
  * A Work card in this Zone. `decision` is the public Decision that placed
  * it here (the adoption's selection).
  */
-export function zoneWork(card: WorkCard & { primaryCredits?: { displayName: string | null }[] }
+export function zoneWork(card: WorkCard & { primaryCredits?: ModuleCredit[] }
   & Parameters<typeof zoneWorkCards>[0],
   context: AdaptContext, decision: string | null): ZoneWork {
-  const author = card.primaryCredits?.find(credit => credit.displayName)?.displayName;
+  const credit = card.primaryCredits?.find(item => item.displayName);
+  const author = credit?.displayName;
+  const href = credit?.handle ? authorHref({ kind: 'agent', handle: credit.handle })
+    : credit?.provider === 'open-library' && credit.key
+      ? authorHref({ kind: 'external', key: credit.key }) : null;
   return { id: card.id, href: realmWorkHref(card.id, context.realm), title: zoneText(card.title),
     cover: zoneImage(card.cover, context.avatarQuery), kind: coverKindOf(card.types),
     author: author ? { value: author, lang: '', dir: 'ltr' } : null,
+    authorHref: href,
     tagline: zoneText(card.tagline),
     status: card.completionStatus, chapters: card.chapterCount, words: card.wordCount,
     updatedAt: isoMoment(card.lastUpdatedAt),
@@ -66,8 +72,7 @@ export interface ModuleCredit {
 /**
  * The people behind a feed's Works, as a people module shows them: each named
  * author once, in the order their Works arrived here, with those Works as the
- * note. An Agent links to their profile; a source-reported author to a search
- * for their name, which is where their other Works are found.
+ * note. Identified authors link to their REZICS page.
  */
 export function zonePeople(works: readonly { title: MainName; primaryCredits?: readonly ModuleCredit[] }[],
   limit: number): ZonePerson[] {
@@ -80,7 +85,10 @@ export function zonePeople(works: readonly { title: MainName; primaryCredits?: r
       if (entry) { if (!entry.titles.some(title => title.value === work.title.value)) entry.titles.push(work.title); continue; }
       if (found.size >= limit) continue;
       found.set(id, { titles: [work.title], person: { id, name: { value: credit.displayName, lang: '', dir: 'ltr' },
-        href: credit.handle ? profileHref(credit.handle) : `/search?${new URLSearchParams({ q: credit.displayName })}`,
+        href: credit.handle ? profileHref(credit.handle)
+          : credit.provider === 'open-library' && credit.key
+            ? authorHref({ kind: 'external', key: credit.key })
+            : `/search?${new URLSearchParams({ q: credit.displayName })}`,
         avatar: null } });
     }
   }

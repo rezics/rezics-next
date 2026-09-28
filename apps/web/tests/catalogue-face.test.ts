@@ -3,7 +3,8 @@ import { initials } from '@rezics/ui/avatar-initials';
 import { coverDesign, coverSeed } from '@rezics/ui/work-cover';
 import { workKinds } from '../../../services/main/src/modules/work/work-kinds.ts';
 import { messages } from '../features/catalogue/messages.ts';
-import { coverKindOf, coverProps, otherLanguageTitle, workTypeLabel } from '../features/catalogue/work.ts';
+import { authorSeparator, coverKindOf, coverProps, otherLanguageTitle, workTypeLabel }
+  from '../features/catalogue/work.ts';
 
 const uuid = '0192f3a4-5b6c-7d8e-9f01-23456789abcd';
 const name = (value: string, language: string, basis: 'requested' | 'fallback' = 'fallback') =>
@@ -16,7 +17,7 @@ describe('one face per Work', () => {
       expect(coverDesign('book', id)).toEqual(coverDesign('book', uuid));
     }
     const work = { id: `https://rezics.com/id/${uuid}`, title: name('Pride and Prejudice', 'en'), kind: 'book' as const,
-      authors: ['Jane Austen'] };
+      authors: [{ name: 'Jane Austen', href: '/authors/open-library/OL21594A' }] };
     // Two reads that picked different fallback keys still give the cover the same props.
     const a = coverProps({ ...work, cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'a1', resourceType: 'work' } });
     const b = coverProps({ ...work, cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'b2', resourceType: 'work' } });
@@ -60,4 +61,10 @@ describe('one face per Work', () => {
     expect(initials('Sophie Li 李素菲')).toBe('SL');
     expect(initials('月下书生 · Moonlit Scribe')).toBe('月');
   });
+
+  test('credited names use the cover’s separator for Latin and CJK names', () => {
+    expect(authorSeparator(['Jane Austen', 'Mary Shelley'])).toBe(', ');
+    expect(authorSeparator(['林梅', 'Jane Austen'])).toBe('、');
+  });
+
 });

@@ -34,6 +34,11 @@ export const ReadersFavorites: Story = {
     const shelf = canvas.getByRole('region', { name: 'Readers’ favorites' });
     await expect(within(shelf).getByRole('link', { name: 'Pride and Prejudice' }))
       .toHaveAttribute('href', `/en/w/${storyWorkId(1).slice(-36)}`);
+    await expect(within(shelf).getByRole('link', { name: 'Jane Austen' }))
+      .toHaveAttribute('href', '/en/authors/open-library/OL21594A');
+    within(shelf).getByRole('link', { name: 'Pride and Prejudice' }).focus();
+    await userEvent.tab();
+    await expect(within(shelf).getByRole('link', { name: 'Jane Austen' })).toHaveFocus();
     // The name is set on the generated cover too; the grey line under the title is the last.
     await expect(within(shelf).getAllByText('Jane Austen').at(-1)).toBeVisible();
     await expect(within(shelf).getByText('Average rating 4.29 out of 5, 4,391,220 ratings')).toBeInTheDocument();

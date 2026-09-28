@@ -6,6 +6,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import type { CatalogueWork } from '../catalogue/work.ts';
+import { AuthorNames } from '../catalogue/author-names.tsx';
 import { CoverLink, WorkTile } from '../catalogue/work-tile.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import type { ZoneMessages } from './messages.ts';
@@ -36,7 +37,8 @@ export function catalogueWork(work: ZoneWork): CatalogueWork {
     // Only the fields the catalogue's cover reads; the rest of Main's avatar shape is not needed here.
     cover: media && work.cover ? { kind: 'image', url: media, width: work.cover.width, height: work.cover.height,
       selection: '', mediaType: '', crop: null, basis: { policy: '', context: '' } } : null,
-    kind: work.kind, authors: work.author ? [work.author.value] : [], rating: null,
+    kind: work.kind, authors: work.author ? [{ name: work.author.value, href: work.authorHref ?? null }] : [],
+    rating: null,
     tagline: work.tagline ? name(work.tagline) : null, completion: work.status };
 }
 
@@ -109,12 +111,13 @@ export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, heading
   const t = materializeData(messages, { locale });
   const Heading = `h${headingLevel}` as const;
   const title = workTitle(work, messages);
+  const card = catalogueWork(work);
   // A chart's position leads the row in its own column, clear of the cover.
   return <article className={cn('group/tile relative grid items-start gap-x-3', rank
     ? compact ? 'grid-cols-[auto_4.5rem_minmax(0,1fr)_auto]' : 'grid-cols-[auto_5rem_minmax(0,1fr)_auto]'
     : compact ? 'grid-cols-[4.5rem_minmax(0,1fr)_auto]' : 'grid-cols-[5rem_minmax(0,1fr)_auto]')}>
     {rank ? <RankBadge rank={rank} label={t.rank({ rank: String(rank) })} className="mt-1" /> : null}
-    <CoverLink work={catalogueWork(work)} avatarQuery={avatarQuery} />
+    <CoverLink work={card} avatarQuery={avatarQuery} />
     <div className="grid min-w-0 content-start gap-0.5">
       <Heading lang={work.title?.lang} dir={work.title?.dir}
         className={cn('text-pretty font-medium font-work-title', compact ? 'line-clamp-1 text-[0.9375rem]/snug'
@@ -123,7 +126,7 @@ export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, heading
           hover:underline focus-visible:ring-2 focus-visible:ring-ring">{title}</LocalizedLink>
       </Heading>
       {work.author ? <p lang={work.author.lang} className="truncate text-muted-foreground text-sm">
-        {work.author.value}</p> : null}
+        <AuthorNames authors={card.authors} /></p> : null}
       {work.tagline ? <p lang={work.tagline.lang} dir={work.tagline.dir} className={cn('text-pretty',
         'text-muted-foreground text-sm/snug', compact ? 'line-clamp-1' : 'line-clamp-2')}>{work.tagline.value}</p>
         : null}

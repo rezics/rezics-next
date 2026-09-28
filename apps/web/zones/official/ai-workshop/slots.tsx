@@ -38,12 +38,15 @@ function Actions({ work, title, t, Link, compact }: {
 }
 
 /** The kind of pick and who made it: "Prompt · by Aria". */
-function Byline({ work, t }: { work: ZoneWork; t: Strings }) {
+function Byline({ work, t, Link }: { work: ZoneWork; t: Strings; Link: ComponentType<ZoneLinkProps> }) {
   if (!work.hub && !work.author) return null;
   return <p className="aw-by">
     {work.hub ? <span className="aw-kind">{t.kind[work.hub.kind]}</span> : null}
     {work.hub && work.author ? ' · ' : null}
-    {work.author ? <span lang={work.author.lang || undefined}>{t.by(work.author.value)}</span> : null}
+    {work.author ? <span lang={work.author.lang || undefined}>{t.by('\u2063').split('\u2063')[0]}
+      {work.authorHref ? <Link href={work.authorHref} className="rounded-sm outline-none hover:underline
+        focus-visible:ring-2 focus-visible:ring-ring">{work.author.value}</Link> : work.author.value}
+      {t.by('\u2063').split('\u2063')[1]}</span> : null}
   </p>;
 }
 
@@ -76,7 +79,7 @@ export function WorkshopCard({ zone, work, layout, Link }: WorkCardSlotProps) {
       <div className="min-w-0">
         <h3 lang={work.title?.lang} dir={work.title?.dir} className="aw-card-title">
           <Link href={work.href}>{title}</Link></h3>
-        <Byline work={work} t={t} />
+        <Byline work={work} t={t} Link={Link} />
       </div>
     </div>
     {full && (work.tagline || work.hub) ? <div className="aw-card-text">
@@ -127,7 +130,7 @@ export function WorkshopHero({ zone, banners, card, whyHere, Link, fallback }: H
             <div className="min-w-0">
               <h3 lang={lead.title?.lang} dir={lead.title?.dir} className="aw-spotlight-title">
                 <Link href={lead.href}>{title}</Link></h3>
-              <Byline work={lead} t={t} />
+              <Byline work={lead} t={t} Link={Link} />
             </div>
           </div>
           {lead.tagline ? <p lang={lead.tagline.lang} dir={lead.tagline.dir} className="aw-spotlight-hook">

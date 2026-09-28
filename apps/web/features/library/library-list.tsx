@@ -11,6 +11,7 @@ import { materializeData } from 'native-i18n';
 import { type ReactNode, useState, useSyncExternalStore } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { relativeTime } from '../feed/time.ts';
+import { AuthorNames } from '../catalogue/author-names.tsx';
 import { ShelfButton } from '../catalogue/reader-actions.tsx';
 import { RatingInline } from '../catalogue/rating.tsx';
 import { slotRatio } from '../catalogue/work.ts';
@@ -78,7 +79,8 @@ function Row({ row, selecting, selected, onSelect, now, avatarQuery, locale, mes
             <Link href={row.work.href} className="rounded-sm outline-none decoration-1 underline-offset-2 hover:underline
               focus-visible:ring-2 focus-visible:ring-ring">{title}</Link>
           </h3>
-          {row.work.authors.length ? <p className="text-muted-foreground">{row.work.authors.join(', ')}</p> : null}
+          {row.work.authors.length ? <p className="text-muted-foreground">
+            <AuthorNames authors={row.work.authors} /></p> : null}
         </div>
         {row.status === 'reading' ? <ReadingProgress row={row} locale={locale} messages={messages} /> : null}
         {row.status === 'read' ? <ReadDates row={row} now={now} locale={locale} messages={messages} /> : null}

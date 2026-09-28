@@ -27,12 +27,13 @@ const name = (value: string, language = 'en') => ({ value, language, direction: 
 // Title matches rank first, then credited names, then text.
 const pride = [
   hit(1, 'Pride and Prejudice', 'en', { field: 'title', matchedText: 'Pride and Prejudice', matchedLanguage: 'en' },
-    { authors: ['Jane Austen'], rating: { mean: 4.29, count: 41_900, max: 5 }, completion: 'completed',
+    { authors: [{ name: 'Jane Austen', href: '/authors/open-library/OL21594A' }],
+      rating: { mean: 4.29, count: 41_900, max: 5 }, completion: 'completed',
       tagline: name('Elizabeth Bennet meets a proud stranger, and first impressions begin to unravel.') }),
   hit(3, '傲慢与偏见 · 中文译读', 'zh-Hans', { field: 'title', matchedText: 'Pride and Prejudice: a reading',
-    matchedLanguage: 'en' }, { authors: ['简·奥斯汀'] }),
+    matchedLanguage: 'en' }, { authors: [{ name: '简·奥斯汀', href: '/authors/open-library/OL21594A' }] }),
   hit(2, 'Letters on Prejudice', 'en', { field: 'credit', matchedText: 'Pride Reading Circle', matchedLanguage: 'en' },
-    { authors: ['Pride Reading Circle'] }),
+    { authors: [{ name: 'Pride Reading Circle', href: null }] }),
 ];
 
 function results(hits: SearchHit[], options: Partial<SearchResultPage> = {}): SearchLoaded {
@@ -79,6 +80,8 @@ export const Populated: Story = {
     const reasons = canvas.getAllByRole('list', { name: 'Why this matched' });
     await expect(reasons[0]).toHaveTextContent('Title matches');
     await expect(canvas.getAllByRole('article')[0]).toHaveTextContent('Jane Austen');
+    await expect(canvas.getAllByRole('article')[0].querySelector('a[href="/en/authors/open-library/OL21594A"]'))
+      .toBeInTheDocument();
     await expect(reasons[1]).toHaveTextContent('Also titled Pride and Prejudice: a reading');
     await expect(reasons[2]).toHaveTextContent('By Pride Reading Circle');
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
@@ -168,7 +171,8 @@ export const EmptySuggestsCloseTitles: Story = {
       { kind: 'name', name: 'Jane Austen', language: 'en' }],
     popular: [11, 12, 13, 14, 15, 16].map(n => ({ id: id(n), href: `/w/${id(n).slice(-36)}`, title: name(['Emma',
       'The Night Ferry Library', 'Salt and Starlight', 'The Cartographer of Tides', 'Weekend buttermilk pancakes',
-      'Letters from the Lighthouse'][n - 11]!), cover: null, kind: 'book' as const, authors: n === 11 ? ['Jane Austen'] : [],
+      'Letters from the Lighthouse'][n - 11]!), cover: null, kind: 'book' as const,
+    authors: n === 11 ? [{ name: 'Jane Austen', href: '/authors/open-library/OL21594A' }] : [],
     rating: { mean: 5 - n / 10, count: 10 * n, max: 5 } })) } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -176,7 +180,8 @@ export const EmptySuggestsCloseTitles: Story = {
     await expect(canvas.getByText(/Did you mean/)).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Pride and Prejudice' })).toHaveAttribute('href',
       '/en/w/00000001-4b5a-4c6d-8e7f-9a0b1c2d3e4f');
-    await expect(canvas.getByRole('link', { name: 'Jane Austen' })).toHaveAttribute('href', '/en/search?q=Jane+Austen');
+    await expect(canvas.getAllByRole('link', { name: 'Jane Austen' })[0])
+      .toHaveAttribute('href', '/en/search?q=Jane+Austen');
     await expect(canvas.getByRole('heading', { name: 'Popular on REZICS' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Salt and Starlight' })).toBeVisible();
   },

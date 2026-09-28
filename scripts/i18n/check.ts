@@ -10,7 +10,7 @@ type Catalog = Map<string, Message>;
 type CatalogSpec = { app: 'web' | 'accounts'; namespace: string; english: string; inline?: boolean;
   localeFiles?: Partial<Record<Locale, string>> };
 
-const webFeatures = ['auth', 'catalogue', 'discover', 'feed', 'home', 'library', 'manage', 'onboarding', 'profile', 'realm',
+const webFeatures = ['auth', 'author', 'catalogue', 'discover', 'feed', 'home', 'library', 'manage', 'onboarding', 'profile', 'realm',
   'search', 'settings', 'shell', 'studio', 'work', 'work-page', 'zones'] as const;
 const accountsFeatures = ['shell', 'auth', 'consent', 'account', 'admin'] as const;
 const specs: CatalogSpec[] = [

@@ -49,7 +49,9 @@ async function realmCards(context: AdaptContext): Promise<Map<string, ZoneWork>>
 /** A module's card, completed from the Realm's card for the same Work. */
 export function withRealmCard(work: ZoneWork, known: ZoneWork | undefined): ZoneWork {
   if (!known) return work;
-  return { ...work, kind: known.kind, author: work.author ?? known.author, tagline: work.tagline ?? known.tagline,
+  return { ...work, kind: known.kind, author: work.author ?? known.author,
+    authorHref: work.author ? work.authorHref : known.authorHref,
+    tagline: work.tagline ?? known.tagline,
     status: work.status ?? known.status, chapters: work.chapters ?? known.chapters,
     cover: work.cover ?? known.cover, decision: work.decision ?? known.decision,
     mod: work.mod ?? known.mod ?? null, hub: work.hub ?? known.hub ?? null };

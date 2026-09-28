@@ -1,5 +1,6 @@
 import type { ReaderActions, ReaderWorkState, ReadingStatus } from './reader-actions.tsx';
 import type { CatalogueWork } from './work.ts';
+import { authorHref } from '../author/route.ts';
 
 // Story data: Works as catalogue cards show them, and a reader-actions adapter
 // that keeps its state in memory, standing in for Main's reader state (G-285).
@@ -8,7 +9,9 @@ export const storyWorkId = (n: number) => `https://rezics.com/id/${String(n).pad
 
 function work(n: number, title: string, language: string, kind: CatalogueWork['kind'], authors: string[],
   rating: [mean: number, count: number] | null): CatalogueWork {
-  return { id: storyWorkId(n), href: `/w/${storyWorkId(n).slice(-36)}`, kind, authors,
+  return { id: storyWorkId(n), href: `/w/${storyWorkId(n).slice(-36)}`, kind,
+    authors: authors.map(name => ({ name, href: name === 'Jane Austen'
+      ? authorHref({ kind: 'external', key: '/authors/OL21594A' }) : null })),
     title: { value: title, language, direction: 'ltr', basis: 'requested' },
     cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: `work-${n}`, resourceType: 'work' },
     rating: rating ? { mean: rating[0], count: rating[1], max: 5 } : null };

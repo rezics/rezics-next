@@ -56,13 +56,15 @@ describe('profile cards', () => {
 
   test('credited Works become catalogue cards with their cover kind, Global rating, pitch and serial state', () => {
     const [serial, translation, prompt, dumplings] = authorWorks.items;
-    const card = creditedCard(serial!, 'Lin Mei 林梅', 'en', messages);
+    const card = creditedCard(serial!, 'Lin Mei 林梅', 'lin_mei', 'en', messages);
     expect(card).toMatchObject({ id: serial!.id, href: `/w/${serial!.id.slice(-36)}`, kind: 'book',
-      authors: ['Lin Mei 林梅'], rating: { mean: 4.4, count: 128, max: 5 }, completion: 'ongoing' });
+      authors: [{ name: 'Lin Mei 林梅', href: '/@lin_mei' }],
+      rating: { mean: 4.4, count: 128, max: 5 }, completion: 'ongoing' });
     expect(card.tagline?.value).toStartWith('一封没有地址的信');
-    expect(creditedCard(translation!, 'Lin Mei', 'en', messages).authors).toEqual(['Lin Mei (Translator)']);
-    expect(creditedCard(prompt!, 'Lin Mei', 'en', messages).kind).toBe('document');
-    expect(creditedCard(dumplings!, 'Lin Mei', 'en', messages).kind).toBe('recipe');
+    expect(creditedCard(translation!, 'Lin Mei', 'lin_mei', 'en', messages).authors)
+      .toEqual([{ name: 'Lin Mei (Translator)', href: '/@lin_mei' }]);
+    expect(creditedCard(prompt!, 'Lin Mei', 'lin_mei', 'en', messages).kind).toBe('document');
+    expect(creditedCard(dumplings!, 'Lin Mei', 'lin_mei', 'en', messages).kind).toBe('recipe');
     // Main's shelf read names a title, cover and types, so a shelf draws the Work's usual cover.
     expect(shelfCard({ id: serial!.id, title: serial!.title, cover: serial!.cover, types: serial!.types }))
       .toMatchObject({ kind: 'book', authors: [], rating: null });

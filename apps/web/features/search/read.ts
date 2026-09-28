@@ -1,4 +1,5 @@
 import { iriOf } from '../discover/scope.ts';
+import { authorHref } from '../author/route.ts';
 import { workTypes } from '../discover/state.ts';
 import { type MainClient, problemCode, type WorkCover, type WorkName } from '../discover/types.ts';
 import type { SearchState } from './state.ts';
@@ -75,7 +76,14 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
     mainVersion: match.mainVersion, types: match.types,
     title: named?.get(match.work)?.name ?? match.title ?? null,
     cover: named?.get(match.work)?.avatar ?? (mediaCover(match.cover) ? match.cover! : null),
-    authors: (match.primaryCredits ?? []).flatMap(credit => credit.displayName ? [credit.displayName] : []),
+    authors: (match.primaryCredits ?? []).flatMap(credit => {
+      if (!credit.displayName) return [];
+      const href = credit.participantKind === 'agent' ? credit.handle
+        ? authorHref({ kind: 'agent', handle: credit.handle }) : null
+        : credit.provider === 'open-library' && credit.key
+          ? authorHref({ kind: 'external', key: credit.key }) : null;
+      return [{ name: credit.displayName, href }];
+    }),
     rating: match.rating ? { mean: match.rating.mean, count: match.rating.count,
       max: 'scale' in match.rating ? match.rating.scale.max : 5 } : null,
     tagline: match.tagline ?? null, completion: match.completionStatus ?? null,

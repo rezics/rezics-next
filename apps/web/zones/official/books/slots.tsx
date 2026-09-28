@@ -50,7 +50,10 @@ export function BooksHero({ zone, banners, card, whyHere, Link, fallback }: Hero
           <h3 lang={lead.title?.lang} dir={lead.title?.dir} className="bz-lead-title">
             <Link href={lead.href}>{lead.title?.value ?? t.untitled}</Link></h3>
           {lead.author ? <p lang={lead.author.lang || undefined} className="bz-byline">
-            {t.byline(lead.author.value)}</p> : null}
+            {t.byline('\u2063').split('\u2063')[0]}
+            {lead.authorHref ? <Link href={lead.authorHref} className="rounded-sm outline-none hover:underline
+              focus-visible:ring-2 focus-visible:ring-ring">{lead.author.value}</Link> : lead.author.value}
+            {t.byline('\u2063').split('\u2063')[1]}</p> : null}
           {lead.tagline ? <p lang={lead.tagline.lang} dir={lead.tagline.dir} className="bz-dek">
             {lead.tagline.value}</p> : null}
           <div className="bz-lead-actions">

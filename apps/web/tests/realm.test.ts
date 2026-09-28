@@ -85,10 +85,20 @@ describe('Main reads as Zone data', () => {
     expect(adapted).toEqual({ id: iri(work), href: `/w/${work}?scope=realm&realm=${realm}`,
       title: { value: 'The Cartographer of Tides', lang: 'en', dir: 'ltr' },
       cover: { url: '/api/main/v1/media/avatars/s', width: 400, height: 600 }, kind: 'book', author: null,
+      authorHref: null,
       tagline: { value: 'A delta that redraws itself.', lang: 'en', dir: 'ltr' }, status: 'ongoing', chapters: 41,
       words: null, updatedAt: '2026-09-27T12:00:00.000Z',
       decision: `/en/r/fiction/decisions?decision=${decision}#decision-${decision}`, mod: null, hub: null });
     expect(zoneWork(card({ tagline: null }), context, null)).toMatchObject({ tagline: null, decision: null });
+  });
+
+  test('a Zone card keeps a credited author’s REZICS destination through a thinner module card', () => {
+    const credited = zoneWork({ ...card(), primaryCredits: [{ agent: null, handle: null,
+      displayName: 'Jane Austen', provider: 'open-library', key: '/authors/OL21594A' }] }, context, null);
+    expect(credited.authorHref).toBe('/authors/open-library/OL21594A');
+    const thin = zoneWork(card(), context, null);
+    expect(withRealmCard(thin, credited)).toMatchObject({ author: credited.author,
+      authorHref: '/authors/open-library/OL21594A' });
   });
 
   test('a Work card carries Main’s mod release to the package, with ISO times', () => {
@@ -115,7 +125,8 @@ describe('Main reads as Zone data', () => {
     ], 6);
     expect(people).toEqual([
       { id: 'open-library:OL21594A', name: { value: 'Jane Austen', lang: '', dir: 'ltr' }, avatar: null,
-        href: '/search?q=Jane+Austen', note: { value: 'Pride and Prejudice · Emma · Persuasion', lang: 'en', dir: 'ltr' } },
+        href: '/authors/open-library/OL21594A',
+        note: { value: 'Pride and Prejudice · Emma · Persuasion', lang: 'en', dir: 'ltr' } },
       { id: maren.agent, name: { value: 'Maren Osei', lang: '', dir: 'ltr' }, avatar: null, href: '/@maren',
         note: { value: 'The Cartographer of Tides', lang: 'en', dir: 'ltr' } },
     ]);

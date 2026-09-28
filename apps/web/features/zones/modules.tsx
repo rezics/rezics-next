@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { CopyTextButton } from '../catalogue/copy-button.tsx';
+import { AuthorNames } from '../catalogue/author-names.tsx';
 import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import { slotRatio } from '../catalogue/work.ts';
 import { CoverLink } from '../catalogue/work-tile.tsx';
@@ -67,7 +68,8 @@ function PickSlide({ banner, work, locale, messages, avatarQuery }: {
           font-work-title text-xl/tight sm:text-2xl/tight">
           <LocalizedLink href={work.href} className="outline-none hover:text-primary focus-visible:underline">
             {title}</LocalizedLink></h2>
-        {work.author ? <p lang={work.author.lang} className="text-muted-foreground text-sm">{work.author.value}</p> : null}
+        {work.author ? <p lang={work.author.lang} className="text-muted-foreground text-sm">
+          <AuthorNames authors={catalogueWork(work).authors} /></p> : null}
         {work.tagline ? <p lang={work.tagline.lang} className="line-clamp-3 text-pretty text-sm/relaxed">
           {work.tagline.value}</p> : null}
         <div className="mt-auto flex items-center gap-2 pt-2">

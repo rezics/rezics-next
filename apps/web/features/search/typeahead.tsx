@@ -11,7 +11,7 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { messages as catalogueMessages } from '../catalogue/messages.ts';
-import { coverKindOf, workTypeLabel } from '../catalogue/work.ts';
+import { authorSeparator, coverKindOf, workTypeLabel } from '../catalogue/work.ts';
 import { normalizePhrase, PHRASE } from './state.ts';
 import { isWideText, type TypeaheadItem } from './suggest.ts';
 import { typeaheadMessages } from './typeahead-messages.ts';
@@ -172,15 +172,15 @@ export function TypeaheadInput({ locale, load = mainTypeahead, ref, onKeyDown, o
           className={cn('flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 text-start',
             'aria-selected:bg-accent aria-selected:text-accent-foreground')}>
           <CatalogueCover work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
-            authors }} size="xs" />
+            authors: authors.map(name => ({ name, href: null })) }} size="xs" />
           <span className="grid min-w-0">
             <span lang={item.title.language} dir={item.title.direction}
               className="truncate font-medium font-work-title text-[0.9375rem]">
               <Highlighted text={item.title.value} phrase={phrase} /></span>
             {type || byline.length ? <span className="truncate text-muted-foreground text-xs">
               {type ? catalogueMessages[locale][type] : null}{type && byline.length ? ' · ' : null}
-              {byline.length ? <Highlighted text={t.byAuthor({ name: new Intl.ListFormat(locale,
-                { type: 'conjunction' }).format(byline) })} phrase={item.matchedField === 'credit' ? phrase : ''} />
+              {byline.length ? <Highlighted text={t.byAuthor({ name: byline.join(authorSeparator(byline)) })}
+                phrase={item.matchedField === 'credit' ? phrase : ''} />
                 : null}</span> : null}
             {also ? <span lang={item.matchedLanguage ?? undefined} className="truncate text-muted-foreground text-xs">
               <Highlighted text={t.alsoTitled({ title: also })} phrase={phrase} /></span> : null}

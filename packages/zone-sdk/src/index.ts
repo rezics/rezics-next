@@ -62,6 +62,8 @@ export interface ZoneWork {
   /** What kind of object a generated cover imitates. */
   kind: 'book' | 'document' | 'recipe' | 'package';
   author: ZoneText | null;
+  /** Destination for the credited author when Main identifies one. */
+  authorHref?: string | null;
   /** The one-line hook shown under the cover, separate from the synopsis. */
   tagline: ZoneText | null;
   status: 'ongoing' | 'completed' | 'hiatus' | null;

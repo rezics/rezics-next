@@ -8,10 +8,8 @@ import type { DiscoveryItem } from './types.ts';
  * browsed. In Mine the rating is the reader's own. Main's primary credits do
  * not carry names for every external author reference, so unnamed ones add none.
  */
-export function discoveryWork(item: DiscoveryItem, scope: BrowseScope): CatalogueWork & {
-  authorLinks: readonly { name: string; href: string | null }[];
-} {
-  const authorLinks = item.primaryCredits.flatMap(credit => {
+export function discoveryWork(item: DiscoveryItem, scope: BrowseScope): CatalogueWork {
+  const authors = item.primaryCredits.flatMap(credit => {
     if (!credit.displayName) return [];
     const href = credit.participantKind === 'agent' ? credit.handle
       ? authorHref({ kind: 'agent', handle: credit.handle }) : null
@@ -21,7 +19,7 @@ export function discoveryWork(item: DiscoveryItem, scope: BrowseScope): Catalogu
   });
   return { id: item.id, href: workHref(item.id, scope), title: item.title, cover: item.cover,
     kind: coverKindOf(item.types),
-    authors: authorLinks.map(author => author.name), authorLinks,
+    authors,
     rating: item.rating ? { mean: item.rating.mean, count: item.rating.count, max: item.rating.scale.max,
       own: scope.kind === 'mine' } : null,
     tagline: item.tagline, completion: item.completionStatus };

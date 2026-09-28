@@ -1,4 +1,5 @@
 import type { MainClient, WorkCover, WorkName } from '../discover/types.ts';
+import type { CatalogueAuthor } from '../catalogue/work.ts';
 
 // Main's phrase page shapes (`publicPhrasePageRequest`/`publicPhrasePageResult`
 // in `services/main/src/api-contract.ts`), taken from the typed Eden client.
@@ -37,8 +38,8 @@ export interface SearchHit {
   title: WorkName | null;
   cover: WorkCover | null;
   types: string[];
-  /** Credited authors' display names in credit order; empty when Main names none. */
-  authors: string[];
+  /** Credited authors' display names and destinations in credit order. */
+  authors: CatalogueAuthor[];
   rating: { mean: number; count: number; max: number } | null;
   tagline: WorkName | null;
   completion: 'ongoing' | 'completed' | 'hiatus' | null;

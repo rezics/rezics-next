@@ -4,6 +4,7 @@ import { TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { authorHref } from '../author/route.ts';
+import { authorSeparator } from '../catalogue/work.ts';
 import Link from '../shell/localized-link.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { RetryButton } from './retry-button.tsx';
@@ -39,22 +40,26 @@ export function WorkCredits({ agentCredits, credits, locale, messages }: {
   if (!native.length && !external.length) return retry;
   const more = (agentCredits.ok && agentCredits.data.nextCursor) || (credits.ok && credits.data.nextCursor);
   const authors = native.filter(credit => credit.role === 'author');
+  const separator = authorSeparator([...authors.map(credit => credit.displayName),
+    ...external.map(credit => credit.displayName ?? credit.key)]);
   const others = (['translator', 'editor'] as const).map(role => ({ role,
     people: native.filter(credit => credit.role === role) })).filter(group => group.people.length);
   // Centred under the cover on a phone, beside it from lg, as the title is.
   return <div className="grid gap-1.5">
-    {authors.length || external.length ? <p className="flex flex-wrap items-baseline justify-center gap-x-3 gap-y-1
+    {authors.length || external.length ? <p className="flex flex-wrap items-baseline justify-center gap-y-1
       font-work-title text-foreground/85 text-xl sm:text-2xl lg:justify-start">
       <span className="sr-only">{authors.length + external.length > 1 ? t.authors : t.author}: </span>
-      {authors.map(credit => <Link key={credit.id} href={authorHref({ kind: 'agent', handle: credit.handle })}
+      {authors.map((credit, index) => <span key={credit.id} className="whitespace-nowrap">{index ? separator : null}
+        <Link href={authorHref({ kind: 'agent', handle: credit.handle })}
         title={`@${credit.handle}`}
-        className={authorLink}>{credit.displayName}</Link>)}
-      {external.map(credit => {
+        className={authorLink}>{credit.displayName}</Link></span>)}
+      {external.map((credit, index) => {
         const key = openLibraryAuthorKey(credit.key);
-        return <Link key={credit.id} href={authorHref({ kind: 'external', key: credit.key })}
+        return <span key={credit.id} className="whitespace-nowrap">{authors.length + index ? separator : null}
+          <Link href={authorHref({ kind: 'external', key: credit.key })}
           title={credit.displayName ? t.openLibraryListed : undefined}
           className={cn(authorLink, !credit.displayName && 'font-sans font-medium text-primary text-sm')}>
-          {credit.displayName ?? t.openLibraryAuthor({ key })}</Link>;
+          {credit.displayName ?? t.openLibraryAuthor({ key })}</Link></span>;
       })}
     </p> : null}
     {others.length ? <p className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-muted-foreground text-sm

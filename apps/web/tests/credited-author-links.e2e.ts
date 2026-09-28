@@ -45,7 +45,7 @@ for (const signedIn of [false, true]) {
       await expect(page.getByRole('heading', { level: 1, name: /雨夜书店/ })).toBeVisible();
       await expect(page.getByRole('link', { name: /Lin Mei 林梅/ }).first()).toHaveAttribute('href', '/en/@lin_mei');
       await expect(page.getByRole('region', { name: 'About the author' })
-        .getByRole('link', { name: /Lin Mei/ })).toHaveAttribute('href', '/en/@lin_mei');
+        .getByRole('link', { name: /Lin Mei/ }).first()).toHaveAttribute('href', '/en/@lin_mei');
       await page.screenshot({ path: info.outputPath(`lin-mei-${signedIn ? 'daniel' : 'public'}-${viewport.width}.png`),
         fullPage: true });
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);

@@ -16,13 +16,21 @@ export interface CatalogueWork {
   title: WorkName | null;
   cover: MainCover | null;
   kind: WorkCoverKind;
-  /** Display names in credit order. Empty when Main names no author. */
-  authors: readonly string[];
+  /** Display names and destinations in credit order. Empty when Main names no author. */
+  authors: readonly CatalogueAuthor[];
   rating: CardRating | null;
   /** A one-line pitch in the reader's language, set under the title. */
   tagline?: WorkName | null;
   /** Serial state; only unfinished serials are marked on the cover. */
   completion?: 'ongoing' | 'completed' | 'hiatus' | null;
+}
+
+export interface CatalogueAuthor { name: string; href: string | null }
+
+/** The same separator the generated Work cover uses for credited names. */
+export function authorSeparator(names: readonly string[]): string {
+  return names.some(name => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(name))
+    ? '、' : ', ';
 }
 
 /** A mean on its own scale; `own` is the reader's single rating (Mine), which has no count. */
@@ -99,7 +107,8 @@ export type CoverWork = Pick<CatalogueWork, 'id' | 'title' | 'cover' | 'kind' | 
  */
 export function coverProps(work: CoverWork, avatarQuery = ''): WorkCoverProps {
   return { id: work.id, kind: work.kind, title: work.title?.value ?? '', lang: work.title?.language,
-    dir: work.title?.direction, authors: work.authors, image: coverImage(work.cover, avatarQuery) };
+    dir: work.title?.direction, authors: work.authors.map(author => author.name),
+    image: coverImage(work.cover, avatarQuery) };
 }
 
 const spoken = (tag: string) => {

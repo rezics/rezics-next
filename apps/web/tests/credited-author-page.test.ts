@@ -23,7 +23,7 @@ describe('author addresses', () => {
         provider: null, key: null, ordinal: null, agent: discoveryFixtures.journey.id,
         displayName: 'Lin Mei', handle: 'lin_mei' },
     ] };
-    expect(discoveryWork(item, { kind: 'global' }).authorLinks).toEqual([
+    expect(discoveryWork(item, { kind: 'global' }).authors).toEqual([
       { name: 'Jane Austen', href: '/authors/open-library/OL21594A' },
       { name: 'Lin Mei', href: '/@lin_mei' },
     ]);

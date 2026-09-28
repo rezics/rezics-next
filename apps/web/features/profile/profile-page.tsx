@@ -122,7 +122,7 @@ function WorkRows({ page, profile, own, headingLevel, avatarQuery, locale, messa
     {page.items.map(item => {
       const serial = completionText(item.completionStatus, t);
       return <li key={item.id} className="py-6 first:pt-2">
-        <WorkRow work={creditedCard(item, profile.displayName, locale, messages)} headingLevel={headingLevel}
+        <WorkRow work={creditedCard(item, profile.displayName, profile.handle, locale, messages)} headingLevel={headingLevel}
           avatarQuery={avatarQuery} locale={locale} shelf={own ? 'none' : 'secondary'}>{serial}</WorkRow>
       </li>;
     })}
