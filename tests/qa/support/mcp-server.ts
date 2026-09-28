@@ -64,7 +64,9 @@ export function startControlledMcpServer(): ControlledMcpServer {
 
     if (rpc.method === 'server/discover') {
       return rpcResponse(rpc, { supportedVersions: [MCP_PROTOCOL_VERSION],
-        capabilities: { tools: { listChanged: capabilityRevision % 2 === 1 } },
+        // A negative revision stands for a server whose capabilities outgrow Main's bound.
+        capabilities: { tools: { listChanged: capabilityRevision % 2 === 1 },
+          ...(capabilityRevision < 0 ? { experimental: { padding: 'x'.repeat(20_000) } } : {}) },
         ttlMs: 0, cacheScope: 'private' }, { name: 'controlled-mcp', version: '1' });
     }
     if (rpc.method === 'tools/list') {

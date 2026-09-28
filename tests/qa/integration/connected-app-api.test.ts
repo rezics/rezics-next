@@ -250,3 +250,16 @@ test('HUB06: cancellation and lost upstream replies are uncertain, replay safely
   expect((await f.call('POST', '/v1/connected-apps/invocations', f.token,
     invocation(ceiling.ceiling, 'echo', { text: 'different payload' }), 'lost-response-key')).status).toBe(409);
 }, 60_000);
+
+test('HUB06: a server whose discovery facts outgrow their bounds is refused, not stored', async () => {
+  const f = await fixture('oversized');
+  mcp.setCapabilityRevision(-1);
+  const refused = await f.call('POST', '/v1/connected-apps/observations', f.token,
+    body('connected-app-observation-v1', { endpoint: mcp.endpoint }), `observe-${randomUUID()}`);
+  expect(refused.status).toBe(502);
+  expect(await refused.json()).toMatchObject({ code: 'connected_app_protocol_error' });
+  expect((await contentPool.query<{ count: string }>(`SELECT count(*) FROM connected_app.server_observation
+    WHERE principal_id = $1`, [f.principalId])).rows[0]?.count).toBe('0');
+  mcp.setCapabilityRevision(0);
+  expect(await observe(f)).toMatchObject({ drift: 'initial' });
+}, 60_000);

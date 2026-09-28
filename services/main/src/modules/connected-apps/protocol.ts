@@ -9,6 +9,9 @@ export const MCP_PROTOCOL_VERSION = '2026-07-28';
 export const MCP_MAX_PAGE_BYTES = 1_048_576;
 export const MCP_MAX_PAGES = 64;
 export const MCP_MAX_TOOLS = 1024;
+/** Discovery facts are kept with every observation, so a server cannot make them large. */
+export const MCP_MAX_SERVER_INFO_BYTES = 4_096;
+export const MCP_MAX_CAPABILITIES_BYTES = 16_384;
 const HTTP_TIMEOUT_MS = 3_000;
 const HTTP_MAX_REQUEST_BYTES = 262_144;
 
@@ -243,6 +246,10 @@ export class McpProtocolClient {
     const serverInfoMeta = isObject(result._meta)
       ? result._meta['io.modelcontextprotocol/serverInfo'] : undefined;
     const serverInfo = isObject(serverInfoMeta) ? serverInfoMeta : {};
+    if (Buffer.byteLength(canonicalJson(serverInfo)) > MCP_MAX_SERVER_INFO_BYTES
+      || Buffer.byteLength(canonicalJson(result.capabilities)) > MCP_MAX_CAPABILITIES_BYTES) {
+      throw new McpProtocolError('MCP server/discover server info or capabilities exceed their bounds');
+    }
     return { protocolVersion: MCP_PROTOCOL_VERSION, serverInfo, capabilities: result.capabilities };
   }
 
