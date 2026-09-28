@@ -98872,6 +98872,10 @@
                                     "agent": {
                                       "type": "null"
                                     },
+                                    "confirmation": {
+                                      "const": "source-reported",
+                                      "type": "string"
+                                    },
                                     "displayName": {
                                       "~elyTyp": 7,
                                       "maxLength": 200,
@@ -118276,6 +118280,18 @@
           },
           {
             "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "enum": [
+                "authored",
+                "curated"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -118432,6 +118448,13 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "relationship": {
+                            "enum": [
+                              "authored",
+                              "curated"
+                            ],
+                            "type": "string"
+                          },
                           "state": {
                             "enum": [
                               "empty",
@@ -118553,6 +118576,7 @@
                           "workRevision",
                           "mainRevision",
                           "title",
+                          "relationship",
                           "cover",
                           "types",
                           "disclosure",
@@ -241854,6 +241878,10 @@
                                         "agent": {
                                           "type": "null"
                                         },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
+                                        },
                                         "displayName": {
                                           "~elyTyp": 7,
                                           "maxLength": 200,
@@ -243781,6 +243809,10 @@
                                       "properties": {
                                         "agent": {
                                           "type": "null"
+                                        },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
                                         },
                                         "displayName": {
                                           "~elyTyp": 7,
@@ -245718,6 +245750,10 @@
                                       "properties": {
                                         "agent": {
                                           "type": "null"
+                                        },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
                                         },
                                         "displayName": {
                                           "~elyTyp": 7,
@@ -247806,6 +247842,10 @@
                                       "properties": {
                                         "agent": {
                                           "type": "null"
+                                        },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
                                         },
                                         "displayName": {
                                           "~elyTyp": 7,
@@ -249905,6 +249945,10 @@
                                       "properties": {
                                         "agent": {
                                           "type": "null"
+                                        },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
                                         },
                                         "displayName": {
                                           "~elyTyp": 7,
@@ -252031,6 +252075,10 @@
                                       "properties": {
                                         "agent": {
                                           "type": "null"
+                                        },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
                                         },
                                         "displayName": {
                                           "~elyTyp": 7,
@@ -256862,6 +256910,10 @@
                                         "agent": {
                                           "type": "null"
                                         },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
+                                        },
                                         "displayName": {
                                           "~elyTyp": 7,
                                           "maxLength": 200,
@@ -257588,6 +257640,10 @@
                                       "properties": {
                                         "agent": {
                                           "type": "null"
+                                        },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
                                         },
                                         "displayName": {
                                           "~elyTyp": 7,
@@ -258327,6 +258383,10 @@
                                       "properties": {
                                         "agent": {
                                           "type": "null"
+                                        },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
                                         },
                                         "displayName": {
                                           "~elyTyp": 7,
@@ -259214,6 +259274,10 @@
                                       "properties": {
                                         "agent": {
                                           "type": "null"
+                                        },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
                                         },
                                         "displayName": {
                                           "~elyTyp": 7,
@@ -260111,6 +260175,10 @@
                                       "properties": {
                                         "agent": {
                                           "type": "null"
+                                        },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
                                         },
                                         "displayName": {
                                           "~elyTyp": 7,
@@ -261035,6 +261103,10 @@
                                       "properties": {
                                         "agent": {
                                           "type": "null"
+                                        },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
                                         },
                                         "displayName": {
                                           "~elyTyp": 7,
@@ -287134,6 +287206,10 @@
                                         "agent": {
                                           "type": "null"
                                         },
+                                        "confirmation": {
+                                          "const": "source-reported",
+                                          "type": "string"
+                                        },
                                         "displayName": {
                                           "~elyTyp": 7,
                                           "maxLength": 200,
@@ -287981,6 +288057,10 @@
                                   "properties": {
                                     "agent": {
                                       "type": "null"
+                                    },
+                                    "confirmation": {
+                                      "const": "source-reported",
+                                      "type": "string"
                                     },
                                     "displayName": {
                                       "~elyTyp": 7,
@@ -289875,6 +289955,10 @@
                                   "properties": {
                                     "agent": {
                                       "type": "null"
+                                    },
+                                    "confirmation": {
+                                      "const": "source-reported",
+                                      "type": "string"
                                     },
                                     "displayName": {
                                       "~elyTyp": 7,
@@ -316786,23 +316870,30 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": false,
                   "properties": {
                     "complete": {
                       "const": true,
                       "type": "boolean"
                     },
                     "cost": {
+                      "additionalProperties": false,
                       "properties": {
                         "accessChecks": {
+                          "minimum": 0,
                           "type": "integer"
                         },
                         "accessQueries": {
+                          "minimum": 0,
                           "type": "integer"
                         },
                         "graphQueries": {
+                          "minimum": 1,
                           "type": "integer"
                         },
                         "mediaQueries": {
+                          "maximum": 1,
+                          "minimum": 0,
                           "type": "integer"
                         }
                       },
@@ -316815,6 +316906,7 @@
                       "type": "object"
                     },
                     "generation": {
+                      "additionalProperties": false,
                       "properties": {
                         "graph": {
                           "type": "string"
@@ -316842,6 +316934,7 @@
                       "items": {
                         "anyOf": [
                           {
+                            "additionalProperties": false,
                             "properties": {
                               "reference": {
                                 "type": "string"
@@ -316858,10 +316951,12 @@
                             "type": "object"
                           },
                           {
+                            "additionalProperties": false,
                             "properties": {
                               "avatar": {
                                 "anyOf": [
                                   {
+                                    "additionalProperties": false,
                                     "properties": {
                                       "key": {
                                         "type": "string"
@@ -316871,6 +316966,7 @@
                                         "type": "string"
                                       },
                                       "policy": {
+                                        "const": "avatar-fallback-v1",
                                         "type": "string"
                                       },
                                       "resourceType": {
@@ -316897,13 +316993,16 @@
                                     "type": "object"
                                   },
                                   {
+                                    "additionalProperties": false,
                                     "properties": {
                                       "basis": {
+                                        "additionalProperties": false,
                                         "properties": {
                                           "context": {
                                             "type": "string"
                                           },
                                           "policy": {
+                                            "const": "avatar-selection-v1",
                                             "type": "string"
                                           }
                                         },
@@ -316922,6 +317021,7 @@
                                         ]
                                       },
                                       "height": {
+                                        "minimum": 1,
                                         "type": "integer"
                                       },
                                       "kind": {
@@ -316938,6 +317038,7 @@
                                         "type": "string"
                                       },
                                       "width": {
+                                        "minimum": 1,
                                         "type": "integer"
                                       }
                                     },
@@ -316963,6 +317064,7 @@
                                 "type": "string"
                               },
                               "name": {
+                                "additionalProperties": false,
                                 "properties": {
                                   "basis": {
                                     "enum": [
@@ -317034,6 +317136,7 @@
                         ]
                       },
                       "maxItems": 64,
+                      "minItems": 1,
                       "type": "array"
                     }
                   },
@@ -379682,6 +379785,10 @@
                                     "agent": {
                                       "type": "null"
                                     },
+                                    "confirmation": {
+                                      "const": "source-reported",
+                                      "type": "string"
+                                    },
                                     "displayName": {
                                       "~elyTyp": 7,
                                       "maxLength": 200,
@@ -380530,6 +380637,10 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "authoring": {
+                    "const": "own-work",
+                    "type": "string"
+                  },
                   "authorityPath": {
                     "enum": [
                       "represented-agent",
@@ -380635,6 +380746,10 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "authoring": {
+                    "const": "own-work",
+                    "type": "string"
+                  },
                   "authorityPath": {
                     "enum": [
                       "represented-agent",
@@ -380738,6 +380853,10 @@
                 "properties": {
                   "actingSubject": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "authoring": {
+                    "const": "own-work",
                     "type": "string"
                   },
                   "authorityPath": {
@@ -387717,6 +387836,10 @@
                         "properties": {
                           "agent": {
                             "type": "null"
+                          },
+                          "confirmation": {
+                            "const": "source-reported",
+                            "type": "string"
                           },
                           "displayName": {
                             "~elyTyp": 7,
