@@ -92,6 +92,10 @@ if (mode === 'frontend') {
 }
 
 const frontendEndpoint = (port: number) => mode === 'main' ? { port, env: 'PORT' } : { env: 'PORT' };
+// Workers' dev registry is per checkout: every checkout names its workers
+// rezics-web and rezics-accounts, and one checkout stopping must not remove
+// another's entry from a shared ~/.config/.wrangler registry.
+const wranglerRegistry = join(root, '.temp', 'wrangler-registry');
 // A worktree backend's issuer is built from its ACCOUNTS_PORT, so it binds that
 // port directly; a worktree frontend's app proxies to the shared service.
 const accountsEndpoint = mode === 'backend' && env.ACCOUNTS_PORT
@@ -100,6 +104,7 @@ const accounts = configure(builder.addExecutable('accounts', 'sh', accountsApp,
   ['-c', 'exec ../../node_modules/.bin/vinext dev --hostname 127.0.0.1 --port "$PORT"']),
 accountsSpec, ['ACCOUNT_SERVICE_ORIGIN', 'WEB_ORIGIN'])
   .withEnvironment('ACCOUNT_SERVICE_ORIGIN', accountUrl)
+  .withEnvironment('WRANGLER_REGISTRY_PATH', wranglerRegistry)
   .withHttpEndpoint(accountsEndpoint)
   .waitFor(backend);
 const accountsUrl = accounts.getEndpoint('http');
@@ -109,6 +114,7 @@ const webApp = configure(builder.addExecutable('web', 'sh', web,
   ['-c', 'set -e; WEB_OAUTH_CLIENT_ID="$(node -e \'const id = JSON.parse(require("node:fs").readFileSync(process.env.REZICS_WEB_AUTH_PUBLIC_PATH, "utf8")).clientId; if (!id) process.exit(1); process.stdout.write(id)\')"; export WEB_OAUTH_CLIENT_ID; exec ../../node_modules/.bin/vinext dev --hostname 127.0.0.1 --port "$PORT"']),
 webSpec, ['MAIN_ORIGIN', 'ACCOUNT_ORIGIN', 'WEB_OAUTH_CLIENT_ID'])
   .withEnvironment('REZICS_WEB_AUTH_PUBLIC_PATH', webAuthPublicPath)
+  .withEnvironment('WRANGLER_REGISTRY_PATH', wranglerRegistry)
   .withEnvironment('MAIN_ORIGIN', mainUrl)
   // Account accepts browser-originated writes only from its public base URL (the
   // Accounts app); Aspire's endpoint says localhost where that URL says 127.0.0.1.
