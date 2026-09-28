@@ -3,7 +3,7 @@ import { checkOccurrenceRecord, checkStructureManifest, InvalidStructureObject, 
   type OccurrenceRecord, type RecipeMeasure } from './format.ts';
 import { orderTree, recordTree, structureObjects } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey,
-  readCompositionHeader } from './graph.ts';
+  readCompositionHeader, type CompositionHeader } from './graph.ts';
 import { isCatalogTarget, structureProfileFor } from './profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, newCost, type TreeCost } from './tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
@@ -21,8 +21,17 @@ export interface CompositionPage {
   next: string | null;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
   cost: TreeCost;
+  /** Ordinals count from 1 among an occurrence's siblings, groups included. */
   occurrenceContext?: { ordinal: number; path: Array<{ occurrence: string;
-    labels: OccurrenceRecord['labels'] }> };
+    labels: OccurrenceRecord['labels']; qualifier?: OccurrenceRecord['qualifier']; ordinal: number }> };
+  /**
+   * With `outline`: siblings before this page's first item, the active children of
+   * each group on the page, and a group parent's own ordinal among its siblings.
+   * Two order-tree descents each, never a sibling scan.
+   */
+  offset?: number;
+  childCounts?: Record<string, number>;
+  parentOrdinal?: number;
 }
 
 /** The measure set is part of an exact immutable revision, including an empty set. */
@@ -85,14 +94,16 @@ export async function readStructureMeasures(env: WorkActivationEnvironment, inpu
 /** Exact revision reads begin at the immutable root, never at today's projection. */
 export async function readCompositionPage(env: WorkActivationEnvironment, input: {
   structure: string; revision?: string; parent?: string; occurrence?: string; after?: string; limit: number;
-  canReadTarget: (target: string) => Promise<boolean>;
+  canReadTarget: (target: string) => Promise<boolean>; outline?: boolean;
+  /** The Structure's header when the caller already read it for this request; saves two queries. */
+  header?: CompositionHeader;
 }): Promise<CompositionPage> {
   if (!NATIVE_ID.test(input.structure) || input.revision && !NATIVE_ID.test(input.revision)
     || input.parent && !NATIVE_ID.test(input.parent)
     || input.occurrence && !NATIVE_ID.test(input.occurrence) || !Number.isInteger(input.limit)
     || input.limit < 1 || input.limit > 100) throw new CompositionUnavailable('invalid composition page');
-  const header = await readCompositionHeader(env, input.structure);
-  if (!header) throw new CompositionUnavailable('composition is unavailable');
+  const header = input.header ?? await readCompositionHeader(env, input.structure);
+  if (!header || header.structure !== input.structure) throw new CompositionUnavailable('composition is unavailable');
   const profile = structureProfileFor(header.profile);
   const revision = input.revision ?? header.head;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?predecessor ?count ?epoch ?sequence WHERE {
@@ -159,7 +170,11 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
         if (!ancestor || ancestor.state !== 'active' || ancestor.role !== 'group') {
           throw new StructureObjectCorrupt('Chapter ancestry is unavailable');
         }
-        path.unshift({ occurrence: ancestor.occurrence, labels: ancestor.labels });
+        const at = await orderTree(objects).countBefore(manifest.order, orderTreeKey(ancestor as Required<Pick<
+          OccurrenceRecord, 'parent' | 'segmentKey' | 'orderKey'>>), cost)
+          - await orderTree(objects).countBefore(manifest.order, `${ancestor.parent}\u0001`, cost);
+        path.unshift({ occurrence: ancestor.occurrence, labels: ancestor.labels,
+          ...(ancestor.qualifier ? { qualifier: ancestor.qualifier } : {}), ordinal: at + 1 });
         parent = ancestor.parent;
       }
       if (parent !== input.structure) throw new StructureObjectCorrupt('Chapter ancestry exceeds depth');
@@ -173,10 +188,11 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       cost, occurrenceContext };
   }
   const parent = input.parent ?? input.structure;
+  let parentRecord: OccurrenceRecord | undefined;
   if (parent !== input.structure) {
     const found = await recordTree(objects).lookup(manifest.records, [parent], cost);
-    const record = found.get(parent);
-    if (!record || record.state !== 'active' || record.role !== 'group') {
+    parentRecord = found.get(parent);
+    if (!parentRecord || parentRecord.state !== 'active' || parentRecord.role !== 'group') {
       throw new CompositionUnavailable('composition parent is unavailable');
     }
   }
@@ -207,10 +223,26 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       occurrences.push({ ...record, target: undefined, selection: undefined, labels: [] });
     } else occurrences.push(record);
   }
+  let outline: { offset: number; childCounts: Record<string, number>; parentOrdinal?: number } | undefined;
+  if (input.outline) {
+    const tree = orderTree(objects);
+    const childCounts: Record<string, number> = {};
+    for (const record of occurrences) {
+      if (record.role !== 'group') continue;
+      childCounts[record.occurrence] = await tree.countBefore(manifest.order, `${record.occurrence}\u0002`, cost)
+        - await tree.countBefore(manifest.order, `${record.occurrence}\u0001`, cost);
+    }
+    const offset = page.length ? await tree.countBefore(manifest.order, orderTreeKey(page[0]!), cost)
+      - await tree.countBefore(manifest.order, prefix, cost) : 0;
+    const parentOrdinal = parentRecord ? await tree.countBefore(manifest.order, orderTreeKey(parentRecord as
+      Required<Pick<OccurrenceRecord, 'parent' | 'segmentKey' | 'orderKey'>>), cost)
+      - await tree.countBefore(manifest.order, `${parentRecord.parent}\u0001`, cost) + 1 : undefined;
+    outline = { offset, childCounts, ...(parentOrdinal ? { parentOrdinal } : {}) };
+  }
   return { structure: input.structure, owner: header.owner, component: header.component,
     work: header.work, mainVersion: header.mainVersion,
     revision, predecessor: value('predecessor') ?? null, placementCount: manifest.placementCount,
     occurrences, next: ordered.length > input.limit ? orderTreeKey(page.at(-1)!) : null,
     sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! },
-    cost };
+    cost, ...outline };
 }

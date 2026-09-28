@@ -8,7 +8,7 @@ import { CONTINUITY, DATASET, GRAPHS, PROFILE, RV, hash, iri, lit,
   metadataWorkRequestDigest, prepareComponent, prepareWorkComponent, workMetadataValidations,
   IdempotencyConflict, PendingActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
-import { InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
+import { BOOK_DIVISIONS, InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
   STRUCTURE_SEAL_FORMAT, checkOccurrenceRecord, checkStructureManifest, checkStructureSealManifest,
   checkRecipeMeasures, type RecipeMeasure, type OccurrenceRecord,
   type OccurrenceRole, type OrderEntry, type PinEntry, type StructureManifest,
@@ -18,7 +18,7 @@ import { COMPOSITION_PROFILE, CompositionCorrupt, CompositionUnavailable, NATIVE
   readPlacements, readPublishedVariants, readSegments, recordTreeKey, structureIri,
   type CompositionHeader, type Label, type PlacementState, type SegmentState, type Selection }
   from './graph.ts';
-import { isCatalogTarget, structureProfileFor, structureProfileForAction,
+import { deepestLevel, isCatalogTarget, structureProfileFor, structureProfileForAction,
   type StructureProfileRegistration } from './profiles.ts';
 import { evenKeys, keyBetween, withinBudget } from './order-key.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, StructureTree, newCost,
@@ -43,7 +43,9 @@ export type CompositionOperation =
     selection?: Selection; label?: Label; sourceKey?: string;
     qualifier?: OccurrenceRecord['qualifier'] }
   | { op: 'move'; occurrence: string; parent: string; position: Position }
-  | { op: 'remove'; occurrence: string };
+  | { op: 'remove'; occurrence: string }
+  /** Retitle an occurrence or change how a Book group divides the book; its place is unchanged. */
+  | { op: 'update'; occurrence: string; label?: Label; qualifier?: OccurrenceRecord['qualifier'] };
 
 export interface NewChapterWork {
   work: string;
@@ -125,8 +127,30 @@ export function checkedOperations(operations: readonly CompositionOperation[],
     || new Set(operations.map(operation => operation.op)).size !== 1) {
     throw new InvalidCompositionChange('a change carries 1-16 operations of one kind');
   }
+  const checkedLabel = (label: Label | undefined) => {
+    if (label !== undefined && (typeof label.value !== 'string' || !label.value.length
+      || label.value.length > STRUCTURE_LIMITS.labelChars || /[\u0000-\u001f\u007f]/u.test(label.value)
+      || !LANGUAGE.test(label.language))) {
+      throw new InvalidCompositionChange('occurrence label is invalid');
+    }
+    return label === undefined ? undefined : { value: label.value, language: label.language };
+  };
   return operations.map(operation => {
     if (operation.op === 'remove') return { op: 'remove', occurrence: native(operation.occurrence, 'occurrence') };
+    if (operation.op === 'update') {
+      const label = checkedLabel(operation.label);
+      const qualifier = operation.qualifier;
+      if (!label && !qualifier) throw new InvalidCompositionChange('an update names a label or a division');
+      // Only a Book group's division can change in place; other qualifiers are part of their use.
+      if (qualifier && (qualifier.type !== 'book-group' || !BOOK_DIVISIONS.includes(qualifier.division)
+        || Object.keys(qualifier).length !== 2
+        || registration && registration.id !== 'book-composition')) {
+        throw new InvalidCompositionChange('only a Book group division can be updated');
+      }
+      return { op: 'update', occurrence: native(operation.occurrence, 'occurrence'),
+        ...(label ? { label } : {}),
+        ...(qualifier ? { qualifier: { type: 'book-group', division: qualifier.division } } : {}) };
+    }
     if (operation.op === 'move') {
       return { op: 'move', occurrence: native(operation.occurrence, 'occurrence'),
         parent: native(operation.parent, 'parent'), position: checkedPosition(operation.position) };
@@ -163,12 +187,7 @@ export function checkedOperations(operations: readonly CompositionOperation[],
     } else if (!target && operation.selection !== undefined) {
       throw new InvalidCompositionChange('a group has no selection');
     }
-    const label = operation.label;
-    if (label !== undefined && (typeof label.value !== 'string' || !label.value.length
-      || label.value.length > STRUCTURE_LIMITS.labelChars || /[\u0000-\u001f\u007f]/u.test(label.value)
-      || !LANGUAGE.test(label.language))) {
-      throw new InvalidCompositionChange('occurrence label is invalid');
-    }
+    const label = checkedLabel(operation.label);
     if (operation.sourceKey !== undefined && (!operation.sourceKey.length || operation.sourceKey.length > 200
       || /[\u0000-\u001f\u007f]/u.test(operation.sourceKey))) {
       throw new InvalidCompositionChange('source key is invalid');
@@ -875,9 +894,12 @@ async function height(w: Working, occurrence: string): Promise<number> {
 }
 
 async function apply(w: Working, operation: CompositionOperation, index: number): Promise<void> {
+  const profile = structureProfileFor(w.header.profile);
   if (operation.op === 'insert') {
     const chain = await ancestry(w, operation.parent);
-    if (chain.length + 1 > STRUCTURE_LIMITS.maxDepth) throw new CompositionConflict('composition depth exceeded');
+    if (chain.length + 1 > deepestLevel(profile, operation.role)) {
+      throw new CompositionConflict('composition depth exceeded');
+    }
     const occurrence = derivedId(`${w.revision}\0occurrence\0${index}`);
     const state: PlacementState = { occurrence, placement: placementIri(w.header.generation, occurrence),
       active: true, parent: operation.parent, role: operation.role, introducedBy: w.revision,
@@ -896,6 +918,14 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
   }
   const state = await w.get(operation.occurrence);
   if (!state?.active) throw new CompositionConflict('occurrence is not active in this composition');
+  if (operation.op === 'update') {
+    if (operation.qualifier && state.role !== 'group') {
+      throw new CompositionConflict('only a group has a division');
+    }
+    if (operation.label) state.label = operation.label;
+    if (operation.qualifier) state.qualifier = operation.qualifier;
+    return;
+  }
   if (operation.op === 'remove') {
     for (const id of await w.segmentsOf(state.occurrence)) {
       if (w.segment(id).count > 0) throw new CompositionConflict('a group with children cannot be removed');
@@ -913,7 +943,8 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
   if (typeof operation.position === 'object' && operation.position.after === state.occurrence) {
     throw new CompositionConflict('an occurrence cannot be placed after itself');
   }
-  if (state.role === 'group' && chain.length + 1 + await height(w, state.occurrence) > STRUCTURE_LIMITS.maxDepth) {
+  if (chain.length + 1 > deepestLevel(profile, state.role) || state.role === 'group'
+    && chain.length + 1 + await height(w, state.occurrence) > (profile.maxDepth ?? STRUCTURE_LIMITS.maxDepth)) {
     throw new CompositionConflict('composition depth exceeded');
   }
   await unplace(w, state);
@@ -987,7 +1018,8 @@ function diff(before: readonly string[], after: readonly string[]): { removed: s
   return { removed: before.filter(triple => !next.has(triple)), added: after.filter(triple => !old.has(triple)) };
 }
 
-const OPERATION_KIND = { insert: 'OccurrenceInsert', move: 'OccurrenceMove', remove: 'OccurrenceRemove' } as const;
+const OPERATION_KIND = { insert: 'OccurrenceInsert', move: 'OccurrenceMove', remove: 'OccurrenceRemove',
+  update: 'OccurrenceUpdate' } as const;
 
 export interface ChangeCompositionIntent {
   admission: Admission;
@@ -1640,6 +1672,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       ...(record.labels[0] ? { label: record.labels[0] } : {}),
       ...(record.target ? { target: record.target,
         ...(record.selection ? { selection: record.selection as Selection } : {}) } : {}),
+      ...(record.qualifier ? { qualifier: record.qualifier } : {}),
       ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}) };
     projectionByRecord[index]!.push(...placementTriples(state, generation, header.profile));
     if (intent.stage && record.introducedBy === revision) {

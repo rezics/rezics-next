@@ -8,6 +8,9 @@ import { checkOccurrenceRecord, checkStructureManifest, checkStructurePage,
   STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
   type OccurrenceRecord, type OrderEntry } from './format.ts';
 import { newCost } from './tree.ts';
+import { deepestLevel, structureProfileFor } from './profiles.ts';
+
+const book = structureProfileFor('book-composition');
 
 export class StructureStageInvalid extends Error {}
 export class StructureStageConflict extends Error {}
@@ -198,6 +201,9 @@ export class StructureStageStore {
         }
         chain.add(parent);
         parent = owner.parent;
+      }
+      if (chain.size > deepestLevel(book, record.role)) {
+        throw new StructureStageInvalid('stage nests deeper than a Book allows');
       }
       if (record.target && !await input.canReadTarget(record.target)) {
         throw new StructureStageUnavailable('staged target is undisclosed');

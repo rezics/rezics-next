@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path';
 import { RV } from '../work/activate.ts';
-import { PROFILE_ROLES, type OccurrenceRole, type StructureProfile } from './format.ts';
+import { PROFILE_ROLES, STRUCTURE_LIMITS, type OccurrenceRole, type StructureProfile } from './format.ts';
 import type { OccurrenceRecord } from './format.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import type { PlacementState } from './graph.ts';
@@ -8,6 +8,7 @@ import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import type { ProfileId } from '../../infrastructure/profile.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
+import { hydrateBookGroup, projectBookGroup, validateBookGroups } from './book-group.ts';
 
 export interface StructureTargetAuthority {
   access: Pick<AccessAdmissionRegistry, 'canReadWork'>
@@ -60,6 +61,11 @@ export interface StructureProfileRegistration {
   /** Owner profile SHACL checks for its projected qualifier nodes. */
   qualifierValidations?: (env: WorkActivationEnvironment,
     changed: readonly PlacementState[]) => Promise<CommandValidation[]>;
+  /**
+   * Occurrence levels below the Structure, when the owner allows fewer than the shared
+   * limit. A group never sits on the last level, where it could hold nothing.
+   */
+  maxDepth?: number;
 }
 
 const book: StructureProfileRegistration = {
@@ -70,7 +76,17 @@ const book: StructureProfileRegistration = {
   targetReadPermission: 'work:read',
   catalogTargetTypes: ['https://schema.org/Book', 'https://schema.org/DigitalDocument'],
   roles: ['group', 'chapter'], targetRoles: ['chapter'], selectionRequiredRoles: ['chapter'],
+  // Volumes, parts and extras sit directly under the book; chapters under the book or one group.
+  maxDepth: 2,
+  projectQualifier: projectBookGroup, hydrateQualifier: hydrateBookGroup,
+  qualifierValidations: validateBookGroups,
 };
+
+/** The deepest level an occurrence of this role may take in a profile's Structure (1 = under the root). */
+export function deepestLevel(profile: StructureProfileRegistration, role: OccurrenceRole): number {
+  if (profile.maxDepth === undefined) return STRUCTURE_LIMITS.maxDepth;
+  return role === 'group' ? profile.maxDepth - 1 : profile.maxDepth;
+}
 
 function validUri(value: unknown): value is string {
   try { return typeof value === 'string' && /^https:\/\/[^\s<>"']+$/.test(value)
@@ -131,7 +147,9 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
         || profile.projectQualifier !== undefined && typeof profile.projectQualifier !== 'function'
         || profile.hydrateQualifier !== undefined && typeof profile.hydrateQualifier !== 'function'
         || profile.qualifierValidations !== undefined
-          && typeof profile.qualifierValidations !== 'function') {
+          && typeof profile.qualifierValidations !== 'function'
+        || profile.maxDepth !== undefined && (!Number.isInteger(profile.maxDepth) || profile.maxDepth < 2
+          || profile.maxDepth > STRUCTURE_LIMITS.maxDepth)) {
         throw new Error(`Duplicate or invalid Structure profile in ${file}`);
       }
       profiles.set(profile.id as StructureProfile, profile as StructureProfileRegistration);

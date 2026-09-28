@@ -1,16 +1,24 @@
 import { readCompositionHeader, readPlacements } from '../structure/graph.ts';
+import { countSerialWords } from '../work/serial-projection.ts';
 import { readContents } from '../work-contents/read.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   unerased, type WorkReadSession } from '../work/read-session.ts';
 
-/** One contents page, one placement batch, two Access owner batches, at most
- * twenty indexed Content variant reads, and fixed graph enrichment batches. */
+/** One contents page of one level, one placement batch, two Access owner batches, at
+ * most twenty indexed Content variant reads, five four-body batches for word counts,
+ * and fixed graph enrichment batches. */
 export const STUDIO_CHAPTER_COST = { pageSize: 20, contentCalls: 20, graphBatches: 4,
-  accessCalls: 44, graphStatements: 64 } as const;
+  accessCalls: 44, graphStatements: 64, bodyBatch: 4, bodyBatches: 5 } as const;
+
+/** Words in one chapter text, as the serial statistics count them; null for a body that is not text. */
+function wordsIn(body: Record<string, unknown>): number | null {
+  try { return typeof body.body === 'string' ? countSerialWords(body.body) : null; }
+  catch { return null; }
+}
 
 export async function readStudioChapters(session: WorkReadSession, agent: string, book: string,
-  options: { cursor?: string; language?: string }) {
+  options: { cursor?: string; language?: string; parent?: string }) {
   const access = session.deps.studioAccess;
   const principal = session.principal;
   if (!principal || !access || session.options.actingSubject !== agent) {
@@ -95,8 +103,24 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
       : variants.some(variant => publicVariants.has(variant.id)) ? 'published' : 'draft';
     return { occurrence: item.occurrence, writer: owner!.writer, otherIdentity: owner!.writer !== agent,
       state, target, label: item.label ?? placement.label ?? null,
-      language: selectedVariant?.languageTag ?? placement.label?.language ?? null };
+      language: selectedVariant?.languageTag ?? placement.label?.language ?? null,
+      text: selectedVariant?.draftHead ?? null };
   });
+  // Words of the text the writer works on: the draft they control, else what readers get.
+  const texts = facts.flatMap(fact => {
+    const revision = fact.state === null ? null : 'text' in fact && fact.text ? fact.text
+      : page.items.find(item => item.occurrence === fact.occurrence)?.selectedRevision
+        ?.slice('urn:rezics:content:revision:'.length) ?? null;
+    return revision ? [{ occurrence: fact.occurrence, revision }] : [];
+  });
+  const words = new Map<string, number | null>();
+  for (let start = 0; start < texts.length; start += STUDIO_CHAPTER_COST.bodyBatch) {
+    const batch = texts.slice(start, start + STUDIO_CHAPTER_COST.bodyBatch);
+    const exact = await content.readExactBatch(batch.map(item => item.revision), async ids => new Set(ids));
+    for (const [index, result] of exact.entries()) {
+      words.set(batch[index]!.occurrence, result?.status === 'available' ? wordsIn(result.body) : null);
+    }
+  }
   const again = await access.studioWork(principal, agent, book);
   if (again.stamp !== first.stamp) throw new WorkReadMoved('Studio Book authority changed');
   const finalWriters = await access.chapterWriters(principal, agent, targets);
@@ -109,10 +133,12 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
     }
   }
   const byFact = new Map(facts.map(fact => [fact.occurrence, fact]));
+  const counted = facts.map(({ text: _text, ...fact }: typeof facts[number] & { text?: string | null }) =>
+    ({ ...fact, words: words.get(fact.occurrence) ?? null }));
   const disclosedPage = { ...page, items: page.items.map(item => {
     const fact = byFact.get(item.occurrence);
     return fact && !fact.target ? { ...item, target: null, label: null,
       selectedRevision: null, progress: null, availability: 'unavailable' as const } : item;
   }) };
-  return { profile: 'studio-chapters-v1' as const, page: disclosedPage, facts };
+  return { profile: 'studio-chapters-v1' as const, page: disclosedPage, facts: counted };
 }

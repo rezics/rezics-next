@@ -1,4 +1,5 @@
 import { readChapter, readContents } from '../work-contents/read.ts';
+import { nextChapter } from '../structure/reading-order.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadMoved, WorkReadSession, WorkReadUnavailable }
   from '../work/read-session.ts';
@@ -9,7 +10,9 @@ import type { FeedReader } from './read.ts';
 type Available = Extract<FeedViewerState, { status: 'available' }>;
 type Target = { activity: string; work: string | null; occurrence?: string };
 /** At most eight Works and the first six chapters per Work. A missing composition
- * yields no next-chapter action; incomplete pagination never claims caught up. */
+ * yields no next-chapter action; incomplete pagination never claims caught up.
+ * A Book with volumes resolves its next chapter by one exact chapter read (after
+ * a bounded reading-order walk when the reader has not started it). */
 export const VIEWER_STATE_COST = { activities: 8, chaptersPerWork: 6 } as const;
 
 export class FeedViewerStateReader {
@@ -86,7 +89,19 @@ export class FeedViewerStateReader {
       const entries = page?.items.filter(item => item.role === 'chapter' && item.availability === 'available') ?? [];
       const lastIndex = read ? entries.findIndex(item => item.occurrence === read.occurrence) : -1;
       const next = read && lastIndex >= 0 ? entries[read.completed ? lastIndex + 1 : lastIndex] : undefined;
-      if (!read || !(lastIndex < 0 || read.completed && !next && !!page?.nextCursor)) return;
+      // In a Book with volumes, the top level alone does not say which chapter comes next.
+      const grouped = page?.items.some(item => item.role === 'group') ?? false;
+      if (!read && page?.items[0]?.role === 'group') {
+        try {
+          const first = await nextChapter(session.deps.environment, { structure: structures.get(work)!,
+            canReadTarget: async () => true });
+          const opened = first ? await readChapter(privateSession, first.record.occurrence,
+            { language: page.language ?? undefined }) : null;
+          distantNext.set(work, opened ? { occurrence: opened.occurrence, language: opened.language } : null);
+        } catch { distantNext.set(work, null); }
+        return;
+      }
+      if (!read || !(grouped || lastIndex < 0 || read.completed && !next && !!page?.nextCursor)) return;
       try {
         const language = read.selectedRevision ? progressLanguages.get(read.selectedRevision)
           : occurrenceLanguages.get(read.occurrence);
@@ -105,7 +120,7 @@ export class FeedViewerStateReader {
       const entries = page?.items.filter(item => item.role === 'chapter' && item.availability === 'available') ?? [];
       const lastIndex = read ? entries.findIndex(item => item.occurrence === read.occurrence) : -1;
       const nextIndex = read ? lastIndex < 0 ? -1 : read.completed ? lastIndex + 1 : lastIndex : 0;
-      const next = entries[nextIndex];
+      const next = work && distantNext.has(work) ? undefined : entries[nextIndex];
       const distant = work ? distantNext.get(work) : null;
       const itemIndex = target.occurrence ? entries.findIndex(item => item.occurrence === target.occurrence) : -1;
       let hidden = false;

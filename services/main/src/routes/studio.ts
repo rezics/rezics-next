@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { ControlDenied, ControlUnavailable } from '../modules/access/topology-control.ts';
 import { readStudioWork, readStudioWorks } from '../modules/studio/works.ts';
 import { readStudioChapters } from '../modules/studio/chapters.ts';
+import { contentsItem } from '../modules/work-contents/read-contract.ts';
 import { changeAdmittedComposition } from '../modules/structure/change-admitted.ts';
 import { derivedId, readCompositionHeader } from '../modules/structure/graph.ts';
 import { GRAPHS, iri } from '../modules/work/activate.ts';
@@ -39,7 +40,9 @@ const chapterFacts = t.Object({ occurrence: readId, writer: t.Nullable(readId),
   otherIdentity: t.Boolean(), state: t.Nullable(t.Union([t.Literal('empty'), t.Literal('draft'),
     t.Literal('published'), t.Literal('changed')])), target: t.Nullable(readId),
   label: t.Nullable(t.Object({ value: t.String(), language: t.String() })),
-  language: t.Nullable(t.String()) });
+  language: t.Nullable(t.String()),
+  /** Words in the text the writer works on (their draft, else the published text); null when unknown. */
+  words: t.Nullable(t.Integer({ minimum: 0 })) });
 
 export function studioRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/me/agents/:agent/works', {
@@ -83,18 +86,14 @@ export function studioRoutes(work: MainWorkDependencies) {
   }).get('/v1/me/agents/:agent/works/:id/chapters', {
     params: t.Object({ agent: readUuid, id: readUuid }),
     query: t.Object({ cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
-      language: t.Optional(t.String({ minLength: 2, maxLength: 35 })) }, { additionalProperties: false }),
+      language: t.Optional(t.String({ minLength: 2, maxLength: 35 })),
+      /** One volume, part or extras group; the Book's top level by default. */
+      parent: t.Optional(readId) }, { additionalProperties: false }),
     response: { 200: t.Object({ profile: t.Literal('studio-chapters-v1'),
       page: t.Object({ profile: t.Literal('work-contents-v1'), work: readId, version: readId,
         composition: readId, compositionRevision: readId, language: t.Nullable(t.String()),
-        items: t.Array(t.Object({ occurrence: readId, parent: readId,
-          role: t.Union([t.Literal('group'), t.Literal('chapter')]),
-          label: t.Nullable(t.Object({ value: t.String(), language: t.String() })),
-          target: t.Nullable(readId), selectedRevision: t.Nullable(t.String()),
-          progress: t.Nullable(t.Object({ composition: readId, occurrence: readId,
-            selectedRevision: t.String() })),
-          availability: t.Union([t.Literal('available'), t.Literal('unavailable')]) }), { maxItems: 20 }),
-        ...pageFields }), facts: t.Array(chapterFacts, { maxItems: 20 }) }), ...workReadProblems },
+        items: t.Array(contentsItem, { maxItems: 20 }), ...pageFields }),
+      facts: t.Array(chapterFacts, { maxItems: 20 }) }), ...workReadProblems },
   }, async ({ request, params, query }) => {
     const agent = `https://rezics.com/id/${params.agent}`;
     const book = `https://rezics.com/id/${params.id}`;

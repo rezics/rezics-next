@@ -18,11 +18,13 @@ test('Reader routes expose bounded, typed Work contents and exact chapter bodies
     });
     const body: Record<string, any> | undefined = chapter.data?.content.body;
     const previous: string | null | undefined = chapter.data?.previous;
-    return { next, occurrence, body, previous };
+    const volume: 'volume' | 'part' | 'extras' | null | undefined = page.data?.items[0]?.division;
+    const context: number | null | undefined = chapter.data?.parentPath[0]?.number;
+    return { next, occurrence, body, previous, volume, context };
   };
   expect(typedReader).toBeFunction();
   expect(WORK_CONTENTS_COST).toEqual({ pageSize: 20, bodyBytes: 1024 * 1024,
-    navigationCandidates: 20, legacyTitleBatch: 4, legacyTitleOwnerCalls: 5 });
+    navigationCandidates: 20, legacyTitleBatch: 4, legacyTitleOwnerCalls: 5, topGroups: 200 });
   const graph = new FusekiClient('http://127.0.0.1:1/rezics');
   const app = createMainApp(graph, { environment: { fuseki: graph,
     lineage: { dataEpoch: 'one', routingEpoch: 'one' }, objectDirectory: '.temp/work-contents' },

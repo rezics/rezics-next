@@ -1,11 +1,12 @@
 import { Elysia, t } from 'elysia';
+import type { Static } from 'typebox';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { createAdmittedComposition, changeAdmittedComposition, sealAdmittedComposition,
   restoreAdmittedComposition, activateAdmittedCompositionStage }
   from '../modules/structure/change-admitted.ts';
 import { cancelCompositionStage, CompositionConflict, CompositionExists, CompositionTooLarge,
-  InvalidCompositionChange, StaleCompositionHead } from '../modules/structure/change.ts';
+  InvalidCompositionChange, StaleCompositionHead, type CompositionOperation } from '../modules/structure/change.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader }
   from '../modules/structure/graph.ts';
 import { readCompositionPage } from '../modules/structure/read.ts';
@@ -31,16 +32,32 @@ const label = t.Object({ value: t.String({ minLength: 1, maxLength: 500 }),
   language: t.String() });
 const position = t.Union([t.Literal('first'), t.Literal('last'),
   t.Object({ after: ref }, { additionalProperties: false })]);
+/** How a group divides the Book: numbered volumes, titled parts, or unnumbered extras. */
+const division = t.Union([t.Literal('volume'), t.Literal('part'), t.Literal('extras')]);
 const operation = t.Union([
   t.Object({ op: t.Literal('insert'), parent: ref, position,
     role: t.Union([t.Literal('group'), t.Literal('chapter')]),
     target: t.Optional(t.String({ format: 'uri' })),
-    selection: t.Optional(selection), label: t.Optional(label), sourceKey: t.Optional(t.String()) },
+    selection: t.Optional(selection), label: t.Optional(label), sourceKey: t.Optional(t.String()),
+    division: t.Optional(division) },
   { additionalProperties: false }),
   t.Object({ op: t.Literal('move'), occurrence: ref, parent: ref, position },
     { additionalProperties: false }),
   t.Object({ op: t.Literal('remove'), occurrence: ref }, { additionalProperties: false }),
+  t.Object({ op: t.Literal('update'), occurrence: ref, label: t.Optional(label),
+    division: t.Optional(division) }, { additionalProperties: false }),
 ]);
+type BodyOperation = Static<typeof operation>;
+
+/** A group's division travels as the Book group qualifier of the Structure command. */
+function commandOperation(item: BodyOperation): CompositionOperation {
+  if (item.op !== 'insert' && item.op !== 'update') return item;
+  const { division: groupDivision, ...rest } = item;
+  if (groupDivision && item.op === 'insert' && item.role !== 'group') {
+    throw new InvalidCompositionChange('only a group has a division');
+  }
+  return { ...rest, ...(groupDivision ? { qualifier: { type: 'book-group' as const, division: groupDivision } } : {}) };
+}
 const sourcePosition = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),
   sequence: t.String() });
 const cost = t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer(),
@@ -55,7 +72,8 @@ const occurrence = t.Object({ occurrence: ref, state: t.Union([t.Literal('active
   segmentKey: t.Optional(t.String()), orderKey: t.Optional(t.String()),
   removedBy: t.Optional(ref), role: t.Union([t.Literal('group'),
     t.Literal('chapter')]), target: t.Optional(t.String()), selection: t.Optional(selection),
-  labels: t.Array(label), sourceKey: t.Optional(t.String()), introducedBy: ref });
+  labels: t.Array(label), sourceKey: t.Optional(t.String()), introducedBy: ref,
+  qualifier: t.Optional(t.Object({ type: t.String() }, { additionalProperties: true })) });
 const pageResult = t.Object({ structure: ref, owner: ref, component: ref, work: ref,
   mainVersion: ref, revision: ref,
   predecessor: t.Nullable(ref), placementCount: t.Integer(), occurrences: t.Array(occurrence),
@@ -408,7 +426,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       try {
         const result = await changeAdmittedComposition(work.environment, work.account, work.access,
           request, { structure: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
-            operations: body.operations, actingSubject: body.actingSubject, idempotencyKey });
+            operations: body.operations.map(commandOperation), actingSubject: body.actingSubject,
+            idempotencyKey });
         return Response.json({ structure: result.structure, revision: result.revision,
           expectedHead: result.expectedHead, receipt: result.receipt, replayed: result.replayed,
           occurrences: result.occurrences ?? [], ...(result.cost ? { cost: result.cost } : {}),

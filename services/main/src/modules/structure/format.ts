@@ -66,7 +66,13 @@ const selection = Type.Union([
   Type.Object({ mode: Type.Literal('fixed-revision'), revision: reference }, { additionalProperties: false }),
 ]);
 
+/** How a Book group divides the book: numbered volumes, titled parts, or unnumbered extras (番外). */
+export const BOOK_DIVISIONS = ['volume', 'part', 'extras'] as const;
+export type BookDivision = (typeof BOOK_DIVISIONS)[number];
+
 const qualifier = Type.Union([
+  Type.Object({ type: Type.Literal('book-group'), division: Type.Enum(BOOK_DIVISIONS) },
+    { additionalProperties: false }),
   Type.Object({
     type: Type.Literal('zone-mount'), zone: nativeId,
     routeSegment: Type.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }),
@@ -294,7 +300,9 @@ export function checkOccurrenceRecord(record: OccurrenceRecord, profile: Structu
   const qualifierType = record.qualifier?.type;
   const expected = record.role === 'mount' ? 'zone-mount' : record.role === 'ingredient'
     ? 'ingredient-line' : record.role === 'step' ? 'recipe-step' : undefined;
-  if (qualifierType !== expected) {
+  // A Book group may say how it divides the book; one without a division reads as a plain part.
+  const bookGroup = profile === 'book-composition' && record.role === 'group' && qualifierType === 'book-group';
+  if (qualifierType !== expected && !bookGroup) {
     throw new InvalidStructureObject(`role ${record.role} requires qualifier ${expected ?? 'none'}`);
   }
   if (record.qualifier?.type === 'ingredient-line'

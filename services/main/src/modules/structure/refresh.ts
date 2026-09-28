@@ -74,30 +74,52 @@ export interface RefreshPlan {
 function sourceKey(record: Record): string { return record.sourceKey ?? record.occurrence; }
 function content(record: Record): string {
   return JSON.stringify({ role: record.role, target: record.target ?? null,
-    selection: record.selection ?? null, labels: record.labels });
+    selection: record.selection ?? null, labels: record.labels, qualifier: record.qualifier ?? null });
 }
-function mapSource(snapshot: Snapshot, conflicts: RefreshConflict[]): Map<string, Record> {
-  const found = new Map<string, Record>();
+
+/** A record's place in its Book: the correspondence key of its group, or null at the top level. */
+type Parent = string | null;
+interface Mapped { record: Record; parent: Parent }
+
+/**
+ * Source uses by correspondence key. A Book nests one level: a group stands at
+ * the top level and a chapter under the top level or one such group.
+ */
+function mapSource(snapshot: Snapshot, conflicts: RefreshConflict[]): Map<string, Mapped> {
+  const found = new Map<string, Mapped>();
+  const byOccurrence = new Map(snapshot.records.map(record => [record.occurrence, record]));
   for (const record of snapshot.records) {
     if (record.state === 'removed') continue;
     const key = sourceCorrespondence(snapshot.structure, sourceKey(record));
-    if (record.parent !== snapshot.structure || record.role !== 'chapter') {
+    const owner = record.parent === snapshot.structure ? null : byOccurrence.get(record.parent);
+    if (record.role !== 'chapter' && record.role !== 'group'
+      || record.parent !== snapshot.structure && (record.role === 'group' || owner?.state !== 'active'
+        || owner.role !== 'group' || owner.parent !== snapshot.structure)) {
       conflicts.push({ sourceKey: key, reason: 'unknown-child-correspondence' });
       continue;
     }
     if (found.has(key)) conflicts.push({ sourceKey: key, reason: 'ambiguous-key' });
-    found.set(key, record);
+    found.set(key, { record, parent: owner ? sourceCorrespondence(snapshot.structure, sourceKey(owner)) : null });
   }
   return found;
 }
 
-const ordered = (rows: readonly Record[]) => [...rows].filter(row => row.state === 'active')
-  .sort((a, b) => a.segmentKey!.localeCompare(b.segmentKey!)
-    || a.orderKey!.localeCompare(b.orderKey!));
+/** Active uses in reading order: the top level in order, each group's chapters where it stands. */
+function readingOrder(rows: readonly Record[], structure: string): Record[] {
+  const active = rows.filter(row => row.state === 'active')
+    .sort((a, b) => a.segmentKey!.localeCompare(b.segmentKey!) || a.orderKey!.localeCompare(b.orderKey!));
+  const children = new Map<string, Record[]>();
+  for (const row of active) children.set(row.parent, [...children.get(row.parent) ?? [], row]);
+  return (children.get(structure) ?? []).flatMap(row => [row, ...children.get(row.occurrence) ?? []]);
+}
 const same = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && left.every((item, index) => item === right[index]);
 
-/** Bounded three-way merge; ambiguous child or simultaneous divergent edits return explicit conflicts. */
+/**
+ * Bounded three-way merge; ambiguous child or simultaneous divergent edits return
+ * explicit conflicts. Order includes each use's group, so moving a chapter into
+ * another volume is an order change on the side that moved it.
+ */
 export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; local: Snapshot;
   revision: string }): RefreshPlan {
   if (input.source.records.length > STRUCTURE_LIMITS.stageRecords
@@ -108,11 +130,19 @@ export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; loca
   }
   const conflicts: RefreshConflict[] = [];
   const source = mapSource(input.source, conflicts);
-  const base = input.base ? mapSource(input.base, conflicts) : new Map<string, Record>();
-  const local = new Map<string, Record>();
+  const base = input.base ? mapSource(input.base, conflicts) : new Map<string, Mapped>();
+  const localStructure = input.local.structure;
+  const localById = new Map(input.local.records.map(record => [record.occurrence, record]));
+  /** A local use's key: its source correspondence, or its own identity for a human use. */
+  const localKey = (record: Record) => record.sourceKey?.startsWith('source:') ? record.sourceKey
+    : `local:${record.occurrence}`;
+  const local = new Map<string, Mapped>();
   const human: Record[] = [];
   for (const record of input.local.records) {
-    if (record.parent !== input.local.structure || record.role !== 'chapter') {
+    const owner = record.parent === localStructure ? null : localById.get(record.parent);
+    if (record.role !== 'chapter' && record.role !== 'group'
+      || record.parent !== localStructure && (record.role === 'group' || owner?.role !== 'group'
+        || owner.parent !== localStructure)) {
       conflicts.push({ sourceKey: record.sourceKey ?? record.occurrence,
         reason: 'unknown-child-correspondence' });
       continue;
@@ -121,14 +151,14 @@ export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; loca
       if (local.has(record.sourceKey)) {
         conflicts.push({ sourceKey: record.sourceKey, reason: 'ambiguous-key' });
       }
-      local.set(record.sourceKey, record);
+      local.set(record.sourceKey, { record, parent: owner ? localKey(owner) : null });
     } else human.push(record);
   }
   const result = new Map<string, Record>();
   let comparisons = 0;
-  for (const [key, incoming] of source) {
-    const prior = base.get(key);
-    const current = local.get(key);
+  for (const [key, { record: incoming }] of source) {
+    const prior = base.get(key)?.record;
+    const current = local.get(key)?.record;
     comparisons++;
     if (!prior) {
       if (current) {
@@ -136,7 +166,7 @@ export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; loca
         continue;
       }
       result.set(key, { ...incoming, occurrence: derivedId(`${input.revision}\0${key}`),
-        parent: input.local.structure, sourceKey: key, introducedBy: input.revision });
+        parent: localStructure, sourceKey: key, introducedBy: input.revision });
       continue;
     }
     if (!current) {
@@ -157,16 +187,17 @@ export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; loca
       continue;
     }
     if (sourceChanged && !localChanged) {
-      const { target: _target, selection: _selection, ...withoutSourceContent } = current;
+      const { target: _target, selection: _selection, qualifier: _qualifier, ...withoutSourceContent } = current;
       result.set(key, { ...withoutSourceContent, role: incoming.role,
         ...(incoming.target !== undefined ? { target: incoming.target } : {}),
         ...(incoming.selection !== undefined ? { selection: incoming.selection } : {}),
+        ...(incoming.qualifier !== undefined ? { qualifier: incoming.qualifier } : {}),
         labels: incoming.labels });
     } else result.set(key, current);
   }
-  for (const [key, prior] of base) {
+  for (const [key, { record: prior }] of base) {
     if (source.has(key)) continue;
-    const current = local.get(key);
+    const current = local.get(key)?.record;
     if (!current || current.state === 'removed') continue;
     comparisons++;
     if (content(current) !== content(prior)) {
@@ -176,70 +207,75 @@ export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; loca
       result.set(key, { ...withoutOrder, state: 'removed', removedBy: input.revision });
     }
   }
-  const baseOrder = ordered(input.base?.records ?? []).map(row =>
-    sourceCorrespondence(input.source.structure, sourceKey(row)));
-  const sourceOrder = ordered(input.source.records).map(row =>
-    sourceCorrespondence(input.source.structure, sourceKey(row)));
-  const localOrder = ordered(input.local.records).map(row => row.sourceKey)
-    .filter((key): key is string => Boolean(key && base.has(key)));
+  // Order is compared as the reading sequence of the uses all three sides share, each with its group.
+  const sequence = (snapshot: Snapshot) => readingOrder(snapshot.records, snapshot.structure)
+    .map(row => sourceCorrespondence(input.source.structure, sourceKey(row)));
+  const placedIn = (mapped: Map<string, Mapped>, key: string) => `${mapped.get(key)?.parent ?? ''}>${key}`;
+  const baseOrder = input.base ? sequence(input.base) : [];
+  const sourceOrder = sequence(input.source);
+  const localOrder = readingOrder(input.local.records, localStructure).map(localKey)
+    .filter(key => base.has(key));
   const common = new Set(baseOrder.filter(key => source.has(key) && local.has(key)));
-  const normalized = (keys: readonly string[]) => keys.filter(key => common.has(key));
-  const sourceMoved = !same(normalized(sourceOrder), normalized(baseOrder));
-  const localMoved = !same(normalized(localOrder), normalized(baseOrder));
-  if (sourceMoved && localMoved && !same(normalized(sourceOrder), normalized(localOrder))) {
+  const arranged = (keys: readonly string[], mapped: Map<string, Mapped>) =>
+    keys.filter(key => common.has(key)).map(key => placedIn(mapped, key));
+  const sourceMoved = !same(arranged(sourceOrder, source), arranged(baseOrder, base));
+  const localMoved = !same(arranged(localOrder, local), arranged(baseOrder, base));
+  if (sourceMoved && localMoved && !same(arranged(sourceOrder, source), arranged(localOrder, local))) {
     conflicts.push({ sourceKey: '*', reason: 'local-and-source-order' });
   }
   if (sourceMoved && human.some(row => row.state === 'active')) {
     conflicts.push({ sourceKey: '*', reason: 'unknown-child-correspondence' });
   }
-  if (conflicts.length) return { records: [], conflicts,
-    cost: { sourceRecords: input.source.records.length, baseRecords: input.base?.records.length ?? 0,
-      localRecords: input.local.records.length, comparisons } };
-  const useSourceOrder = sourceMoved && !localMoved;
+  const cost = { sourceRecords: input.source.records.length, baseRecords: input.base?.records.length ?? 0,
+    localRecords: input.local.records.length, comparisons };
+  if (conflicts.length) return { records: [], conflicts, cost };
+  // The arrangement: each kept use with the key of the group it stands in.
+  const arrangement: { key: string; row: Record; parent: Parent }[] = [];
   const seen = new Set<string>();
-  const active: Record[] = [];
-  if (useSourceOrder) {
-    for (const key of sourceOrder) {
-      const row = result.get(key);
-      if (row?.state === 'active' && !seen.has(key)) {
-        active.push(row);
-        seen.add(key);
-      }
+  const place = (key: string, parent: Parent) => {
+    const row = result.get(key);
+    if (row?.state === 'active' && !seen.has(key)) {
+      arrangement.push({ key, row, parent });
+      seen.add(key);
     }
+  };
+  if (sourceMoved && !localMoved) {
+    for (const key of sourceOrder) place(key, source.get(key)!.parent);
   } else {
-    for (const row of ordered(input.local.records)) {
+    for (const row of readingOrder(input.local.records, localStructure)) {
+      const key = localKey(row);
+      const owner = row.parent === localStructure ? null : localKey(localById.get(row.parent)!);
       if (!row.sourceKey?.startsWith('source:')) {
-        active.push(row);
-        continue;
-      }
-      const merged = result.get(row.sourceKey);
-      if (merged?.state === 'active' && !seen.has(row.sourceKey)) {
-        active.push(merged);
-        seen.add(row.sourceKey);
-      }
-    }
-    for (const key of sourceOrder) {
-      const row = result.get(key);
-      if (row?.state === 'active' && !seen.has(key)) {
-        active.push(row);
+        arrangement.push({ key, row, parent: owner });
         seen.add(key);
-      }
+      } else place(key, owner);
     }
+    for (const key of sourceOrder) place(key, source.get(key)!.parent);
   }
-  if (active.length > STRUCTURE_LIMITS.stageRecords) {
+  if (arrangement.length > STRUCTURE_LIMITS.stageRecords) {
     throw new StructureRefreshInvalid('refresh result exceeds the bounded stage');
   }
-  const keys = new Map<number, string[]>();
-  const positioned = active.map((row, index) => {
-    const segment = Math.floor(index / STRUCTURE_LIMITS.segmentMembers);
-    const count = Math.min(STRUCTURE_LIMITS.segmentMembers,
-      active.length - segment * STRUCTURE_LIMITS.segmentMembers);
-    if (!keys.has(segment)) keys.set(segment, evenKeys(count));
-    return { ...row, segmentKey: segment.toString(36),
-      orderKey: keys.get(segment)![index % STRUCTURE_LIMITS.segmentMembers]! };
+  // A use follows its group; one whose group did not survive the merge has no place to stand.
+  const destination = new Map(arrangement.map(item => [item.key, item.row]));
+  const children = new Map<string, Record[]>();
+  for (const item of arrangement) {
+    const owner = item.parent === null ? null : destination.get(item.parent);
+    if (item.parent !== null && owner?.role !== 'group') {
+      return { records: [], conflicts: [{ sourceKey: item.key, reason: 'unknown-child-correspondence' }], cost };
+    }
+    const parent = owner?.occurrence ?? localStructure;
+    children.set(parent, [...children.get(parent) ?? [], { ...item.row, parent }]);
+  }
+  const positioned = [...children.values()].flatMap(rows => {
+    const segments = Math.ceil(rows.length / STRUCTURE_LIMITS.segmentMembers);
+    const segmentKeys = evenKeys(segments);
+    return rows.map((row, index) => {
+      const segment = Math.floor(index / STRUCTURE_LIMITS.segmentMembers);
+      const count = Math.min(STRUCTURE_LIMITS.segmentMembers, rows.length - segment * STRUCTURE_LIMITS.segmentMembers);
+      return { ...row, segmentKey: segmentKeys[segment]!,
+        orderKey: evenKeys(count)[index % STRUCTURE_LIMITS.segmentMembers]! };
+    });
   });
   const removed = [...result.values(), ...human].filter(row => row.state === 'removed');
-  return { records: [...positioned, ...removed], conflicts,
-    cost: { sourceRecords: input.source.records.length, baseRecords: input.base?.records.length ?? 0,
-      localRecords: input.local.records.length, comparisons } };
+  return { records: [...positioned, ...removed], conflicts, cost };
 }

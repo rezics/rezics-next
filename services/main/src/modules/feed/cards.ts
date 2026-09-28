@@ -3,7 +3,7 @@ import { GRAPHS, iri, lit, MAX_WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import type { ResourceSummary } from '../media/summary.ts';
 import { readCompositionHeader } from '../structure/graph.ts';
 import { readCompositionPage } from '../structure/read.ts';
-import { firstChapterHeading } from '../work-contents/read.ts';
+import { chapterStoryNumber, firstChapterHeading } from '../work-contents/read.ts';
 import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import { FEED_COST, type feedAction, type feedCard, type FeedItem } from './contract.ts';
@@ -191,7 +191,10 @@ async function chapterCard(session: WorkReadSession, source: FeedSource, occurre
   const label = record.labels.find(label => label.language.toLowerCase() === source.language?.toLowerCase()) ?? record.labels[0];
   const title = label && !/^(?:untitled chapter|未命名章节)$/iu.test(label.value.trim())
     ? label.value : source.excerpt ? firstChapterHeading({ body: source.excerpt }) : null;
-  return { card: { kind: 'chapter', occurrence, parent: record.parent, number: page.occurrenceContext.ordinal,
+  // A chapter in a volume is numbered through the Book, as Contents numbers it; extras are not.
+  const number = record.parent === header.structure ? page.occurrenceContext.ordinal
+    : await chapterStoryNumber(session, header, record, page.occurrenceContext);
+  return { card: { kind: 'chapter', occurrence, parent: record.parent, ...(number ? { number } : {}),
     ...(title ? { title } : {}), ...(source.excerpt ? { excerpt: source.excerpt } : {}) },
   primaryAction: { kind: 'read-chapter', work: header.work, occurrence,
     href: `/w/${header.work.slice(-36)}/read/${occurrence.slice(-36)}${source.language ? `?language=${encodeURIComponent(source.language.toLowerCase())}` : ''}` } };

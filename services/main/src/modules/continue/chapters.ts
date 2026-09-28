@@ -1,6 +1,7 @@
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { readCompositionPage } from '../structure/read.ts';
-import { CompositionCorrupt, CompositionUnavailable, orderTreeKey } from '../structure/graph.ts';
+import { CompositionCorrupt, CompositionUnavailable } from '../structure/graph.ts';
+import { nextChapter } from '../structure/reading-order.ts';
 import type { OccurrenceRecord } from '../structure/format.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
@@ -20,36 +21,30 @@ const chapterLabel = (record: OccurrenceRecord, language: string) =>
   ?? record.labels[0];
 
 /** Seek by order key; the number of object pages and graph rows is bounded by Works,
- * even when one Book has thousands of placements. */
+ * even when one Book has thousands of placements. The next chapter follows
+ * reading order, so a finished volume continues into the next one. */
 async function nextRecord(session: WorkReadSession, structure: string, progress?: WorkProgress) {
   const env = session.deps.environment;
   const visible = async () => true; // Publication is checked in one batch below.
-  let parent = structure;
-  let after: string | undefined;
-  if (progress) {
-    const current = await readCompositionPage(env, { structure, occurrence: progress.occurrence,
-      limit: 1, canReadTarget: visible });
-    const record = current.occurrences[0];
-    if (!record || record.state !== 'active' || record.role !== 'chapter'
-      || !record.segmentKey || !record.orderKey) return null;
-    if (!progress.completed) return { record, pageCount: current.placementCount,
-      ordinal: current.occurrenceContext?.ordinal ?? 1 };
-    parent = record.parent;
-    after = orderTreeKey(record as Required<Pick<OccurrenceRecord,
-      'parent' | 'segmentKey' | 'orderKey'>>);
+  if (!progress) {
+    const first = await nextChapter(env, { structure, canReadTarget: visible });
+    return first ? { record: first.record, pageCount: first.page.placementCount, ordinal: 1 } : null;
   }
-  let page = await readCompositionPage(env, { structure, parent, after, limit: 1,
+  const current = await readCompositionPage(env, { structure, occurrence: progress.occurrence,
+    limit: 1, canReadTarget: visible });
+  const record = current.occurrences[0];
+  if (!record || record.state !== 'active' || record.role !== 'chapter'
+    || !record.segmentKey || !record.orderKey) return null;
+  if (!progress.completed) return { record, pageCount: current.placementCount,
+    ordinal: current.occurrenceContext?.ordinal ?? 1 };
+  const next = await nextChapter(env, { structure, revision: current.revision, from: record,
     canReadTarget: visible });
-  let record = page.occurrences[0];
-  if (record?.role === 'group') {
-    page = await readCompositionPage(env, { structure, parent: record.occurrence, limit: 1,
-      canReadTarget: visible });
-    record = page.occurrences[0];
-  }
-  if (!record || record.role !== 'chapter') return null;
-  const ordinal = progress ? (await readCompositionPage(env, { structure, occurrence: record.occurrence,
-    limit: 1, canReadTarget: visible })).occurrenceContext?.ordinal ?? 1 : 1;
-  return { record, pageCount: page.placementCount, ordinal };
+  if (!next) return null;
+  // A chapter inside a group means a grouped Book, whose unread count is a lower bound anyway.
+  const ordinal = next.record.parent !== structure ? 1 : (await readCompositionPage(env, { structure,
+    revision: current.revision, occurrence: next.record.occurrence, limit: 1, canReadTarget: visible }))
+    .occurrenceContext?.ordinal ?? 1;
+  return { record: next.record, pageCount: next.page.placementCount, ordinal };
 }
 
 export async function continueChapters(session: WorkReadSession, principal: VerifiedPrincipal,
