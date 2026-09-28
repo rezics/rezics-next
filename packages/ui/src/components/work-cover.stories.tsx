@@ -113,6 +113,20 @@ export const StableColors: Story = {
   },
 };
 
+/** Main's fallback keys are hex digests; a shelf of them should not share a handful of colors. */
+export const PaletteSpread: Story = {
+  render: args => <div className="flex flex-wrap items-end gap-3">
+    {Array.from({ length: 20 }, (_, index) => <WorkCover key={index} {...args} size="sm"
+      seed={`${(index * 2654435761 >>> 0).toString(16).padStart(8, '0')}7a2c1e8d3b4c6a9e2f1b4d6a`} />)}
+  </div>,
+  async play({ canvasElement }) {
+    const grounds = new Set([...canvasElement.querySelectorAll<HTMLElement>('[data-slot="work-cover"]')]
+      .map(cover => cover.style.background));
+    // Ten book swatches: twenty keys should reach most of them.
+    await expect(grounds.size).toBeGreaterThanOrEqual(7);
+  },
+};
+
 export const LongTitles: Story = {
   render: args => <div className="flex flex-wrap items-end gap-5">
     <WorkCover {...args} title="The Life and Opinions of Tristram Shandy, Gentleman, with a Discourse on Noses and Hobby-Horses"

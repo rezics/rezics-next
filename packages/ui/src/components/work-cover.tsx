@@ -63,13 +63,23 @@ const swatches: Record<WorkCoverKind, readonly WorkCoverSwatch[]> = {
   ],
 };
 
-/** FNV-1a: a stable 32-bit hash, so a Work keeps its colors on every page and render. */
+/**
+ * FNV-1a with a final avalanche (MurmurHash3's fmix32): a stable 32-bit hash,
+ * so a Work keeps its colors on every page and render. FNV's low bits follow
+ * the input's low bits, and Main's fallback keys are hex strings, so without
+ * the final mix a shelf of such keys lands on a few swatches.
+ */
 export function coverHash(seed: string): number {
   let hash = 0x811c9dc5;
   for (let index = 0; index < seed.length; index += 1) {
     hash ^= seed.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193);
   }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x85ebca6b);
+  hash ^= hash >>> 13;
+  hash = Math.imul(hash, 0xc2b2ae35);
+  hash ^= hash >>> 16;
   return hash >>> 0;
 }
 

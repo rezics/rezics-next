@@ -52,14 +52,11 @@ export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, lo
   const t = materializeData(messages[locale], { locale });
   const Heading = `h${headingLevel}` as const;
   const title = workTitle(work, locale);
+  const unfinished = work.completion === 'ongoing' || work.completion === 'hiatus';
   // Relative, so screen-reader-only text stays inside a scrolling row rather than widening the page.
   return <article className={cn('group/tile relative flex min-w-0 flex-col', className)}>
     <div className="flex items-end" style={{ aspectRatio: String(slot) }}>
       <CoverLink work={work} avatarQuery={avatarQuery} className="w-full">
-        {work.completion === 'ongoing' || work.completion === 'hiatus'
-          ? <span className="absolute start-2 bottom-2 z-20 rounded-full bg-background/92 px-2 py-0.5 font-medium
-            text-[0.6875rem] text-foreground shadow-[0_1px_4px_rgb(0_0_0/0.18)] backdrop-blur">
-            {work.completion === 'ongoing' ? t.ongoing : t.hiatus}</span> : null}
         <ShelfMark work={work.id} title={title} locale={locale} />
       </CoverLink>
     </div>
@@ -71,7 +68,12 @@ export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, lo
     {work.title?.basis === 'fallback' ? <p className="sr-only">{t.fallbackTitle}</p> : null}
     {work.authors.length ? <p className="mt-0.5 truncate text-muted-foreground text-sm">{work.authors.join(', ')}</p>
       : null}
-    {work.rating ? <RatingInline rating={work.rating} locale={locale} className="mt-1" /> : null}
+    {/* An unfinished serial says so beside its rating, clear of the cover's own title and author. */}
+    {work.rating || unfinished ? <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+      {work.rating ? <RatingInline rating={work.rating} locale={locale} /> : null}
+      {unfinished ? <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-[0.6875rem] text-muted-foreground">
+        {work.completion === 'ongoing' ? t.ongoing : t.hiatus}</span> : null}
+    </div> : null}
     {work.tagline ? <p lang={work.tagline.language} dir={work.tagline.direction}
       className="mt-1.5 line-clamp-2 text-pretty text-muted-foreground text-sm/snug">{work.tagline.value}</p> : null}
   </article>;
