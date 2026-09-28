@@ -115,6 +115,7 @@ export async function hydrateFeedItem(session: WorkReadSession, source: FeedSour
     target: { id: source.target, work: source.work,
       title: target?.name ?? { value: source.title ?? '', language: 'en', direction: 'ltr', basis: 'fallback' },
       cover: target?.icon ?? { kind: 'fallback', policy: 'avatar-fallback-v1', key: source.target, resourceType: 'collection' },
+      types: presentation?.types ?? [],
       excerpt: source.kind === 'work' || source.kind === 'added' || source.kind === 'adoption'
         ? presentation?.excerpt ?? body.excerpt : body.excerpt,
       language: source.kind === 'work' || source.kind === 'added' || source.kind === 'adoption'
@@ -359,7 +360,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
           throw new WorkReadMoved('Chapter content changed');
         }
       }
-      if (item.card.kind === 'prompt' || item.card.kind === 'release' || item.card.kind === 'review') {
+      if (item.card.kind === 'prompt' || item.card.kind === 'release' || item.card.kind === 'review'
+        || item.card.kind === 'list') {
         const card = await feedCardData(session, finalSource, item.target, item.links.target);
         if (JSON.stringify(card.card) !== JSON.stringify(item.card)
           || JSON.stringify(card.primaryAction) !== JSON.stringify(item.primaryAction)) throw new WorkReadMoved('Card content changed');

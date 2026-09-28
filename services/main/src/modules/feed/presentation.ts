@@ -1,18 +1,22 @@
 import { namedDiscoveryCredits } from '../discovery/credits.ts';
 import { DISCOVERY_COST, type DiscoveryCredit, type ProjectedCredit } from '../discovery/contract.ts';
 import { readAuthorNames, sourceReportedCredits } from '../source/author-name-read.ts';
-import { GRAPHS, iri } from '../work/activate.ts';
+import { GRAPHS, iri, MAX_WORK_SEMANTIC_TYPES } from '../work/activate.ts';
+import { workSemanticTypes } from '../work/work-kinds.ts';
 import { metadataComponent, METADATA_PROFILE } from '../work/metadata-schema.ts';
 import { parsedMetadataState, selectedMetadata } from '../work/metadata-read.ts';
-import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { type ReadRow, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { FEED_COST } from './contract.ts';
 
-export interface FeedWorkPresentation { authors: DiscoveryCredit[]; excerpt: string | null; language: string | null }
+export interface FeedWorkPresentation { authors: DiscoveryCredit[]; excerpt: string | null; language: string | null;
+  /** The Work's semantic types, so a card draws the cover every other page draws. */
+  types: string[] }
 
-/** One metadata batch, one credit batch, one name batch and one preview batch
- * for the admitted Works. The final fence checks pointers and credit identity
- * without hydrating metadata states or preview bodies a second time. */
+/** One metadata batch, one type batch, one credit batch, one name batch and one
+ * preview batch for the admitted Works. The final fence checks pointers, types
+ * and credit identity without hydrating metadata states or preview bodies a
+ * second time. */
 export async function feedWorkPresentations(session: WorkReadSession, works: readonly string[]) {
   const ids = [...new Set(works)];
   if (ids.length > FEED_COST.candidates) throw new WorkReadUnavailable('Feed Work presentation budget exceeded');
@@ -53,6 +57,20 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
     || pointers.some(row => !!row.head !== states.has(row.work!.value))) {
     throw new WorkReadUnavailable('Feed metadata heads are incomplete');
   }
+
+  const typesQuery = `SELECT ?work ?type WHERE { VALUES ?work { ${values} }
+    GRAPH ${iri(GRAPHS.current)} { ?work a ?type . VALUES ?type { ${workSemanticTypes.map(type => `<${type}>`).join(' ')} } }
+  } ORDER BY ?work ?type LIMIT ${ids.length * MAX_WORK_SEMANTIC_TYPES + 1}`;
+  const typeSignature = (rows: readonly ReadRow[]) => {
+    if (rows.length > ids.length * MAX_WORK_SEMANTIC_TYPES
+      || rows.some(row => !row.work || !ids.includes(row.work.value) || !row.type)) {
+      throw new WorkReadUnavailable('Feed Work types are ambiguous');
+    }
+    return rows.map(row => [row.work!.value, row.type!.value]);
+  };
+  const originalTypes = typeSignature(await session.query(typesQuery, ids.length * MAX_WORK_SEMANTIC_TYPES + 1));
+  const types = new Map<string, string[]>(ids.map(work => [work, []]));
+  for (const [work, type] of originalTypes) types.get(work!)!.push(type!);
 
   const creditQuery = `SELECT ?work ?id ?revision ?key ?ordinal ?agent WHERE {
     VALUES ?work { ${values} }
@@ -144,13 +162,15 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
       const name = names.get(credit.agent);
       return name ? [{ ...credit, ...name } as DiscoveryCredit] : [];
     });
-    items.set(work, { authors, ...excerpts.get(work)! });
+    items.set(work, { authors, ...excerpts.get(work)!, types: types.get(work)! });
   }
   return { items, fence: async () => {
     if (JSON.stringify(pointerSignature(await session.query(pointersQuery, ids.length + 1)))
       !== JSON.stringify(originalPointers)
       || JSON.stringify(creditSignature(await session.query(creditQuery, ids.length * 64 + 1)))
-      !== JSON.stringify(originalCredits)) throw new WorkReadMoved('Feed Work presentation changed');
+      !== JSON.stringify(originalCredits)
+      || JSON.stringify(typeSignature(await session.query(typesQuery, ids.length * MAX_WORK_SEMANTIC_TYPES + 1)))
+      !== JSON.stringify(originalTypes)) throw new WorkReadMoved('Feed Work presentation changed');
     const currentNames = await namedDiscoveryCredits(session, [...credits.values()].flat(), ids.length);
     if (JSON.stringify([...currentNames]) !== JSON.stringify([...names])) throw new WorkReadMoved('Feed Work author changed');
   } };

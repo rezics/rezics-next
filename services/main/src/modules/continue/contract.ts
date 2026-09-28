@@ -4,6 +4,7 @@ import { readAvatar, readId, readName, readUuid } from '../work/read-contract.ts
 export const continueQuery = t.Object({ actingSubject: readId,
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 6 })) }, { additionalProperties: false });
 export const continueItem = t.Object({ work: readId, title: readName, cover: readAvatar,
+  types: t.Array(t.String(), { maxItems: 3 }),
   source: t.Union([t.Literal('reading'), t.Literal('followed')]),
   lastPosition: t.Nullable(t.Object({ occurrence: readId, position: t.Nullable(t.String()),
     completed: t.Boolean(), updatedAt: t.String() })),

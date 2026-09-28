@@ -8,7 +8,7 @@ import { InvalidLibraryStatus, LibraryStatusConflict, StaleLibraryStatus }
 import { readWorkBasis } from '../modules/work/read-header.ts';
 import { canonicalChapterWorks } from '../modules/structure/chapter-work.ts';
 import { workRead, WorkReadInvalid } from '../modules/work/read-session.ts';
-import { pageQuery, readAvatar, readId, readName, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
+import { pageQuery, readId, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
 import { shelfWork } from '../modules/profiles/read-contract.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -45,7 +45,7 @@ const shelves = t.Object({ profile: t.Literal('reader-shelves-v1'),
   count: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() }) });
 const statusShelf = t.Object({ profile: t.Literal('reader-status-shelf-v1'),
   status: t.Exclude(status, t.Null()), items: t.Array(t.Object({ ...statusState.properties,
-    card: t.Nullable(t.Object({ id: readId, title: readName, cover: readAvatar })) }), { maxItems: 20 }),
+    card: t.Nullable(shelfWork) }), { maxItems: 20 }),
   nextCursor: t.Nullable(t.String()), sourcePosition: readPosition,
   count: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() }) });
 const publicShelves = t.Object({ profile: t.Literal('agent-status-shelves-v1'), agent: readId,

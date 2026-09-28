@@ -4,7 +4,8 @@ import { readCompositionHeader } from '../structure/graph.ts';
 import { readCompositionPage } from '../structure/read.ts';
 import { firstChapterHeading } from '../work-contents/read.ts';
 import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
-import type { feedAction, feedCard, FeedItem } from './contract.ts';
+import { publicWork } from '../work/public-patterns.ts';
+import { FEED_COST, type feedAction, type feedCard, type FeedItem } from './contract.ts';
 import type { FeedSource } from './source.ts';
 import { interestSources, workKinds, workSemanticTypes } from '../work/work-kinds.ts';
 
@@ -24,6 +25,7 @@ export async function feedCardData(session: WorkReadSession, source: FeedSource,
       opening: row.spoiler ? null : row.body.slice(0, 400) },
     primaryAction: { kind: 'read-review', review: row.id, href } };
   }
+  if (source.kind === 'collection') return listCard(session, source, href);
   if (!source.work || !['work', 'added', 'contribution'].includes(source.kind)) return fallback;
   if (source.occurrence) return chapterCard(session, source, source.occurrence);
   const types = await session.query(`SELECT ?type WHERE { GRAPH ${iri(GRAPHS.current)} {
@@ -90,6 +92,43 @@ export async function feedCardData(session: WorkReadSession, source: FeedSource,
     throw new WorkReadUnavailable('Hub publication has an invalid body');
   }
   return fallback;
+}
+
+/**
+ * A public list's first page of placements: one composition page, one public
+ * Work batch, one type batch and one summary batch. Only public Works leave
+ * here, in the list's order; the count is exact when the page held every
+ * placement and a lower bound otherwise.
+ */
+async function listCard(session: WorkReadSession, source: FeedSource, href: string): Promise<Card> {
+  const open: Card['primaryAction'] = { kind: 'open', href };
+  const structures = await session.query(`SELECT ?structure WHERE { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(source.target)} a rv:Collection ; rv:collectionState rv:Active ; rv:disclosure rv:Public ;
+      rv:structure ?structure } } LIMIT 2`, 2);
+  if (structures.length !== 1 || !structures[0]?.structure) throw new WorkReadMissing('List unavailable');
+  // Every target is filtered by the public Work batch below before anything about it is returned.
+  const page = await readCompositionPage(session.deps.environment, { structure: structures[0].structure.value,
+    limit: FEED_COST.listPlacements, canReadTarget: async () => true });
+  const placed = [...new Set(page.occurrences.flatMap(item => item.role === 'member' && item.target
+    ? [item.target] : []))];
+  const visible = placed.length ? new Set((await session.query(`SELECT DISTINCT ?work WHERE {
+    VALUES ?work { ${placed.map(iri).join(' ')} } ${publicWork('?work', '?main')} } LIMIT ${placed.length + 1}`,
+  placed.length + 1)).map(row => row.work?.value)) : new Set<string | undefined>();
+  const works = placed.filter(work => visible.has(work));
+  const first = works.slice(0, FEED_COST.listPreview);
+  const summaries = first.length ? await session.summaries(first) : [];
+  const types = new Map<string, string[]>(first.map(work => [work, []]));
+  if (first.length) {
+    for (const row of await session.query(`SELECT ?work ?type WHERE { VALUES ?work { ${first.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?work a ?type . VALUES ?type { ${workSemanticTypes.map(type => `<${type}>`).join(' ')} } }
+    } ORDER BY ?work ?type LIMIT ${first.length * 3 + 1}`, first.length * 3 + 1)) {
+      if (row.work && row.type) types.get(row.work.value)?.push(row.type.value);
+    }
+  }
+  return { card: { kind: 'list', count: { value: works.length, kind: page.next ? 'lower-bound' : 'exact' },
+    works: summaries.flatMap(summary => summary.status === 'available' && summary.type === 'work'
+      && summary.disclosure === 'public' ? [{ id: summary.reference, title: summary.name, cover: summary.avatar,
+        types: types.get(summary.reference) ?? [] }] : []) }, primaryAction: open };
 }
 
 async function chapterCard(session: WorkReadSession, source: FeedSource, occurrence: string): Promise<Card> {

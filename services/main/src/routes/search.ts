@@ -24,9 +24,9 @@ import { queryPublicContentPhrase } from '../modules/content-publication/search.
 import { pageCompleteContentRelation } from '../modules/content-publication/search-continuation.ts';
 import { checkJudgmentProtection } from '../modules/judgment/protection.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../modules/work/search-budget.ts';
-import { decoratePhraseRelation } from '../modules/work/search-facets.ts';
+import { decoratePhraseRelation, phraseWorkTypes } from '../modules/work/search-facets.ts';
 import { enrichSerialSearch } from '../modules/work/summary-serial.ts';
-import { enrichSearchCardPage } from '../modules/search/result-cards.ts';
+import { enrichSearchCardPage, searchPageAuthors } from '../modules/search/result-cards.ts';
 import { searchCardWindow } from '../modules/search/card-window.ts';
 import { withSearchGraphSnapshot } from '../modules/search/snapshot.ts';
 import { MAX_SEARCH_RESPONSE_BYTES } from '../modules/work/search-readiness.ts';
@@ -34,6 +34,7 @@ import { assertPublicTextReady } from '../modules/work/search-readiness.ts';
 import { querySearchFields, normalizedSearchText, SEARCH_FIELD_COST, fenceSearchFields } from '../modules/search/fields.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { readName, readAvatar } from '../modules/work/read-contract.ts';
+import { discoveryCredit } from '../modules/discovery/contract.ts';
 import { problemResult, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
   unsupportedPublicSearchSelectors, workTypeFilters } from '../api-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -195,7 +196,9 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       { additionalProperties: false }),
       response: { 200: t.Object({ profile: t.Literal('public-work-typeahead-v1'),
         items: t.Array(t.Object({ work: t.String(), mainVersion: t.String(), title: readName,
-          cover: readAvatar, matchedField: t.Union([t.Literal('title'), t.Literal('credit')]),
+          cover: readAvatar, types: t.Array(t.String(), { maxItems: 3 }),
+          authors: t.Array(discoveryCredit, { maxItems: 3 }),
+          matchedField: t.Union([t.Literal('title'), t.Literal('credit')]),
           matchedText: t.String(), matchedLanguage: t.Nullable(t.String()) }), { maxItems: 10 }),
         hasMore: t.Boolean(), sourcePosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }) }),
         400: problemResult(400), 422: problemResult(422), 503: problemResult(503) },
@@ -212,11 +215,15 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           const visible = await present(selection, { context: 'main-version-default' as const,
             sourcePosition: position, total: results.length, results });
           const page = visible.results.slice(0, SEARCH_FIELD_COST.typeaheadItems);
+          // A suggestion names what the Work is and who wrote it, as a search card does.
+          const types = await phraseWorkTypes(work.environment, page.map(row => ({ work: row.work, language: '' })),
+            position);
           const items = await workRead(work, new Request(request.url), { language: query.language }, async session => {
             if (session.position.dataEpoch !== position.dataEpoch || session.position.sequence !== position.sequence) {
               throw new SearchSnapshotMoved('Typeahead moved during hydration');
             }
             const summaries = await session.summaries(page.map(row => row.work));
+            const authors = await searchPageAuthors(session, [...new Set(page.map(row => row.work))]);
             const after = await session.summaries(page.map(row => row.work));
             if (JSON.stringify(summaries) !== JSON.stringify(after)) {
               throw new SearchSnapshotMoved('Typeahead disclosure changed during hydration');
@@ -225,6 +232,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
               const summary = summaries[i];
               return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
                 ? [{ work: row.work, mainVersion: row.mainVersion, title: summary.name, cover: summary.avatar,
+                  types: types.get(row.work) ?? [], authors: authors.get(row.work) ?? [],
                   matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
                   matchedLanguage: row.matchedLanguage }] : [];
             });

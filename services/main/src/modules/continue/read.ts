@@ -2,6 +2,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { readFollowTarget } from '../follows/read.ts';
 import { readChapter, readContents } from '../work-contents/read.ts';
 import { WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
+import { GRAPHS, iri, MAX_WORK_SEMANTIC_TYPES, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { CONTINUE_COST } from './contract.ts';
 
 export async function readContinue(session: WorkReadSession, principal: VerifiedPrincipal,
@@ -84,6 +85,14 @@ export async function readContinue(session: WorkReadSession, principal: Verified
   }
   items.sort((a, b) => Number(b.source === 'reading') - Number(a.source === 'reading')
     || b.updatedAt.localeCompare(a.updatedAt) || b.work.localeCompare(a.work));
-  return { profile: 'home-continue-v1' as const, items: items.slice(0, limit), sourcePosition: session.position,
+  const shown = items.slice(0, limit);
+  // One type batch, so each Work keeps the cover it has on every other page.
+  const typeRows = shown.length ? await publicSession.query(`SELECT ?work ?type WHERE {
+    VALUES ?work { ${shown.map(item => iri(item.work)).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?work a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
+  } LIMIT ${shown.length * MAX_WORK_SEMANTIC_TYPES + 1}`, shown.length * MAX_WORK_SEMANTIC_TYPES) : [];
+  return { profile: 'home-continue-v1' as const, sourcePosition: session.position,
+    items: shown.map(item => ({ ...item, types: typeRows.filter(row => row.work?.value === item.work)
+      .flatMap(row => row.type ? [row.type.value] : []).sort() })),
     scanned: { reading: reading.length, followed: followed.rows.length, limit: CONTINUE_COST.maxCandidates } };
 }

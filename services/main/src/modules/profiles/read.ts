@@ -114,10 +114,20 @@ export function nextPage(session: WorkReadSession, binding: unknown, ids: string
   return ids.length > limit ? encodeReadCursor(binding, session.position, ids[limit - 1]!) : null;
 }
 
-/** Two bounded summary batches: hydration and the final Access/title fence. */
+/** Two bounded summary batches, hydration and the final Access/title fence,
+ * and one type batch, so a shelf draws each Work's cover as every page does. */
 export async function shelfWorks(session: WorkReadSession, works: string[]) {
   const ids = [...new Set(works)];
   const summaries = await session.summaries(ids);
+  const typeRows = ids.length ? await session.query(`SELECT ?work ?type WHERE {
+    VALUES ?work { ${ids.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?work a ?type .
+      VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
+  } LIMIT ${ids.length * WORK_SEMANTIC_TYPES.length + 1}`, ids.length * WORK_SEMANTIC_TYPES.length) : [];
+  if (typeRows.some(row => !row.work || !row.type || !ids.includes(row.work.value))
+    || new Set(typeRows.map(row => `${row.work!.value}\0${row.type!.value}`)).size !== typeRows.length) {
+    throw new WorkReadUnavailable('Work types are ambiguous');
+  }
   const confirmed = await session.summaries(ids);
   const result = new Map<string, Static<typeof shelfWork>>();
   ids.forEach((id, i) => {
@@ -125,7 +135,8 @@ export async function shelfWorks(session: WorkReadSession, works: string[]) {
     const final = confirmed[i];
     if (summary?.status !== 'available' || summary.type !== 'work' || final?.status !== 'available') return;
     if (JSON.stringify(summary) !== JSON.stringify(final)) throw new WorkReadMoved('Summary changed during read');
-    result.set(id, { id, title: summary.name, cover: summary.avatar });
+    result.set(id, { id, title: summary.name, cover: summary.avatar,
+      types: typeRows.filter(row => row.work!.value === id).map(row => row.type!.value).sort() });
   });
   return result;
 }
@@ -152,18 +163,6 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
   const cards = await shelfWorks(session, page);
   const visible = page.filter(id => cards.has(id));
   const serial = await readSerialSummaries(session, visible);
-  const typeRows = visible.length ? await session.query(`SELECT ?work ?type WHERE {
-    VALUES ?work { ${visible.map(iri).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} { ?work a ?type .
-      VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
-  } LIMIT ${visible.length * WORK_SEMANTIC_TYPES.length + 1}`,
-  visible.length * WORK_SEMANTIC_TYPES.length) : [];
-  if (typeRows.some(row => !row.work || !row.type || !cards.has(row.work.value))
-    || new Set(typeRows.map(row => `${row.work!.value}\0${row.type!.value}`)).size !== typeRows.length) {
-    throw new WorkReadUnavailable('Agent Work types are ambiguous');
-  }
-  const types = new Map(visible.map(id => [id,
-    typeRows.filter(row => row.work!.value === id).map(row => row.type!.value).sort()]));
   const ratings = new Map<string, Awaited<ReturnType<typeof readWorkRating>>>();
   if (context) for (const id of visible) ratings.set(id, await readWorkRating(session, id, context));
   const credits = page.length ? await session.query(`SELECT ?work ?credit ?role WHERE {
@@ -187,7 +186,7 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
     }
     const rating = ratings.get(id);
     const sum = rating?.distribution.reduce((total, bin) => total + bin.value * bin.count, 0) ?? 0;
-    return [{ ...card, types: types.get(id) ?? [], tagline: serial.get(id)!.tagline,
+    return [{ ...card, tagline: serial.get(id)!.tagline,
       completionStatus: serial.get(id)!.completionStatus,
       rating: rating?.status === 'available' && rating.count && rating.context && rating.scale
         ? { context: rating.context, count: rating.count, sum, mean: rating.mean!,

@@ -23,9 +23,10 @@ export const agentProfile = t.Object({ profile: t.Literal('agent-read-v1'), id: 
   resolution: t.Optional(t.Object({ requestedHandle: t.String(),
     state: t.Union([t.Literal('native'), t.Literal('current'), t.Literal('retired')]),
     redirect: t.Boolean(), canonical: t.String() })) });
-export const shelfWork = t.Object({ id: readId, title: readName, cover: readAvatar });
-export const creditedWork = t.Object({ ...shelfWork.properties,
-  types: t.Array(t.String(), { maxItems: 8 }), tagline: t.Nullable(readName),
+/** A Work on a shelf or list: what its cover is drawn from, the same on every page. */
+export const shelfWork = t.Object({ id: readId, title: readName, cover: readAvatar,
+  types: t.Array(t.String(), { maxItems: 8 }) });
+export const creditedWork = t.Object({ ...shelfWork.properties, tagline: t.Nullable(readName),
   completionStatus: t.Nullable(t.Union([t.Literal('ongoing'), t.Literal('completed'), t.Literal('hiatus')])),
   rating: t.Nullable(discoveryRating),
   attribution: t.Array(t.Object({ credit: readId, role: creditRole }), { maxItems: 3 }) });
@@ -45,7 +46,7 @@ export const libraryRating = t.Object({ id: readId, revision: readId, work: t.Nu
  * avatar slot probe; collections
  * use 5; Work pages use ≤8 plus at most one serial batch, one type batch and
  * 20 bounded standing rating reads when a Context is selected. Library hydration
- * is O(P), P≤20, with two summary batches and final authority checks. SQL uses
+ * is O(P), P≤20, with two summary batches, one type batch and final authority checks. SQL uses
  * five-second statements. Relation ordering may scan/sort D heads (O(D log D));
  * LIMIT bounds output, not native execution cost. No corpus-scale claim. */
 export const PROFILE_READ_COST = { ...WORK_READ_COST, sqlStatementMs: 5_000,

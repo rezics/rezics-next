@@ -112,6 +112,21 @@ export async function searchPageCredits(session: WorkReadSession, works: readonl
   return result;
 }
 
+/** Named primary authors for a page of Works: native Agents by their public
+ * name and handle, source-reported authors by their recorded name. One credit
+ * relation, one Agent name batch and the source name reads, as search cards. */
+export async function searchPageAuthors(session: WorkReadSession, works: readonly string[]) {
+  const credits = await searchPageCredits(session, works);
+  const names = await namedDiscoveryCredits(session, [...credits.values()].flat(), SEARCH_CARD_COST.works);
+  const sourceNames = await readAuthorNames(session, [...credits.values()].flat()
+    .flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : []));
+  return new Map(works.map(work => [work, (credits.get(work) ?? []).flatMap((credit): DiscoveryCredit[] => {
+    if (credit.participantKind === 'external-reference') return [{ ...credit, ...sourceNames.get(credit.key) }];
+    const name = names.get(credit.agent);
+    return name ? [{ ...credit, ...name }] : [];
+  })]));
+}
+
 /** Hydrate only the selected page after the phrase relation is complete.
  * Its candidate set and continuation remain those of the search owner. */
 export async function enrichSearchCardPage<T extends { resultGrain: string;
@@ -130,17 +145,14 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
       || session.position.sequence !== page.sourcePosition!.sequence) {
       throw new SearchSnapshotMoved('Search card graph position changed');
     }
-    const [summaries, serial, credits, ratings] = await Promise.all([
-      session.summaries(ids), searchPageSerial(session, ids), searchPageCredits(session, ids),
+    const [summaries, serial, authors, ratings] = await Promise.all([
+      session.summaries(ids), searchPageSerial(session, ids), searchPageAuthors(session, ids),
       searchPageRatings(session, matches, page.context),
     ]);
     if (summaries.some(summary => summary.status !== 'available'
       || summary.type !== 'work' || summary.disclosure !== 'public')) {
       throw new SearchSnapshotMoved('Search card disclosure changed');
     }
-    const names = await namedDiscoveryCredits(session, [...credits.values()].flat(), SEARCH_CARD_COST.works);
-    const sourceNames = await readAuthorNames(session, [...credits.values()].flat()
-      .flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : []));
     const fenced: ResourceSummary[] = [];
     for (let i = 0; i < ids.length; i += MAX_SUMMARY_BATCH) {
       fenced.push(...await session.summaries(ids.slice(i, i + MAX_SUMMARY_BATCH)));
@@ -159,11 +171,7 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
         tagline: value.tagline, completionStatus: value.completionStatus,
         chapterCount: value.chapterCount, wordCount: value.wordCount,
         lastUpdatedAt: value.lastUpdatedAt,
-        primaryCredits: credits.get(id)!.flatMap((credit): DiscoveryCredit[] => {
-          if (credit.participantKind === 'external-reference') return [{ ...credit, ...sourceNames.get(credit.key) }];
-          const name = names.get(credit.agent);
-          return name ? [{ ...credit, ...name }] : [];
-        }) }];
+        primaryCredits: authors.get(id)! }];
     }));
   }).catch((error: unknown) => {
     if (error instanceof WorkReadMoved) throw new SearchSnapshotMoved(error.message);

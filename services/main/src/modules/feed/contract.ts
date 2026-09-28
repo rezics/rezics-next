@@ -32,6 +32,12 @@ export const feedCard = t.Union([
   t.Object({ kind: t.Literal('prompt'), preview: t.Optional(t.String({ maxLength: 400 })) }),
   t.Object({ kind: t.Literal('media'), durationSeconds: t.Optional(t.Number({ minimum: 0 })) }),
   t.Object({ kind: t.Literal('activity') }),
+  /** A public list: how many public Works it holds and its first three, so the card shows what is in it. */
+  t.Object({ kind: t.Literal('list'),
+    count: t.Object({ value: t.Integer({ minimum: 0 }),
+      kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }),
+    works: t.Array(t.Object({ id: readId, title: readName, cover: readAvatar,
+      types: t.Array(t.String(), { maxItems: 3 }) }), { maxItems: 3 }) }),
   t.Object({ kind: t.Literal('review'), review: readUuid, rating: t.Integer({ minimum: 1, maximum: 10 }),
     scale: t.Union([t.Literal(5), t.Literal(10)]), spoiler: t.Boolean(),
     helpfulCount: t.Integer({ minimum: 0 }), opening: t.Nullable(t.String({ maxLength: 400 })) }),
@@ -76,6 +82,8 @@ export const feedItem = t.Object({ id: readId, kind: feedKind,
     actors: t.Array(actor, { minItems: 1, maxItems: 3 }),
     range: t.Optional(t.Object({ kind: t.Literal('chapters'), from: t.Integer(), to: t.Integer() })) }),
   target: t.Object({ id: readId, work: t.Nullable(readId), title: readName, cover: readAvatar,
+    /** The Work's semantic types; empty when the target is not a Work. */
+    types: t.Array(t.String(), { maxItems: 3 }),
     excerpt: t.Nullable(t.String({ maxLength: 400 })), language: t.Nullable(t.String()) }),
   realm: t.Nullable(t.Object({ id: readId, name: readName, icon: readAvatar })),
   time: t.String(), timeBasis: t.Union([t.Literal('revision'), t.Literal('relay')]),
@@ -115,4 +123,6 @@ export type FeedVoteResult = Static<typeof feedVoteResult>;
  * envelope, not claimed to be a PostgreSQL seek. Review refresh seeks at most
  * 100 Access events and rechecks at most 20 current rows. Cards cap responses at 256KiB. */
 export const FEED_COST = { pageSize: 20, candidates: 8, tagCandidates: 2, refreshItems: 20, groupMembers: 4,
-  commentProbe: 64, intervalMs: 1000, responseBytes: 256 * 1024 } as const;
+  commentProbe: 64, intervalMs: 1000, responseBytes: 256 * 1024,
+  /** A list card reads one page of its placements and names the first public Works in it. */
+  listPlacements: 100, listPreview: 3 } as const;

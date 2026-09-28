@@ -21,7 +21,8 @@ export const trendingQuery = t.Object({ scope: t.Optional(t.String({ maxLength: 
 export const trendingResult = t.Object({ profile: t.Literal('home-trending-v1'),
   rankingVersion: t.String(), window: t.Union([t.Literal('day'), t.Literal('week')]),
   items: t.Array(t.Object({ work: readId, realm: readId, title: readName,
-    cover: readAvatar, rank: t.Integer({ minimum: 1 }), reason: t.Literal('growth-in-realm') }),
+    cover: readAvatar, types: t.Array(t.String(), { maxItems: 8 }), rank: t.Integer({ minimum: 1 }),
+    reason: t.Literal('growth-in-realm') }),
   { maxItems: 5 }), sourcePosition: readPosition });
 export type TrendingQuery = Static<typeof trendingQuery>;
 export type TrendingResult = Static<typeof trendingResult>;
@@ -150,7 +151,7 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
               && (rule.strength !== 'fewer' || reduced(work.id, rule)))) continue;
           }
           items.push({ work: work.id, realm: placement.realm, title: work.title,
-            cover: work.cover, rank: items.length + 1, reason: 'growth-in-realm' });
+            cover: work.cover, types: work.types, rank: items.length + 1, reason: 'growth-in-realm' });
           realmCounts.set(placement.realm, (realmCounts.get(placement.realm) ?? 0) + 1);
           break;
         }
