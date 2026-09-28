@@ -214,6 +214,7 @@ export interface MainWorkDependencies {
   /** Relay erasure journal and Content owner; absent means erasure is unavailable. */
   erasures?: ErasureService;
   realmReplies?: RealmReplyStore;
+  realmReplyThreads?: import('../modules/realm-reply/thread-store.ts').RealmReplyThreadStore;
   ownerOperations?: OwnerOperations;
   recommendations?: RankingGenerations;
   eventQueries?: EventTemporalQueries;

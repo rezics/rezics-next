@@ -68,6 +68,7 @@ import { ReaderVariantPreferenceStore } from './modules/work/native-variants.ts'
 import { RealmVariantRecommendationStore } from './modules/work/realm-variant-recommendation.ts';
 import { RealmReplyContentStore } from './modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from './modules/realm-reply/store.ts';
+import { RealmReplyThreadStore } from './modules/realm-reply/thread-store.ts';
 import { VerificationCorrectionPublisher, VerificationCorrectionWorker }
   from './modules/verification/correction-delivery.ts';
 import { verificationCorrectionSubjectReader } from './modules/verification/correction-delivery.ts';
@@ -419,6 +420,7 @@ const app = createMainApp(fuseki, {
   readerPreferences: new ReaderVariantPreferenceStore(pool),
   realmRecommendations: new RealmVariantRecommendationStore(pool),
   realmReplies: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, access, environment),
+  realmReplyThreads: new RealmReplyThreadStore(contentPool, pool),
   maintainers: new WorkMaintainers(pool, environment),
   verification: new VerificationStore(contentPool),
   content,

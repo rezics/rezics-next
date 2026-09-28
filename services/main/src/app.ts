@@ -52,6 +52,7 @@ import { recipeRoutes } from './routes/recipes.ts';
 import { ratingRoutes } from './routes/ratings.ts';
 import { realmReplyRoutes } from './routes/realm-replies.ts';
 import { memberReplyRoutes } from './routes/member-replies.ts';
+import { realmReplyThreadRoutes } from './routes/realm-reply-threads.ts';
 import { workMaintainerRoutes } from './routes/work-maintainers.ts';
 import { resourceRoutes } from './routes/resources.ts';
 import { globalRatingRoutes } from './routes/rating-global.ts';
@@ -145,7 +146,8 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(workMaintainerRoutes(work))
     .use(workReadRoutes(work))
     .use(alsoEnjoyedRoutes(work))
-    .use(realmReadRoutes(work));
+    .use(realmReadRoutes(work))
+    .use(realmReplyThreadRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
