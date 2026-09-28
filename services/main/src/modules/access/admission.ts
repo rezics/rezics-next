@@ -220,6 +220,9 @@ async function rollback(client: PoolClient): Promise<void> {
   try { await client.query('ROLLBACK'); } catch { /* preserve the original failure */ }
 }
 
+/** Reads whose only writes are FOR SHARE locks commit asynchronously; see controlRead. */
+const READ_BEGIN = 'BEGIN; SET LOCAL synchronous_commit = off';
+
 async function requireRecoveryOpen(client: PoolClient): Promise<string> {
   const result = await client.query<{ open: boolean; generation: string }>(
     'SELECT open, generation FROM access.recovery_fence WHERE id = true FOR SHARE');
@@ -343,7 +346,7 @@ export class AccessAdmissionRegistry {
     }
     const client = await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      await client.query(READ_BEGIN);
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);
@@ -655,7 +658,7 @@ export class AccessAdmissionRegistry {
   async activePrincipalId(principal: VerifiedPrincipal): Promise<string | null> {
     const client = await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      await client.query(READ_BEGIN);
       await requireRecoveryOpen(client);
       const result = await client.query<{ id: string }>(
         `SELECT id FROM access.principal WHERE account_issuer = $1
@@ -674,7 +677,7 @@ export class AccessAdmissionRegistry {
   ): Promise<boolean> {
     const client = await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      await client.query(READ_BEGIN);
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);

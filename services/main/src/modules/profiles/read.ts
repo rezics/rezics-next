@@ -91,6 +91,56 @@ export async function readAgent(session: WorkReadSession, agent: string) {
       ...(statusShelves ? { statusShelves } : {}) } };
 }
 
+export interface AgentCard { id: string; displayName: string; handle: string; links: { profile: string } }
+
+/** readAgent's public-Agent gate for a page of cards: one Access fence batch
+ * before and after, one graph batch and one handle batch. A hidden Agent is
+ * absent. Cards show no library or avatar, so neither owner is read. */
+export async function readAgentCards(session: WorkReadSession, agents: readonly string[]) {
+  const ids = [...new Set(agents)];
+  const cards = new Map<string, AgentCard>();
+  if (!ids.length) return cards;
+  const owner = profileAccess(session);
+  const before = await owner.agentFences(ids);
+  const active = ids.filter(id => before.has(id));
+  if (!active.length) return cards;
+  const [rows, handles] = await Promise.all([session.query(`SELECT ?agent ?displayName ?agentKind ?handle
+    ?agentHead ?profileHead ?predecessor ?bio ?avatarSelection WHERE { VALUES ?agent { ${active.map(iri).join(' ')} }
+    ${publicAgent('?agent')}
+    # Top-level OPTIONALs join the bound ?agent; inside one GRAPH group they would bind it themselves.
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?agent rv:publicProfileHead ?profileHead } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?agent rv:profileBio ?bio } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?agent rv:profileAvatarSelection ?avatarSelection } }
+    OPTIONAL { FILTER(BOUND(?profileHead)) GRAPH ${iri(GRAPHS.revisions)} {
+      ?profileHead a rv:AgentPublicProfileRevision ; rv:component ?agent ; rv:predecessor ?predecessor . } }
+  } LIMIT ${active.length * 2 + 1}`, active.length * 2 + 1),
+  (async () => {
+    try { return await session.deps.agentHandles?.currents(active) ?? new Map<string, string>(); }
+    catch { throw new WorkReadUnavailable('Agent handle owner is unavailable'); }
+  })()]);
+  const kinds = new Set([`${RV}PersonAgent`, `${RV}OrganizationAgent`, `${RV}ServiceAgent`]);
+  for (const agent of active) {
+    const matched = rows.filter(row => row.agent?.value === agent);
+    if (!matched.length) continue;
+    const row = matched[0]!;
+    const displayName = field(row, 'displayName');
+    if (matched.length !== 1 || !kinds.has(field(row, 'agentKind')) || !displayName || displayName.length > 200
+      || (row.profileHead && !row.predecessor)
+      || field(row, 'handle') !== allocateAgentHandle(agent)) throw new WorkReadUnavailable('Agent profile is ambiguous');
+    if (row.bio && (!row.bio.value || row.bio.value.length > 500
+      || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(row.bio['xml:lang'] ?? ''))) {
+      throw new WorkReadUnavailable('Agent bio is invalid');
+    }
+    const handle = handles.get(agent) ?? field(row, 'handle');
+    cards.set(agent, { id: agent, displayName, handle, links: { profile: `/@${handle}` } });
+  }
+  const after = await owner.agentFences([...cards.keys()]);
+  if ([...cards.keys()].some(agent => after.get(agent) !== before.get(agent))) {
+    throw new WorkReadMoved('Agent profile changed');
+  }
+  return cards;
+}
+
 export async function readHandle(session: WorkReadSession, handle: string) {
   let resolved;
   try { resolved = session.deps.agentHandles

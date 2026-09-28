@@ -139,12 +139,13 @@ export class GovernanceStore {
     private readonly heads: TargetHeads, private readonly rules: RuleBasis,
     private readonly effects?: ModerationEffects, private readonly reviews?: ReviewReportOwner) {}
 
-  private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+  /** `read` work writes nothing; see controlRead for its asynchronous commit. */
+  private async transaction<T>(work: (client: PoolClient) => Promise<T>, read = false): Promise<T> {
     const client = await this.pool.connect().catch(() => {
       throw new GovernanceUnavailable('governance owner is unavailable');
     });
     try {
-      await client.query('BEGIN');
+      await client.query(read ? 'BEGIN; SET LOCAL synchronous_commit = off' : 'BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       const fence = await client.query<{ open: boolean }>(
@@ -667,7 +668,7 @@ export class GovernanceStore {
          AND (e.revision IS NULL OR e.revision = requested.revision)
          AND e.context = ANY($3::text[])`,
       [heads.map(item => item.work), heads.map(item => item.revision), contexts])).rows
-      .map(row => row.resource)));
+      .map(row => row.resource)), true);
   }
 
   /** An exact Content revision remains fenced independently of a later variant head. */
@@ -679,7 +680,7 @@ export class GovernanceStore {
       FROM access.governance_enforcement WHERE owner = 'content' AND resource = $1
         AND component = 'body' AND effect = 'disclosure' AND state = 'restricted'
         AND context = $2 AND (revision IS NULL OR revision = $3) LIMIT 1`,
-    [resource, GLOBAL_CONTEXT, revision])).rowCount !== 0);
+    [resource, GLOBAL_CONTEXT, revision])).rowCount !== 0, true);
   }
 
   /** Steps whose deadline has passed and whose decision is still the case head: pending human disposition. */

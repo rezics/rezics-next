@@ -58,6 +58,14 @@ export class AgentVanityHandles {
     return row?.handle ?? null;
   }
 
+  /** One indexed probe for a page of Agents; an Agent without a vanity handle is absent. */
+  async currents(agents: readonly string[]): Promise<Map<string, string>> {
+    if (!agents.length) return new Map();
+    return new Map((await this.pool.query<{ agent_id: string; handle: string }>(`SELECT agent_id, handle
+      FROM access.agent_handle WHERE agent_id = ANY($1::text[]) AND state = 'current'`, [agents])).rows
+      .map(row => [row.agent_id, row.handle]));
+  }
+
   async resolve(input: string): Promise<HandleResolution | null> {
     const handle = input.toLowerCase();
     const native = agentForHandle(input);

@@ -3,7 +3,7 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { controlTransaction, ControlConflict, ControlInvalid, ControlStale } from '../access/topology-control.ts';
+import { controlRead, controlTransaction, ControlConflict, ControlInvalid, ControlStale } from '../access/topology-control.ts';
 import { followPrincipal } from '../follows/authority.ts';
 import { commandKey } from '../follows/store.ts';
 import { digest } from '../recommendation/derived-generation.ts';
@@ -43,7 +43,7 @@ export class HomePersonalStore {
   constructor(private readonly pool: Pool) {}
 
   async read(principal: VerifiedPrincipal, agent: string) {
-    return controlTransaction(this.pool, async client => {
+    return controlRead(this.pool, async client => {
       const owner = await followPrincipal(client, principal, agent);
       const state = (await client.query<{ revision: string; preferences: HomePreferences }>(
         'SELECT revision, preferences FROM access.home_state WHERE principal_id = $1', [owner])).rows[0];
@@ -182,7 +182,7 @@ export class HomePersonalStore {
   }
 
   async watermarks(principal: VerifiedPrincipal, agent: string) {
-    return controlTransaction(this.pool, async client => {
+    return controlRead(this.pool, async client => {
       const owner = await followPrincipal(client, principal, agent);
       const rows = (await client.query<{ scope: string; data_epoch: string; sequence: string; updated_at: Date }>(
         `SELECT scope, data_epoch, sequence::text AS sequence, updated_at FROM access.home_watermark
@@ -193,7 +193,7 @@ export class HomePersonalStore {
   }
 
   async getWatermark(principal: VerifiedPrincipal, agent: string, scope: string) {
-    return controlTransaction(this.pool, async client => {
+    return controlRead(this.pool, async client => {
       const owner = await followPrincipal(client, principal, agent);
       return (await client.query<{ data_epoch: string; sequence: string; updated_at: Date }>(
         `SELECT data_epoch, sequence::text AS sequence, updated_at FROM access.home_watermark

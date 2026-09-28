@@ -1,7 +1,7 @@
 import type { Static } from 'typebox';
 import { readAgent } from '../profiles/read.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
-import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadMissing, WorkReadMoved,
+import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit, WorkReadMissing, WorkReadMoved,
   publicWork, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { ResourceSummary } from '../media/summary.ts';
@@ -54,6 +54,42 @@ export async function readFollowTarget(session: WorkReadSession, target: string,
   return { id: target, kind, name: summary.name, icon: summary.avatar,
     realm: kind === 'zone' || kind === 'realm' ? summaryId : null,
     href: kind === 'work' ? `/w/${target.slice(-36)}` : `/r/${summaryId.slice(-36)}` };
+}
+
+type FollowTarget = Static<typeof followTarget>;
+
+/** readFollowTarget for a page of Works or Realms: one public-graph query and
+ * one summary batch (the caller's, when given). A hidden target is absent. */
+export async function readFollowTargets(session: WorkReadSession, targets: readonly string[],
+  kind: 'work' | 'realm', summaries?: ReadonlyMap<string, ResourceSummary>): Promise<Map<string, FollowTarget>> {
+  if (session.principal) throw new WorkReadUnavailable('Public follow reader required');
+  const ids = [...new Set(targets)];
+  const result = new Map<string, FollowTarget>();
+  if (!ids.length) return result;
+  const values = ids.map(iri).join(' ');
+  const missing = ids.filter(id => !summaries?.has(id));
+  const [rows, fetched] = await Promise.all([kind === 'work'
+    ? session.query(`SELECT DISTINCT ?work WHERE { VALUES ?work { ${values} } ${publicWork('?work', '?main')} }
+      LIMIT ${ids.length + 1}`, ids.length)
+    : session.query(`SELECT ?realm WHERE { GRAPH ${iri(GRAPHS.current)} { VALUES ?realm { ${values} }
+      ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active .
+      ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+      FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
+      FILTER NOT EXISTS { ?realm rv:protectionHead ?protection }
+    } } LIMIT ${ids.length + 1}`, ids.length),
+  session.summaries(missing)]);
+  const visible = rows.map(row => row[kind]?.value);
+  // readFollowTarget bounds each target's relation to one row.
+  if (new Set(visible).size !== visible.length) throw new WorkReadLimit('Read exceeds its bounded relation');
+  const all = new Map([...summaries ?? [], ...fetched.map(summary => [summary.reference, summary] as const)]);
+  for (const id of ids) {
+    const summary = all.get(id);
+    if (!visible.includes(id) || summary?.status !== 'available' || summary.disclosure !== 'public'
+      || summary.type !== kind) continue;
+    result.set(id, { id, kind, name: summary.name, icon: summary.avatar,
+      realm: kind === 'realm' ? id : null, href: kind === 'work' ? `/w/${id.slice(-36)}` : `/r/${id.slice(-36)}` });
+  }
+  return result;
 }
 
 export async function readFollows(session: WorkReadSession, store: FollowsStore,

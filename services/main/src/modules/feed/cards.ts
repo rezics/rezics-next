@@ -15,7 +15,7 @@ type Card = { card: Static<typeof feedCard>; primaryAction: Static<typeof feedAc
  * recipe totalTime/yield, persisted chapter word count or timed-media owner.
  * Optional fields in the card contract deliberately stay absent in those cases. */
 export async function feedCardData(session: WorkReadSession, source: FeedSource,
-  target: FeedItem['target'], href: string): Promise<Card> {
+  target: FeedItem['target'], href: string, knownTypes?: ReadonlyMap<string, readonly string[]>): Promise<Card> {
   const workEvent = source.kind === 'work' || source.kind === 'added';
   const fallback: Card = { card: { kind: workEvent ? 'work' : 'activity' },
     primaryAction: workEvent && source.work ? { kind: 'want-to-read', work: source.work } : { kind: 'open', href } };
@@ -29,10 +29,9 @@ export async function feedCardData(session: WorkReadSession, source: FeedSource,
   if (source.kind === 'collection') return listCard(session, source, href);
   if (!source.work || !['work', 'added', 'contribution'].includes(source.kind)) return fallback;
   if (source.occurrence) return chapterCard(session, source, source.occurrence);
-  const types = await session.query(`SELECT ?type WHERE { GRAPH ${iri(GRAPHS.current)} {
+  const kinds = knownTypes?.get(source.work) ?? (await session.query(`SELECT ?type WHERE { GRAPH ${iri(GRAPHS.current)} {
     ${iri(source.work)} a ?type . VALUES ?type { ${workSemanticTypes.map(type => `<${type}>`).join(' ')} }
-  } } LIMIT ${workSemanticTypes.length + 1}`, workSemanticTypes.length + 1);
-  const kinds = types.map(row => row.type?.value);
+  } } LIMIT ${workSemanticTypes.length + 1}`, workSemanticTypes.length + 1)).map(row => row.type?.value);
   // A metadata-only package, prompt or film has no playable/installable
   // revision yet. Its page remains the safe action until an owner supplies one.
   if (kinds.some(kind => kind && workKinds[kind as keyof typeof workKinds]?.primaryAction !== 'read')) {
@@ -159,6 +158,18 @@ export async function fenceListCard(session: WorkReadSession, card: Extract<Feed
       throw new WorkReadMoved('List Work changed');
     }
   }
+}
+
+/** One semantic-type batch for the page's Works, the relation feedCardData reads per Work. */
+export async function feedWorkTypes(session: WorkReadSession, works: readonly string[]) {
+  const ids = [...new Set(works)];
+  const types = new Map<string, string[]>(ids.map(work => [work, []]));
+  if (!ids.length) return types;
+  const rows = await session.query(`SELECT ?work ?type WHERE { VALUES ?work { ${ids.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?work a ?type . VALUES ?type { ${workSemanticTypes.map(type => `<${type}>`).join(' ')} } }
+  } LIMIT ${ids.length * workSemanticTypes.length + 1}`, ids.length * workSemanticTypes.length);
+  for (const row of rows) if (row.work && row.type) types.get(row.work.value)?.push(row.type.value);
+  return types;
 }
 
 async function chapterCard(session: WorkReadSession, source: FeedSource, occurrence: string): Promise<Card> {

@@ -1,43 +1,45 @@
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { readFollowTarget } from '../follows/read.ts';
+import { readFollowTargets } from '../follows/read.ts';
 import { readChapter, readContents } from '../work-contents/read.ts';
 import { WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { GRAPHS, iri, MAX_WORK_SEMANTIC_TYPES, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
+import { inOrder, settle, unwrap } from '../feed/settled.ts';
 import { CONTINUE_COST } from './contract.ts';
 
+/** The owner heads load together, every candidate's public target is one
+ * batch, and each Work's contents and progress load concurrently. Items are
+ * sorted after, so read order never changes the result. */
 export async function readContinue(session: WorkReadSession, principal: VerifiedPrincipal,
   agent: string, limit = 6) {
   const { follows, libraryStatus: status, homePersonal } = session.deps;
-  if (!follows || !status || !homePersonal || !session.deps.access.canReadAsBaselineMember
-    || !await session.deps.access.canReadAsBaselineMember(principal, agent)) {
-    throw new WorkReadUnavailable('Continue is unavailable');
-  }
-  const fence = await status.fence(agent);
-  const personal = await homePersonal.read(principal, agent);
-  const reading = await status.page(agent, 'reading', CONTINUE_COST.candidatesPerSource);
-  const followed = await follows.read(principal, agent, '', 'work', CONTINUE_COST.candidatesPerSource);
+  const canRead = session.deps.access.canReadAsBaselineMember;
+  if (!follows || !status || !homePersonal || !canRead) throw new WorkReadUnavailable('Continue is unavailable');
+  // A denied reader reports unavailable before any private owner answers.
+  const [allowed, rest] = await inOrder(canRead.call(session.deps.access, principal, agent),
+    settle(inOrder(status.fence(agent), homePersonal.read(principal, agent),
+      status.page(agent, 'reading', CONTINUE_COST.candidatesPerSource),
+      follows.read(principal, agent, '', 'work', CONTINUE_COST.candidatesPerSource))));
+  if (!allowed) throw new WorkReadUnavailable('Continue is unavailable');
+  const [fence, personal, reading, followed] = unwrap(rest);
   const followedSet = new Set(followed.rows.map(row => row.target));
   const works = [...new Set([...reading.map(row => row.work), ...followed.rows.map(row => row.target)])]
     .slice(0, CONTINUE_COST.maxCandidates);
   const statuses = new Map((await status.batch(agent, works)).map(row => [row.work, row]));
   const hidden = new Set(personal.exclusions.filter(rule => rule.kind === 'continue' && rule.strength === 'hide')
     .map(rule => rule.target));
-  const items: { work: string; title: Awaited<ReturnType<typeof readFollowTarget>>['name'];
-    cover: Awaited<ReturnType<typeof readFollowTarget>>['icon']; source: 'reading' | 'followed';
-    lastPosition: { occurrence: string; position: string | null; completed: boolean; updatedAt: string } | null;
-    nextUnread: { occurrence: string; title: string | null; href: string };
-    unreadCount: { value: number; kind: 'exact' | 'lower-bound' }; updatedAt: string }[] = [];
   const publicSession = new WorkReadSession(session.deps, new Request(session.request.url),
     { language: session.options.language }, session.position);
-  for (const work of works) {
-    if (hidden.has(work)) continue;
+  const candidates = works.filter(work => !hidden.has(work)
+    && (statuses.get(work)?.status === 'reading' || followedSet.has(work)));
+  const targets = await readFollowTargets(publicSession, candidates, 'work');
+  const privateSession = new WorkReadSession(session.deps, session.request,
+    { actingSubject: agent, limit: CONTINUE_COST.chaptersPerWork }, session.position);
+  privateSession.principal = principal;
+  const read = await inOrder(...candidates.map(async work => {
+    const target = targets.get(work);
+    if (!target) return null;
     const state = statuses.get(work);
-    if (state?.status !== 'reading' && !followedSet.has(work)) continue;
     try {
-      const target = await readFollowTarget(publicSession, work, 'work');
-      const privateSession = new WorkReadSession(session.deps, session.request,
-        { actingSubject: agent, limit: CONTINUE_COST.chaptersPerWork }, session.position);
-      privateSession.principal = principal;
       const page = await readContents(privateSession, work, {});
       let chapterItems = page.items;
       if (!chapterItems.some(item => item.role === 'chapter' && item.availability === 'available')) {
@@ -66,21 +68,27 @@ export async function readContinue(session: WorkReadSession, principal: Verified
           : { occurrence: selected.occurrence, title: selected.label?.value ?? null };
         unread = 1; countKind = 'lower-bound';
       }
-      if (!next) continue;
-      items.push({ work, title: target.name, cover: target.icon,
-        source: state?.status === 'reading' ? 'reading' : 'followed',
+      if (!next) return null;
+      return { work, title: target.name, cover: target.icon,
+        source: state?.status === 'reading' ? 'reading' as const : 'followed' as const,
         lastPosition: progress ? { occurrence: progress.occurrence, position: progress.position,
           completed: progress.completed, updatedAt: progress.changedAt } : null,
         nextUnread: { occurrence: next.occurrence, title: next.title,
           href: `/w/${work.slice(-36)}/read/${next.occurrence.slice(-36)}${page.language
             ? `?language=${encodeURIComponent(page.language)}` : ''}` },
         unreadCount: { value: unread, kind: countKind },
-        updatedAt: progress?.changedAt ?? state?.changedAt ?? new Date(0).toISOString() });
-    } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
-  }
-  if (await status.fence(agent) !== fence || (await homePersonal.read(principal, agent)).revision !== personal.revision
-    || (await follows.read(principal, agent, '', 'work', 1)).revision !== followed.revision
-    || !await session.deps.access.canReadAsBaselineMember(principal, agent)) {
+        updatedAt: progress?.changedAt ?? state?.changedAt ?? new Date(0).toISOString() };
+    } catch (error) {
+      if (!(error instanceof WorkReadMissing)) throw error;
+      return null;
+    }
+  }));
+  const items = read.filter(item => item !== null);
+  const [fenced, personalNow, followsNow, stillAllowed] = await inOrder(status.fence(agent),
+    homePersonal.read(principal, agent), follows.read(principal, agent, '', 'work', 1),
+    canRead.call(session.deps.access, principal, agent));
+  if (fenced !== fence || personalNow.revision !== personal.revision || followsNow.revision !== followed.revision
+    || !stillAllowed) {
     throw new WorkReadMoved('Continue changed');
   }
   items.sort((a, b) => Number(b.source === 'reading') - Number(a.source === 'reading')

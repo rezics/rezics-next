@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { controlTransaction, ControlConflict, ControlInvalid, ControlStale } from '../access/topology-control.ts';
+import { controlRead, controlTransaction, ControlConflict, ControlInvalid, ControlStale } from '../access/topology-control.ts';
 import { followPrincipal } from '../follows/authority.ts';
 import { commandKey } from '../follows/store.ts';
 import { digest } from '../recommendation/derived-generation.ts';
@@ -20,7 +20,7 @@ export class FeedStore {
   constructor(private readonly pool: Pool) {}
 
   async checkpoint(epoch: string): Promise<FeedCheckpoint> {
-    return controlTransaction(this.pool, async client => {
+    return controlRead(this.pool, async client => {
       const row = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id')).rows[0];
       if (!row) throw new WorkReadUnavailable('Feed projection is starting');
       if (row.data_epoch !== epoch) throw new WorkReadUnavailable('Feed projection is recovering');
@@ -29,7 +29,7 @@ export class FeedStore {
   }
 
   async reviewPending(sequence: string): Promise<boolean> {
-    return controlTransaction(this.pool, async client => (await client.query(
+    return controlRead(this.pool, async client => (await client.query(
       'SELECT 1 FROM access.reader_review_event WHERE sequence > $1::bigint LIMIT 1', [sequence])).rowCount !== 0);
   }
 
@@ -132,7 +132,7 @@ export class FeedStore {
     after: { key: string; id: string } | undefined, reader: { principal: VerifiedPrincipal; agent: string } | undefined,
     window: NonNullable<FeedQuery['window']>, asOf: number) {
     if (!Number.isInteger(limit) || limit < 1 || limit > FEED_COST.pageSize) throw new ControlInvalid('Invalid feed page');
-    return controlTransaction(this.pool, async client => {
+    return controlRead(this.pool, async client => {
       const checkpoint = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR SHARE')).rows[0];
       if (checkpoint?.data_epoch !== position.dataEpoch || checkpoint.revision !== revision) throw new WorkReadMoved('Feed changed');
       const owner = reader ? await followPrincipal(client, reader.principal, reader.agent) : null;
@@ -176,7 +176,7 @@ export class FeedStore {
 
   async members(epoch: string, ids: string[]): Promise<FeedRow[]> {
     if (ids.length > FEED_COST.candidates) throw new ControlInvalid('Feed member budget exceeded');
-    return controlTransaction(this.pool, async client => (await client.query<FeedRow>(
+    return controlRead(this.pool, async client => (await client.query<FeedRow>(
       'SELECT * FROM access.feed_item WHERE data_epoch = $1 AND id = ANY($2::text[])', [epoch, ids])).rows);
   }
 
@@ -187,7 +187,7 @@ export class FeedStore {
       throw new ControlInvalid('Invalid feed head');
     }
     if (afterReview !== undefined && !/^\d{1,30}$/.test(afterReview)) throw new ControlInvalid('Invalid review head');
-    return controlTransaction(this.pool, async client => {
+    return controlRead(this.pool, async client => {
       const checkpoint = (await client.query<FeedCheckpoint>(
         'SELECT * FROM access.feed_checkpoint WHERE id FOR SHARE')).rows[0];
       if (checkpoint?.data_epoch !== position.dataEpoch || checkpoint.revision !== revision) {

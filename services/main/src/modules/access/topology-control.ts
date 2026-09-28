@@ -49,10 +49,10 @@ export function normalizeControlError(error: unknown): Error {
 
 /** One bounded owner transaction behind the Access recovery fence. */
 export async function controlTransaction<T>(pool: Pool,
-  work: (client: PoolClient) => Promise<T>): Promise<T> {
+  work: (client: PoolClient) => Promise<T>, read = false): Promise<T> {
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await client.query(read ? 'BEGIN; SET LOCAL synchronous_commit = off' : 'BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
     const fence = await client.query<{ open: boolean }>(
@@ -65,6 +65,14 @@ export async function controlTransaction<T>(pool: Pool,
     try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
     throw normalizeControlError(error);
   } finally { client.release(); }
+}
+
+/** A read whose only writes are FOR SHARE row locks. Locks need no crash
+ * durability, so its commit skips the WAL flush (a median 11 ms under load,
+ * measured by G-383). Isolation and the recovery fence are unchanged; never
+ * pass a callback that writes rows. */
+export function controlRead<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  return controlTransaction(pool, work, true);
 }
 
 export async function lockGate(client: PoolClient, scope: string, write: boolean): Promise<string> {

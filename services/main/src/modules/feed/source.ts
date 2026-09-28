@@ -21,22 +21,23 @@ export async function feedReviewSources(session: WorkReadSession, ids: readonly 
   if (ids.length > FEED_COST.refreshItems) throw new WorkReadUnavailable('Review source budget exceeded');
   if (!ids.length) return [];
   if (!session.deps.reviews) throw new WorkReadUnavailable('Review owner is unavailable');
-  const result: FeedSource[] = [];
-  for (const id of ids) {
+  const reviews = session.deps.reviews;
+  // Each review is independent; concurrent reads keep the input order.
+  const result = await Promise.all(ids.map(async (id): Promise<FeedSource | null> => {
     const review = id.slice('https://rezics.com/id/'.length);
-    const row = await session.deps.reviews.byId(review, null);
-    if (!row || !row.body.trim()) continue;
+    const row = await reviews.byId(review, null);
+    if (!row || !row.body.trim()) return null;
     let target: Awaited<ReturnType<typeof reviewTarget>>;
     try { target = await reviewTarget(session, row.context, row.work); }
-    catch (error) { if (error instanceof WorkReadMissing) continue; throw error; }
-    if (target.mainVersion !== row.main_version || target.realm !== row.realm) continue;
-    result.push({ id, sequence: '0', kind: 'review', target: row.work, work: row.work,
+    catch (error) { if (error instanceof WorkReadMissing) return null; throw error; }
+    if (target.mainVersion !== row.main_version || target.realm !== row.realm) return null;
+    return { id, sequence: '0', kind: 'review', target: row.work, work: row.work,
       actor: row.acting_subject, realm: row.realm, zone: null, language: row.language,
       excerpt: row.spoiler ? null : row.body.slice(0, 400), title: null,
       occurrence: null, contentTarget: null, reply: null, contentRevision: null,
-      review: null, readerReview: row });
-  }
-  return result;
+      review: null, readerReview: row };
+  }));
+  return result.filter((source): source is FeedSource => !!source);
 }
 
 /** Ingestion retains only opaque references, including currently hidden ones.
@@ -186,16 +187,26 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
     return row[name]!.value;
   };
   if (new Set(rows.map(row => row.id?.value)).size !== rows.length) throw new WorkReadUnavailable('Feed source is ambiguous');
-  const sourceBound = await session.deps.sourceAdoptions?.boundWorks(rows.flatMap(row =>
-    row.kind?.value === 'work' && row.work ? [row.work.value] : [])) ?? new Set<string>();
+  const revisionOf = (row: ReadRow) => row.contentRevision!.value.slice('urn:rezics:content:revision:'.length);
+  const published = rows.filter(row => row.contentTarget);
+  if (published.some(row => !row.contentRevision) || published.length && !session.deps.content) {
+    throw new WorkReadUnavailable('Published Content owner unavailable');
+  }
+  // One bound-Work probe and one exact read per published revision, concurrently.
+  // Separate reads keep each body under its own 4 MiB bound rather than a shared one.
+  const revisions = [...new Set(published.map(revisionOf))];
+  const [sourceBound, exacts] = await Promise.all([
+    session.deps.sourceAdoptions?.boundWorks(rows.flatMap(row =>
+      row.kind?.value === 'work' && row.work ? [row.work.value] : [])) ?? new Set<string>(),
+    Promise.all(revisions.map(async id =>
+      (await session.deps.content!.readExactBatch([id], async ids => new Set(ids)))[0]))]);
+  const exactById = new Map(revisions.map((id, index) => [id, exacts[index]]));
   const mapped: FeedSource[] = [];
   for (const row of rows) {
     let actor = row.actor?.value;
     let excerpt: string | null = row.excerpt?.value ?? null;
     if (row.contentTarget) {
-      if (!session.deps.content || !row.contentRevision) throw new WorkReadUnavailable('Published Content owner unavailable');
-      const id = row.contentRevision.value.slice('urn:rezics:content:revision:'.length);
-      const exact = (await session.deps.content.readExactBatch([id], async ids => new Set(ids)))[0];
+      const exact = exactById.get(revisionOf(row));
       if (!exact || ['missing', 'erased', 'denied'].includes(exact.status)) continue;
       if (exact.status !== 'available' || exact.reference.resourceId !== row.contentTarget?.value) {
         throw new WorkReadUnavailable('Published Content differs');

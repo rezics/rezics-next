@@ -11,6 +11,7 @@ import type { AvatarDescriptor } from '../media/summary.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { HomeInterestKind } from './contract.ts';
 import { ONBOARDING_COST } from './contract.ts';
+import { inOrder } from '../feed/settled.ts';
 import { interestKinds, interestSources, matchingActivityKinds, matchingWorkKinds,
   officialZoneInterests } from './kinds.ts';
 
@@ -181,17 +182,17 @@ export async function readSuggestedFollows(session: WorkReadSession,
   input: { interests?: string; languages?: string }, reader?: { principal: VerifiedPrincipal; agent: string }) {
   const selectedKinds = parseChoices(input.interests, interestKinds, 6) as HomeInterestKind[];
   const selectedLanguages = parseChoices(input.languages, languages, 8);
-  const personal = reader && session.deps.homePersonal
-    ? await session.deps.homePersonal.read(reader.principal, reader.agent) : null;
-  if (reader && !personal) throw new WorkReadUnavailable('Home preferences are unavailable');
+  if (reader && !session.deps.homePersonal) throw new WorkReadUnavailable('Home preferences are unavailable');
+  // The preference, directory and official Zone heads are independent reads.
+  const [personal, directory, official] = await inOrder(
+    reader ? session.deps.homePersonal!.read(reader.principal, reader.agent) : null,
+    readRealmDirectory(new WorkReadSession(session.deps, session.request,
+      { language: session.options.language, limit: ONBOARDING_COST.realms }, session.position), { sort: 'activity' }),
+    listOfficialZones(session.deps.environment, { limit: ONBOARDING_COST.officialRealms }));
   const effectiveLanguages = selectedLanguages.length ? selectedLanguages : personal?.preferences.contentLanguages ?? [];
-  const directory = await readRealmDirectory(new WorkReadSession(session.deps, session.request,
-    { language: session.options.language, limit: ONBOARDING_COST.realms }, session.position),
-  { sort: 'activity' });
   const muted = new Set(personal?.exclusions.filter(item => item.kind === 'realm'
     && item.strength === 'mute').map(item => item.target) ?? []);
   const tagRules = personal?.exclusions.filter(item => item.kind === 'tag') ?? [];
-  const official = await listOfficialZones(session.deps.environment, { limit: ONBOARDING_COST.officialRealms });
   if (official.next) throw new WorkReadUnavailable('Official Zone candidate bound exceeded');
   const zoneByRealm = new Map(official.items.map(item => [item.realm, item.zone]));
   const officialInterestByRealm = new Map(official.items.map(item =>
@@ -217,34 +218,33 @@ export async function readSuggestedFollows(session: WorkReadSession,
       language?: string };
     sampleWorks: { id: string; title: typeof directory.items[number]['name'];
       cover: typeof directory.items[number]['icon'] }[] }[] = [];
-  const ranked: InterestCandidate<typeof items[number]>[] = [];
-  for (const [index, realm] of candidateRealms.entries()) {
-    if (muted.has(realm.id) || followed?.matches[index]) continue;
+  // Each candidate Realm's scan is independent; they run together and any
+  // failure surfaces in candidate order, as a serial scan would report it.
+  const scanned = await inOrder(...candidateRealms.map(async (realm, index) => {
+    if (muted.has(realm.id) || followed?.matches[index]) return null;
     if (personal?.exclusions.some(rule => rule.kind === 'realm' && rule.target === realm.id
       && rule.strength === 'fewer'
-      && Number.parseInt(digest([realm.id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0)) continue;
+      && Number.parseInt(digest([realm.id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0)) return null;
     const works = await readRealmWorks(new WorkReadSession(session.deps, session.request,
       { language: session.options.language, limit: ONBOARDING_COST.workScan }, session.position), realm.id);
-    if (!works.items.length) continue;
+    if (!works.items.length) return null;
     const candidates = works.items.filter(work => !personal?.exclusions.some(rule => rule.kind === 'work' && rule.target === work.id
         && (rule.strength === 'hide' || rule.strength === 'not-interested' || rule.strength === 'fewer'
           && Number.parseInt(digest([work.id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0)));
-    const kindMatches = await readWorkKindMatches(session, candidates.map(work => work.id));
-    const hasDiscussion = selectedKinds.includes('discussions')
-      && await realmHasDiscussion(session, realm.id);
-    const samples = [] as typeof candidates;
-    for (const work of candidates) {
-      if (tagRules.length) {
+    const [kindMatches, hasDiscussion, tagged] = await inOrder(
+      readWorkKindMatches(session, candidates.map(work => work.id)),
+      selectedKinds.includes('discussions') && realmHasDiscussion(session, realm.id),
+      inOrder(...candidates.map(async work => {
+        if (!tagRules.length) return true;
         const tagSession = new WorkReadSession(session.deps, session.request,
           { language: session.options.language, scope: 'realm', realm: realm.id, limit: 3 }, session.position);
         const tags = await readWorkClassifications(tagSession, work.id, tagRules.map(rule => rule.target));
-        if (tagRules.some(rule => tags.items.some(item => item.sense === rule.target)
+        return !tagRules.some(rule => tags.items.some(item => item.sense === rule.target)
           && (rule.strength === 'mute' || rule.strength === 'fewer'
-            && Number.parseInt(digest([work.id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0))) continue;
-      }
-      samples.push(work);
-    }
-    if (!samples.length) continue;
+            && Number.parseInt(digest([work.id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0));
+      })));
+    const samples = candidates.filter((_work, position) => tagged[position]);
+    if (!samples.length) return null;
     const matches = selectedKinds.filter(kind => officialInterestByRealm.get(realm.id) === kind
       || samples.some(work => kindMatches.get(work.id)?.includes(kind))
       || kind === 'discussions' && hasDiscussion
@@ -268,10 +268,11 @@ export async function readSuggestedFollows(session: WorkReadSession,
         ...(popularLanguage ? { language: popularLanguage } : {}) },
       sampleWorks } as typeof items[number];
     const activityRank = directory.items.findIndex(item => item.id === realm.id);
-    ranked.push({ value: suggestion, matches, languageMatches, official: !!zone,
+    return { value: suggestion, matches, languageMatches, official: !!zone,
       score: Math.min(rankingWorks.length, ONBOARDING_COST.workScan) * 10
-        + (activityRank < 0 ? 0 : directory.items.length - activityRank), index });
-  }
+        + (activityRank < 0 ? 0 : directory.items.length - activityRank), index };
+  }));
+  const ranked: InterestCandidate<typeof items[number]>[] = scanned.filter(candidate => candidate !== null);
   items.push(...selectInterestSuggestions(ranked, selectedKinds, ONBOARDING_COST.suggestions)
     .map(({ value, interest }) => ({ ...value, reason: { ...value.reason,
       kind: interest ? 'matching-kind' as const : 'popular' as const, interest } })));

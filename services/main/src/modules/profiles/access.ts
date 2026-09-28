@@ -17,7 +17,8 @@ export class ProfilesAccess {
   readonly visibility: AgentLibraryVisibilityStore;
   constructor(private readonly pool: Pool) { this.visibility = new AgentLibraryVisibilityStore(pool); }
 
-  private async transaction<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
+  /** `read` callbacks write nothing; see controlRead for their asynchronous commit. */
+  private async transaction<T>(operation: (client: PoolClient) => Promise<T>, read = false): Promise<T> {
     const signal = fusekiReadBudget.getStore()?.signal ?? AbortSignal.timeout(10_000);
     signal.throwIfAborted();
     const client = await new Promise<PoolClient>((resolve, reject) => {
@@ -35,7 +36,7 @@ export class ProfilesAccess {
     signal.addEventListener('abort', abort, { once: true });
     try {
       if (signal.aborted) { abort(); signal.throwIfAborted(); }
-      await client.query('BEGIN');
+      await client.query(read ? 'BEGIN; SET LOCAL synchronous_commit = off' : 'BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       const fence = await client.query<{ open: boolean }>('SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
@@ -54,13 +55,18 @@ export class ProfilesAccess {
   }
 
   async agentFence(agent: string): Promise<string | null> {
+    return (await this.agentFences([agent])).get(agent) ?? null;
+  }
+
+  /** One indexed probe for a page of Agents; an inactive Agent is absent. */
+  async agentFences(agents: readonly string[]): Promise<Map<string, string>> {
+    if (!agents.length) return new Map();
     return this.transaction(async client => {
-      const rows = await client.query<{ generation: string; recovery: string }>(`SELECT s.generation,
-        f.generation AS recovery FROM access.authority_subject s CROSS JOIN access.recovery_fence f
-        WHERE s.id = $1 AND s.kind = 'agent' AND s.active AND f.id = true`, [agent]);
-      const row = rows.rows[0];
-      return row ? `${row.recovery}:${row.generation}` : null;
-    });
+      const rows = await client.query<{ id: string; generation: string; recovery: string }>(`SELECT s.id,
+        s.generation, f.generation AS recovery FROM access.authority_subject s CROSS JOIN access.recovery_fence f
+        WHERE s.id = ANY($1::text[]) AND s.kind = 'agent' AND s.active AND f.id = true`, [agents]);
+      return new Map(rows.rows.map(row => [row.id, `${row.recovery}:${row.generation}`]));
+    }, true);
   }
 
   async libraryFence(principal: VerifiedPrincipal, agent: string,

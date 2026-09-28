@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { controlTransaction, ControlConflict, ControlInvalid, ControlStale } from '../access/topology-control.ts';
+import { controlRead, controlTransaction, ControlConflict, ControlInvalid, ControlStale } from '../access/topology-control.ts';
 import { digest } from '../recommendation/derived-generation.ts';
 import { FOLLOWS_COST, type BatchFollowCommand, type BatchFollowResult,
   type FollowCommand, type FollowKind, type FollowResult } from './contract.ts';
@@ -71,7 +71,7 @@ export class FollowsStore {
 
   async read(principal: VerifiedPrincipal, agent: string, after = '', kind?: FollowKind, limit = 20) {
     if (!Number.isInteger(limit) || limit < 1 || limit > FOLLOWS_COST.pageSize) throw new ControlInvalid('Invalid page size');
-    return controlTransaction(this.pool, async client => {
+    return controlRead(this.pool, async client => {
       const owner = await followPrincipal(client, principal, agent);
       const inventory = (await client.query<{ revision: string }>(
         'SELECT revision FROM access.follow_inventory WHERE principal_id = $1 FOR SHARE', [owner])).rows[0];
@@ -83,7 +83,7 @@ export class FollowsStore {
   }
 
   async state(target: string, reader?: { principal: VerifiedPrincipal; agent: string }) {
-    return controlTransaction(this.pool, async client => {
+    return controlRead(this.pool, async client => {
       const owner = reader ? await followPrincipal(client, reader.principal, reader.agent) : null;
       const row = owner ? (await client.query<FollowRow>(`SELECT target, kind, following, revision
         FROM access.follow WHERE principal_id = $1 AND target = $2`, [owner, target])).rows[0] : undefined;
@@ -100,7 +100,7 @@ export class FollowsStore {
   /** Candidate membership uses at most 80 indexed relationship lookups. */
   async matches(principal: VerifiedPrincipal, agent: string, candidates: string[][]) {
     if (candidates.length > 20 || candidates.some(ids => ids.length > 4)) throw new ControlInvalid('Follow match budget exceeded');
-    return controlTransaction(this.pool, async client => {
+    return controlRead(this.pool, async client => {
       const owner = await followPrincipal(client, principal, agent);
       const rows = await client.query<{ target: string; kind: FollowKind }>(`SELECT target, kind FROM access.follow
         WHERE principal_id = $1 AND following AND target = ANY($2::text[])`, [owner, candidates.flat()]);
