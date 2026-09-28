@@ -5,7 +5,7 @@ import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure
 import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { readWorkBasis, fenceWorkBasis } from '../work/read-header.ts';
-import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid,
+import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadExpired, WorkReadInvalid,
   unerased, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { WORK_CONTENTS_COST } from './read-contract.ts';
@@ -215,7 +215,8 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
     const current = await composition(session, header.work, header.component);
     const { basis } = current;
     if (current.header.structure !== header.structure) throw missing();
-    if (options.revision && options.revision !== header.head) throw new WorkReadMoved('Composition revision changed');
+    // A pinned revision that is no longer the head will not come back on a retry.
+    if (options.revision && options.revision !== header.head) throw new WorkReadExpired('Composition revision changed');
     const language = contentLanguage(options.language, basis.selectedLanguage);
     const page = await readCompositionPage(session.deps.environment, { structure: header.structure,
       occurrence, limit: 1, canReadTarget: target => canReadTarget(session, target) });

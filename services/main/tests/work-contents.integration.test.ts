@@ -187,3 +187,63 @@ test('Reader: public and private composition pages, current Content, cursor and 
     expect(afterErasure.items).toMatchObject([{ availability: 'unavailable', target: null }]);
   } finally { await stack.stop(); }
 }, 180_000);
+
+test('Reader: a chapter Work names its Book and the chapter to open, and no other Work does', async () => {
+  const stack = await startMediaStack('chapter-place');
+  try {
+    const a = await stack.member('chapter-place-owner');
+    const store = stack.objects('semantic/structure/');
+    await store.initialize();
+    (stack.env as typeof stack.env & { structureObjects: typeof store }).structureObjects = store;
+    const composed = async (title: string) => {
+      const types = ['https://schema.org/Book'];
+      const created = await activateMetadataWork(stack.env, { title, semanticTypes: types, admission: stack.admission(
+        a.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, types)) });
+      if (!created.work || !created.mainVersion) throw new Error('Book was not created');
+      const book = { work: created.work, mainVersion: created.mainVersion };
+      const text = await stack.contribution(book.work, a.actor, 'en', `${title} text`);
+      const selection = { context: { kind: 'main-version-default' as const, id: book.mainVersion }, work: book.work,
+        contribution: text.contribution, publicationDecision: text.decision, expectedSelectionHead: null,
+        selectionBasis: 'main-maintainer' as const, actingSubject: a.actor };
+      await selectMainDefault(stack.env, stack.admission(a.actor, `publication:select:${book.mainVersion}`,
+        'publication.select', mainSelectionDigest(selection)), selection);
+      await a.grant(`work:edit:${book.work}`, 'work.edit');
+      await a.grant(`work:read:${book.work}`, 'work.read');
+      const made = await json<{ structure: string; revision: string }>(await a.send('POST', '/v1/compositions',
+        { profile: 'book-composition', work: book.work, mainVersion: book.mainVersion, actingSubject: a.actor }), 201);
+      return { ...book, ...made };
+    };
+    const book = await composed(`Chapter place book ${randomUUID()}`);
+    const other = await composed(`Chapter place anthology ${randomUUID()}`);
+    // A chapter made as a part of its Book, and older chapter Works placed afterwards.
+    const made = await json<{ work: string; occurrence: string; compositionRevision: string }>(await a.send('POST',
+      `/v1/works/${short(book.work)}/chapters`, { profile: 'book-chapter-create-v1', title: 'Chapter one',
+        language: 'en', direction: 'ltr', parent: book.structure, position: 'last',
+        expectedCompositionHead: book.revision, actingSubject: a.actor }), 200);
+    const legacy = await stack.privateWork(a.actor, 'Placed chapter');
+    const twice = await stack.privateWork(a.actor, 'Chapter in two Books');
+    for (const target of [made.work, legacy.work, twice.work]) await a.grant(`work:read:${target}`, 'work.read');
+    const placed = await json<{ revision: string; occurrences: string[] }>(await a.send('POST',
+      `/v1/compositions/${short(book.structure)}/changes`, { profile: 'book-composition',
+        expectedHead: made.compositionRevision, actingSubject: a.actor, operations: [
+          { op: 'insert', parent: book.structure, position: 'last', role: 'chapter', target: legacy.work },
+          { op: 'insert', parent: book.structure, position: 'last', role: 'chapter', target: twice.work }] }), 200);
+    await json(await a.send('POST', `/v1/compositions/${short(other.structure)}/changes`, {
+      profile: 'book-composition', expectedHead: other.revision, actingSubject: a.actor,
+      operations: [{ op: 'insert', parent: other.structure, position: 'last', role: 'chapter',
+        target: twice.work }] }), 200);
+    const header = async (work: string) => json<{ partOf?: { work: string; occurrence: string | null } }>(
+      await a.read(`/v1/works/${short(work)}?actingSubject=${encodeURIComponent(a.actor)}`));
+    expect((await header(made.work)).partOf).toEqual({ work: book.work, occurrence: made.occurrence });
+    expect((await header(legacy.work)).partOf).toEqual({ work: book.work, occurrence: placed.occurrences[0] });
+    expect((await header(twice.work)).partOf).toBeUndefined();
+    expect((await header(book.work)).partOf).toBeUndefined();
+    // A removed chapter keeps the Book it was made in, with no place to open.
+    await json(await a.send('POST', `/v1/compositions/${short(book.structure)}/changes`, {
+      profile: 'book-composition', expectedHead: placed.revision, actingSubject: a.actor,
+      operations: [{ op: 'remove', occurrence: made.occurrence }] }), 200);
+    expect((await header(made.work)).partOf).toEqual({ work: book.work, occurrence: null });
+    const publicHeader = await json<{ partOf?: unknown }>(await stack.call('GET', `/v1/works/${short(book.work)}`));
+    expect(publicHeader.partOf).toBeUndefined();
+  } finally { await stack.stop(); }
+}, 180_000);

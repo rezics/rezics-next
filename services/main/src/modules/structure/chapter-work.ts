@@ -31,3 +31,31 @@ export async function canonicalChapterWorks(session: WorkReadSession, works: rea
   }
   return parents;
 }
+
+/**
+ * Where a chapter Work is read: its Book and its one active chapter occurrence in the Book's current Main
+ * Version composition (null when it has none, or several). A chapter made as a part of its Book keeps that
+ * Book; an older chapter is the chapter of the one Book that places it. Null for any other Work, including
+ * one several Books place. One bounded graph query.
+ */
+export async function chapterPlace(session: WorkReadSession, work: string) {
+  const rows = await session.query(`SELECT DISTINCT ?book ?occurrence ?declared WHERE {
+    { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} schema:isPartOf ?book . } BIND(true AS ?declared) }
+    UNION
+    { GRAPH ${iri(GRAPHS.current)} {
+        ?structure a rv:Structure ; rv:structureProfile rv:BookComposition ;
+          rv:structureOf ?main ; rv:selectedGeneration ?generation .
+        ?main rv:work ?book . ?book rv:mainVersion ?main .
+        ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
+          rv:occurrenceRole rv:ChapterRole ; schema:item ${iri(work)} ; rv:occurrence ?occurrence .
+        FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
+      } }
+    FILTER(?book != ${iri(work)})
+  } LIMIT 8`, 8);
+  const declared = rows.find(row => row.declared)?.book?.value;
+  const books = new Set(rows.flatMap(row => row.book ? [row.book.value] : []));
+  const book = declared ?? (books.size === 1 ? [...books][0]! : null);
+  if (!book) return null;
+  const places = rows.filter(row => row.book?.value === book && row.occurrence);
+  return { work: book, occurrence: places.length === 1 ? places[0]!.occurrence!.value : null };
+}

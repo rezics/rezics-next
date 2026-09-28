@@ -4,6 +4,7 @@ import { iri, GRAPHS, WORK_SEMANTIC_TYPES } from './activate.ts';
 import { workCard } from './read-contract.ts';
 import { WorkReadMissing, WorkReadUnavailable, publicWork, unerased, type WorkReadSession } from './read-session.ts';
 import { readMetadataHeader, recordedDisplayText, selectedMetadata } from './metadata-read.ts';
+import { chapterPlace } from '../structure/chapter-work.ts';
 
 export type WorkCard = Static<typeof workCard>;
 export interface WorkBasis { card: WorkCard; mainRevision: string; selectedLanguage: string | null;
@@ -64,6 +65,7 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
   const basis = await readWorkBasis(session, work);
   const metadata = basis.metadata;
   const selected = selectedMetadata(metadata, session.options.language);
+  const partOf = await chapterPlace(session, work);
   await fenceWorkBasis(session, basis);
   const path = `/v1/works/${work.slice(-36)}`;
   return { profile: 'work-read-v1' as const, ...basis.card, disclosure: basis.disclosure,
@@ -72,7 +74,7 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
     metadataRevision: metadata.revision,
     originalTitle: metadata.originalTitle ? recordedDisplayText(metadata.originalTitle) : null,
     mainVersionRevision: basis.mainRevision, mainVersionLabel: selected.mainVersionLabel,
-    selectedLanguage: basis.selectedLanguage, sourcePosition: session.position,
+    selectedLanguage: basis.selectedLanguage, ...(partOf ? { partOf } : {}), sourcePosition: session.position,
     links: { versions: `${path}/versions`, classifications: `${path}/classifications`,
       adoptions: `${path}/adoptions`, ratings: `${path}/ratings`, history: `${path}/history`, credits: `${path}/credits`,
       metadata: `${path}/metadata`, editions: `${path}/editions` } };
