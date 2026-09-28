@@ -23,25 +23,33 @@ export interface DiscoverState {
   context: string | null;
   type: WorkTypeKey | null;
   term: string | null;
+  conditions?: { include: string[]; exclude: string[]; match: 'all' | 'any' };
 }
 
 /** The URL's discover state, or null when a value is malformed: a filtered view never widens. */
 export function parseDiscoverState(params: SearchParams): DiscoverState | null {
   const scope = parseScope(params);
-  if ([params.context, params.type, params.term].some(Array.isArray)) return null;
+  if ([params.context, params.type, params.term, params.ci, params.ce, params.cm].some(Array.isArray)) return null;
   const context = single(params.context) ?? null;
   const type = single(params.type) ?? null;
   const term = single(params.term) ?? null;
-  if (!scope || (context !== null && !isUuid(context)) || (term !== null && !isUuid(term))) return null;
+  const list = (raw: string | undefined) => raw === undefined || raw === '' ? [] : raw.split(',');
+  const include = list(single(params.ci)), exclude = list(single(params.ce));
+  const match = single(params.cm) ?? 'all';
+  if (!scope || (context !== null && !isUuid(context)) || (term !== null && !isUuid(term))
+    || ![...include, ...exclude].every(isUuid) || new Set([...include, ...exclude]).size
+      !== include.length + exclude.length || (match !== 'all' && match !== 'any')) return null;
   if (type !== null && !workTypes.some(item => item.key === type)) return null;
   // Main defines no personal classification, so Mine never filters by term.
   if (scope.kind === 'mine' && term !== null) return null;
-  return { scope, context, type: type as WorkTypeKey | null, term };
+  return { scope, context, type: type as WorkTypeKey | null, term,
+    ...(include.length || exclude.length || match !== 'all' ? { conditions: { include, exclude, match } } : {}) };
 }
 
 export function discoverHref(state: DiscoverState): string {
   return withQuery('/discover', { ...scopeQuery(state.scope), context: state.context, type: state.type,
-    term: state.term });
+    term: state.term, ci: state.conditions?.include.join(','), ce: state.conditions?.exclude.join(','),
+    cm: (state.conditions?.include.length ?? 0) > 1 && state.conditions?.match === 'any' ? 'any' : null });
 }
 
 /**
@@ -82,6 +90,9 @@ export function termShelf(term: string, type: WorkTypeKey | null, ranked: boolea
  * rated needs a rating question (`ranked`); Mine is the reader's own ratings.
  */
 export function shelvesFor(state: DiscoverState, ranked = false): ShelfSpec[] {
+  if (state.conditions?.include.length || state.conditions?.exclude.length) {
+    return state.type ? [recent(state.type)] : [recent('book'), recent('document'), recent('recipe')];
+  }
   if (state.scope.kind === 'mine') {
     return ranked ? [{ key: 'mine', topic: { kind: 'mine', type: state.type }, sort: 'top-rated', type: state.type,
       term: null }] : [];

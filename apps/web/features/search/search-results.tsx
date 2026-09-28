@@ -124,6 +124,8 @@ function FailureNotice({ failure, state, t, onRetry, onRestart }: {
     case 'restart': return <Notice icon={RefreshCwIcon} headingLevel={2} title={t.restartTitle} description={t.restartHelp}>
       <Button size="sm" onClick={onRestart}><RotateCwIcon aria-hidden="true" />{t.restart}</Button></Notice>;
     case 'budget': return <Notice icon={LibraryIcon} headingLevel={2} title={t.budgetTitle} description={t.budgetHelp} />;
+    case 'unsupported': return <Notice icon={BanIcon} headingLevel={2} title={t.unsupportedTitle}
+      description={t.unsupportedHelp} />;
     case 'missing': return <Notice icon={CircleSlashIcon} headingLevel={2} title={t.realmMissingTitle}>
       <Link href={searchHref({ ...state, scope: { kind: 'global' } })}
         className={buttonVariants({ size: 'sm', variant: 'outline' })}>{t.seeGlobal}</Link></Notice>;

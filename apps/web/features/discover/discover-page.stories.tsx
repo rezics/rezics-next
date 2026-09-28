@@ -86,6 +86,31 @@ export const AllBooks: Story = {
   },
 };
 
+/** Two included genres use one any Condition over the Books listing. */
+const filteredBooks: DiscoverState = { ...bookState,
+  conditions: { include: [adventure, context], exclude: [], match: 'any' } };
+const tag = (id: string, value: string): DiscoveryItem['classifications'][number] => ({
+  sense: `https://rezics.com/id/${id}`, concept: `https://rezics.com/id/${id}`,
+  decision: `https://rezics.com/id/${realm}`, source: 'global',
+  name: { value, language: 'en', direction: 'ltr', basis: 'requested' },
+});
+export const FilteredBooks: Story = {
+  args: { state: filteredBooks, shelves: shelves(filteredBooks, () => ok(page([
+    { ...works.journey, classifications: [tag(adventure, 'Adventure'), tag(context, 'Mystery')] },
+    { ...works.pride, classifications: [tag(adventure, 'Adventure')] },
+  ]))) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const bar = within(canvas.getByRole('region', { name: 'Conditions' }));
+    await expect(bar.getByText('Adventure')).toBeVisible();
+    await expect(bar.getByText('Mystery')).toBeVisible();
+    await expect(within(bar.getByRole('group', { name: 'Match' })).getByRole('link', { name: 'Any' }))
+      .toHaveAttribute('aria-current', 'true');
+    await expect(canvas.getByRole('region', { name: 'Recently added' })).toBeVisible();
+    await expect(canvas.queryByRole('region', { name: 'Readers’ favorites' })).toBeNull();
+  },
+};
+
 const genreState: DiscoverState = { ...global, term: adventure };
 export const Genre: Story = {
   args: { state: genreState, shelves: shelvesFor(genreState, true).map(spec => loaded(genreState, spec,

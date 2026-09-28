@@ -7,6 +7,7 @@ import { type CatalogueWork, coverKindOf } from '../catalogue/work.ts';
 import type { DiscoverFallback, DiscoverPageProps, LoadedShelf } from './discover-view.tsx';
 import { fills } from './fills.ts';
 import { readDiscovery, readRealm, readStandingContext, settle } from './read.ts';
+import { readQueryDiscovery } from './query-read.ts';
 import { type SearchParams, workHref } from './scope.ts';
 import { browseReader } from './server.ts';
 import { type DiscoverState, discoverHref, discoveryQuery, genreTerms, parseDiscoverState, type ShelfSpec, shelvesFor,
@@ -24,7 +25,8 @@ async function readShelf(reader: Reader, state: DiscoverState, spec: ShelfSpec, 
   const query = discoveryQuery(state, spec, { limit, language, context, actingSubject: reader.actingSubject });
   // Mine is this person's own population; without a session Agent there is nothing to read.
   const initial = mine && !reader.actingSubject ? { ok: false as const, failure: 'sign-in' as const }
-    : await readDiscovery(mine ? reader.personal : reader.anonymous, query);
+    : state.conditions ? await readQueryDiscovery(reader.anonymous, state, query)
+      : await readDiscovery(mine ? reader.personal : reader.anonymous, query);
   return { spec, query, initial };
 }
 
@@ -79,14 +81,15 @@ export async function loadDiscoverState(state: DiscoverState | null, locale: UiL
   const limit = overview ? ROW_PAGE : GRID_PAGE;
   const first = await Promise.all(shelvesFor(state, context !== null)
     .map(spec => readShelf(reader, state, spec, context, limit, locale)));
-  const genre = overview && genres ? await genreShelves(reader, state, first, context, locale) : [];
+  const genre = overview && genres && !state.conditions ? await genreShelves(reader, state, first, context, locale) : [];
   // Genres follow the favorites they grew from, ahead of what is merely recent.
   const favorites = first.filter(shelf => shelf.spec.topic.kind === 'favorites');
   const shelves = genre.length
     ? [...favorites, ...genre, ...first.filter(shelf => !favorites.includes(shelf))] : first;
   // When no list here can be shown, the page still offers what readers are reading, and in a
   // community, everyone's lists; never a column of identical "being prepared" boxes.
-  const fallback = overview && !first.some(fills) ? await readFallback(reader, state, locale) : undefined;
+  const fallback = overview && !state.conditions && !first.some(fills)
+    ? await readFallback(reader, state, locale) : undefined;
   return { state, realm: realmView, shelves, fallback, ...common,
     ...await readerState(reader, [...shelves, ...fallback?.shelves ?? []]) };
 }

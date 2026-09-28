@@ -39,6 +39,8 @@ export function failureNotice(failure: ReadFailure, shelf: string, t: ContractOf
     case 'missing': return { icon: CircleSlashIcon, title: t.missingShelf, description: t.missingHelp, tone: 'default' };
     case 'sign-in': return { icon: KeyRoundIcon, title: t.signInTitle, description: t.signInHelp, tone: 'default' };
     case 'invalid': return { icon: BanIcon, title: t.invalidTitle, tone: 'destructive' };
+    case 'unsupported': return { icon: BanIcon, title: t.unsupportedTitle,
+      description: t.unsupportedHelp, tone: 'default' };
     case 'budget': return { icon: LibraryIcon, title: t.budgetTitle, tone: 'default' };
     case 'unavailable': return { icon: TriangleAlertIcon, title: t.unavailableShelf({ shelf }),
       description: t.unavailableHelp, tone: 'destructive' };

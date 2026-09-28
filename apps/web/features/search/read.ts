@@ -1,28 +1,31 @@
 import { iriOf } from '../discover/scope.ts';
 import { authorHref } from '../author/route.ts';
 import { workTypes } from '../discover/state.ts';
+import type { ResourceQuery } from '../../../../model/definitions/filter-document-v1.ts';
 import { type MainClient, problemCode, type WorkCover, type WorkName } from '../discover/types.ts';
 import type { SearchState } from './state.ts';
 import { reasonsOf, type SearchContinuation, searchFailureOf, type SearchLoaded, type SearchPage,
-  type SearchPageRequest } from './types.ts';
+  } from './types.ts';
 
 export const SEARCH_PAGE_SIZE = 10;
 
-/** The phrase page profile for a state: Main or Realm context, with or without a classification term. */
-export function searchRequest(state: SearchState, continuation?: SearchContinuation): SearchPageRequest {
-  const base = { phrase: state.phrase, language: state.language, pageSize: SEARCH_PAGE_SIZE,
-    ...(state.includeTypes?.length ? { includeTypes: state.includeTypes.map(key => workTypes.find(type => type.key === key)!.iri) } : {}),
-    ...(state.excludeTypes?.length ? { excludeTypes: state.excludeTypes.map(key => workTypes.find(type => type.key === key)!.iri) } : {}),
-    ...(continuation ? { continuation } : {}) };
-  const context = state.scope.kind === 'realm'
-    ? { kind: 'realm-local' as const, id: iriOf(state.scope.realm) } : null;
-  if (state.term) {
-    const sense = iriOf(state.term);
-    return context ? { profile: 'public-realm-classified-phrase-page-v1', context, sense, ...base }
-      : { profile: 'public-main-classified-phrase-page-v1', sense, ...base };
-  }
-  return context ? { profile: 'public-realm-phrase-page-v1', context, ...base }
-    : { profile: 'public-main-phrase-page-v1', ...base };
+/** One FilterDocument for the phrase; the UI keeps all chosen values in Query's grammar. */
+export function searchRequest(state: SearchState, continuation?: SearchContinuation): ResourceQuery {
+  const included = [...(state.term ? [state.term] : []), ...(state.concepts?.include ?? [])];
+  const excluded = state.concepts?.exclude ?? [];
+  const filter: NonNullable<ResourceQuery['filter']> = { all: [
+    ...(state.includeTypes?.length ? [{ facet: 'type', any: state.includeTypes.map(key =>
+      workTypes.find(type => type.key === key)!.iri) }] : []),
+    ...(state.excludeTypes?.length ? [{ facet: 'type', none: state.excludeTypes.map(key =>
+      workTypes.find(type => type.key === key)!.iri) }] : []),
+    ...(state.language ? [{ facet: 'language', any: [state.language] }] : []),
+    ...(included.length ? [{ facet: 'concept', [state.concepts?.match === 'any' ? 'any' : 'all']:
+      included.map(iriOf) }] : []),
+    ...(excluded.length ? [{ facet: 'concept', none: excluded.map(iriOf) }] : []),
+  ] };
+  return { context: state.scope.kind === 'realm' ? { realm: iriOf(state.scope.realm) } : 'global',
+    scope: { kind: 'all' }, text: { phrase: state.phrase }, sort: 'relevance', filter,
+    page: { size: SEARCH_PAGE_SIZE, ...(continuation ? { continuation } : {}) } };
 }
 
 type Named = { name: WorkName; avatar: WorkCover };
@@ -60,10 +63,11 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
   options: { language: string; actingSubject?: string; continuation?: SearchContinuation }): Promise<SearchLoaded> {
   let page: SearchPage;
   try {
-    const { data, error } = await clients.search.v1.queries.page.post(searchRequest(state, options.continuation));
+    const { data, error } = await clients.search.v1.query.post(searchRequest(state, options.continuation));
     if (error) return { ok: false, failure: searchFailureOf(error.status, problemCode(error.value)) };
-    if (!data || data.profile === 'public-content-phrase-page-v1') return { ok: false, failure: 'unavailable' };
-    page = data;
+    if (!data || !('results' in data.result)
+      || data.result.profile === 'public-content-phrase-page-v1') return { ok: false, failure: 'unavailable' };
+    page = data.result as SearchPage;
   } catch {
     return { ok: false, failure: 'unavailable' };
   }
@@ -91,7 +95,8 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
       conceptName: reasons.classification.concept
         ? named?.get(reasons.classification.concept)?.name ?? null : null } : null } }));
   return { ok: true, page: { total: page.total, population: page.population, sequence: page.sourcePosition.sequence,
-    indexGeneration: page.indexGeneration, next: page.next, facets: page.facets,
+    indexGeneration: page.indexGeneration, next: page.next as SearchContinuation | null,
+    facets: 'facets' in page ? page.facets : undefined,
     titles: hits.every(hit => hit.title !== null), hits } };
 }
 

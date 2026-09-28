@@ -38,7 +38,7 @@ export const Concept: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'Fantasy' })).toBeVisible();
-    await expect(canvas.getByText('Tags')).toBeVisible();
+    await expect(canvas.getAllByText('Tags')[0]).toBeVisible();
     await expect(canvas.getByText(/Stories built on the impossible/)).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Fiction' })).toHaveAttribute('href', `/en/concepts/${conceptUuid(5)}`);
     await expect(canvas.getByRole('link', { name: 'High fantasy' })).toHaveAttribute('href',
@@ -49,7 +49,7 @@ export const Concept: Story = {
     await expect(canvas.getByRole('link', { name: /^Follow/ })).toHaveAttribute('href',
       `/auth/start?next=${encodeURIComponent(page)}`);
     const bar = within(canvas.getByRole('region', { name: 'Conditions' }));
-    await expect(bar.getByText('Fantasy, this page’s Concept')).toBeInTheDocument();
+    await expect(bar.getByText('Fantasy, this page’s tag')).toBeInTheDocument();
     // Concepts the listed Works also carry are one step from included or excluded.
     await expect(bar.getByRole('link', { name: 'Include Dragons' })).toHaveAttribute('href',
       `/en/concepts/${conceptUuid(1)}?include=${conceptUuid(8)}`);
@@ -73,8 +73,8 @@ export const IncludeAndExclude: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const bar = within(canvas.getByRole('region', { name: 'Conditions' }));
-    await expect(bar.getByText('Included: Dragons')).toBeInTheDocument();
-    await expect(bar.getByText('Excluded: Romance')).toBeInTheDocument();
+    await expect(bar.getByText('Dragons')).toBeInTheDocument();
+    await expect(bar.getByText('Romance')).toBeInTheDocument();
     await expect(bar.getByRole('link', { name: 'Remove Dragons' })).toHaveAttribute('href',
       `/en/concepts/${conceptUuid(1)}?exclude=${conceptUuid(3)}`);
     await expect(bar.getByRole('link', { name: 'Remove Romance' })).toHaveAttribute('href',
@@ -83,7 +83,8 @@ export const IncludeAndExclude: Story = {
     await expect(match.getByRole('link', { name: /^All/ })).toHaveAttribute('aria-current', 'true');
     await expect(match.getByRole('link', { name: /^Any/ })).toHaveAttribute('href',
       `/en/concepts/${conceptUuid(1)}?include=${conceptUuid(8)}&exclude=${conceptUuid(3)}&match=any`);
-    await expect(bar.getByRole('link', { name: 'Clear' })).toHaveAttribute('href', `/en/concepts/${conceptUuid(1)}`);
+    await expect(bar.getByRole('link', { name: 'Clear Conditions' }))
+      .toHaveAttribute('href', `/en/concepts/${conceptUuid(1)}`);
     await expect(within(canvas.getByRole('region', { name: 'Works' })).getAllByRole('heading', { level: 3 }))
       .toHaveLength(2);
   },
@@ -95,12 +96,12 @@ export const AddByName: Story = {
     const canvas = within(canvasElement);
     const bar = within(canvas.getByRole('region', { name: 'Conditions' }));
     await userEvent.click(bar.getByRole('radio', { name: 'Exclude' }));
-    const input = bar.getByRole('combobox', { name: 'Add a Concept' });
+    const input = bar.getByRole('combobox', { name: 'Search tags' });
     await userEvent.type(input, 'dr');
     await waitFor(() => expect(screen.getByRole('option', { name: 'Dragons' })).toBeVisible());
     await userEvent.clear(input);
     await userEvent.type(input, 'zz');
-    await waitFor(() => expect(screen.getByText('No Concepts match')).toBeVisible());
+    await waitFor(() => expect(screen.getByText('No tags found')).toBeVisible());
   },
 };
 
@@ -211,9 +212,8 @@ export const ChineseDark: Story = {
   parameters: { route: { pathname: `/zh-Hans/concepts/${conceptUuid(1)}` } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText('标签')).toBeVisible();
-    await expect(canvas.getByRole('region', { name: '条件' })).toHaveTextContent('作品包含');
-    await expect(canvas.getByText('已包含：Magic schools')).toBeInTheDocument();
+    await expect(canvas.getAllByText('标签')[0]).toBeVisible();
+    await expect(canvas.getByRole('region', { name: '筛选条件' })).toHaveTextContent('Magic schools');
     await expect(within(canvas.getByRole('region', { name: '作品' })).getByText('1 部作品')).toBeVisible();
   },
 };
@@ -249,4 +249,3 @@ export const Unavailable: Story = {
     await expect(within(canvasElement).getByRole('alert')).toHaveTextContent('This Concept can’t be shown right now');
   },
 };
-

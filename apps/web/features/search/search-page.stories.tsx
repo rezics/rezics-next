@@ -10,6 +10,7 @@ import type { SearchFailure, SearchHit, SearchLoaded, SearchResultPage } from '.
 
 const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-4b5a-4c6d-8e7f-9a0b1c2d3e4f`;
 const realm = '3f0e1c2d-4b5a-4c6d-8e7f-9a0b1c2d3e4f';
+const term = '0b1c2d3e-4f5a-4b6c-8d7e-8f9a0b1c2d3e';
 
 function hit(n: number, title: string | null, language: string, reasons: Partial<SearchHit['reasons']> = {},
   card: Partial<Pick<SearchHit, 'authors' | 'rating' | 'tagline' | 'completion'>> = {}): SearchHit {
@@ -90,6 +91,22 @@ export const Populated: Story = {
   },
 };
 
+const mystery = '5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d';
+const romance = '6b7c8d9e-0f1a-4b2c-8d3e-4f5a6b7c8d9e';
+export const ConceptConditions: Story = {
+  args: { parsed: state('书店', { term, concepts: { include: [mystery], exclude: [romance], match: 'any' } }),
+    initial: results([hit(24, '深夜书店', 'zh-Hans', { classification: {
+      concept: id(88), conceptName: name('悬疑', 'zh-Hans'), source: 'global' } })]) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const bar = within(canvas.getByRole('region', { name: 'Conditions' }));
+    await expect(bar.getAllByRole('link', { name: /^Remove/ })).toHaveLength(3);
+    await expect(within(bar.getByRole('group', { name: 'Match' })).getByRole('link', { name: 'Any' }))
+      .toHaveAttribute('aria-current', 'true');
+    await expect(canvas.getByRole('link', { name: '深夜书店' })).toBeVisible();
+  },
+};
+
 export const FacetedTypes: Story = {
   args: { parsed: state('Pride', { includeTypes: ['book'] }), initial: results(pride, {
     facets: { populationBasis: 'all-filters', resultGrain: 'work',
@@ -134,7 +151,7 @@ export const RealmClassified: Story = {
     await expect(completeness).toHaveTextContent('Only Simplified Chinese text');
     await expect(completeness).toHaveTextContent('Only this genre');
     await expect(completeness).toHaveTextContent('Works you muted are left out');
-    await expect(canvas.getAllByRole('link', { name: 'Remove filter: Only this genre' })[0])
+    await expect(within(canvas.getByRole('region', { name: 'Conditions' })).getByRole('link', { name: /^Remove/ }))
       .toHaveAttribute('href', `/en/search?q=${encodeURIComponent('西游记')}&scope=realm&realm=${realm}&lang=zh-Hans`);
     await userEvent.click(canvas.getByRole('combobox', { name: 'Search in' }));
     await waitFor(() => expect(within(document.body).getByRole('option', { name: 'All of REZICS' })).toBeVisible());
@@ -278,7 +295,7 @@ export const RestartWhenResultsMove: Story = {
 export const TooManyToRank: Story = {
   args: { parsed: state('the'), initial: failed('budget') },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByText('This phrase matches too many texts to rank')).toBeVisible();
+    await expect(within(canvasElement).getByText('This search exceeds the result limit')).toBeVisible();
   },
 };
 

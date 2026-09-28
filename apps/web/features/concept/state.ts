@@ -1,5 +1,5 @@
 import { idOf, iriOf, isUuid, type SearchParams, single, withQuery } from '../discover/scope.ts';
-import type { ConceptWorksQuery } from './types.ts';
+import type { ResourceQuery } from '../../../../model/definitions/filter-document-v1.ts';
 
 // `/concepts/{id}?scope&realm&include&exclude&match`: a Concept page and its
 // Condition bar as the URL gives them. Pure functions shared by the route, its
@@ -76,10 +76,14 @@ export function hasRoom(state: ConceptState, operator: 'include' | 'exclude', ma
   return operator === 'include' ? state.include.length + 1 < maxValues : state.exclude.length < maxValues;
 }
 
-/** Main's query for the state's Works. */
-export function worksQuery(state: ConceptState, language: string, cursor?: string): ConceptWorksQuery {
-  return { language, ...(state.scope.kind === 'realm' ? { scope: 'realm' as const, realm: iriOf(state.scope.realm) } : {}),
-    ...(state.include.length ? { include: state.include.map(iriOf), match: state.match } : {}),
-    ...(state.exclude.length ? { exclude: state.exclude.map(iriOf) } : {}),
-    ...(cursor ? { cursor } : {}) };
+/** Main's Query for the Concept page's Conditions and newest Works. */
+export function conceptQuery(state: ConceptState, cursor?: string): ResourceQuery {
+  const filter: NonNullable<ResourceQuery['filter']> = { all: [
+    state.match === 'any' ? { facet: 'concept', any: [state.concept, ...state.include].map(iriOf) }
+      : { facet: 'concept', all: [state.concept, ...state.include].map(iriOf) },
+    ...(state.exclude.length ? [{ facet: 'concept', none: state.exclude.map(iriOf) }] : []),
+  ] };
+  return { context: state.scope.kind === 'realm' ? { realm: iriOf(state.scope.realm) } : 'global',
+    scope: { kind: 'all' }, filter, sort: 'newest', page: { size: 20,
+      ...(cursor ? { continuation: cursor } : {}) } };
 }

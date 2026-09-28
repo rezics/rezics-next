@@ -10,7 +10,9 @@ type PagePost = MainClient['v1']['queries']['page']['post'];
 export type SearchPageRequest = Parameters<PagePost>[0];
 /** Work-grain pages; this UI never asks for the Content-variant profile. */
 export type SearchPage = Exclude<Ok<PagePost>, { profile: 'public-content-phrase-page-v1' }>;
-export type SearchContinuation = NonNullable<SearchPage['next']>;
+type QueryResult = Ok<MainClient['v1']['query']['post']>['result'];
+export type SearchContinuation = NonNullable<SearchPage['next']>
+  | NonNullable<Extract<QueryResult, { profile: 'public-concept-set-phrase-v1' }>['next']>;
 type Match = SearchPage['results'][number];
 
 /** Where the phrase was found: Main ranks title matches first, then credited names, taglines and text. */
@@ -66,12 +68,13 @@ export type SearchFailure =
   | 'budget'
   /** The Realm is not public or does not exist. */
   | 'missing'
-  | 'invalid' | 'unavailable';
+  | 'invalid' | 'unsupported' | 'unavailable';
 
 export type SearchLoaded = { ok: true; page: SearchResultPage } | { ok: false; failure: SearchFailure };
 
 export function searchFailureOf(status: number, code: string | undefined): SearchFailure {
   if (status === 409 || code === 'invalid_search_continuation') return 'restart';
+  if (code === 'unsupported_query_shape' || code === 'unsupported_query_source') return 'unsupported';
   if (status === 422) return 'budget';
   if (status === 404) return 'missing';
   if (status === 400) return 'invalid';

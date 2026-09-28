@@ -34,6 +34,8 @@ export default {
   signInTitle: '登录后查看你评过分的作品',
   signInHelp: '你的评分只有你自己能看到。',
   invalidTitle: '无法按这些条件显示这个列表',
+  unsupportedTitle: '此处暂不支持组合这些条件',
+  unsupportedHelp: '请在最新作品列表中包含一个标签，或移除一个条件。',
   budgetTitle: '这个列表太大，暂时无法显示',
   noRatingsYet: '这里还不能评分',
   noRatingsHelp: '读者可以在这里评分后，你评过分的作品会出现在这个页面。',

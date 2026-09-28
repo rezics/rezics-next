@@ -42,6 +42,8 @@ const en = {
   signInTitle: 'Sign in to see works you rated',
   signInHelp: 'Your ratings are private to you.',
   invalidTitle: 'This list can’t be shown with these filters',
+  unsupportedTitle: 'These Conditions cannot be combined here',
+  unsupportedHelp: 'Try an included tag on a newest list, or remove a Condition.',
   budgetTitle: 'This list is too large to show right now',
   noRatingsYet: 'Ratings aren’t open here yet',
   noRatingsHelp: 'Once readers can rate works here, the ones you rated appear on this page.',

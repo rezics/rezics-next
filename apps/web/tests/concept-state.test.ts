@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { alsoCarried } from '../features/concept/concept-page.tsx';
 import { classificationFacet, facetLabel } from '../features/concept/facets.ts';
 import { conceptFacet, ok, state, works, worksPage } from '../features/concept/fixtures.ts';
-import { conceptHref, conceptPath, hasRoom, parseConceptState, withoutValue, withValue,
-  worksQuery } from '../features/concept/state.ts';
+import { conceptHref, conceptPath, conceptQuery, hasRoom, parseConceptState, withoutValue, withValue }
+  from '../features/concept/state.ts';
 import { failureOf, type FacetList } from '../features/concept/types.ts';
 import { isPublicPagePath } from '../i18n/locale.ts';
 
@@ -50,11 +50,19 @@ describe('Concept page URL state', () => {
     expect(hasRoom(base, 'exclude', 1)).toBe(false);
   });
 
-  test('G-409 Main receives IRIs, and matching only when a value was included', () => {
+  test('Concept Works passes all, any and none as Query Conditions with exact cursor state', () => {
     const parsed = parseConceptState(concept, { scope: 'realm', realm, include: magic, exclude: romance })!;
-    expect(worksQuery(parsed, 'zh-Hans', 'next')).toEqual({ language: 'zh-Hans', scope: 'realm', realm: iri(realm),
-      include: [iri(magic)], match: 'all', exclude: [iri(romance)], cursor: 'next' });
-    expect(worksQuery(parseConceptState(concept, {})!, 'en')).toEqual({ language: 'en' });
+    expect(conceptQuery(parsed, 'next')).toEqual({ context: { realm: iri(realm) }, scope: { kind: 'all' },
+      sort: 'newest', page: { size: 20, continuation: 'next' }, filter: { all: [
+        { facet: 'concept', all: [iri(concept), iri(magic)] },
+        { facet: 'concept', none: [iri(romance)] },
+      ] } });
+    expect(conceptQuery({ ...parsed, match: 'any' }).filter).toEqual({ all: [
+      { facet: 'concept', any: [iri(concept), iri(magic)] },
+      { facet: 'concept', none: [iri(romance)] },
+    ] });
+    expect(conceptQuery(parseConceptState(concept, {})!)).toMatchObject({ context: 'global',
+      filter: { all: [{ facet: 'concept', all: [iri(concept)] }] } });
   });
 });
 

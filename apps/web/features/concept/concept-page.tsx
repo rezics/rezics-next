@@ -95,15 +95,18 @@ function ScopeSwitch({ state, concept, realms, t }: { state: ConceptState; conce
   </nav>;
 }
 
-/** Phrase search narrowed to the Concept, on today's classified search (`/search?term=`). */
+/** Phrase search narrowed to this Concept through the same Query Condition. */
 function SearchWithin({ concept, state, locale, t }: { concept: ConceptRead; state: ConceptState; locale: UiLocale;
   t: Text }) {
-  const term = idOf(concept.interpretations[0] ?? '');
+  const term = idOf(concept.id);
   if (!term) return null;
   const label = t.searchWithin({ name: concept.name.value });
   return <form role="search" aria-label={label} action={localizedPath('/search', locale)} method="get"
     className="flex w-full min-w-0 items-center gap-2 sm:ms-auto sm:w-auto">
     <input type="hidden" name="term" value={term} />
+    {state.include.length ? <input type="hidden" name="ci" value={state.include.join(',')} /> : null}
+    {state.exclude.length ? <input type="hidden" name="ce" value={state.exclude.join(',')} /> : null}
+    {state.match === 'any' ? <input type="hidden" name="cm" value="any" /> : null}
     {state.scope.kind === 'realm' ? <>
       <input type="hidden" name="scope" value="realm" /><input type="hidden" name="realm" value={state.scope.realm} />
     </> : null}

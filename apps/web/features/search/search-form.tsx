@@ -66,6 +66,9 @@ export function SearchForm({ state, realm, load, locale, messages }: {
     {realm && scope === 'realm' ? <input type="hidden" name="realm" value={realm.id} /> : null}
     {state.language ? <input type="hidden" name="lang" value={state.language} /> : null}
     {state.term ? <input type="hidden" name="term" value={state.term} /> : null}
+    {state.concepts?.include.length ? <input type="hidden" name="ci" value={state.concepts.include.join(',')} /> : null}
+    {state.concepts?.exclude.length ? <input type="hidden" name="ce" value={state.concepts.exclude.join(',')} /> : null}
+    {state.concepts?.match === 'any' ? <input type="hidden" name="cm" value="any" /> : null}
     {state.includeTypes?.length ? <input type="hidden" name="include" value={state.includeTypes.join(',')} /> : null}
     {state.excludeTypes?.length ? <input type="hidden" name="exclude" value={state.excludeTypes.join(',')} /> : null}
     <div className="relative flex-1">

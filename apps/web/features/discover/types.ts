@@ -24,7 +24,7 @@ export type RealmHeader = Ok<ReturnType<MainClient['v1']['realms']>['get']>;
  * `stale` is its 409 on a first page, when the active generation predates a
  * write and no operator has rebuilt it; `moved` is a 409 on a later page.
  */
-export type ReadFailure = 'unbuilt' | 'stale' | 'moved' | 'invalid' | 'sign-in' | 'missing' | 'budget'
+export type ReadFailure = 'unbuilt' | 'stale' | 'moved' | 'invalid' | 'unsupported' | 'sign-in' | 'missing' | 'budget'
   | 'unavailable';
 
 export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure };
@@ -33,6 +33,7 @@ export function failureOf(status: number, code?: string): ReadFailure {
   if (status === 404) return 'missing';
   if (status === 401 || status === 403) return 'sign-in';
   if (status === 409) return 'moved';
+  if (code === 'unsupported_query_shape' || code === 'unsupported_query_source') return 'unsupported';
   if (status === 400) return 'invalid';
   if (status === 422) return 'budget';
   if (status === 503 && code === 'discovery_unavailable') return 'unbuilt';

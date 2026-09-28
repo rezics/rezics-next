@@ -1,6 +1,6 @@
 import type { UiLocale } from '../../i18n/define.ts';
 import { type MainClient, problemCode } from '../discover/types.ts';
-import { type ConceptState, worksQuery } from './state.ts';
+import { type ConceptState, conceptQuery } from './state.ts';
 import { type ConceptWorksPage, failureOf, type Loaded } from './types.ts';
 
 // Reads shared by the server render and the browser's "Show more": each takes
@@ -24,8 +24,12 @@ export async function settle<T>(call: () => Promise<Answer<T>>): Promise<Loaded<
  */
 export async function readConceptWorks(main: MainClient, state: ConceptState, locale: UiLocale,
   cursor?: string): Promise<Loaded<ConceptWorksPage>> {
-  const read = () => settle(() => main.v1.concepts({ id: state.concept }).works
-    .get({ query: worksQuery(state, locale, cursor) }));
+  const query = conceptQuery(state, cursor);
+  const read = async (): Promise<Loaded<ConceptWorksPage>> => {
+    const response = await settle(() => main.v1.query.post(query, { headers: { 'accept-language': locale } }));
+    return response.ok ? response.data.result.profile === 'concept-works-v1'
+      ? { ok: true, data: response.data.result } : { ok: false, failure: 'invalid' } : response;
+  };
   const first = await read();
   return !first.ok && first.failure === 'moved' && !cursor ? read() : first;
 }

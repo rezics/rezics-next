@@ -1,6 +1,6 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { ChevronDownIcon, LinkIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from 'lucide-react';
+import { ChevronDownIcon, LinkIcon, SlidersHorizontalIcon, UserRoundIcon } from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
 import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -11,6 +11,7 @@ import type { DiscoverMessages } from '../discover/messages.ts';
 import { Notice } from '../discover/notice.tsx';
 import { workTypes } from '../discover/state.ts';
 import { PageContainer } from '../shell/page.tsx';
+import { SearchConditionBar } from '../query/condition-bar.tsx';
 import type { SearchFallback } from './fallback.ts';
 import type { SearchMessages } from './messages.ts';
 import type { SearchLoader } from './query.ts';
@@ -121,16 +122,6 @@ function Filters({ state, facets, idPrefix, locale, t }: { state: SearchState;
       </ul>
       <p className="px-2 text-muted-foreground text-xs">{t.typeHelp}</p>
     </section> : null}
-    {state.term ? <section aria-labelledby={`${idPrefix}-term`} className="grid gap-2">
-      <h2 id={`${idPrefix}-term`} className="font-semibold text-sm">{t.classification}</h2>
-      <p className="inline-flex h-8 w-fit items-center gap-1 rounded-full bg-secondary ps-3.5 pe-1 text-sm">
-        {t.classificationActive}{facets?.terms.values[0]
-          ? <span className="tabular-nums">{t.atLeast({ count: String(facets.terms.values[0].count) })}</span> : null}
-        <Link href={searchHref({ ...state, term: null })} aria-label={t.removeFilter({ filter: t.classificationActive })}
-          className="grid size-6 place-items-center rounded-full outline-none hover:bg-background/70
-            focus-visible:ring-2 focus-visible:ring-ring"><XIcon aria-hidden="true" className="size-3.5" /></Link>
-      </p>
-    </section> : null}
   </div>;
 }
 
@@ -146,7 +137,8 @@ export function SearchPage({ parsed, realm, initial, fallback, signedIn, actingS
   const scopeLabel = state.scope.kind === 'realm' && realm ? realm.label : t.global;
   const searching = parsed.ok && phraseStatus(state.phrase) === 'ok';
   // Filters appear once a search has results to narrow, or to remove ones the URL already applies.
-  const filtered = Boolean(state.language || state.term || state.includeTypes?.length || state.excludeTypes?.length);
+  const filtered = Boolean(state.language || state.term || state.concepts?.include.length
+    || state.concepts?.exclude.length || state.includeTypes?.length || state.excludeTypes?.length);
   const filters = searching && initial?.ok && (initial.page.total > 0 || filtered);
   // Result cards read the reader's shelf state in the browser, one batch per page of results.
   return <ReaderActionsProvider signedIn={signedIn} signInHref={signInPath(localizedPath(searchHref(state), locale))}
@@ -166,7 +158,13 @@ export function SearchPage({ parsed, realm, initial, fallback, signedIn, actingS
       : <Notice icon={LinkIcon} headingLevel={2} title={t.badLinkTitle} description={t.badLinkHelp}>
         <Link href={searchHref(state)} className={buttonVariants({ size: 'sm' })}>{t.seeGlobal}</Link>
       </Notice>
-      : <div className={cn('grid gap-6', filters && 'lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start')}>
+      : <>
+        {searching ? <SearchConditionBar state={state} locale={locale} values={initial?.ok
+          ? initial.page.hits.flatMap(hit => hit.reasons.classification?.concept
+            && hit.reasons.classification.conceptName ? [{ id: hit.reasons.classification.concept,
+              name: hit.reasons.classification.conceptName.value,
+              language: hit.reasons.classification.conceptName.language }] : []) : []} /> : null}
+        <div className={cn('grid gap-6', filters && 'lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start')}>
         {filters ? <aside aria-label={t.filters}>
           <div className="hidden lg:sticky lg:top-6 lg:block">
             <Filters state={state} facets={initial?.ok ? initial.page.facets : undefined}
@@ -189,6 +187,7 @@ export function SearchPage({ parsed, realm, initial, fallback, signedIn, actingS
         <SearchResults state={state} initial={initial} scopeLabel={scopeLabel} signedIn={signedIn}
           actingSubject={actingSubject} avatarQuery={avatarQuery} load={load} fallback={fallback} locale={locale}
           messages={messages} />
-      </div>}
+        </div>
+      </>}
   </PageContainer></ReaderActionsProvider>;
 }

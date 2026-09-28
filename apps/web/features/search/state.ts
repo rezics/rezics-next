@@ -15,8 +15,10 @@ export interface SearchState {
   scope: SearchScope;
   /** A content language tag: only texts published in it match. */
   language: string | null;
-  /** A classification Sense: only Works classified under it match. */
+  /** A Concept: only Works classified under it match. */
   term: string | null;
+  /** More Concepts to include or exclude; `term` is the first included value. */
+  concepts?: { include: string[]; exclude: string[]; match: 'all' | 'any' };
   /** Any included type may match; excluded types never match. */
   includeTypes?: WorkTypeKey[];
   excludeTypes?: WorkTypeKey[];
@@ -53,6 +55,10 @@ export function parseSearchState(params: SearchParams): ParsedSearch {
   const realm = single(params.realm);
   const rawLanguage = single(params.lang);
   const term = single(params.term) ?? null;
+  const conceptList = (raw: string | undefined) => raw === undefined || raw === '' ? [] : raw.split(',');
+  const conceptInclude = conceptList(single(params.ci));
+  const conceptExclude = conceptList(single(params.ce));
+  const conceptMatch = single(params.cm) ?? 'all';
   const parseTypes = (raw: string | undefined): WorkTypeKey[] | null => {
     if (raw === undefined) return [];
     const keys = raw.split(',');
@@ -66,18 +72,27 @@ export function parseSearchState(params: SearchParams): ParsedSearch {
   const parsedScope: SearchScope | null = (scope === undefined || scope === 'global') && realm === undefined
     ? { kind: 'global' } : scope === 'realm' && isUuid(realm) ? { kind: 'realm', realm } : null;
   const repeated = [params.q, params.scope, params.realm, params.lang, params.term,
-    params.include, params.exclude].some(Array.isArray);
+    params.include, params.exclude, params.ci, params.ce, params.cm].some(Array.isArray);
   if (repeated || !parsedScope || (rawLanguage && !language) || (term !== null && !isUuid(term))
-    || !includeTypes || !excludeTypes || includeTypes.some(type => excludeTypes.includes(type))) {
+    || !includeTypes || !excludeTypes || includeTypes.some(type => excludeTypes.includes(type))
+    || ![...conceptInclude, ...conceptExclude].every(isUuid)
+    || new Set([...(term ? [term] : []), ...conceptInclude, ...conceptExclude]).size
+      !== (term ? 1 : 0) + conceptInclude.length + conceptExclude.length
+    || (conceptMatch !== 'all' && conceptMatch !== 'any')) {
     return { ok: false, reason: 'malformed', phrase };
   }
   return { ok: true, state: { phrase, scope: parsedScope, language, term,
+    ...(conceptInclude.length || conceptExclude.length || conceptMatch !== 'all' ? {
+      concepts: { include: conceptInclude, exclude: conceptExclude, match: conceptMatch },
+    } : {}),
     ...(includeTypes.length ? { includeTypes } : {}), ...(excludeTypes.length ? { excludeTypes } : {}) } };
 }
 
 export function searchHref(state: SearchState): string {
   return withQuery('/search', { q: state.phrase, ...(state.scope.kind === 'realm'
     ? { scope: 'realm', realm: state.scope.realm } : {}), lang: state.language, term: state.term,
-    include: state.includeTypes?.join(','), exclude: state.excludeTypes?.join(',') });
+    include: state.includeTypes?.join(','), exclude: state.excludeTypes?.join(','),
+    ci: state.concepts?.include.join(','), ce: state.concepts?.exclude.join(','),
+    cm: ((state.term ? 1 : 0) + (state.concepts?.include.length ?? 0)) > 1
+      && state.concepts?.match === 'any' ? 'any' : null });
 }
-

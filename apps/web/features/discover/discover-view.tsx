@@ -10,6 +10,7 @@ import { WorkShelf } from '../catalogue/work-shelf.tsx';
 import { RetryButton } from '../work-page/retry-button.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
+import { DiscoverConditionBar } from '../query/condition-bar.tsx';
 import type { DiscoverMessages } from './messages.ts';
 import { fills } from './fills.ts';
 import { failureNotice, Notice } from './notice.tsx';
@@ -99,7 +100,8 @@ function CommunitySwitch({ state, realm, t }: { state: DiscoverState; realm: Sco
 /** The failure an overview names once for the rows it left out: one that needs the reader's action first. */
 function leadingFailure(shelves: readonly LoadedShelf[]): ReadFailure | null {
   const failures = shelves.flatMap(shelf => shelf.initial.ok ? [] : [shelf.initial.failure]);
-  const order: ReadFailure[] = ['unavailable', 'sign-in', 'moved', 'budget', 'invalid', 'missing', 'stale', 'unbuilt'];
+  const order: ReadFailure[] = ['unavailable', 'sign-in', 'moved', 'budget', 'unsupported', 'invalid',
+    'missing', 'stale', 'unbuilt'];
   return order.find(failure => failures.includes(failure)) ?? null;
 }
 
@@ -146,7 +148,8 @@ function Overview({ shelves, fallback, realm, state, neighbour, seeAll, signInHr
     {rows.length ? null : notice}
     {rows.map(shelf => <DiscoverShelf key={shelf.spec.key} heading={{ title: shelfTitle(shelf, t), seeAll: seeAll(shelf) }}
       mode="row" scope={state.scope} query={shelf.query} initial={shelf.initial} signInHref={signInHref}
-      avatarQuery={avatarQuery} locale={locale} messages={messages} />)}
+      avatarQuery={avatarQuery} locale={locale} messages={messages}
+      conditionState={state.conditions ? state : undefined} />)}
     {substitutes}
     {/* Some rows showed: the note about the missing ones comes after them, quietly. */}
     {rows.length ? notice : null}
@@ -211,6 +214,10 @@ export function DiscoverView({ state, realm, realmMissing, shelves, fallback, si
           </p> : null}
         </div>
       </header>
+      {scope.kind !== 'mine' ? <DiscoverConditionBar state={state} locale={locale}
+        values={shelves.flatMap(shelf => shelf.initial.ok ? shelf.initial.data.items.flatMap(item =>
+          item.classifications.map(tag => ({ id: tag.concept, name: tag.name.value,
+            language: tag.name.language }))) : [])} /> : null}
       {realmMissing ? <Notice icon={CircleSlashIcon} headingLevel={2} title={t.realmMissingTitle}>
         <Link href={hrefIn(state, { kind: 'global' })} className={buttonVariants({ size: 'sm' })}>{t.browseEverything}</Link>
       </Notice> : !shelves.length ? <Notice icon={StarIcon} headingLevel={2} title={t.noRatingsYet}
@@ -219,8 +226,8 @@ export function DiscoverView({ state, realm, realmMissing, shelves, fallback, si
           seeAll={seeAll} signInHref={signInHref} avatarQuery={avatarQuery} locale={locale} messages={messages} />
         : shelves.map(shelf => <DiscoverShelf key={shelf.spec.key} heading={{ title: shelfTitle(shelf, t) }} mode="grid"
           scope={scope} query={shelf.query} initial={shelf.initial} load={load} neighbour={neighbour}
-          signInHref={signInHref} avatarQuery={avatarQuery} locale={locale} messages={messages} />)}
+          signInHref={signInHref} avatarQuery={avatarQuery} locale={locale} messages={messages}
+          conditionState={state.conditions ? state : undefined} />)}
     </PageContainer>
   </ReaderActionsProvider>;
 }
-

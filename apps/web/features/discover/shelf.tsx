@@ -7,12 +7,15 @@ import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { browserMainApi } from '../api/browser.ts';
 import { type ShelfHeading, ShelfHeader, WorkGrid, WorkShelf } from '../catalogue/work-shelf.tsx';
 import Link from '../shell/localized-link.tsx';
 import { discoveryWork } from './cards.ts';
 import type { DiscoverMessages } from './messages.ts';
 import { failureNotice, Notice } from './notice.tsx';
 import { bffDiscovery, type DiscoveryLoader, discoveryPagesOptions, ReadError } from './query.ts';
+import { readQueryDiscovery } from './query-read.ts';
+import type { DiscoverState } from './state.ts';
 import type { BrowseScope } from './scope.ts';
 import type { DiscoveryPage, DiscoveryQuery, Loaded, ReadFailure } from './types.ts';
 
@@ -31,6 +34,7 @@ export interface DiscoverShelfProps {
   avatarQuery?: string;
   /** Reads later pages; the BFF by default, a fixture in stories. */
   load?: DiscoveryLoader;
+  conditionState?: DiscoverState;
   locale: UiLocale;
   messages: DiscoverMessages;
 }
@@ -77,11 +81,13 @@ export function DiscoverShelf(props: DiscoverShelfProps) {
   </section>;
 }
 
-function Pages({ first, query, load = bffDiscovery, scope, heading, neighbour, signInHref, avatarQuery, locale,
+function Pages({ first, query, load, conditionState, scope, heading, neighbour, signInHref, avatarQuery, locale,
   messages }: DiscoverShelfProps & { first: DiscoveryPage }) {
   const t = materializeData(messages, { locale });
   const client = useQueryClient();
-  const options = discoveryPagesOptions(query, first, load);
+  const loader = load ?? (conditionState ? (page: DiscoveryQuery) => readQueryDiscovery(browserMainApi(),
+    conditionState, page) : bffDiscovery);
+  const options = discoveryPagesOptions(query, first, loader);
   const pages = useInfiniteQuery(options);
   const list = useRef<HTMLUListElement>(null);
   const items = (pages.data?.pages ?? [first]).flatMap(page => page.items);

@@ -58,18 +58,22 @@ describe('search requests', () => {
     expect(new Set([JSON.stringify(anonymous), JSON.stringify(alice), JSON.stringify(bob)]).size).toBe(3);
   });
 
-  test('each scope and term selects its Main phrase profile', () => {
-    expect(searchRequest(global)).toEqual({ profile: 'public-main-phrase-page-v1', phrase: 'Pride', language: null,
-      pageSize: 10 });
-    expect(searchRequest({ ...global, language: 'en', term })).toEqual({ profile: 'public-main-classified-phrase-page-v1',
-      phrase: 'Pride', language: 'en', sense: iri(term), pageSize: 10 });
-    const context = { kind: 'realm-local', id: iri(realm) };
+  test('each scope and Condition enters one Query document', () => {
+    expect(searchRequest(global)).toEqual({ context: 'global', scope: { kind: 'all' },
+      text: { phrase: 'Pride' }, sort: 'relevance', filter: { all: [] }, page: { size: 10 } });
+    expect(searchRequest({ ...global, language: 'en', term })).toMatchObject({ filter: { all: [
+      { facet: 'language', any: ['en'] }, { facet: 'concept', all: [iri(term)] },
+    ] } });
+    const context = { realm: iri(realm) };
     expect(searchRequest({ ...global, scope: { kind: 'realm', realm } })).toMatchObject({
-      profile: 'public-realm-phrase-page-v1', context });
+      context });
     expect(searchRequest({ ...global, scope: { kind: 'realm', realm }, term })).toMatchObject({
-      profile: 'public-realm-classified-phrase-page-v1', context, sense: iri(term) });
+      context, filter: { all: [{ facet: 'concept', all: [iri(term)] }] } });
     expect(searchRequest({ ...global, includeTypes: ['book'], excludeTypes: ['recipe'] })).toMatchObject({
-      includeTypes: ['https://schema.org/Book'], excludeTypes: ['https://schema.org/Recipe'] });
+      filter: { all: [{ facet: 'type', any: ['https://schema.org/Book'] },
+        { facet: 'type', none: ['https://schema.org/Recipe'] }] } });
+    expect(searchRequest({ ...global, term, concepts: { include: [realm], exclude: [], match: 'any' } }))
+      .toMatchObject({ filter: { all: [{ facet: 'concept', any: [iri(term), iri(realm)] }] } });
   });
 
   test('expired or moved continuations restart; over-budget phrases are named', () => {
@@ -97,7 +101,7 @@ describe('search result hydration', () => {
   const name = (value: string) => ({ value, language: 'zh-Hans', direction: 'ltr', basis: 'requested' });
   const fallback = { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'k', resourceType: 'work' };
   function client(summaries: unknown, seen: unknown[] = []) {
-    return { v1: { queries: { page: { post: async () => ({ data: page, error: null }) } },
+    return { v1: { query: { post: async () => ({ data: { result: page }, error: null }) },
       resources: { summaries: { post: async (body: unknown) => { seen.push(body);
         return summaries instanceof Error ? { data: null, error: { status: 503, value: {} } }
           : { data: { summaries }, error: null }; } } } } } as unknown as MainClient;
