@@ -388238,6 +388238,28 @@
                         "null"
                       ]
                     },
+                    "partOf": {
+                      "properties": {
+                        "occurrence": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "work": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "work",
+                        "occurrence"
+                      ],
+                      "type": "object"
+                    },
                     "profile": {
                       "const": "work-read-v1",
                       "type": "string"
