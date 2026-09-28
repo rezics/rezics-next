@@ -140,6 +140,9 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     await page.reload();
     const chapters = page.getByRole('region', { name: 'Chapters' });
     await expect(chapters.getByRole('listitem').nth(1)).toContainText('第三章 最后一班车');
+    // Main says where each chapter stands: nothing is written yet.
+    await expect(chapters.getByRole('listitem').filter({ hasText: '第一章 雨夜' })).toContainText('Not started',
+      { timeout: 30_000 });
     await page.getByRole('button', { name: 'Move “第三章 最后一班车” down' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'to position 3.' })).toBeAttached({ timeout: 30_000 });
     await shoot(page, info, 'studio-chapters');
@@ -150,7 +153,7 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     await expect(page.getByRole('textbox', { name: 'Chapter text' })).toHaveAttribute('lang', 'zh-Hans');
     await append(page, '雨停在书店打烊前。');
     await expect(saveState(page)).toHaveText(/^Saved · /, { timeout: 30_000 });
-    await expect(page).toHaveURL(/\/chapters\/[0-9a-f-]{36}\?revision=[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/\/chapters\/[0-9a-f-]{36}\?revision=[0-9a-f-]{36}&language=zh-Hans$/);
     // Chinese is measured in characters.
     await expect(page.getByText('9 characters')).toBeVisible();
 
@@ -236,6 +239,20 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
         .filter({ hasText: /Submitted to Studio QA Realm|can’t submit to this Realm/ })).toBeVisible({ timeout: 60_000 });
     }
     await shoot(page, info, 'studio-realms');
+
+    // The session Agent opening the writer's book: each chapter names the identity that writes it, even one still
+    // private to the writer, and Switch opens it in the writer's Studio. The book is public once its introduction
+    // is its main text; Main may refuse that step above.
+    await page.goto(`${sessionStudio}/works/${work}?tab=chapters`);
+    if (await page.getByRole('heading', { level: 1, name: title }).isVisible()) {
+      const rows = page.getByRole('region', { name: 'Chapters' }).getByRole('listitem');
+      await expect(rows.filter({ hasText: '第一章 雨夜' })).toContainText('Written as Studio Writer 书生', { timeout: 30_000 });
+      await expect(rows.filter({ hasText: '第二章 未寄出的信' })).toContainText('Written as Studio Writer 书生');
+      await shoot(page, info, 'studio-chapters-written-as');
+      await page.getByRole('link', { name: 'Switch to Studio Writer 书生 to write “第一章 雨夜”' }).click();
+      await page.waitForURL(url => url.pathname.startsWith(`${studio}/works/${work}/chapters/`));
+      await expect(page.getByRole('region', { name: 'Writing as' })).toContainText('Studio Writer 书生');
+    }
 
     // Another identity's Studio is reported, never opened or switched to.
     await page.goto('/en/studio/@agent-00000000-0000-4000-8000-000000000001');

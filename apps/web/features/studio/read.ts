@@ -308,9 +308,9 @@ async function bounded<T, R>(items: readonly T[], limit: number, work: (item: T)
 }
 
 /**
- * Who writes each chapter on a page and where it stands. Main lets an Agent
- * list a chapter's Content variants only when it writes the chapter, so one
- * read per chapter tells both. A chapter the Studio Agent doesn't write is
+ * Who writes each chapter on a page and where it stands. Main lists a
+ * chapter's Content variants only to the Agent that writes it (or holds a
+ * grant to), so one read per chapter tells both. A chapter the Studio Agent doesn't write is
  * asked of this person's other identities: a chapter it can't even see (a
  * private one) through the Book's contents as each of them, a public one
  * through its variants, one identity after another. At most one read per
@@ -471,7 +471,7 @@ export async function readStudioChapter(actingSubject: string, chapter: string, 
   const language = canonicalLanguage(requested
     ?? written.find(tag => tag.toLowerCase() === titled.toLowerCase()) ?? written[0] ?? titled);
   const variant = await chapterVariant(header.data.id, language);
-  // Main lets a writer list their variant heads only with an explicit grant; without one it answers 404.
+  // Main lists a chapter's variant heads to the Agent that writes it or holds a grant to; to others it answers 404.
   const known = listed.ok ? listed.data.items.find(item => item.variantId === variant)
     ?? listed.data.items.find(item => item.language.tag?.toLowerCase() === language.toLowerCase()) : undefined;
   const head = known?.draftHead ?? (listed.ok ? null : revision);
