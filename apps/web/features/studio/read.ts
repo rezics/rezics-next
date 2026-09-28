@@ -4,7 +4,7 @@ import { mainApi, mainApiWithToken } from '../api/main.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { chapterVariant } from './content-api.ts';
 import { type ChapterFacts, chapterFacts, type RawFact } from './outline.ts';
-import { canonicalLanguage, type ClassificationPage, type ContentsItem, type ContentsPage, directionOf,
+import { canonicalLanguage, type ClassificationPage, type ContentsPage, directionOf,
   failureOf, idOf, iri, type InventoryPage, type InventoryState, type InventoryWork, type Loaded, type MainClient, type MyText,
   type NativeVariants, type RealmChoice, type ReviewMode, workKind, type Submission, type TextDraft, type TextHead,
   type WorkHeader, type WorkMetadata } from './types.ts';

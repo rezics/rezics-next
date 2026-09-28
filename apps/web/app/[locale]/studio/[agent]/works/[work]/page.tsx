@@ -8,7 +8,7 @@ import Link from '../../../../../../features/shell/localized-link.tsx';
 import { PageContainer } from '../../../../../../features/shell/page.tsx';
 import { RetryButton } from '../../../../../../features/work-page/retry-button.tsx';
 import type { AgentOption } from '../../../../../../features/auth/acting-identity.ts';
-import { studioHref, workHref } from '../../../../../../features/studio/agent.ts';
+import { studioHref, } from '../../../../../../features/studio/agent.ts';
 import { detailsValues } from '../../../../../../features/studio/details-api.ts';
 import type { StudioMessages } from '../../../../../../features/studio/messages.ts';
 import { openStates } from '../../../../../../features/studio/parts.tsx';
