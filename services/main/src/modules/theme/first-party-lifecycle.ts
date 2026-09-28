@@ -138,15 +138,19 @@ export async function readFirstPartyTheme(env: WorkActivationEnvironment,
     }
     OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:FirstPartyThemeRevision ;
       rv:dependencyDigest ?digest ; rv:bundle ?bundle ; rv:submittedBy ?submitter ;
-      rv:submittedPrincipal ?submitterPrincipal . } }
+      rv:submittedPrincipal ?submitterPrincipal . }
+      FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(theme)} rv:themeRevisionHead ?revision } } }
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?revision rv:reviewHead ?review }
       GRAPH ${iri(GRAPHS.revisions)} { ?review rv:reviewedBy ?reviewer ;
         rv:reviewerPrincipal ?reviewerPrincipal ; rv:decision ?decision ;
-        rv:reviewEvidenceDigest ?evidence . } }
+        rv:reviewEvidenceDigest ?evidence . }
+      FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(theme)} rv:themeRevisionHead ?revision } } }
     OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?activation a rv:FirstPartyThemeActivation ;
       rv:revision ?activationRevision ; rv:approvalExpiresAt ?expiry ; rv:controlBasis ?activationControl . }
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?activation rv:revocation ?revocation } } }
-    OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?control rv:disabled ?disabled } }
+      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?activation rv:revocation ?revocation } }
+      FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(theme)} rv:themeActivationHead ?activation } } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?control rv:disabled ?disabled }
+      FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(CONTROL)} rv:controlHead ?control } } }
   } LIMIT 2`, 32_000);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;

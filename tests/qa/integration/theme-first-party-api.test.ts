@@ -90,6 +90,16 @@ test('VIEW09: first-party create, immutable review, host activation, revoke and 
       `/v1/themes/${shortId(theme)}/revisions`, {
         expectedRevision: null, bundle, actingSubject: f.actor,
       }), 201);
+    const emptyTheme = nativeId();
+    await f.json(await call('POST', '/v1/themes', {
+      theme: shortId(emptyTheme), owner: f.actor, hostZone: zone, actingSubject: f.actor,
+    }), 201);
+    const empty = await app.handle(new Request(`http://main.local/v1/themes/${shortId(emptyTheme)}/first-party`, {
+      headers: { authorization: `Bearer ${f.account.tokenA}` },
+    }));
+    expect(empty.status).toBe(200);
+    expect(await empty.json()).toMatchObject({ revision: null, bundle: null,
+      activation: null, decision: null });
     expect((await call('POST', `/v1/themes/${shortId(theme)}/revisions`, {
       expectedRevision: null, bundle, actingSubject: f.actor,
     })).status).toBe(409);
