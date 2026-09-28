@@ -1,5 +1,6 @@
 import { t } from 'elysia';
 import { pageFields, readAvatar, readId, readName, readPosition, readUuid } from '../work/read-contract.ts';
+import { DISCUSSION_TITLE_CHARS } from './discussion-text.ts';
 
 /**
  * Bounds of the Realm thread reads. A list page ranks at most `cohort` of the
@@ -25,10 +26,14 @@ const count = t.Object({ value: t.Integer({ minimum: 0 }),
 /** The public Work a thread is about, as every card names it. */
 const threadWork = t.Object({ id: readId, title: readName, cover: readAvatar });
 
-/** One discussion in a Realm's list: its opening words, the Work it is about and how it is doing. */
+/**
+ * One discussion in a Realm's list: its title (the author's first line, see
+ * `discussion-text.ts`), the words after it, the Work it is about and how it is doing.
+ */
 export const realmThreadSummary = t.Object({ reply: readId, placement: readId,
   work: threadWork, author: threadAuthor,
   time: t.String(), language: t.Nullable(t.String()),
+  title: t.String({ maxLength: DISCUSSION_TITLE_CHARS + 1 }),
   excerpt: t.String({ maxLength: REALM_THREAD_COST.excerptChars }), vote: threadVote, replies: count });
 export const realmThreadsQuery = t.Object({ sort: t.Optional(threadSort), window: t.Optional(threadWindow),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: REALM_THREAD_COST.pageSize })),
@@ -39,9 +44,13 @@ export const realmThreadsPage = t.Object({ profile: t.Literal('realm-threads-v1'
   sort: threadSort, window: threadWindow,
   items: t.Array(realmThreadSummary, { maxItems: REALM_THREAD_COST.pageSize }), ...pageFields });
 
-/** One reply in a thread. `parent` is null only for the discussion that opens it. */
+/**
+ * One reply in a thread. `parent` is null only for the discussion that opens
+ * it, which alone has a `title`: its first line, which `body` then leaves out.
+ */
 export const realmThreadReply = t.Object({ reply: readId, placement: readId, parent: t.Nullable(readId),
   author: threadAuthor, time: t.String(), language: t.Nullable(t.String()), revisionId: readUuid,
+  title: t.Nullable(t.String({ maxLength: DISCUSSION_TITLE_CHARS + 1 })),
   body: t.String({ maxLength: REALM_THREAD_COST.bodyChars }), vote: threadVote });
 export const realmThreadQuery = t.Object({ sort: t.Optional(threadSort),
   language: t.Optional(realmThreadsQuery.properties.language),

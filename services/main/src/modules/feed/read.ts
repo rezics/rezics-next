@@ -22,6 +22,7 @@ import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
 import { feedWorkPresentations, followIdentities, type FeedWorkPresentation } from './presentation.ts';
 import type { Static } from 'typebox';
 import { inOrder, settle, unwrap, type Settled } from './settled.ts';
+import { clip, discussionParts } from '../realm-reply/discussion-text.ts';
 
 export interface FeedReader { principal: VerifiedPrincipal; agent: string }
 /** Graph calls left (of 160) below which reader state waits for the fence. */
@@ -82,8 +83,28 @@ async function replyExcerpt(session: WorkReadSession, source: FeedSource) {
   const after = await session.deps.realmReplies.visible(source.realm, source.reply);
   if (!after || after.placement !== current.placement || after.revisionId !== current.revisionId
     || after.reviewDecisionId !== current.reviewDecisionId) throw new WorkReadMissing('Reply unavailable');
-  return { excerpt: body.body.body.slice(0, 400),
-    language: body.reference.language.kind === 'tag' ? body.reference.language.tag : null };
+  const language = body.reference.language.kind === 'tag' ? body.reference.language.tag : null;
+  // A discussion is titled by its first line; a reply is only its words.
+  const parts = source.kind === 'discussion' ? discussionParts(body.body.body)
+    : { title: null, body: body.body.body.trim() };
+  return { excerpt: body.body.body.slice(0, 400), language,
+    post: { title: parts.title, excerpt: clip(parts.body, 400) || null, language } };
+}
+
+/**
+ * The post's own title and words, now that its card is known. A discussion or
+ * reply brings them from its body; a chapter, release or list has its own
+ * title; a review has only its opening; anything else is the Work itself.
+ */
+function postOf(item: FeedItem, reply: FeedItem['post'] | undefined): FeedItem['post'] {
+  if (reply) return reply;
+  const { card, target } = item;
+  const language = target.language;
+  if (card.kind === 'chapter') return { title: card.title ?? null, excerpt: card.excerpt ?? null, language };
+  if (card.kind === 'release') return { title: card.version ?? null, excerpt: card.changelogExcerpt ?? null, language };
+  if (card.kind === 'review') return { title: null, excerpt: card.opening, language };
+  if (card.kind === 'list') return { title: target.title.value, excerpt: null, language: target.title.language };
+  return { title: null, excerpt: target.excerpt, language };
 }
 
 /** Counts only currently approved, visible placements. A global card counts
@@ -92,6 +113,16 @@ async function replyExcerpt(session: WorkReadSession, source: FeedSource) {
  * One graph batch names each global card's first public Realm thread and
  * whether another exists; each distinct Realm and Work is counted once. */
 async function commentCounts(session: WorkReadSession, sources: readonly FeedSource[]) {
+  // A discussion or reply counts the replies under it, not every thread on its
+  // Work: one bounded Content walk per Realm on the page (realm-reply/thread-store.ts).
+  const byRealm = new Map<string, string[]>();
+  for (const source of sources) {
+    if (source.reply && source.realm) byRealm.set(source.realm, [...byRealm.get(source.realm) ?? [], source.reply]);
+  }
+  const threadCounts = new Map([...byRealm].map(([realm, replies]) => [realm, settle((async () => {
+    if (!session.deps.realmReplyThreads) throw new WorkReadUnavailable('Thread count owner is unavailable');
+    return session.deps.realmReplyThreads.counts(realm, [...new Set(replies)]);
+  })())]));
   const global = [...new Set(sources.flatMap(source => source.work && !source.realm ? [source.work] : []))];
   const threads = await settle(global.length ? session.query(`SELECT ?work (MIN(STR(?realm)) AS ?first)
     (MAX(STR(?realm)) AS ?last) WHERE { VALUES ?work { ${global.map(iri).join(' ')} }
@@ -111,6 +142,11 @@ async function commentCounts(session: WorkReadSession, sources: readonly FeedSou
     return counts.get(key)!;
   };
   const results = await Promise.all(sources.map(async (source): Promise<Settled<FeedItem['comments']>> => {
+    if (source.reply && source.realm) {
+      const counted = await threadCounts.get(source.realm)!;
+      return counted.ok ? { ok: true, value: { value: counted.value.counts.get(source.reply) ?? 0,
+        kind: counted.value.complete ? 'exact' : 'lower-bound' } } : counted;
+    }
     if (!source.work) return { ok: true, value: { value: 0, kind: 'exact' } };
     let realm = source.realm, single = true;
     if (!realm) {
@@ -146,19 +182,21 @@ function itemTarget(source: FeedSource, target: Pick<FollowTarget, 'name' | 'ico
 
 /** One card from its hydrated parts; the reads themselves are page batches. */
 function feedItem(source: FeedSource, row: FeedRow, actor: AgentCard, target: FollowTarget | null,
-  realm: FollowTarget | null, body: { excerpt: string | null; language: string | null },
+  realm: FollowTarget | null, body: { excerpt: string | null; language: string | null; post?: FeedItem['post'] },
   comments: FeedItem['comments'], presentation: FeedWorkPresentation | undefined): FeedItem {
   const href = targetHref(source);
   const reasons: FeedItem['reasons'] = source.kind === 'work' ? [{ kind: 'new-work', actor: source.actor }]
     : source.kind === 'added' ? [{ kind: 'added-to-rezics', actor: source.actor }]
       : source.kind === 'adoption' && source.realm
         ? [{ kind: 'realm-pick', realm: source.realm, curator: source.actor }] : [];
-  return { id: source.id, kind: source.kind, authors: presentation?.authors ?? [], reasons,
+  const itemTargetValue = itemTarget(source, target, presentation, body);
+  return { id: source.id, kind: source.kind, post: body.post ?? { title: null, excerpt: itemTargetValue.excerpt,
+    language: itemTargetValue.language }, authors: presentation?.authors ?? [], reasons,
     reason: { kind: 'recommended', basis: 'all' }, group: { key: row.group_key, count: 1,
       actors: [{ id: actor.id, name: actor.displayName, handle: actor.handle }] },
     card: { kind: 'activity' }, primaryAction: { kind: 'open', href }, viewerState: { status: 'anonymous' },
     actor: { id: actor.id, name: actor.displayName, handle: actor.handle },
-    target: itemTarget(source, target, presentation, body),
+    target: itemTargetValue,
     realm: realm ? { id: realm.id, name: realm.name, icon: realm.icon } : null,
     time: row.occurred_at.toISOString(), timeBasis: row.time_basis, score: row.score,
     vote: row.vote ?? 0, voteRevision: row.vote_revision ?? null, comments,
@@ -260,7 +298,7 @@ export function collapseWorkCards(items: FeedItem[]): FeedItem[] {
 
 const normalized = (query: FeedQuery) => [
   [...(query.kinds ?? [])].sort(), [...new Set((query.contentLanguages ?? []).map(value => value.toLowerCase()))].sort(),
-  [...(query.realms ?? [])].sort(), [...(query.tags ?? [])].sort(), query.language?.toLowerCase() ?? null,
+  [...(query.realms ?? [])].sort(), [...(query.concepts ?? [])].sort(), query.language?.toLowerCase() ?? null,
   parseFeedInterests(query.interests).sort(),
 ];
 
@@ -313,7 +351,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     }
     after = { id: cursor.after, key: order.key }; asOf = order.asOf; recentRealms = order.recentRealms; followedSeen = order.followedSeen;
   }
-  const limit = Math.min(query.limit ?? FEED_COST.pageSize, query.tags ? FEED_COST.tagCandidates : FEED_COST.candidates);
+  const limit = Math.min(query.limit ?? FEED_COST.pageSize, query.concepts ? FEED_COST.tagCandidates : FEED_COST.candidates);
   const rows = await store.page(session.position, checkpoint.revision, sort, limit, after, reader, window, asOf);
   const page: FeedRow[] = [];
   let members = 0;
@@ -418,7 +456,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
           return settle(feedCardData(session, source, itemTarget(source, target, undefined, source),
             targetLink(source), types));
         }))),
-      query.tags ? readTagSets(session, query.language, candidates, query.tags) : new Map<string, Settled<string[]>>());
+      query.concepts ? readTagSets(session, query.language, candidates, query.concepts) : new Map<string, Settled<string[]>>());
   });
   const presentationRead = feedWorkPresentations(session, sources.flatMap(source => source.work ? [source.work] : []));
   // A Work's news also answers to follows of the authors its card credits,
@@ -439,18 +477,20 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       const realm = source.realm ? realmTargets.get(source.realm) : null;
       if (!actor || target === undefined || realm === undefined) throw new WorkReadMissing('Feed card part is unavailable');
       const presentation = source.work ? presentations.get(source.work) : undefined;
+      const body = unwrap(bodies[index]!);
       const item = feedItem(source, memberRows.find(row => row.id === source.id)!, actor, target, realm,
-        unwrap(bodies[index]!), unwrap(comments.get(source.id)!), presentation);
+        body, unwrap(comments.get(source.id)!), presentation);
       Object.assign(item, unwrap(cards[index]!));
+      item.post = postOf(item, 'post' in body ? body.post : undefined);
       const followed = matches?.reasons[sources.indexOf(source)]?.[0];
       item.reason = followed ? { kind: 'followed', target: followed.target, targetKind: followed.kind }
         : { kind: 'recommended', basis: scope === 'following' ? 'thin-following' : 'all' };
       if (query.contentLanguages && (!item.target.language
         || !query.contentLanguages.some(language => language.toLowerCase() === item.target.language!.toLowerCase()))) continue;
-      if (query.tags) {
+      if (query.concepts) {
         if (!source.work) continue;
         const senses = unwrap(acceptedTags.get(tagKey(source))!);
-        if (!query.tags.some(tag => senses.includes(tag))) continue;
+        if (!query.concepts.some(concept => senses.includes(concept))) continue;
       }
       items.push(item);
     } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
@@ -553,6 +593,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     }
     if (state.status === 'available' && state.spoiler.hidden) {
       item.target = { ...item.target, excerpt: null };
+      // A chapter's title can spoil as much as its words.
+      item.post = { ...item.post, title: item.card.kind === 'chapter' ? null : item.post.title, excerpt: null };
       if (item.card.kind === 'chapter') item.card = { kind: 'chapter', occurrence: item.card.occurrence, parent: item.card.parent,
         ...(item.card.number !== undefined ? { number: item.card.number } : {}) };
       if (item.card.kind === 'prompt') item.card = { kind: 'prompt' };

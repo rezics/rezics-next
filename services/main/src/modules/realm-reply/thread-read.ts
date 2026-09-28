@@ -6,6 +6,7 @@ import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid, WorkReadMissing,
   WorkReadMoved, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
+import { clip, discussionParts } from './discussion-text.ts';
 import { replySlotIri } from './graph.ts';
 import { REALM_THREAD_COST, type realmThread, type realmThreadReply, type realmThreadSummary,
   type threadSort, type threadWindow } from './thread-contract.ts';
@@ -169,9 +170,10 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
   const items: Summary[] = page.flatMap(row => {
     const text = texts.get(row.reply), about = titles.get(row.work);
     if (!text || !about) return [];
+    const { title, body } = discussionParts(text.body);
     return [{ reply: row.reply, placement: row.placement, work: about, author: named(row.author),
-      time: row.time.toISOString(), language: text.language,
-      excerpt: Array.from(text.body.trim()).slice(0, REALM_THREAD_COST.excerptChars).join(''),
+      time: row.time.toISOString(), language: text.language, title,
+      excerpt: clip(body, REALM_THREAD_COST.excerptChars),
       vote: votes.get(row.placement) ?? closed,
       replies: { value: counted.counts.get(row.reply) ?? 0, kind: counted.complete ? 'exact' : 'lower-bound' } }];
   });
@@ -234,10 +236,12 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   if (!about || !texts.has(focus)) throw new WorkReadMissing('Reply is unavailable');
   const reply = (row: Head): Reply[] => {
     const text = texts.get(row.reply);
-    return text ? [{ reply: row.reply, placement: row.placement, parent: row.parent, author: named(row.author),
-      time: row.time.toISOString(), language: text.language, revisionId: row.revisionId,
-      body: Array.from(text.body).slice(0, REALM_THREAD_COST.bodyChars).join(''),
-      vote: votes.get(row.placement) ?? closed }] : [];
+    if (!text) return [];
+    const { title, body } = row.parent ? { title: null, body: text.body.trim() } : discussionParts(text.body);
+    return [{ reply: row.reply, placement: row.placement, parent: row.parent, author: named(row.author),
+      time: row.time.toISOString(), language: text.language, revisionId: row.revisionId, title,
+      body: clip(body, REALM_THREAD_COST.bodyChars),
+      vote: votes.get(row.placement) ?? closed }];
   };
   // Depth first, each reply's replies in the chosen order. A reply whose body
   // is gone takes its replies with it, as a hidden placement does.

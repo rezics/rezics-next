@@ -8,7 +8,7 @@ import { CatalogueCover } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import { ShareButton, VoteControl } from '../feed/actions.tsx';
 import { SpoilerVeil } from '../feed/discussion-card.tsx';
-import { announcesSpoilers, discussionText, threadPath } from '../feed/discussion.ts';
+import { announcesSpoilers, threadPath } from '../feed/discussion.ts';
 import { useFeed } from '../feed/feed-context.tsx';
 import { ReplyComposer, type ReplyMode, type ReplyTarget } from '../feed/reply-composer.tsx';
 import { ReplyBody, ReplyByline, ReplyList, type ThreadContext } from '../feed/reply-tree.tsx';
@@ -69,7 +69,7 @@ function AboutWork({ work }: { work: ThreadRead['work'] }) {
 function OpeningPost({ post, read, realm, count }: { post: ThreadReply; read: ThreadRead;
   realm: ThreadViewProps['realm']; count: number }) {
   const { t } = useFeed();
-  const { title, body } = discussionText(post.body);
+  const title = post.title ?? '', body = post.body;
   const href = threadPath(realm.path, post.reply);
   const words = body ? <ReplyBody reply={{ ...post, body }} className="text-base/relaxed" /> : null;
   return <article aria-labelledby="thread-title" className="grid gap-3">
@@ -107,7 +107,7 @@ function ReplyContext({ read, realm }: { read: ThreadRead; realm: ThreadViewProp
       <span className="text-muted-foreground text-xs">{t.openingPost}</span>
       <LocalizedLink href={threadPath(realm.path, opening.reply)} lang={opening.language ?? undefined}
         className="text-pretty font-semibold text-lg/snug underline-offset-2 hover:underline">
-        {discussionText(opening.body).title || t.untitled}</LocalizedLink>
+        {opening.title || t.untitled}</LocalizedLink>
     </p> : null}
     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-info/10 px-3 py-2 text-info-foreground
       text-sm">

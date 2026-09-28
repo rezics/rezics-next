@@ -402,7 +402,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       }
       throw new Error('Feed cursor did not terminate');
     };
-    const tagged = await collect(`tags=${encodeURIComponent(tag.sense)}`);
+    const tagged = await collect(`concepts=${encodeURIComponent(tag.sense)}`);
     expect(tagged.map(item => item.target.work)).toEqual([first.work]);
     const decisions = await collect('kinds=decision');
     expect(decisions).toHaveLength(1);

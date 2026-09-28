@@ -7,7 +7,7 @@ import { type ReactNode, useId, useState } from 'react';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { JoinButton, ShareButton, type VoteTarget, VoteControl } from './actions.tsx';
-import { announcesSpoilers, discussionText } from './discussion.ts';
+import { announcesSpoilers } from './discussion.ts';
 import { useFeed } from './feed-context.tsx';
 import { type AttachedWork, barAction, MetaLine, PostRow, PostTime, rowLink, WorkAttachment } from './post-row.tsx';
 import type { FeedItem } from './types.ts';
@@ -22,8 +22,10 @@ export interface DiscussionPost {
   realm: FeedItem['realm'];
   author: { name: string; handle: string } | null;
   time: string;
-  /** The author's words: a discussion's first line is its title. */
-  text: string;
+  /** A discussion's title, its author's first line as Main reads it; a reply has none. */
+  title: string | null;
+  /** The words after the title, or all of a reply's. */
+  body: string;
   language: string | null;
   work: AttachedWork | null;
   comments: { value: number; kind: 'exact' | 'lower-bound' } | null;
@@ -62,24 +64,24 @@ export function DiscussionCard({ post, menu, position, total }: { post: Discussi
   /** The feed's hide and mute menu, where the post came from Home. */
   menu?: ReactNode; position?: number; total?: number }) {
   const { t, locale, avatarQuery, realmPath } = useFeed();
-  const { title, body } = post.kind === 'discussion' ? discussionText(post.text) : { title: '', body: post.text.trim() };
+  const title = post.title ?? '', body = post.body.trim();
   const spoiler = post.kind === 'discussion' && announcesSpoilers(title);
   const count = post.comments ? new Intl.NumberFormat(locale, { notation: 'compact' }).format(post.comments.value) : null;
   const words = body ? <span lang={post.language ?? undefined} className={cn('whitespace-pre-line',
     post.kind === 'reply' && 'text-foreground')}>{body}</span> : null;
   const author = post.author
-    ? <LocalizedLink href={`/@${post.author.handle}`} className={cn(rowLink, 'truncate',
+    ? <LocalizedLink href={`/@${post.author.handle}`} className={cn(rowLink,
       !post.realm && 'font-semibold text-foreground')}>{post.author.name}</LocalizedLink>
     : <span className="italic">{t.someone}</span>;
   return <PostRow kind={post.kind} href={post.href} position={position} total={total}
     meta={<MetaLine icon={post.realm ? <CommunityIcon icon={post.realm.icon} name={post.realm.name.value}
       avatarQuery={avatarQuery} size="xs" /> : <CommunityIcon icon={null} name={post.author?.name ?? '·'} person size="xs" />}
     parts={[
-      post.realm ? <LocalizedLink href={realmPath(post.realm.id)} lang={post.realm.name.language}
-        className={cn(rowLink, 'truncate font-semibold text-foreground')}>{post.realm.name.value}</LocalizedLink> : null,
-      author, <PostTime time={post.time} />,
-      post.kind === 'reply' ? <span>{t.replied}</span> : null,
-      spoiler ? <SpoilerTag /> : null,
+      post.realm ? { name: true, node: <LocalizedLink href={realmPath(post.realm.id)} lang={post.realm.name.language}
+        className={cn(rowLink, 'font-semibold text-foreground')}>{post.realm.name.value}</LocalizedLink> } : null,
+      { name: true, node: author }, { keep: true, node: <PostTime time={post.time} /> },
+      post.kind === 'reply' ? { node: t.replied } : null,
+      spoiler ? { keep: true, node: <SpoilerTag /> } : null,
     ]} end={<>{post.realm ? <JoinButton realm={post.realm} /> : null}{menu}</>} />}
     title={post.kind === 'discussion' ? title || t.untitled : null} titleLang={post.language ?? undefined}
     label={t.replyIn}

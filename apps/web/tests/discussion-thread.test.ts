@@ -1,29 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { announcesSpoilers, discussionText, threadPath } from '../features/feed/discussion.ts';
+import { announcesSpoilers, threadPath } from '../features/feed/discussion.ts';
 import { parseThreadSort, parseThreadWindow, replyTree, type ThreadReply } from '../features/feed/thread.ts';
 
 const id = (value: number) => `https://rezics.com/id/00000000-0000-4000-8000-${value.toString(16).padStart(12, '0')}`;
 function reply(value: number, parent: number | null): ThreadReply {
   return { reply: id(value), placement: id(1000 + value), parent: parent === null ? null : id(parent), author: null,
     time: '2026-09-28T07:38:50.000Z', language: 'en', revisionId: '00000000-0000-4000-a000-000000000001',
-    body: `Reply ${value}`, vote: { score: 0, value: 0, revision: null, open: true } };
+    title: parent === null ? `Discussion ${value}` : null, body: `Reply ${value}`, vote: { score: 0, value: 0, revision: null, open: true } };
 }
 
 describe('how a discussion reads', () => {
-  test('the author’s first line is the title and the rest is the body', () => {
-    expect(discussionText('【本周共读】《雨夜书店》第一章 雨夜\n这周我们读第一章。\n\n我最喜欢开头那句。'))
-      .toEqual({ title: '【本周共读】《雨夜书店》第一章 雨夜', body: '这周我们读第一章。\n\n我最喜欢开头那句。' });
-    expect(discussionText('  Share your smallest useful prompt  ')).toEqual({ title: 'Share your smallest useful prompt',
-      body: '' });
-  });
-
-  test('a first line too long for a title keeps every word, the overflow opening the body', () => {
-    const line = 'x'.repeat(320);
-    const { title, body } = discussionText(`${line}\nsecond`);
-    expect(Array.from(title)).toHaveLength(301);
-    expect(`${title.slice(0, -1)}${body}`).toBe(`${line}\nsecond`);
-  });
-
   test('only a spoiler the author announced at the start of the title veils the body', () => {
     for (const title of ['【剧透】《雨夜书店》第二章：那张旧车票', 'Spoilers (chapter 35): Darcy’s letter',
       '[Spoiler] the ending', 'ネタバレ注意：最終章']) expect(announcesSpoilers(title)).toBe(true);

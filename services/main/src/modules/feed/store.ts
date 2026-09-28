@@ -16,6 +16,9 @@ export interface FeedCheckpoint { data_epoch: string; sequence: string; after_id
   rebuild_epoch: string | null; rebuild_after: string; review_sequence: string }
 export interface FeedRow { id: string; kind: FeedSource['kind']; occurred_at: Date;
   time_basis: 'revision' | 'relay'; realm: string | null; group_key: string; group_members: string[]; sort_time: Date; score: number; order_key: string; vote: -1 | 0 | 1; vote_revision: string | null }
+/** Activities that are posts of their own: each takes its own votes and appears on its own. */
+const soloKinds: ReadonlySet<string> = new Set(['discussion', 'reply']);
+
 export class FeedStore {
   constructor(private readonly pool: Pool) {}
 
@@ -76,8 +79,10 @@ export class FeedStore {
         const { time, basis } = activityTime(source.id, fallbackTime);
         if ((await client.query('SELECT 1 FROM access.feed_item WHERE data_epoch = $1 AND id = $2',
           [expected.data_epoch, source.id])).rowCount) continue;
-        const bucket = digest([source.groupKind ?? source.kind, source.realm ?? null,
-          source.kind === 'work' ? source.id : source.work ?? source.target ?? source.id, time.toISOString().slice(0, 10)]);
+        // A discussion or reply is a post of its own, never grouped (migration 820 promoted earlier ones).
+        const bucket = soloKinds.has(source.kind) ? digest(['home-solo-v1', source.id])
+          : digest([source.groupKind ?? source.kind, source.realm ?? null,
+            source.kind === 'work' ? source.id : source.work ?? source.target ?? source.id, time.toISOString().slice(0, 10)]);
         const group = (await client.query<FeedRow>(`SELECT * FROM access.feed_item
           WHERE data_epoch = $1 AND group_bucket = $2 AND group_leader AND cardinality(group_members) < 4
           ORDER BY id DESC LIMIT 1 FOR UPDATE`, [expected.data_epoch, bucket])).rows[0];

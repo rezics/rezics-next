@@ -27,7 +27,7 @@ export default {
   chapterRange: insert('第 {{from}}–{{to}} 章', { from: String, to: String }),
   chapterNumber: insert('第 {{number}} 章', { number: String }),
   moreUpdates: plural({ other: insert('另有 {{count}} 条更新') }, { count: asValue(number()) }),
-  picked: insert('入选 {{realm}}', { realm: String }), pickedByRealm: '入选领域',
+  picked: insert('入选 {{realm}}', { realm: String }), pickedByRealm: '入选领域', pickedHere: '入选',
   review: '书评', ratedOutOf: insert('评分 {{rating}}/{{scale}}', { rating: String, scale: String }),
   reviewSpoilerTitle: '这篇书评涉及剧情',
   reviewSpoilerBody: '开头在这里隐藏，打开书评即可阅读。',

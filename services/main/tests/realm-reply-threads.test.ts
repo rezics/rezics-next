@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { allocateAgentHandle } from '../src/modules/agent/handle.ts';
+import { discussionParts } from '../src/modules/realm-reply/discussion-text.ts';
 import { readRealmThread, readRealmThreads } from '../src/modules/realm-reply/thread-read.ts';
 import { REALM_THREAD_COST } from '../src/modules/realm-reply/thread-contract.ts';
 import type { PlacedHead, ThreadNode, ThreadVote } from '../src/modules/realm-reply/thread-store.ts';
@@ -139,10 +140,12 @@ test('a thread shows its approved replies nested, hides what sits under a withdr
   // Depth first: each reply is followed by its own replies, best first.
   expect(read.items.map(item => [item.reply, item.parent])).toEqual([[reply(1), null], [reply(2), reply(1)],
     [reply(4), reply(2)], [reply(3), reply(1)]]);
-  expect(read.items[0]).toMatchObject({ body: 'Chapter one: the letter\nWho left it?', language: 'en',
+  // The opening discussion's first line is its title; its body goes on from there. Replies have no title.
+  expect(read.items[0]).toMatchObject({ title: 'Chapter one: the letter', body: 'Who left it?', language: 'en',
     author: { id: agent(1), name: 'Reader 1', handle: allocateAgentHandle(agent(1)) },
     time: new Date(start + 60_000).toISOString() });
   expect(read.items[1]!.vote).toEqual({ score: 3, value: 1, revision: null, open: true });
+  expect(read.items[1]).toMatchObject({ title: null, body: 'Title 2\nBody 2' });
   expect(read.items[3]!.author).toBeNull();
   expect(read.items[2]!.vote.open).toBe(false);
   expect(read.work).toMatchObject({ cover: { kind: 'fallback' } });
@@ -195,7 +198,7 @@ test('a Realm lists its discussions newest first, a page at a time, with their r
   const first = await readRealmThreads(session, realm, { sort: 'new', limit: 2, now });
   expect(first).toMatchObject({ profile: 'realm-threads-v1', realm, sort: 'new' });
   expect(first.items.map(item => item.reply)).toEqual([reply(4)]);
-  expect(first.items[0]).toMatchObject({ excerpt: 'Title 4\nBody 4', replies: { value: 2, kind: 'exact' },
+  expect(first.items[0]).toMatchObject({ title: 'Title 4', excerpt: 'Body 4', replies: { value: 2, kind: 'exact' },
     work: { id: work }, author: { name: 'Reader 1' } });
   expect(first.nextCursor).not.toBeNull();
   expect(decodeReadCursor(first.nextCursor!, ['realm-threads-v1', realm, 'new', null], session.position)?.after)
@@ -214,4 +217,15 @@ test('Best weighs votes against age, Top counts votes in the period, and a reord
   const moved = world(discussions, { votes: { 1: { score: 0 }, 2: { score: 50 } } });
   await expect(readRealmThreads(moved.session, realm, { sort: 'top', window: 'all', limit: 1, now,
     cursor: all.nextCursor! })).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('a discussion is titled by its first line, and a first line too long for a title loses no word', () => {
+  expect(discussionParts('【本周共读】《雨夜书店》第一章 雨夜\n这周我们读第一章。\n\n我最喜欢开头那句。'))
+    .toEqual({ title: '【本周共读】《雨夜书店》第一章 雨夜', body: '这周我们读第一章。\n\n我最喜欢开头那句。' });
+  expect(discussionParts('  Share your smallest useful prompt  ')).toEqual({ title: 'Share your smallest useful prompt',
+    body: '' });
+  const line = '字'.repeat(320);
+  const { title, body } = discussionParts(`${line}\nsecond`);
+  expect(Array.from(title)).toHaveLength(301);
+  expect(`${title.slice(0, -1)}${body}`).toBe(`${line}\nsecond`);
 });

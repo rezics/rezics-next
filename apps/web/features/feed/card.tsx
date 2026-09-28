@@ -13,7 +13,7 @@ import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { type Dismissal, DismissedPost, JoinButton, MoreMenu, PrimaryAction, ShareButton, VoteControl } from './actions.tsx';
 import { DiscussionCard, type DiscussionPost } from './discussion-card.tsx';
-import { discussionText, threadPath } from './discussion.ts';
+import { threadPath } from './discussion.ts';
 import { useFeed } from './feed-context.tsx';
 import { type AttachedWork, barAction, MetaLine, PostRow, PostTime, rowLink, WorkAttachment } from './post-row.tsx';
 import type { FeedItem } from './types.ts';
@@ -62,8 +62,8 @@ function reasonWords(reason: Reason, item: FeedItem, now: number, t: T): { icon:
     case 'new-work': return now - Date.parse(item.time) < NEW_WORK_MS ? { icon: SparklesIcon, text: t.newWork }
       : { icon: BookCheckIcon, text: t.published };
     case 'added-to-rezics': return { icon: BookPlusIcon, text: t.addedToRezics };
-    case 'realm-pick': return { icon: StampIcon, text: item.realm?.id === reason.realm
-      ? t.picked({ realm: item.realm.name.value }) : t.pickedByRealm };
+    // The meta line already names the Realm, so its own pick says only that it picked the Work.
+    case 'realm-pick': return { icon: StampIcon, text: item.realm?.id === reason.realm ? t.pickedHere : t.pickedByRealm };
   }
 }
 
@@ -83,7 +83,7 @@ function kicker(item: FeedItem, now: number, t: T): { icon: LucideIcon; text: st
       if (card.kind !== 'chapter') return { icon: FileTextIcon, text: t.update };
       return { icon: BookOpenIcon, text: group.range && group.range.from !== group.range.to
         ? t.chapterRange({ from: String(group.range.from), to: String(group.range.to) }) : t.newChapter };
-    case 'adoption': return { icon: StampIcon, text: item.realm ? t.picked({ realm: item.realm.name.value }) : t.pickedByRealm };
+    case 'adoption': return { icon: StampIcon, text: item.realm ? t.pickedHere : t.pickedByRealm };
     case 'decision': return { icon: StampIcon, text: t.decision };
     case 'discussion': return { icon: MessagesSquareIcon, text: t.discussion };
     case 'reply': return { icon: MessageSquareTextIcon, text: t.reply };
@@ -176,20 +176,28 @@ function FeedMeta({ item, end }: { item: FeedItem; end: ReactNode }) {
   return <MetaLine icon={item.realm ? <CommunityIcon icon={item.realm.icon} name={item.realm.name.value}
     avatarQuery={avatarQuery} size="xs" /> : <CommunityIcon icon={null} name={item.actor.name} person size="xs" />}
   parts={[
-    item.realm ? <LocalizedLink href={realmPath(item.realm.id)} lang={item.realm.name.language}
-      className={cn(rowLink, 'truncate font-semibold text-foreground')}>{item.realm.name.value}</LocalizedLink> : null,
-    people ? <span className={cn('truncate', !item.realm && 'font-semibold text-foreground')}>{people}</span> : null,
-    <PostTime time={item.time} />,
-    <span className="flex items-center gap-1"><Icon aria-hidden="true" className="size-3.5 shrink-0" />{text}</span>,
-    reason ? <span title={why} className="rounded-full bg-info/10 px-1.5 font-medium text-[11px] text-info-foreground">
-      {reason}</span> : null,
+    item.realm ? { name: true, node: <LocalizedLink href={realmPath(item.realm.id)} lang={item.realm.name.language}
+      className={cn(rowLink, 'font-semibold text-foreground')}>{item.realm.name.value}</LocalizedLink> } : null,
+    people ? { name: true, node: <span className={cn(!item.realm && 'font-semibold text-foreground')}>{people}</span> }
+      : null,
+    { keep: true, node: <PostTime time={item.time} /> },
+    { node: <span className="inline-flex items-center gap-1"><Icon aria-hidden="true" className="size-3.5 shrink-0" />
+      {text}</span> },
+    reason ? { node: <span title={why} className="rounded-full bg-info/10 px-1.5 font-medium text-[11px]
+      text-info-foreground">{reason}</span> } : null,
   ]} end={end} />;
+}
+
+/** A review has no title of its own; its opening line stands in, and the rest follows as its preview. */
+function firstLine(text: string): { title: string; body: string } {
+  const trimmed = text.trim(), end = trimmed.indexOf('\n');
+  return end < 0 ? { title: trimmed, body: '' } : { title: trimmed.slice(0, end).trim(), body: trimmed.slice(end + 1).trim() };
 }
 
 /** A review's title: its stars, then its opening line, or its rating when it keeps the plot back. */
 function reviewHeading(card: Extract<FeedItem['card'], { kind: 'review' }>, t: T, locale: string) {
   const rating = new Intl.NumberFormat(locale).format(card.rating);
-  const { title, body } = card.opening ? discussionText(card.opening) : { title: '', body: '' };
+  const { title, body } = firstLine(card.opening ?? '');
   return { title: <span className="inline-flex max-w-full items-baseline gap-2">
     <StarMeter mean={card.rating} max={card.scale} className="translate-y-px text-[0.8125rem]" />
     <span className="sr-only">{t.ratedOutOf({ rating, scale: String(card.scale) })}</span>
@@ -233,7 +241,7 @@ function discussionPost(item: FeedItem & { realm: NonNullable<FeedItem['realm']>
     href: threadPath(realmPath(item.realm.id), target.id),
     vote: { id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision },
     realm: item.realm, author: { name: item.actor.name, handle: item.actor.handle }, time: item.time,
-    text: target.excerpt ?? '', language: target.language,
+    title: item.post.title, body: item.post.excerpt ?? '', language: item.post.language,
     work: target.work ? { id: target.work, title: target.title, cover: target.cover, types: target.types,
       byline: authorLine(item.authors) } : null,
     comments: item.kind === 'discussion' ? item.comments : null,
@@ -247,7 +255,7 @@ function FeedDiscussion({ item, position, total }: { item: FeedItem & { realm: N
   const [dismissed, setDismissed] = useState<Dismissal | null>(null);
   if (dismissed) return <DismissedPost dismissal={dismissed} onUndo={() => setDismissed(null)} />;
   const post = discussionPost(item, realmPath);
-  const title = post.kind === 'discussion' ? discussionText(post.text).title : post.text;
+  const title = post.title ?? post.body;
   return <DiscussionCard post={post} position={position} total={total}
     menu={<MoreMenu item={item} share={{ href: post.href, title }} onDismiss={setDismissed} />} />;
 }

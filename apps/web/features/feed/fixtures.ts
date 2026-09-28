@@ -42,7 +42,7 @@ export function post(n: number, overrides: Overrides = {}): FeedItem {
   const work = storyId(n, 'cccc');
   const actor = overrides.actor ?? people.mei;
   const base: FeedItem = {
-    id: storyId(n), kind: 'work', actor, authors: [], reasons: [],
+    id: storyId(n), kind: 'work', post: { title: null, excerpt: null, language: 'en' }, actor, authors: [], reasons: [],
     reason: { kind: 'followed', target: realms.fiction.id, targetKind: 'realm' },
     card: { kind: 'work' }, primaryAction: { kind: 'want-to-read', work }, viewerState: { status: 'anonymous' },
     group: { key: `group-${n}`, count: 1, actors: [actor] },
@@ -95,6 +95,9 @@ export const everyKind: FeedItem[] = [
   // A discussion is titled by its first line; the Work it is about names its source.
   post(7, { kind: 'discussion', realm: realms.classics, actor: people.leo, primaryAction: { kind: 'open', href: '/w/x' },
     card: { kind: 'activity' }, score: 42, comments: { value: 17, kind: 'exact' },
+    post: { title: 'Is Mr. Bennet a good father?', language: 'en', excerpt: 'Chapter 2 makes me think he enjoys his '
+      + 'family’s confusion more than he should. He teases Mrs. Bennet in front of the girls and never once takes '
+      + 'their future seriously.' },
     target: { id: storyId(7, 'dddd'), title: name('Pride and Prejudice'),
       excerpt: 'Is Mr. Bennet a good father?\nChapter 2 makes me think he enjoys his family’s confusion more than he '
         + 'should. He teases Mrs. Bennet in front of the girls and never once takes their future seriously.' } }),
@@ -102,11 +105,14 @@ export const everyKind: FeedItem[] = [
   post(15, { kind: 'discussion', realm: realms.fiction, actor: people.aria, score: 6, card: { kind: 'activity' },
     primaryAction: { kind: 'open', href: '/w/x' }, group: { key: 'rainy-day', count: 3,
       actors: [people.aria, people.leo, people.mei] },
+    post: { title: '【剧透】《雨夜书店》第二章：那张旧车票', language: 'zh-Hans',
+      excerpt: '信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。' },
     target: { id: storyId(15, 'dddd'), title: name('雨夜书店', 'zh-Hans'), language: 'zh-Hans',
       excerpt: '【剧透】《雨夜书店》第二章：那张旧车票\n信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。' } }),
   // A reply reads as a quoted comment that opens its place in the thread.
   post(16, { kind: 'reply', realm: realms.fiction, actor: people.daniel, score: 3, card: { kind: 'activity' },
     primaryAction: { kind: 'open', href: '/w/x' },
+    post: { title: null, language: 'zh-Hans', excerpt: '第一章很短，但每一句都在铺垫。我已经去追第二章了，剧透帖见。' },
     target: { id: storyId(16, 'dddd'), title: name('雨夜书店', 'zh-Hans'), language: 'zh-Hans',
       excerpt: '第一章很短，但每一句都在铺垫。我已经去追第二章了，剧透帖见。' } }),
   // A pick and the Work's own post on one page arrive as one card; the pick is the reason it shows.

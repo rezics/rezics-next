@@ -72,10 +72,20 @@ export const feedQuery = t.Object({ ...pageQuery,
   interests: t.Optional(t.String({ minLength: 2, maxLength: 64 })),
   contentLanguages: t.Optional(t.Array(readLanguage, { minItems: 1, maxItems: 8, uniqueItems: true })),
   realms: t.Optional(t.Array(readId, { minItems: 1, maxItems: 8, uniqueItems: true })),
-  tags: t.Optional(t.Array(readId, { minItems: 1, maxItems: 3, uniqueItems: true })),
+  /** Concepts a Work card must carry in its Context: a one-Condition Filter each (docs/contracts/queries.md). */
+  concepts: t.Optional(t.Array(readId, { minItems: 1, maxItems: 3, uniqueItems: true })),
 }, { additionalProperties: false });
 export type FeedQuery = Static<typeof feedQuery>;
-export const feedItem = t.Object({ id: readId, kind: feedKind,
+/**
+ * The post itself, apart from the Work it is about (`target`): its own title
+ * where it has one (a discussion's first line, a chapter's or a list's name,
+ * a release's version), its opening words and their language. A post that is
+ * the Work itself (a new Work, a pick, a prompt) has no title of its own and
+ * its words are the Work's. Its type is `kind`; its author is `actor`.
+ */
+export const feedPost = t.Object({ title: t.Nullable(t.String({ maxLength: 301 })),
+  excerpt: t.Nullable(t.String({ maxLength: 400 })), language: t.Nullable(t.String()) });
+export const feedItem = t.Object({ id: readId, kind: feedKind, post: feedPost,
   actor, authors: t.Array(discoveryCredit, { maxItems: 3 }),
   reason: feedReason, reasons: t.Array(feedActivityReason, { maxItems: 8 }),
   card: feedCard, primaryAction: feedAction, viewerState: feedViewerState,

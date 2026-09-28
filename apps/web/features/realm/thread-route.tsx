@@ -6,7 +6,7 @@ import { materializeData } from 'native-i18n';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { isUiLocale } from '../../i18n/define.ts';
-import { discussionText, threadPath } from '../feed/discussion.ts';
+import { threadPath } from '../feed/discussion.ts';
 import type { FeedMessages } from '../feed/messages.ts';
 import { parseThreadSort, type ThreadRead, type ThreadSort } from '../feed/thread.ts';
 import { type Loaded, settle } from '../feed/types.ts';
@@ -43,9 +43,9 @@ export async function realmThreadMetadata({ params }: Pick<ThreadRouteProps, 'pa
     .threads({ reply: thread }).get({ query: { language: locale } }));
   if (!read.ok) return { title: resolved.header.name.value };
   const opening = read.data.focus === read.data.thread ? read.data.items[0] : read.data.ancestors[0];
-  const title = opening ? discussionText(opening.body).title : '';
+  const title = opening?.title ?? '';
   return { title: title ? `${title} · ${resolved.header.name.value}` : resolved.header.name.value,
-    description: opening ? discussionText(opening.body).body.slice(0, 200) || undefined : undefined };
+    description: opening?.body.slice(0, 200) || undefined };
 }
 
 /** A thread's shape while Main answers: the post, then a few replies, in the page's rhythm. */

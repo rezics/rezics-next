@@ -30,7 +30,7 @@ export const messages = {
   chapterNumber: insert('Chapter {{number}}', { number: String }),
   moreUpdates: plural({ one: insert('+{{count}} more update'), other: insert('+{{count}} more updates') },
     { count: asValue(number()) }),
-  picked: insert('Picked by {{realm}}', { realm: String }), pickedByRealm: 'Picked by a Realm',
+  picked: insert('Picked by {{realm}}', { realm: String }), pickedByRealm: 'Picked by a Realm', pickedHere: 'Picked',
   review: 'Review', ratedOutOf: insert('Rated {{rating}} out of {{scale}}', { rating: String, scale: String }),
   reviewSpoilerTitle: 'This review discusses the plot',
   reviewSpoilerBody: 'Its opening stays hidden here. Open the review to read it.',

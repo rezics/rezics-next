@@ -28,15 +28,20 @@ export function PostTime({ time }: { time: string }) {
     {relativeTime(time, now, locale)}</time>;
 }
 
-/** The one meta line: its parts joined by dots, truncating as one line. */
-export function MetaLine({ icon, parts, end }: { icon: ReactNode; parts: readonly ReactNode[]; end?: ReactNode }) {
-  const shown = parts.filter(Boolean);
+/** One part of the meta line: `keep` never shrinks (the time); `name` keeps a few letters (a Realm, a person). */
+export interface MetaPart { node: ReactNode; keep?: boolean; name?: boolean }
+
+/** The one meta line: its parts joined by dots, each giving way in turn so the line never wraps. */
+export function MetaLine({ icon, parts, end }: { icon: ReactNode; parts: readonly (MetaPart | null | false)[];
+  end?: ReactNode }) {
+  const shown = parts.filter((part): part is MetaPart => Boolean(part));
   return <div className="flex h-6 min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
     {icon}
     <p className="flex min-w-0 flex-1 items-center gap-x-1 overflow-hidden whitespace-nowrap">
       {shown.map((part, index) => <span key={index} className={cn('flex min-w-0 items-center gap-x-1',
-        index === 0 ? 'shrink' : 'shrink-0', index === shown.length - 1 && 'truncate')}>
-        {index ? <span aria-hidden="true">·</span> : null}{part}</span>)}
+        part.keep ? 'shrink-0' : part.name ? 'min-w-[3.5rem] shrink' : 'shrink-[2]')}>
+        {index ? <span aria-hidden="true">·</span> : null}
+        <span className="min-w-0 truncate">{part.node}</span></span>)}
     </p>
     {end ? <div className="relative z-10 flex shrink-0 items-center gap-1">{end}</div> : null}
   </div>;
@@ -118,11 +123,12 @@ export function PostRow({ kind, href, meta, title, titleLang, titleDir, titleCla
       </div>
       {thumbnail ? <div className="relative z-10 row-span-2 self-start">{thumbnail}</div> : null}
     </div>
-    <div className="-ms-2 flex flex-wrap items-center gap-x-1 gap-y-1">
+    <div className="-ms-2 flex flex-wrap items-center gap-x-1 gap-y-1.5">
       <div role="group" aria-label={t.actions} className="relative z-10 flex items-center gap-0.5">
         {vote}{comments}{actions}</div>
-      {attachment ? <div className="ms-auto flex min-w-0 max-sm:ms-2 max-sm:basis-full max-sm:pb-1">{attachment}</div>
-        : null}
+      {/* Beside the actions where there is room; on phones the Work comes first, as X puts a link card before them. */}
+      {attachment ? <div className="ms-auto flex min-w-0 max-sm:order-first max-sm:ms-2 max-sm:basis-full max-sm:pt-0.5">
+        {attachment}</div> : null}
     </div>
   </article>;
 }

@@ -20,7 +20,7 @@ export function threadPost(item: ThreadSummary, realmPath: string): DiscussionPo
   return { kind: 'discussion', href: threadPath(realmPath, item.reply),
     vote: { id: item.placement, vote: item.vote.value, score: item.vote.score, revision: item.vote.revision,
       open: item.vote.open },
-    realm: null, author: item.author, time: item.time, text: item.excerpt, language: item.language,
+    realm: null, author: item.author, time: item.time, title: item.title, body: item.excerpt, language: item.language,
     work: { ...item.work, types: [], byline: null }, comments: item.replies };
 }
 
