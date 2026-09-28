@@ -119,8 +119,8 @@ export function ShareButton({ href, title }: { href: string; title: string }) {
   return <button type="button" aria-label={copied ? t.linkCopied : t.share} title={t.share}
     onClick={() => void sharePage(href, title, locale).then(done => setCopied(done === 'copied'))}
     className={cn(barAction, 'w-8 justify-center px-0')}>
-    {copied ? <CheckIcon aria-hidden="true" className="size-4 text-success-foreground" />
-      : <Share2Icon aria-hidden="true" className="size-4" />}
+    {copied ? <CheckIcon aria-hidden="true" className="text-success-foreground" />
+      : <Share2Icon aria-hidden="true" />}
     {copied ? <span role="status" className="sr-only">{t.linkCopied}</span> : null}
   </button>;
 }
@@ -150,7 +150,7 @@ export function MoreMenu({ item, onDismiss }: { item: FeedItem; share?: { href: 
     {failed ? <p role="status" className="text-destructive-foreground text-xs">{t.feedbackFailed}</p> : null}
     <Menu onSelect={({ value }) => void choose(value)}>
       <MenuTrigger aria-label={t.moreOptions} title={t.moreOptions} className={cn(barAction, 'size-7 justify-center px-0')}>
-        <EllipsisIcon aria-hidden="true" className="size-4" />
+        <EllipsisIcon aria-hidden="true" />
       </MenuTrigger>
       <MenuContent className="w-64">
         {choices.map((choice, index) => <span key={choice.value} className="contents">

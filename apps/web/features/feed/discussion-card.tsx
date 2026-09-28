@@ -74,11 +74,6 @@ export function DiscussionCard({ post, menu, position, total }: { post: Discussi
       !post.realm && 'font-semibold text-foreground')}>{post.author.name}</LocalizedLink>
     : <span className="italic">{t.someone}</span>;
   return <PostRow kind={post.kind} href={post.href} position={position} total={total}
-    compactMeta={<MetaLine icon={post.realm ? <CommunityIcon icon={post.realm.icon} name={post.realm.name.value}
-      avatarQuery={avatarQuery} size="xs" /> : <CommunityIcon icon={null} name={post.author?.name ?? '·'} person size="xs" />}
-    parts={[post.realm ? { name: true, node: <LocalizedLink href={realmPath(post.realm.id)} lang={post.realm.name.language}
-      className={cn(rowLink, 'font-semibold text-foreground')}>{post.realm.name.value}</LocalizedLink> }
-      : { name: true, node: author }, { keep: true, node: <PostTime time={post.time} /> }]} />}
     meta={<MetaLine icon={post.realm ? <CommunityIcon icon={post.realm.icon} name={post.realm.name.value}
       avatarQuery={avatarQuery} size="xs" /> : <CommunityIcon icon={null} name={post.author?.name ?? '·'} person size="xs" />}
     parts={[
@@ -98,12 +93,12 @@ export function DiscussionCard({ post, menu, position, total }: { post: Discussi
     comments={post.comments && count !== null ? <LocalizedLink href={`${post.href}#comments`} className={barAction}
       aria-label={post.comments.kind === 'exact' ? t.comments(post.comments.value)
         : t.commentsAtLeast(post.comments.value)}>
-      <MessageCircleIcon aria-hidden="true" className="size-4" />
+      <MessageCircleIcon aria-hidden="true" />
       <span aria-hidden="true" className="tabular-nums">{count}{post.comments.kind === 'exact' ? '' : '+'}</span>
     </LocalizedLink> : null}
     actions={<>
       <LocalizedLink href={`${post.href}#reply`} className={barAction}>
-        <ReplyIcon aria-hidden="true" className="size-4" />{post.kind === 'discussion' ? t.replyAction : t.viewThread}
+        <ReplyIcon aria-hidden="true" />{post.kind === 'discussion' ? t.replyAction : t.viewThread}
       </LocalizedLink>
       <ShareButton href={post.href} title={title || body} />
     </>} />;

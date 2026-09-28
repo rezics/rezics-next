@@ -13,7 +13,7 @@ import { FeedProvider, FeedView } from '../feed/feed-context.tsx';
 import { FeedList } from '../feed/feed-list.tsx';
 import type { FeedMessages } from '../feed/messages.ts';
 import type { ContinueItem, InterestsResult } from '../feed/types.ts';
-import { type FeedDefaults, feedSearch, type FeedState, interestKinds, type PostView, withChange } from '../feed/state.ts';
+import { type FeedDefaults, feedSearch, type FeedState, interestKinds, withChange } from '../feed/state.ts';
 import type { FeedPage, FeedQuery, Loaded } from '../feed/types.ts';
 import { type Community, followedRealmIds, segmentsOf } from '../shell/communities.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
@@ -49,8 +49,6 @@ export interface HomePageProps {
   rail?: ReactNode;
   /** Stories: an in-memory Main. */
   api?: FeedApi;
-  /** Cards or one line per post, as the reader last chose. */
-  view?: PostView;
 }
 
 export interface HomePostsProps {
@@ -134,7 +132,7 @@ export function HomePage(props: HomePageProps) {
   return <FeedProvider locale={locale} messages={messages.feed} now={props.now} signedIn={signedIn}
     actingSubject={actingSubject} signInHref={props.signInHref} avatarQuery={props.avatarQuery} tab={state.tab}
     followedRealms={props.followed?.complete ? followedRealmIds(props.followed) : null} api={props.api}
-    realmSegments={segmentsOf(props.official)} view={props.view}>
+    realmSegments={segmentsOf(props.official)}>
     <div className="mx-auto grid w-full max-w-[72rem] items-start gap-6 py-4 sm:px-6 sm:py-6 lg:px-8
       xl:grid-cols-[minmax(0,46rem)_20rem] xl:justify-center">
       <div className="grid min-w-0 gap-5">

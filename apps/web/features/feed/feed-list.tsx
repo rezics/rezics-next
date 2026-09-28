@@ -2,7 +2,7 @@
 
 import { Button } from '@rezics/ui/button';
 import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
-import { scrollBehavior } from '@rezics/ui/utils';
+import { cn, scrollBehavior } from '@rezics/ui/utils';
 import { ArrowUpIcon, CircleCheckBigIcon, RefreshCwIcon, RotateCwIcon, TriangleAlertIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -10,6 +10,7 @@ import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { commandKey } from './api.ts';
 import { FeedCard } from './card.tsx';
+import { postRhythm } from './post-row.tsx';
 import { relativeTime } from './time.ts';
 import { useFeed } from './feed-context.tsx';
 import type { FeedHead, FeedItem, FeedPage, FeedQuery, Loaded, ReadFailure } from './types.ts';
@@ -34,19 +35,20 @@ function initialState(initial: FeedPage): ListState {
     failure: null, sparse: initial.items.length ? 0 : 1 };
 }
 
-/** A card-shaped placeholder, so loading keeps the page's rhythm. */
+/** A post-shaped placeholder in the posts' own rhythm, so the page does not jump when they arrive. */
 export function FeedSkeleton({ count = 3 }: { count?: number }) {
   return <div aria-hidden="true">
-    {Array.from({ length: count }, (_, index) => <div key={index} className="grid gap-3 border-border/60 border-b
-      px-4 py-4">
-      <div className="flex items-center gap-2"><Skeleton className="size-6 rounded-full" />
-        <Skeleton className="h-3 w-40 rounded-full" /></div>
-      <div className="grid grid-cols-[minmax(0,1fr)_4rem] gap-4">
-        <div className="grid content-start gap-2"><Skeleton className="h-4 w-3/4 rounded-full" />
-          <SkeletonText lines={2} /></div>
-        <Skeleton className="aspect-[2/3] w-16 rounded-md" />
+    {Array.from({ length: count }, (_, index) => <div key={index} className={cn('border-border/60 border-b',
+      postRhythm.row)}>
+      <div className={cn('flex items-center gap-2', postRhythm.meta)}><Skeleton className="size-5 rounded-full" />
+        <Skeleton className="h-3 w-48 rounded-full" /></div>
+      <div className={cn('grid', postRhythm.afterMeta, postRhythm.afterTitle)}>
+        <div className="flex h-6 items-center"><Skeleton className="h-4 w-3/4 rounded-full" /></div>
+        <SkeletonText lines={2} />
       </div>
-      <Skeleton className="h-8 w-64 rounded-full" />
+      <Skeleton className={cn('h-11 w-64 rounded-xl', postRhythm.section)} />
+      <div className={cn('flex items-center gap-3', postRhythm.section, postRhythm.bar)}>
+        <Skeleton className="h-4 w-56 rounded-full" /></div>
     </div>)}
   </div>;
 }

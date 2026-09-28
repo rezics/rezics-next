@@ -37,8 +37,9 @@ function Feed({ initial, query = { scope: 'following', sort: 'best' }, api = mem
     tab={tab} followedRealms={followedRealms} api={api}>
     <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref}
       actions={signedIn ? memoryReaderActions({}) : undefined}>
-      <div className="mx-auto max-w-3xl py-6 sm:px-6">
-        <section aria-label="Posts" className="border-border/60 border-y bg-card sm:rounded-2xl sm:border">
+      {/* Home's centre column: posts are divided rows with no frame around them. */}
+      <div className="mx-auto max-w-[46rem] py-6 sm:px-6">
+        <section aria-label="Posts">
           <FeedList initial={initial} query={query} allHref="/en?tab=all" headInterval={headInterval}
             empty={<p>Nothing here</p>} />
         </section>
@@ -384,6 +385,47 @@ export const Chinese: Story = {
 };
 
 export const Dark: Story = { globals: { theme: 'dark' } };
+
+/** The distance between the bottom of one element and the top of the next, in CSS pixels. */
+const gap = (above: Element, below: Element) => below.getBoundingClientRect().top - above.getBoundingClientRect().bottom;
+const style = (element: Element) => getComputedStyle(element);
+
+/**
+ * Posts breathe as X's rows do (`postRhythm`, measured on X on 2026-09-28):
+ * 12 px above and below and 16 px at the sides at every width, a 17/24 title,
+ * 15/20 text with CJK at 1.8, then 12 px before the Work and before a 20 px
+ * action bar. Home once shrank posts to 80–110 px; this keeps them from it.
+ */
+async function expectRhythm(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const bennet = article(canvas, 'Is Mr. Bennet a good father?');
+  await expect(style(bennet).padding).toBe('12px 16px');
+  const title = within(bennet).getByRole('heading', { name: 'Is Mr. Bennet a good father?' });
+  await expect([style(title).fontSize, style(title).lineHeight]).toEqual(['17px', '24px']);
+  const preview = title.nextElementSibling!;
+  await expect([style(preview).fontSize, style(preview).lineHeight]).toEqual(['15px', '20px']);
+  const work = within(bennet).getByRole('link', { name: /^Pride and Prejudice/ });
+  const bar = within(bennet).getByRole('group', { name: 'Actions' }).parentElement!;
+  await expect(gap(preview, work)).toBe(12);
+  await expect(gap(work, bar)).toBe(12);
+  await expect(bar.getBoundingClientRect().height).toBe(20);
+  // The bottom padding, then the one-pixel divider.
+  await expect(bennet.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom).toBe(13);
+  // Chinese words in an English page keep the CJK line.
+  const words = within(article(canvas, 'A reply in a discussion')).getByText(/第一章很短/);
+  await expect(style(words).lineHeight).toBe('27px');
+}
+
+export const Rhythm: Story = {
+  args: { initial: { ok: true, data: page(everyKind.filter(item => item.kind === 'discussion' || item.kind === 'reply')) } },
+  play: ({ canvasElement }) => expectRhythm(canvasElement),
+};
+
+/** Phones keep X's 16 px sides and the same rhythm. */
+export const RhythmPhone: Story = {
+  ...Rhythm,
+  globals: { viewport: { value: 'phone' } },
+};
 
 export const Phone: Story = {
   globals: { viewport: { value: 'phone' } },

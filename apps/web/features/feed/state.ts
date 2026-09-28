@@ -37,14 +37,6 @@ export interface FeedState {
 
 export interface FeedDefaults { tab: FeedTab; sort: FeedSort }
 
-/** Posts as cards, or one line each: the reader's choice, kept in a cookie so the server renders it at once. */
-export type PostView = 'card' | 'compact';
-export const VIEW_COOKIE = 'rezics_post_view';
-
-export function parsePostView(value: string | undefined): PostView {
-  return value === 'compact' ? 'compact' : 'card';
-}
-
 const realmId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAX_LANGUAGES = 8, MAX_REALMS = 8;
 

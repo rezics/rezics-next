@@ -5,15 +5,13 @@ import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@rezics/ui/popover';
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@rezics/ui/sheet';
 import { cn } from '@rezics/ui/utils';
-import { ChevronDownIcon, ClockIcon, FlameIcon, LayoutListIcon, Rows3Icon, SlidersHorizontalIcon, TrophyIcon,
-  XIcon } from 'lucide-react';
+import { ChevronDownIcon, ClockIcon, FlameIcon, SlidersHorizontalIcon, TrophyIcon, XIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { materializeData } from 'native-i18n';
 import { type ReactNode, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { useFeed } from './feed-context.tsx';
 import type { FeedMessages } from './messages.ts';
 import { activeFilterCount, contentLanguages, type FeedDefaults, feedSearch, type FeedSort, type FeedState,
   topWindows, withChange } from './state.ts';
@@ -56,27 +54,13 @@ export function LinkMenu<V extends string>({ label, value, options, icon, classN
   </Menu>;
 }
 
-/** Cards or one line per post; the choice holds for the next visit. */
-export function ViewSwitch({ className }: { className?: string }) {
-  const { t, view, setView } = useFeed();
-  const option = (value: 'card' | 'compact', label: string, Icon: typeof Rows3Icon) =>
-    <button type="button" aria-pressed={view === value} aria-label={label} title={label} onClick={() => setView(value)}
-      className="grid size-7 place-items-center rounded-full text-muted-foreground outline-none transition-colors
-        hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-background
-        aria-pressed:text-foreground aria-pressed:shadow-sm">
-      <Icon aria-hidden="true" className="size-4" /></button>;
-  return <div role="group" aria-label={t.postView} className={cn('flex shrink-0 items-center rounded-full bg-muted/70 p-0.5',
-    className)}>
-    {option('card', t.cardView, LayoutListIcon)}{option('compact', t.compactView, Rows3Icon)}
-  </div>;
-}
-
 /**
  * Home's controls, as Reddit and X keep them: the tabs (Following and All;
  * pinned Saved Filters take their place after these once readers can pin
- * them), then one compact line with the sort menu, Top's period, the Filters
- * with each active filter as a removable chip, and the view switch. Every
- * choice has its own address; filters survive tab and sort changes.
+ * them), then one compact line with the sort menu, Top's period, and the
+ * Filters with each active filter as a removable chip. Home has one view of
+ * posts, so there is no card/compact switch. Every choice has its own
+ * address; filters survive tab and sort changes.
  */
 export function FeedControls({ state, defaults, signedIn, locale, messages, realms }: {
   state: FeedState; defaults: FeedDefaults; signedIn: boolean; locale: UiLocale; messages: FeedMessages;
@@ -123,8 +107,7 @@ export function FeedControls({ state, defaults, signedIn, locale, messages, real
             transition-colors hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-ring">
             {chip.label}<XIcon aria-hidden="true" className="size-3.5" /></Link>
         </li>)}
-      </ul> : <span className="flex-1" />}
-      <ViewSwitch />
+      </ul> : null}
     </div>
   </div>;
 }

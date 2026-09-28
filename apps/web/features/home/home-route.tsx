@@ -6,7 +6,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { getMessages } from '../../i18n/server.ts';
 import { signInPath } from '../auth/paths.ts';
-import { feedSearch, interestKinds, parsePostView, VIEW_COOKIE } from '../feed/state.ts';
+import { feedSearch, interestKinds } from '../feed/state.ts';
 import { followedRealmIds, segmentsOf } from '../shell/communities.ts';
 import { FeedSkeleton } from '../feed/feed-list.tsx';
 import { HomePage, HomePosts, type HomePostsProps } from './home-page.tsx';
@@ -68,7 +68,6 @@ export async function HomeRoute({ locale, searchParams }: { locale: UiLocale;
     continueItems={continueItems} official={official} interests={interests}
     pickerSkipped={jar.get(PICKER_COOKIE)?.value === 'skipped'}
     welcomeDismissed={jar.get(WELCOME_COOKIE)?.value === 'dismissed'}
-    view={parsePostView(jar.get(VIEW_COOKIE)?.value)}
     signInHref={signInHref} signUpHref={`${signInHref}&create=1`}
     posts={<Suspense fallback={<div aria-busy="true"><FeedSkeleton /></div>}>
       <StreamedPosts posts={posts} locale={locale} messages={feedMessages} signedIn={view.signedIn}

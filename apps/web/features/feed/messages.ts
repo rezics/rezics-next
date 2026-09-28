@@ -20,7 +20,6 @@ export const messages = {
   languages: 'Languages', realms: 'Realms', noRealmsToFilter: 'Follow a Realm to filter by it.',
   showPosts: 'Show posts', clearFilters: 'Clear filters', close: 'Close',
   activeFilters: 'Active filters', removeFilter: insert('Remove filter: {{filter}}', { filter: String }),
-  postView: 'Post view', cardView: 'Card view', compactView: 'Compact view',
 
   // A post
   by: insert('by {{name}}', { name: String }),

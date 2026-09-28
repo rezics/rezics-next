@@ -10,13 +10,42 @@ import { useFeed } from './feed-context.tsx';
 import { absoluteTime, relativeTime } from './time.ts';
 import type { Avatar, Name } from './types.ts';
 
-/** CJK body text: a taller line and spacing between Han and Latin runs. */
-export const readableText = '[text-autospace:normal] [&:is(:lang(zh),:lang(ja),:lang(ko))]:leading-[1.7]';
+/**
+ * CJK running text: the taller line the frontend direction sets, and spacing
+ * between Han and Latin runs. A post's words carry their language on a span
+ * inside the preview, beside facts in the reader's, so the line follows them.
+ */
+export const readableText = '[text-autospace:normal] [&:is(:lang(zh),:lang(ja),:lang(ko))]:leading-[1.8] '
+  + '[&_:is(:lang(zh),:lang(ja),:lang(ko))]:leading-[1.8]';
+
+/**
+ * A post's rhythm, from X's rows as measured on 2026-09-28 (a public profile at
+ * 1440×900 and 390×844): 12 px above and below and 16 px at the sides at every
+ * width, 15/20 px text, 12 px before an attachment and before the action bar,
+ * and a 20 px bar whose larger targets overhang it. REZICS adds Reddit's title,
+ * a step above the text, and keeps its meta line a step below. Skeletons and
+ * other lists of posts take the same values, so every list breathes alike.
+ */
+export const postRhythm = {
+  row: 'px-4 py-3',
+  /** The meta line: one 20 px line; Join and the menu overhang it rather than grow it. */
+  meta: 'h-5 text-sm',
+  /** Meta to title. */
+  afterMeta: 'mt-2',
+  title: 'text-[1.0625rem]/6 font-semibold',
+  /** Title to preview. */
+  afterTitle: 'gap-1.5',
+  preview: 'text-[0.9375rem]/5',
+  /** Before the attachment, and before the action bar. */
+  section: 'mt-3',
+  /** The action bar's line: 20 px, its 32 px targets centred on it. */
+  bar: 'h-5',
+} as const;
 
 /** A bare icon action in a post's bar: no pill until hovered, as X draws them. */
 export const barAction = 'relative z-10 inline-flex h-8 items-center gap-1.5 rounded-full px-2 font-medium '
   + 'text-muted-foreground text-[13px] outline-none transition-colors hover:bg-accent hover:text-accent-foreground '
-  + 'focus-visible:ring-2 focus-visible:ring-ring';
+  + 'focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4.5';
 
 /** Links inside a row sit above its stretched title link, so they keep their own target. */
 export const rowLink = 'relative z-10 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring';
@@ -35,7 +64,7 @@ export interface MetaPart { node: ReactNode; keep?: boolean; name?: boolean }
 export function MetaLine({ icon, parts, end }: { icon: ReactNode; parts: readonly (MetaPart | null | false)[];
   end?: ReactNode }) {
   const shown = parts.filter((part): part is MetaPart => Boolean(part));
-  return <div className="flex h-6 min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
+  return <div className={cn('flex min-w-0 items-center gap-2 text-muted-foreground', postRhythm.meta)}>
     {icon}
     <p className="flex min-w-0 flex-1 items-center gap-x-1 overflow-hidden whitespace-nowrap">
       {shown.map((part, index) => <span key={index} className={cn('flex min-w-0 items-center gap-x-1',
@@ -49,14 +78,14 @@ export function MetaLine({ icon, parts, end }: { icon: ReactNode; parts: readonl
 
 export interface AttachedWork { id: string; title: Name; cover: Avatar; types: readonly string[]; byline: string | null }
 
-/** The Work a post is about, attached as X attaches a link: its cover and one line of title and author. */
+/** The Work a post is about, on its own line as X attaches a link: its cover and one line of title and author. */
 export function WorkAttachment({ work }: { work: AttachedWork }) {
   const { avatarQuery } = useFeed();
-  return <LocalizedLink href={`/w/${work.id.slice(-36)}`} className="relative z-10 flex h-8 min-w-0 max-w-full
-    items-center gap-2 rounded-lg border border-border/70 bg-background/60 py-0.5 pe-2.5 ps-1 text-[13px] outline-none
-    transition-colors hover:border-border hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring sm:max-w-80">
+  return <LocalizedLink href={`/w/${work.id.slice(-36)}`} className="relative z-10 flex h-11 w-fit min-w-0 max-w-full
+    items-center gap-2.5 rounded-xl border border-border/70 bg-background/60 py-1 ps-1 pe-3 text-sm outline-none
+    transition-colors hover:border-border hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring sm:max-w-md">
     <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
-      authors: [] }} avatarQuery={avatarQuery} size="xs" className="w-[1.125rem] shrink-0 rounded-[0.125rem]"
+      authors: [] }} avatarQuery={avatarQuery} size="xs" className="w-6 shrink-0 rounded-[0.1875rem]"
     alt="" loading="lazy" />
     <span className="min-w-0 truncate">
       <span lang={work.title.language} dir={work.title.direction} className="font-medium text-foreground">
@@ -68,18 +97,17 @@ export function WorkAttachment({ work }: { work: AttachedWork }) {
 
 /**
  * One post, with X's treatment and Reddit's anatomy: no frame, a divider
- * below, the whole row leading to the post and tinting on hover. One meta
- * line, the post's own title, at most three lines of preview, then the bare
- * action bar with the Work attached beside it. Compact view keeps one line.
+ * below, the whole row leading to the post and tinting on hover (X's 3% ink).
+ * In Reddit's order: the meta line, the post's own title, at most three lines
+ * of preview, the Work attached, then the bare action bar, spaced as
+ * `postRhythm` measures X. There is one view: dense lists are for catalogues.
  */
-export function PostRow({ kind, href, meta, compactMeta, title, titleLang, titleDir, titleClass, label, preview,
-  thumbnail, attachment, vote, comments, actions, below, position, total }: {
+export function PostRow({ kind, href, meta, title, titleLang, titleDir, titleClass, label, preview, thumbnail,
+  attachment, vote, comments, actions, below, position, total }: {
   kind: string;
   /** Where the row leads; a post with nowhere to go is not clickable. */
   href: string | null;
   meta: ReactNode;
-  /** The shorter meta line of the compact view: where and when. */
-  compactMeta?: ReactNode;
   /** The post's own title; a reply has none and is named by `label` for assistive technology. */
   title: ReactNode | null; titleLang?: string; titleDir?: 'ltr' | 'rtl'; titleClass?: string; label?: string;
   preview?: ReactNode;
@@ -91,46 +119,31 @@ export function PostRow({ kind, href, meta, compactMeta, title, titleLang, title
   below?: ReactNode;
   position?: number; total?: number;
 }) {
-  const { t, view } = useFeed();
+  const { t } = useFeed();
   const titleId = useId();
   const heading = title ?? label;
   const link = (children: ReactNode, className?: string) => href
     ? <LocalizedLink href={href} className={cn('outline-none after:absolute after:inset-0 after:content-[""]',
       'focus-visible:underline', className)}>{children}</LocalizedLink> : children;
-  const row = 'group/post relative border-border/60 border-b transition-colors hover:bg-foreground/[0.03] '
-    + 'has-[:focus-visible]:bg-foreground/[0.03]';
-  if (view === 'compact') {
-    return <article aria-labelledby={titleId} aria-posinset={position} aria-setsize={position ? total ?? -1 : undefined}
-      data-kind={kind} className={cn(row, 'flex min-h-11 items-center gap-2 px-2 py-1 sm:px-3')}>
-      <div className="relative z-10 shrink-0">{vote}</div>
-      <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center sm:gap-3">
-        <h3 id={titleId} lang={titleLang} dir={titleDir} className="min-w-0 truncate font-medium text-sm">
-          {link(heading)}</h3>
-        <div className="min-w-0 shrink-0 text-xs sm:max-w-[45%] [&_p]:gap-x-1 [&>div]:h-5">{compactMeta ?? meta}</div>
-      </div>
-      {comments ? <div className="relative z-10 shrink-0">{comments}</div> : null}
-    </article>;
-  }
   return <article aria-labelledby={titleId} aria-posinset={position} aria-setsize={position ? total ?? -1 : undefined}
-    data-kind={kind} className={cn(row, 'grid gap-1 px-3 pt-2.5 pb-1.5 sm:px-4')}>
+    data-kind={kind} className={cn('group/post relative border-border/60 border-b transition-colors',
+      'hover:bg-foreground/[0.03] has-[:focus-visible]:bg-foreground/[0.03]', postRhythm.row)}>
     {meta}
-    <div className={cn('grid gap-x-3', thumbnail && 'grid-cols-[minmax(0,1fr)_auto]')}>
-      <div className="grid min-w-0 content-start gap-0.5">
+    <div className={cn('grid gap-x-3', postRhythm.afterMeta, thumbnail && 'grid-cols-[minmax(0,1fr)_auto]')}>
+      <div className={cn('grid min-w-0 content-start', postRhythm.afterTitle)}>
         <h3 id={titleId} lang={titleLang} dir={titleDir} className={cn(title === null && 'sr-only',
-          'line-clamp-2 text-pretty font-semibold text-base/snug [overflow-wrap:anywhere]', titleClass)}>
+          'line-clamp-2 text-pretty [overflow-wrap:anywhere]', postRhythm.title, titleClass)}>
           {title === null ? heading : link(title)}</h3>
-        {preview ? <div className={cn('line-clamp-3 text-muted-foreground text-sm/5 [overflow-wrap:anywhere]',
+        {preview ? <div className={cn('line-clamp-3 text-muted-foreground [overflow-wrap:anywhere]', postRhythm.preview,
           readableText)}>{title === null ? link(preview) : preview}</div> : null}
         {below}
       </div>
-      {thumbnail ? <div className="relative z-10 row-span-2 self-start">{thumbnail}</div> : null}
+      {thumbnail ? <div className="relative z-10 self-start">{thumbnail}</div> : null}
     </div>
-    <div className="-ms-2 flex flex-wrap items-center gap-x-1 gap-y-1.5">
-      <div role="group" aria-label={t.actions} className="relative z-10 flex items-center gap-0.5">
+    {attachment ? <div className={cn('flex min-w-0', postRhythm.section)}>{attachment}</div> : null}
+    <div className={cn('-ms-2 flex items-center', postRhythm.section, postRhythm.bar)}>
+      <div role="group" aria-label={t.actions} className="relative z-10 flex items-center gap-x-1 sm:gap-x-3">
         {vote}{comments}{actions}</div>
-      {/* Beside the actions where there is room; on phones the Work comes first, as X puts a link card before them. */}
-      {attachment ? <div className="ms-auto flex min-w-0 max-sm:order-first max-sm:ms-2 max-sm:basis-full max-sm:pt-0.5">
-        {attachment}</div> : null}
     </div>
   </article>;
 }
