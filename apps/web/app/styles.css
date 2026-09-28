@@ -4,4 +4,5 @@
 @import "@fontsource-variable/geist-mono";
 @import "@rezics/ui/styles.css";
 
+/* Production builds narrow this to the components the app imports (usedUiSources in vite.config.ts). */
 @source "../../../packages/ui/src";

@@ -4,7 +4,7 @@
 @import "./hitbox.css";
 @import "./prose.css";
 
-@source "./";
+/* Each app names the component sources Tailwind scans (apps/web builds only the ones it uses). */
 
 /*
  * Theme selection lives on <html>: `.dark` or `.light` is an explicit choice,
