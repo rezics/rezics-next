@@ -2,6 +2,446 @@
   "version": 1,
   "entries": [
     {
+      "id": "author-OL113362A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL113362A.json",
+      "fetchedAt": "2026-09-28T02:06:34.599Z",
+      "sha256": "9690c0433d0f8b136259509ab2332fc2947bdc6311de63ef508d1f5332dd25ac",
+      "size": 5305,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/9690c0433d0f8b136259509ab2332fc2947bdc6311de63ef508d1f5332dd25ac.json"
+    },
+    {
+      "id": "author-OL15030763A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL15030763A.json",
+      "fetchedAt": "2026-09-28T02:06:40.956Z",
+      "sha256": "9b1cdcb544948a4b421a7f8bb10f09984ad0c51ebbc4126289bfcadb197897f9",
+      "size": 419,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/9b1cdcb544948a4b421a7f8bb10f09984ad0c51ebbc4126289bfcadb197897f9.json"
+    },
+    {
+      "id": "author-OL15109279A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL15109279A.json",
+      "fetchedAt": "2026-09-28T02:06:49.579Z",
+      "sha256": "a5d652a906a7f748ba7802cba963aa4087c88b4371b6d009c57edf93329c0e05",
+      "size": 433,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/a5d652a906a7f748ba7802cba963aa4087c88b4371b6d009c57edf93329c0e05.json"
+    },
+    {
+      "id": "author-OL15669783A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL15669783A.json",
+      "fetchedAt": "2026-09-28T02:06:44.682Z",
+      "sha256": "37f91da268fc011708e806aa947855af87105137cd91abe61d581a2480fea3c3",
+      "size": 358,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/37f91da268fc011708e806aa947855af87105137cd91abe61d581a2480fea3c3.json"
+    },
+    {
+      "id": "author-OL15811481A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL15811481A.json",
+      "fetchedAt": "2026-09-28T02:06:42.269Z",
+      "sha256": "96253e0221b616d7b8624ed3a05ecf47fe7f40217a01f1dd7d1965005bf27317",
+      "size": 423,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/96253e0221b616d7b8624ed3a05ecf47fe7f40217a01f1dd7d1965005bf27317.json"
+    },
+    {
+      "id": "author-OL161167A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL161167A.json",
+      "fetchedAt": "2026-09-28T02:06:33.367Z",
+      "sha256": "2e24551d5ca8e0ce0ee58160fb57c60e70db425e3e9e7870c3df9d9362839da5",
+      "size": 10907,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/2e24551d5ca8e0ce0ee58160fb57c60e70db425e3e9e7870c3df9d9362839da5.json"
+    },
+    {
+      "id": "author-OL16184674A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL16184674A.json",
+      "fetchedAt": "2026-09-28T02:06:45.921Z",
+      "sha256": "3be94f903ba7c0b79a26da66ddd40e48ff0f7b05183901d57d11acd51e4107c3",
+      "size": 393,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/3be94f903ba7c0b79a26da66ddd40e48ff0f7b05183901d57d11acd51e4107c3.json"
+    },
+    {
+      "id": "author-OL21594A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL21594A.json",
+      "fetchedAt": "2026-09-28T02:06:30.948Z",
+      "sha256": "b3f22cc720ef776c16d3b236d4db569d7049a931fbbe864e29fb9cb760a79416",
+      "size": 7277,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/b3f22cc720ef776c16d3b236d4db569d7049a931fbbe864e29fb9cb760a79416.json"
+    },
+    {
+      "id": "author-OL22098A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL22098A.json",
+      "fetchedAt": "2026-09-28T02:06:32.169Z",
+      "sha256": "79689ccf8ee30eb9bd4a08fda57602799a91e73e1d97bc06f8c61111a430a5a0",
+      "size": 7939,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/79689ccf8ee30eb9bd4a08fda57602799a91e73e1d97bc06f8c61111a430a5a0.json"
+    },
+    {
+      "id": "author-OL23767A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL23767A.json",
+      "fetchedAt": "2026-09-28T02:06:38.461Z",
+      "sha256": "3bb99c9c11132717516e6b6d995da9beb2f48f291e56b8f411cc2b6700d348ee",
+      "size": 4876,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/3bb99c9c11132717516e6b6d995da9beb2f48f291e56b8f411cc2b6700d348ee.json"
+    },
+    {
+      "id": "author-OL25342A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL25342A.json",
+      "fetchedAt": "2026-09-28T02:06:36.026Z",
+      "sha256": "54bf1acbdb88c8229108be29c94fb58a99bec39eab98618393f5dd7239246091",
+      "size": 3668,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/54bf1acbdb88c8229108be29c94fb58a99bec39eab98618393f5dd7239246091.json"
+    },
+    {
+      "id": "author-OL26680A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL26680A.json",
+      "fetchedAt": "2026-09-28T02:06:37.230Z",
+      "sha256": "f3215521457c5ff3b15b9dd1943e6f194b8bdf8a8928c1c63160a4f1b249c62c",
+      "size": 5668,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/f3215521457c5ff3b15b9dd1943e6f194b8bdf8a8928c1c63160a4f1b249c62c.json"
+    },
+    {
+      "id": "author-OL4288487A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL4288487A.json",
+      "fetchedAt": "2026-09-28T02:06:48.363Z",
+      "sha256": "0fd245c0f70008e595e68266129ed6392d21913a6ea4ab58d6800786d2a4eb81",
+      "size": 1068,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/0fd245c0f70008e595e68266129ed6392d21913a6ea4ab58d6800786d2a4eb81.json"
+    },
+    {
+      "id": "author-OL608235A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL608235A.json",
+      "fetchedAt": "2026-09-28T02:06:39.638Z",
+      "sha256": "decd64b146448bfc69f1bf1f5b484db211c6136f0f959c54f4387f2c60d5badb",
+      "size": 1159,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/decd64b146448bfc69f1bf1f5b484db211c6136f0f959c54f4387f2c60d5badb.json"
+    },
+    {
+      "id": "author-OL6725631A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL6725631A.json",
+      "fetchedAt": "2026-09-28T02:06:47.133Z",
+      "sha256": "90a6c64372ad2c18f2f0568a6064b180011218174d4fc28f0581368a1b443ac5",
+      "size": 278,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/90a6c64372ad2c18f2f0568a6064b180011218174d4fc28f0581368a1b443ac5.json"
+    },
+    {
+      "id": "author-OL68149A",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/authors/OL68149A.json",
+      "fetchedAt": "2026-09-28T02:06:43.447Z",
+      "sha256": "a7eb3b0c9c13300dd7b381b79750d069169f7f3c28c6de8befe0f3bafa0256e8",
+      "size": 1425,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/a7eb3b0c9c13300dd7b381b79750d069169f7f3c28c6de8befe0f3bafa0256e8.json"
+    },
+    {
+      "id": "edition-OL23693859M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL23693859M.json",
+      "fetchedAt": "2026-09-28T02:06:27.245Z",
+      "sha256": "4c7496637a995b1ead2ea348451d6a12d03a575cb041ccc3909a0c3ea3965021",
+      "size": 2171,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/4c7496637a995b1ead2ea348451d6a12d03a575cb041ccc3909a0c3ea3965021.json"
+    },
+    {
+      "id": "edition-OL35422426M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL35422426M.json",
+      "fetchedAt": "2026-09-28T02:06:02.851Z",
+      "sha256": "7a9de1b8cf84d8659d395c395ee1b5e2a5c4acb6ce7fc695509f844f63f4ee6d",
+      "size": 651,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/7a9de1b8cf84d8659d395c395ee1b5e2a5c4acb6ce7fc695509f844f63f4ee6d.json"
+    },
+    {
+      "id": "edition-OL37595955M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL37595955M.json",
+      "fetchedAt": "2026-09-28T02:06:00.190Z",
+      "sha256": "29d7451907327191030dcbaa147988edfcdde053ac957c66130d2584b2201c23",
+      "size": 569,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/29d7451907327191030dcbaa147988edfcdde053ac957c66130d2584b2201c23.json"
+    },
+    {
+      "id": "edition-OL43723716M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL43723716M.json",
+      "fetchedAt": "2026-09-28T02:06:11.273Z",
+      "sha256": "53e50e12ab92101e35d0e6c0c4912d0c30501c1d0078c5c5a6b033c2433db6c8",
+      "size": 1153,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/53e50e12ab92101e35d0e6c0c4912d0c30501c1d0078c5c5a6b033c2433db6c8.json"
+    },
+    {
+      "id": "edition-OL44576899M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL44576899M.json",
+      "fetchedAt": "2026-09-28T02:06:05.690Z",
+      "sha256": "76d666df5df397c78e5b6ccd6d422a408eb2dbdee91fbc12f86d0bb441189de7",
+      "size": 1269,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/76d666df5df397c78e5b6ccd6d422a408eb2dbdee91fbc12f86d0bb441189de7.json"
+    },
+    {
+      "id": "edition-OL49836838M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL49836838M.json",
+      "fetchedAt": "2026-09-28T02:05:55.235Z",
+      "sha256": "ebc531a7b6662cd285b56fc682d75d078610a698c17554ff729e305409871045",
+      "size": 848,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/ebc531a7b6662cd285b56fc682d75d078610a698c17554ff729e305409871045.json"
+    },
+    {
+      "id": "edition-OL50383225M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL50383225M.json",
+      "fetchedAt": "2026-09-28T02:05:57.646Z",
+      "sha256": "7b31601fbf1561146d171635748aa1d75fdbe068b9a7d4088cb383bd59d0d1d0",
+      "size": 794,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/7b31601fbf1561146d171635748aa1d75fdbe068b9a7d4088cb383bd59d0d1d0.json"
+    },
+    {
+      "id": "edition-OL59675577M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL59675577M.json",
+      "fetchedAt": "2026-09-28T02:06:29.720Z",
+      "sha256": "091bfd2e213adea578d4738bfc842f9019cbbb826509efe3d2fdfa30b0971b79",
+      "size": 966,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/091bfd2e213adea578d4738bfc842f9019cbbb826509efe3d2fdfa30b0971b79.json"
+    },
+    {
+      "id": "edition-OL59844600M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL59844600M.json",
+      "fetchedAt": "2026-09-28T02:06:16.266Z",
+      "sha256": "5d55ad9a731d871544c7d5ab5055a65767669e5128e392934e032bba4bd0cba5",
+      "size": 933,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/5d55ad9a731d871544c7d5ab5055a65767669e5128e392934e032bba4bd0cba5.json"
+    },
+    {
+      "id": "edition-OL59988960M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL59988960M.json",
+      "fetchedAt": "2026-09-28T02:06:21.232Z",
+      "sha256": "137b9651048c0b2365603bc5a6aefd7f14c41e9f0405c4d851c19598be03fc43",
+      "size": 1007,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/137b9651048c0b2365603bc5a6aefd7f14c41e9f0405c4d851c19598be03fc43.json"
+    },
+    {
+      "id": "edition-OL60086420M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL60086420M.json",
+      "fetchedAt": "2026-09-28T02:06:18.779Z",
+      "sha256": "4c41c929f6434272ad0b12f7de840c3f205c49af4e0fc5bef270f02957a0c7cb",
+      "size": 927,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/4c41c929f6434272ad0b12f7de840c3f205c49af4e0fc5bef270f02957a0c7cb.json"
+    },
+    {
+      "id": "edition-OL61503466M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL61503466M.json",
+      "fetchedAt": "2026-09-28T02:06:24.857Z",
+      "sha256": "f095869aa3f4897d8a58ba9072edc9a1f2dee3e26511969e1e0b6db5ea415d69",
+      "size": 920,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/f095869aa3f4897d8a58ba9072edc9a1f2dee3e26511969e1e0b6db5ea415d69.json"
+    },
+    {
+      "id": "edition-OL62085812M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL62085812M.json",
+      "fetchedAt": "2026-09-28T02:06:08.514Z",
+      "sha256": "1c2a4aacfd0498f7c98b67a4e93b76cf7e20268e7a636774702c9afe33bbcebc",
+      "size": 2440,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/1c2a4aacfd0498f7c98b67a4e93b76cf7e20268e7a636774702c9afe33bbcebc.json"
+    },
+    {
+      "id": "edition-OL62456547M",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/books/OL62456547M.json",
+      "fetchedAt": "2026-09-28T02:06:13.816Z",
+      "sha256": "3c5a3e977e764d8cf790300fe4e8330c3eca217a30b543ee8e729c483420b65e",
+      "size": 382,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/3c5a3e977e764d8cf790300fe4e8330c3eca217a30b543ee8e729c483420b65e.json"
+    },
+    {
+      "id": "work-OL1095427W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL1095427W.json",
+      "fetchedAt": "2026-09-28T02:06:04.439Z",
+      "sha256": "b76c1744ea3f405a544514cc6873c4737829468a931b80779c05fc3924c93c0e",
+      "size": 4060,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/b76c1744ea3f405a544514cc6873c4737829468a931b80779c05fc3924c93c0e.json"
+    },
+    {
+      "id": "work-OL138052W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL138052W.json",
+      "fetchedAt": "2026-09-28T02:05:56.468Z",
+      "sha256": "9aebaded8915a2c9a1937e21f9455839cf575d420d0a961009f3d1c610e08499",
+      "size": 7843,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/9aebaded8915a2c9a1937e21f9455839cf575d420d0a961009f3d1c610e08499.json"
+    },
+    {
+      "id": "work-OL13855988W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL13855988W.json",
+      "fetchedAt": "2026-09-28T02:06:26.032Z",
+      "sha256": "78f46c330a20bd649f2fa97bc45fcad690c4d76271c7aa6b8ef0e9ebc0038a75",
+      "size": 378,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/78f46c330a20bd649f2fa97bc45fcad690c4d76271c7aa6b8ef0e9ebc0038a75.json"
+    },
+    {
+      "id": "work-OL14930611W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL14930611W.json",
+      "fetchedAt": "2026-09-28T02:06:01.413Z",
+      "sha256": "b3ccb9b00e9a87aa928ab4aeecec7cee859b21517b78d7c2a12c7205140404bb",
+      "size": 6115,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/b3ccb9b00e9a87aa928ab4aeecec7cee859b21517b78d7c2a12c7205140404bb.json"
+    },
+    {
+      "id": "work-OL262421W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL262421W.json",
+      "fetchedAt": "2026-09-28T02:05:58.873Z",
+      "sha256": "6b0fcd293aeff4dcf7a5f419c294a4fdd5c87b7fbb57cb2d6ca5a2e900523cfd",
+      "size": 8415,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/6b0fcd293aeff4dcf7a5f419c294a4fdd5c87b7fbb57cb2d6ca5a2e900523cfd.json"
+    },
+    {
+      "id": "work-OL29983W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL29983W.json",
+      "fetchedAt": "2026-09-28T02:06:10.037Z",
+      "sha256": "dc2ddb89bf03a4d298cdc0ed3c2a1a436d315dc492af1111f7057f1570c6ed81",
+      "size": 5427,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/dc2ddb89bf03a4d298cdc0ed3c2a1a436d315dc492af1111f7057f1570c6ed81.json"
+    },
+    {
+      "id": "work-OL43592659W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL43592659W.json",
+      "fetchedAt": "2026-09-28T02:06:15.019Z",
+      "sha256": "a360cf442d857b202b5f4549ea8e305f1d8c3ea2913f3fc891a587be2cffb86d",
+      "size": 349,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/a360cf442d857b202b5f4549ea8e305f1d8c3ea2913f3fc891a587be2cffb86d.json"
+    },
+    {
+      "id": "work-OL43776831W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL43776831W.json",
+      "fetchedAt": "2026-09-28T02:06:28.446Z",
+      "sha256": "68578a019cc16204f22ab7ff15a5ce3dcb5d637970537d62c715f4058fdba568",
+      "size": 427,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/68578a019cc16204f22ab7ff15a5ce3dcb5d637970537d62c715f4058fdba568.json"
+    },
+    {
+      "id": "work-OL43981488W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL43981488W.json",
+      "fetchedAt": "2026-09-28T02:06:19.992Z",
+      "sha256": "b8064bc57887320a0c196db366ac9a39ae09a8103f88fbcdb704416c0da95c87",
+      "size": 465,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/b8064bc57887320a0c196db366ac9a39ae09a8103f88fbcdb704416c0da95c87.json"
+    },
+    {
+      "id": "work-OL44028824W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL44028824W.json",
+      "fetchedAt": "2026-09-28T02:06:17.473Z",
+      "sha256": "a0d79eb9d20ecafe880e35aa70f18d898fd608cb8af1a4c2e8486300f58ac5a5",
+      "size": 428,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/a0d79eb9d20ecafe880e35aa70f18d898fd608cb8af1a4c2e8486300f58ac5a5.json"
+    },
+    {
+      "id": "work-OL450063W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL450063W.json",
+      "fetchedAt": "2026-09-28T02:06:07.322Z",
+      "sha256": "29bdf33cd8a1a3a078061b7031fb2b8e1f2219a2c8e5786ca53be587d21cbb32",
+      "size": 4549,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/29bdf33cd8a1a3a078061b7031fb2b8e1f2219a2c8e5786ca53be587d21cbb32.json"
+    },
+    {
+      "id": "work-OL45094623W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL45094623W.json",
+      "fetchedAt": "2026-09-28T02:06:22.413Z",
+      "sha256": "0e6a0dd22176ead3a16f6a68713343233e62e777fdedc3dff5f5d94d6243b290",
+      "size": 422,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/0e6a0dd22176ead3a16f6a68713343233e62e777fdedc3dff5f5d94d6243b290.json"
+    },
+    {
+      "id": "work-OL66554W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL66554W.json",
+      "fetchedAt": "2026-09-28T02:05:54.055Z",
+      "sha256": "dd0fa391ab9fe17e0c22fdc272215be29a815eeadc9bba709b1e88c2ae56469b",
+      "size": 5211,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/dd0fa391ab9fe17e0c22fdc272215be29a815eeadc9bba709b1e88c2ae56469b.json"
+    },
+    {
+      "id": "work-OL69612W",
+      "source": "open-library",
+      "requestUrl": "https://openlibrary.org/works/OL69612W.json",
+      "fetchedAt": "2026-09-28T02:06:12.603Z",
+      "sha256": "207573ddbd1500c69479f9e7cd1f8f3261d0ae1f7be13e82161f27fabbb664bb",
+      "size": 4454,
+      "reuseBasis": "Open Library catalog metadata is released under CC0; JSON API records only, no book text or cover images. https://openlibrary.org/help/faq/using",
+      "seed": "tests/fixtures/seeds/open-library/207573ddbd1500c69479f9e7cd1f8f3261d0ae1f7be13e82161f27fabbb664bb.json"
+    },
+    {
       "id": "Q42",
       "source": "wikidata",
       "requestUrl": "https://www.wikidata.org/wiki/Special:EntityData/Q42.json",

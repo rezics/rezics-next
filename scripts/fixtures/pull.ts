@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { sources, type FixtureSource } from '../../tests/fixtures/sources/wikidata.ts';
+import { openLibrary } from '../../tests/fixtures/sources/open-library.ts';
 
 export interface FixtureEntry {
   id: string;
@@ -118,7 +119,7 @@ async function fetchNormalized(adapter: FixtureSource, request: { id: string; ur
 }
 
 export async function pullFixtures(root: string, options: PullOptions = {}): Promise<PullResult[]> {
-  const adapters = options.adapters ?? sources;
+  const adapters = options.adapters ?? [...sources, openLibrary];
   const selected = options.source ? adapters.filter(item => item.name === options.source) : adapters;
   if (!selected.length) throw new Error(`Unsupported fixture source: ${options.source}`);
   const mode = options.mode ?? 'replay';
