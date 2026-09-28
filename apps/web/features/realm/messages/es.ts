@@ -69,4 +69,5 @@ export default {
     other: insert('{{count}} miembros eligieron aparecer en la lista') }, { count: asValue(number()) }),
   membersNone: 'Aún no hay miembros que hayan elegido aparecer en la lista.',
   featured: 'Destacado',
+  createPost: "Crear publicación",
 } satisfies Partial<RealmMessages>;

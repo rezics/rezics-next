@@ -72,4 +72,9 @@ export default {
   correctionMade: 'Une correction a été apportée à un contenu que vous suivez',
   moreLikeThis: plural({ one: insert('et {{count}} autre notification similaire'), other: insert('et {{count}} autres notifications similaires') },
     { count: asValue(number()) }),
+  mentionedYou: insert("{{name}} vous a mentionné", { name: String }),
+  newChapterOn: insert("Nouveau chapitre de « {{title}} »", { title: String }),
+  newChapter: "Une œuvre que vous suivez a un nouveau chapitre",
+  votedOnPost: insert("{{name}} a voté sur votre publication à propos de « {{title}} »", { name: String, title: String }),
+  votedOnYourPost: insert("{{name}} a voté sur votre publication", { name: String }),
 } satisfies Partial<ShellMessages>;

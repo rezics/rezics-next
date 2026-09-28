@@ -50,4 +50,6 @@ export default {
   trending: 'Im Trend diese Woche',
   trendingIn: insert('Im Trend in {{realm}}', { realm: String }),
   fromEveryone: 'Von allen auf REZICS',
+  unsupportedTitle: "Diese Bedingungen können hier nicht kombiniert werden",
+  unsupportedHelp: "Nutze bei einer Liste der neuesten Werke ein enthaltenes Schlagwort oder entferne eine Bedingung.",
 } satisfies Partial<DiscoverMessages>;

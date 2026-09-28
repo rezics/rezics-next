@@ -1,4 +1,4 @@
-import { insert, plural } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { AuthorMessages } from '../messages.ts';
 
 export default {
@@ -30,4 +30,14 @@ export default {
   description: insert('Œuvres de {{name}} sur REZICS : notes, lecteurs et par où commencer.', { name: String }),
   descriptionLifespan: insert('{{name}} ({{lifespan}}). Œuvres sur REZICS, avec leurs notes et leurs lecteurs.',
     { name: String, lifespan: String }),
+  followers: plural({
+    one: insert("{{count}} abonné"),
+    other: insert("{{count}} abonnés"),
+  }, { count: asValue(number()) }),
+  followersAtLeast: insert("{{count}}+ abonnés", { count: String }),
+  follow: "Suivre",
+  following: "Suivi",
+  unfollowName: insert("Ne plus suivre {{name}}", { name: String }),
+  signInToFollow: "Connectez-vous pour suivre",
+  followFailed: "Impossible d’enregistrer. Réessayez.",
 } satisfies Partial<AuthorMessages>;

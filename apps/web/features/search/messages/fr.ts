@@ -68,4 +68,6 @@ export default {
   didYouMeanEnd: ' ?',
   listSeparator: ', ',
   popularTitle: 'Populaire sur REZICS',
+  unsupportedTitle: "Ces conditions ne peuvent pas être combinées dans la recherche",
+  unsupportedHelp: "Retirez une condition ou modifiez la façon dont les valeurs doivent correspondre.",
 } satisfies Partial<SearchMessages>;

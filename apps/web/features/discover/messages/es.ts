@@ -50,4 +50,6 @@ export default {
   trending: 'Tendencias de la semana',
   trendingIn: insert('Tendencias en {{realm}}', { realm: String }),
   fromEveryone: 'De todos en REZICS',
+  unsupportedTitle: "Aquí no se pueden combinar estas condiciones",
+  unsupportedHelp: "En una lista de novedades, usa una etiqueta incluida o quita una condición.",
 } satisfies Partial<DiscoverMessages>;

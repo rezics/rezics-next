@@ -69,4 +69,5 @@ export default {
     other: insert('{{count}} Mitglieder möchten gelistet werden') }, { count: asValue(number()) }),
   membersNone: 'Noch niemand hat sich für einen Eintrag in der Liste entschieden.',
   featured: 'Empfohlen',
+  createPost: "Beitrag erstellen",
 } satisfies Partial<RealmMessages>;
