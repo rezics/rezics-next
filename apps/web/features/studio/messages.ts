@@ -85,7 +85,7 @@ export const messages = {
   completionOngoing: 'Ongoing', completionCompleted: 'Completed', completionHiatus: 'On hiatus',
 
   // Chapters
-  chaptersHelp: 'Readers get the chapters in this order, volume by volume. Drag a chapter by its handle, or open the handle for the moves. Each chapter stays private until you publish it.',
+  chaptersHelp: 'Readers get the chapters in this order, volume by volume. Drag a chapter by its grip, or choose its Move button for the same moves by keyboard. Each chapter stays private until you publish it.',
   noChapters: 'No chapters yet. Add the first one below.',
   chaptersFailed: 'Couldn’t load the chapters.',
   moreChapters: 'Show more chapters',
@@ -126,7 +126,7 @@ export const messages = {
   loadingChapters: 'Loading chapters…', loadChaptersFailed: 'Couldn’t load these chapters.',
   // Moving and selecting chapters
   moveHandle: insert('Move “{{title}}”', { title: String }),
-  moveHandleHint: 'Drag to move, or open for the moves.',
+  moveHandleHint: 'Drag to move',
   moveTo: 'Move to', moveToTop: 'The top level', moveInto: insert('“{{title}}”', { title: String }),
   movedInto: insert('Moved “{{title}}” into “{{group}}”.', { title: String, group: String }),
   movedOut: insert('Moved “{{title}}” to the top level.', { title: String }),

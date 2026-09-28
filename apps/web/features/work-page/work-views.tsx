@@ -367,8 +367,7 @@ export async function WorkContents({ workRef, id, work, query, locale, messages 
     ?? groups.find(item => item.division !== 'extras' && item.childCount) ?? groups[0];
   const openPage = open && query ? await readContents(id, { parent: idOf(open.occurrence) ?? undefined,
     language: query.language }) : null;
-  const { actingSubject } = await readingAgent();
   return <ContentsRegion contents={contents} workRef={workRef} id={id} query={query ?? {}} oneText={oneText}
     opened={open && openPage?.ok ? { occurrence: open.occurrence, page: openPage.data } : null}
-    actingSubject={actingSubject} locale={locale} messages={messages} />;
+    locale={locale} messages={messages} />;
 }

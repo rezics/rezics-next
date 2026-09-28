@@ -222,7 +222,9 @@ export const Volumes: Story = {
     const first = canvas.getByRole('button', { name: /^第一卷 雨夜/ });
     const second = canvas.getByRole('button', { name: /^第二卷 雨停之后/ });
     await expect(first).toHaveAttribute('aria-expanded', 'false');
-    await expect(first).toHaveTextContent('Volume 1 · 2 chapters');
+    // Its title already says 第一卷, so no second volume number is added.
+    await expect(first).toHaveTextContent('2 chapters');
+    await expect(first).not.toHaveTextContent('Volume 1');
     await expect(second).toHaveAttribute('aria-expanded', 'true');
     await expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('Extras · 1 chapter');
     const draft = await canvas.findByRole('link', { name: 'Write “第三章 最后一班车”' });
@@ -303,28 +305,34 @@ export const BulkActions: Story = {
   },
 };
 
-/** Dragging: a chapter dropped on a volume's header goes to its end; a volume dragged above another moves before it. */
+/** Dragging by the grip: a chapter dropped on a volume's header goes to its end; a volume dropped on the upper half of another moves before it. */
 export const DragAndDrop: Story = {
   args: (() => { const setup = volumes(); return { content: setup.content, main: setup.main }; })() as never,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    // A pointer presses the grip, moves past the lift threshold, then over the target, and lets go.
     const drag = async (source: HTMLElement, target: HTMLElement, clientY: number) => {
-      const dataTransfer = new DataTransfer();
-      await fireEvent.dragStart(source, { dataTransfer });
-      await fireEvent.dragOver(target, { dataTransfer, clientY });
-      await fireEvent.drop(target, { dataTransfer, clientY });
-      await fireEvent.dragEnd(source, { dataTransfer });
+      const from = source.getBoundingClientRect();
+      const x = from.left + from.width / 2, y = from.top + from.height / 2;
+      const to = target.getBoundingClientRect().left + 40;
+      await fireEvent.pointerDown(source, { button: 0, pointerId: 1, clientX: x, clientY: y });
+      await fireEvent.pointerMove(window, { pointerId: 1, clientX: x + 8, clientY: y + 8 });
+      await fireEvent.pointerMove(window, { pointerId: 1, clientX: to, clientY });
+      await fireEvent.pointerUp(window, { pointerId: 1, clientX: to, clientY });
     };
-    const handle = await canvas.findByRole('button', { name: 'Move “第四章 站台”' });
+    // The grip beside each Move button is what a pointer drags.
+    const grip = (button: HTMLElement) => button.parentElement!.querySelector<HTMLElement>('[data-drag-handle]')!;
+    const handle = grip(await canvas.findByRole('button', { name: 'Move “第四章 站台”' }));
     const extras = canvas.getByRole('button', { name: /^番外/ }).parentElement!;
     await drag(handle, extras, extras.getBoundingClientRect().top + 4);
     await waitFor(() => expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('2 chapters'));
     await expect(canvas.getByText('Moved “第四章 站台” into “番外”.')).toBeInTheDocument();
-    const second = canvas.getByRole('button', { name: 'Move “第二卷 雨停之后”' });
-    await waitFor(() => expect(second).toBeEnabled());
+    const moveSecond = canvas.getByRole('button', { name: 'Move “第二卷 雨停之后”' });
+    await waitFor(() => expect(moveSecond).toBeEnabled());
+    const second = grip(moveSecond);
     const firstHeader = canvas.getByRole('button', { name: /^第一卷 雨夜/ }).parentElement!;
     await drag(second, firstHeader, firstHeader.getBoundingClientRect().top + 1);
-    await waitFor(() => expect(canvas.getByRole('button', { name: /^第二卷 雨停之后/ })).toHaveTextContent('Volume 1'));
+    await waitFor(() => expect(canvas.getAllByRole('button', { name: /^第.卷/ })[0]).toHaveAccessibleName(/^第二卷 雨停之后/));
   },
 };
 
@@ -334,7 +342,7 @@ export const VolumesChinese: Story = {
   globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('button', { name: /^第一卷 雨夜/ })).toHaveTextContent('第一卷 雨夜第一卷 · 2 章');
+    await expect(canvas.getByRole('button', { name: /^第一卷 雨夜/ })).toHaveTextContent('第一卷 雨夜2 章');
     await expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('番外 · 1 章');
     await expect(await canvas.findByText('960 字')).toBeVisible();
     await expect(canvas.getByRole('button', { name: '新建分卷' })).toBeVisible();

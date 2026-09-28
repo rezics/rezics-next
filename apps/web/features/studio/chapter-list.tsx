@@ -14,18 +14,18 @@ import { Menu, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparat
 import { ChoiceSelect } from '@rezics/ui/select';
 import { Skeleton } from '@rezics/ui/skeleton';
 import { cn } from '@rezics/ui/utils';
-import { ArrowDownIcon, ArrowLeftRightIcon, ArrowUpIcon, BookOpenIcon, ChevronDownIcon, EllipsisIcon, FolderInputIcon,
+import { ArrowDownIcon, ArrowLeftRightIcon, ArrowUpDownIcon, ArrowUpIcon, BookOpenIcon, ChevronDownIcon, EllipsisIcon, FolderInputIcon,
   GripVerticalIcon, LockIcon, PenLineIcon, PlusIcon, SendIcon, Trash2Icon, TriangleAlertIcon, XIcon }
   from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
-import { type DragEvent, type FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { browserMainApi } from '../api/browser.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { relativeTime } from '../feed/time.ts';
 import Link from '../shell/localized-link.tsx';
 import { chapterHref as readerChapterHref } from '../work-page/route.ts';
-import { volumeName } from '../work-page/format.ts';
+import { numberedTitle, volumeName } from '../work-page/format.ts';
 import { chapterVariant, changeComposition, type CompositionOperation, createChapter, ensureComposition,
   publishLatest } from './content-api.ts';
 import { browserStorage, type ChapterMemory, chapterMemoryKey, readChapterMemory } from './local-draft.ts';
@@ -233,42 +233,69 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
     if (into) setOpen(current => new Set([...current, into.occurrence]));
   };
 
-  const onDragStart = (event: DragEvent, item: ContentsItem) => {
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', nameOf(item));
-    dragging.current = { occurrence: item.occurrence, role: item.role, parent: item.parent };
-    setDrag(dragging.current);
-  };
-  /** Where the dragged use would land over `item`: into a volume's end, or before or after it. */
-  const landing = (event: DragEvent, item: ContentsItem, into: boolean): Drop | null => {
+  const everything = () => [...top.items, ...Object.values(levels).flatMap(level => level.items)];
+  /**
+   * Where the dragged use would land under the pointer: into a volume's end (a chapter over a volume's
+   * header), before or after a use, or at the end of the book. Volumes stand only at the top level.
+   */
+  const landingAt = (x: number, y: number): Drop | null => {
     const moving = dragging.current;
-    if (!moving || moving.occurrence === item.occurrence) return null;
-    // Volumes stand only at the top level; a chapter dropped on a volume's header goes to its end.
-    if (moving.role === 'group' && item.parent !== structure) return null;
-    return { occurrence: item.occurrence, edge: into && moving.role === 'chapter' ? 'into'
-      : dropEdge(event.clientY, event.currentTarget.getBoundingClientRect()) };
+    const element = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-drop-target], [data-drop-end]');
+    if (!moving || !element) return null;
+    if (element.dataset.dropEnd !== undefined) return { end: true };
+    const item = everything().find(entry => entry.occurrence === element.dataset.dropTarget);
+    if (!item || item.occurrence === moving.occurrence || moving.role === 'group' && item.parent !== structure) return null;
+    return { occurrence: item.occurrence, edge: element.dataset.dropInto !== undefined && moving.role === 'chapter'
+      ? 'into' : dropEdge(y, element.getBoundingClientRect()) };
   };
-  const over = (event: DragEvent, item: ContentsItem, into = false) => {
-    const at = landing(event, item, into);
-    if (!at) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    setDrop(current => current && 'occurrence' in current && 'occurrence' in at && current.occurrence === at.occurrence
-      && current.edge === at.edge ? current : at);
-  };
-  const dropped = (event: DragEvent, facts: ChapterFacts, item: ContentsItem | null, into = false) => {
-    event.preventDefault();
-    const at = item ? landing(event, item, into) : dragging.current ? { end: true as const } : null;
-    const all = [...top.items, ...Object.values(levels).flatMap(level => level.items)];
-    const moving = all.find(entry => entry.occurrence === dragging.current?.occurrence);
-    dragEnd();
-    if (!moving || !at || !structure) return;
+  const land = (moving: ContentsItem, at: Drop) => {
+    const facts = { ...serverFacts, ...known };
+    if (!structure) return;
     if ('end' in at) return moveTo(moving, { parent: structure, end: true }, facts[moving.occurrence]);
-    const anchor = all.find(entry => entry.occurrence === at.occurrence);
+    const anchor = everything().find(entry => entry.occurrence === at.occurrence);
     if (!anchor) return;
     moveTo(moving, at.edge === 'into' ? { parent: anchor.occurrence, end: true }
       : at.edge === 'before' ? { parent: anchor.parent, before: anchor.occurrence }
         : { parent: anchor.parent, after: anchor.occurrence }, facts[moving.occurrence]);
+  };
+  /**
+   * A drag follows the pointer (mouse, pen or touch) from the grip: past a few pixels it lifts the use, the
+   * row under the pointer shows where it would land, and releasing moves it there. Escape cancels.
+   */
+  const startDrag = (event: ReactPointerEvent<HTMLElement>, item: ContentsItem) => {
+    if (busy !== null || event.button !== 0) return;
+    event.preventDefault();
+    const origin = { x: event.clientX, y: event.clientY };
+    let at: Drop | null = null;
+    const move = (next: PointerEvent) => {
+      if (!dragging.current) {
+        if (Math.hypot(next.clientX - origin.x, next.clientY - origin.y) < 4) return;
+        dragging.current = { occurrence: item.occurrence, role: item.role, parent: item.parent };
+        setDrag(dragging.current);
+      }
+      // Near the window's edge the page scrolls, to reach volumes out of view.
+      if (next.clientY < 48) window.scrollBy(0, -16);
+      else if (next.clientY > window.innerHeight - 48) window.scrollBy(0, 16);
+      at = landingAt(next.clientX, next.clientY);
+      setDrop(at);
+    };
+    const finish = (commit: boolean) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('keydown', escape);
+      const moving = everything().find(entry => entry.occurrence === dragging.current?.occurrence);
+      const landed = at;
+      dragEnd();
+      if (commit && moving && landed) land(moving, landed);
+    };
+    const release = () => finish(true);
+    const cancel = () => finish(false);
+    const escape = (key: KeyboardEvent) => { if (key.key === 'Escape') cancel(); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('keydown', escape);
   };
   function dragEnd() {
     dragging.current = null;
@@ -323,7 +350,13 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
       current = made;
       setComposition(made);
     }
-    const operation: CompositionOperation = { op: 'insert', parent: current.structure, position: 'last', role: 'group',
+    // Extras close the book: a new volume or part goes before them, as a reader meets them.
+    let before = top.items.length;
+    while (!top.next && division !== 'extras' && before > 0 && top.items[before - 1]!.role === 'group'
+      && top.items[before - 1]!.division === 'extras') before--;
+    const position = before === top.items.length ? 'last' as const : before === 0 ? 'first' as const
+      : { after: top.items[before - 1]!.occurrence };
+    const operation: CompositionOperation = { op: 'insert', parent: current.structure, position, role: 'group',
       division, ...(title ? { label: { value: title, language: book.language } } : {}) };
     setBusy('group');
     setError(null);
@@ -381,14 +414,22 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
   const failed = !page.ok && page.failure !== 'none' && page.failure !== 'missing';
   const clock = now ?? Date.now();
 
-  /** The handle a chapter or volume moves by: drag it, or open it for moves the keyboard reaches. */
+  /**
+   * How a chapter or volume moves: a grip to drag, and beside it a Move button whose menu the keyboard
+   * reaches. They are separate controls because a menu trigger takes the press that would start a drag.
+   */
   const handle = (item: ContentsItem, parent: string, facts: ChapterFacts) => {
     const name = nameOf(item, facts[item.occurrence]);
     const siblings = siblingsOf(parent);
     const up = stepDestination(item.occurrence, -1, parent, siblings);
     const down = stepDestination(item.occurrence, 1, parent, siblings);
     const into = item.role === 'chapter' ? groups.filter(group => group.occurrence !== item.parent) : [];
-    return <Menu onSelect={details => {
+    return <span className="flex items-center">
+      <span data-drag-handle="" aria-hidden="true" title={t.moveHandleHint} onPointerDown={event => startDrag(event, item)}
+        className={cn('flex h-8 w-4 touch-none select-none items-center justify-center text-muted-foreground/70',
+          busy === null ? 'cursor-grab active:cursor-grabbing' : 'cursor-not-allowed')}>
+        <GripVerticalIcon className="size-4" /></span>
+      <Menu onSelect={details => {
       if (details.value === 'up' && up) moveTo(item, up, facts[item.occurrence]);
       else if (details.value === 'down' && down) moveTo(item, down, facts[item.occurrence]);
       else if (details.value === 'top' && structure) moveTo(item, { parent: structure, end: true }, facts[item.occurrence]);
@@ -397,11 +438,9 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
       }
     }}>
       <MenuTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-sm" draggable={busy === null}
-          onDragStart={event => onDragStart(event, item)} onDragEnd={dragEnd}
-          aria-label={t.moveHandle({ title: name })} title={t.moveHandleHint} disabled={busy !== null}
-          className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing">
-          <GripVerticalIcon aria-hidden="true" /></Button>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label={t.moveHandle({ title: name })}
+          disabled={busy !== null} className="text-muted-foreground">
+          <ArrowUpDownIcon aria-hidden="true" /></Button>
       </MenuTrigger>
       <MenuContent>
         <MenuItem value="up" disabled={!up}><ArrowUpIcon aria-hidden="true" />{t.moveUp({ title: name })}</MenuItem>
@@ -423,7 +462,8 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
           </MenuSub>
         </> : null}
       </MenuContent>
-    </Menu>;
+    </Menu>
+    </span>;
   };
 
   const chapterRow = (row: ContentsItem, parent: string, facts: ChapterFacts) => {
@@ -440,8 +480,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
       .filter((part): part is string => part !== null);
     const name = nameOf(row, fact);
     return <li key={row.occurrence} data-occurrence={row.occurrence}
-      onDragOver={event => over(event, row)} onDragLeave={() => setDrop(null)}
-      onDrop={event => dropped(event, facts, row)}
+      data-drop-target={row.occurrence}
       className={cn('grid grid-cols-[auto_auto_2rem_minmax(0,1fr)] items-center gap-x-2 gap-y-2 px-2 py-3',
         'sm:grid-cols-[auto_auto_2.5rem_minmax(0,1fr)_auto] sm:px-3',
         drag?.occurrence === row.occurrence && 'opacity-50', dropClass(drop, row.occurrence))}>
@@ -488,8 +527,9 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
     const name = groupName(item, locale, t);
     const level = levels[item.occurrence];
     const isOpen = open.has(item.occurrence);
-    const kind = item.division === 'volume' && item.number ? volumeName(item.number, locale, t)
-      : item.division === 'extras' ? t.extras : t.untitledPart === name ? null : t.part;
+    // "Volume 2" only when the title does not already say which volume it is (第二卷 …, Volume II).
+    const kind = item.division === 'volume' && item.number ? numberedTitle(item.label?.value) ? null
+      : volumeName(item.number, locale, t) : item.division === 'extras' ? t.extras : t.untitledPart === name ? null : t.part;
     return <li key={item.occurrence} data-occurrence={item.occurrence} className={cn('bg-muted/30',
       drag?.occurrence === item.occurrence && 'opacity-50')}>
       <Collapsible open={isOpen} onOpenChange={details => {
@@ -500,8 +540,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
         });
         if (details.open && (!level || level.status === 'failed')) void load(item.occurrence);
       }}>
-        <div onDragOver={event => over(event, item, true)} onDragLeave={() => setDrop(null)}
-          onDrop={event => dropped(event, facts, item, true)}
+        <div data-drop-target={item.occurrence} data-drop-into=""
           className={cn('flex items-center gap-2 px-2 py-2 sm:px-3', dropClass(drop, item.occurrence))}>
           {handle(item, structure ?? item.parent, facts)}
           {renaming === item.occurrence ? <form className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
@@ -574,7 +613,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
               ? <ol className="grid divide-y divide-border/60">
                 {level!.items.map(row => row.role === 'chapter' ? chapterRow(row, item.occurrence, facts) : null)}
               </ol>
-              : <p onDragOver={event => over(event, item, true)} onDrop={event => dropped(event, facts, item, true)}
+              : <p data-drop-target={item.occurrence} data-drop-into=""
                 className="px-4 py-4 text-muted-foreground text-sm">{t.groupEmpty}</p>
               : level?.status === 'failed' ? <p role="alert" className="flex flex-wrap items-center gap-2 px-4 py-3
                 text-destructive-foreground text-sm">{t.loadChaptersFailed}
@@ -598,11 +637,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
         {top.items.map(item => item.role === 'group' ? groupSection(item, merged)
           : chapterRow(item, structure ?? item.parent, merged))}
       </ol>
-      {drag ? <p onDragOver={event => {
-        if (!dragging.current) return;
-        event.preventDefault();
-        setDrop({ end: true });
-      }} onDrop={event => dropped(event, merged, null)} className={cn('rounded-2xl border-2 border-dashed px-4 py-3',
+      {drag ? <p data-drop-end="" className={cn('rounded-2xl border-2 border-dashed px-4 py-3',
         'text-center text-muted-foreground text-sm', drop && 'end' in drop ? 'border-primary' : 'border-border')}>
         {t.dropAtEnd}</p> : null}
       <ActionBar open={selected.size > 0} onOpenChange={next => { if (!next) setSelected(new Set()); }}>

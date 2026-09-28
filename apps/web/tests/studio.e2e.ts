@@ -217,7 +217,8 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     await page.getByRole('menuitem', { name: 'Move to' }).click();
     await page.getByRole('menuitem', { name: '第一卷 雨夜' }).click();
     await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('1 chapter', { timeout: 30_000 });
-    await page.getByRole('button', { name: 'Move “第二章 未寄出的信”', exact: true })
+    // A pointer drags the grip beside the Move button.
+    await chapters.getByRole('listitem').filter({ hasText: '第二章 未寄出的信' }).last().locator('[data-drag-handle]')
       .dragTo(chapters.getByRole('button', { name: /^第一卷 雨夜/ }));
     await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('2 chapters', { timeout: 30_000 });
     await volume('第二卷 末班车');
@@ -227,7 +228,7 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     await expect(chapters.getByRole('button', { name: /^第二卷 末班车/ })).toContainText('1 chapter', { timeout: 30_000 });
     await page.reload();
     // Numbers run through the book in reading order: the chapter left at the top level stands before the volumes.
-    await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('Volume 1 · 2 chapters');
+    await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('2 chapters');
     await expect(chapters.getByRole('listitem').filter({ hasText: '第四章 站台' })).toContainText('4');
     await shoot(page, info, 'studio-volumes');
 
