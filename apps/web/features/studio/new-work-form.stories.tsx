@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, within, screen } from 'storybook/test';
 import { agents } from './fixtures.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
@@ -23,12 +23,12 @@ type Story = StoryObj<typeof meta>;
 export const LanguageRequired: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const language = canvas.getByRole('combobox', { name: 'Language you’ll write in' }) as HTMLSelectElement;
-    await expect(language).toHaveValue('');
-    await expect(language.checkValidity()).toBe(false);
+    const language = canvas.getByRole('combobox', { name: 'Language you’ll write in' });
+    await expect(language).toHaveTextContent('Choose a language');
     await expect(canvas.getByText('Choose the language of this work, or select Undetermined.')).toBeVisible();
-    await userEvent.selectOptions(language, 'und');
-    await expect(language.checkValidity()).toBe(true);
+    await userEvent.click(language);
+    await userEvent.click(await screen.findByRole('option', { name: 'Undetermined' }));
+    await expect(language).toHaveTextContent('Undetermined');
   },
 };
 

@@ -1,9 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fireEvent, screen, userEvent, waitFor, within } from 'storybook/test';
 import { detailsValues } from './details-api.ts';
 import type { DetailsState, SaveDetails } from './details-form.tsx';
-import { agents, contents, history, ids, publishedTexts, realmOptions, serial, story, storyMain, tags } from './fixtures.ts';
+import { chapterVariant } from './content-api.ts';
+import { agents, contents, history, ids, now, publishedTexts, realmOptions, serial, story, storyMain, tags }
+  from './fixtures.ts';
+import { chapterFacts as factsOf } from './outline.ts';
 import type { ChapterFacts } from './read.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
@@ -16,20 +19,75 @@ type Props = ComponentProps<typeof StudioWork>;
 const base = '/en/studio/@agent-00000000-0000-4000-8000-000000000001/works/00000000-0000-4000-8000-000000000101';
 
 /** A Book's chapters as Main's contents read returns them, from a stand-in Main that holds the Book's composition. */
-function chaptersOf(main: ReturnType<typeof storyMain>, structure: string): ContentsPage {
-  const book = main.book(ids.serial)!;
-  return { ...contents, composition: structure, compositionRevision: book.head,
-    items: book.items.map((entry, index) => ({ occurrence: entry.occurrence, parent: structure, role: 'chapter',
-      label: entry.label, target: entry.target, selectedRevision: null, progress: null,
-      availability: index < 2 ? 'available' : 'unavailable' })) } as ContentsPage;
+function chaptersOf(main: ReturnType<typeof storyMain>): ContentsPage {
+  const page = main.level(ids.serial);
+  return { ...page, items: page.items.map((item, index) => ({ ...item,
+    availability: index < 2 ? 'available' : 'unavailable' })) } as ContentsPage;
 }
 
 function chapters(options: Parameters<typeof storyMain>[0] = {}) {
   const main = storyMain(options);
-  const structure = main.seedBook(ids.serial, [{ target: ids.chapters[0]!, title: '第一章 雨夜' },
+  main.seedBook(ids.serial, [{ target: ids.chapters[0]!, title: '第一章 雨夜' },
     { target: ids.chapters[1]!, title: '第二章 未寄出的信' }, { target: ids.chapters[2]!, title: '第三章 最后一班车' }]);
-  const page = chaptersOf(main, structure);
-  return { main, content: { tab: 'chapters', chapters: { page: { ok: true, data: page }, main: main.main } } as WorkTabContent };
+  return { main, content: { tab: 'chapters', chapters: { page: { ok: true, data: chaptersOf(main) },
+    main: main.main } } as WorkTabContent };
+}
+
+const chapterIds = [...ids.chapters, 'https://rezics.com/id/00000000-0000-4000-8000-000000000114',
+  'https://rezics.com/id/00000000-0000-4000-8000-000000000115'];
+/**
+ * 雨夜书店 as a writer keeps it: two volumes and its extras (番外). The second
+ * volume is the one being written, so it arrives open with its chapters.
+ */
+function volumes(options: Parameters<typeof storyMain>[0] = {}) {
+  const main = storyMain(options);
+  const characters = (value: number) => ({ unit: 'characters' as const, value });
+  main.seedOutline(ids.serial, [
+    { title: '第一卷 雨夜', division: 'volume', chapters: [
+      { target: chapterIds[0]!, title: '第一章 雨夜', state: 'published', length: characters(2345) },
+      { target: chapterIds[1]!, title: '第二章 未寄出的信', state: 'changed', length: characters(1820) }] },
+    { title: '第二卷 雨停之后', division: 'volume', chapters: [
+      { target: chapterIds[2]!, title: '第三章 最后一班车', state: 'draft', length: characters(960) },
+      { target: chapterIds[3]!, title: '第四章 站台', state: 'draft', length: characters(12) }] },
+    { title: '番外', division: 'extras', chapters: [
+      { target: chapterIds[4]!, title: '书店的猫', state: 'empty' }] },
+  ]);
+  const top = main.level(ids.serial);
+  const second = top.items[1]!.occurrence;
+  const facts = async (parent?: string) => {
+    const read = await main.main.v1.me.agents({ agent: agents[0]!.iri.slice(-36) }).works({ id: ids.serial.slice(-36) })
+      .chapters.get({ query: { language: 'zh-Hans', ...(parent ? { parent } : {}) } });
+    return factsOf(agents[0]!, agents, read.data!.page, read.data!.facts);
+  };
+  return { main, top, second, content: { tab: 'chapters', chapters: { page: { ok: true, data: top }, main: main.main,
+    agents, facts: facts(), opened: { occurrence: second, page: main.level(ids.serial, second), facts: facts(second) },
+    now } } as WorkTabContent };
+}
+
+/**
+ * Picks an item from the open menu with the keyboard, as a keyboard user moves
+ * a chapter; pointer presses in menus opened by earlier stories' layers are not
+ * reliable in one test page.
+ */
+async function choose(name: string | RegExp) {
+  const item = await screen.findByRole('menuitem', { name });
+  await waitFor(() => expect(item.closest('[data-part=content]')).toHaveFocus());
+  for (let step = 0; step < 8 && !item.hasAttribute('data-highlighted'); step++) await userEvent.keyboard('{ArrowDown}');
+  await expect(item).toHaveAttribute('data-highlighted');
+  await userEvent.keyboard('{Enter}');
+}
+
+/** Opens a chapter's or volume's handle and picks one of its moves, or a volume from "Move to". */
+async function moveBy(canvasElement: HTMLElement, title: string, move: RegExp | string, into?: string) {
+  await userEvent.click(within(canvasElement).getByRole('button', { name: `Move “${title}”` }));
+  if (!into) return choose(move);
+  const submenu = await screen.findByRole('menuitem', { name: /Move to|移到/ });
+  await waitFor(() => expect(submenu.closest('[data-part=content]')).toHaveFocus());
+  for (let step = 0; step < 8 && !submenu.hasAttribute('data-highlighted'); step++) {
+    await userEvent.keyboard('{ArrowDown}');
+  }
+  await userEvent.keyboard('{ArrowRight}');
+  await choose(into);
 }
 
 const details: DetailsState = { status: 'idle', head: 'https://rezics.com/id/00000000-0000-4000-8000-000000000903',
@@ -64,16 +122,20 @@ export const Chapters: Story = {
     await expect(within(list).getAllByText('Published')).toHaveLength(2);
     await expect(canvas.getByRole('link', { name: 'Write “第一章 雨夜”' })).toHaveAttribute('href',
       expect.stringContaining('/chapters/00000000-0000-4000-8000-000000000111?language=zh-Hans'));
-    await expect(canvas.getByRole('button', { name: 'Move “第一章 雨夜” up' })).toBeDisabled();
-    await userEvent.click(canvas.getByRole('button', { name: 'Move “第三章 最后一班车” up' }));
+    // Each chapter moves from its handle's menu, which the keyboard reaches; the first cannot go up.
+    await userEvent.click(canvas.getByRole('button', { name: 'Move “第一章 雨夜”' }));
+    await expect(await screen.findByRole('menuitem', { name: 'Move “第一章 雨夜” up' }))
+      .toHaveAttribute('aria-disabled', 'true');
+    await userEvent.keyboard('{Escape}');
+    await moveBy(canvasElement, '第三章 最后一班车', 'Move “第三章 最后一班车” up');
     await waitFor(() => expect(within(list).getAllByRole('listitem')[1]).toHaveTextContent('第三章 最后一班车'));
-    await expect(canvas.getByRole('status')).toHaveTextContent('Moved “第三章 最后一班车” to position 2.');
+    await expect(canvas.getByText('Moved “第三章 最后一班车”.')).toBeInTheDocument();
     await userEvent.type(canvas.getByRole('textbox', { name: 'New chapter' }), '第四章 站台');
     await userEvent.click(canvas.getByRole('button', { name: 'Add chapter' }));
     await expect(await canvas.findByRole('link', { name: 'Write “第四章 站台”' })).toBeInTheDocument();
     await expect(canvas.getByRole('textbox', { name: 'New chapter' })).toHaveValue('');
-    // A chapter just added moves at once: Main's answer named its place.
-    await userEvent.click(canvas.getByRole('button', { name: 'Move “第四章 站台” up' }));
+    // A chapter just added moves at once: the list was read again with its place.
+    await moveBy(canvasElement, '第四章 站台', 'Move “第四章 站台” up');
     await waitFor(() => expect(within(list).getAllByRole('listitem')[2]).toHaveTextContent('第四章 站台'));
     await expect(calls).toEqual(['move', 'work', 'insert', 'move']);
   },
@@ -144,6 +206,155 @@ export const ChaptersRefused: Story = {
   },
 };
 
+/**
+ * A Book in volumes, as long serials are built: each volume a section that
+ * opens and closes, the one being written open; chapters numbered through the
+ * Book (extras unnumbered), each with where it stands and how long it is.
+ * A chapter moves into another volume from its handle's menu; a new volume is
+ * made, a chapter added to it, and a volume renamed; one with chapters can't
+ * be deleted.
+ */
+export const Volumes: Story = {
+  args: (() => { const setup = volumes(); return { content: setup.content, main: setup.main }; })() as never,
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const calls = (args as unknown as { main: ReturnType<typeof storyMain> }).main.calls;
+    const first = canvas.getByRole('button', { name: /^第一卷 雨夜/ });
+    const second = canvas.getByRole('button', { name: /^第二卷 雨停之后/ });
+    await expect(first).toHaveAttribute('aria-expanded', 'false');
+    await expect(first).toHaveTextContent('Volume 1 · 2 chapters');
+    await expect(second).toHaveAttribute('aria-expanded', 'true');
+    await expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('Extras · 1 chapter');
+    const draft = await canvas.findByRole('link', { name: 'Write “第三章 最后一班车”' });
+    const row = draft.closest('li')!;
+    await expect(row).toHaveTextContent('3');
+    await waitFor(() => expect(row).toHaveTextContent('960 characters'));
+    await expect(row).toHaveTextContent('Draft');
+    // A closed volume reads its chapters when it opens: numbered through the Book, with where each stands.
+    await userEvent.click(first);
+    const changed = (await canvas.findByRole('link', { name: 'Write “第二章 未寄出的信”' })).closest('li')!;
+    await waitFor(() => expect(changed).toHaveTextContent('Unpublished changes'));
+    await expect(changed).toHaveTextContent('1,820 characters');
+    // Into the other volume from the handle's menu, as the keyboard does it.
+    await moveBy(canvasElement, '第二章 未寄出的信', '', '第二卷 雨停之后');
+    await waitFor(() => expect(second).toHaveTextContent('3 chapters'));
+    await expect(canvas.getByText('Moved “第二章 未寄出的信” into “第二卷 雨停之后”.')).toBeInTheDocument();
+    await expect(first).toHaveTextContent('1 chapter');
+    // A new volume, then its first chapter: new chapters go to the end of the volume chosen below.
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'New volume' })).toBeEnabled());
+    await userEvent.click(canvas.getByRole('button', { name: 'New volume' }));
+    await userEvent.type(canvas.getByRole('textbox', { name: /Title/ }), '第三卷 晴');
+    await userEvent.click(canvas.getByRole('button', { name: 'Create' }));
+    const third = await canvas.findByRole('button', { name: /^第三卷 晴/ });
+    await expect(canvas.getByRole('combobox', { name: 'Add to' })).toHaveTextContent('第三卷 晴');
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Add chapter' })).toBeEnabled());
+    await userEvent.type(canvas.getByRole('textbox', { name: 'New chapter' }), '第五章 放晴');
+    await userEvent.click(canvas.getByRole('button', { name: 'Add chapter' }));
+    await waitFor(() => expect(third).toHaveTextContent('1 chapter'));
+    await expect(await canvas.findByRole('link', { name: 'Write “第五章 放晴”' })).toBeVisible();
+    // Rename the extras; a volume with chapters offers no delete.
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Actions for “番外”' })).toBeEnabled());
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions for “番外”' }));
+    await choose('Rename');
+    const name = canvas.getByRole('textbox', { name: 'New title for “番外”' });
+    await userEvent.clear(name);
+    await userEvent.type(name, '番外篇{Enter}');
+    await expect(await canvas.findByRole('button', { name: /^番外篇/ })).toBeVisible();
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Actions for “第三卷 晴”' })).toBeEnabled());
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions for “第三卷 晴”' }));
+    await expect(await screen.findByRole('menuitem', { name: 'Delete' })).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.keyboard('{Escape}');
+    await expect(calls).toEqual(['move', 'insert', 'work', 'insert', 'update']);
+  },
+};
+
+/**
+ * Several chapters at once: selecting them brings up a toolbar that publishes
+ * each one's latest draft, or moves them together into a volume.
+ */
+export const BulkActions: Story = {
+  args: (() => {
+    const setup = volumes();
+    return { content: setup.content, main: setup.main };
+  })() as never,
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const main = (args as unknown as { main: ReturnType<typeof storyMain> }).main;
+    // The drafts the selected chapters publish, saved as the chapter editor saves them.
+    for (const chapter of [chapterIds[2]!, chapterIds[3]!]) {
+      main.seedChapter(chapter, await chapterVariant(chapter, 'zh-Hans'), '雨停了。');
+    }
+    await userEvent.click(await canvas.findByRole('checkbox', { name: 'Select “第三章 最后一班车”' }));
+    await userEvent.click(canvas.getByRole('checkbox', { name: 'Select “第四章 站台”' }));
+    const bar = await screen.findByRole('toolbar', { name: 'Actions for the selected chapters' });
+    await expect(bar).toHaveTextContent('2 selected');
+    await userEvent.click(within(bar).getByRole('button', { name: 'Publish' }));
+    await expect(await canvas.findByText('Published 2 chapters.')).toBeInTheDocument();
+    await expect(main.calls.filter(call => call === 'publish-chapter')).toHaveLength(2);
+    // Moving together, into the extras.
+    await waitFor(() => expect(canvas.getByRole('checkbox', { name: 'Select “第三章 最后一班车”' })).toBeEnabled());
+    await userEvent.click(canvas.getByRole('checkbox', { name: 'Select “第三章 最后一班车”' }));
+    await userEvent.click(canvas.getByRole('checkbox', { name: 'Select “第四章 站台”' }));
+    const again = await screen.findByRole('toolbar', { name: 'Actions for the selected chapters' });
+    await userEvent.click(within(again).getByRole('button', { name: 'Move to' }));
+    await choose('番外');
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('3 chapters'));
+    await expect(canvas.getByRole('button', { name: /^第二卷 雨停之后/ })).toHaveTextContent('0 chapters');
+  },
+};
+
+/** Dragging: a chapter dropped on a volume's header goes to its end; a volume dragged above another moves before it. */
+export const DragAndDrop: Story = {
+  args: (() => { const setup = volumes(); return { content: setup.content, main: setup.main }; })() as never,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const drag = (source: HTMLElement, target: HTMLElement, clientY: number) => {
+      const dataTransfer = new DataTransfer();
+      fireEvent.dragStart(source, { dataTransfer });
+      fireEvent.dragOver(target, { dataTransfer, clientY });
+      fireEvent.drop(target, { dataTransfer, clientY });
+      fireEvent.dragEnd(source, { dataTransfer });
+    };
+    const handle = await canvas.findByRole('button', { name: 'Move “第四章 站台”' });
+    const extras = canvas.getByRole('button', { name: /^番外/ }).parentElement!;
+    drag(handle, extras, extras.getBoundingClientRect().top + 4);
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('2 chapters'));
+    await expect(canvas.getByText('Moved “第四章 站台” into “番外”.')).toBeInTheDocument();
+    const second = canvas.getByRole('button', { name: 'Move “第二卷 雨停之后”' });
+    await waitFor(() => expect(second).toBeEnabled());
+    const firstHeader = canvas.getByRole('button', { name: /^第一卷 雨夜/ }).parentElement!;
+    drag(second, firstHeader, firstHeader.getBoundingClientRect().top + 1);
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^第二卷 雨停之后/ })).toHaveTextContent('Volume 1'));
+  },
+};
+
+export const VolumesChinese: Story = {
+  args: (() => { const setup = volumes(); return { content: setup.content, locale: 'zh-Hans',
+    messages: { ...messages, ...zhHans } }; })() as never,
+  globals: { locale: 'zh-Hans' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: /^第一卷 雨夜/ })).toHaveTextContent('第一卷 雨夜第一卷 · 2 章');
+    await expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('番外 · 1 章');
+    await expect(await canvas.findByText('960 字')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: '新建分卷' })).toBeVisible();
+  },
+};
+
+export const VolumesDark: Story = {
+  args: (() => { const setup = volumes(); return { content: setup.content }; })() as never,
+  globals: { theme: 'dark' },
+};
+
+export const VolumesPhone: Story = {
+  args: (() => { const setup = volumes(); return { content: setup.content }; })() as never,
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    await expect(await within(canvasElement).findByRole('link', { name: 'Write “第三章 最后一班车”' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
 /** A Book's own text is its introduction: what readers see first and what Realms review. */
 export const Introduction: Story = {
   args: { content: { tab: 'text', texts: { ok: true, data: texts } } },
@@ -176,7 +387,7 @@ export const Details: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const form = canvas.getByRole('region', { name: 'Details' });
-    await expect(within(form).getByRole('combobox', { name: 'Status' })).toHaveValue('ongoing');
+    await expect(within(form).getByRole('combobox', { name: 'Status' })).toHaveTextContent('Ongoing');
     await expect(within(form).getByRole('textbox', { name: 'Tagline' })).toHaveValue('一封没有地址的信，把雨夜书店带向二十年前的秘密。');
     await userEvent.clear(within(form).getByRole('textbox', { name: 'Description' }));
     await userEvent.type(within(form).getByRole('textbox', { name: 'Description' }), '雨夜里的一家书店。');

@@ -171,10 +171,10 @@ export function storyMain(options: StoryMainOptions = {}) {
   const next = () => id(++sequence);
   const texts = new Map<string, { head: string; body: string; language: string; work: string; publication: string | null }>();
   const drafts = new Map<string, string>();
-  const variants = new Map<string, { head: string; publication: string | null; eligibility: string | null }>();
+  const variants = new Map<string, { head: string; publication: string | null; eligibility: string | null;
+    resource: string }>();
   const revisions = new Map<string, { resource: string; variant: string; body: string }>();
-  const structures = new Map<string, { head: string; book: string; items: Array<{ occurrence: string; target: string;
-    label: { value: string; language: string } }> }>();
+  const structures = new Map<string, Outline>();
   const calls: string[] = [];
   const wait = () => new Promise(resolve => setTimeout(resolve, options.delayMs ?? 30));
   const offline = async () => {
@@ -190,7 +190,8 @@ export function storyMain(options: StoryMainOptions = {}) {
   const recordDraft = (resource: string, variant: string, body: string) => {
     const revision = next().slice(-36);
     const current = variants.get(variant);
-    variants.set(variant, { head: revision, publication: current?.publication ?? null, eligibility: current?.eligibility ?? null });
+    variants.set(variant, { head: revision, publication: current?.publication ?? null, eligibility: current?.eligibility ?? null,
+      resource });
     revisions.set(revision, { resource, variant, body });
     return revision;
   };
@@ -220,29 +221,33 @@ export function storyMain(options: StoryMainOptions = {}) {
       language: body.language, author: agents[0]!.iri, sourcePosition: position, replayed: false });
   } });
   const compositions = Object.assign((params: { id: string }) => ({ changes: { post: async (body: {
-    expectedHead: string; operations: Array<{ op: string; occurrence?: string; target?: string;
-      label?: { value: string; language: string }; position: 'first' | 'last' | { after: string } }> }) => {
+    expectedHead: string; operations: Array<{ op: string; occurrence?: string; target?: string; parent?: string;
+      role?: string; division?: Division; label?: { value: string; language: string };
+      position?: 'first' | 'last' | { after: string } }> }) => {
     await wait();
     const structure = structures.get(`https://rezics.com/id/${params.id}`);
     if (options.chapters === 'denied') return fail(403, 'authority_denied');
     if (!structure) return fail(404, 'composition_unavailable');
     if (structure.head !== body.expectedHead) return fail(409, 'stale_composition_head');
     const occurrences: string[] = [];
+    // One change applies whole or not at all, as Main's does.
+    const before = structure.nodes.map(node => ({ ...node }));
     for (const operation of body.operations) {
+      const node = structure.nodes.find(entry => entry.occurrence === operation.occurrence);
+      calls.push(operation.op);
       if (operation.op === 'insert') {
-        calls.push('insert');
         const occurrence = next();
         occurrences.push(occurrence);
-        structure.items.push({ occurrence, target: operation.target!, label: operation.label! });
-      } else if (operation.op === 'move') {
-        calls.push('move');
-        const from = structure.items.findIndex(entry => entry.occurrence === operation.occurrence);
-        const [moved] = structure.items.splice(from, 1);
-        const after = operation.position === 'first' ? -1 : typeof operation.position === 'object'
-          ? structure.items.findIndex(entry => entry.occurrence === (operation.position as { after: string }).after)
-          : structure.items.length - 1;
-        structure.items.splice(after + 1, 0, moved!);
-      }
+        place(structure, { occurrence, parent: operation.parent!, role: operation.role === 'group' ? 'group' : 'chapter',
+          ...(operation.target ? { target: operation.target } : {}), ...(operation.label ? { label: operation.label } : {}),
+          ...(operation.division ? { division: operation.division } : {}) }, operation.position ?? 'last');
+      } else if (!node || !conflictFree(structure, operation, node)) {
+        structure.nodes = before;
+        return fail(409, 'composition_conflict');
+      } else if (operation.op === 'move') place(structure, node, operation.position ?? 'last', operation.parent);
+      else if (operation.op === 'update') Object.assign(node, operation.label ? { label: operation.label } : {},
+        operation.division ? { division: operation.division } : {});
+      else if (operation.op === 'remove') structure.nodes = structure.nodes.filter(entry => entry !== node);
     }
     structure.head = next();
     return ok({ structure: `https://rezics.com/id/${params.id}`, revision: structure.head, expectedHead: body.expectedHead,
@@ -252,27 +257,54 @@ export function storyMain(options: StoryMainOptions = {}) {
     if (options.chapters === 'denied') return fail(403, 'authority_denied');
     calls.push('composition');
     const structure = next();
-    structures.set(structure, { head: next(), book: body.work, items: [] });
+    structures.set(structure, { structure, head: next(), book: body.work, nodes: [] });
     return ok({ structure, mainVersion: id(601), revision: structures.get(structure)!.head, receipt: 'urn:rezics:receipt:story',
       replayed: false, sourcePosition: position });
   } });
-  const works = Object.assign((params: { id: string }) => ({ contents: { get: async () => {
-    await wait();
-    const found = [...structures.entries()].find(([, value]) => value.book === `https://rezics.com/id/${params.id}`);
-    if (!found) return fail(404, 'work_unavailable');
-    return ok({ ...contents, items: found[1].items.map(entry => ({ occurrence: entry.occurrence, parent: found[0],
-      role: 'chapter', label: entry.label, target: entry.target, selectedRevision: null, progress: null,
-      availability: 'unavailable' })), composition: found[0], compositionRevision: found[1].head });
-  } } }), { post: async () => {
+  const outlineOf = (work: string) => [...structures.values()].find(value => value.book === `https://rezics.com/id/${work}`);
+  const works = Object.assign((params: { id: string }) => ({
+    contents: { get: async (request?: { query?: { parent?: string } }) => {
+      await wait();
+      const found = outlineOf(params.id);
+      if (!found) return fail(404, 'work_unavailable');
+      return ok(levelPage(found, request?.query?.parent));
+    } },
+    'content-variants': { get: async () => {
+      await wait();
+      const resource = `https://rezics.com/id/${params.id}`;
+      return ok({ work: resource, items: [...variants.entries()].filter(([, value]) => value.resource === resource)
+        .map(([variantId, value]) => ({ variantId, language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-Hans' },
+          direction: 'ltr', draftHead: value.head, publicationHead: value.publication,
+          eligibilityHead: value.eligibility })), nextCursor: null,
+      sourcePosition: { owner: 'content', dataEpoch: 'story-epoch', sequence: '1' } });
+    } },
+  }), { post: async () => {
     await wait();
     calls.push('work');
     return ok({ work: next(), mainVersion: next(), workRevision: next(), mainRevision: next(), sourcePosition: position,
       replayed: false });
   } });
+  /** Main's Studio chapter read: one level with where each chapter stands for its writer, the Studio Agent. */
+  const me = { agents: (agent: { agent: string }) => ({ works: (work: { id: string }) => ({ chapters: { get: async (
+    request?: { query?: { parent?: string } }) => {
+    await wait();
+    const found = outlineOf(work.id);
+    if (!found) return fail(404, 'work_unavailable');
+    const page = levelPage(found, request?.query?.parent);
+    const writer = `https://rezics.com/id/${agent.agent}`;
+    return ok({ profile: 'studio-chapters-v1', page, facts: page.items.filter(item => item.role === 'chapter')
+      .map(item => {
+        const node = found.nodes.find(entry => entry.occurrence === item.occurrence)!;
+        return { occurrence: item.occurrence, writer, otherIdentity: false, state: node.state ?? 'empty',
+          target: item.target, label: item.label, language: item.label?.language ?? null,
+          length: node.length ?? null };
+      }) });
+  } } }) }) };
   const main = { v1: {
     contributions,
     compositions,
     works,
+    me,
     'contribution-edits': { post: async (body: { contribution: string; expectedHead: string; body: string }) => {
       await offline();
       calls.push('edit');
@@ -357,13 +389,35 @@ export function storyMain(options: StoryMainOptions = {}) {
     seed: (text: string, body: string, language: string, work: string) => recordText(text, body, language, work),
     /** Seeds a chapter's draft and returns its head (a bare revision ID, as Content names them). */
     seedChapter: (chapter: string, variant: string, body: string) => recordDraft(chapter, variant, body),
-    /** Seeds a Book's composition with chapters. */
+    /** Seeds a Book's composition with chapters at its top level. */
     seedBook: (book: string, chapters: Array<{ target: string; title: string }>) => {
       const structure = next();
-      structures.set(structure, { head: next(), book, items: chapters.map(entry => ({ occurrence: next(),
-        target: entry.target, label: { value: entry.title, language: 'zh-Hans' } })) });
+      structures.set(structure, { structure, head: next(), book, nodes: chapters.map(entry => ({ occurrence: next(),
+        parent: structure, role: 'chapter' as const, target: entry.target,
+        label: { value: entry.title, language: 'zh-Hans' } })) });
       return structure;
     },
+    /**
+     * Seeds a Book's composition in volumes: each entry is a top-level chapter or a group with its chapters,
+     * a chapter saying where it stands for its writer and how long it is.
+     */
+    seedOutline: (book: string, entries: readonly OutlineSeed[]) => {
+      const structure = next();
+      const outline: Outline = { structure, head: next(), book, nodes: [] };
+      const chapterNode = (parent: string, entry: OutlineChapterSeed): OutlineNode => ({ occurrence: next(), parent,
+        role: 'chapter', target: entry.target, label: { value: entry.title, language: 'zh-Hans' },
+        ...(entry.state ? { state: entry.state } : {}), ...(entry.length ? { length: entry.length } : {}) });
+      for (const entry of entries) {
+        if (!('chapters' in entry)) { outline.nodes.push(chapterNode(structure, entry)); continue; }
+        const group: OutlineNode = { occurrence: next(), parent: structure, role: 'group', division: entry.division,
+          ...(entry.title ? { label: { value: entry.title, language: 'zh-Hans' } } : {}) };
+        outline.nodes.push(group, ...entry.chapters.map(chapter => chapterNode(group.occurrence, chapter)));
+      }
+      structures.set(structure, outline);
+      return structure;
+    },
+    /** One level of a seeded Book as Main's contents read returns it. */
+    level: (book: string, parent?: string) => levelPage(outlineOf(book.slice(-36))!, parent),
     /** Another tab or device saves a newer version. */
     writeElsewhere: (text: string, body: string) => {
       const current = texts.get(text);
@@ -372,6 +426,68 @@ export function storyMain(options: StoryMainOptions = {}) {
     writeChapterElsewhere: (chapter: string, variant: string, body: string) => recordDraft(chapter, variant, body),
     head: (text: string) => texts.get(text)?.head ?? null,
     chapterHead: (variant: string) => variants.get(variant)?.head ?? null,
-    book: (book: string) => [...structures.values()].find(value => value.book === book),
+    /** A Book's outline: its head, its top level (`items`) and every node. */
+    book: (book: string) => {
+      const found = [...structures.values()].find(value => value.book === book);
+      return found ? { head: found.head, nodes: found.nodes,
+        items: found.nodes.filter(node => node.parent === found.structure) as Array<OutlineNode & {
+          label: { value: string; language: string } }> } : undefined;
+    },
   };
+}
+
+type Division = 'volume' | 'part' | 'extras';
+type ChapterState = 'empty' | 'draft' | 'published' | 'changed';
+interface OutlineNode { occurrence: string; parent: string; role: 'chapter' | 'group'; target?: string;
+  label?: { value: string; language: string }; division?: Division; state?: ChapterState;
+  length?: { unit: 'characters' | 'words'; value: number } }
+/** A stand-in Book composition: siblings keep their order in `nodes`. */
+interface Outline { structure: string; head: string; book: string; nodes: OutlineNode[] }
+interface OutlineChapterSeed { target: string; title: string; state?: ChapterState;
+  length?: { unit: 'characters' | 'words'; value: number } }
+export type OutlineSeed = OutlineChapterSeed | { title: string | null; division: Division; chapters: OutlineChapterSeed[] };
+
+/** Puts `node` first, last or after a sibling of `parent` (its own parent by default), keeping sibling order. */
+function place(outline: Outline, node: OutlineNode, where: 'first' | 'last' | { after: string }, parent = node.parent) {
+  outline.nodes = outline.nodes.filter(entry => entry !== node);
+  node.parent = parent;
+  const siblings = outline.nodes.filter(entry => entry.parent === parent);
+  const index = where === 'first' ? siblings.length ? outline.nodes.indexOf(siblings[0]!) : outline.nodes.length
+    : where === 'last' ? siblings.length ? outline.nodes.indexOf(siblings.at(-1)!) + 1 : outline.nodes.length
+      : outline.nodes.findIndex(entry => entry.occurrence === where.after) + 1;
+  outline.nodes.splice(index, 0, node);
+}
+
+/** Main's rules the stand-in keeps: groups sit at the top level, and only an empty group is removed. */
+function conflictFree(outline: Outline, operation: { op: string; parent?: string }, node: OutlineNode): boolean {
+  if (operation.op === 'remove') return node.role === 'chapter' || !outline.nodes.some(entry => entry.parent === node.occurrence);
+  if (operation.op === 'move' && operation.parent) {
+    const into = outline.nodes.find(entry => entry.occurrence === operation.parent);
+    return operation.parent === outline.structure ? true : node.role === 'chapter' && into?.role === 'group';
+  }
+  return true;
+}
+
+/** One level as Main's contents read numbers it: volumes among volumes, story chapters through the Book. */
+function levelPage(outline: Outline, parent = outline.structure): ContentsPage {
+  const children = (of: string) => outline.nodes.filter(node => node.parent === of);
+  const top = children(outline.structure);
+  const numbers = new Map<string, number | null>();
+  let chapter = 0;
+  for (const node of top) {
+    if (node.role === 'chapter') numbers.set(node.occurrence, ++chapter);
+    else for (const child of children(node.occurrence)) {
+      numbers.set(child.occurrence, node.division === 'extras' ? null : ++chapter);
+    }
+  }
+  const volumes = top.filter(node => node.role === 'group' && (node.division ?? 'part') === 'volume');
+  return { ...contents, composition: outline.structure, compositionRevision: outline.head, nextCursor: null,
+    items: children(parent).map(node => ({ occurrence: node.occurrence, parent, role: node.role,
+      label: node.label ?? null, division: node.role === 'group' ? node.division ?? 'part' : null,
+      number: node.role === 'group' ? volumes.includes(node) ? volumes.indexOf(node) + 1 : null
+        : numbers.get(node.occurrence) ?? null,
+      childCount: node.role === 'group' ? children(node.occurrence).length : null, target: node.target ?? null,
+      selectedRevision: null, progress: null,
+      availability: node.state === 'published' || node.state === 'changed' ? 'available' : 'unavailable' })),
+    count: { value: children(parent).length, kind: 'exact-page', total: null } } as ContentsPage;
 }

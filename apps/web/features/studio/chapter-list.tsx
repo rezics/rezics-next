@@ -18,8 +18,7 @@ import { ArrowDownIcon, ArrowLeftRightIcon, ArrowUpIcon, BookOpenIcon, ChevronDo
   GripVerticalIcon, LockIcon, PenLineIcon, PlusIcon, SendIcon, Trash2Icon, TriangleAlertIcon, XIcon }
   from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
-import { type DragEvent, type FormEvent, type ReactNode, Suspense, use, useEffect, useId, useMemo, useRef, useState }
-  from 'react';
+import { type DragEvent, type FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { browserMainApi } from '../api/browser.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
@@ -99,11 +98,6 @@ function groupName(item: ContentsItem, locale: UiLocale, t: T): string {
     : item.division === 'extras' ? t.extras : t.untitledPart);
 }
 
-/** Resolves the server's facts for the rows under it; the list renders at once without them. */
-function WithFacts({ facts, children }: { facts: Promise<ChapterFacts>; children: (known: ChapterFacts) => ReactNode }) {
-  return children(use(facts));
-}
-
 const dropClass = (drop: Drop | null, occurrence: string) => drop && 'occurrence' in drop && drop.occurrence === occurrence
   ? drop.edge === 'before' ? 'shadow-[inset_0_2px_0_0_var(--color-primary)]'
     : drop.edge === 'after' ? 'shadow-[inset_0_-2px_0_0_var(--color-primary)]' : 'ring-2 ring-primary ring-inset'
@@ -135,15 +129,23 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
   const [announcement, setAnnouncement] = useState('');
   const [drag, setDrag] = useState<Drag | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
+  // Drag events can follow each other before React renders; handlers read the dragged use from here.
+  const dragging = useRef<Drag | null>(null);
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const structure = composition?.structure ?? null;
   const [target, setTarget] = useState<string | null>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const attempt = useRef<string | null>(null);
-  const openedFacts = useMemo(() => opened?.facts ?? Promise.resolve({}), [opened]);
-  const serverFacts = useMemo(() => Promise.all([facts ?? Promise.resolve({}), openedFacts])
-    .then(([first, second]) => ({ ...first, ...second })), [facts, openedFacts]);
+  // Main's facts for the rows the page read arrive after the list; the list neither waits nor re-mounts for them.
+  const [serverFacts, setServerFacts] = useState<ChapterFacts>({});
+  useEffect(() => {
+    let active = true;
+    for (const promise of [facts, opened?.facts]) {
+      void promise?.then(known => { if (active) setServerFacts(current => ({ ...current, ...known })); });
+    }
+    return () => { active = false; };
+  }, [facts, opened]);
 
   // What this device remembers of each chapter's draft: when it last saved it and the head it saved,
   // which pins the chapter's address and stands for Main's word on its state until that streams in.
@@ -234,36 +236,45 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
   const onDragStart = (event: DragEvent, item: ContentsItem) => {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', nameOf(item));
-    setDrag({ occurrence: item.occurrence, role: item.role, parent: item.parent });
+    dragging.current = { occurrence: item.occurrence, role: item.role, parent: item.parent };
+    setDrag(dragging.current);
+  };
+  /** Where the dragged use would land over `item`: into a volume's end, or before or after it. */
+  const landing = (event: DragEvent, item: ContentsItem, into: boolean): Drop | null => {
+    const moving = dragging.current;
+    if (!moving || moving.occurrence === item.occurrence) return null;
+    // Volumes stand only at the top level; a chapter dropped on a volume's header goes to its end.
+    if (moving.role === 'group' && item.parent !== structure) return null;
+    return { occurrence: item.occurrence, edge: into && moving.role === 'chapter' ? 'into'
+      : dropEdge(event.clientY, event.currentTarget.getBoundingClientRect()) };
   };
   const over = (event: DragEvent, item: ContentsItem, into = false) => {
-    if (!drag || drag.occurrence === item.occurrence) return;
-    // Volumes stand only at the top level; a chapter dropped on a volume's header goes to its end.
-    if (drag.role === 'group' && item.parent !== structure) return;
+    const at = landing(event, item, into);
+    if (!at) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-    const edge = into && drag.role === 'chapter' ? 'into' as const
-      : dropEdge(event.clientY, event.currentTarget.getBoundingClientRect());
-    setDrop(current => current && 'occurrence' in current && current.occurrence === item.occurrence
-      && current.edge === edge ? current : { occurrence: item.occurrence, edge });
+    setDrop(current => current && 'occurrence' in current && 'occurrence' in at && current.occurrence === at.occurrence
+      && current.edge === at.edge ? current : at);
   };
-  const dropped = (event: DragEvent, facts: ChapterFacts) => {
+  const dropped = (event: DragEvent, facts: ChapterFacts, item: ContentsItem | null, into = false) => {
     event.preventDefault();
-    const moving = drag && [...top.items, ...Object.values(levels).flatMap(level => level.items)]
-      .find(item => item.occurrence === drag.occurrence);
-    const at = drop;
-    setDrag(null);
-    setDrop(null);
+    const at = item ? landing(event, item, into) : dragging.current ? { end: true as const } : null;
+    const all = [...top.items, ...Object.values(levels).flatMap(level => level.items)];
+    const moving = all.find(entry => entry.occurrence === dragging.current?.occurrence);
+    dragEnd();
     if (!moving || !at || !structure) return;
     if ('end' in at) return moveTo(moving, { parent: structure, end: true }, facts[moving.occurrence]);
-    const anchor = [...top.items, ...Object.values(levels).flatMap(level => level.items)]
-      .find(item => item.occurrence === at.occurrence);
+    const anchor = all.find(entry => entry.occurrence === at.occurrence);
     if (!anchor) return;
     moveTo(moving, at.edge === 'into' ? { parent: anchor.occurrence, end: true }
       : at.edge === 'before' ? { parent: anchor.parent, before: anchor.occurrence }
         : { parent: anchor.parent, after: anchor.occurrence }, facts[moving.occurrence]);
   };
-  const dragEnd = () => { setDrag(null); setDrop(null); };
+  function dragEnd() {
+    dragging.current = null;
+    setDrag(null);
+    setDrop(null);
+  }
 
   const addChapter = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -429,7 +440,8 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
       .filter((part): part is string => part !== null);
     const name = nameOf(row, fact);
     return <li key={row.occurrence} data-occurrence={row.occurrence}
-      onDragOver={event => over(event, row)} onDragLeave={() => setDrop(null)} onDrop={event => dropped(event, facts)}
+      onDragOver={event => over(event, row)} onDragLeave={() => setDrop(null)}
+      onDrop={event => dropped(event, facts, row)}
       className={cn('grid grid-cols-[auto_auto_2rem_minmax(0,1fr)] items-center gap-x-2 gap-y-2 px-2 py-3',
         'sm:grid-cols-[auto_auto_2.5rem_minmax(0,1fr)_auto] sm:px-3',
         drag?.occurrence === row.occurrence && 'opacity-50', dropClass(drop, row.occurrence))}>
@@ -489,7 +501,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
         if (details.open && (!level || level.status === 'failed')) void load(item.occurrence);
       }}>
         <div onDragOver={event => over(event, item, true)} onDragLeave={() => setDrop(null)}
-          onDrop={event => dropped(event, facts)}
+          onDrop={event => dropped(event, facts, item, true)}
           className={cn('flex items-center gap-2 px-2 py-2 sm:px-3', dropClass(drop, item.occurrence))}>
           {handle(item, structure ?? item.parent, facts)}
           {renaming === item.occurrence ? <form className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
@@ -562,7 +574,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
               ? <ol className="grid divide-y divide-border/60">
                 {level!.items.map(row => row.role === 'chapter' ? chapterRow(row, item.occurrence, facts) : null)}
               </ol>
-              : <p onDragOver={event => over(event, item, true)} onDrop={event => dropped(event, facts)}
+              : <p onDragOver={event => over(event, item, true)} onDrop={event => dropped(event, facts, item, true)}
                 className="px-4 py-4 text-muted-foreground text-sm">{t.groupEmpty}</p>
               : level?.status === 'failed' ? <p role="alert" className="flex flex-wrap items-center gap-2 px-4 py-3
                 text-destructive-foreground text-sm">{t.loadChaptersFailed}
@@ -587,10 +599,10 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
           : chapterRow(item, structure ?? item.parent, merged))}
       </ol>
       {drag ? <p onDragOver={event => {
-        if (!drag) return;
+        if (!dragging.current) return;
         event.preventDefault();
         setDrop({ end: true });
-      }} onDrop={event => dropped(event, merged)} className={cn('rounded-2xl border-2 border-dashed px-4 py-3',
+      }} onDrop={event => dropped(event, merged, null)} className={cn('rounded-2xl border-2 border-dashed px-4 py-3',
         'text-center text-muted-foreground text-sm', drop && 'end' in drop ? 'border-primary' : 'border-border')}>
         {t.dropAtEnd}</p> : null}
       <ActionBar open={selected.size > 0} onOpenChange={next => { if (!next) setSelected(new Set()); }}>
@@ -656,7 +668,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
     </form> : null}
     {failed ? <Alert variant="destructive"><TriangleAlertIcon aria-hidden="true" />
       <AlertDescription className="text-destructive-foreground">{t.chaptersFailed}</AlertDescription></Alert> : null}
-    {!empty ? <Suspense fallback={outline({})}><WithFacts facts={serverFacts}>{outline}</WithFacts></Suspense>
+    {!empty ? outline(serverFacts)
       : page.ok || page.failure === 'none' || page.failure === 'missing' ? <p className="rounded-2xl border
         border-border/80 border-dashed px-4 py-6 text-center text-muted-foreground text-sm">{t.noChapters}</p> : null}
     {top.next ? <Button type="button" variant="outline" className="justify-self-start"
