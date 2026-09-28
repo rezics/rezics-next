@@ -1,4 +1,4 @@
-import { insert, plural } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { AuthorMessages } from '../messages.ts';
 
 export default {
@@ -29,4 +29,10 @@ export default {
   description: insert('REZICSでの{{name}}の作品：評価、読者、読み始める作品。', { name: String }),
   descriptionLifespan: insert('{{name}}（{{lifespan}}）。REZICSでの作品、評価、読者。',
     { name: String, lifespan: String }),
+  followers: plural({ other: insert('フォロワー{{count}}人') }, { count: asValue(number()) }),
+  followersAtLeast: insert('フォロワー{{count}}人以上', { count: String }),
+  follow: 'フォロー', following: 'フォロー中',
+  unfollowName: insert('{{name}}さんのフォローを解除', { name: String }),
+  signInToFollow: 'ログインしてフォロー',
+  followFailed: '更新できませんでした。もう一度お試しください。',
 } satisfies Partial<AuthorMessages>;

@@ -69,4 +69,9 @@ export default {
   correctionMade: '你追蹤的作品已有更正',
   moreLikeThis: plural({ one: insert('另有 {{count}} 則類似通知'), other: insert('另有 {{count}} 則類似通知') },
     { count: asValue(number()) }),
+  mentionedYou: insert('{{name}}提及了你', { name: String }),
+  newChapter: '你追蹤的作品有新章節',
+  newChapterOn: insert('《{{title}}》有新章節', { title: String }),
+  votedOnPost: insert('{{name}}投票支持了你關於《{{title}}》的貼文', { name: String, title: String }),
+  votedOnYourPost: insert('{{name}}投票支持了你的貼文', { name: String }),
 } satisfies Partial<ShellMessages>;

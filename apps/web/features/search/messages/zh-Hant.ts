@@ -69,4 +69,6 @@ export default {
   didYouMeanEnd: '？',
   listSeparator: '、',
   popularTitle: 'REZICS 熱門',
+  unsupportedTitle: '搜尋不支援搭配這些條件',
+  unsupportedHelp: '請移除一項條件，或變更條件值的比對方式。',
 } satisfies Partial<SearchMessages>;

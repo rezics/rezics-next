@@ -72,4 +72,9 @@ export default {
   correctionMade: '팔로우 중인 항목이 수정되었어요',
   moreLikeThis: plural({ one: insert('이와 비슷한 항목 {{count}}개 더'), other: insert('이와 비슷한 항목 {{count}}개 더') },
     { count: asValue(number()) }),
+  mentionedYou: insert('{{name}}님이 나를 언급했어요', { name: String }),
+  newChapter: '팔로우 중인 작품에 새 챕터가 올라왔어요',
+  newChapterOn: insert('“{{title}}”에 새 챕터가 올라왔어요', { title: String }),
+  votedOnPost: insert('{{name}}님이 “{{title}}”에 관한 내 게시물에 투표했어요', { name: String, title: String }),
+  votedOnYourPost: insert('{{name}}님이 내 게시물에 투표했어요', { name: String }),
 } satisfies Partial<ShellMessages>;

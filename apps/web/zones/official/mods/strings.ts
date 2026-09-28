@@ -1,6 +1,10 @@
 // The Mods Zone's own words. Packages bring their strings; the platform
 // passes the interface locale in `zone.locale`, and a word a locale lacks reads English.
 
+function pluralCount(locale: string, count: number, one: string, other: string): string {
+  return new Intl.PluralRules(locale).select(count) === 'one' ? one : other;
+}
+
 const en = {
   featured: 'Featured',
   by: (author: string) => `by ${author}`,
@@ -9,7 +13,7 @@ const en = {
   intervals: { day: 'Today', week: 'This week', month: 'This month' },
   updated: (ago: string) => `Updated ${ago}`,
   collection: 'Collection',
-  count: (count: number) => count === 1 ? '1 pick' : `${count} picks`,
+  count: (count: number) => pluralCount('en', count, `${count} pick`, `${count} picks`),
   more: 'See all',
   environments: { client: 'Client', server: 'Server', 'client-and-server': 'Client and server' },
   rank: (rank: number) => `No. ${rank}`,
@@ -54,6 +58,14 @@ const translations: Record<string, Partial<Strings>> = {
     collection: '合集',
     count: (count: number) => `${count} 項`,
     more: '查看全部',
+    environments: { client: '用戶端', server: '伺服器端', 'client-and-server': '用戶端與伺服器端' },
+    rank: (rank: number) => `第 ${rank} 名`,
+    compatibility: '相容性',
+    chooseEnvironment: '選擇遊戲版本、載入器及運行端，以確認模組版本相容性',
+    exactRelease: '相容版本', olderRelease: '較舊的相容版本',
+    release: '正式版', beta: 'Beta 版', alpha: 'Alpha 版', channelUnknown: '發布類型未知',
+    versionUnknown: '版本未知', dependenciesUnknown: '相依項目未知',
+    required: '需要', noRequired: '沒有必要模組', inspect: '查看版本',
   },
   ko: {
     featured: '추천',
@@ -65,6 +77,14 @@ const translations: Record<string, Partial<Strings>> = {
     collection: '컬렉션',
     count: (count: number) => `추천 ${count}개`,
     more: '모두 보기',
+    environments: { client: '클라이언트', server: '서버', 'client-and-server': '클라이언트와 서버' },
+    rank: (rank: number) => `제 ${rank}위`,
+    compatibility: '호환성',
+    chooseEnvironment: '릴리스 호환성을 확인하려면 게임 버전, 로더와 실행 환경을 선택하세요',
+    exactRelease: '호환 버전', olderRelease: '이전 호환 버전',
+    release: '정식 릴리스', beta: '베타', alpha: '알파', channelUnknown: '알 수 없는 채널',
+    versionUnknown: '알 수 없는 버전', dependenciesUnknown: '알 수 없는 종속 항목',
+    required: '필요', noRequired: '필수 모드 없음', inspect: '릴리스 확인',
   },
   de: {
     featured: 'Vorgestellt',
@@ -74,8 +94,16 @@ const translations: Record<string, Partial<Strings>> = {
     intervals: { day: 'Heute', week: 'Diese Woche', month: 'Diesen Monat' },
     updated: (ago: string) => `Zuletzt ${ago} aktualisiert`,
     collection: 'Sammlung',
-    count: (count: number) => count === 1 ? '1 Empfehlung' : `${count} Empfehlungen`,
+    count: (count: number) => pluralCount('de', count, `${count} Empfehlung`, `${count} Empfehlungen`),
     more: 'Alle ansehen',
+    environments: { client: 'Client', server: 'Server', 'client-and-server': 'Client und Server' },
+    rank: (rank: number) => `Nr. ${rank}`,
+    compatibility: 'Kompatibilität',
+    chooseEnvironment: 'Wähle Spielversion, Loader und Seite, um die Kompatibilität einer Version zu prüfen',
+    exactRelease: 'Kompatible Version', olderRelease: 'Ältere kompatible Version',
+    release: 'Release', beta: 'Beta', alpha: 'Alpha', channelUnknown: 'Release-Kanal unbekannt',
+    versionUnknown: 'Version unbekannt', dependenciesUnknown: 'Abhängigkeiten unbekannt',
+    required: 'Benötigt', noRequired: 'Keine erforderlichen Mods', inspect: 'Release ansehen',
   },
   ja: {
     featured: '注目',
@@ -87,6 +115,14 @@ const translations: Record<string, Partial<Strings>> = {
     collection: 'コレクション',
     count: (count: number) => `${count}件のおすすめ`,
     more: 'すべて見る',
+    environments: { client: 'クライアント', server: 'サーバー', 'client-and-server': 'クライアントとサーバー' },
+    rank: (rank: number) => `${rank}位`,
+    compatibility: '互換性',
+    chooseEnvironment: 'リリースの互換性を確認するには、ゲームのバージョン、ローダー、実行環境を選択してください',
+    exactRelease: '対応リリース', olderRelease: '以前の対応リリース',
+    release: '正式版', beta: 'ベータ版', alpha: 'アルファ版', channelUnknown: 'リリース区分不明',
+    versionUnknown: 'バージョン不明', dependenciesUnknown: '依存関係不明',
+    required: '必要', noRequired: '必須Modはありません', inspect: 'リリースを見る',
   },
   fr: {
     featured: 'À la une',
@@ -96,8 +132,16 @@ const translations: Record<string, Partial<Strings>> = {
     intervals: { day: 'Aujourd’hui', week: 'Cette semaine', month: 'Ce mois-ci' },
     updated: (ago: string) => `Mis à jour ${ago}`,
     collection: 'Collection',
-    count: (count: number) => count === 1 ? '1 sélection' : `${count} sélections`,
+    count: (count: number) => pluralCount('fr', count, `${count} sélection`, `${count} sélections`),
     more: 'Voir plus',
+    environments: { client: 'Client', server: 'Serveur', 'client-and-server': 'Client et serveur' },
+    rank: (rank: number) => `Nº ${rank}`,
+    compatibility: 'Compatibilité',
+    chooseEnvironment: 'Choisissez une version du jeu, un loader et un côté pour vérifier un release',
+    exactRelease: 'Version compatible', olderRelease: 'Ancienne version compatible',
+    release: 'Version stable', beta: 'Bêta', alpha: 'Alpha', channelUnknown: 'Canal inconnu',
+    versionUnknown: 'Version inconnue', dependenciesUnknown: 'Dépendances inconnues',
+    required: 'Requis', noRequired: 'Aucun mod requis', inspect: 'Voir le release',
   },
   es: {
     featured: 'Destacados',
@@ -107,8 +151,16 @@ const translations: Record<string, Partial<Strings>> = {
     intervals: { day: 'Hoy', week: 'Esta semana', month: 'Este mes' },
     updated: (ago: string) => `Actualizado ${ago}`,
     collection: 'Colección',
-    count: (count: number) => count === 1 ? '1 selección' : `${count} selecciones`,
+    count: (count: number) => pluralCount('es', count, `${count} selección`, `${count} selecciones`),
     more: 'Ver más',
+    environments: { client: 'Cliente', server: 'Servidor', 'client-and-server': 'Cliente y servidor' },
+    rank: (rank: number) => `N.º ${rank}`,
+    compatibility: 'Compatibilidad',
+    chooseEnvironment: 'Elige una versión del juego, un loader y el entorno para comprobar la compatibilidad',
+    exactRelease: 'Versión compatible', olderRelease: 'Versión compatible anterior',
+    release: 'Versión estable', beta: 'Beta', alpha: 'Alfa', channelUnknown: 'Canal desconocido',
+    versionUnknown: 'Versión desconocida', dependenciesUnknown: 'Dependencias desconocidas',
+    required: 'Requiere', noRequired: 'No requiere mods', inspect: 'Ver versión',
   },
 };
 

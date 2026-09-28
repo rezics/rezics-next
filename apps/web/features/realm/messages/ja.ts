@@ -67,4 +67,5 @@ export default {
     { count: asValue(number()) }),
   membersNone: '一覧表示を選んだメンバーはまだいません。',
   featured: '注目',
+  createPost: '投稿を作成',
 } satisfies Partial<RealmMessages>;

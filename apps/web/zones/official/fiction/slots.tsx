@@ -10,6 +10,11 @@ const intervalLabels: Record<string, Record<RankingInterval, string>> = {
   en: { day: 'Today', week: 'This week', month: 'This month' },
   'zh-Hans': { day: '日榜', week: '周榜', month: '月榜' },
   'zh-Hant': { day: '日榜', week: '週榜', month: '月榜' },
+  ja: { day: '今日', week: '今週', month: '今月' },
+  ko: { day: '오늘', week: '이번 주', month: '이번 달' },
+  de: { day: 'Heute', week: 'Diese Woche', month: 'Diesen Monat' },
+  fr: { day: 'Aujourd’hui', week: 'Cette semaine', month: 'Ce mois-ci' },
+  es: { day: 'Hoy', week: 'Esta semana', month: 'Este mes' },
 };
 
 /** The shared Zone header puts the publication's name ahead of its lists. */

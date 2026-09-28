@@ -1,4 +1,4 @@
-import { insert, plural } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { AuthorMessages } from '../messages.ts';
 
 export default {
@@ -29,4 +29,10 @@ export default {
   description: insert('REZICS의 {{name}} 작품: 평점, 독자, 어디서부터 읽을지.', { name: String }),
   descriptionLifespan: insert('{{name}}({{lifespan}}). REZICS의 작품, 평점과 독자.',
     { name: String, lifespan: String }),
+  followers: plural({ other: insert('팔로워 {{count}}명') }, { count: asValue(number()) }),
+  followersAtLeast: insert('팔로워 {{count}}명 이상', { count: String }),
+  follow: '팔로우', following: '팔로잉',
+  unfollowName: insert('{{name}} 팔로우 취소', { name: String }),
+  signInToFollow: '로그인 후 팔로우',
+  followFailed: '변경하지 못했습니다. 다시 시도해 주세요.',
 } satisfies Partial<AuthorMessages>;

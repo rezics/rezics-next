@@ -50,4 +50,6 @@ export default {
   trending: '今週のトレンド',
   trendingIn: insert('{{realm}}のトレンド', { realm: String }),
   fromEveryone: 'REZICS のみんなから',
+  unsupportedTitle: 'この条件はここでは組み合わせられません',
+  unsupportedHelp: '新着順のリストでタグを1つ含めるか、条件を1つ削除してください。',
 } satisfies Partial<DiscoverMessages>;

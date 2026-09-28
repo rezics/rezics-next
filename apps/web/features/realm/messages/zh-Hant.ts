@@ -67,4 +67,5 @@ export default {
     { count: asValue(number()) }),
   membersNone: '目前沒有選擇公開列名的成員。',
   featured: '精選',
+  createPost: '建立貼文',
 } satisfies Partial<RealmMessages>;

@@ -50,4 +50,6 @@ export default {
   trending: '이번 주 트렌드',
   trendingIn: insert('{{realm}} 트렌드', { realm: String }),
   fromEveryone: 'REZICS의 모든 사람에게서',
+  unsupportedTitle: '여기서는 이 조건을 함께 사용할 수 없습니다',
+  unsupportedHelp: '최신 목록에 태그를 하나 포함하거나 조건을 하나 삭제해 보세요.',
 } satisfies Partial<DiscoverMessages>;

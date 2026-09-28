@@ -69,4 +69,5 @@ export default {
     other: insert('회원 {{count}}명이 공개 목록에 표시되도록 선택했어요') }, { count: asValue(number()) }),
   membersNone: '아직 공개 목록에 표시하기로 선택한 회원이 없어요.',
   featured: '추천',
+  createPost: '게시물 작성',
 } satisfies Partial<RealmMessages>;

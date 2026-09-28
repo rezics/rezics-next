@@ -7,10 +7,16 @@ import { ConceptMalformed, ConceptPage, ConceptUnavailable } from './concept-pag
 import { conceptFacet, conceptUuid, failed, fantasy, follow, localConcept, localRealm, memorySearch, ok,
   state, works, worksLoader, worksPage } from './fixtures.ts';
 import { facetLabel } from './facets.ts';
-import { messages } from './messages.ts';
+import { type ConceptMessages, messages } from './messages.ts';
+import zhHant from './messages/zh-Hant.ts';
 import zhHans from './messages/zh-Hans.ts';
+import ja from './messages/ja.ts';
+import ko from './messages/ko.ts';
 
 const zh = { ...messages, ...zhHans };
+const zhHantMessages: ConceptMessages = { ...messages, ...zhHant };
+const jaMessages: ConceptMessages = { ...messages, ...ja };
+const koMessages: ConceptMessages = { ...messages, ...ko };
 const page = `/en/concepts/${conceptUuid(1)}`;
 const signedOut = { signedIn: false };
 
@@ -232,6 +238,22 @@ export const PhoneChineseDark: Story = {
   globals: { viewport: { value: 'phone' }, locale: 'zh-Hans', theme: 'dark' },
   play: noOverflow,
 };
+
+const localizedPhone = (locale: 'zh-Hant' | 'ja' | 'ko', translated: ConceptMessages,
+  followerCount: string, worksLabel: string): Story => ({
+  args: { ...Phone.args, locale, messages: translated, facet: facetLabel(conceptFacet, locale) },
+  globals: { viewport: { value: 'phone' }, locale },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(followerCount)).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: worksLabel })).toBeVisible();
+    await noOverflow();
+  },
+});
+
+export const TraditionalChinesePhone: Story = localizedPhone('zh-Hant', zhHantMessages, '12 位追蹤者', '作品');
+export const JapanesePhone: Story = localizedPhone('ja', jaMessages, 'フォロワー12人', '作品');
+export const KoreanPhone: Story = localizedPhone('ko', koMessages, '팔로워 12명', '작품');
 
 /** A link whose Conditions repeat or contradict themselves is said so, never silently widened. */
 export const MalformedLink: Story = {

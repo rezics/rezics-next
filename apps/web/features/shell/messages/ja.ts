@@ -69,4 +69,9 @@ export default {
   correctionOn: insert('「{{title}}」に修正が加えられました', { title: String }),
   correctionMade: 'フォロー中の作品に修正が加えられました',
   moreLikeThis: plural({ one: insert('ほか{{count}}件も同様'), other: insert('ほか{{count}}件も同様') }, { count: asValue(number()) }),
+  mentionedYou: insert('{{name}}さんがあなたにメンションしました', { name: String }),
+  newChapter: 'フォロー中の作品に新しい章が追加されました',
+  newChapterOn: insert('「{{title}}」に新しい章が追加されました', { title: String }),
+  votedOnPost: insert('{{name}}さんが「{{title}}」についてのあなたの投稿に投票しました', { name: String, title: String }),
+  votedOnYourPost: insert('{{name}}さんがあなたの投稿に投票しました', { name: String }),
 } satisfies Partial<ShellMessages>;

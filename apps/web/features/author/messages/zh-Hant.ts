@@ -1,4 +1,4 @@
-import { insert, plural } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { AuthorMessages } from '../messages.ts';
 
 export default {
@@ -28,4 +28,10 @@ export default {
   description: insert('{{name}}在 REZICS 上的作品：評分、讀者，以及從哪裡開始讀。', { name: String }),
   descriptionLifespan: insert('{{name}}（{{lifespan}}）。REZICS 上的作品、評分與讀者。',
     { name: String, lifespan: String }),
+  followers: plural({ other: insert('{{count}} 位追蹤者') }, { count: asValue(number()) }),
+  followersAtLeast: insert('{{count}}+ 位追蹤者', { count: String }),
+  follow: '追蹤', following: '已追蹤',
+  unfollowName: insert('取消追蹤 {{name}}', { name: String }),
+  signInToFollow: '登入後即可追蹤',
+  followFailed: '無法更新追蹤狀態，請再試一次。',
 } satisfies Partial<AuthorMessages>;

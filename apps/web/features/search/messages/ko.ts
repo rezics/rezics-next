@@ -67,4 +67,6 @@ export default {
   didYouMeanEnd: '',
   listSeparator: ', ',
   popularTitle: 'REZICS 인기 작품',
+  unsupportedTitle: '검색에서는 이 조건을 함께 사용할 수 없습니다',
+  unsupportedHelp: '조건을 하나 삭제하거나 값의 일치 방식을 바꿔 주세요.',
 } satisfies Partial<SearchMessages>;

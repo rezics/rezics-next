@@ -69,4 +69,6 @@ export default {
   didYouMeanEnd: '？',
   listSeparator: '、',
   popularTitle: 'REZICS で人気',
+  unsupportedTitle: '検索ではこの条件を組み合わせられません',
+  unsupportedHelp: '条件を1つ削除するか、値の一致方法を変更してください。',
 } satisfies Partial<SearchMessages>;

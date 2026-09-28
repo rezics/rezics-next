@@ -3,6 +3,10 @@ import { expect, within } from 'storybook/test';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import type { PublicAgentProfile } from '../auth/agent-profile.ts';
 import { ProfileSettings } from './profile-settings.tsx';
+import { type SettingsMessages, englishMessages } from './messages.ts';
+import zhHant from './messages/zh-Hant.ts';
+import ja from './messages/ja.ts';
+import ko from './messages/ko.ts';
 
 const person: AgentOption = { iri: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
   label: 'Ada Lovelace', handle: 'ada', kind: 'person', path: 'direct-principal' };
@@ -94,3 +98,21 @@ export const ChinesePhone: Story = {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
+
+const localizedPhone = (locale: 'zh-Hant' | 'ja' | 'ko', translated: Partial<SettingsMessages>): Story => {
+  const messages: SettingsMessages = { ...englishMessages, ...translated };
+  return {
+    args: { locale, messages },
+    globals: { locale, viewport: { value: 'phone' } },
+    async play({ canvasElement }) {
+      const canvas = within(canvasElement);
+      await expect(canvas.getByRole('heading', { name: messages.pageTitle })).toBeVisible();
+      await expect(canvas.getByRole('heading', { name: messages.notificationsTitle })).toBeVisible();
+      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    },
+  };
+};
+
+export const TraditionalChinesePhone: Story = localizedPhone('zh-Hant', zhHant);
+export const JapanesePhone: Story = localizedPhone('ja', ja);
+export const KoreanPhone: Story = localizedPhone('ko', ko);

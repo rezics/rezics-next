@@ -50,4 +50,6 @@ export default {
   trending: '本週熱門',
   trendingIn: insert('{{realm}} 熱門', { realm: String }),
   fromEveryone: '來自 REZICS 上的所有人',
+  unsupportedTitle: '這些條件無法在此搭配使用',
+  unsupportedHelp: '請在最新清單加入一個標籤，或移除一項條件。',
 } satisfies Partial<DiscoverMessages>;

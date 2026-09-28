@@ -12,11 +12,12 @@ import { PageContainer } from '../shell/page.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { type UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { messages } from './messages.ts';
+import { messages as fallbackMessages, type SettingsMessages } from './messages.ts';
 import { ProfileEditForm } from './profile-edit-form.tsx';
 import { SettingsSections } from './settings-sections.tsx';
 
-export function ProfileSettings({ agent, profile, locale, error, updated, accountOrigin, preview }: {
+export function ProfileSettings({ agent, profile, locale, error, updated, accountOrigin, preview,
+  messages: translatedMessages }: {
   agent: AgentOption | null;
   profile: PublicAgentProfile | null;
   locale: UiLocale;
@@ -24,8 +25,9 @@ export function ProfileSettings({ agent, profile, locale, error, updated, accoun
   updated: 'handle' | 'profile' | null;
   accountOrigin?: string;
   preview?: boolean;
+  messages?: SettingsMessages;
 }) {
-  const t = messages[locale];
+  const t = translatedMessages ?? fallbackMessages[locale];
   const ownPerson = agent?.kind === 'person' && agent.path === 'direct-principal';
   const name = profile?.displayName ?? (agent ? agentName(agent, authMessages[locale]) : '');
   const errors: Record<string, string> = { cooldown: t.cooldown, denied: t.denied,

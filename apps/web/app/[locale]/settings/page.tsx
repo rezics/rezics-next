@@ -7,6 +7,7 @@ import { ACCESS_COOKIE } from '../../../features/auth/cookies.ts';
 import { ProfileSettings } from '../../../features/settings/profile-settings.tsx';
 import { isUiLocale } from '../../../i18n/define.ts';
 import { localizedPath } from '../../../i18n/locale.ts';
+import { getMessages } from '../../../i18n/server.ts';
 import { serviceOrigin } from '../../../features/api/origins.ts';
 
 export default async function SettingsPage({ params, searchParams }: {
@@ -20,9 +21,11 @@ export default async function SettingsPage({ params, searchParams }: {
   if (!session) redirect(signInPath(localizedPath('/settings', locale)));
   const agent = session.agent.status === 'selected' ? session.agent.agent : null;
   const profile = agent ? await readAgentProfile(agent.iri, (await cookies()).get(ACCESS_COOKIE)?.value) : null;
+  const messages = await getMessages('settings', locale);
   return <ProfileSettings agent={agent} profile={profile}
     accountOrigin={serviceOrigin('ACCOUNT_ORIGIN')}
     locale={locale}
+    messages={messages}
     error={query.error ?? null} updated={query.updated === 'handle' || query.updated === 'profile'
       ? query.updated : null} />;
 }
