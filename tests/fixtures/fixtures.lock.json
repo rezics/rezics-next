@@ -2,6 +2,76 @@
   "version": 1,
   "entries": [
     {
+      "id": "pg11",
+      "source": "gutenberg",
+      "requestUrl": "https://www.gutenberg.org/cache/epub/11/pg11.txt",
+      "fetchedAt": "2026-09-28T07:15:15.598Z",
+      "sha256": "a93a8718181ecf2ccd1a9bed6e5363b684b4b358b5dddeadddbf3555d6070562",
+      "size": 154582,
+      "reuseBasis": "Public-domain literary text in the United States; UTF-8 editions with the license, header, footer and trademark references removed under section 1.C. Source attribution retained only as provenance. https://www.gutenberg.org/policy/license.html",
+      "seed": "tests/fixtures/gutenberg/a93a8718181ecf2ccd1a9bed6e5363b684b4b358b5dddeadddbf3555d6070562.json"
+    },
+    {
+      "id": "pg113",
+      "source": "gutenberg",
+      "requestUrl": "https://www.gutenberg.org/cache/epub/113/pg113.txt",
+      "fetchedAt": "2026-09-28T07:15:23.237Z",
+      "sha256": "ce49e7dd20859f2b2505b158bf3f64c3ed9272ea3867f5ec439086daf117db14",
+      "size": 455677,
+      "reuseBasis": "Public-domain literary text in the United States; UTF-8 editions with the license, header, footer and trademark references removed under section 1.C. Source attribution retained only as provenance. https://www.gutenberg.org/policy/license.html",
+      "seed": "tests/fixtures/gutenberg/ce49e7dd20859f2b2505b158bf3f64c3ed9272ea3867f5ec439086daf117db14.json"
+    },
+    {
+      "id": "pg1260",
+      "source": "gutenberg",
+      "requestUrl": "https://www.gutenberg.org/cache/epub/1260/pg1260.txt",
+      "fetchedAt": "2026-09-28T07:15:18.645Z",
+      "sha256": "fedea334fe40aed22b2a51219d614df5535f4e3334348e1ab1b2c5161e820b1e",
+      "size": 1065073,
+      "reuseBasis": "Public-domain literary text in the United States; UTF-8 editions with the license, header, footer and trademark references removed under section 1.C. Source attribution retained only as provenance. https://www.gutenberg.org/policy/license.html",
+      "seed": "tests/fixtures/gutenberg/fedea334fe40aed22b2a51219d614df5535f4e3334348e1ab1b2c5161e820b1e.json"
+    },
+    {
+      "id": "pg1342",
+      "source": "gutenberg",
+      "requestUrl": "https://www.gutenberg.org/cache/epub/1342/pg1342.txt",
+      "fetchedAt": "2026-09-28T07:15:14.236Z",
+      "sha256": "6f7ec2a018dd7b7ddaed1e6117e299c25945faa082880fe63fb0b51a722b7ccb",
+      "size": 752552,
+      "reuseBasis": "Public-domain literary text in the United States; UTF-8 editions with the license, header, footer and trademark references removed under section 1.C. Source attribution retained only as provenance. https://www.gutenberg.org/policy/license.html",
+      "seed": "tests/fixtures/gutenberg/6f7ec2a018dd7b7ddaed1e6117e299c25945faa082880fe63fb0b51a722b7ccb.json"
+    },
+    {
+      "id": "pg1661",
+      "source": "gutenberg",
+      "requestUrl": "https://www.gutenberg.org/cache/epub/1661/pg1661.txt",
+      "fetchedAt": "2026-09-28T07:15:20.080Z",
+      "sha256": "ab1b1ea267cd64c4706ed5e6df37313d85e06e79db1de4b5169cececa0a57672",
+      "size": 587825,
+      "reuseBasis": "Public-domain literary text in the United States; UTF-8 editions with the license, header, footer and trademark references removed under section 1.C. Source attribution retained only as provenance. https://www.gutenberg.org/policy/license.html",
+      "seed": "tests/fixtures/gutenberg/ab1b1ea267cd64c4706ed5e6df37313d85e06e79db1de4b5169cececa0a57672.json"
+    },
+    {
+      "id": "pg514",
+      "source": "gutenberg",
+      "requestUrl": "https://www.gutenberg.org/cache/epub/514/pg514.txt",
+      "fetchedAt": "2026-09-28T07:15:21.792Z",
+      "sha256": "6ccc7d880186f957e6ef1083b99d65c834602f3c8cf2a976c84d18f1801c251d",
+      "size": 1051783,
+      "reuseBasis": "Public-domain literary text in the United States; UTF-8 editions with the license, header, footer and trademark references removed under section 1.C. Source attribution retained only as provenance. https://www.gutenberg.org/policy/license.html",
+      "seed": "tests/fixtures/gutenberg/6ccc7d880186f957e6ef1083b99d65c834602f3c8cf2a976c84d18f1801c251d.json"
+    },
+    {
+      "id": "pg84",
+      "source": "gutenberg",
+      "requestUrl": "https://www.gutenberg.org/cache/epub/84/pg84.txt",
+      "fetchedAt": "2026-09-28T07:15:17.050Z",
+      "sha256": "bd5a835164ee7e9d24ccf031cc73a0bb251f92bbfd803abd74dc92f15295b20d",
+      "size": 429000,
+      "reuseBasis": "Public-domain literary text in the United States; UTF-8 editions with the license, header, footer and trademark references removed under section 1.C. Source attribution retained only as provenance. https://www.gutenberg.org/policy/license.html",
+      "seed": "tests/fixtures/gutenberg/bd5a835164ee7e9d24ccf031cc73a0bb251f92bbfd803abd74dc92f15295b20d.json"
+    },
+    {
       "id": "author-OL113362A",
       "source": "open-library",
       "requestUrl": "https://openlibrary.org/authors/OL113362A.json",

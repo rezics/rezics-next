@@ -3,6 +3,9 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join, resolve } from 'node:path';
 import { sources, type FixtureSource } from '../../tests/fixtures/sources/wikidata.ts';
 import { openLibrary } from '../../tests/fixtures/sources/open-library.ts';
+import { gutenberg } from '../../tests/fixtures/sources/gutenberg.ts';
+
+type Source = FixtureSource & { responseFormat?: 'json' | 'text' };
 
 export interface FixtureEntry {
   id: string;
@@ -21,7 +24,7 @@ export interface PullOptions {
   updateLock?: boolean;
   offline?: boolean;
   fetcher?: typeof fetch;
-  adapters?: readonly FixtureSource[];
+  adapters?: readonly Source[];
   now?: () => Date;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -37,6 +40,8 @@ const lockRelative = 'tests/fixtures/fixtures.lock.json';
 const hash = (data: string) => createHash('sha256').update(data, 'utf8').digest('hex');
 const canonical = (value: unknown) => JSON.stringify(value) + '\n';
 const defaultSleep = (ms: number) => new Promise<void>(resolveSleep => setTimeout(resolveSleep, ms));
+const seedPath = (source: string, digest: string) => source === 'gutenberg'
+  ? `tests/fixtures/gutenberg/${digest}.json` : `tests/fixtures/seeds/${source}/${digest}.json`;
 
 function readLock(root: string): FixtureLock {
   const path = join(root, lockRelative);
@@ -49,7 +54,7 @@ function readLock(root: string): FixtureLock {
     if (seen.has(key) || !/^[a-z][a-z0-9-]*$/.test(entry.source)
       || !/^[A-Za-z0-9-]+$/.test(entry.id) || !/^[a-f0-9]{64}$/.test(entry.sha256)
       || !Number.isSafeInteger(entry.size) || entry.size < 0
-      || entry.seed !== `tests/fixtures/seeds/${entry.source}/${entry.sha256}.json`
+      || entry.seed !== seedPath(entry.source, entry.sha256)
       || !entry.requestUrl.startsWith('https://') || !entry.reuseBasis || !entry.fetchedAt) {
       throw new Error(`Invalid fixture lock entry ${key}`);
     }
@@ -92,13 +97,14 @@ export function readLockedFixture(root: string, source: string, id: string): unk
   return JSON.parse(checkedBytes(cache, entry));
 }
 
-async function fetchNormalized(adapter: FixtureSource, request: { id: string; url: string },
+async function fetchNormalized(adapter: Source, request: { id: string; url: string },
   fetcher: typeof fetch, sleep: (ms: number) => Promise<void>): Promise<string> {
   const userAgent = `REZICSFixtureHarness/1.0 (+https://github.com/rezics/rezics-next)`;
   for (let attempt = 0; attempt < 3; attempt++) {
     let response: Response;
     try {
-      response = await fetcher(request.url, { headers: { 'User-Agent': userAgent, Accept: 'application/json' },
+      response = await fetcher(request.url, { headers: { 'User-Agent': userAgent,
+        Accept: adapter.responseFormat === 'text' ? 'text/plain' : 'application/json' },
         signal: AbortSignal.timeout(15_000) });
     } catch (error) { throw new Error(`Fixture fetch failed for ${adapter.name}/${request.id}: ${String(error)}`); }
     if (response.status === 429 || response.status === 503) {
@@ -110,16 +116,19 @@ async function fetchNormalized(adapter: FixtureSource, request: { id: string; ur
     if (!response.ok) throw new Error(`Fixture fetch ${adapter.name}/${request.id}: HTTP ${response.status}`);
     const bytes = await response.arrayBuffer();
     if (bytes.byteLength > 2_000_000) throw new Error(`Fixture response too large for ${adapter.name}/${request.id}`);
-    let raw: unknown;
-    try { raw = JSON.parse(new TextDecoder().decode(bytes)); }
-    catch { throw new Error(`Fixture response was not JSON for ${adapter.name}/${request.id}`); }
+    const decoded = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+    let raw: unknown = decoded;
+    if (adapter.responseFormat !== 'text') {
+      try { raw = JSON.parse(decoded); }
+      catch { throw new Error(`Fixture response was not JSON for ${adapter.name}/${request.id}`); }
+    }
     return canonical(adapter.normalize(raw, request.id));
   }
   throw new Error('Unreachable fixture retry state');
 }
 
 export async function pullFixtures(root: string, options: PullOptions = {}): Promise<PullResult[]> {
-  const adapters = options.adapters ?? [...sources, openLibrary];
+  const adapters = options.adapters ?? [...sources, openLibrary, gutenberg];
   const selected = options.source ? adapters.filter(item => item.name === options.source) : adapters;
   if (!selected.length) throw new Error(`Unsupported fixture source: ${options.source}`);
   const mode = options.mode ?? 'replay';
@@ -160,7 +169,7 @@ export async function pullFixtures(root: string, options: PullOptions = {}): Pro
         throw new Error(`Fixture ${adapter.name}/${request.id} drifted while restoring replay cache; run REZICS_FIXTURES=live task fixtures:pull -- --source ${adapter.name} to inspect, then --update-lock`);
       }
       if (options.updateLock) {
-        const seed = `tests/fixtures/seeds/${adapter.name}/${sha256}.json`;
+        const seed = seedPath(adapter.name, sha256);
         putImmutable(join(root, seed), payload, sha256);
         const entry: FixtureEntry = { id: request.id, source: adapter.name, requestUrl: request.url,
           fetchedAt: (options.now ?? (() => new Date()))().toISOString(), sha256,
