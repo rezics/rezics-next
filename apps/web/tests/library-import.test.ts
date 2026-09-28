@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
 import { LibraryImportInvalid, parseLibraryImport } from '../features/library/import-csv.ts';
 import { matchImportedBook } from '../features/library/import-match.ts';
+import { importSelectedBook } from '../features/library/import-api.ts';
+import type { MainClient } from '../features/discover/types.ts';
 
 test('G414: quoted Goodreads reviews, dates, ISBN and shelves survive import parsing', () => {
   const exportText = 'Book Id,Title,Author,ISBN13,My Rating,Date Read,Bookshelves,Exclusive Shelf,My Review\r\n'
@@ -49,4 +51,29 @@ test('G414: ISBN resolves a title tie; author mismatch asks the reader to choose
     .toMatchObject({ kind: 'ambiguous', selected: null });
   expect(matchImportedBook({ ...book, title: 'Unknown book', isbn: null }, candidates))
     .toMatchObject({ kind: 'not-found', selected: null });
+});
+
+test('G414: re-importing a reviewed book leaves its status and private note unchanged', async () => {
+  const agent = 'https://rezics.com/id/0194f314-9280-767f-89a6-000000000099';
+  const work = 'https://rezics.com/id/0194f314-9280-767f-89a6-000000000001';
+  const book = parseLibraryImport('Book Id,Title,Author,Exclusive Shelf,Date Read,My Review\n'
+    + '1,Pride and Prejudice,Jane Austen,read,2026/01/04,Still a favorite.\n').books[0]!;
+  let status: 'read' | null = null, version = 0, note: string | null = null, statusWrites = 0, noteWrites = 0;
+  const main = { v1: {
+    works: () => ({
+      'reader-state': { get: async () => ({ data: { status: { status, version,
+        startedOn: null, finishedOn: status ? '2026-01-04' : null },
+      rating: { global: null }, customShelves: [] } }) },
+      'reader-status': { put: async () => { statusWrites++; status = 'read'; version++;
+        return { data: { version } }; } },
+    }),
+    me: { 'import-reviews': Object.assign(() => ({ put: async ({ text }: { text: string }) => {
+      noteWrites++; note = text; return { data: { text } };
+    } }), { get: async () => ({ data: { items: note ? [{ text: note }] : [] } }) }) },
+  } } as unknown as MainClient;
+  const save = () => importSelectedBook(agent, book, { work, rating: null, reviewVisibility: 'private' },
+    null, 'en', new Map(), () => main);
+  expect((await save()).issues).toEqual([]);
+  expect((await save()).issues).toEqual([]);
+  expect([statusWrites, noteWrites]).toEqual([1, 1]);
 });
