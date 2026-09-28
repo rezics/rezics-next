@@ -2,6 +2,16 @@ import { chapterPlaceHref } from '../work-page/route.ts';
 import type { ChapterSummary, WorkFacts, WorkSummary } from './types.ts';
 import { uuidOf } from './types.ts';
 
+/**
+ * The Work a moderation target is about: a Work's own record (`graph`), or
+ * the text published for it (`content`, whose resource is the Work, as a
+ * chapter's body is). Other owners name no Work.
+ */
+export function targetWork(target: { owner: string; resource: string }): string | null {
+  return (target.owner === 'graph' || target.owner === 'content')
+    && /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(target.resource) ? target.resource : null;
+}
+
 /** A name as the page sets it: its text and, when Main knows it, its language and direction for `lang` and `dir`. */
 export interface ShownName { value: string; language?: string; direction?: 'ltr' | 'rtl' }
 

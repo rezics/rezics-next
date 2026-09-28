@@ -12,7 +12,7 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { agentLabel, dateTime, isoTime, relativeTime } from './format.ts';
-import { actionLabel, componentLabel, isSpoilerReason, kindLabel, reasonText, ruleFor, shortcutKeys,
+import { actionLabel, componentLabel, isSpoilerReason, kindLabel, reasonLabel, ruleFor, shortcutKeys,
   stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import type { QueueNames } from './queue-api.ts';
@@ -102,7 +102,7 @@ export function QueueDetail({ item, names, draft, basis, allowed, authority, rul
   const subject = subjectOf(item.target.resource, names, t.workFallback);
   // A chapter's own context carries its Book's authors; a Book's own, when it is itself in the queue.
   const facts = names.facts[subject.iri] ?? names.facts[subject.cover.iri];
-  const reason = reasonText(item, t);
+  const reason = reasonLabel(item, t, realmRules);
   const report = isReport(item);
   const cited = report ? ruleFor(item.reasonCode, realmRules) : null;
   const decidable = actionOrder.filter(action => allowed.has(action));

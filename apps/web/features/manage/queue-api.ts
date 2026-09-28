@@ -1,6 +1,7 @@
 import { browserMainApi } from '../api/browser.ts';
 import { commitDecision, type Outcome } from './commands.ts';
 import type { Decision } from './queue-state.ts';
+import { targetWork } from './queue-subject.ts';
 import { mergeAgents, readAgents, readDecisionBasis, readDraftText, readQueue, readSubjects } from './read.ts';
 import type { QueueView } from './routes.ts';
 import type { AgentSummary, ChapterSummary, DecisionBasis, Loaded, MainClient, ModerationItem, ModerationPage,
@@ -41,7 +42,7 @@ export const reporters = (basis: DecisionBasis) => basis.reports.map(report => r
 export function mentioned(items: readonly ModerationItem[]) {
   return { agents: items.flatMap(item => [item.authorAgent, item.escalation?.actingSubject])
     .filter((iri): iri is string => typeof iri === 'string'),
-  works: items.filter(item => item.target.owner === 'graph').map(item => item.target.resource) };
+  works: items.flatMap(item => targetWork(item.target) ?? []) };
 }
 
 /** Newly read names over known ones; a part Main could not answer keeps what was known. */

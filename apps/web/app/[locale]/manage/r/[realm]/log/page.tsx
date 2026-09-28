@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { auditAgents, auditWorks, LogView } from '../../../../../../features/manage/log-view.tsx';
+import { auditAgents, auditWorks } from '../../../../../../features/manage/labels.ts';
+import { LogView } from '../../../../../../features/manage/log-view.tsx';
 import { ManageFailure } from '../../../../../../features/manage/parts.tsx';
 import { readAgents, readAudit, readPublicDecisions, readSubjects } from '../../../../../../features/manage/read.ts';
 import { logHref, parseLogView } from '../../../../../../features/manage/routes.ts';

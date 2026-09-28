@@ -4,6 +4,7 @@ import { workTypeLabel } from '../catalogue/work.ts';
 import { date, readableCode } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import type { QueueAction } from './queue-state.ts';
+import { targetWork } from './queue-subject.ts';
 import type { AuditItem, ModerationItem, PersonRecord, PublicDecision, PublishedRule, WorkSummary } from './types.ts';
 
 type T = ContractOf<ManageMessages>;
@@ -35,6 +36,16 @@ export function ruleFor(code: string | null, rules: readonly PublishedRule[]):
   if (!code) return null;
   const index = rules.findIndex(rule => code === rule.id || code === `rule.${rule.id}`);
   return index < 0 ? null : { rule: rules[index]!, number: index + 1 };
+}
+
+/**
+ * A report's reason as the queue shows it: the title of the Realm rule it
+ * names, in the reader's language, or else the reason's own words.
+ */
+export function reasonLabel(item: Pick<ModerationItem, 'kind' | 'reasonCode'>, t: T, rules: readonly PublishedRule[]):
+  string | null {
+  const cited = item.kind.endsWith('_submission') ? null : ruleFor(item.reasonCode, rules);
+  return cited ? cited.rule.title.value : reasonText(item, t);
 }
 
 /** What a Work is, in a word: a chapter of a Book, or the kind its types name (Prompt, Mod, Book…). */
@@ -216,6 +227,14 @@ export function auditRuns(items: readonly AuditItem[]): AuditRun[] {
   }
   return runs;
 }
+
+/** The Works an audit page's decisions were about. */
+export const auditWorks = (items: readonly AuditItem[]) =>
+  items.flatMap(item => item.target ? targetWork(item.target) ?? [] : []);
+
+/** The people an audit page names: who acted, and whom a role change was about. */
+export const auditAgents = (items: readonly AuditItem[]) => items.flatMap(item => [item.actingSubject,
+  ...(item.detail?.member ? [item.detail.member] : []), ...(item.detail?.changes.map(change => change.member) ?? [])]);
 
 export function auditKindLabel(kind: AuditItem['kind'], t: T): string {
   switch (kind) {

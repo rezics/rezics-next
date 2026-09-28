@@ -167,7 +167,7 @@ export default {
   promptText: '提示词内容', skillInstructions: '使用说明', skillSummary: '功能',
   writtenFor: insert('适用于 {{models}}', { models: String }),
   hubShortened: '这里只显示一部分。打开作品查看全文。',
-  hubUnavailable: '公开发布后，这里会显示它的内容。',
+  hubUnavailable: '以提示词或技能形式公开发布后，这里会显示它的内容。现在可以打开作品阅读。',
   chapterText: '章节正文',
   spoilerWarning: insert('可能剧透《{{book}}》。', { book: String }),
   showText: '显示正文', hideText: '隐藏正文',

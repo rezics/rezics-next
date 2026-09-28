@@ -10,11 +10,12 @@ import { browserMainApi } from '../api/browser.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { agentLabel, dateTime, isoTime, relativeTime, shownHandle } from './format.ts';
-import { auditDetail, auditKindLabel, auditOutcome, auditRuns, publicDecisionLabel } from './labels.ts';
+import { auditAgents, auditDetail, auditKindLabel, auditOutcome, auditRuns, auditWorks,
+  publicDecisionLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark, Pill, WorkThumb } from './parts.tsx';
 import { SubjectName } from './queue-context.tsx';
-import { subjectOf } from './queue-subject.ts';
+import { subjectOf, targetWork } from './queue-subject.ts';
 import { mergeAgents, readAgents, readAudit, readPublicDecisions, readSubjects, type SubjectNames } from './read.ts';
 import { type AuditFilter, type LogView as View, logHref } from './routes.ts';
 import type { AgentSummary, AuditItem, AuditPage, Loaded, PublicDecision, PublicDecisionPage } from './types.ts';
@@ -28,14 +29,6 @@ export interface LogApi {
   decisions(cursor: string): Promise<Loaded<PublicDecisionPage>>;
   names(agents: readonly string[], works: readonly string[], known: LogNames): Promise<LogNames>;
 }
-
-/** The Works an audit page's decisions were about. */
-export const auditWorks = (items: readonly AuditItem[]) =>
-  items.flatMap(item => item.target?.owner === 'graph' ? [item.target.resource] : []);
-
-/** The people an audit page names: who acted, and whom a role change was about. */
-export const auditAgents = (items: readonly AuditItem[]) => items.flatMap(item => [item.actingSubject,
-  ...(item.detail?.member ? [item.detail.member] : []), ...(item.detail?.changes.map(change => change.member) ?? [])]);
 
 export function bffLogApi(realm: string, actingSubject: string, language: string): LogApi {
   return {
@@ -123,7 +116,8 @@ export function LogView({ realm, address = realm, actingSubject, view, first, na
         {first.kind === 'audit' ? auditRuns(audit).map(({ item, count, latest }) => {
           const name = agentName(item.actingSubject);
           const handle = shownHandle(names.agents[item.actingSubject]?.handle ?? null);
-          const subject = item.target?.owner === 'graph' ? subjectOf(item.target.resource, names, t.workFallback) : null;
+          const work = item.target ? targetWork(item.target) : null;
+          const subject = work ? subjectOf(work, names, t.workFallback) : null;
           return <li key={item.id} className="flex gap-3 px-4 py-3.5">
             <AgentMark name={name} iri={item.actingSubject} />
             <div className="grid min-w-0 flex-1 gap-1">

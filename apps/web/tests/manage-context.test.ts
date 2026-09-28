@@ -3,10 +3,10 @@ import { materializeData } from 'native-i18n';
 import { decideSubmission } from '../features/manage/commands.ts';
 import { book, chapterOne, chapters, mod, names, occurrences, prompt, publishedRules, queue, records,
   works } from '../features/manage/fixtures.ts';
-import { isSpoilerReason, recordFacts, ruleFor, workTypeText } from '../features/manage/labels.ts';
+import { auditWorks, isSpoilerReason, reasonLabel, recordFacts, ruleFor, workTypeText } from '../features/manage/labels.ts';
 import { messages } from '../features/manage/messages.ts';
 import { mergeNames, noNames } from '../features/manage/queue-api.ts';
-import { reviewedAs, subjectOf } from '../features/manage/queue-subject.ts';
+import { reviewedAs, subjectOf, targetWork } from '../features/manage/queue-subject.ts';
 import { reasonsOf } from '../features/manage/queue-view.tsx';
 import { chapterExcerpt } from '../features/manage/read.ts';
 import { parseQueueView, queueHref } from '../features/manage/routes.ts';
@@ -44,6 +44,16 @@ describe('G-395 what a queue item is about', () => {
       cover: { iri: book }, href: `/w/${uuid(book)}/read/${uuid(occurrences.one)}` });
   });
 
+  test('a report on a Work\'s record or on its published text is about that Work; other owners name none', () => {
+    expect(targetWork({ owner: 'graph', resource: chapterOne })).toBe(chapterOne);
+    expect(targetWork({ owner: 'content', resource: chapterOne })).toBe(chapterOne);
+    expect(targetWork({ owner: 'media', resource: chapterOne })).toBeNull();
+    expect(targetWork({ owner: 'content', resource: 'urn:rezics:variant:x' })).toBeNull();
+    expect(auditWorks([{ id: 'a', caseId: 'c', kind: 'content_moderation', outcome: 'dismiss', reason: null, detail: null,
+      actingSubject: book, decidedAt: '2026-09-28T00:00:00.000Z', caseSequence: '1',
+      target: { owner: 'content', resource: chapterOne, component: 'body' } }])).toEqual([chapterOne]);
+  });
+
   test('a Work says what it is, and mods, prompts and skills have their own facts to review', () => {
     expect(workTypeText(works[chapterOne], t)).toBe('Chapter');
     expect(workTypeText(works[book], t)).toBe('Book');
@@ -70,6 +80,14 @@ describe('G-395 who raised it and what they may break', () => {
     expect(ruleFor(null, rules)).toBeNull();
     expect([isSpoilerReason('spoiler.in_title'), isSpoilerReason('spoilers'), isSpoilerReason('spoiled_milk'),
       isSpoilerReason(null)]).toEqual([true, true, false, false]);
+  });
+
+  test('a reason naming a rule reads as the rule\'s title in the reader\'s language; others as their words', () => {
+    const rules = publishedRules('zh-CN');
+    expect(reasonLabel({ kind: 'content_report', reasonCode: 'no-spoilers' }, t, rules)).toBe('标题中不要剧透');
+    expect(reasonLabel({ kind: 'content_report', reasonCode: 'title_review' }, t, rules)).toBe('Title needs review');
+    // A submission's reason is the reviewer's own words, never a rule's title.
+    expect(reasonLabel({ kind: 'work_submission', reasonCode: 'no-spoilers' }, t, rules)).toBe('no-spoilers');
   });
 
   test('a record reads as standing and outcomes, and a first submission or report says so', () => {

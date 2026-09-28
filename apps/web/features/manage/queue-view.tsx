@@ -13,7 +13,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import type { Outcome } from './commands.ts';
 import { agentLabel, isoTime, relativeTime } from './format.ts';
-import { actionLabel, decidedText, kindLabel, reasonText, shortcutActions, shortcutKeys, stateLabel } from './labels.ts';
+import { actionLabel, decidedText, kindLabel, reasonLabel, shortcutActions, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import { Pill, WorkThumb } from './parts.tsx';
 import { bffQueueApi, mergeNames, type QueueApi, type QueueNames, reporters } from './queue-api.ts';
@@ -286,7 +286,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
     const title = subject.text;
     const author = item.authorAgent ? agentLabel(names.agents[item.authorAgent], item.authorAgent,
       short => t.agentFallback({ id: short })) : null;
-    const reason = reasonText(item, t);
+    const reason = reasonLabel(item, t, realmRules);
     const isCurrent = state.current === id;
     const outcome = state.settled[id];
     return <li key={id} className={cn('group relative flex items-start gap-3 rounded-xl border px-3 py-3 transition-colors',
@@ -348,7 +348,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
       {reasons.length ? <nav aria-label={t.reasonFilterLabel} className="flex gap-2 overflow-x-auto pb-1">
         <Pill href={queueHref(address, { ...view, reason: null })} current={!view.reason}>{t.anyReason}</Pill>
         {reasons.map(code => <Pill key={code} href={queueHref(address, { ...view, reason: code })}
-          current={view.reason === code}>{reasonText({ kind: 'content_report', reasonCode: code }, t)}</Pill>)}
+          current={view.reason === code}>{reasonLabel({ kind: 'content_report', reasonCode: code }, t, realmRules)}</Pill>)}
       </nav> : null}
     </div>
     <div role="status" aria-live="polite" className="empty:hidden">{flash ? <p className="text-sm">{flash}</p> : null}</div>

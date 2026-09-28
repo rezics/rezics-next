@@ -190,7 +190,7 @@ export const messages = {
   promptText: 'Prompt text', skillInstructions: 'Instructions', skillSummary: 'What it does',
   writtenFor: insert('Written for {{models}}', { models: String }),
   hubShortened: 'Shortened here. Open the Work for the full text.',
-  hubUnavailable: 'Its text shows here once it’s published publicly.',
+  hubUnavailable: 'Its text shows here when it’s published publicly as a prompt or skill. Open the Work to read it now.',
   chapterText: 'Chapter text',
   spoilerWarning: insert('May spoil {{book}}.', { book: String }),
   showText: 'Show text', hideText: 'Hide text',
