@@ -244,6 +244,40 @@ test('G-415: Hub Work read copies only the currently eligible exact Prompt revis
   expect((await f.call('GET', path, 'owner', 'work:read')).status).toBe(503);
 });
 
+test('G-415: Hub Work read serves the retained SKILL.md of an eligible Skill revision', async () => {
+  const f = await fixture();
+  const variantId = `urn:rezics:variant:${randomUUID()}`;
+  const manifest = '---\nname: recipe-scaling\ndescription: Scale a recipe\n---\n# Recipe scaling\nKeep source amounts.\n';
+  const imported = await json(await f.call('POST', '/v1/hub/imports', 'owner', 'work:edit', {
+    profile: 'agent-skills-directory-import-v1', resourceId: f.created.work, variantId,
+    language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', expectedHead: null,
+    actingSubject: f.actor, sourceFormat: 'agent-skills-directory-v1',
+    sourceLocator: { label: 'recipe-scaling' },
+    files: [{ path: 'SKILL.md', bytesBase64: Buffer.from(manifest).toString('base64'), executable: false }],
+  }, `hub-import-${randomUUID()}`), 201);
+  const exact = (await content.readExactBatch([imported.revision], async ids => new Set(ids)))[0];
+  if (exact?.status !== 'available') throw new Error('Skill exact revision missing');
+  const publication = `urn:rezics:publication:${randomUUID()}`;
+  const eligibility = `urn:rezics:eligibility:${randomUUID()}`;
+  await environment.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
+    GRAPH <${GRAPHS.current}> {
+      <${f.created.work}> a rv:SkillPackage .
+      <${variantId}> a rv:ContentVariant ; rv:resource <${f.created.work}> ;
+        rv:contentPublicationHead <${publication}> ; rv:publicSearchEligibilityHead <${eligibility}> . }
+    GRAPH <${GRAPHS.revisions}> {
+      <${publication}> a rv:ContentPublicationDecision ; rv:component <${variantId}> ;
+        rv:resource <${f.created.work}> ;
+        rv:contentRevision <urn:rezics:content:revision:${imported.revision}> ;
+        rv:byteDigest ${JSON.stringify(exact.reference.byteDigest)} ; rv:sequence 1 .
+      <${eligibility}> a rv:ContentSearchEligibilityDecision ; rv:variant <${variantId}> ;
+        rv:resource <${f.created.work}> ; rv:publicationDecision <${publication}> ;
+        rv:disclosure rv:Public . } }`);
+  const path = `/v1/hub/works/${f.created.work.slice(-36)}?actingSubject=${encodeURIComponent(f.actor)}`;
+  const page = await json(await f.call('GET', path, 'owner', 'work:read'), 200);
+  expect(page).toMatchObject({ profile: 'hub-work-page-v1', kind: 'skill', content: manifest,
+    versions: [{ revision: imported.revision }] });
+});
+
 test('HUB01: a lost subtype write repairs from the existing Content receipt on the same key', async () => {
   let failOnce = true;
   class InterruptedArtifacts extends PackageArtifactStore {
