@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { profileValidations } from '../../infrastructure/profile.ts';
+import { CommandOutcomeUnknown, type CommandResult } from '../../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, type WorkActivationEnvironment }
   from '../work/activate.ts';
 import { validLocalizedText, type LocalizedText } from '../display-language/select.ts';
+import { agentLocalizedName } from './localized-name.ts';
 
 export class AgentProfileInvalid extends Error {}
 export class AgentProfileDenied extends Error {}
@@ -14,6 +16,7 @@ export class AgentProfileStale extends Error {
   constructor(readonly currentHead: string) { super('Agent profile changed'); }
 }
 export class AgentProfileConflict extends Error {}
+export class AgentProfileValidationFailed extends Error {}
 export class AgentProfileUnavailable extends Error {}
 
 export interface AgentBio { text: string; language: string }
@@ -74,22 +77,29 @@ async function terminal(env: WorkActivationEnvironment, receipt: string): Promis
 async function currentHead(env: WorkActivationEnvironment, agent: string) {
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    SELECT ?base ?profile ?name ?localizedName WHERE {
+    SELECT ?base ?profile ?name ?localizedName ?originalNameLanguage WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(agent)} a rv:Agent ; rv:head ?base ; rdfs:label ?name .
       OPTIONAL { ${iri(agent)} rv:publicProfileHead ?profile }
       OPTIONAL { ${iri(agent)} rv:localizedName ?localizedName }
+      OPTIONAL { ${iri(agent)} rv:originalNameLanguage ?originalNameLanguage }
       FILTER NOT EXISTS { ${iri(agent)} a rv:AgentTombstone }
       FILTER NOT EXISTS { ${iri(agent)} rv:profileDisclosure rv:Private }
       FILTER NOT EXISTS { ${iri(agent)} rv:protectionHead ?protection } }
     GRAPH ${iri(GRAPHS.revisions)} { ?base a rv:RevisionAnchor ; rv:component ${iri(agent)} ;
       rv:modelRevision <https://rezics.com/definition/agent-provision-v1> .
       FILTER NOT EXISTS { ?base a rv:ErasedRevision } }
-  } LIMIT 2`, 8192)).results?.bindings ?? [];
-  if (rows.length !== 1 || !rows[0]?.base || !rows[0].name) {
+  } LIMIT 21`, 32_768)).results?.bindings ?? [];
+  if (!rows.length || rows.length > 20 || !rows[0]?.base || !rows[0].name) {
     throw new AgentProfileDenied('Agent is unavailable');
   }
-  return { head: rows[0].profile?.value ?? rows[0].base.value,
-    name: rows[0].name.value, localizedName: rows[0].localizedName?.value ?? null };
+  const first = rows[0]!;
+  if (rows.some(row => row.base?.value !== first.base?.value || row.profile?.value !== first.profile?.value
+    || row.name?.value !== first.name?.value)) throw new AgentProfileUnavailable('Agent profile is ambiguous');
+  let localizedName: LocalizedText | null;
+  try { localizedName = agentLocalizedName(rows, first.name!.value); }
+  catch { throw new AgentProfileUnavailable('Organization names are invalid'); }
+  return { head: first.profile?.value ?? first.base!.value,
+    name: first.name!.value, localizedName };
 }
 
 /** One indexed Access controller check and one bounded graph CAS; no Agent roster scan.
@@ -139,15 +149,9 @@ export class AgentPublicProfiles {
       if (current.head !== input.expectedHead) throw new AgentProfileStale(current.head);
       let localizedName = input.localizedName;
       if (!localizedName && current.localizedName) {
-        let priorName: LocalizedText;
-        try { priorName = JSON.parse(current.localizedName) as LocalizedText; }
-        catch { throw new AgentProfileUnavailable('Organization names are invalid'); }
-        if (!validLocalizedText(priorName, AGENT_PROFILE_COST.nameCharacters)
-          || priorName.labels[priorName.original] !== current.name) {
-          throw new AgentProfileUnavailable('Organization names are invalid');
-        }
-        localizedName = { ...priorName,
-          labels: { ...priorName.labels, [priorName.original]: input.displayName } };
+        localizedName = { ...current.localizedName,
+          labels: { ...current.localizedName.labels,
+            [current.localizedName.original]: input.displayName } };
       }
       if (input.localizedName) {
         const kind = await this.env.fuseki.query(`PREFIX rv: <${RV}> ASK {
@@ -163,6 +167,14 @@ export class AgentPublicProfiles {
       const operation = `urn:rezics:operation:agent-profile:${hash(receipt)}`;
       const event = `urn:rezics:event:${hash(receipt)}`;
       const batch = `urn:rezics:outbox:${hash(receipt)}`;
+      const model = localizedName ? 'agent-profile-v2' : 'agent-profile-v1';
+      const modelIri = `https://rezics.com/definition/${model}`;
+      const nameLiterals = localizedName && Object.entries(localizedName.labels)
+        .map(([language, value]) => `${lit(value)}@${language}`).join(', ');
+      const localizedTriples = localizedName
+        ? ` ; rv:profileNameFormat rv:LocalizedNameV2 ;
+            rv:originalNameLanguage ${lit(localizedName.original)} ;
+            rv:localizedName ${nameLiterals}` : '';
       const initial = input.expectedHead === (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?base WHERE {
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rv:head ?base }
       } LIMIT 2`, 8192)).results?.bindings?.[0]?.base?.value;
@@ -172,18 +184,22 @@ export class AgentPublicProfiles {
           GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rdfs:label ?oldName .
             ${expected} ${iri(input.agent)} rv:profileBio ?oldBio .
             ${iri(input.agent)} rv:profileAvatarSelection ?oldAvatar .
-            ${iri(input.agent)} rv:localizedName ?oldLocalizedName . } }
+            ${iri(input.agent)} rv:localizedName ?oldLocalizedName .
+            ${iri(input.agent)} rv:originalNameLanguage ?oldOriginalNameLanguage .
+            ${iri(input.agent)} rv:profileNameFormat ?oldNameFormat . } }
         INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
           GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rdfs:label ${lit(input.displayName)} ;
             rv:publicProfileHead ${iri(revision)}
             ${input.bio ? `; rv:profileBio ${lit(input.bio.text)}@${input.bio.language}` : ''}
-            ${localizedName ? `; rv:localizedName ${lit(JSON.stringify(localizedName))}` : ''}
+            ${localizedTriples}
             ${input.avatarSelection ? `; rv:profileAvatarSelection ${lit(input.avatarSelection)}` : ''} . }
           GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:AgentPublicProfileRevision, rv:RevisionAnchor ;
             rv:component ${iri(input.agent)} ; rv:operation ${iri(operation)} ;
             rv:predecessor ${iri(input.expectedHead)} ;
-            rv:modelRevision <https://rezics.com/definition/agent-profile-v1> ;
-            rv:shapeRevision <https://rezics.com/definition/agent-profile-v1> ;
+            ${localizedName ? `rv:originalNameLanguage ${lit(localizedName.original)} ;
+              rv:localizedName ${nameLiterals} ;` : ''}
+            rv:modelRevision ${iri(modelIri)} ;
+            rv:shapeRevision ${iri(modelIri)} ;
             rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
             rv:sequence ?next . }
           GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
@@ -204,6 +220,8 @@ export class AgentPublicProfiles {
             rdfs:label ?oldName . OPTIONAL { ${iri(input.agent)} rv:profileBio ?oldBio }
             OPTIONAL { ${iri(input.agent)} rv:profileAvatarSelection ?oldAvatar }
             OPTIONAL { ${iri(input.agent)} rv:localizedName ?oldLocalizedName }
+            OPTIONAL { ${iri(input.agent)} rv:originalNameLanguage ?oldOriginalNameLanguage }
+            OPTIONAL { ${iri(input.agent)} rv:profileNameFormat ?oldNameFormat }
             ${expected} }
           ${initial ? `FILTER(?base = ${iri(input.expectedHead)}) FILTER NOT EXISTS {
             GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rv:publicProfileHead ?prior } }` : ''}
@@ -212,15 +230,27 @@ export class AgentPublicProfiles {
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rv:protectionHead ?protection } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
           BIND(?n + 1 AS ?next) }`;
-      const validations = await profileValidations(this.env.fuseki, 'agent-profile-v1', [{
-        shape: 'https://rezics.com/definition/agent-profile-v1/profile-shape',
-        focus: [input.agent], graphs: [GRAPHS.current] }]);
-      try { await this.env.fuseki.commandWithReceipt({ receipt, digest, update,
-        validations, deadlineMs: 10_000 }); } catch { /* exact receipt decides an uncertain response */ }
+      const validations = await profileValidations(this.env.fuseki, model, [{
+        shape: `${modelIri}/profile-shape`, focus: [input.agent], graphs: [GRAPHS.current] },
+        ...(localizedName ? [{ shape: `${modelIri}/revision-shape`,
+          focus: [revision], graphs: [GRAPHS.current, GRAPHS.revisions] }] : [])]);
+      let command: CommandResult | undefined;
+      try { command = await this.env.fuseki.commandWithReceipt({ receipt, digest, update,
+        validations, deadlineMs: 10_000 }); }
+      catch (error) { if (!(error instanceof CommandOutcomeUnknown)) throw error; }
       const saved = await terminal(this.env, receipt);
       if (!saved) {
+        if (command?.status === 'invalid') {
+          throw new AgentProfileValidationFailed('Agent profile failed model validation');
+        }
+        if (command?.status === 'unknown-profile') {
+          throw new AgentProfileUnavailable('Agent profile shape is unavailable');
+        }
         const now = await currentHead(this.env, input.agent);
         if (now.head !== input.expectedHead) throw new AgentProfileStale(now.head);
+        if (command?.status === 'guard-unmatched' || command?.status === 'conflict') {
+          throw new AgentProfileConflict('Agent profile graph basis changed');
+        }
         throw new AgentProfileUnavailable('Agent profile outcome is unknown');
       }
       if (saved.digest !== digest || saved.agent !== input.agent) {

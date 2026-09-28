@@ -1,0 +1,73 @@
+import type { ProfileDefinition } from '../compiler/ir.ts';
+
+const definition = '<https://rezics.com/definition/agent-profile-v2>' as const;
+const languageTag = '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$';
+
+/** The Agent's plain label remains its original; v2 stores its languages as RDF literals. */
+export const agentPublicV2Profile = {
+  id: 'agent-profile-v2',
+  comments: [
+    'Organization names have one original language and at most twenty language-tagged labels.',
+    'A v1 Agent has no name-format marker and keeps its original public profile valid.',
+  ],
+  prefixes: [['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
+    ['rdfs', 'http://www.w3.org/2000/01/rdf-schema#'],
+    ['sh', 'http://www.w3.org/ns/shacl#'], ['rv', 'https://rezics.com/vocab/'],
+    ['xsd', 'http://www.w3.org/2001/XMLSchema#']],
+  layout: 'compact',
+  shapes: [
+    { iri: 'https://rezics.com/definition/agent-profile-v2/profile-shape',
+      canonical: { types: ['rv:Agent'], when: [{ path: 'rv:profileNameFormat',
+        value: 'rv:LocalizedNameV2' }] },
+      properties: [
+        { path: 'rdf:type', hasValue: 'rv:Agent' },
+        { path: 'rdfs:label', minCount: 1, maxCount: 1, datatype: 'xsd:string', maxLength: 200 },
+        { path: 'rv:profileHandle', minCount: 1, maxCount: 1, datatype: 'xsd:string',
+          pattern: '^agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
+        { path: 'rv:profileDisclosure', minCount: 1, maxCount: 1, in: ['rv:Public', 'rv:Private'] },
+        { path: 'rv:profileNameFormat', hasValue: 'rv:LocalizedNameV2', maxCount: 1 },
+        { path: 'rv:originalNameLanguage', minCount: 1, maxCount: 1,
+          datatype: 'xsd:string', pattern: languageTag, maxLength: 35 },
+        { path: 'rv:localizedName', minCount: 1, maxCount: 20,
+          datatype: 'rdf:langString', uniqueLang: true, maxLength: 200 },
+        { path: 'rv:profileAvatarSelection', maxCount: 1, datatype: 'xsd:string',
+          pattern: '^[0-9a-f-]{36}$' },
+        { path: 'rv:profileBio', maxCount: 1, datatype: 'rdf:langString' },
+      ] },
+    { iri: 'https://rezics.com/definition/agent-profile-v2/revision-shape',
+      canonical: { types: ['rv:AgentPublicProfileRevision'],
+        when: [{ path: 'rv:modelRevision', value: definition }] },
+      properties: [
+        { path: 'rdf:type', minCount: 2, maxCount: 2,
+          in: ['rv:AgentPublicProfileRevision', 'rv:RevisionAnchor'] },
+        { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:Agent' },
+        { path: 'rv:predecessor', minCount: 1, maxCount: 1, class: 'rv:RevisionAnchor' },
+        { path: 'rv:operation', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
+        { path: 'rv:originalNameLanguage', minCount: 1, maxCount: 1,
+          datatype: 'xsd:string', pattern: languageTag, maxLength: 35 },
+        { path: 'rv:localizedName', minCount: 1, maxCount: 20,
+          datatype: 'rdf:langString', uniqueLang: true, maxLength: 200 },
+        { path: 'rv:modelRevision', hasValue: definition, maxCount: 1 },
+        { path: 'rv:shapeRevision', hasValue: definition, maxCount: 1 },
+        { path: 'rv:datasetId', hasValue: '<urn:rezics:dataset:product>', maxCount: 1 },
+        { path: 'rv:dataEpoch', minCount: 1, maxCount: 1, datatype: 'xsd:string' },
+        { path: 'rv:sequence', minCount: 1, maxCount: 1, datatype: 'xsd:integer', minInclusive: 1 },
+      ] },
+    { iri: 'https://rezics.com/definition/agent-profile-v2/legacy-revision-shape',
+      canonical: { types: ['rv:AgentPublicProfileRevision'],
+        when: [{ path: 'rv:modelRevision',
+          value: '<https://rezics.com/definition/agent-profile-v1>' }] },
+      properties: [
+        { path: 'rdf:type', minCount: 2, maxCount: 2,
+          in: ['rv:AgentPublicProfileRevision', 'rv:RevisionAnchor'] },
+        { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:Agent' },
+        { path: 'rv:predecessor', minCount: 1, maxCount: 1, class: 'rv:RevisionAnchor' },
+        { path: 'rv:operation', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
+        { path: 'rv:modelRevision', hasValue: '<https://rezics.com/definition/agent-profile-v1>', maxCount: 1 },
+        { path: 'rv:shapeRevision', hasValue: '<https://rezics.com/definition/agent-profile-v1>', maxCount: 1 },
+        { path: 'rv:datasetId', hasValue: '<urn:rezics:dataset:product>', maxCount: 1 },
+        { path: 'rv:dataEpoch', minCount: 1, maxCount: 1, datatype: 'xsd:string' },
+        { path: 'rv:sequence', minCount: 1, maxCount: 1, datatype: 'xsd:integer', minInclusive: 1 },
+      ] },
+  ],
+} as const satisfies ProfileDefinition;

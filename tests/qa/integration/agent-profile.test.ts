@@ -63,6 +63,19 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
       { ...orgName, expectedHead: first.revision })).status).toBe(400);
     const orgSaved = await json(await call('PUT', `${orgPath}/profile`, owner.token, orgName), 201);
     expect(orgSaved.profile).toBe('agent-public-profile-v2');
+    const orgGraph = await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?model ?original ?name WHERE {
+        GRAPH <urn:rezics:graph:revisions> { <${orgSaved.revision}> rv:modelRevision ?model . }
+        GRAPH <urn:rezics:graph:current> { <${org.agent}> rv:originalNameLanguage ?original ;
+          rv:localizedName ?name . }
+      } LIMIT 21`);
+    expect(orgGraph.results?.bindings).toHaveLength(3);
+    expect(new Set(orgGraph.results?.bindings.map(row => row.model?.value)))
+      .toEqual(new Set(['https://rezics.com/definition/agent-profile-v2']));
+    expect(new Set(orgGraph.results?.bindings.map(row => row.original?.value)))
+      .toEqual(new Set(['en']));
+    expect(new Set(orgGraph.results?.bindings.map(row => row.name?.['xml:lang'])))
+      .toEqual(new Set(['en', 'zh-Hans', 'ja']));
     expect(await json(await call('GET', orgPath, undefined, undefined, randomUUID(), 'zh-CN'), 200))
       .toMatchObject({ displayName: '北辰出版', originalDisplayName: 'North Star Editions',
         displayNameInfo: { language: 'zh-Hans', direction: 'ltr', basis: 'requested' } });
@@ -74,6 +87,11 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
       displayName: 'North Star Books', avatarSelection: null, bio: null,
     }), 201);
     expect(orgLegacyEdit.profile).toBe('agent-public-profile-v1');
+    const preservedRevision = await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?model WHERE { GRAPH <urn:rezics:graph:revisions> {
+        <${orgLegacyEdit.revision}> rv:modelRevision ?model . } } LIMIT 2`);
+    expect(preservedRevision.results?.bindings[0]?.model?.value)
+      .toBe('https://rezics.com/definition/agent-profile-v2');
     expect(await json(await call('GET', orgPath, undefined, undefined, randomUUID(), 'zh-CN'), 200))
       .toMatchObject({ displayName: '北辰出版', originalDisplayName: 'North Star Books',
         localizedNames: { labels: { en: 'North Star Books' } } });
@@ -88,6 +106,30 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     expect((await call('PUT', `${path}/profile`, owner.token, {
       ...body(first.revision as string, 'Valid'), avatarSelection: randomUUID(),
     })).status).toBe(400);
+    class RejectedProfileFuseki extends FusekiClient {
+      outcome: 'invalid' | 'guard-unmatched' = 'invalid';
+      override async commandWithReceipt(input: CommandEnvelope): Promise<CommandResult> {
+        if (input.receipt.startsWith('urn:rezics:receipt:agent-profile:')) {
+          return { status: this.outcome };
+        }
+        return super.commandWithReceipt(input);
+      }
+    }
+    const rejected = new RejectedProfileFuseki(Bun.env.FUSEKI_URL!);
+    const rejectedApp = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      account, media: stack.media, profiles: new ProfilesAccess(stack.accessPool),
+      agentProfiles: new AgentPublicProfiles(stack.accessPool, { ...stack.env, fuseki: rejected }, stack.media.store),
+      personPreferences: new PersonPreferencesStore(stack.accessPool),
+      agentHandles: new AgentVanityHandles(stack.accessPool) });
+    const reject = async (key: string) => json(await rejectedApp.handle(new Request(
+      `http://main.local${path}/profile`, { method: 'PUT', headers: {
+        authorization: `Bearer ${owner.token}`, 'content-type': 'application/json',
+        'idempotency-key': key }, body: JSON.stringify(body(first.revision as string, 'Rejected')),
+      })), rejected.outcome === 'invalid' ? 422 : 409);
+    expect((await reject('profile-invalid')).code).toBe('agent_profile_validation_failed');
+    rejected.outcome = 'guard-unmatched';
+    expect((await reject('profile-guard-unmatched')).code).toBe('agent_profile_conflict');
+    expect((await json(await call('GET', path), 200)).revision).toBe(first.revision);
     const [a, b] = await Promise.all([
       call('PUT', `${path}/profile`, owner.token, body(first.revision as string, '林梅'), 'profile-a'),
       call('PUT', `${path}/profile`, owner.token, body(first.revision as string, 'Mira'), 'profile-b'),

@@ -4,6 +4,7 @@ import { writeProblems } from '../api-responses.ts';
 import { AgentProvisionConflict, AgentProvisionDenied, AgentProvisionInvalid,
   AgentProvisionUnavailable } from '../modules/agent/provision.ts';
 import { AgentProfileConflict, AgentProfileDenied, AgentProfileInvalid, AgentProfileStale,
+  AgentProfileValidationFailed,
   AgentProfileUnavailable } from '../modules/agent/profile.ts';
 import { VanityConflict, VanityCooldown, VanityDenied, VanityInvalid, VanityUnavailable,
   VANITY_HANDLE_PATTERN } from '../modules/agent/vanity.ts';
@@ -99,7 +100,8 @@ export function agentRoutes(work: MainWorkDependencies) {
       params: t.Object({ id: t.String({ pattern:
         '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }) }),
       body: profileChangeBody,
-      response: { 200: profileChangeResult, 201: profileChangeResult, ...writeProblems },
+      response: { 200: profileChangeResult, 201: profileChangeResult, ...writeProblems,
+        422: problemResult(422) },
     }, async ({ request, params, body }) => {
       try {
         if (!work.agentProfiles) return problem(503, 'agent_profile_unavailable', 'Agent profiles are unavailable');
@@ -121,6 +123,8 @@ export function agentRoutes(work: MainWorkDependencies) {
         }, { status: 409, headers: { 'content-type': 'application/problem+json',
           'cache-control': 'no-store' } });
         if (error instanceof AgentProfileConflict) return problem(409, 'agent_profile_conflict', error.message);
+        if (error instanceof AgentProfileValidationFailed) return problem(422,
+          'agent_profile_validation_failed', error.message);
         if (error instanceof AgentProfileUnavailable) return problem(503, 'agent_profile_unavailable', error.message);
         return commandError(error);
       }

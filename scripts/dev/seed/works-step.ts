@@ -44,13 +44,26 @@ export async function seedWorks(state: SeedState) {
       } else receipt.workRevision = current.revision;
     }
     created.set(work.id, receipt);
-    if (work.tagline) await state.optional('Work serial summary', () => api.put(
-      `/v1/works/${receipt.work.slice(-36)}/metadata`, {
-        profile: 'work-metadata-details-v1', expectedHead: null,
-        state: { kind: 'header', originalTitle: null, completionStatus: work.completionStatus ?? null,
-          localized: [{ language: work.language, title: null, description: null,
-            mainVersionLabel: null, tagline: work.tagline }] },
-        actingSubject: author ?? owner.actingSubject }, session.token, seedKey('serial-metadata', work.id)));
+    if (work.tagline) await state.optional('Work serial summary', async () => {
+      const path = `/v1/works/${receipt.work.slice(-36)}/metadata`;
+      const current = await api.get<{ revision: string | null;
+        originalTitle: { value: string; language: string } | null;
+        completionStatus: DemoWork['completionStatus'] | null;
+        localized: { language: string; title: string | null; description: string | null;
+          mainVersionLabel: string | null; tagline?: string | null }[] }>(
+        `${path}?actingSubject=${encodeURIComponent(author ?? owner.actingSubject)}`, session.token);
+      const previous = current.localized.find(row => row.language.toLowerCase() === work.language.toLowerCase());
+      if (previous?.tagline === work.tagline && current.completionStatus === (work.completionStatus ?? null)) return;
+      const localized = current.localized.filter(row => row !== previous);
+      localized.push({ language: work.language, title: previous?.title ?? null,
+        description: previous?.description ?? null, mainVersionLabel: previous?.mainVersionLabel ?? null,
+        tagline: work.tagline });
+      await api.put(path, { profile: 'work-metadata-details-v1', expectedHead: current.revision,
+        state: { kind: 'header', originalTitle: current.originalTitle,
+          completionStatus: work.completionStatus ?? current.completionStatus, localized },
+        actingSubject: author ?? owner.actingSubject }, session.token,
+      seedKey('serial-metadata-v2', `${work.id}:${current.revision?.slice(-12) ?? 'first'}`));
+    });
     if (work.seedTitle && state.operatorInput) {
       const path = `/v1/works/${receipt.work.slice(-36)}/metadata`;
       const current = await api.get<{ revision: string | null; originalTitle: { value: string; language: string } | null;

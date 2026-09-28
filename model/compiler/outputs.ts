@@ -47,7 +47,7 @@ function valueExpression(property: PropertyDefinition, prefixes: ReadonlyMap<str
   if (kind === 'langString') {
     const language = property.languageIn?.length
       ? unionLiterals(property.languageIn)
-      : `Type.String({ pattern: ${quote('^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$')} })`;
+      : `Type.String({ pattern: ${quote('^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$')} })`;
     return `Type.Object({ "@value": Type.String(${quote(options)}), "@language": ${language} }, { additionalProperties: false })`;
   }
   if (property.in) return unionLiterals(property.in.map(term => expand(term, prefixes)));
@@ -119,6 +119,7 @@ function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<stri
         'agent-00000000-0000-4000-8000-000000000001',
       '^\\d{4}-\\d{2}-\\d{2}$': '2026-03-08',
       '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$': 'en',
+      '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$': 'en',
       '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$': 'en-US',
       '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':
         '00000000-0000-4000-8000-000000000001',

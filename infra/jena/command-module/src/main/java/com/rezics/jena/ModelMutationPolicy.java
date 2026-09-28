@@ -107,11 +107,40 @@ final class ModelMutationPolicy {
         boolean changed = before.selectors().entrySet().stream().anyMatch(entry ->
             !entry.getValue().equals(values(data, before.graph(), node, NodeFactory.createURI(entry.getKey()))));
         if (changed) {
+            if (agentNameUpgrade(data, receipt, name, before))
+                return CanonicalPolicy.validate(profiles, data, name, false);
             if (!routeLifecycle(data, receipt, name, before))
                 return CommandService.invalid("prestate canonical selector changed: " + name);
             return null;
         }
         return CanonicalPolicy.validateSelected(profiles, data, name, selected);
+    }
+
+    /** An Agent's first localized profile advances the current shape selector with
+     * the same receipted v2 revision. Later profile edits keep that selector. */
+    private static boolean agentNameUpgrade(DatasetGraph data, String receipt,
+                                            String name, Subject before) {
+        if (!before.graph().equals(CURRENT) || before.selection() == null
+            || !before.selection().type().equals(RV + "Agent")
+            || !receipt.startsWith("urn:rezics:receipt:agent-profile:")
+            || !before.selectors().getOrDefault(RV + "profileNameFormat", Set.of()).isEmpty()) return false;
+        Node agent = NodeFactory.createURI(name);
+        Node revisionPredicate = NodeFactory.createURI(RV + "profileRevision");
+        Set<Node> revisions = values(data, RECEIPTS, NodeFactory.createURI(receipt), revisionPredicate);
+        if (revisions.size() != 1) return false;
+        Node revision = revisions.iterator().next();
+        Node receiptNode = NodeFactory.createURI(receipt);
+        return data.contains(CURRENT, agent, NodeFactory.createURI(RV + "profileNameFormat"),
+                NodeFactory.createURI(RV + "LocalizedNameV2"))
+            && data.contains(CURRENT, agent, NodeFactory.createURI(RV + "publicProfileHead"), revision)
+            && data.contains(REVISIONS, revision, NodeFactory.createURI(RV + "component"), agent)
+            && data.contains(REVISIONS, revision, NodeFactory.createURI(RV + "modelRevision"),
+                NodeFactory.createURI("https://rezics.com/definition/agent-profile-v2"))
+            && data.contains(RECEIPTS, receiptNode, RDF.type.asNode(),
+                NodeFactory.createURI(RV + "OperationReceipt"))
+            && data.contains(RECEIPTS, receiptNode, NodeFactory.createURI(RV + "agent"), agent)
+            && data.contains(RECEIPTS, receiptNode, NodeFactory.createURI(RV + "outcome"),
+                NodeFactory.createURI(RV + "Succeeded"));
     }
 
     /** A receipted Agent compensation replaces its public identity with a
