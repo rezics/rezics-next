@@ -3,18 +3,16 @@
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@rezics/ui/dialog';
-import { ImageCropperImage, ImageCropperRootProvider, ImageCropperSelection, useImageCropper }
-  from '@rezics/ui/image-cropper';
 import { workCoverRatio } from '@rezics/ui/work-cover';
 import { CircleCheckIcon, ImageUpIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
-import { type ChangeEvent, useEffect, useId, useRef, useState } from 'react';
+import { type ChangeEvent, lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { coverKindOf } from '../catalogue/work.ts';
 import type { WorkCover as MainCover } from '../discover/types.ts';
-import { COVER_MAX_BYTES, type CoverOutcome, coverTypes, removeCover, uploadCover } from './cover-api.ts';
+import { type CoverOutcome, coverTypes, removeCover, uploadCover } from './cover-api.ts';
 import type { StudioMessages } from './messages.ts';
 import { StudioCover } from './studio-cover.tsx';
 
@@ -29,34 +27,8 @@ export interface CoverEditorProps {
   send?: typeof fetch;
 }
 
-// The longest side Studio sends; readers get at most 2048 px, and a cover is shown far smaller.
-const LONG_SIDE = 1800;
-
-function Cropper({ source, ratio, label, onReady }: {
-  source: { url: string; width: number; height: number }; ratio: number; label: string;
-  onReady: (crop: () => Promise<Blob | null>) => void;
-}) {
-  const cropper = useImageCropper({ aspectRatio: ratio });
-  useEffect(() => {
-    onReady(async () => {
-      const size = ratio >= 1 ? { width: LONG_SIDE, height: Math.round(LONG_SIDE / ratio) }
-        : { width: Math.round(LONG_SIDE * ratio), height: LONG_SIDE };
-      for (const quality of [0.9, 0.8, 0.7]) {
-        const image = await cropper.getCroppedImage({ type: 'image/jpeg', quality, maxSize: size, output: 'blob' });
-        if (!(image instanceof Blob)) return null;
-        if (image.size <= COVER_MAX_BYTES) return image;
-      }
-      return null;
-    });
-  }, [cropper, ratio, onReady]);
-  // The frame takes the picture's own proportions, so the picture is never stretched; tall pictures fit the screen.
-  const shape = source.width / source.height;
-  return <ImageCropperRootProvider value={cropper} aria-label={label} className="mx-auto rounded-2xl bg-muted"
-    style={{ aspectRatio: String(shape), maxWidth: `min(100%, calc(60dvh * ${shape}))` }}>
-    <ImageCropperImage src={source.url} alt="" />
-    <ImageCropperSelection />
-  </ImageCropperRootProvider>;
-}
+// The cropper (Zag's image cropper and its geometry) loads only once an author picks a picture.
+const Cropper = lazy(() => import('./cover-cropper.tsx').then(module => ({ default: module.CoverCropper })));
 
 /** The picture's size, read before framing it. */
 function measure(url: string): Promise<{ url: string; width: number; height: number } | null> {
@@ -153,8 +125,10 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
       <DialogContent size="md">
         <DialogHeader title={t.cropHeading} description={t.cropHelp} />
         <DialogBody>
-          {source ? <Cropper source={source} ratio={ratio} label={t.cropLabel}
-            onReady={value => { crop.current = value; }} /> : null}
+          {source ? <Suspense fallback={<div aria-hidden="true" className="mx-auto w-full rounded-2xl bg-muted"
+            style={{ aspectRatio: String(source.width / source.height), maxWidth: `min(100%, calc(60dvh * ${source.width / source.height}))` }} />}>
+            <Cropper source={source} ratio={ratio} label={t.cropLabel} onReady={value => { crop.current = value; }} />
+          </Suspense> : null}
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setSource(null)} disabled={busy !== null}>{t.cancel}</Button>
