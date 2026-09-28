@@ -2,7 +2,7 @@ import { cn } from '@rezics/ui/utils';
 import { BoxIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
-import type { ModReleasePage } from '../realm/types.ts';
+import type { ModExactCompatibility, ModReleasePage } from '../realm/types.ts';
 import { agoText } from './card.tsx';
 import type { ZoneMessages } from './messages.ts';
 
@@ -49,8 +49,10 @@ function Pills({ label, values, code }: { label: string; values: readonly string
 }
 
 /** The sections for one mod's releases, newest first; `failed` when Main's read did not answer. */
-export function ModSections({ releases, failed, locale, messages }: {
-  releases: readonly ModRelease[]; failed?: boolean; locale: UiLocale; messages: ZoneMessages;
+export function ModSections({ releases, failed, exact, exactFailed, selection, moreReleases, locale, messages }: {
+  releases: readonly ModRelease[]; failed?: boolean; exact?: ModExactCompatibility | null;
+  exactFailed?: boolean; selection?: { gameVersion: string; loader: string; side: 'client' | 'server' } | null;
+  moreReleases?: boolean; locale: UiLocale; messages: ZoneMessages;
 }) {
   const t = materializeData(messages, { locale });
   if (failed) {
@@ -58,21 +60,39 @@ export function ModSections({ releases, failed, locale, messages }: {
       <TriangleAlertIcon aria-hidden="true" className="size-4" />{messages.modUnavailable}</p>;
   }
   const [newest] = releases;
-  if (!newest) return null;
+  if (!newest) return <p role="status" className="text-muted-foreground text-sm">
+    {exactFailed ? messages.modUnavailable : exact?.state === 'incompatible' ? messages.modNotCompatible
+      : exact?.state === 'unknown' ? messages.modUnknown : messages.modChooseForDetails}</p>;
   const versions = [...new Set(releases.flatMap(release => release.gameVersions))].sort(newestFirst);
   const loaders = [...new Set(releases.flatMap(release => release.loaders))];
   const environments = [...new Set(releases.flatMap(release => release.environment ? [release.environment] : []))];
-  // What a player on the newest game version installs beside it: that version's newest release.
-  const current = releases.find(release => versions[0] && release.gameVersions.includes(versions[0])) ?? newest;
-  const dependencies = current.dependencies;
+  const current = exact?.release ?? null;
+  const dependencies = current?.dependencies ?? null;
   const groups = (['required', 'optional', 'incompatible', 'embedded'] as const).map(requirement => ({ requirement,
     label: { required: messages.modRequired, optional: messages.modOptional, incompatible: messages.modIncompatible,
       embedded: messages.modEmbedded }[requirement],
-    items: (dependencies ?? []).filter(item => item.requirement === requirement) })).filter(group => group.items.length);
+    items: (dependencies ?? []).filter(item => item.requirement === requirement
+      && (!item.side || item.side === selection?.side)) })).filter(group => group.items.length);
   const date = (at: string) => new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(at));
   const noted = releases.filter(release => release.changelog);
   return <div data-mod-sections="" className="grid grid-cols-1 gap-8">
     <Section id="mod-compatibility" title={messages.modCompatibility}>
+      {exactFailed ? <p role="status" className="text-muted-foreground text-sm">{messages.modUnavailable}</p>
+        : exact?.state === 'unknown' ? <p role="status" className="text-muted-foreground text-sm">{messages.modUnknown}</p>
+          : exact?.state === 'incompatible' ? <p role="status" className="text-muted-foreground text-sm">
+            {messages.modNotCompatible}</p>
+            : current && selection ? <div data-release-state={exact?.state} className="rounded-xl border border-border/70
+              bg-card p-4 text-sm">
+              <p>{exact?.state === 'stale' ? messages.modOlderCompatible : messages.modCompatibility}:
+                {' '}<strong translate="no">{current.version ?? '—'}</strong>
+                {' · '}{current.channel === 'release' ? messages.modChannelRelease
+                  : current.channel === 'beta' ? messages.modChannelBeta
+                    : current.channel === 'alpha' ? messages.modChannelAlpha : messages.modChannelUnknown}
+                {' · '}<time dateTime={current.publishedAt}>{date(current.publishedAt)}</time></p>
+              <p translate="no" className="mt-1 text-muted-foreground">Minecraft {selection.gameVersion}
+                {' · '}{selection.loader} · {selection.side === 'client' ? messages.envClient : messages.envServer}</p>
+              <p className="mt-2 text-muted-foreground">{messages.modGetUnavailable}</p>
+            </div> : <p className="text-muted-foreground text-sm">{messages.modChooseForDetails}</p>}
       <div className="grid grid-cols-1 gap-4 rounded-2xl border border-border/70 bg-card p-4 sm:grid-cols-3">
         <Pills label={newest.game} values={versions} code />
         <Pills label={messages.modLoaders} values={loaders} code />
@@ -80,9 +100,13 @@ export function ModSections({ releases, failed, locale, messages }: {
       </div>
     </Section>
     <Section id="mod-dependencies" title={messages.modDependencies}>
-      <p translate="no" className="-mt-2 text-muted-foreground text-sm">{t.modFor({ version: current.version ?? '—',
-        runtime: [current.game, ...current.gameVersions, ...current.loaders].join(' ') })}</p>
-      {dependencies === null ? <p className="text-muted-foreground text-sm">{messages.modDependenciesUnknown}</p>
+      {current && selection ? <p translate="no" className="-mt-2 text-muted-foreground text-sm">
+        {t.modFor({ version: current.version ?? '—', runtime: `Minecraft ${selection.gameVersion} ${selection.loader}` })}
+      </p> : null}
+      {!current ? <p className="text-muted-foreground text-sm">{exact?.state === 'incompatible'
+        ? messages.modNotCompatible : exactFailed ? messages.modUnavailable : exact?.state === 'unknown'
+          ? messages.modUnknown : messages.modChooseForDetails}</p>
+        : dependencies === null ? <p className="text-muted-foreground text-sm">{messages.modDependenciesUnknown}</p>
         : groups.length ? <div className="grid grid-cols-1 gap-4">
           {groups.map(group => <div key={group.requirement} className="grid grid-cols-1 gap-2">
             <h3 className="text-muted-foreground text-sm">{group.label}</h3>
@@ -104,13 +128,14 @@ export function ModSections({ releases, failed, locale, messages }: {
         </div> : <p className="text-muted-foreground text-sm">{messages.modNoDependencies}</p>}
     </Section>
     <Section id="mod-versions" title={messages.modVersions}>
+      {moreReleases ? <p className="text-muted-foreground text-sm">{messages.modMoreVersions}</p> : null}
       {/* Wide on phones, so it scrolls; the scroller takes focus to scroll by keyboard. */}
       <div tabIndex={0} className="overflow-x-auto rounded-2xl border
         border-border/70 bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <table className="w-full min-w-[32rem] text-sm">
           <thead className="text-muted-foreground text-start">
             <tr className="border-border/60 border-b">
-              {[messages.modVersion, messages.modGameVersions, messages.modLoaders, messages.modEnvironments,
+              {[messages.modVersion, messages.modChannel, messages.modGameVersions, messages.modLoaders, messages.modEnvironments,
                 messages.modPublished].map(heading => <th key={heading} scope="col"
                 className="px-4 py-2.5 text-start font-medium">{heading}</th>)}
             </tr>
@@ -120,6 +145,9 @@ export function ModSections({ releases, failed, locale, messages }: {
               className="border-border/60 border-b last:border-b-0">
               <th scope="row" translate="no" className="px-4 py-3 text-start font-medium font-mono">
                 {release.version ?? '—'}</th>
+              <td className="px-4 py-3">{release.channel === 'release' ? messages.modChannelRelease
+                : release.channel === 'beta' ? messages.modChannelBeta
+                  : release.channel === 'alpha' ? messages.modChannelAlpha : messages.modChannelUnknown}</td>
               <td translate="no" className="px-4 py-3">{release.gameVersions.join(', ')}</td>
               <td translate="no" className="px-4 py-3">{release.loaders.join(', ')}</td>
               <td className="px-4 py-3">{release.environment ? environmentLabel(release.environment, messages) : '—'}</td>

@@ -24,6 +24,7 @@ export type ZoneBrowseQuery = NonNullable<NonNullable<Parameters<Realm['modules'
 /** Main's admitted Facets (`GET /v1/facets`): their names and labels in every UI locale. */
 export type FacetList = Ok<MainClient['v1']['facets']['get']>;
 export type ModReleasePage = Ok<ReturnType<MainClient['v1']['mod-releases']>['get']>;
+export type ModExactCompatibility = Ok<ReturnType<MainClient['v1']['mod-compatibility']>['exact']['get']>;
 export type RankingPage = Ok<Realm['rankings']['get']>;
 export type RankingMetric = RankingPage['metric'];
 export type ZonePresentationRead = Ok<Zone['presentation']['get']>;

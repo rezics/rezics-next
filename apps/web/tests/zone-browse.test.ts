@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ZoneWork } from '@rezics/zone-sdk';
-import { browseHref, chipHref, cleared, mainBrowseQuery, parseBrowseState, toggled }
+import { browseHref, chipHref, cleared, mainBrowseQuery, modPreference, parseBrowseState, readModPreference, toggled,
+  withModPreference }
   from '../features/zones/browse-state.ts';
 import { browseEntry, browseModel, type FacetCounts } from '../features/zones/browse-view.ts';
 import { messages } from '../features/zones/messages.ts';
@@ -27,21 +28,48 @@ describe('Browse state in the URL', () => {
     const state = parseBrowseState({ loader: 'fabric', version: ['1.21.1', '1.20.1'], concept, q: 'lumen',
       sort: 'updated' });
     const href = browseHref(base, state);
-    expect(href).toBe(`${base}?q=lumen&loader=fabric&version=1.21.1&version=1.20.1&concept=${concept}&sort=updated`);
+    expect(href).toBe(`${base}?q=lumen&version=1.21.1&version=1.20.1&loader=fabric&concept=${concept}&sort=updated`);
     expect(parseBrowseState(Object.fromEntries([...new URL(href, 'https://x').searchParams.keys()].map(key =>
       [key, new URL(href, 'https://x').searchParams.getAll(key)])))).toEqual(state);
     expect(mainBrowseQuery(state)).toEqual({ q: 'lumen', sort: 'updated', concept: [conceptIri],
       loader: ['Fabric'], gameVersion: ['1.21.1', '1.20.1'] });
   });
 
-  test('choosing a value adds it, choosing it again removes it; a length band replaces the other; paging restarts', () => {
+  test('choosing an environment axis replaces it, choosing it again removes it; paging restarts', () => {
     const state = { ...parseBrowseState({ loader: 'fabric', length: '0-99999' }), cursor: 'page-2' };
-    expect(toggled(state, 'modLoader', 'Forge').filter.modLoader).toEqual(['Fabric', 'Forge']);
+    expect(toggled(state, 'modLoader', 'Forge').filter.modLoader).toEqual(['Forge']);
     expect(toggled(state, 'modLoader', 'Fabric').filter.modLoader).toBeUndefined();
     expect(toggled(state, 'length', '1000000-').filter.length).toEqual(['1000000-']);
     expect(toggled(state, 'status', 'completed').cursor).toBeNull();
     expect(cleared(state)).toMatchObject({ filter: {}, cursor: null });
     expect(chipHref(base, 'modGameVersion', '1.21.1')).toBe(`${base}?version=1.21.1`);
+  });
+
+  test('the reader’s environment survives a visit and explicit links replace it', () => {
+    const saved = parseBrowseState({ version: '1.20.1', loader: 'forge', env: 'server' }).filter;
+    expect(readModPreference(modPreference(saved))).toEqual(saved);
+    expect(withModPreference(parseBrowseState({ q: 'lanterns' }), saved, false).filter).toEqual(saved);
+    expect(withModPreference(parseBrowseState({ version: '1.21.1', loader: 'fabric' }), saved, true).filter)
+      .toEqual({ modGameVersion: ['1.21.1'], modLoader: ['Fabric'] });
+    expect(readModPreference('not%a%cookie')).toEqual({});
+  });
+
+  test('excluded Concepts round-trip independently of included Concepts and clear together', () => {
+    const state = parseBrowseState({ concept, exclude: '0192f3a4-5b6c-7d8e-9f01-000000000000' });
+    expect(state.excludedConcepts).toEqual(['https://rezics.com/id/0192f3a4-5b6c-7d8e-9f01-000000000000']);
+    expect(mainBrowseQuery(state)).toMatchObject({ concept: [conceptIri],
+      excludeConcept: state.excludedConcepts });
+    expect(browseHref(base, state)).toContain('&exclude=0192f3a4-5b6c-7d8e-9f01-000000000000');
+    expect(cleared(state).excludedConcepts).toEqual([]);
+  });
+
+  test('required mod dependencies use the same URL and query value', () => {
+    const state = parseBrowseState({ requires: ['fabric-api', 'Invalid ID'] });
+    expect(state.filter.modRequiredDependency).toEqual(['fabric-api']);
+    expect(mainBrowseQuery(state).requiredDependency).toEqual(['fabric-api']);
+    expect(browseHref(base, state)).toBe(`${base}?requires=fabric-api`);
+    expect(toggled(state, 'modRequiredDependency', 'forge-config-api').filter.modRequiredDependency)
+      .toEqual(['fabric-api', 'forge-config-api']);
   });
 });
 
@@ -53,6 +81,7 @@ const work = (id: string, mod = true): ZoneWork => ({ id: `https://rezics.com/id
 const counts = (overrides: Partial<FacetCounts> = {}): FacetCounts => ({ modLoader: [{ value: 'Fabric', count: 2 },
   { value: 'Forge', count: 2 }], modGameVersion: [{ value: '1.21.1', count: 4 }],
   modEnvironment: [{ value: 'client', count: 4 }, { value: 'server', count: 2 }],
+  modRequiredDependency: [],
   concept: [{ value: conceptIri, count: 2, name: { value: 'Minecraft', lang: 'en', dir: 'ltr' } },
     { value: 'https://rezics.com/id/0192f3a4-5b6c-7d8e-9f01-000000000000', count: 1, name: null }],
   status: [], length: [], type: [{ value: 'https://rezics.com/vocab/ModPackage', count: 4 },
@@ -67,10 +96,11 @@ describe('Browse page model', () => {
     const model = browseModel({ base, zoneName: 'Mods', state, page: page(state),
       admitted: new Map([['type', 'Type'], ['concept', 'Tags']]), locale: 'en', messages });
     expect(model.groups.map(group => [group.facet, group.label, group.values.map(value => value.label.value)]))
-      .toEqual([['modLoader', 'Loader', ['Fabric', 'Forge']], ['modEnvironment', 'Environment', ['Client', 'Server']],
+      .toEqual([['modGameVersion', 'Game version', ['1.21.1']],
+        ['modLoader', 'Loader', ['Fabric', 'Forge']], ['modEnvironment', 'Side', ['Client', 'Server']],
         // A Concept Main could not name is left out; a Facet with one value cannot narrow anything.
         ['type', 'Type', ['Mod', 'Guide']]]);
-    expect(model.groups[0]!.values[0]).toMatchObject({ chosen: true, href: base });
+    expect(model.groups[1]!.values[0]).toMatchObject({ chosen: true, href: base });
     expect(model.chosen).toEqual([{ key: 'modLoader:Fabric', label: 'Fabric', remove: 'Remove filter: Fabric',
       href: base }]);
     expect([model.filtersLabel, model.results, model.clearHref]).toEqual(['Filters (1)', '2 results', base]);
@@ -89,6 +119,17 @@ describe('Browse page model', () => {
     expect(model.results).toBe('至少 60 个结果');
     expect(model.sorts.map(sort => sort.sort)).toEqual(['relevance', 'newest', 'updated']);
   });
+
+  test('an excluded Concept has a visible removable chip and its own action', () => {
+    const state = parseBrowseState({ exclude: concept });
+    const model = browseModel({ base, zoneName: 'Mods', state, page: page(state),
+      admitted: new Map(), locale: 'en', messages });
+    expect(model.chosen).toEqual([{ key: `exclude:${conceptIri}`, label: 'Exclude: Minecraft',
+      remove: 'Remove exclusion: Minecraft', href: base }]);
+    const value = model.groups.find(group => group.facet === 'concept')!.values[0]!;
+    expect(value).toMatchObject({ excluded: true, excludeHref: base });
+    expect(value.href).toContain(`concept=${concept}`);
+  });
 });
 
 describe('Browse entry on the home', () => {
@@ -97,8 +138,18 @@ describe('Browse entry on the home', () => {
       counts: counts({ status: [{ value: 'ongoing', count: 3 }, { value: 'completed', count: 0 }] }) });
     expect(entry).toMatchObject({ href: base, searchLabel: 'Search Mods', placeholder: 'Search Mods…' });
     expect(entry.groups.map(group => [group.facet, group.chips.map(chip => [chip.label.value, chip.count, chip.href])]))
-      .toEqual([['modLoader', [['Fabric', 2, `${base}?loader=fabric`], ['Forge', 2, `${base}?loader=forge`]]],
+      .toEqual([['modGameVersion', [['1.21.1', 4, `${base}?version=1.21.1`]]],
+        ['modLoader', [['Fabric', 2, `${base}?loader=fabric`], ['Forge', 2, `${base}?loader=forge`]]],
         ['modEnvironment', [['Client', 4, `${base}?env=client`], ['Server', 2, `${base}?env=server`]]]]);
     expect(browseEntry({ base, zoneName: 'Mods', locale: 'en', messages, counts: null }).groups).toEqual([]);
+  });
+
+  test('keeps the saved loader and side while a home chip changes the game version', () => {
+    const remembered = parseBrowseState({ version: '1.20.1', loader: 'forge', env: 'client' }).filter;
+    const entry = browseEntry({ base, zoneName: 'Mods', locale: 'en', messages, counts: counts(), remembered });
+    expect(entry.href).toBe(`${base}?version=1.20.1&loader=forge&env=client`);
+    expect(entry.groups[0]!.chips[0]!.href).toBe(`${base}?version=1.21.1&loader=forge&env=client`);
+    expect(entry.kept).toEqual([{ name: 'version', value: '1.20.1' }, { name: 'loader', value: 'forge' },
+      { name: 'env', value: 'client' }]);
   });
 });

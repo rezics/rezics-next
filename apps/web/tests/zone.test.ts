@@ -177,6 +177,11 @@ describe('Zone Work cards from Main', () => {
       loaders: ['Forge' as const], environment: null, latestRelease: null, updatedAt };
     expect(zoneWorkCards({ mod: card }).mod?.updatedAt).toBe('2026-09-28T04:27:33.000Z');
     expect(zoneWorkCards({ mod: { ...card, updatedAt: 'soon' } }).mod?.updatedAt).toBeNull();
+    expect(zoneWorkCards({ mod: { ...card, selected: { version: '1.2.0', gameVersions: ['1.20.1'],
+      loaders: ['Forge'], environment: 'client-and-server', side: 'server', state: 'stale', channel: 'release',
+      dependencies: [{ id: 'forge-config-api', requirement: 'required', range: null, side: null }],
+      publishedAt: updatedAt } } }).mod?.selected).toMatchObject({ version: '1.2.0', state: 'stale',
+      publishedAt: '2026-09-28T04:27:33.000Z', dependencies: [{ id: 'forge-config-api' }] });
   });
 
   test('reads without the cards, and Works without them, carry none', () => {

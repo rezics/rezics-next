@@ -3,7 +3,7 @@ import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { ModProfileInvalid, ModResolutionConflict, ModResolutionUnavailable }
   from '../modules/package/mod-resolution.ts';
-import { MOD_RELEASE_COST } from '../modules/package/mod-release.ts';
+import { MOD_RELEASE_COST, modCompatibility, modReleaseChannel } from '../modules/package/mod-release.ts';
 import { GRAPHS, iri } from '../modules/work/activate.ts';
 import { publicWork, workRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -80,11 +80,20 @@ const release = t.Object({ profile: t.Literal('mod-release-v1'),
     side: t.Nullable(t.Union([t.Literal('client'), t.Literal('server')])) }),
   { maxItems: MOD_RELEASE_COST.dependencies })),
   changelog: t.Nullable(t.String({ maxLength: MOD_RELEASE_COST.changelogCharacters })),
-  capturedAt: t.String(), publishedAt: t.String() });
+  capturedAt: t.String(), publishedAt: t.String(),
+  channel: t.Nullable(t.Union([t.Literal('release'), t.Literal('beta'), t.Literal('alpha')])) });
 const releasePage = t.Object({ profile: t.Literal('mod-releases-v1'), work: t.String(),
   items: t.Array(release, { maxItems: MOD_RELEASE_COST.pageSize }), nextCursor: t.Nullable(t.String()) });
 const releaseQuery = t.Object({ limit: t.Optional(t.Integer({ minimum: 1, maximum: MOD_RELEASE_COST.pageSize })),
   cursor: t.Optional(t.String({ maxLength: 256 })) }, { additionalProperties: false });
+const exactQuery = t.Object({ game: t.Literal('Minecraft'),
+  gameVersion: t.String({ pattern: '^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$' }), loader,
+  side: t.Union([t.Literal('client'), t.Literal('server')]) }, { additionalProperties: false });
+const exactResult = t.Object({ profile: t.Literal('mod-exact-compatibility-v1'),
+  state: t.Union([t.Literal('compatible'), t.Literal('stale'), t.Literal('unknown'), t.Literal('incompatible')]),
+  release: t.Nullable(t.Object({ version: t.Nullable(t.String({ maxLength: 64 })), publishedAt: t.String(),
+    channel: t.Nullable(t.Union([t.Literal('release'), t.Literal('beta'), t.Literal('alpha')])),
+    dependencies: release.properties.dependencies })) });
 
 /** A release page cursor: the last release's stored time and key, never a receipt id. */
 const encodeCursor = (after: { boundAt: string; key: string }) =>
@@ -106,6 +115,7 @@ export const openApiOperations = {
   '/v1/package-resolutions/mods/{resolution}/work-binding': {
     post: { bearer: true, idempotencyKey: true } },
   '/v1/mod-compatibility/{work}': { get: { bearer: false } },
+  '/v1/mod-compatibility/{work}/exact': { get: { bearer: false } },
   '/v1/mod-releases/{work}': { get: { bearer: false } },
 };
 
@@ -196,6 +206,26 @@ export function packageModRoutes(work: MainWorkDependencies) {
         const card = (await store.readCards([id])).get(id);
         return card ? Response.json(card, { headers: { 'cache-control': 'no-store' } })
           : problem(404, 'mod_compatibility_missing', 'No public mod compatibility is bound');
+      } catch (error) { return modError(error); }
+    })
+    /** O(R) indexed rows for one Work, R ≤ 128; the store refuses a larger history. */
+    .get('/v1/mod-compatibility/:work/exact', {
+      params: t.Object({ work: groupUuid }), query: exactQuery,
+      response: { 200: exactResult, ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const store = work.packageModResolutions;
+        if (!store) return problem(503, 'mod_resolution_unavailable', 'Mod compatibility owner is unavailable');
+        const id = `https://rezics.com/id/${params.work}`;
+        if (!await publicModWork(work, request, id)) return problem(404, 'work_unavailable',
+          'Public mod Work is unavailable');
+        const releases = (await store.readBrowseListings([id])).get(id)?.releases ?? [];
+        const result = modCompatibility(releases, { gameVersions: [query.gameVersion], loaders: [query.loader],
+          environments: [query.side] });
+        return Response.json({ profile: 'mod-exact-compatibility-v1', state: result.state,
+          release: result.release ? { version: result.release.version, publishedAt: result.release.publishedAt,
+            channel: modReleaseChannel(result.release.version), dependencies: result.release.dependencies } : null },
+        { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return modError(error); }
     })
     .get('/v1/mod-releases/:work', {

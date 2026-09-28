@@ -4,7 +4,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import { workTypeLabel } from '../catalogue/work.ts';
 import { type BrowseFacet, browseFacets, browseHref, type BrowseSort, type BrowseState, chipHref, cleared,
-  facetParams, lengthBands, toggled, urlValue } from './browse-state.ts';
+  facetParams, lengthBands, toggled, toggledExcludedConcept, urlValue } from './browse-state.ts';
 import type { ZoneMessages } from './messages.ts';
 
 // Main's browse page as the page shows it: every Facet and value named in the
@@ -14,7 +14,8 @@ import type { ZoneMessages } from './messages.ts';
 /** Main's per-Facet value counts; Concept values carry their name. */
 export type FacetCounts = Record<BrowseFacet, readonly { value: string; count: number; name?: ZoneText | null }[]>;
 
-export interface BrowseValue { value: string; label: ZoneText; count: number; chosen: boolean; href: string }
+export interface BrowseValue { value: string; label: ZoneText; count: number; chosen: boolean; href: string;
+  excluded?: boolean; excludeHref?: string }
 export interface BrowseFacetGroup { facet: BrowseFacet; label: string; values: BrowseValue[] }
 
 export interface BrowseModel {
@@ -44,7 +45,8 @@ const plain = (value: string): ZoneText => ({ value, lang: '', dir: 'ltr' });
 /** Facet labels: an admitted Facet's own (`GET /v1/facets`), else the page's words for Main's other Conditions. */
 export function facetLabel(facet: BrowseFacet, admitted: ReadonlyMap<string, string>, messages: ZoneMessages): string {
   return admitted.get(facet) ?? { modLoader: messages.facetLoader, modGameVersion: messages.facetGameVersion,
-    modEnvironment: messages.facetEnvironment, status: messages.facetStatus, length: messages.facetLength,
+    modEnvironment: messages.facetEnvironment, modRequiredDependency: messages.facetRequiredDependency,
+    status: messages.facetStatus, length: messages.facetLength,
     concept: messages.facetConcept, type: messages.facetType }[facet];
 }
 
@@ -74,11 +76,19 @@ function groups(base: string, state: BrowseState, counts: FacetCounts, admitted:
     const values = counts[facet].flatMap(item => {
       const label = valueLabel(facet, item.value, item.name, locale, messages);
       const chosen = state.filter[facet]?.includes(item.value) ?? false;
-      return label && (item.count > 0 || chosen) ? [{ value: item.value, label, count: item.count, chosen,
-        href: browseHref(base, toggled(state, facet, item.value)) }] : [];
+      const excluded = facet === 'concept' && (state.excludedConcepts?.includes(item.value) ?? false);
+      const includedState = excluded ? toggled(toggledExcludedConcept(state, item.value), facet, item.value)
+        : toggled(state, facet, item.value);
+      const excludedState = chosen ? toggledExcludedConcept(toggled(state, facet, item.value), item.value)
+        : toggledExcludedConcept(state, item.value);
+      return label && (item.count > 0 || chosen || excluded) ? [{ value: item.value, label, count: item.count,
+        chosen, href: browseHref(base, includedState),
+        ...facet === 'concept' ? { excluded, excludeHref: browseHref(base,
+          excludedState) } : {} }] : [];
     });
     // A Facet with a single value and nothing chosen cannot narrow anything.
-    return values.length > 1 || values.some(value => value.chosen)
+    return values.length > 1 || values.some(value => value.chosen || value.excluded)
+      || base.includes('/r/mods/browse') && facet.startsWith('mod') && values.length > 0
       ? [{ facet, label: facetLabel(facet, admitted, messages), values }] : [];
   });
 }
@@ -98,6 +108,12 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
     return { key: `${facet}:${value}`, label, remove: t.removeFilter({ label }),
       href: browseHref(base, toggled(state, facet, value)) };
   }));
+  for (const value of state.excludedConcepts ?? []) {
+    const label = facetGroups.find(group => group.facet === 'concept')?.values.find(item => item.value === value)
+      ?.label.value ?? value;
+    chosen.push({ key: `exclude:${value}`, label: `${messages.exclude}: ${label}`,
+      remove: t.removeExclusion({ label }), href: browseHref(base, toggledExcludedConcept(state, value)) });
+  }
   const sorts = (state.text ? ['relevance', 'newest', 'updated'] as const : ['newest', 'updated'] as const)
     .map(sort => ({ sort, current: page.sort === sort,
       label: { relevance: messages.sortRelevance, newest: messages.sortNewest, updated: messages.sortUpdated }[sort],
@@ -107,13 +123,15 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
     href: browseHref(base, { ...state, view, cursor: state.cursor }) }));
   const notes = [
     page.window.complete ? null : t.windowNote({ count: String(page.window.scanned) }),
-    page.tags === 'stale' && state.filter.concept ? messages.tagsStale : null,
-    page.tags === 'unavailable' && state.filter.concept ? messages.tagsUnavailable : null,
+    page.tags === 'stale' && (state.filter.concept || state.excludedConcepts?.length) ? messages.tagsStale : null,
+    page.tags === 'unavailable' && (state.filter.concept || state.excludedConcepts?.length)
+      ? messages.tagsUnavailable : null,
     page.items.some(item => item.mod) || state.filter.modLoader || state.filter.modGameVersion ? messages.noDownloads
       : null,
   ].filter(note => note !== null);
   const kept = browseFacets.flatMap(facet => (state.filter[facet] ?? []).map(value =>
     ({ name: facetParams[facet], value: urlValue(facet, value) })));
+  kept.push(...(state.excludedConcepts ?? []).map(value => ({ name: 'exclude', value: urlValue('concept', value) })));
   return { title: t.browseTitle({ zone: zoneName }), searchLabel: t.searchLabel({ zone: zoneName }),
     placeholder: t.searchPlaceholder({ zone: zoneName }), action: base,
     kept: [...kept, ...state.view === 'grid' ? [{ name: 'view', value: 'grid' }] : []],
@@ -128,21 +146,32 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
 }
 
 /** The Facets the home's search bar offers, in this order, and how many values of each. */
-const entryFacets: readonly (readonly [BrowseFacet, number])[] = [['modLoader', 3], ['modGameVersion', 4],
+const entryFacets: readonly (readonly [BrowseFacet, number])[] = [['modGameVersion', 4], ['modLoader', 3],
   ['modEnvironment', 2], ['status', 3], ['length', 4]];
 
 /** What a Zone home leads with: its search, and the values of the Facets Main measures as one-filter links. */
-export function browseEntry({ base, zoneName, counts, locale, messages }: {
+export function browseEntry({ base, zoneName, counts, locale, messages, remembered = {} }: {
   base: string; zoneName: string; counts: FacetCounts | null; locale: UiLocale; messages: ZoneMessages;
+  remembered?: BrowseState['filter'];
 }): ZoneBrowseEntry {
   const t = materializeData(messages, { locale });
   const groups = counts ? entryFacets.flatMap(([facet, limit]) => {
-    const chips = counts[facet].filter(item => item.count > 0).slice(0, limit).flatMap(item => {
+    const values = facet === 'modEnvironment' && base.includes('/r/mods/browse')
+      ? (['client', 'server'] as const).map(value => counts[facet].find(item => item.value === value)
+        ?? { value, count: 0 }) : counts[facet];
+    const chips = values.filter(item => item.count > 0 || facet === 'modEnvironment').slice(0, limit).flatMap(item => {
       const label = valueLabel(facet, item.value, item.name, locale, messages);
-      return label ? [{ facet, value: item.value, label, count: item.count, href: chipHref(base, facet, item.value) }] : [];
+      const href = base.includes('/r/mods/browse') && Object.keys(remembered).length
+        ? browseHref(base, { text: null, sort: null, view: 'list',
+          filter: { ...remembered, [facet]: [item.value] } }) : chipHref(base, facet, item.value);
+      return label ? [{ facet, value: item.value, label, count: item.count, href }] : [];
     });
-    return chips.length > 1 ? [{ facet, label: facetLabel(facet, new Map(), messages), chips }] : [];
+    return chips.length > 1 || base.includes('/r/mods/browse') && facet.startsWith('mod') && chips.length > 0
+      ? [{ facet, label: facetLabel(facet, new Map(), messages), chips }] : [];
   }) : [];
-  return { href: base, searchLabel: t.searchLabel({ zone: zoneName }),
+  const kept = browseFacets.flatMap(facet => (remembered[facet] ?? []).map(value =>
+    ({ name: facetParams[facet], value: urlValue(facet, value) })));
+  return { href: kept.length ? browseHref(base, { text: null, sort: null, view: 'list', filter: remembered }) : base,
+    kept, searchLabel: t.searchLabel({ zone: zoneName }),
     placeholder: t.searchPlaceholder({ zone: zoneName }), groups };
 }

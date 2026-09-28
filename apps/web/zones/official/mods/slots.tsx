@@ -26,11 +26,12 @@ function ago(at: string, locale: string, now = Date.now()): string | null {
     : days < 365 ? format.format(-Math.floor(days / 30), 'month') : format.format(-Math.floor(days / 365), 'year');
 }
 
-/** When a pick last changed: its mod's newest release, or else its last published revision. */
-const lastUpdate = (work: ZoneWork) => work.mod?.updatedAt ?? work.updatedAt;
+/** The chosen release's date takes precedence on a compatibility-filtered result. */
+const lastUpdate = (work: ZoneWork) => work.mod?.selected?.publishedAt ?? work.mod?.updatedAt ?? work.updatedAt;
 
 /** What a player checks before installing: where it runs, its loaders and its game versions. */
-function Compatibility({ mod, t, limit = 3 }: { mod: ZoneModRelease; t: Strings; limit?: number }) {
+function Compatibility({ mod, t, limit = 3 }: { mod: Pick<ZoneModRelease,
+  'gameVersions' | 'loaders' | 'environment'>; t: Strings; limit?: number }) {
   const versions = mod.gameVersions;
   return <ul className="mh-tags" aria-label={t.compatibility}>
     {mod.environment ? <li>{t.environments[mod.environment]}</li> : null}
@@ -54,6 +55,11 @@ export function ModsCard({ zone, work, layout, rank, Link, fallback }: WorkCardS
   const title = work.title?.value ?? t.untitled;
   const at = lastUpdate(work);
   const when = at ? ago(at, zone.locale) : null;
+  const selected = work.mod?.selected;
+  const required = selected?.dependencies?.filter(item => item.requirement === 'required'
+    && (!item.side || item.side === selected.side)) ?? [];
+  const date = selected && !Number.isNaN(Date.parse(selected.publishedAt))
+    ? new Intl.DateTimeFormat(zone.locale, { dateStyle: 'medium' }).format(new Date(selected.publishedAt)) : null;
   return <article className="mh-row" data-layout={layout}>
     {rank ? <span className="mh-rank"><span className="sr-only">{t.rank(rank)}</span>
       <span aria-hidden="true">{rank}</span></span> : null}
@@ -66,7 +72,16 @@ export function ModsCard({ zone, work, layout, rank, Link, fallback }: WorkCardS
       </div>
       {work.tagline && layout === 'row' ? <p lang={work.tagline.lang} dir={work.tagline.dir} className="mh-summary">
         {work.tagline.value}</p> : null}
-      {work.mod ? <Compatibility mod={work.mod} t={t} limit={layout === 'rail' ? 1 : 3} /> : null}
+      {selected ? <div data-release-state={selected.state} className="mh-release">
+        <p className="mh-release-name">{selected.state === 'stale' ? t.olderRelease : t.exactRelease}:
+          {' '}<strong translate="no">{selected.version ?? t.versionUnknown}</strong>
+          {' · '}{selected.channel ? t[selected.channel] : t.channelUnknown}
+          {date ? <> · <time dateTime={selected.publishedAt}>{date}</time></> : null}</p>
+        <Compatibility mod={selected} t={t} limit={layout === 'rail' ? 1 : 3} />
+        <p className="mh-required">{selected.dependencies === null ? t.dependenciesUnknown
+          : required.length ? `${t.required}: ${required.map(item => item.id).join(', ')}` : t.noRequired}</p>
+        <Link href={`${work.href}#mod-versions`} className="mh-inspect">{t.inspect}</Link>
+      </div> : work.mod ? <p className="mh-release-unknown">{t.chooseEnvironment}</p> : null}
     </div>
     {when && layout === 'row' ? <p className="mh-updated"><HistoryIcon aria-hidden="true" />
       <time dateTime={at ?? undefined}>{t.updated(when)}</time></p> : null}

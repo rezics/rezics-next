@@ -2,7 +2,8 @@ import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { idOf, parseRealmRef } from './route.ts';
-import { type AgentRead, failureOf, type FacetList, type Loaded, type ModReleasePage, type OfficialZone,
+import { type AgentRead, failureOf, type FacetList, type Loaded, type ModExactCompatibility,
+  type ModReleasePage, type OfficialZone,
   type RankingMetric, type RankingPage,
   type RealmDecisionsPage, type RealmDecisionRead, type RealmDirectoryPage, type RealmHeader, type RealmRoster,
   type RealmZoneRead,
@@ -146,6 +147,12 @@ export const readFacets = cache(async (): Promise<Loaded<FacetList>> => settle((
 /** A mod Work's disclosed releases, newest first. */
 export const readModReleases = cache(async (work: string): Promise<Loaded<ModReleasePage>> =>
   settle(() => main().v1['mod-releases']({ work }).get({ query: { limit: 20 } })));
+
+/** One complete game, version, loader and side; Main keeps every returned fact on one release. */
+export const readModExact = cache(async (work: string, gameVersion: string,
+  loader: 'Fabric' | 'Forge' | 'NeoForge', side: 'client' | 'server'):
+  Promise<Loaded<ModExactCompatibility>> => settle(() =>
+  main().v1['mod-compatibility']({ work }).exact.get({ query: { game: 'Minecraft', gameVersion, loader, side } })));
 
 /** A few active public Realms, for "Other communities". */
 export const readRealmDirectory = cache(async (locale: UiLocale): Promise<Loaded<RealmDirectoryPage>> =>

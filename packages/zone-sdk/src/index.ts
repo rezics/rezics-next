@@ -99,6 +99,13 @@ export interface ZoneModRelease {
   version: string | null;
   /** ISO date-time the newest release was published: the mod's last update. */
   updatedAt: string | null;
+  /** An exact release chosen from the same game version, loader and side; absent outside browse. */
+  selected?: { version: string | null; gameVersions: string[]; loaders: string[];
+    environment: 'client' | 'server' | 'client-and-server' | null; side: 'client' | 'server';
+    publishedAt: string; channel: 'release' | 'beta' | 'alpha' | null;
+    dependencies: { id: string; requirement: 'required' | 'optional' | 'incompatible' | 'embedded';
+      range: string | null; side: 'client' | 'server' | null }[] | null;
+    state: 'compatible' | 'stale' } | null;
 }
 
 /** A published prompt or Skill, as its author disclosed it. */
@@ -204,6 +211,8 @@ export interface ZoneBrowseEntry {
   /** The search field's accessible name and placeholder, in the reader's language. */
   searchLabel: string;
   placeholder: string;
+  /** Remembered compatibility Conditions retained by the home search form. */
+  kept?: { name: string; value: string }[];
   groups: { facet: string; label: string; chips: ZoneFilterChip[] }[];
 }
 

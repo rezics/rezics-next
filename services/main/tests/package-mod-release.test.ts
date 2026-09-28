@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { solveModCaptures, type ModCapture, type ModRequest } from '../src/modules/package/mod-profile.ts';
-import { MOD_RELEASE_COST, modListing, type ModRelease, modRelease, newestVersionsFirst }
+import { MOD_RELEASE_COST, modCompatibility, modListing, type ModRelease, modRelease, modReleaseChannel,
+  newestVersionsFirst }
   from '../src/modules/package/mod-release.ts';
 import { ModProfileInvalid, ModResolutionConflict, ModResolutionStore, ModResolutionUnavailable }
   from '../src/modules/package/mod-resolution.ts';
@@ -72,6 +73,25 @@ test('a listing folds releases into every game version and loader, newest releas
   expect(modListing([])).toBeNull();
 });
 
+test('exact compatibility selects one release and distinguishes old, unknown and incompatible evidence', () => {
+  const newest = { ...release('2.0.0-beta.1', '1.21.1', 'Fabric'), environment: 'client' as const,
+    dependencies: [{ id: 'fabric-api', requirement: 'required' as const, range: null, side: 'client' as const }],
+    publishedAt: '2026-09-28T00:00:00Z' };
+  const older = { ...release('1.4.0', '1.20.1', 'Forge'), publishedAt: '2026-08-01T00:00:00Z' };
+  const rows = [newest, older];
+  expect(modReleaseChannel(newest.version)).toBe('beta');
+  expect(modReleaseChannel(older.version)).toBe('release');
+  expect(modReleaseChannel('snapshot-x')).toBeNull();
+  expect(modCompatibility(rows, { gameVersions: ['1.20.1'], loaders: ['Forge'],
+    environments: ['server'] })).toEqual({ state: 'stale', release: older });
+  expect(modCompatibility(rows, { gameVersions: ['1.20.1'], loaders: ['Fabric'],
+    environments: ['client'] }).state).toBe('incompatible');
+  expect(modCompatibility([{ ...older, environment: null }], { gameVersions: ['1.20.1'], loaders: ['Forge'],
+    environments: ['server'] }).state).toBe('unknown');
+  expect(modCompatibility([], { gameVersions: ['1.20.1'], loaders: ['Forge'],
+    environments: ['server'] }).state).toBe('unknown');
+});
+
 /** A pool that answers by statement and counts them, so each read's statement budget is exact. */
 function pools(answer: (sql: string, values: unknown[]) => unknown[]) {
   const statements: string[] = [];
@@ -98,19 +118,33 @@ test('card, listing and release reads are one bounded statement each', async () 
     capturedAt: '2026-09-01T00:00:00.000Z' }]]));
   expect((await store.readListings([work])).get(work)).toMatchObject({ profile: 'mod-work-card-v2',
     updatedAt: at.toISOString() });
+  expect((await store.readBrowseListings([work])).get(work)).toMatchObject({
+    listing: { profile: 'mod-work-card-v2' }, releases: [{ version: '1.3.0', publishedAt: at.toISOString() }] });
   const page = await store.readReleases(work, 2);
   expect(page.items.map(item => item.version)).toEqual(['1.1.0', '1.2.0']);
   // The cursor keeps the stored microseconds and the release key; no receipt id leaves the store.
   expect(page.next).toEqual({ boundAt: '2026-09-22 00:00:00.123456+00', key: 'key-2' });
   await store.readReleases(work, 2, page.next!);
-  expect(statements).toHaveLength(4);
+  expect(statements).toHaveLength(5);
   expect(statements[1]).toContain(`LIMIT ${MOD_RELEASE_COST.releasesPerListing}`);
-  expect(statements[3]).toContain('(bound_at, release_key) < ($3::timestamptz, $4::text)');
+  expect(statements[2]).toContain(`LIMIT ${MOD_RELEASE_COST.browseReleasesPerWork + 1}`);
+  expect(statements[4]).toContain('(bound_at, release_key) < ($3::timestamptz, $4::text)');
   await expect(store.readCards(Array(21).fill(work))).rejects.toBeInstanceOf(ModResolutionUnavailable);
   await expect(store.readListings(Array(MOD_RELEASE_COST.listingWorks + 1).fill(work)))
     .rejects.toBeInstanceOf(ModResolutionUnavailable);
+  await expect(store.readBrowseListings(Array(MOD_RELEASE_COST.listingWorks + 1).fill(work)))
+    .rejects.toBeInstanceOf(ModResolutionUnavailable);
   await expect(store.readReleases(work, MOD_RELEASE_COST.pageSize + 1)).rejects.toBeInstanceOf(ModProfileInvalid);
-  expect(statements).toHaveLength(4);
+  expect(statements).toHaveLength(5);
+});
+
+test('the browse read fails closed when a Work exceeds its release budget', async () => {
+  const at = new Date('2026-09-28T00:00:00Z');
+  const { pool, statements } = pools(() => Array.from({ length: MOD_RELEASE_COST.browseReleasesPerWork + 1 }, () =>
+    ({ work, release: release('1.0.0', '1.20.1', 'Forge'), bound_at: at })));
+  await expect(new ModResolutionStore(pool, pool).readBrowseListings([work]))
+    .rejects.toBeInstanceOf(ModResolutionUnavailable);
+  expect(statements).toHaveLength(1);
 });
 
 test('binding lists a release once; another receipt for the same release or Work owner conflicts', async () => {

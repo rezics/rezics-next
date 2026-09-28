@@ -45,6 +45,8 @@ export const messages = {
   viewLabel: 'View', viewList: 'List', viewGrid: 'Grid',
   filters: 'Filters', filtersChosen: insert('Filters ({{count}})', { count: String }),
   clearAll: 'Clear all filters', removeFilter: insert('Remove filter: {{label}}', { label: String }),
+  exclude: 'Exclude', excluded: 'Excluded',
+  removeExclusion: insert('Remove exclusion: {{label}}', { label: String }),
   chosen: 'selected', showAllValues: 'Show all',
   results: plural({ one: insert('{{count}} result'), other: insert('{{count}} results') }, { count: asValue(number()) }),
   resultsAtLeast: insert('{{count}}+ results', { count: String }),
@@ -54,7 +56,9 @@ export const messages = {
   noDownloads: 'REZICS doesn’t count downloads.',
   browseEmptyTitle: 'Nothing matches these filters',
   browseEmptyBody: 'Remove a filter, or search for something else.',
-  facetLoader: 'Loader', facetGameVersion: 'Game version', facetEnvironment: 'Environment', facetStatus: 'Status',
+  facetGame: 'Game', facetLoader: 'Loader', facetGameVersion: 'Game version', facetEnvironment: 'Side',
+  facetRequiredDependency: 'Requires mod',
+  modChooseEnvironment: 'Choose where this mod will run', facetStatus: 'Status',
   facetLength: 'Length', facetConcept: 'Tags', facetType: 'Type',
   envClient: 'Client', envServer: 'Server', envBoth: 'Client and server',
   statusOngoing: 'Ongoing', statusCompleted: 'Completed', statusHiatus: 'On hiatus',
@@ -65,7 +69,7 @@ export const messages = {
   // A mod's detail sections on its page.
   modVersions: 'Versions', modCompatibility: 'Compatibility', modDependencies: 'Dependencies',
   modChangelog: 'Changelog', modVersion: 'Version', modGameVersions: 'Game versions', modLoaders: 'Loaders',
-  modPublished: 'Published', modEnvironments: 'Environments',
+  modPublished: 'Published', modEnvironments: 'Environments', modChannel: 'Channel',
   modRequired: 'Required', modOptional: 'Optional', modIncompatible: 'Incompatible', modEmbedded: 'Included',
   modNoDependencies: 'This release needs no other mods.',
   modDependenciesUnknown: 'Listed before REZICS showed dependencies.',
@@ -73,6 +77,14 @@ export const messages = {
   modNoNotes: 'No notes for this release.', modRange: insert('Version {{range}}', { range: String }),
   modClientOnly: 'Client only', modServerOnly: 'Server only',
   modUnavailable: 'Couldn’t load this mod’s versions.', modReleases: insert('{{count}} releases', { count: String }),
+  modUnknown: 'Compatibility is unknown for this environment.',
+  modNotCompatible: 'No disclosed release is compatible with this environment.',
+  modOlderCompatible: 'The compatible release is older than this mod’s newest release.',
+  modChooseForDetails: 'Choose a game version, loader and side in Mods to check an exact release.',
+  modChannelRelease: 'Release', modChannelBeta: 'Beta', modChannelAlpha: 'Alpha',
+  modChannelUnknown: 'Channel unknown', modGetUnavailable: 'No downloadable file is available here.',
+  modMoreVersions: 'Showing the 20 newest disclosed releases.',
+  modInspect: 'Inspect releases',
 };
 
 export type ZoneMessages = typeof messages;

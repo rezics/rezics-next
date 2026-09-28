@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ModResolutionConflict, ModResolutionStore }
   from '../../../services/main/src/modules/package/mod-resolution.ts';
+import { modCompatibility, modReleaseChannel } from '../../../services/main/src/modules/package/mod-release.ts';
 import type { ModRequest } from '../../../services/main/src/modules/package/mod-profile.ts';
 
 test('public mod binding owns its private receipt, lists releases and returns only bounded card facts', async () => {
@@ -63,5 +64,47 @@ test('public mod binding owns its private receipt, lists releases and returns on
       VALUES ($1, $2, $3, $4)`, [legacy, randomUUID(), owner, JSON.stringify(first)]);
     expect((await store.readReleases(legacy, 20)).items).toMatchObject([{ profile: 'mod-release-v1', mod: null,
       version: '1.3.0', gameVersions: ['1.21.1'], environment: null, dependencies: null, changelog: null }]);
+  } finally { await Promise.all([content.end(), access.end()]); }
+});
+
+test('one Work with a newer beta on Fabric and an older stable Forge release resolves each environment exactly', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL || !Bun.env.ACCESS_DATABASE_URL) {
+    throw new Error('Run through the isolated QA integration tier');
+  }
+  const content = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
+  const access = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  try {
+    await migrateContent(content);
+    const owner = randomUUID(), work = `https://rezics.com/id/${randomUUID()}`;
+    await access.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+      VALUES ($1,'https://local.example.test',$2)`, [owner, randomUUID()]);
+    const bind = async (ecosystem: 'fabric' | 'forge', gameVersion: string, version: string) => {
+      const manifest = ecosystem === 'fabric'
+        ? JSON.stringify({ schemaVersion: 1, id: 'duomod', version, environment: 'client', depends: {} })
+        : `modLoader="javafml"\nloaderVersion="[47,)"\nlicense="MIT"\nclientSideOnly=true\n[[mods]]\nmodId="duomod"\nversion="${version}"\n`;
+      const bytes = Buffer.from(manifest);
+      const request: ModRequest = { profile: 'mod-native-capture-v1', ecosystem, side: 'CLIENT', root: 'duomod',
+        runtime: { loaderVersion: ecosystem === 'fabric' ? '0.16.10' : '47', gameVersion },
+        captures: [{ identity: 'duomod', surface: 'manifest', status: 'observed',
+          bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') }] };
+      const store = new ModResolutionStore(content, access);
+      const receipt = await store.resolve(owner, `exact-${randomUUID()}`, request);
+      await store.bind(owner, receipt.resolution.resolution.slice(-36), work);
+    };
+    await bind('forge', '1.20.1', '1.4.0');
+    await bind('fabric', '1.21.1', '2.0.0-beta.1');
+    const rows = (await new ModResolutionStore(content, access).readBrowseListings([work])).get(work)?.releases;
+    expect(rows).toHaveLength(2);
+    expect(modReleaseChannel(rows![0]!.version)).toBe('beta');
+    expect(modCompatibility(rows!, { gameVersions: ['1.20.1'], loaders: ['Forge'],
+      environments: ['client'] })).toMatchObject({ state: 'stale', release: { version: '1.4.0',
+      loaders: ['Forge'], gameVersions: ['1.20.1'] } });
+    expect(modCompatibility(rows!, { gameVersions: ['1.21.1'], loaders: ['Fabric'],
+      environments: ['client'] })).toMatchObject({ state: 'compatible',
+      release: { version: '2.0.0-beta.1', loaders: ['Fabric'] } });
+    expect(modCompatibility(rows!, { gameVersions: ['1.20.1'], loaders: ['Fabric'],
+      environments: ['client'] }).state).toBe('incompatible');
+    expect(modCompatibility(rows!, { gameVersions: ['1.20.1'], loaders: ['Forge'],
+      environments: ['server'] }).state).toBe('incompatible');
   } finally { await Promise.all([content.end(), access.end()]); }
 });

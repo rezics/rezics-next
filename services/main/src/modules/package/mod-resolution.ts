@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ModProfileInvalid, type ModOutcome, type ModRequest, solveModCaptures }
   from './mod-profile.ts';
-import { MOD_RELEASE_COST, type ModListing, modListing, type ModRelease, modRelease } from './mod-release.ts';
+import { MOD_RELEASE_COST, type ModBrowseRelease, type ModListing, modListing, type ModRelease, modRelease,
+  modReleaseChannel }
+  from './mod-release.ts';
 
 export { ModProfileInvalid } from './mod-profile.ts';
 export class ModResolutionConflict extends Error {}
@@ -116,6 +118,44 @@ export class ModResolutionStore {
     }));
   }
 
+  /**
+   * One indexed seek per Work and at most W × (R + 1) rows (W ≤ 64, R ≤ 128).
+   * A truncated history fails closed: a release beyond the window could change
+   * compatibility or a Facet count. Only fields needed for browse cross Access.
+   */
+  async readBrowseListings(works: readonly string[]): Promise<Map<string, {
+    listing: ModListing; releases: ModBrowseRelease[] }>> {
+    if (!this.accessPool || works.length > MOD_RELEASE_COST.listingWorks) {
+      throw new ModResolutionUnavailable('mod browse owner is unavailable');
+    }
+    if (!works.length) return new Map();
+    const rows = (await this.accessPool.query<{ work: string; release: ModBrowseRelease; bound_at: Date }>(
+      `SELECT w.work, jsonb_build_object('version', r.release->'version',
+        'gameVersions', r.release->'gameVersions', 'loaders', r.release->'loaders',
+        'environment', r.release->'environment', 'dependencies', r.release->'dependencies') AS release,
+        r.bound_at, r.release_key
+      FROM unnest($1::text[]) AS w(work) CROSS JOIN LATERAL (
+        SELECT release, bound_at, release_key FROM access.mod_work_release r WHERE r.work = w.work
+        ORDER BY bound_at DESC, release_key DESC LIMIT ${MOD_RELEASE_COST.browseReleasesPerWork + 1}) r
+      ORDER BY w.work, r.bound_at DESC, r.release_key DESC`, [[...new Set(works)]])).rows;
+    const grouped = new Map<string, { release: ModBrowseRelease; boundAt: string }[]>();
+    for (const row of rows) {
+      const group = grouped.get(row.work) ?? [];
+      group.push({ release: { ...row.release, publishedAt: row.bound_at.toISOString() },
+        boundAt: row.bound_at.toISOString() });
+      grouped.set(row.work, group);
+    }
+    const result = new Map<string, { listing: ModListing; releases: ModBrowseRelease[] }>();
+    for (const [work, group] of grouped) {
+      if (group.length > MOD_RELEASE_COST.browseReleasesPerWork) {
+        throw new ModResolutionUnavailable('mod browse release history exceeds its read budget');
+      }
+      const listing = modListing(group.slice(0, MOD_RELEASE_COST.releasesPerListing));
+      if (listing) result.set(work, { listing, releases: group.map(item => item.release) });
+    }
+    return result;
+  }
+
   /** One indexed page of at most 20 releases, newest first, continuing after `(boundAt, key)`. */
   async readReleases(work: string, limit: number, after?: { boundAt: string; key: string }) {
     if (!this.accessPool) throw new ModResolutionUnavailable('mod release owner is unavailable');
@@ -129,7 +169,8 @@ export class ModResolutionStore {
       ORDER BY bound_at DESC, release_key DESC LIMIT $2`,
     [work, limit + 1, ...after ? [after.boundAt, after.key] : []])).rows;
     const page = rows.slice(0, limit), last = page.at(-1);
-    return { items: page.map(row => ({ ...row.release, publishedAt: row.bound_at.toISOString() })),
+    return { items: page.map(row => ({ ...row.release, publishedAt: row.bound_at.toISOString(),
+      channel: modReleaseChannel(row.release.version) })),
       next: rows.length > limit && last ? { boundAt: last.bound_key, key: last.release_key } : null };
   }
   private verified(row: Row): ModResolution {

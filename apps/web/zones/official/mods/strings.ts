@@ -14,6 +14,11 @@ const en = {
   environments: { client: 'Client', server: 'Server', 'client-and-server': 'Client and server' },
   rank: (rank: number) => `No. ${rank}`,
   compatibility: 'Runs on',
+  chooseEnvironment: 'Choose a game version, loader and side to check a release',
+  exactRelease: 'Compatible release', olderRelease: 'Older compatible release',
+  release: 'Release', beta: 'Beta', alpha: 'Alpha', channelUnknown: 'Channel unknown',
+  versionUnknown: 'Version unknown', dependenciesUnknown: 'Dependencies unknown',
+  required: 'Requires', noRequired: 'No required mods', inspect: 'Inspect release',
 };
 
 type Strings = typeof en;
@@ -33,6 +38,11 @@ const translations: Record<string, Partial<Strings>> = {
     environments: { client: '客户端', server: '服务端', 'client-and-server': '客户端和服务端' },
     rank: (rank: number) => `第 ${rank} 名`,
     compatibility: '适用于',
+    chooseEnvironment: '选择游戏版本、加载器和运行端，查看兼容版本',
+    exactRelease: '兼容版本', olderRelease: '较早的兼容版本',
+    release: '正式版', beta: '测试版', alpha: '早期测试版', channelUnknown: '发布类型未知',
+    versionUnknown: '版本号未知', dependenciesUnknown: '依赖信息未知',
+    required: '必需', noRequired: '无必需模组', inspect: '查看版本',
   },
   'zh-Hant': {
     featured: '精選',

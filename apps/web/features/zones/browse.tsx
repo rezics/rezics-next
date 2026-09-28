@@ -11,6 +11,8 @@ import { slotRatio } from '../catalogue/work.ts';
 import type { BrowseFacetGroup, BrowseModel } from './browse-view.ts';
 import type { ZoneMessages } from './messages.ts';
 import type { CardRenderer } from './modules.tsx';
+import { ModPreferenceMemory } from './mod-preference.tsx';
+import { modPreference } from './browse-state.ts';
 
 // A Zone's browse page, laid out as search-first catalogues are (Modrinth's
 // search, a novel site's library): search and sort above the results, the
@@ -51,9 +53,10 @@ const chip = cn('inline-flex h-8 items-center gap-1.5 rounded-full border border
  * serials), each with how many picks it opens.
  */
 export function ZoneBrowseBar({ browse, messages }: { browse: ZoneBrowseEntry; messages: ZoneMessages }) {
-  return <section aria-label={browse.searchLabel} data-zone-browse-bar="" className="grid grid-cols-1 gap-3">
-    <BrowseSearch action={browse.href} label={browse.searchLabel} placeholder={browse.placeholder}
-      submit={messages.search} />
+  const content = <section aria-label={browse.searchLabel} data-zone-browse-bar="" className="grid grid-cols-1 gap-3">
+    {browse.href.includes('/r/mods/browse') ? <p className="text-muted-foreground text-sm">
+      {messages.facetGame}: <strong translate="no" className="text-foreground">Minecraft</strong>
+      {' · '}{messages.modChooseEnvironment}</p> : null}
     {browse.groups.length ? <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
       {browse.groups.map(group => <div key={group.facet} className="flex flex-wrap items-center gap-1.5">
         <span className="me-0.5 text-muted-foreground text-xs">{group.label}</span>
@@ -68,15 +71,18 @@ export function ZoneBrowseBar({ browse, messages }: { browse: ZoneBrowseEntry; m
       <LocalizedLink href={browse.href} className={cn(buttonVariants({ variant: 'link', size: 'sm' }), 'px-0')}>
         {messages.browseAll}<ArrowRightIcon aria-hidden="true" className="rtl:rotate-180" /></LocalizedLink>
     </div> : null}
+    <BrowseSearch action={browse.href} label={browse.searchLabel} placeholder={browse.placeholder}
+      submit={messages.search} kept={browse.kept} />
   </section>;
+  return browse.href.includes('/r/mods/browse') ? <ModPreferenceMemory>{content}</ModPreferenceMemory> : content;
 }
 
 const MANY = 6;
 
 function FacetValues({ group, messages }: { group: BrowseFacetGroup; messages: ZoneMessages }) {
-  const item = (value: BrowseFacetGroup['values'][number]) => <li key={value.value}>
+  const item = (value: BrowseFacetGroup['values'][number]) => <li key={value.value} className="flex items-center gap-1">
     <LocalizedLink href={value.href} aria-current={value.chosen ? 'true' : undefined} lang={value.label.lang || undefined}
-      className="group/value flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm outline-none
+      className="group/value flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm outline-none
         hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-ring aria-[current=true]:font-medium">
       <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center rounded border border-border
         group-aria-[current=true]/value:border-primary group-aria-[current=true]/value:bg-primary
@@ -85,7 +91,12 @@ function FacetValues({ group, messages }: { group: BrowseFacetGroup; messages: Z
       <span className="min-w-0 flex-1 truncate" translate={group.facet.startsWith('mod') ? 'no' : undefined}>
         {value.label.value}{value.chosen ? <span className="sr-only"> ({messages.chosen})</span> : null}</span>
       <span className="text-muted-foreground text-xs tabular-nums">{value.count}</span>
-    </LocalizedLink></li>;
+    </LocalizedLink>
+    {value.excludeHref ? <LocalizedLink href={value.excludeHref} aria-current={value.excluded ? 'true' : undefined}
+      aria-label={`${value.excluded ? messages.excluded : messages.exclude}: ${value.label.value}`}
+      className="shrink-0 rounded-lg px-2 py-1 text-muted-foreground text-xs outline-none hover:text-primary
+        focus-visible:ring-2 focus-visible:ring-ring aria-[current=true]:font-semibold aria-[current=true]:text-primary">
+      {value.excluded ? messages.excluded : messages.exclude}</LocalizedLink> : null}</li>;
   const shown = group.values.filter((value, index) => index < MANY || value.chosen);
   const rest = group.values.filter(value => !shown.includes(value));
   return <>
@@ -99,9 +110,9 @@ function FacetValues({ group, messages }: { group: BrowseFacetGroup; messages: Z
   </>;
 }
 
-function Facets({ groups, messages, idPrefix }: { groups: readonly BrowseFacetGroup[]; messages: ZoneMessages;
-  idPrefix: string }) {
-  return <div className="grid grid-cols-1 gap-5">
+function Facets({ groups, messages, idPrefix, className }: { groups: readonly BrowseFacetGroup[];
+  messages: ZoneMessages; idPrefix: string; className?: string }) {
+  return <div className={cn('grid grid-cols-1 gap-5', className)}>
     {groups.map(group => <section key={group.facet} aria-labelledby={`${idPrefix}-${group.facet}`}
       className="grid grid-cols-1 gap-1">
       <h3 id={`${idPrefix}-${group.facet}`} className="px-2 font-semibold text-sm">{group.label}</h3>
@@ -128,6 +139,10 @@ export function ZoneBrowse({ model, card, messages }: {
   model: BrowseModel; card: CardRenderer; messages: ZoneMessages;
 }) {
   const chosen = model.chosen.length;
+  const isMods = model.action.includes('/r/mods/browse');
+  const isEnvironment = (facet: string) => ['modGameVersion', 'modLoader', 'modEnvironment'].includes(facet);
+  const environmentGroups = isMods ? model.groups.filter(group => isEnvironment(group.facet)) : [];
+  const otherGroups = isMods ? model.groups.filter(group => !isEnvironment(group.facet)) : model.groups;
   const slot = slotRatio(model.items);
   const list = (items: readonly ZoneWork[]) => model.state.view === 'grid'
     ? <ul className="grid grid-cols-2 gap-x-(--zone-shelf-gap) gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
@@ -135,10 +150,18 @@ export function ZoneBrowse({ model, card, messages }: {
     : <ul className="grid grid-cols-1 divide-y divide-border/60 rounded-(--zone-radius-card) border border-border/60
       bg-card">
       {items.map(work => <li key={work.id} className="min-w-0 p-3 sm:p-4">{card(work, { layout: 'row' })}</li>)}</ul>;
-  return <PageContainer className="grid grid-cols-1 gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
+  const content = <PageContainer className="grid grid-cols-1 gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
+    {isMods ? <section aria-label={messages.modChooseEnvironment}
+      className="grid gap-4 rounded-xl border border-border/80 bg-card p-4 lg:col-span-2">
+      <h2 className="font-medium text-sm">{messages.modChooseEnvironment}</h2>
+      <p className="text-muted-foreground text-sm">{messages.facetGame}: <strong translate="no"
+        className="text-foreground">Minecraft</strong></p>
+      <Facets groups={environmentGroups} messages={messages} idPrefix="environment"
+        className="sm:grid-cols-3" />
+    </section> : null}
     <aside aria-labelledby="browse-filters" className="hidden lg:sticky lg:top-32 lg:block">
       <h2 id="browse-filters" className="sr-only">{messages.filters}</h2>
-      <Facets groups={model.groups} messages={messages} idPrefix="facet" />
+      <Facets groups={otherGroups} messages={messages} idPrefix="facet" />
     </aside>
     <section aria-labelledby="browse-title" className="grid min-w-0 grid-cols-1 gap-4">
       <h2 id="browse-title" className="sr-only">{model.title}</h2>
@@ -154,12 +177,12 @@ export function ZoneBrowse({ model, card, messages }: {
               : <LayoutGridIcon aria-hidden="true" className="size-4" />}
             <span className="sr-only">{item.label}</span></> }))} />
       </div>
-      {model.groups.length ? <details className="rounded-xl border border-border/80 bg-card lg:hidden">
+      {otherGroups.length ? <details className="rounded-xl border border-border/80 bg-card lg:hidden">
         <summary className="flex h-11 cursor-pointer items-center gap-2 px-4 font-medium text-sm outline-none
           focus-visible:ring-2 focus-visible:ring-ring">
           <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
           {model.filtersLabel}</summary>
-        <div className="border-border/60 border-t p-2"><Facets groups={model.groups} messages={messages}
+        <div className="border-border/60 border-t p-2"><Facets groups={otherGroups} messages={messages}
           idPrefix="facet-phone" /></div>
       </details> : null}
       {chosen ? <ul aria-label={messages.filters} className="flex flex-wrap items-center gap-1.5">
@@ -185,4 +208,6 @@ export function ZoneBrowse({ model, card, messages }: {
       </nav> : null}
     </section>
   </PageContainer>;
+  return isMods ? <ModPreferenceMemory current={modPreference(model.state.filter)}>{content}</ModPreferenceMemory>
+    : content;
 }

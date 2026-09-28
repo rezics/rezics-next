@@ -1,7 +1,7 @@
 import type { ZoneBrowseEntry, ZoneContext, ZoneDecision, ZoneModule, ZoneModuleType, ZonePerson, ZoneText, ZoneTokens,
   ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
-import { parseBrowseState } from './browse-state.ts';
+import { browseFacets, parseBrowseState } from './browse-state.ts';
 import { browseEntry, type BrowseModel, browseModel, type FacetCounts } from './browse-view.ts';
 import { zoneMessagesFor } from './fixtures.ts';
 import { presetTokens } from './presentation.ts';
@@ -335,6 +335,8 @@ export function browseCounts(works: readonly ZoneWork[]): FacetCounts {
     modGameVersion: tally(work => minecraft(work)?.gameVersions ?? []),
     modEnvironment: tally(work => { const environment = minecraft(work)?.environment;
       return !environment ? [] : environment === 'client-and-server' ? ['client', 'server'] : [environment]; }),
+    modRequiredDependency: tally(work => minecraft(work)?.selected?.dependencies?.filter(item =>
+      item.requirement === 'required').map(item => item.id) ?? []),
     concept: [], status: tally(work => work.status ? [work.status] : []), length: [],
     type: tally(work => [typeOf[work.kind]]) };
 }
@@ -354,6 +356,8 @@ export function officialBrowseModel(slug: OfficialSlug, locale: UiLocale, params
     facet === except || values.some(value => ({
       modLoader: () => work.mod?.loaders.includes(value), modGameVersion: () => work.mod?.gameVersions.includes(value),
       modEnvironment: () => work.mod?.environment === value || work.mod?.environment === 'client-and-server',
+      modRequiredDependency: () => work.mod?.selected?.dependencies?.some(item =>
+        item.requirement === 'required' && item.id === value),
       status: () => work.status === value, type: () => typeOf[work.kind] === value,
     } as Record<string, () => boolean | undefined>)[facet]?.() ?? false));
   const found = works.filter(work => holds(work) && (!state.text
@@ -362,6 +366,11 @@ export function officialBrowseModel(slug: OfficialSlug, locale: UiLocale, params
   // Each Facet counts with the other Facets' Conditions only, as Main's do.
   const facets = Object.fromEntries(Object.keys(all).map(facet => [facet,
     browseCounts(works.filter(work => holds(work, facet)))[facet as keyof FacetCounts]])) as FacetCounts;
+  // Main retains a chosen zero-count value so the reader can see and remove it.
+  for (const facet of browseFacets) {
+    facets[facet] = [...facets[facet], ...(state.filter[facet] ?? []).filter(value =>
+      !facets[facet].some(item => item.value === value)).map(value => ({ value, count: 0 }))];
+  }
   return browseModel({ base: `/${locale}/r/${slug}/browse`, zoneName: officialZone(slug, locale).name.value, state,
     admitted: new Map([['type', zh(locale) ? '种类' : 'Type'], ['concept', zh(locale) ? '标签' : 'Tags']]), locale,
     messages: zoneMessagesFor(locale), page: { items: found.slice(0, 20), facets,

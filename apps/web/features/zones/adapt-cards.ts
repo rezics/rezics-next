@@ -19,7 +19,9 @@ export function isoMoment(value: unknown): string | null {
 
 function zoneMod(card: MainCards['mod']): ZoneModRelease | null {
   return card ? { game: card.game, gameVersions: card.gameVersions, loaders: card.loaders,
-    environment: card.environment, version: card.latestRelease, updatedAt: isoMoment(card.updatedAt) } : null;
+    environment: card.environment, version: card.latestRelease, updatedAt: isoMoment(card.updatedAt),
+    ...card.selected ? { selected: { ...card.selected, publishedAt: isoMoment(card.selected.publishedAt) ??
+      card.selected.publishedAt } } : {} } : null;
 }
 
 function zoneHub(card: MainCards['hub']): ZoneHubItem | null {

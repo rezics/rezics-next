@@ -2,7 +2,7 @@ import { ModProfileInvalid, type ModRelation, type ModRequest } from './mod-prof
 
 /** What one disclosed release may carry, and how many a listing or page reads (migration 815). */
 export const MOD_RELEASE_COST = { pageSize: 20, listingWorks: 64, releasesPerListing: 16, dependencies: 32,
-  changelogCharacters: 4000, rangeCharacters: 128, releaseBytes: 16_384 } as const;
+  browseReleasesPerWork: 128, changelogCharacters: 4000, rangeCharacters: 128, releaseBytes: 16_384 } as const;
 
 export type ModLoader = 'Fabric' | 'Forge' | 'NeoForge';
 /** Where a release runs, as its manifest declares it; null when the manifest does not say. */
@@ -142,10 +142,63 @@ export interface ModListing {
   latestRelease: string | null;
   /** When the newest release was disclosed: the mod's last update. */
   updatedAt: string;
+  /** Browse's exact release for its chosen Conditions; absent on home modules. */
+  selected?: { version: string | null; gameVersions: string[]; loaders: ModLoader[];
+    environment: ModEnvironment | null; side: 'client' | 'server'; publishedAt: string;
+    channel: 'release' | 'beta' | 'alpha' | null;
+    dependencies: ModReleaseDependency[] | null; state: 'compatible' | 'stale' } | null;
+}
+
+/** A bounded browse row. Its fields all belong to the same bound release. */
+export type ModBrowseRelease = Pick<ModRelease, 'version' | 'gameVersions' | 'loaders' | 'environment' | 'dependencies'>
+  & { publishedAt: string };
+
+export interface ModSelection {
+  gameVersions?: readonly string[];
+  loaders?: readonly ModLoader[];
+  environments?: readonly ('client' | 'server')[];
+  requiredDependencies?: readonly string[];
+}
+
+export function matchesModRelease(release: ModBrowseRelease, selection: ModSelection): boolean {
+  return (!selection.gameVersions?.length || selection.gameVersions.some(value => release.gameVersions.includes(value)))
+    && (!selection.loaders?.length || selection.loaders.some(value => release.loaders.includes(value)))
+    && (!selection.environments?.length || selection.environments.some(value =>
+      release.environment === value || release.environment === 'client-and-server'))
+    && (!selection.requiredDependencies?.length || selection.requiredDependencies.some(value =>
+      release.dependencies?.some(item => item.requirement === 'required' && item.id === value)));
+}
+
+/** `publishedAt` and dependencies stay bound to the selected release, never to a different loader's newest. */
+export function selectModRelease(releases: readonly ModBrowseRelease[], selection: ModSelection): ModBrowseRelease | null {
+  return releases.find(release => matchesModRelease(release, selection)) ?? null;
+}
+
+/** A complete environment either identifies one release, has missing side evidence, or proves no match. */
+export function modCompatibility(releases: readonly ModBrowseRelease[],
+  selection: Required<Pick<ModSelection, 'gameVersions' | 'loaders' | 'environments'>>) {
+  const selected = selectModRelease(releases, selection);
+  if (selected) return { state: selected === releases[0] ? 'compatible' as const : 'stale' as const,
+    release: selected };
+  if (!releases.length || releases.some(release => release.environment === null
+    && selection.gameVersions.some(value => release.gameVersions.includes(value))
+    && selection.loaders.some(value => release.loaders.includes(value)))) {
+    return { state: 'unknown' as const, release: null };
+  }
+  return { state: 'incompatible' as const, release: null };
+}
+
+/** Only conventional numeric versions prove a release channel; an explicit alpha/beta suffix takes precedence. */
+export function modReleaseChannel(version: string | null): 'release' | 'beta' | 'alpha' | null {
+  if (!version) return null;
+  if (/(?:^|[.\-+_])alpha(?:[.\-+_]|\d|$)/i.test(version)) return 'alpha';
+  if (/(?:^|[.\-+_])beta(?:[.\-+_]|\d|$)/i.test(version)) return 'beta';
+  return /^\d+(?:\.\d+){1,3}$/.test(version) ? 'release' : null;
 }
 
 /** Folds a Work's releases, newest first, into its listing card. */
-export function modListing(releases: readonly { release: ModRelease; boundAt: string }[]): ModListing | null {
+export function modListing(releases: readonly { release: Pick<ModRelease,
+  'gameVersions' | 'loaders' | 'environment' | 'version'>; boundAt: string }[]): ModListing | null {
   const [newest] = releases;
   if (!newest) return null;
   const versions = new Set(releases.flatMap(item => item.release.gameVersions));

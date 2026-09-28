@@ -175,6 +175,20 @@
       -webkit-line-clamp: 2;
     }
 
+    .mh-release {
+      display: grid;
+      gap: 0.25rem;
+      min-inline-size: 0;
+      margin-block-start: 0.35rem;
+      font-size: 0.8125rem;
+    }
+
+    .mh-release-name { color: var(--foreground); }
+    .mh-release-name strong { font-weight: 650; }
+    .mh-release-unknown, .mh-required { color: var(--muted-foreground); font-size: 0.8125rem; }
+    .mh-inspect { color: var(--primary); font-weight: 600; text-decoration: underline; text-underline-offset: 0.15em; }
+    .mh-release[data-release-state="stale"] .mh-release-name { color: var(--muted-foreground); }
+
     .mh-tags {
       display: flex;
       flex-wrap: wrap;

@@ -3,7 +3,8 @@ import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import type { ZoneBanner, ZoneCardOptions, ZoneDecision, ZoneModule, ZoneModuleData, ZoneModuleType, ZoneWork }
   from '@rezics/zone-sdk';
-import { BookOpenIcon, CookingPotIcon, DownloadIcon, MessageCircleIcon, PlusIcon, ScaleIcon, TagIcon, XIcon }
+import { BookOpenIcon, CookingPotIcon, DownloadIcon, MessageCircleIcon, PackageSearchIcon, PlusIcon, ScaleIcon,
+  TagIcon, XIcon }
   from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
@@ -43,7 +44,8 @@ function PrimaryAction({ work, locale, messages }: { work: ZoneWork; locale: UiL
   if (work.hub?.kind === 'prompt') {
     return <CopyTextButton text={work.hub.copyText} label={t.copyPrompt} copied={t.promptCopied} failed={t.copyFailed} />;
   }
-  const [Icon, label] = work.hub?.kind === 'skill' || work.mod || work.kind === 'package' ? [DownloadIcon, t.install]
+  const [Icon, label] = work.mod ? [PackageSearchIcon, messages.modInspect]
+    : work.hub?.kind === 'skill' || work.kind === 'package' ? [DownloadIcon, t.install]
     : work.kind === 'recipe' ? [CookingPotIcon, t.openRecipe] : [BookOpenIcon, messages.read];
   return <LocalizedLink href={work.href} className={buttonVariants({ size: 'sm', pill: true })}>
     <Icon aria-hidden="true" />{label}</LocalizedLink>;

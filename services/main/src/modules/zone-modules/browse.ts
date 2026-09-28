@@ -2,7 +2,9 @@ import type { Static } from 'typebox';
 import { primaryDiscoveryCredits } from '../discovery/credits.ts';
 import { readEpochOrder } from '../discovery/lineage.ts';
 import { readPublicHubCards } from '../hub/public-card.ts';
-import type { ModListing } from '../package/mod-release.ts';
+import { type ModBrowseRelease, type ModListing, type ModSelection, modReleaseChannel, selectModRelease }
+  from '../package/mod-release.ts';
+import { ModResolutionUnavailable } from '../package/mod-resolution.ts';
 import { RecommendationUnavailable } from '../recommendation/derived-generation.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri } from '../work/activate.ts';
@@ -23,6 +25,8 @@ export interface BrowseCandidate {
   concepts: string[] | null;
   status: Status | null; words: number | null;
   listing: ModListing | null; updatedAt: string | null;
+  /** Newest first, bounded by the package owner; each row is one exact release. */
+  releases?: readonly ModBrowseRelease[];
 }
 
 const fold = (text: string) => text.normalize('NFKC').toLocaleLowerCase('und').replace(/\s+/g, ' ').trim();
@@ -56,41 +60,74 @@ const facets: Record<ZoneBrowseFacet, { test: (item: BrowseCandidate, value: str
   length: { test: (item, value) => inBand(item.words, value),
     values: item => zoneLengthBands.filter(band => inBand(item.words, band)) },
   modLoader: { test: (item, value) => item.listing?.loaders.includes(value as never) ?? false,
-    values: item => item.listing?.loaders ?? [] },
+    values: item => item.releases ? [...new Set(item.releases.flatMap(release => release.loaders))]
+      : item.listing?.loaders ?? [] },
   modGameVersion: { test: (item, value) => item.listing?.gameVersions.includes(value) ?? false,
-    values: item => item.listing?.gameVersions ?? [] },
+    values: item => item.releases ? [...new Set(item.releases.flatMap(release => release.gameVersions))]
+      : item.listing?.gameVersions ?? [] },
   // A mod for both sides serves a reader filtering by either.
   modEnvironment: { test: (item, value) => item.listing?.environment === value
     || item.listing?.environment === 'client-and-server',
-  values: item => !item.listing?.environment ? []
-    : item.listing.environment === 'client-and-server' ? ['client', 'server'] : [item.listing.environment] },
+  values: item => item.releases ? [...new Set(item.releases.flatMap(release =>
+    release.environment === 'client-and-server' ? ['client', 'server'] : release.environment ? [release.environment] : []))]
+    : !item.listing?.environment ? []
+      : item.listing.environment === 'client-and-server' ? ['client', 'server'] : [item.listing.environment] },
+  modRequiredDependency: { test: (item, value) => item.releases?.some(release =>
+    release.dependencies?.some(dependency => dependency.requirement === 'required' && dependency.id === value)) ?? false,
+  values: item => [...new Set(item.releases?.flatMap(release => release.dependencies?.filter(dependency =>
+    dependency.requirement === 'required').map(dependency => dependency.id) ?? []) ?? [])] },
 };
 
-export type BrowseFilter = Partial<Record<ZoneBrowseFacet, readonly string[]>>;
+export type BrowseFilter = Partial<Record<ZoneBrowseFacet, readonly string[]>> & {
+  /** None of these Concepts may be accepted for a matching Work. */
+  conceptExclude?: readonly string[];
+};
 
 export function browseFilter(query: Omit<Query, 'q' | 'sort' | 'limit' | 'cursor' | 'language'>): BrowseFilter {
-  return { type: query.type, concept: query.concept, status: query.status,
+  return { type: query.type, concept: query.concept, conceptExclude: query.excludeConcept,
+    status: query.status,
     length: query.length ? [query.length] : undefined, modLoader: query.loader,
-    modGameVersion: query.gameVersion, modEnvironment: query.environment };
+    modGameVersion: query.gameVersion, modEnvironment: query.environment,
+    modRequiredDependency: query.requiredDependency };
 }
 
 /** The Filter as a FilterDocument: one Condition per chosen Facet, a length as its range. */
 type Condition = { facet: Exclude<ZoneBrowseFacet, 'length'>; any: string[] }
+  | { facet: 'concept'; none: string[] }
   | { facet: 'length'; range: { min: string; max?: string } };
 
 export function filterDocument(filter: BrowseFilter): { all: Condition[] } {
-  return { all: zoneBrowseFacets.flatMap((facet): Condition[] => {
+  const all = zoneBrowseFacets.flatMap((facet): Condition[] => {
     const chosen = filter[facet];
     if (!chosen?.length) return [];
     if (facet !== 'length') return [{ facet, any: [...chosen] }];
     const band = lengthBand(chosen[0]!);
     return [{ facet, range: { min: String(band.min), ...band.max === null ? {} : { max: String(band.max) } } }];
-  }) };
+  });
+  if (filter.conceptExclude?.length) all.push({ facet: 'concept', none: [...filter.conceptExclude] });
+  return { all };
 }
 
-const holds = (item: BrowseCandidate, filter: BrowseFilter, except?: ZoneBrowseFacet) =>
-  zoneBrowseFacets.every(facet => facet === except || !filter[facet]?.length
-    || filter[facet]!.some(value => facets[facet].test(item, value)));
+const modFacets = ['modLoader', 'modGameVersion', 'modEnvironment', 'modRequiredDependency'] as const;
+function modSelection(filter: BrowseFilter, except?: ZoneBrowseFacet): ModSelection {
+  return { loaders: except === 'modLoader' ? undefined : filter.modLoader as ModSelection['loaders'],
+    gameVersions: except === 'modGameVersion' ? undefined : filter.modGameVersion,
+    environments: except === 'modEnvironment' ? undefined : filter.modEnvironment as ModSelection['environments'],
+    requiredDependencies: except === 'modRequiredDependency' ? undefined : filter.modRequiredDependency };
+}
+
+const holds = (item: BrowseCandidate, filter: BrowseFilter, except?: ZoneBrowseFacet) => {
+  if (filter.conceptExclude?.some(value => item.concepts?.includes(value))) return false;
+  if (!zoneBrowseFacets.every(facet => modFacets.includes(facet as typeof modFacets[number])
+    || facet === except || !filter[facet]?.length
+    || filter[facet]!.some(value => facets[facet].test(item, value)))) return false;
+  const selection = modSelection(filter, except);
+  if (!selection.loaders?.length && !selection.gameVersions?.length && !selection.environments?.length
+    && !selection.requiredDependencies?.length) return true;
+  return item.releases ? selectModRelease(item.releases, selection) !== null
+    : modFacets.every(facet => facet === except || !filter[facet]?.length
+      || filter[facet]!.some(value => facets[facet].test(item, value)));
+};
 
 /**
  * The matching candidates in the requested order, and each Facet's value
@@ -109,11 +146,18 @@ export function browseWindow(candidates: readonly BrowseCandidate[], filter: Bro
     const tally = new Map<string, number>();
     for (const item of candidates) {
       if (relevance.get(item.work)! > 0 && holds(item, filter, facet)) {
-        for (const value of new Set(facets[facet].values(item))) tally.set(value, (tally.get(value) ?? 0) + 1);
+        for (const value of new Set(facets[facet].values(item))) {
+          if (modFacets.includes(facet as typeof modFacets[number])
+            && !holds(item, { ...filter, [facet]: [value] })) continue;
+          tally.set(value, (tally.get(value) ?? 0) + 1);
+        }
       }
     }
     // Chosen values stay listed even when nothing matches them, so they can be cleared.
     for (const value of filter[facet] ?? []) if (!tally.has(value)) tally.set(value, 0);
+    if (facet === 'concept') for (const value of filter.conceptExclude ?? []) {
+      if (!tally.has(value)) tally.set(value, 0);
+    }
     const listed = [...tally].map(([value, count]) => ({ value, count }));
     // Length bands keep their own order; other values list the most common first.
     return [facet, facet === 'length'
@@ -165,6 +209,10 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
     throw new WorkReadInvalid('Work type is not admitted');
   }
   const filter = browseFilter(query);
+  if (!session.deps.packageModResolutions && (filter.modGameVersion?.length || filter.modLoader?.length
+    || filter.modEnvironment?.length || filter.modRequiredDependency?.length)) {
+    throw new WorkReadUnavailable('Mod compatibility owner is unavailable');
+  }
   if (query.length) {
     const band = lengthBand(query.length);
     if (band.max !== null && band.max < band.min) throw new WorkReadInvalid('Length range is empty');
@@ -224,27 +272,32 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
     types.set(row.work.value, [...types.get(row.work.value) ?? [], row.type.value].sort());
   }
   const [summaries, listings, stats, tags] = await Promise.all([session.summaries(ids),
-    session.deps.packageModResolutions?.readListings(ids) ?? new Map<string, ModListing>(),
+    session.deps.packageModResolutions?.readBrowseListings(ids).catch(error => {
+      if (error instanceof ModResolutionUnavailable) throw new WorkReadUnavailable(error.message);
+      throw error;
+    }) ?? new Map(),
     session.deps.serialStats?.batch(ids, session.position.sequence)
       ?? new Map<string, { wordCount: number | null; lastUpdatedAt: string | null }>(),
     readTags(session, realm, ids)]);
-  if (filter.concept?.length && tags.state === 'unavailable') {
+  if ((filter.concept?.length || filter.conceptExclude?.length) && tags.state === 'unavailable') {
     throw new WorkReadUnavailable('Zone Tags are unavailable');
   }
   const candidates = window.flatMap((row, order): BrowseCandidate[] => {
     const summary = summaries[order], work = row.work!.value;
     if (summary?.status !== 'available' || summary.disclosure !== 'public') return [];
-    const listing = listings.get(work) ?? null, stat = stats.get(work);
+    const mod = listings.get(work), listing = mod?.listing ?? null, stat = stats.get(work);
     return [{ work, order, title: summary.name.value, types: types.get(work) ?? [],
       concepts: tags.state === 'unavailable' ? null : tags.concepts.get(work) ?? [],
       status: (row.status?.value ?? null) as Status | null, words: stat?.wordCount ?? null, listing,
+      releases: mod?.releases ?? [],
       updatedAt: later(listing?.updatedAt, stat?.lastUpdatedAt) }];
   });
   const { found: matched, facets: counts } = browseWindow(candidates, filter, text, sort);
   // Tags built before the latest change are not applied, as Discover withholds its term matches.
-  const found = filter.concept?.length && tags.state !== 'current' ? [] : matched;
+  const found = (filter.concept?.length || filter.conceptExclude?.length) && tags.state !== 'current' ? [] : matched;
   const page = found.slice(offset, offset + limit), pageIds = page.map(item => item.work);
-  const conceptIds = counts.concept.map(item => item.value).slice(0, ZONE_BROWSE_COST.windowRows);
+  const conceptIds = [...new Set([...(filter.concept ?? []), ...(filter.conceptExclude ?? []),
+    ...counts.concept.map(item => item.value)])].slice(0, ZONE_BROWSE_COST.windowRows);
   const [serial, conceptNames] = await Promise.all([readSerialSummaries(session, page.flatMap(item => {
     const summary = summaries[item.order];
     return summary?.status === 'available' && summary.type === 'work' ? [item.work] : [];
@@ -266,12 +319,24 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   if (fenced.some(summary => summary?.status !== 'available' || summary.disclosure !== 'public')) {
     throw new WorkReadUnavailable('Zone browse Work changed disclosure during the read');
   }
+  const candidatesByWork = new Map(page.map(item => [item.work, item] as const));
   const items = hydrated.map(item => ({ ...item,
     primaryCredits: displayZoneCredits(item.primaryCredits, names.agents, names.sources),
-    mod: listings.get(item.id) ?? null, hub: hub.get(item.id) ?? null }));
+    mod: candidatesByWork.get(item.id)?.listing ? { ...candidatesByWork.get(item.id)!.listing!, selected: (() => {
+      const releases = candidatesByWork.get(item.id)?.releases ?? [];
+      if (filter.modGameVersion?.length !== 1 || filter.modLoader?.length !== 1
+        || filter.modEnvironment?.length !== 1) return null;
+      const selected = selectModRelease(releases, modSelection(filter));
+      return selected ? { version: selected.version, gameVersions: selected.gameVersions,
+        loaders: selected.loaders, environment: selected.environment,
+        side: filter.modEnvironment![0] as 'client' | 'server', publishedAt: selected.publishedAt,
+        channel: modReleaseChannel(selected.version), dependencies: selected.dependencies,
+        state: selected === releases[0] ? 'compatible' as const : 'stale' as const } : null;
+    })() } : null, hub: hub.get(item.id) ?? null }));
   // A Concept shows under its public name only; one without is left out rather than shown as an IRI.
-  const concept = counts.concept.flatMap((item, index) => {
-    const summary = conceptNames[index];
+  const namedConcepts = new Map(conceptIds.map((concept, index) => [concept, conceptNames[index]] as const));
+  const concept = counts.concept.flatMap(item => {
+    const summary = namedConcepts.get(item.value);
     return summary?.status === 'available' && summary.disclosure === 'public' && summary.type === 'concept'
       ? [{ ...item, name: summary.name }] : [];
   });
