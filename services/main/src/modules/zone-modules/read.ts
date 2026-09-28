@@ -1,6 +1,7 @@
 import { readEpochOrder } from '../discovery/lineage.ts';
 import { namedDiscoveryCredits, primaryDiscoveryCredits } from '../discovery/credits.ts';
 import type { DiscoveryCredit, ProjectedCredit } from '../discovery/contract.ts';
+import { readAuthorNames } from '../source/author-name-read.ts';
 import { readRealmDecisions } from '../realm-reads/public-decision-index.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
@@ -20,12 +21,27 @@ function cursorOrder(value: string) {
 }
 
 export function displayZoneCredits(credits: ProjectedCredit[],
-  names: ReadonlyMap<string, { displayName: string; handle: string }>): DiscoveryCredit[] {
+  names: ReadonlyMap<string, { displayName: string; handle: string }>,
+  sourceNames: Awaited<ReturnType<typeof readAuthorNames>> = new Map()): DiscoveryCredit[] {
   return credits.flatMap((credit): DiscoveryCredit[] => {
-    if (credit.participantKind === 'external-reference') return [credit];
+    if (credit.participantKind === 'external-reference') return [{ ...credit,
+      displayName: null, nameSource: undefined, ...sourceNames.get(credit.key) }];
     const name = names.get(credit.agent);
     return name ? [{ ...credit, ...name }] : [];
   });
+}
+
+/** One retained-name batch of at most 60 credits per module page. */
+async function zoneCreditNames(session: WorkReadSession, credits: ProjectedCredit[]) {
+  if (credits.length > ZONE_MODULE_COST.retainedAuthorKeys) {
+    throw new WorkReadUnavailable('Zone credit batch is out of bounds');
+  }
+  const [agents, sources] = await Promise.all([
+    namedDiscoveryCredits(session, credits),
+    readAuthorNames(session, credits.flatMap(credit =>
+      credit.participantKind === 'external-reference' ? [credit.key] : [])),
+  ]);
+  return { agents, sources };
 }
 
 /** One bounded candidate page, one type batch, two summary batches and ≤20 exact
@@ -107,8 +123,9 @@ export async function readZoneWorks(session: WorkReadSession, realm: string, kin
     session.deps.hub && session.deps.content
       ? readPublicHubCards(session, visible.map(item => item.id)) : new Map(),
   ]);
-  const names = await namedDiscoveryCredits(session, visible.flatMap(item => item.primaryCredits));
-  const items = visible.map(item => ({ ...item, primaryCredits: displayZoneCredits(item.primaryCredits, names),
+  const names = await zoneCreditNames(session, visible.flatMap(item => item.primaryCredits));
+  const items = visible.map(item => ({ ...item, primaryCredits: displayZoneCredits(item.primaryCredits,
+    names.agents, names.sources),
     mod: mods.get(item.id) ?? null, hub: hub.get(item.id) ?? null }));
   await readRealmBasis(session, realm);
   const last = page.at(-1);
@@ -206,9 +223,9 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
     dataEpoch: row.revisionEpoch!.value, sequence: row.sequence!.value };
   }));
   const visible = hydrated.filter((item): item is NonNullable<typeof item> => item !== null);
-  const names = await namedDiscoveryCredits(session, visible.flatMap(item => item.work.primaryCredits));
+  const names = await zoneCreditNames(session, visible.flatMap(item => item.work.primaryCredits));
   const items = visible.map(item => ({ ...item, work: { ...item.work,
-    primaryCredits: displayZoneCredits(item.work.primaryCredits, names) } }));
+    primaryCredits: displayZoneCredits(item.work.primaryCredits, names.agents, names.sources) } }));
   await readRealmBasis(session, realm);
   const last = page.at(-1);
   return { profile: 'zone-latest-chapters-v1' as const, realm,

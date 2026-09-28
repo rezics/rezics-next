@@ -13,14 +13,14 @@ export const zoneHubCard = t.Object({ profile: t.Literal('hub-work-card-v1'),
   declaredModels: t.Array(t.String(), { maxItems: 64 }), testedModels: t.Array(t.String(), { maxItems: 64 }),
   preview: t.String({ maxLength: 240 }), copyText: t.String({ maxLength: 65_536 }) });
 
-export const ZONE_MODULE_COST = { pageSize: 20, candidateRows: 21, typeRows: 160,
+export const ZONE_MODULE_COST = { pageSize: 20, candidateRows: 21, typeRows: 160, creditsPerWork: 3,
   serialHeads: 20, summaryBatches: 2, replyReviewChecks: 40, contentRevisions: 20,
-  contentBytes: 20 * 1_048_576, creditQueries: 20,
+  contentBytes: 20 * 1_048_576, creditQueries: 20, retainedAuthorKeys: 60,
   graphCalls: 160, graphBytes: 4 * 1024 * 1024,
   deadlineMs: 10_000 } as const;
 
 export const zoneWork = t.Object({ ...workCard.properties,
-  primaryCredits: t.Array(discoveryCredit, { maxItems: 3 }), evidence: readId,
+  primaryCredits: t.Array(discoveryCredit, { maxItems: ZONE_MODULE_COST.creditsPerWork }), evidence: readId,
   dataEpoch: t.String(), sequence: t.String(),
   mod: t.Nullable(zoneModCard), hub: t.Nullable(zoneHubCard) });
 export const zoneWorkPage = t.Object({ profile: t.Union([
@@ -32,7 +32,7 @@ export const zoneDecisionPage = t.Object({ profile: t.Literal('zone-recent-decis
     semanticRuleChange: t.Integer({ minimum: 0 }), basis: t.Literal('exact-page') }) });
 export const zoneChapterPage = t.Object({ profile: t.Literal('zone-latest-chapters-v1'), realm: readId,
   items: t.Array(t.Object({ work: t.Object({ ...workCard.properties,
-    primaryCredits: t.Array(discoveryCredit, { maxItems: 3 }) }), chapter: readId, publication: readId,
+    primaryCredits: t.Array(discoveryCredit, { maxItems: ZONE_MODULE_COST.creditsPerWork }) }), chapter: readId, publication: readId,
     contentRevision: t.String(), language: t.String(), dataEpoch: t.String(), sequence: t.String() }),
   { maxItems: ZONE_MODULE_COST.pageSize }), ...pageFields });
 export const zoneReplyPage = t.Object({ profile: t.Union([
