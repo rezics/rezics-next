@@ -99,6 +99,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/paging-authority-search.test.ts',
   // Saved Filter tabs read Home's feed, which is global across the QA project's files.
   'tests/qa/integration/saved-filter.test.ts',
+  // Continue across volumes seeds Home, whose relay replays prior receipts from zero (G-410).
+  'tests/qa/integration/structure-book-volumes.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
