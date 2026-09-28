@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { HOME_READ_BUDGET, meterStatements, seedHome, startHomeStack } from './feed-read-support.ts';
 import { startMediaStack } from './media-support.ts';
 import { GRAPHS, RV, activateMetadataWork, iri, metadataWorkRequestDigest }
   from '../../../services/main/src/modules/work/activate.ts';
@@ -199,3 +200,53 @@ test('BOOK02/COMP06: volumes, parts and extras are revisioned groups that Conten
     expect(WORK_CONTENTS_COST.topGroups).toBe(200);
   } finally { await stack.stop(); }
 }, 240_000);
+
+test('BOOK02: Continue starts in the first volume and crosses into the next within its read budget', async () => {
+  const home = await startHomeStack('continue-volumes');
+  try {
+    const seeded = await seedHome(home);
+    const work = seeded.works[2]!.work;
+    const rows = (await home.stack.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      SELECT ?structure ?head ?occurrence ?label WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(work)} rv:mainVersion ?main .
+        ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureHead ?head ; rv:selectedGeneration ?generation .
+        ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrence ?occurrence ;
+          rv:occurrenceRole rv:ChapterRole ; rv:occurrenceLabel ?label .
+      } } ORDER BY ?label`)).results?.bindings ?? [];
+    expect(rows.map(row => row.label?.value)).toEqual(['Chapter 1', 'Chapter 2']);
+    const structure = rows[0]!.structure!.value;
+    const [first, second] = rows.map(row => row.occurrence!.value) as [string, string];
+    const changes = `/v1/compositions/${short(structure)}/changes`;
+    const volumes = await home.json<{ revision: string; occurrences: string[] }>(await home.call('POST', changes, {
+      profile: 'book-composition', expectedHead: rows[0]!.head!.value, actingSubject: seeded.author,
+      operations: ['Volume One', 'Volume Two'].map(value => ({ op: 'insert', parent: structure, position: 'last',
+        role: 'group', label: { value, language: 'en' }, division: 'volume' })) }, home.author.token), 200);
+    const [one, two] = volumes.occurrences as [string, string];
+    await home.json(await home.call('POST', changes, { profile: 'book-composition',
+      expectedHead: volumes.revision, actingSubject: seeded.author, operations: [
+        { op: 'move', occurrence: first, parent: one, position: 'last' },
+        { op: 'move', occurrence: second, parent: two, position: 'last' }] }, home.author.token), 200);
+    const meter = meterStatements();
+    try {
+      const next = async () => {
+        const graph = home.stack.fuseki.queries;
+        const statements = meter.count();
+        const response = await home.call('GET', seeded.signed('/v1/me/continue'), undefined, home.reader.token);
+        const body = await response.text();
+        expect(response.status).toBe(200);
+        expect(home.stack.fuseki.queries - graph).toBeLessThanOrEqual(HOME_READ_BUDGET.continue.graphQueries);
+        expect(meter.count() - statements).toBeLessThanOrEqual(HOME_READ_BUDGET.continue.statements);
+        return (JSON.parse(body) as { items: Array<{ work: string; nextUnread: { occurrence: string; title: string | null };
+          unreadCount: { kind: string } }> }).items.find(item => item.work === work);
+      };
+      // Reading, not started: the first chapter sits inside the first volume.
+      expect(await next()).toMatchObject({ nextUnread: { occurrence: first, title: 'Chapter 1' } });
+      await home.json(await home.call('PUT', `/v1/compositions/${short(structure)}/occurrences/${short(first)}/progress`,
+        { actingSubject: seeded.reader, expectedVersion: 0, completed: true, position: null },
+        home.reader.token, randomUUID()));
+      expect(await next()).toMatchObject({ nextUnread: { occurrence: second, title: 'Chapter 2' },
+        unreadCount: { kind: 'lower-bound' } });
+      expect(meter.violations).toEqual([]);
+    } finally { meter.restore(); }
+  } finally { await home.stop(); }
+}, 300_000);
