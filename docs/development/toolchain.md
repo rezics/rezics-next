@@ -86,7 +86,6 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @better-auth/passkey | 1.7.5 | services/account |
 | @better-auth/utils | 0.4.2 | services/account |
 | @better-fetch/fetch | 1.3.2 | services/account |
-| @biomejs/biome | 2.5.14 | . |
 | @cloudflare/vite-plugin | 1.58.0 | apps/accounts, apps/web |
 | @elysia/eden | 2.0.0-beta.5 | apps/web, services/account, services/main |
 | @elysia/openapi | 2.0.0-beta.4 | services/account, services/main |
@@ -137,6 +136,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | nodemailer | 10.0.10 | services/account |
 | nuqs | 2.10.1 | apps/web |
 | openapi-types | 12.1.3 | services/account, services/main |
+| oxfmt | 0.70.0 | . |
 | oxlint | 1.85.0 | . |
 | oxlint-tsgolint | 7.0.2003 | . |
 | pg | 8.23.0 | services/account, services/content, services/main |

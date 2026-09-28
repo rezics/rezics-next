@@ -192,7 +192,7 @@ export async function exerciseRatingAggregates(f: Fixture) {
   await all('older-correction', [7, 16 / 3, 5]);
   const withdrawn = await success<Opinion>(await submit(null, markers[2]!, initial[2]!.observationRevision));
   expect((await all('withdraw-latest', [6, 4.5, 4]))[0]!.population.contributingRaters).toBe(1);
-  const restored = await success<Opinion>(await submit(8, markers[2]!, withdrawn.observationRevision));
+  await success<Opinion>(await submit(8, markers[2]!, withdrawn.observationRevision));
   await all('restore-latest', [7, 16 / 3, 5]);
   // Failed sealing must roll back both the admission and the private inventory.
   await accessPool.query(`CREATE FUNCTION access.fail_rating_inventory_fixture() RETURNS trigger LANGUAGE plpgsql AS $$

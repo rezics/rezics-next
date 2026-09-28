@@ -1,0 +1,8 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "singleQuote": true,
+  // Keep authored key order; Biome, the previous formatter, did not sort package.json.
+  "sortPackageJson": false,
+  "overrides": [{ "files": ["*.jsonc"], "options": { "trailingComma": "none" } }]
+}

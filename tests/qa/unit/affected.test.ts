@@ -37,11 +37,11 @@ test('a changed module selects every test that reaches it and routes each to its
 });
 
 test('documentation and static configuration select no tests', () => {
-  const result = plan(['docs/testing/test-harness.md', 'biome.json', 'services/main/tsconfig.json',
+  const result = plan(['docs/testing/test-harness.md', '.oxfmtrc.json', 'services/main/tsconfig.json',
     'scripts/static/ast-grep/rules/no-dynamic-code.yml']);
   expect(Object.values(result.tests).flat()).toEqual([]);
   expect(result.widened).toEqual([]);
-  expect(result.ignored.map(item => item.path)).toEqual(['biome.json', 'docs/testing/test-harness.md',
+  expect(result.ignored.map(item => item.path)).toEqual(['.oxfmtrc.json', 'docs/testing/test-harness.md',
     'scripts/static/ast-grep/rules/no-dynamic-code.yml', 'services/main/tsconfig.json']);
 });
 
@@ -55,7 +55,7 @@ test('inputs outside the import graph widen to the tiers that load them', () => 
 });
 
 test('only graph-selected changes build the import graph', () => {
-  expect(needsGraph(['docs/testing/test-harness.md', 'biome.json', 'yarn.lock', 'infra/dev/compose.yaml'])).toBe(false);
+  expect(needsGraph(['docs/testing/test-harness.md', '.oxfmtrc.json', 'yarn.lock', 'infra/dev/compose.yaml'])).toBe(false);
   expect(needsGraph(['package.json'], new Set(['package.json']))).toBe(true);
   expect(needsGraph(['services/main/src/app.ts'])).toBe(true);
 });

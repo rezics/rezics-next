@@ -192,7 +192,7 @@ export async function seedPracticalCorpus(env: WorkActivationEnvironment, conten
     realmSelectionDigest(adoptionInput), admission => selectRealmLocal(env, admission, adoptionInput));
   const rejectedPhrase = startIndex === 0 ? 'rejected sapphire harbor'
     : `freshrejectedbeacon${startIndex}`;
-  const rejected = await contribution(works[2]!.work, rejectedPhrase, 'en');
+  await contribution(works[2]!.work, rejectedPhrase, 'en');
   const rejectionInput = { context: { kind: 'realm-local' as const, id: space.realm },
     work: works[2]!.work, mainVersion: works[2]!.main, expectedSelectionHead: null,
     decisionBasis: 'realm-manager-review' as const, reasonCode: 'not-approved' as const,

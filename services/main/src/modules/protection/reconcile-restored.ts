@@ -13,7 +13,6 @@ import { readWorkProtectionReceipt, workProtectionDigest,
 import type { RecoveryTerm, RecoveryTriple } from './recovery-evidence.ts';
 
 const markerFor = (epoch: string) => `urn:rezics:restore:${epoch}`;
-const rdfType = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
 const safeIri = (value: string) => {
   if (!/^(?:https?:\/\/[^<>\s"{}|\\^`]+|urn:rezics:[A-Za-z0-9:._-]+)$/.test(value)) {
     throw new RetainedEffectConflict('retained Work protection term is invalid');

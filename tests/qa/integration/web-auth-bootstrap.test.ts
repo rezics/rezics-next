@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, rmSync, statSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { MAIN_SITE_SCOPE } from '../../../apps/web/features/auth/scopes.ts';
@@ -15,8 +15,6 @@ import { AccountAssertionVerifier } from '../../../services/main/src/modules/acc
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { baselineMemberProof } from '../../../services/main/src/modules/access/baseline.ts';
-
-const root = resolve(import.meta.dir, '../../..');
 
 test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;

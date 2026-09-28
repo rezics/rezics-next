@@ -12,6 +12,16 @@
   },
   "ignorePatterns": ["tests/qa/unit/fixtures/**"],
   "rules": {
+    "no-debugger": "error",
+    "no-dupe-keys": "error",
+    "no-fallthrough": "error",
+    "no-unreachable": "error",
+    // Unused imports, locals and types; parameters stay free so callbacks keep their shape.
+    "no-unused-vars": [
+      "error",
+      { "args": "none", "ignoreRestSiblings": true, "varsIgnorePattern": "^_" }
+    ],
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
     "typescript/no-floating-promises": ["error", { "checkThenables": true }],
     "typescript/no-misused-promises": "error"
   }

@@ -48,7 +48,6 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
     try {
       await migrateContent(pool);
       const content = new ContentCore(pool);
-      const cursor = new ContentProjectionCursor(pool);
       const env = { fuseki, lineage, objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
       const id = randomUUID();
       const workAdmission = randomUUID();

@@ -20,8 +20,6 @@ import { useLibrary } from './library-context.tsx';
 import type { LibraryMessages } from './messages.ts';
 import type { LibraryRow, Review } from './types.ts';
 
-type T = ReturnType<typeof materializeData<LibraryMessages>>;
-
 /**
  * Where a Work in progress stands, as StoryGraph shows it: a bar when Main
  * counts the chapters exactly, what comes next, and Continue to the next

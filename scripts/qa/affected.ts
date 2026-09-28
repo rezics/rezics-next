@@ -43,7 +43,7 @@ export const inputRules: Rule[] = [
   { match: /^\.(?:claude|codex|github|vscode)\//, effect: 'ignore', reason: 'agent, editor or CI configuration' },
   { match: /^scripts\/documentation\//, effect: 'ignore', reason: 'documentation checker; run task docs:check' },
   { match: /^apps\/|^packages\/ui\//, effect: 'ignore', reason: 'frontend, outside the backend Goal' },
-  { match: /^(?:biome\.json|\.dependency-cruiser\.json|\.oxlintrc\.json|knip\.jsonc|sgconfig\.yml|\.gitignore|\.gitattributes|\.nvmrc)$|^scripts\/static\/ast-grep\/|(?:^|\/)tsconfig[^/]*\.json$/,
+  { match: /^(?:\.oxfmtrc\.json|\.dependency-cruiser\.json|\.oxlintrc\.json|knip\.jsonc|sgconfig\.yml|\.gitignore|\.gitattributes|\.nvmrc)$|^scripts\/static\/ast-grep\/|(?:^|\/)tsconfig[^/]*\.json$/,
     effect: 'ignore', reason: 'static configuration; run task check:backend' },
   { match: /^(?:package\.json|yarn\.lock|\.yarnrc\.yml|bunfig\.toml)$|^\.yarn\/|^(?:services\/[^/]+|packages\/model|model)\/package\.json$/,
     effect: 'widen', tiers: affectedTiers, reason: 'dependency or runtime configuration' },

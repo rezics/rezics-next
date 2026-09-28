@@ -71,7 +71,6 @@ export function goProxyRunAdapter(loader: GoProxyResponseLoader): SourceRunProvi
           : /HTTP [0-9]{3}/i.test(message) ? 'http-status' : 'network';
         return { ok: false, outcome: 'failed', reason, status: null };
       }
-      const found = result.status === 200;
       const payload = result.bytes === null ? Buffer.alloc(0) : Buffer.from(result.bytes);
       return { ok: true, url: new URL(request.path, GO_PROXY_ORIGIN).toString(),
         status: result.status, mediaType: 'text/plain',

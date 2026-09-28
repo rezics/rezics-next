@@ -8,7 +8,6 @@ import { classificationModelRevisions } from './vocabulary.ts';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from './context.ts';
 
-const NONE = 'urn:rezics:none';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const CLASSIFICATION_DIRECT_DECISION_PROFILE =
   'https://rezics.com/definition/classification-direct-decision-v1';

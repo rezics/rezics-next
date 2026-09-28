@@ -43,8 +43,8 @@ const commands: string[][] = [
   ['bun', 'scripts/dev/env-example.ts', '--check'],
   ['bun', 'scripts/research/storage_architecture/docs-check.ts'],
   [
-    'node_modules/.bin/biome',
-    'lint',
+    'node_modules/.bin/oxlint',
+    '--format=unix',
     ...(!backend ? ['apps'] : []),
     'services',
     ...(backend ? ['packages/model'] : ['packages']),
@@ -67,8 +67,8 @@ const commands: string[][] = [
   // Unused files and dependencies block; unused exports stay a `task check:unused` report.
   ['bun', 'scripts/static/knip.ts', '--include', 'files,dependencies'],
   [
-    'node_modules/.bin/biome',
-    'format',
+    'node_modules/.bin/oxfmt',
+    '--check',
     'package.json',
     ...(!backend ? ['apps/web/package.json', 'apps/accounts/package.json'] : []),
     'services/main/package.json',
@@ -76,7 +76,7 @@ const commands: string[][] = [
     'services/content/package.json',
     'packages/model/package.json',
     ...(!backend ? ['packages/ui/package.json'] : []),
-    'biome.json',
+    '.oxfmtrc.json',
     '.dependency-cruiser.json',
     '.oxlintrc.json',
     'knip.jsonc',

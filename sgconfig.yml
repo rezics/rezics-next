@@ -1,4 +1,4 @@
-# ast-grep project: code-shape rules that import graphs and Biome cannot express.
+# ast-grep project: code-shape rules that import graphs and Oxlint cannot express.
 # Run through `task ast-grep scan`; rule tests run with `task ast-grep test`.
 ruleDirs:
   - scripts/static/ast-grep/rules

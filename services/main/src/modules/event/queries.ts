@@ -294,7 +294,6 @@ async function recoveryOpen(client: PoolClient) {
 }
 
 function histogramSql(interpretation: 'civil-date' | 'instant', grain: 'year' | 'month' | 'day') {
-  const interval = grain === 'day' ? '1 day' : grain === 'month' ? '1 month' : '1 year';
   if (interpretation === 'civil-date') return `INSERT INTO access.event_histogram_bucket
     (generation_id, family, time_status, grain, bucket_start, definite_count, possible_count)
     SELECT $1, 'event-interval', statuses.time_status, $4, bucket.bucket_start::date,

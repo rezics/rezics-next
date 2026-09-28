@@ -47,7 +47,6 @@ export class WorkProtectionPending extends Error {
 export class WorkProtectionUnavailable extends Error {}
 export class WorkProtectionMissing extends Error {}
 
-const family = (action: WorkProtectionAdmissionAction) => workReceiptFamilies[action];
 const eventKind = (action: WorkProtectionAdmissionAction, outcome: 'Succeeded' | 'Cancelled') => ({
   'work.protection.tighten': outcome === 'Succeeded' ? 'WorkProtectionTightenedEvent' : 'WorkProtectionTighteningCancelledEvent',
   'work.protection.confirm': outcome === 'Succeeded' ? 'WorkProtectionConfirmedEvent' : 'WorkProtectionConfirmationCancelledEvent',

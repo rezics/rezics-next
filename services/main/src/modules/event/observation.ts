@@ -61,11 +61,6 @@ function canonicalInstant(value: string | undefined): string {
   return new Date(value).toISOString();
 }
 
-function sameInstant(a: string | undefined, b: string | undefined): boolean {
-  return Boolean(a && b && Number.isFinite(Date.parse(a)) && Number.isFinite(Date.parse(b))
-    && Date.parse(a) === Date.parse(b));
-}
-
 export async function readEventObservationReceipt(env: WorkActivationEnvironment,
   admissionId: string): Promise<EventObservationReceipt | null> {
   const receipt = eventObservationReceiptIri(admissionId);

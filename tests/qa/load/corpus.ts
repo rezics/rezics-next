@@ -185,7 +185,7 @@ export async function seedLoadCorpus(env: WorkActivationEnvironment, pool: Pool,
     admission(`publication:adopt:${space.realm}`, 'publication.adopt', realmSelectionDigest(adoptionInput)),
     adoptionInput);
   if (adoption.outcome !== 'succeeded') throw new Error('load Realm adoption failed');
-  const rejected = await publishedContribution(env, works[2]!, 'rejected sapphire harbor', 'en');
+  await publishedContribution(env, works[2]!, 'rejected sapphire harbor', 'en');
   const rejectionInput = { context: { kind: 'realm-local' as const, id: space.realm },
     work: works[2]!, mainVersion: mains[2]!, expectedSelectionHead: null,
     decisionBasis: 'realm-manager-review' as const, reasonCode: 'not-approved' as const,

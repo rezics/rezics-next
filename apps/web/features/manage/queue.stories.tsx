@@ -127,9 +127,8 @@ export const KeepOrRemoveReport: Story = {
 
 /** A moderator can hand a report to the owners with a note for them. */
 export const EscalateReport: Story = {
-  async play({ canvasElement }) {
+  async play() {
     reset();
-    const canvas = within(canvasElement);
     await userEvent.keyboard('e');
     const dialog = within(await within(document.body).findByRole('dialog', { name: 'Escalate to the Realm owners' }, { timeout: 5000 }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'What should the owners look at?' }),

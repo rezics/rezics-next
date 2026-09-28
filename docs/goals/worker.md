@@ -105,8 +105,7 @@ workers do not overload the host:
 ```sh
 bun scripts/goal/goalctl.ts test <explicit test files> [-t <ID>]
 bun node_modules/typescript/bin/tsc --project services/main/tsconfig.json   # or the owner's tsconfig
-node_modules/.bin/biome lint <changed source directories>
-node_modules/.bin/oxlint --type-aware <changed source directories>        # promise rules
+node_modules/.bin/oxlint --type-aware <changed source directories>        # lint and promise rules
 ```
 
 In a worktree, `task dev` runs web and Storybook natively on random ports

@@ -47,17 +47,17 @@ test('the import gate scans TypeScript edges and rejects forbidden boundaries', 
 });
 
 test('the lint gate rejects a dangerous debugger statement', () => {
-  const result = run('biome', [
-    'lint',
-    'tests/fixtures/static-boundaries/lint-failing/debugger.ts',
-  ]);
+  const result = run('oxlint', ['tests/fixtures/static-boundaries/lint-failing/debugger.ts']);
   expect(result.code).not.toBe(0);
-  expect(result.output).toContain('lint/suspicious/noDebugger');
+  expect(result.output).toContain('eslint(no-debugger)');
 });
 
 test('authored model and reusable packages cannot import their consumers', () => {
   const failing = run('depcruise', [
-    '--config', '.dependency-cruiser.json', '--output-type', 'err',
+    '--config',
+    '.dependency-cruiser.json',
+    '--output-type',
+    'err',
     'scripts/static/fixtures/failing',
   ]);
   expect(failing.code).not.toBe(0);

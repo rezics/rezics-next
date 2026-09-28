@@ -121,7 +121,7 @@ test('G324: text reviews become grouped, live, spoiler-safe Work cards', async (
       helpful: true, expectedRevision: null }, b.token));
     await refresh();
     expect((await cards())[0]?.card).toMatchObject({ kind: 'review', helpfulCount: 1, opening: null });
-    const edited = await json<{ revision: string }>(await call('POST', '/v1/reviews',
+    await json(await call('POST', '/v1/reviews',
       write(second.work, 'A public recommendation', false, two.revision), a.token));
     await refresh();
     expect((await cards())[0]?.card).toMatchObject({ kind: 'review', opening: 'A public recommendation',

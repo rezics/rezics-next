@@ -90,8 +90,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const IDEMPOTENCY = /^[A-Za-z0-9:_./-]{1,128}$/;
 const CONSENT_GENERATION = UUID;
 const MAX_ARGUMENT_BYTES = 262_144;
-const MAX_SERVER_INFO_BYTES = 4_096;
-const MAX_CAPABILITIES_BYTES = 16_384;
 
 function jsonBytes(value: unknown, message: string, maximum: number): string {
   let encoded: string;
