@@ -13,7 +13,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { languageName, numberedTitle, volumeName } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
-import { readContentsGroup } from './contents-actions.ts';
+import type { readContentsGroup } from './contents-actions.ts';
 import { Region, RegionFailure } from './region.tsx';
 import { chapterHref, type ContentsQuery, idOf, textHref, workHref } from './route.ts';
 import type { ContentsPage, Loaded, WorkName } from './types.ts';
@@ -158,8 +158,8 @@ function OneTextContents({ oneText, workRef, locale, messages }: {
  * chapter with no publication in this language is listed but not linked, so the
  * gap is visible. A Work with no contents but a selected text lists that text.
  */
-export function ContentsRegion({ contents, workRef, id, query, oneText = null, opened = null, loadGroup, locale,
-  messages }: {
+export function ContentsRegion({ contents, workRef, id, query, oneText = null, opened = null, loadGroup, groupAction,
+  locale, messages }: {
   contents: Loaded<ContentsPage>; workRef: string; query: ContentsQuery;
   /** The Work's ID, for reading a group's chapters when it opens. */
   id?: string;
@@ -167,13 +167,15 @@ export function ContentsRegion({ contents, workRef, id, query, oneText = null, o
   oneText?: OneText | null;
   /** The open group's first page of chapters, read with the top level. */
   opened?: { occurrence: string; page: ContentsPage } | null;
-  /** Reads a group's first page; stories pass a stand-in, the page reads Main through the BFF. */
+  /** Reads a group's first page; stories pass a stand-in. */
   loadGroup?: (parent: string) => Promise<ContentsPage | null>;
+  /** The page's server action that reads a group as the page reads (`contents-actions.ts`). */
+  groupAction?: typeof readContentsGroup;
   locale: UiLocale; messages: WorkPageMessages;
 }) {
   const t = materializeData(messages, { locale });
-  const readGroup = loadGroup ?? (async (parent: string) => id
-    ? readContentsGroup(id, idOf(parent) ?? '', query.language) : null);
+  const readGroup = loadGroup ?? (groupAction && id
+    ? (parent: string) => groupAction(id, idOf(parent) ?? '', query.language) : null);
   const here = { parent: query.parent, language: query.language };
   const firstPage = workHref(workRef, 'contents', null, here);
   const back = query.parent ? <Link href={workHref(workRef, 'contents', null, { language: query.language,
@@ -211,7 +213,7 @@ export function ContentsRegion({ contents, workRef, id, query, oneText = null, o
       <BookOpenIcon aria-hidden="true" />{t.startReading}</Link> : null}
     {back}
     {items.length ? <ol className="grid divide-y divide-border/60 border-border/60 border-y">
-      {items.map(item => item.role === 'group' && (id || loadGroup)
+      {items.map(item => item.role === 'group' && readGroup
         ? <ContentsGroup key={item.occurrence} item={item} workRef={workRef} query={query}
           initial={opened?.occurrence === item.occurrence ? opened.page : null} loadGroup={readGroup}
           locale={locale} t={t} />

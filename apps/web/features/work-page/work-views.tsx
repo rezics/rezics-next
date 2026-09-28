@@ -21,6 +21,7 @@ import { WorkCredits, WorkCreditsSkeleton } from './credits.tsx';
 import { HistoryRegion } from './history.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
+import { readContentsGroup } from './contents-actions.ts';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
 import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readAlsoEnjoyed, readClassifications,
@@ -369,5 +370,5 @@ export async function WorkContents({ workRef, id, work, query, locale, messages 
     language: query.language }) : null;
   return <ContentsRegion contents={contents} workRef={workRef} id={id} query={query ?? {}} oneText={oneText}
     opened={open && openPage?.ok ? { occurrence: open.occurrence, page: openPage.data } : null}
-    locale={locale} messages={messages} />;
+    groupAction={readContentsGroup} locale={locale} messages={messages} />;
 }
