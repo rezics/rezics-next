@@ -41,8 +41,12 @@ const chapterFacts = t.Object({ occurrence: readId, writer: t.Nullable(readId),
     t.Literal('published'), t.Literal('changed')])), target: t.Nullable(readId),
   label: t.Nullable(t.Object({ value: t.String(), language: t.String() })),
   language: t.Nullable(t.String()),
-  /** Words in the text the writer works on (their draft, else the published text); null when unknown. */
-  words: t.Nullable(t.Integer({ minimum: 0 })) });
+  /**
+   * How long the text the writer works on is (their draft, else the published text), in
+   * characters for Chinese and Japanese and words elsewhere; null when unknown.
+   */
+  length: t.Nullable(t.Object({ unit: t.Union([t.Literal('characters'), t.Literal('words')]),
+    value: t.Integer({ minimum: 0 }) })) });
 
 export function studioRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/me/agents/:agent/works', {

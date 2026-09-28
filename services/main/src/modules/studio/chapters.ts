@@ -6,15 +6,27 @@ import { WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   unerased, type WorkReadSession } from '../work/read-session.ts';
 
 /** One contents page of one level, one placement batch, two Access owner batches, at
- * most twenty indexed Content variant reads, five four-body batches for word counts,
+ * most twenty indexed Content variant reads, five four-body batches for lengths,
  * and fixed graph enrichment batches. */
 export const STUDIO_CHAPTER_COST = { pageSize: 20, contentCalls: 20, graphBatches: 4,
   accessCalls: 44, graphStatements: 64, bodyBatch: 4, bodyBatches: 5 } as const;
 
-/** Words in one chapter text, as the serial statistics count them; null for a body that is not text. */
-function wordsIn(body: Record<string, unknown>): number | null {
-  try { return typeof body.body === 'string' ? countSerialWords(body.body) : null; }
-  catch { return null; }
+// Scripts written without spaces between words: their writers measure a manuscript in
+// characters (中文“字数”, 日本語「文字数」); elsewhere writers count words.
+const UNSPACED = new Set(['zh', 'ja', 'yue', 'wuu', 'lzh', 'hak', 'nan', 'cmn', 'gan', 'hsn']);
+
+/** How long one chapter text is, in the unit its language's writers use; null for a body that is not text. */
+export function manuscriptLength(body: Record<string, unknown>, language: string):
+  { unit: 'characters' | 'words'; value: number } | null {
+  if (typeof body.body !== 'string') return null;
+  try {
+    if (!UNSPACED.has(language.split('-')[0]!.toLowerCase())) return { unit: 'words', value: countSerialWords(body.body) };
+    let value = 0;
+    for (const { segment } of new Intl.Segmenter(language, { granularity: 'grapheme' }).segment(body.body)) {
+      if (!/^\s+$/u.test(segment)) value++;
+    }
+    return { unit: 'characters', value };
+  } catch { return null; }
 }
 
 export async function readStudioChapters(session: WorkReadSession, agent: string, book: string,
@@ -113,12 +125,14 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
         ?.slice('urn:rezics:content:revision:'.length) ?? null;
     return revision ? [{ occurrence: fact.occurrence, revision }] : [];
   });
-  const words = new Map<string, number | null>();
+  const lengths = new Map<string, ReturnType<typeof manuscriptLength>>();
   for (let start = 0; start < texts.length; start += STUDIO_CHAPTER_COST.bodyBatch) {
     const batch = texts.slice(start, start + STUDIO_CHAPTER_COST.bodyBatch);
     const exact = await content.readExactBatch(batch.map(item => item.revision), async ids => new Set(ids));
     for (const [index, result] of exact.entries()) {
-      words.set(batch[index]!.occurrence, result?.status === 'available' ? wordsIn(result.body) : null);
+      const fact = facts.find(item => item.occurrence === batch[index]!.occurrence);
+      lengths.set(batch[index]!.occurrence, result?.status === 'available'
+        ? manuscriptLength(result.body, fact?.language ?? options.language ?? page.language ?? 'und') : null);
     }
   }
   const again = await access.studioWork(principal, agent, book);
@@ -134,7 +148,7 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
   }
   const byFact = new Map(facts.map(fact => [fact.occurrence, fact]));
   const counted = facts.map(({ text: _text, ...fact }: typeof facts[number] & { text?: string | null }) =>
-    ({ ...fact, words: words.get(fact.occurrence) ?? null }));
+    ({ ...fact, length: lengths.get(fact.occurrence) ?? null }));
   const disclosedPage = { ...page, items: page.items.map(item => {
     const fact = byFact.get(item.occurrence);
     return fact && !fact.target ? { ...item, target: null, label: null,

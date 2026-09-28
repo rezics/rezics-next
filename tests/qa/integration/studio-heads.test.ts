@@ -5,7 +5,6 @@ import { Elysia } from 'elysia';
 import { Pool } from 'pg';
 import { StudioAccess } from '../../../services/main/src/modules/studio/access.ts';
 import { STUDIO_CHAPTER_COST } from '../../../services/main/src/modules/studio/chapters.ts';
-import { countSerialWords } from '../../../services/main/src/modules/work/serial-projection.ts';
 import { authorWorkGeneration } from '../../../services/main/src/modules/access/author-baseline.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
@@ -313,8 +312,8 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       { writer: null, state: null, target: null, label: null },
     ]);
     expect(disclosed.page.items[2]).toMatchObject({ occurrence: strangerChapter.occurrence });
-    // Words count the writer's own draft; a volume lists its chapters one level at a time.
-    expect(disclosed.facts[0]).toMatchObject({ words: countSerialWords('第一章の本文') });
+    // Length measures the writer's own draft, in characters for Japanese; a volume lists its chapters one level at a time.
+    expect(disclosed.facts[0]).toMatchObject({ length: { unit: 'characters', value: 6 } });
     const volume = await f.json<{ revision: string; occurrences: string[] }>(await f.call('POST',
       `/v1/compositions/${shortId(composition.structure)}/changes`, { profile: 'book-composition',
         expectedHead: strangerChapter.compositionRevision, actingSubject: f.actor, operations: [{ op: 'insert',
@@ -327,11 +326,11 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     expect(top.page.items[0]).toMatchObject({ occurrence: volume.occurrences[0], role: 'group',
       division: 'volume', number: 1, childCount: 1 });
     const inVolume = await f.json<{ page: { items: Array<{ occurrence: string; number: number | null }> };
-      facts: Array<{ occurrence: string; words: number | null; state: string | null }> }>(await contentCall('GET',
+      facts: Array<{ occurrence: string; length: unknown; state: string | null }> }>(await contentCall('GET',
       `${chapterReadPath}&parent=${encodeURIComponent(volume.occurrences[0]!)}`), 200);
     expect(inVolume.page.items).toMatchObject([{ occurrence: chapter.occurrence, number: 1 }]);
     expect(inVolume.facts).toMatchObject([{ occurrence: chapter.occurrence, state: 'draft',
-      words: countSerialWords('第一章の本文') }]);
+      length: { unit: 'characters', value: 6 } }]);
     let statements = 0;
     const measuredFuseki = new Proxy(f.env.fuseki, { get(target, key) {
       if (key === 'query') return (...args: Parameters<typeof target.query>) => {
