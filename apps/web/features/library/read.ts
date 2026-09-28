@@ -10,7 +10,7 @@ import { workHref } from '../work-page/route.ts';
 import { dayText, momentText } from './format.ts';
 import { type LibraryShelf, type LibraryState, pageOf, sortLibrary, statusShelves } from './state.ts';
 import type { ContinueItem, CustomShelf, FollowedAuthors, LibraryItem, LibraryOverview, LibraryRow, Loaded,
-  ReaderStateItem, ReadingProgress, Review, ShelfStatus, StatusShelfItem } from './types.ts';
+  ReaderStateItem, ReadingProgress, Review, ShelfStatus, StatusShelfItem, YearlyGoal } from './types.ts';
 
 // Server reads for `/library`, as the session's Agent. Each region returns
 // its own `Loaded` outcome, so a shelf that cannot load leaves the rest.
@@ -49,6 +49,14 @@ export const libraryReader = cache(async () => {
   return reader.actingSubject ? { ...reader, actingSubject: reader.actingSubject } : null;
 });
 type Reader = NonNullable<Awaited<ReturnType<typeof libraryReader>>>;
+
+/** A dated finish is the unit of the yearly goal; undated Read works do not advance it. */
+export const readYearlyGoal = cache(async (year: number): Promise<Loaded<YearlyGoal>> => {
+  const reader = await libraryReader();
+  if (!reader) return { ok: false, failure: 'sign-in' };
+  return settle(() => reader.main.v1.me['reading-goal'].get({ query: {
+    actingSubject: reader.actingSubject, year } }));
+});
 
 /** Status counts, the reader's custom shelves, who may see the status shelves, and the rating question. */
 export const readOverview = cache(async (): Promise<Loaded<LibraryOverview>> => {

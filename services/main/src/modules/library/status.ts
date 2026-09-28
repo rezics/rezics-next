@@ -15,6 +15,8 @@ export interface WorkProgress { structure: string; occurrence: string; selectedR
 export class InvalidLibraryStatus extends Error {}
 export class StaleLibraryStatus extends Error {}
 export class LibraryStatusConflict extends Error {}
+export interface YearlyGoal { year: number; target: number | null; completed: number;
+  version: number; changedAt: string | null; replayed?: boolean }
 
 const columns = `work, status, started_on::text AS started_on, finished_on::text AS finished_on,
   version::text AS version, changed_at::text AS changed_at`;
@@ -36,6 +38,78 @@ function validDate(value: string | null) {
  * Reads use one indexed batch; writes serialize the key and exact status row. */
 export class ReaderLibraryStatusStore {
   constructor(private readonly pool: Pool) {}
+
+  async goal(agent: string, year: number): Promise<YearlyGoal> {
+    if (!ID.test(agent) || !Number.isInteger(year) || year < 1900 || year > 2100) {
+      throw new InvalidLibraryStatus('invalid reading goal');
+    }
+    const [goal, books] = await Promise.all([
+      this.pool.query<{ target: number | null; version: string; changed_at: string }>(`
+        SELECT target, version::text AS version, changed_at::text AS changed_at
+        FROM reader.yearly_goal WHERE agent = $1 AND year = $2`, [agent, year]),
+      this.pool.query<{ count: string }>(`
+        SELECT count(*)::text AS count FROM reader.library_status
+        WHERE agent = $1 AND status = 'read' AND finished_on >= make_date($2,1,1)
+          AND finished_on < make_date($2 + 1,1,1)`, [agent, year]),
+    ]);
+    return { year, target: goal.rows[0]?.target ?? null, completed: Number(books.rows[0]!.count),
+      version: Number(goal.rows[0]?.version ?? 0), changedAt: goal.rows[0]?.changed_at ?? null };
+  }
+
+  async setGoal(input: { agent: string; year: number; target: number | null;
+    expectedVersion: number; idempotencyKey: string }): Promise<YearlyGoal> {
+    if (!ID.test(input.agent) || !KEY.test(input.idempotencyKey)
+      || !Number.isInteger(input.year) || input.year < 1900 || input.year > 2100
+      || input.target !== null && (!Number.isInteger(input.target) || input.target < 1 || input.target > 1000)
+      || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
+      throw new InvalidLibraryStatus('invalid reading goal command');
+    }
+    const digest = createHash('sha256').update(JSON.stringify([input.year, input.target,
+      input.expectedVersion])).digest('hex');
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [JSON.stringify(['yearly-goal-key', input.agent, input.idempotencyKey])]);
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [JSON.stringify(['yearly-goal-year', input.agent, input.year])]);
+      const prior = await client.query<{ request_digest: string; result: YearlyGoal }>(`
+        SELECT request_digest, result FROM reader.yearly_goal_command
+        WHERE agent = $1 AND idempotency_key = $2`, [input.agent, input.idempotencyKey]);
+      if (prior.rows[0]) {
+        if (prior.rows[0].request_digest !== digest) throw new LibraryStatusConflict('goal key has another intent');
+        await client.query('COMMIT');
+        return { ...prior.rows[0].result, replayed: true };
+      }
+      const current = await client.query<{ version: string }>(`
+        SELECT version::text AS version FROM reader.yearly_goal
+        WHERE agent = $1 AND year = $2 FOR UPDATE`, [input.agent, input.year]);
+      const version = Number(current.rows[0]?.version ?? 0);
+      if (version !== input.expectedVersion) throw new StaleLibraryStatus('reading goal changed');
+      const written = await client.query<{ target: number | null; version: string; changed_at: string }>(`
+        INSERT INTO reader.yearly_goal (agent, year, target, version) VALUES ($1,$2,$3,$4)
+        ON CONFLICT (agent, year) DO UPDATE SET target = EXCLUDED.target,
+          version = EXCLUDED.version, changed_at = clock_timestamp()
+        RETURNING target, version::text AS version, changed_at::text AS changed_at`,
+      [input.agent, input.year, input.target, version + 1]);
+      const books = await client.query<{ count: string }>(`
+        SELECT count(*)::text AS count FROM reader.library_status
+        WHERE agent = $1 AND status = 'read' AND finished_on >= make_date($2,1,1)
+          AND finished_on < make_date($2 + 1,1,1)`, [input.agent, input.year]);
+      const result: YearlyGoal = { year: input.year, target: written.rows[0]!.target,
+        completed: Number(books.rows[0]!.count), version: Number(written.rows[0]!.version),
+        changedAt: written.rows[0]!.changed_at };
+      await client.query(`INSERT INTO reader.yearly_goal_command (agent, idempotency_key, request_digest, result)
+        VALUES ($1,$2,$3,$4)`, [input.agent, input.idempotencyKey, digest, JSON.stringify(result)]);
+      await client.query('COMMIT');
+      return { ...result, replayed: false };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
+  }
 
   async batch(agent: string, works: string[]): Promise<StatusState[]> {
     if (!ID.test(agent) || works.length > 24 || new Set(works).size !== works.length

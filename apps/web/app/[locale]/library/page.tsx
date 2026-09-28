@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { signInPath } from '../../../features/auth/paths.ts';
 import { readSession } from '../../../features/auth/session.ts';
 import { LibraryPage } from '../../../features/library/library-page.tsx';
-import { libraryReader, readCurrentlyReading, readFollowedAuthors, readOverview, readShelfView }
+import { libraryReader, readCurrentlyReading, readFollowedAuthors, readOverview, readShelfView, readYearlyGoal }
   from '../../../features/library/read.ts';
 import { libraryHref, parseLibraryState } from '../../../features/library/state.ts';
 import { localizedPath } from '../../../i18n/locale.ts';
@@ -30,9 +30,10 @@ export default async function LibraryRoute({ searchParams }: Props) {
   if (!session) redirect(signInPath(here));
   if (session.agent.status !== 'selected') redirect(`${localizedPath('/identity', locale)}?next=${encodeURIComponent(here)}`);
   const first = state.shelf.kind === 'all' && state.page === 1;
-  const [reader, overview, view, reading, authors, messages] = await Promise.all([libraryReader(), readOverview(),
+  const year = new Date().getUTCFullYear();
+  const [reader, overview, view, reading, authors, goal, messages] = await Promise.all([libraryReader(), readOverview(),
     readShelfView(state, locale), first ? readCurrentlyReading(locale) : [], first ? readFollowedAuthors(locale) : null,
-    getMessages('library', locale)]);
+    readYearlyGoal(year), getMessages('library', locale)]);
   return <LibraryPage state={state} overview={overview} view={view} reading={reading} authors={authors} now={Date.now()}
-    avatarQuery={reader?.avatarQuery} locale={locale} messages={messages} />;
+    goal={goal} avatarQuery={reader?.avatarQuery} locale={locale} messages={messages} />;
 }

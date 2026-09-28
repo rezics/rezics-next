@@ -10,6 +10,7 @@ type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }>
 type Me = MainClient['v1']['me'];
 
 export type MyShelves = Ok<Me['shelves']['get']>;
+export type YearlyGoal = Ok<Me['reading-goal']['get']>;
 export type ShelfStatus = MyShelves['statusShelves'][number]['status'];
 /** A shelf the reader made: a Collection they curate, public or private on its own. */
 export type CustomShelf = MyShelves['items'][number];

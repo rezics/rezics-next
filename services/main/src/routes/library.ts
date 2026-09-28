@@ -57,6 +57,10 @@ const publicStatusShelf = t.Object({ profile: t.Literal('agent-status-shelf-v1')
   items: t.Array(t.Object({ work: readId, card: shelfWork }), { maxItems: 20 }),
   nextCursor: t.Nullable(t.String()), sourcePosition: readPosition,
   count: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() }) });
+const yearlyGoal = t.Object({ year: t.Integer({ minimum: 1900, maximum: 2100 }),
+  target: t.Nullable(t.Integer({ minimum: 1, maximum: 1000 })),
+  completed: t.Integer({ minimum: 0 }), version: t.Integer({ minimum: 0 }),
+  changedAt: t.Nullable(t.String()), replayed: t.Optional(t.Boolean()) });
 const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500), 503: problemResult(503) };
 const privateHeaders = { 'cache-control': 'private, no-store' };
@@ -70,6 +74,7 @@ export const openApiOperations = {
   '/v1/me/shelves/status/{status}/works': { get: { bearer: true } },
   '/v1/agents/{id}/shelves': { get: { bearer: false } },
   '/v1/agents/{id}/shelves/status/{status}/works': { get: { bearer: false } },
+  '/v1/me/reading-goal': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
 } as const;
 
 function failure(error: unknown) {
@@ -207,6 +212,35 @@ export function libraryRoutes(work: MainWorkDependencies) {
         return Response.json(await workRead(work, request, query,
           session => readPublicShelves(session, `https://rezics.com/id/${params.id}`, work.libraryStatus!)),
         { headers: privateHeaders });
+      } catch (error) { return failure(error); }
+    })
+    .get('/v1/me/reading-goal', {
+      query: t.Object({ actingSubject: readId, year: t.Numeric({ minimum: 1900, maximum: 2100 }) },
+        { additionalProperties: false }), response: { 200: yearlyGoal, ...errors },
+    }, async ({ request, query }) => {
+      if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
+      try {
+        if (!await reader(request, query.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
+        return Response.json(await work.libraryStatus.goal(query.actingSubject, query.year),
+          { headers: privateHeaders });
+      } catch (error) { return failure(error); }
+    })
+    .put('/v1/me/reading-goal', {
+      body: t.Object({ actingSubject: readId, year: t.Integer({ minimum: 1900, maximum: 2100 }),
+        target: t.Nullable(t.Integer({ minimum: 1, maximum: 1000 })),
+        expectedVersion: t.Integer({ minimum: 0 }) }, { additionalProperties: false }),
+      response: { 200: yearlyGoal, ...errors },
+    }, async ({ request, body }) => {
+      if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
+      const idempotencyKey = request.headers.get('idempotency-key') ?? '';
+      if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      }
+      try {
+        if (!await reader(request, body.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
+        return Response.json(await work.libraryStatus.setGoal({ agent: body.actingSubject, year: body.year,
+          target: body.target, expectedVersion: body.expectedVersion, idempotencyKey }),
+          { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
     .get('/v1/agents/:id/shelves/status/:status/works', {

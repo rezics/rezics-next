@@ -2,7 +2,7 @@ import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import { commandKey } from '../feed/api.ts';
 import { type Loaded, settle } from '../feed/types.ts';
-import type { LibraryVisibility, Review, Visibility } from './types.ts';
+import type { LibraryVisibility, Review, Visibility, YearlyGoal } from './types.ts';
 
 // The browser side of Library. Every command acts as the session's Agent,
 // compares and sets against the version the page read, and carries its own
@@ -35,6 +35,10 @@ const headers = () => ({ headers: { 'idempotency-key': commandKey() } });
 const uuid = (iri: string) => iri.slice(-36);
 // Main's Collection change takes at most sixteen operations.
 const CHANGE_BATCH = 16;
+
+export const saveYearlyGoal = (agent: string, year: number, target: number | null, expectedVersion: number,
+  main: () => MainClient = browserMainApi): Promise<Loaded<YearlyGoal>> =>
+  settle(() => main().v1.me['reading-goal'].put({ actingSubject: agent, year, target, expectedVersion }, headers()));
 
 export function mainLibraryApi(actingSubject: string, main: () => MainClient = browserMainApi): LibraryApi {
   /** A Collection's current head and root, which a change names. */
