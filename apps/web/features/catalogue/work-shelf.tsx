@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@rezics/ui/utils';
+import { cn, scrollBehavior } from '@rezics/ui/utils';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { type ReactNode, type Ref, useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -77,7 +77,7 @@ export function WorkShelf({ heading, works, avatarQuery, locale, className }: {
     const element = list.current;
     if (!element) return;
     const rtl = getComputedStyle(element).direction === 'rtl' ? -1 : 1;
-    element.scrollBy({ left: direction * rtl * element.clientWidth * 0.9, behavior: 'smooth' });
+    element.scrollBy({ left: direction * rtl * element.clientWidth * 0.9, behavior: scrollBehavior() });
   };
   const slot = slotRatio(works);
   // min-w-0 keeps the row's scroll width from widening the page's grid.

@@ -423,7 +423,9 @@
 }
 
 /* Simplified Chinese interface: Latin keeps Manrope and Source Serif; Han falls
-   back to the platform's SC faces instead of the browser's default CJK font. */
+   back to the platform's SC faces instead of the browser's default CJK font.
+   The app sets lang="zh-Hans"; zh-CN is the older tag some content carries. */
+:root:lang(zh-Hans),
 :root:lang(zh-CN) {
   --font-interface:
     "Manrope Variable", "Manrope", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI",
@@ -457,6 +459,20 @@
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+
+  /* Reduced motion everywhere: components opt in with motion-reduce:, and this
+     catches what they miss (enter/exit animations, slides, spinners' easing).
+     Animations still end, so presence and animationend handlers keep working. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 

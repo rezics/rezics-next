@@ -2,6 +2,7 @@
 
 import { Button } from '@rezics/ui/button';
 import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
+import { scrollBehavior } from '@rezics/ui/utils';
 import { ArrowUpIcon, CircleCheckBigIcon, RefreshCwIcon, RotateCwIcon, TriangleAlertIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -158,7 +159,7 @@ function FeedPages({ page, query, empty, allHref, headInterval }: { page: FeedPa
   }, [loadMore, state.cursor, state.loading, state.failure, state.sparse]);
 
   function showNewest() {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: scrollBehavior() });
     router.refresh();
   }
 
