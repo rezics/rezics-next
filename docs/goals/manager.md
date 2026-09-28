@@ -153,7 +153,7 @@ These steps describe one workable approach, not a fixed procedure.
 2. **Understand the product.** Have scouts map what exists: the web app
    (`apps/web`), the UI package (`packages/ui`) and Storybook, the Main, Content
    and Account service APIs, the product intent in `docs/product` and the
-   experience cases in `docs/experience`.
+   decisions in `docs/plan/frontend.md`.
 3. **Keep researching the frontend.** How the main site and the Accounts site
    should work is an open question that the manager owns throughout the Goal.
    Study strong comparable products (Google Account for Accounts; mature

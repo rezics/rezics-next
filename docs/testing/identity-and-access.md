@@ -17,5 +17,6 @@ explicit Agent selection through Main and Access. It does not qualify browser
 tab storage or the full Studio/session/task-default resolution. Those
 [additional obligations](../../scripts/qa/cases/identity-and-access.ts)
 remain pending without changing the qualified backend case denominator.
-The [experience design](../experience/identity-and-access-experience.md)
-owns the browser behavior.
+Web stories and browser tests own the browser behavior; the
+[frontend direction](../plan/frontend.md#identity-and-administration) records
+the decisions for surfaces not yet built.

@@ -17,8 +17,8 @@ They are design contracts, not claims that software or deployments are complete.
 For the shortest path, follow [installation and graph quickstart](operations/installation.md),
 then the [first authenticated journey](plan/README.md#fast-start-milestones).
 Development uses the [toolchain lock](development/toolchain.md) and the
-[executable test harness](testing/test-harness.md). Main and Account exist in part;
-the web client is pending.
+[executable test harness](testing/test-harness.md). Main, Account, the web app and
+the Accounts site exist in part.
 
 For sustained implementation, use the root [Goal](../GOAL.md) and
 [task reading routes](plan/README.md#task-reading-routes). The maintainer starts
@@ -39,13 +39,13 @@ and runs worker processes, claims and integration waves through the
 
 | Owner | Responsibility |
 | --- | --- |
-| [Product](product/capabilities.md) | Outcomes, scope, complete capability coverage and user journeys. |
+| [Product](product/capabilities.md) | Scope, capability coverage and the [design principles](product/design-principles.md) for capabilities, APIs and screens. |
 | [Architecture](architecture/README.md) | System boundaries, selected technologies and cross-domain invariants. |
 | [Contracts](contracts/README.md) | Identity, operations, state transitions, authority and observable outcomes. |
 | [Services](services/README.md) | Service interfaces, owned data, dependencies and failure handling. |
 | [Implementation blueprints](implementation/README.md) | Concrete target representations and producer-to-consumer protocols. |
 | [Storage](storage/README.md) | Engine bindings, placement, history, indexing and workload budgets. |
-| [Experience](experience/README.md) | How clients expose the same capability without losing meaning. |
+| [Frontend](plan/frontend.md) | Product decisions for the main and Accounts sites; stories and browser tests carry the flows. |
 | [Operations](operations/README.md) | Deployment assessment, installation, recovery, erasure and incidents. |
 | [Testing](testing/README.md) | Prospective scenarios and evidence required to qualify the target. |
 | [Development](development/README.md) | Repository organization, generation, development workflow and frontend code boundaries. |
