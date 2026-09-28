@@ -224,24 +224,23 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
       await expect(chapters.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible({ timeout: 30_000 });
     };
     await volume('第一卷 雨夜');
-    // Into a volume from the Move menu, as the keyboard does it: ↓ to "Move to", → into its volumes, Enter.
+    // Into a volume from the Move menu, as the keyboard does it: ↓ to the volume under "Move to", Enter.
     const highlight = async (name: string) => {
       const item = page.getByRole('menuitem', { name, exact: true });
       await expect(item).toBeVisible();
+      // The menu takes focus a frame after it opens; keys pressed before then reach the page instead.
+      await expect(item.locator('xpath=ancestor::*[@role="menu"][1]')).toBeFocused();
       for (let step = 0; step < 8 && await item.getAttribute('data-highlighted') === null; step++) {
         await page.keyboard.press('ArrowDown');
       }
       await expect(item).toHaveAttribute('data-highlighted', '');
-      // A submenu highlights its first item before it takes focus; Enter goes to whichever menu has it.
-      await expect(item.locator('xpath=ancestor::*[@role="menu"][1]')).toBeFocused();
     };
     await expect(async () => {
       await page.keyboard.press('Escape');
       await page.getByRole('button', { name: 'Move “第一章 雨夜”', exact: true }).click();
-      await expect(page.getByRole('menuitem', { name: 'Move to' })).toBeVisible({ timeout: 3_000 });
+      await expect(page.getByRole('group', { name: 'Move to' }).getByRole('menuitem', { name: '第一卷 雨夜' }))
+        .toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 60_000 });
-    await highlight('Move to');
-    await page.keyboard.press('ArrowRight');
     await highlight('第一卷 雨夜');
     await page.keyboard.press('Enter');
     await expect(chapters.getByRole('button', { name: /^第一卷 雨夜/ })).toContainText('1 chapter', { timeout: 30_000 });

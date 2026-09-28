@@ -77,16 +77,12 @@ async function choose(name: string | RegExp) {
   await userEvent.keyboard('{Enter}');
 }
 
-/** Opens a chapter's or volume's handle and picks one of its moves, or a volume from "Move to". */
+/** Opens a chapter's or volume's handle and picks one of its moves, or a volume under its "Move to" heading. */
 async function moveBy(canvasElement: HTMLElement, title: string, move: RegExp | string, into?: string) {
   await userEvent.click(within(canvasElement).getByRole('button', { name: `Move “${title}”` }));
   if (!into) return choose(move);
-  const submenu = await screen.findByRole('menuitem', { name: /Move to|移到/ });
-  await waitFor(() => expect(submenu.closest('[data-part=content]')).toHaveFocus());
-  for (let step = 0; step < 8 && !submenu.hasAttribute('data-highlighted'); step++) {
-    await userEvent.keyboard('{ArrowDown}');
-  }
-  await userEvent.keyboard('{ArrowRight}');
+  const heading = await screen.findByText(/^(Move to|移到)$/);
+  await expect(heading.closest('[role=group]')).toContainElement(await screen.findByRole('menuitem', { name: into }));
   await choose(into);
 }
 

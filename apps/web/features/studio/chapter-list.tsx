@@ -9,8 +9,8 @@ import { Checkbox } from '@rezics/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/collapsible';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { Menu, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent,
-  MenuSubTrigger, MenuTrigger } from '@rezics/ui/menu';
+import { Menu, MenuContent, MenuGroup, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger }
+  from '@rezics/ui/menu';
 import { ChoiceSelect } from '@rezics/ui/select';
 import { Skeleton } from '@rezics/ui/skeleton';
 import { cn } from '@rezics/ui/utils';
@@ -447,19 +447,12 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
         <MenuItem value="down" disabled={!down}><ArrowDownIcon aria-hidden="true" />{t.moveDown({ title: name })}</MenuItem>
         {item.role === 'chapter' && (into.length || item.parent !== structure) ? <>
           <MenuSeparator />
-          <MenuSub onSelect={details => {
-            if (details.value === 'top' && structure) moveTo(item, { parent: structure, end: true }, facts[item.occurrence]);
-            else if (details.value.startsWith('into:')) {
-              moveTo(item, { parent: details.value.slice(5), end: true }, facts[item.occurrence]);
-            }
-          }}>
-            <MenuSubTrigger><FolderInputIcon aria-hidden="true" />{t.moveTo}</MenuSubTrigger>
-            <MenuSubContent>
-              {item.parent !== structure ? <MenuItem value="top">{t.moveToTop}</MenuItem> : null}
-              {into.map(group => <MenuItem key={group.occurrence} value={`into:${group.occurrence}`}
-                lang={group.label?.language}>{groupName(group, locale, t)}</MenuItem>)}
-            </MenuSubContent>
-          </MenuSub>
+          {/* One level, not a submenu: a submenu can open without taking focus, and then Enter selects nothing. */}
+          <MenuGroup heading={t.moveTo}>
+            {item.parent !== structure ? <MenuItem value="top">{t.moveToTop}</MenuItem> : null}
+            {into.map(group => <MenuItem key={group.occurrence} value={`into:${group.occurrence}`}
+              lang={group.label?.language}>{groupName(group, locale, t)}</MenuItem>)}
+          </MenuGroup>
         </> : null}
       </MenuContent>
     </Menu>
@@ -585,21 +578,17 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
             </MenuTrigger>
             <MenuContent>
               <MenuItem value="rename"><PenLineIcon aria-hidden="true" />{t.renameGroup}</MenuItem>
-              <MenuSub>
-                <MenuSubTrigger>{t.showAs}</MenuSubTrigger>
-                <MenuSubContent>
-                  <MenuRadioGroup value={item.division ?? 'part'} onValueChange={details => {
-                    if (details.value !== item.division) {
-                      void run(item.occurrence, [{ op: 'update', occurrence: item.occurrence,
-                        division: details.value as Division }], t.groupRenamed({ title: name }));
-                    }
-                  }}>
-                    <MenuRadioItem value="volume">{t.divisionVolume}</MenuRadioItem>
-                    <MenuRadioItem value="part">{t.divisionPart}</MenuRadioItem>
-                    <MenuRadioItem value="extras">{t.divisionExtras}</MenuRadioItem>
-                  </MenuRadioGroup>
-                </MenuSubContent>
-              </MenuSub>
+              <MenuSeparator />
+              <MenuRadioGroup heading={t.showAs} value={item.division ?? 'part'} onValueChange={details => {
+                if (details.value !== item.division) {
+                  void run(item.occurrence, [{ op: 'update', occurrence: item.occurrence,
+                    division: details.value as Division }], t.groupRenamed({ title: name }));
+                }
+              }}>
+                <MenuRadioItem value="volume">{t.divisionVolume}</MenuRadioItem>
+                <MenuRadioItem value="part">{t.divisionPart}</MenuRadioItem>
+                <MenuRadioItem value="extras">{t.divisionExtras}</MenuRadioItem>
+              </MenuRadioGroup>
               <MenuSeparator />
               <MenuItem value="delete" variant="destructive" disabled={Boolean(item.childCount)}
                 title={item.childCount ? t.deleteNeedsEmpty : undefined}>
