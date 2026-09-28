@@ -1,19 +1,16 @@
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { isUiLocale, uiLocales, type UiLocale } from '../../i18n/define.ts';
-import { localizedPath } from '../../i18n/locale.ts';
+import { localeAlternates, pageUrl } from '../../features/seo/address.ts';
+import { isUiLocale } from '../../i18n/define.ts';
 
+// Every localized page is canonical at its own path. A page whose address
+// carries a selection or a native identity replaces these (see features/seo).
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
   if (!isUiLocale(locale)) return {};
-  const url = (await headers()).get('x-rezics-page-url');
-  if (!url) return {};
-  const page = new URL(url);
-  const address = (choice: UiLocale) => new URL(localizedPath(page.pathname, choice), page.origin).toString();
-  return { alternates: { canonical: address(locale), languages: Object.fromEntries(
-    uiLocales.map(choice => [choice, address(choice)])) } };
+  const page = await pageUrl();
+  return page ? { alternates: localeAlternates(page.origin, page.pathname, locale) } : {};
 }
 
 export default async function LocaleLayout({ children, params }: {
