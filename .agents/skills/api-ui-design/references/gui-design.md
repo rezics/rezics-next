@@ -32,7 +32,7 @@ when useful; evaluate navigation and state handling instead of assuming a famili
 pattern or an extra disclosure layer is always better.
 
 Choose controls by intent, option scale, frequency and device within
-[the existing UI system](../../../../libraries/ui/README.md). These are examples,
+[the existing UI system](../../../../packages/ui/README.md). These are examples,
 not component mandates:
 
 - Small multi-selection can use a [checkbox group](https://design-system.service.gov.uk/components/checkboxes/).
@@ -56,7 +56,7 @@ found and whether the initial view makes the common task clear.
 Use [external-content-value](../../external-content-value/SKILL.md) for changed
 audience-facing text and [storybook-ui-review](../../storybook-ui-review/SKILL.md)
 for visible implementation changes. Their owners govern localization and rendered
-checks under [AGENTS.md](../../../../AGENTS.md#data-and-verification-boundaries).
+checks under [AGENTS.md](../../../../AGENTS.md).
 Design-only work does not claim rendered results or start an application solely
 for QA. API-only work does not acquire a screenshot requirement from this method.
 Report scoped evidence and remaining limits; AI/static review is not measured

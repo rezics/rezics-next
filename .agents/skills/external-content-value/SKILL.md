@@ -37,10 +37,10 @@ categories and record format only where they help explain decisions.
 ## Completion
 
 Verify the changed text in its source context and follow the owner's
-[localization policy](../../../libraries/i18n/README.md) and deterministic
-checks. Follow the [AGENTS.md verification boundary](../../../AGENTS.md#data-and-verification-boundaries):
-scoped Storybook checks for covered UI are already authorized; full-application
-rendered QA requires the user's explicit request. For visible copy changes, use
-the [Storybook UI review skill](../storybook-ui-review/SKILL.md).
+localization contract ([web](../../../apps/web/i18n/define.ts) and
+[Languages and themes](../../../docs/plan/frontend.md#languages-and-themes)) and
+deterministic checks (`task i18n:check`). For visible copy changes, use the
+[Storybook UI review skill](../storybook-ui-review/SKILL.md) and read the
+changed flow in a real browser against the local stack.
 Finish when the affected text serves its audience and required checks pass;
 report unresolved factual or terminology decisions without expanding the audit.

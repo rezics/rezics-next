@@ -6,8 +6,8 @@ description: Design or review REZICS capability/API contracts and GUI interactio
 # API and UI design
 
 Apply the [product design principles](../../../docs/product/design-principles.md)
-and current [task scope](../../../AGENTS.md#task-scope-and-evidence). This skill
-supplies methods; feature owners retain decisions and acceptance evidence.
+within the current task's scope. This skill supplies methods; feature owners
+retain decisions and acceptance evidence.
 
 ## Select the relevant path
 
@@ -57,3 +57,25 @@ must not duplicate an effect, a two-value selection must remain two values, and 
 partial result must not become success. Use existing owner tests and verification
 permissions proportionately. Report what was checked and what remains unverified;
 contract integrity does not establish rendered or human-usability acceptance.
+
+## Sources
+
+Primary sources behind the principles, reviewed September 2026, with what they
+do not establish:
+
+- [Google AIP-121](https://google.aip.dev/121): model resources and relationships
+  independently of storage, with standard and fitting custom methods. It does
+  not prescribe REZICS transports or implementation order.
+- [Microsoft API design guidance](https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design):
+  model business capabilities; balance chatty calls against oversized responses.
+  It proves nothing about this product's latency, workload or usability.
+- Nielsen, [Progressive Disclosure](https://www.nngroup.com/articles/progressive-disclosure/)
+  (2006): prioritize common controls and make advanced entry discoverable,
+  checked by task analysis. It sets no number of levels or user proportion.
+- [Recognition and recall](https://www.nngroup.com/articles/recognition-and-recall/):
+  keep choices and context recognizable rather than remembered. It does not
+  choose controls or grouping for a task.
+- [OpenAI customization guidance](https://learn.chatgpt.com/docs/customization/overview)
+  and [scoped instruction guidance](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra):
+  concise persistent guidance plus selectively loaded workflows, which is why
+  methods live in skills. File structure alone does not prove model behavior.
