@@ -42,7 +42,8 @@ function CommunityList({ items, collapsed, avatarQuery, onNavigate }: {
             ? <span aria-hidden="true" className="absolute -end-0.5 -top-0.5 size-2 rounded-full bg-brand ring-2
               ring-sidebar" /> : null}
         </span>
-        <span lang={item.language} className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.name}</span>
+        <span lang={item.language} dir={item.direction}
+          className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.name}</span>
         {item.activity === 'new' ? <>
           {collapsed ? null : <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-brand" />}
           <span className="sr-only">, {t.newActivity}</span>

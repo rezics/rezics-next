@@ -34,15 +34,17 @@ test('Realm public profile: manager admission, CAS, media, moderator choice and 
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(moderator.actor)} a rv:Agent . ${iri(outsider.actor)} a rv:Agent . } }`);
     const publication = {
-      name: { en: 'Readers Guild', 'zh-CN': '读者公会' },
-      description: { en: 'Read together.', 'zh-CN': '一起阅读。' },
+      name: { original: 'en', labels: { en: 'Readers Guild', 'zh-Hans': '读者公会',
+        'zh-Hant': '讀者公會', ja: '読者の会' } },
+      description: { original: 'en', labels: { en: 'Read together.', 'zh-Hans': '一起阅读。' } },
       iconSelection: null as string | null, bannerSelection: null as string | null,
-      rules: [{ id: 'be-kind', title: { en: 'Be kind', 'zh-CN': '友善' },
-        body: { en: 'Respect others.', 'zh-CN': '尊重他人。' }, governanceRule: null }],
+      rules: [{ id: 'be-kind', title: { original: 'en', labels: { en: 'Be kind', 'zh-Hans': '友善' } },
+        body: { original: 'en', labels: { en: 'Respect others.', 'zh-Hans': '尊重他人。' } },
+        governanceRule: null }],
       count: { kind: 'estimated' as const, value: 120 }, moderators: [moderator.actor],
     };
     const body = (actingSubject: string, expectedHead: string | null, value = publication) => ({
-      profile: 'realm-public-profile-v1', expectedHead, actingSubject, publication: value,
+      profile: 'realm-public-profile-v2', expectedHead, actingSubject, publication: value,
     });
     await manager.grant(`realm:profile:${realm}`, 'realm.profile.publish');
     expect((await outsider.send('PUT', `${root}/profile`, body(outsider.actor, null))).status).toBe(403);
@@ -104,13 +106,29 @@ test('Realm public profile: manager admission, CAS, media, moderator choice and 
       banner: { kind: 'image' }, rules: [{ id: 'be-kind', title: { value: '友善' } }],
       membership: { count: { kind: 'estimated', value: 120 }, publicMembers: null },
       moderators: { kind: 'known', items: [moderator.actor] } });
+    expect((await response<{ name: { value: string; language: string; basis: string } }>(
+      await stack.call('GET', `${root}?language=zh-TW`), 200)).name)
+      .toMatchObject({ value: '讀者公會', language: 'zh-Hant', basis: 'requested' });
+    expect((await response<{ name: { value: string; language: string; basis: string } }>(
+      await stack.call('GET', `${root}?languages=de,ja`), 200)).name)
+      .toMatchObject({ value: '読者の会', language: 'ja', basis: 'requested' });
+    const precedence = await stack.main.handle(new Request(`http://main.local${root}?language=ja`, {
+      headers: { 'x-rezics-display-languages': 'zh-Hans,de' },
+    }));
+    expect((await response<{ name: { value: string } }>(precedence, 200)).name.value).toBe('読者の会');
+    const summary = await stack.main.handle(new Request(
+      `http://main.local/v1/resources/${short(realm)}?language=ja`, {
+        headers: { 'x-rezics-display-languages': 'zh-Hans,de' },
+      }));
+    expect((await response<{ name: { value: string } }>(summary, 200)).name.value).toBe('読者の会');
     expect((await stack.call('GET', home.banner.url)).status).toBe(200);
     expect((await manager.send('PUT', `${root}/profile`, body(manager.actor, null))).status).toBe(409);
 
     // Competing manager commands against one head admit only one successor.
     const successors = await Promise.all([0, 1].map(index => manager.send('PUT', `${root}/profile`,
       body(manager.actor, published.revision, { ...publication,
-        description: { ...publication.description, en: `Revision ${index}` } }),
+        description: { ...publication.description,
+          labels: { ...publication.description.labels, en: `Revision ${index}` } } }),
       `profile-race-${randomUUID()}`)));
     expect(successors.map(result => result.status).sort()).toEqual([201, 409]);
     const revoked = await response<{ revision: string }>(await moderator.send('PUT',

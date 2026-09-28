@@ -27,7 +27,8 @@ function community(item: Followed): Community {
   const activity = item.newSince?.state === 'new' || item.newSince?.state === 'more-unverified' ? 'new'
     : item.newSince ? 'none' : 'unknown';
   return { id: item.id, kind: item.kind === 'zone' ? 'zone' : 'realm', ...item.realm ? { realm: item.realm } : {},
-    name: item.name.value, language: item.name.language, icon: item.icon, href: item.href, activity,
+    name: item.name.value, language: item.name.language, direction: item.name.direction,
+    icon: item.icon, href: item.href, activity,
     ...(item.newSince?.count ? { count: item.newSince.count } : {}) };
 }
 
@@ -47,14 +48,15 @@ export const readFollowed = cache(async (kind: Extract<FollowKind, 'realm' | 'zo
 });
 
 /** Official Zones for everyone, named by their backing Realm; at most six, in Main's order. */
-export const readOfficialZones = cache(async (language: string): Promise<Community[]> => {
+export const readOfficialZones = cache(async (_language: string): Promise<Community[]> => {
   const reader = await shellReader();
   const list = await settle(() => reader.anonymous.v1.zones.get({ query: { official: 'true', limit: 6 } }));
   if (!list.ok) return [];
   const named = await Promise.all(list.data.items.slice(0, 6).map(async zone => {
-    const realm = await settle(() => reader.anonymous.v1.realms({ realm: uuidOf(zone.realm) }).get({ query: { language } }));
+    const realm = await settle(() => reader.anonymous.v1.realms({ realm: uuidOf(zone.realm) }).get());
     return realm.ok ? { id: zone.zone, kind: 'zone' as const, realm: zone.realm, name: realm.data.name.value,
-      language: realm.data.name.language, icon: realm.data.icon, href: `/r/${zone.routeSegment}`,
+      language: realm.data.name.language, direction: realm.data.name.direction,
+      icon: realm.data.icon, href: `/r/${zone.routeSegment}`,
       activity: 'unknown' as const } : null;
   }));
   return named.filter(item => item !== null);
@@ -84,7 +86,7 @@ export const readModerated = cache(async (language: string): Promise<Moderated[]
   return Promise.all(managed.slice(0, 8).map(async item => {
     const named = known.find(community => realmOf(community) === item.realm);
     if (named) return { ...item, name: named.name, language: named.language };
-    const read = await settle(() => reader.anonymous.v1.realms({ realm: uuidOf(item.realm) }).get({ query: { language } }));
+    const read = await settle(() => reader.anonymous.v1.realms({ realm: uuidOf(item.realm) }).get());
     return read.ok ? { ...item, name: read.data.name.value, language: read.data.name.language }
       : { ...item, name: uuidOf(item.realm).slice(0, 8) };
   }));

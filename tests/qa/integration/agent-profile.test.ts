@@ -7,6 +7,7 @@ import { AgentProvisioning } from '../../../services/main/src/modules/agent/prov
 import { AGENT_PROFILE_COST, AgentPublicProfiles } from '../../../services/main/src/modules/agent/profile.ts';
 import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { currentNotificationAgentReader } from '../../../services/main/src/modules/notification/subjects.ts';
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { hash } from '../../../services/main/src/modules/work/activate.ts';
@@ -35,10 +36,13 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
       account, media: stack.media, profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       agentProfiles: new AgentPublicProfiles(stack.accessPool, stack.env, stack.media.store),
+      personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentHandles: new AgentVanityHandles(stack.accessPool) });
-    const call = (method: string, path: string, token?: string, body?: unknown, key = randomUUID()) =>
+    const call = (method: string, path: string, token?: string, body?: unknown, key = randomUUID(),
+      language?: string) =>
       app.handle(new Request(`http://main.local${path}`, { method,
         headers: { ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(language ? { 'accept-language': language } : {}),
           ...(body ? { 'content-type': 'application/json', 'idempotency-key': key } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}) }));
     const created = await json(await call('POST', '/v1/agents', owner.token,
@@ -48,6 +52,32 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     const first = await json(await call('GET', path), 200);
     expect(first).toMatchObject({ displayName: 'Initial Name', bio: null,
       avatarSelection: null, avatarUrl: null });
+    const org = await json(await call('POST', '/v1/agents', owner.token,
+      { profile: 'agent-provision-v1', kind: 'organization', displayName: 'North Star Editions' }), 201);
+    const orgPath = `/v1/agents/${(org.agent as string).slice(-36)}`;
+    const orgFirst = await json(await call('GET', orgPath), 200);
+    const localizedName = { original: 'en', labels: { en: 'North Star Editions',
+      'zh-Hans': '北辰出版', ja: '北極星出版' } };
+    const orgName = { profile: 'agent-public-profile-v2', expectedHead: orgFirst.revision,
+      displayName: 'North Star Editions', avatarSelection: null, bio: null, localizedName };
+    expect((await call('PUT', `${path}/profile`, owner.token,
+      { ...orgName, expectedHead: first.revision })).status).toBe(400);
+    const orgSaved = await json(await call('PUT', `${orgPath}/profile`, owner.token, orgName), 201);
+    expect(orgSaved.profile).toBe('agent-public-profile-v2');
+    expect(await json(await call('GET', orgPath, undefined, undefined, randomUUID(), 'zh-CN'), 200))
+      .toMatchObject({ displayName: '北辰出版', originalDisplayName: 'North Star Editions',
+        displayNameInfo: { language: 'zh-Hans', direction: 'ltr', basis: 'requested' } });
+    expect(await json(await call('GET', orgPath, undefined, undefined, randomUUID(), 'de'), 200))
+      .toMatchObject({ displayName: 'North Star Editions',
+        displayNameInfo: { language: 'en', basis: 'fallback' } });
+    const orgLegacyEdit = await json(await call('PUT', `${orgPath}/profile`, owner.token, {
+      profile: 'agent-public-profile-v1', expectedHead: orgSaved.revision,
+      displayName: 'North Star Books', avatarSelection: null, bio: null,
+    }), 201);
+    expect(orgLegacyEdit.profile).toBe('agent-public-profile-v1');
+    expect(await json(await call('GET', orgPath, undefined, undefined, randomUUID(), 'zh-CN'), 200))
+      .toMatchObject({ displayName: '北辰出版', originalDisplayName: 'North Star Books',
+        localizedNames: { labels: { en: 'North Star Books' } } });
     const body = (expectedHead: string, displayName: string) => ({
       profile: 'agent-public-profile-v1', expectedHead, displayName,
       avatarSelection: null, bio: { text: ' 写作者 ', language: 'zh-Hans' },
@@ -146,6 +176,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     const recoveryApp = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
       account, media: stack.media, profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentProfiles: new AgentPublicProfiles(stack.accessPool, { ...stack.env, fuseki: faulted }, stack.media.store),
+      personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentHandles: new AgentVanityHandles(stack.accessPool) });
     const recovery = await json(await recoveryApp.handle(new Request(`http://main.local${path}/profile`, {
       method: 'PUT', headers: { authorization: `Bearer ${owner.token}`, 'content-type': 'application/json',

@@ -55,7 +55,7 @@ export async function seedRealms(state: SeedState) {
     // Separate stewards retain their own member quotas on a previously seeded stack.
     const steward = state.sessions[index + 1]!;
     const receipt = await state.optional('Space / Realm creation', () => api.post<SpaceReceipt>('/v1/spaces', {
-      profile: 'space-realm-v1', name: realm.name, capabilities: ['realm'],
+      profile: 'space-realm-v1', name: realm.seedName, capabilities: ['realm'],
       actingSubject: steward.actingSubject }, steward.token, seedKey('realm', realm.id)));
     if (receipt) createdRealms.push({ id: realm.id, receipt, steward });
   }

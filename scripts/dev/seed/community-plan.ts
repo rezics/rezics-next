@@ -8,10 +8,10 @@ import type { DemoPerson } from './plan.ts';
 
 /** People who came for a community rather than an official Zone. They sign up with the base plan's people. */
 export const communityPeople: readonly DemoPerson[] = [
-  { id: 'wei', handle: 'zhou_wei', name: 'Zhou Wei 周伟', email: 'rezics-demo-wei@example.test', password: 'Rezics-demo-2026-wei' },
+  { id: 'wei', handle: 'zhou_wei', name: '周伟', seedName: 'Zhou Wei 周伟', email: 'rezics-demo-wei@example.test', password: 'Rezics-demo-2026-wei' },
   { id: 'priya', handle: 'priya_raman', name: 'Priya Raman', email: 'rezics-demo-priya@example.test', password: 'Rezics-demo-2026-priya' },
   { id: 'max', handle: 'max_becker', name: 'Max Becker', email: 'rezics-demo-max@example.test', password: 'Rezics-demo-2026-max' },
-  { id: 'hana', handle: 'hana_sato', name: 'Hana Sato 佐藤花', email: 'rezics-demo-hana@example.test', password: 'Rezics-demo-2026-hana' },
+  { id: 'hana', handle: 'hana_sato', name: '佐藤花', seedName: 'Hana Sato 佐藤花', email: 'rezics-demo-hana@example.test', password: 'Rezics-demo-2026-hana' },
   { id: 'nora', handle: 'nora_lindqvist', name: 'Nora Lindqvist', email: 'rezics-demo-nora@example.test', password: 'Rezics-demo-2026-nora' },
 ];
 

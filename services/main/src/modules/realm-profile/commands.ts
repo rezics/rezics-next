@@ -1,4 +1,3 @@
-import { Value } from 'typebox/value';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
@@ -9,13 +8,14 @@ import type { GovernanceRules } from '../governance/rules.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, IdempotencyConflict, PendingActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
-import { checkedProfile, nativeId, publicProfile, REALM_PROFILE,
+import { checkedProfile, currentProfile, nativeId, REALM_PROFILE,
   RealmProfileInvalid, RealmProfileMissing, RealmProfileStale, RealmProfileUnavailable,
   type PublicProfile } from './schema.ts';
 
 type Account = Pick<AccountAssertionVerifier, 'verify'>;
 type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>;
 const FAMILY = 'realm-public-profile-v1';
+const MODERATOR_PROFILE = 'https://rezics.com/definition/realm-public-profile-v1';
 const MAX_GRAPH_READ_BYTES = 64 * 1024;
 
 export interface ProfilePublicationInput {
@@ -144,14 +144,20 @@ async function admit(env: WorkActivationEnvironment, account: Account, access: A
   return { registered, admission };
 }
 
-async function profileHead(env: WorkActivationEnvironment, realm: string): Promise<string | null> {
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+async function profileHead(env: WorkActivationEnvironment, realm: string): Promise<{
+  head: string | null; space: string; spaceProfile: 'space-realm-v1' | 'space-realm-v2' }> {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?space ?spaceProfile WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ;
       rv:space ?space . ?space a rv:Space ; rv:realmCapability ${iri(realm)} ;
-      rv:disclosure rv:Public . OPTIONAL { ${iri(realm)} rv:publicProfileHead ?head } }
+      rv:disclosure rv:Public . OPTIONAL { ${iri(realm)} rv:publicProfileHead ?head }
+      OPTIONAL { ?space rv:definitionProfile ?spaceProfile } }
   } LIMIT 2`, MAX_GRAPH_READ_BYTES)).results?.bindings ?? [];
-  if (rows.length !== 1) throw new RealmProfileMissing('Realm is unavailable');
-  return rows[0]!.head?.value ?? null;
+  if (rows.length !== 1 || !rows[0]?.space || !nativeId.test(rows[0].space.value)) {
+    throw new RealmProfileMissing('Realm is unavailable');
+  }
+  const spaceProfile = rows[0].spaceProfile?.value === 'https://rezics.com/definition/space-realm-v2'
+    ? 'space-realm-v2' as const : 'space-realm-v1' as const;
+  return { head: rows[0].head?.value ?? null, space: rows[0].space.value, spaceProfile };
 }
 
 async function imageSelection(media: MediaStore | undefined, selection: string | null,
@@ -192,7 +198,7 @@ export async function publishRealmProfile(env: WorkActivationEnvironment, media:
     throw new RealmProfileInvalid('Realm profile identity is invalid');
   }
   const profile = checkedProfile(input.profile);
-  const digest = hash(JSON.stringify({ family: FAMILY, action: 'publish', realm: input.realm,
+  const digest = hash(JSON.stringify({ family: 'realm-public-profile-v2', action: 'publish', realm: input.realm,
     expectedHead: input.expectedHead, actingSubject: input.actingSubject, profile }));
   const scope = `realm:profile:${input.realm}`;
   const { registered, admission } = await admit(env, account, access, request, {
@@ -200,18 +206,18 @@ export async function publishRealmProfile(env: WorkActivationEnvironment, media:
     actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, digest });
   if (admission.state !== 'sealed' && !await readTerminal(env, admission.id)) {
-    let head: string | null;
-    try { head = await profileHead(env, input.realm); }
+    let basis: Awaited<ReturnType<typeof profileHead>>;
+    try { basis = await profileHead(env, input.realm); }
     catch (error) {
       if (!(error instanceof RealmProfileMissing)) throw error;
       const terminal = await cancel(env, admission, 'InvalidProfile');
       await access.recordGraphOutcome(admission.id, terminal);
       throw error;
     }
-    if (head !== input.expectedHead) {
+    if (basis.head !== input.expectedHead) {
       const stale = await cancel(env, admission, 'StaleHead');
       await access.recordGraphOutcome(admission.id, stale);
-      if (stale.outcome === 'cancelled') throw new RealmProfileStale('Realm profile head changed', head);
+      if (stale.outcome === 'cancelled') throw new RealmProfileStale('Realm profile head changed', basis.head);
     }
     try {
       await imageSelection(media, profile.iconSelection, input.realm, DEFAULT_MEDIA_CONTEXT);
@@ -243,11 +249,13 @@ export async function publishRealmProfile(env: WorkActivationEnvironment, media:
     const receipt = receiptIri(admission.id);
     const payload = JSON.stringify(profile);
     const expected = input.expectedHead;
-    const update = `PREFIX rv: <${RV}>
+    const update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(basis.space)} rdfs:label ?oldName }
         ${expected ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.realm)} rv:publicProfileHead ${iri(expected)} }` : ''} }
       INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-        GRAPH ${iri(GRAPHS.current)} { ${iri(input.realm)} rv:publicProfileHead ${iri(revision)} }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(input.realm)} rv:publicProfileHead ${iri(revision)} .
+          ${iri(basis.space)} rdfs:label ${lit(profile.name.labels[profile.name.original]!)}@${profile.name.original} }
         GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RealmPublicProfileRevision, rv:RevisionAnchor ;
           rv:component ${iri(input.realm)} ; rv:operation ${iri(operation)} ;
           ${expected ? `rv:predecessor ${iri(expected)} ;` : ''}
@@ -261,8 +269,8 @@ export async function publishRealmProfile(env: WorkActivationEnvironment, media:
           input.realm)} } }
       WHERE { ${guard(env)}
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.realm)} a rv:Realm ; rv:realmState rv:Active ;
-          rv:space ?space . ?space a rv:Space ; rv:realmCapability ${iri(input.realm)} ;
-          rv:disclosure rv:Public .
+          rv:space ${iri(basis.space)} . ${iri(basis.space)} a rv:Space ; rv:realmCapability ${iri(input.realm)} ;
+          rv:disclosure rv:Public ; rdfs:label ?oldName .
           ${expected ? `${iri(input.realm)} rv:publicProfileHead ${iri(expected)} .` : ''} }
         ${expected ? '' : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
           ${iri(input.realm)} rv:publicProfileHead ?prior } }`}
@@ -271,12 +279,15 @@ export async function publishRealmProfile(env: WorkActivationEnvironment, media:
           ${iri(agent)} a rv:Agent . ${iri(moderatorSlot(input.realm, agent))} rv:choiceHead ?choice${index} . }
           GRAPH ${iri(GRAPHS.revisions)} { ?choice${index} rv:publicChoice rv:Accepted . }`).join('\n')}
         BIND(?n + 1 AS ?next) }`;
-    const validations = await profileValidations(env.fuseki, 'realm-public-profile-v1', [{
+    const validations = [...await profileValidations(env.fuseki, 'realm-public-profile-v2', [{
       shape: `${REALM_PROFILE}/revision-shape`, focus: [revision],
-      graphs: [GRAPHS.current, GRAPHS.revisions] }]);
+      graphs: [GRAPHS.current, GRAPHS.revisions] }]),
+      ...await profileValidations(env.fuseki, basis.spaceProfile, [{
+        shape: `https://rezics.com/definition/${basis.spaceProfile}/space-shape`,
+        focus: [basis.space], graphs: [GRAPHS.current] }])];
     try { await validatedCommand(env, { receipt, digest, update, validations,
       deadlineMs: 10_000 }, admission); } catch { /* receipt decides */ }
-    if (!await readTerminal(env, admission.id) && await profileHead(env, input.realm) !== expected) {
+    if (!await readTerminal(env, admission.id) && (await profileHead(env, input.realm)).head !== expected) {
       await cancel(env, admission, 'StaleHead');
     }
   }
@@ -344,7 +355,7 @@ export async function choosePublicModerator(env: WorkActivationEnvironment, acco
           rv:component ${iri(slot)} ; rv:operation ${iri(operation)} ;
           ${head ? `rv:predecessor ${iri(head)} ;` : ''}
           rv:publicChoice rv:${input.public ? 'Accepted' : 'Declined'} ;
-          rv:modelRevision ${iri(REALM_PROFILE)} ; rv:shapeRevision ${iri(REALM_PROFILE)} ;
+          rv:modelRevision ${iri(MODERATOR_PROFILE)} ; rv:shapeRevision ${iri(MODERATOR_PROFILE)} ;
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:sequence ?next . }
         GRAPH ${iri(GRAPHS.receipts)} { ${receiptTriples(env, admission, receipt, 'Succeeded',
@@ -362,9 +373,9 @@ export async function choosePublicModerator(env: WorkActivationEnvironment, acco
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
         BIND(?n + 1 AS ?next) }`;
     const validations = await profileValidations(env.fuseki, 'realm-public-profile-v1', [
-      { shape: `${REALM_PROFILE}/moderator-slot-shape`, focus: [slot],
+        { shape: `${MODERATOR_PROFILE}/moderator-slot-shape`, focus: [slot],
         graphs: [GRAPHS.current, GRAPHS.revisions] },
-      { shape: `${REALM_PROFILE}/moderator-choice-shape`, focus: [revision],
+      { shape: `${MODERATOR_PROFILE}/moderator-choice-shape`, focus: [revision],
         graphs: [GRAPHS.current, GRAPHS.revisions] },
     ]);
     try { await validatedCommand(env, { receipt, digest, update,
@@ -388,11 +399,11 @@ export async function choosePublicModerator(env: WorkActivationEnvironment, acco
 }
 
 export async function readCurrentProfile(env: WorkActivationEnvironment, realm: string) {
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?revision ?payload WHERE {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?revision ?payload ?model WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm .
       OPTIONAL { ${iri(realm)} rv:publicProfileHead ?revision } }
     OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:RealmPublicProfileRevision ;
-      rv:component ${iri(realm)} ; rv:profilePayload ?payload . } }
+      rv:component ${iri(realm)} ; rv:profilePayload ?payload ; rv:modelRevision ?model . } }
   } LIMIT 2`, MAX_GRAPH_READ_BYTES)).results?.bindings ?? [];
   if (rows.length !== 1) throw new RealmProfileUnavailable('Realm public profile is ambiguous');
   if (!rows[0]?.revision) return null;
@@ -401,9 +412,10 @@ export async function readCurrentProfile(env: WorkActivationEnvironment, realm: 
   }
   let parsed: unknown;
   try { parsed = JSON.parse(rows[0].payload.value); } catch { /* rejected below */ }
-  if (!Value.Check(publicProfile, parsed)) throw new RealmProfileUnavailable('Realm public profile is invalid');
-  try { checkedProfile(parsed); } catch { throw new RealmProfileUnavailable('Realm public profile is invalid'); }
-  return { revision: rows[0].revision.value, profile: parsed };
+  try { return { revision: rows[0].revision.value, profile: currentProfile(parsed),
+    contract: rows[0].model?.value === REALM_PROFILE ? 'realm-public-profile-v2' as const
+      : 'realm-public-profile-v1' as const }; }
+  catch { throw new RealmProfileUnavailable('Realm public profile is invalid'); }
 }
 
 export { chosenModerators };

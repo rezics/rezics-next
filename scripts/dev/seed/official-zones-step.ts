@@ -7,7 +7,7 @@ import { editorList, extraWorks, fabricApi, fictionQuotes, fictionWorks, laterMo
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantImportedContributionSeedAuthority,
   type LocalOperatorInput } from './operator.ts';
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
-import { people, profilePlan, seedKey, works } from './plan.ts';
+import { localizedBilingual, people, profilePlan, seedKey, works } from './plan.ts';
 import { seedReply } from './replies.ts';
 import { modsConcepts } from './realms-step.ts';
 import { gamesCatalogue } from './games-catalogue.ts';
@@ -721,18 +721,22 @@ async function profiles(o: Official) {
         }));
         if (chosen) moderators.push(moderator.actingSubject);
       }
-      const header = await o.read<{ profileRevision: string | null; description: { value: string } | null;
+      const header = await o.read<{ profileRevision: string | null; profileContract: string | null;
+        description: { value: string } | null;
         moderators: { items: string[] } }>(`${root}?language=en`);
-      if (header?.description?.value === profile.description.en
+      if (header?.profileContract === 'realm-public-profile-v2'
+        && header.description?.value === profile.description.en
         && JSON.stringify(header.moderators.items) === JSON.stringify(moderators)) return;
       await grantRealmProfileSeed(o.input(realm.steward, realm.steward.actingSubject),
         [{ action: 'realm.profile.publish', realm: realm.receipt.realm }]);
-      await o.api.put(`${root}/profile`, { profile: 'realm-public-profile-v1',
+      await o.api.put(`${root}/profile`, { profile: 'realm-public-profile-v2',
         expectedHead: header?.profileRevision ?? null, actingSubject: realm.steward.actingSubject,
-        publication: { name: profile.name, description: profile.description, iconSelection: null,
-          bannerSelection: null, rules: profile.rules.map(rule => ({ ...rule, governanceRule: null })),
+        publication: { name: localizedBilingual(profile.name),
+          description: localizedBilingual(profile.description), iconSelection: null,
+          bannerSelection: null, rules: profile.rules.map(rule => ({ ...rule,
+            title: localizedBilingual(rule.title), body: localizedBilingual(rule.body), governanceRule: null })),
           count: { kind: 'exact', value: null }, moderators } },
-      await token(realm.steward.id), seedKey('official-profile', `${id}:${header?.profileRevision?.slice(-12) ?? 'first'}`));
+      await token(realm.steward.id), seedKey('official-profile-v2', `${id}:${header?.profileRevision?.slice(-12) ?? 'first'}`));
     });
   }
 }

@@ -6,6 +6,7 @@ export interface Community {
   realm?: string;
   name: string;
   language: string;
+  direction?: 'ltr' | 'rtl';
   icon: { kind: 'fallback'; key: string } | { kind: 'image'; url: string } | null;
   /** A page path; locale-prefixed when rendered. */
   href: string;

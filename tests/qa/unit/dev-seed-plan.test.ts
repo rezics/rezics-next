@@ -67,6 +67,8 @@ describe('dev seed plan', () => {
     expect(new Set(works.map(work => work.language))).toEqual(new Set(['en', 'zh-Hans']));
     expect(new Set(works.map(work => work.type))).toEqual(new Set(['book', 'document', 'recipe', 'prompt', 'skill', 'mod']));
     expect(works.filter(work => work.excerpt).length).toBeGreaterThanOrEqual(5);
+    expect(works.find(work => work.id === 'serial')).toMatchObject({ title: '雨夜书店',
+      seedTitle: '雨夜书店 · 连载小说' });
   });
 
   test('uses stable bounded operation keys and valid type IRIs', () => {

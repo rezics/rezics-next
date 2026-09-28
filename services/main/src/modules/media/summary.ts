@@ -5,6 +5,8 @@ import { readContextSummaryBatch } from '../context/summary-read.ts';
 import { PROFILES } from '../semantic/schema.ts';
 import { readWorkComponentState } from '../work/history.ts';
 import { readPublicRealmNames } from '../space/read.ts';
+import { currentProfile } from '../realm-profile/schema.ts';
+import { readerLanguages, selectDisplayName, type LocalizedText } from '../display-language/select.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaUnavailable,
   type AvatarRow, type MediaStore } from './store.ts';
 
@@ -39,6 +41,7 @@ export interface SummaryInput {
   resources: readonly string[];
   context: string;
   language: string | null;
+  languages?: readonly string[];
 }
 
 export type AvatarDescriptor =
@@ -61,7 +64,27 @@ export interface SummaryBatch {
 }
 
 interface GraphRow { type: ResourceType; work: string | null; head: string | null;
-  public: boolean; labels: Map<string, string> }
+  public: boolean; labels: Map<string, string>; localizedName?: LocalizedText }
+
+/** Current profile payloads for a bounded Realm summary batch, one graph call. */
+async function realmProfileNames(env: WorkActivationEnvironment, realms: readonly string[]) {
+  const names = new Map<string, LocalizedText>();
+  if (!realms.length) return names;
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realm ?payload WHERE {
+    VALUES ?realm { ${realms.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm . OPTIONAL { ?realm rv:publicProfileHead ?head } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RealmPublicProfileRevision ;
+      rv:component ?realm ; rv:profilePayload ?payload } }
+  } LIMIT ${realms.length + 1}`)).results?.bindings ?? [];
+  if (rows.length !== realms.length) throw new MediaUnavailable('Realm profile batch is incomplete');
+  for (const row of rows) {
+    if (!row.realm || names.has(row.realm.value)) throw new MediaUnavailable('Realm profile batch is ambiguous');
+    if (!row.payload) continue;
+    try { names.set(row.realm.value, currentProfile(JSON.parse(row.payload.value)).name); }
+    catch { throw new MediaUnavailable('Realm profile name is invalid'); }
+  }
+  return names;
+}
 
 /** Definition projections and exact sealed heads are read together, independent of batch size. */
 async function readRelationDefinitionNames(env: WorkActivationEnvironment, resources: readonly string[],
@@ -281,6 +304,8 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   }
   const realmNames = await readPublicRealmNames(env, realms, new Set(realmProofs.keys()));
   if (realms.length) cost.graphQueries += 2;
+  const profileNames = await realmProfileNames(env, [...realmNames.keys()]);
+  if (realmNames.size) cost.graphQueries++;
   const contextRefs = [...special].filter(([, row]) => row.type === 'context').map(([reference]) => reference);
   const contextBatch = await readContextSummaryBatch(env, contextRefs,
     input.context === DEFAULT_MEDIA_CONTEXT ? null : input.context,
@@ -322,7 +347,8 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   for (const [reference, row] of special) {
     if (row.type === 'realm') {
       const name = realmNames.get(reference);
-      if (name) { row.labels.set('en', name); readable.set(reference, row); }
+      if (name) { row.localizedName = profileNames.get(reference);
+        row.labels.set(row.localizedName?.original ?? 'en', name); readable.set(reference, row); }
       continue;
     }
     if (row.type === 'context') {
@@ -389,7 +415,10 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
       ? contextBatch.contexts.get(input.context) : undefined;
     return { reference, status: 'available', type: row.type,
       disclosure: row.public ? 'public' : 'restricted',
-      name: { ...selectName(row.labels, input.language)!,
+      name: { ...(row.type === 'realm'
+        ? selectDisplayName(row.localizedName ?? row.labels,
+          input.languages ?? readerLanguages(input.language))!
+        : selectName(row.labels, input.language)!),
         ...(selectedContext?.preferenceRevision
           ? { context: input.context, preferenceRevision: selectedContext.preferenceRevision } : {}) },
       avatar: avatar(row.type, reference, avatars.get(reference)) };

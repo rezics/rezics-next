@@ -10,6 +10,10 @@ export const agentRevision = t.String({ pattern:
 export const creditRole = t.Union([t.Literal('author'), t.Literal('translator'), t.Literal('editor')]);
 export const agentProfile = t.Object({ profile: t.Literal('agent-read-v1'), id: readId,
   displayName: t.String({ minLength: 1, maxLength: 200 }),
+  displayNameInfo: t.Optional(t.Nullable(readName)),
+  originalDisplayName: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+  localizedNames: t.Optional(t.Nullable(t.Object({ original: t.String(),
+    labels: t.Record(t.String(), t.String()) }))),
   revision: agentRevision,
   bio: t.Nullable(t.Object({ text: t.String({ minLength: 1, maxLength: 500 }),
     language: t.String({ minLength: 2, maxLength: 35 }) })),

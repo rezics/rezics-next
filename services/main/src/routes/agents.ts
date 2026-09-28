@@ -31,12 +31,21 @@ const handleChangeResult = t.Object({ profile: t.Literal('agent-handle-v1'),
 const availabilityResult = t.Object({ profile: t.Literal('agent-handle-availability-v1'),
   handle: t.String(), available: t.Boolean(), reason: t.Union([t.Literal('available'),
     t.Literal('invalid'), t.Literal('reserved'), t.Literal('claimed'), t.Literal('retained')]) });
-const profileChangeBody = t.Object({ profile: t.Literal('agent-public-profile-v1'),
+const profileChangeFields = {
   expectedHead: t.String(), displayName: t.String({ minLength: 1, maxLength: 200 }),
   avatarSelection: t.Nullable(t.String()), bio: t.Nullable(t.Object({
     text: t.String({ minLength: 1, maxLength: 500 }), language: t.String({ minLength: 2, maxLength: 35 }),
-  }, { additionalProperties: false })) }, { additionalProperties: false });
-const profileChangeResult = t.Object({ profile: t.Literal('agent-public-profile-v1'),
+  }, { additionalProperties: false })) };
+const localizedName = t.Object({ original: t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' }),
+  labels: t.Record(t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' }),
+    t.String({ minLength: 1, maxLength: 200 })) }, { additionalProperties: false });
+const profileChangeBody = t.Union([
+  t.Object({ profile: t.Literal('agent-public-profile-v1'), ...profileChangeFields }, { additionalProperties: false }),
+  t.Object({ profile: t.Literal('agent-public-profile-v2'), ...profileChangeFields,
+    localizedName }, { additionalProperties: false }),
+]);
+const profileChangeResult = t.Object({ profile: t.Union([
+  t.Literal('agent-public-profile-v1'), t.Literal('agent-public-profile-v2')]),
   agent: t.String(), revision: t.String(), receipt: t.String(), replayed: t.Boolean(),
   sourcePosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }) });
 const resultSchema = t.Object({ profile: t.Literal('agent-provision-v1'),
@@ -99,6 +108,7 @@ export function agentRoutes(work: MainWorkDependencies) {
           agent: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
           displayName: body.displayName, avatarSelection: body.avatarSelection,
           bio: body.bio, idempotencyKey: request.headers.get('idempotency-key') ?? '',
+          ...(body.profile === 'agent-public-profile-v2' ? { localizedName: body.localizedName } : {}),
         });
         return Response.json(result, { status: result.replayed ? 200 : 201,
           headers: { 'cache-control': 'no-store' } });

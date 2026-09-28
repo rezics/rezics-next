@@ -6,6 +6,7 @@ import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, type WorkActivationEnvironment }
   from '../work/activate.ts';
+import { validLocalizedText, type LocalizedText } from '../display-language/select.ts';
 
 export class AgentProfileInvalid extends Error {}
 export class AgentProfileDenied extends Error {}
@@ -19,9 +20,10 @@ export interface AgentBio { text: string; language: string }
 export interface AgentProfileInput {
   agent: string; expectedHead: string; displayName: string;
   avatarSelection: string | null; bio: AgentBio | null; idempotencyKey: string;
+  localizedName?: LocalizedText;
 }
 export interface AgentProfileResult {
-  profile: 'agent-public-profile-v1'; agent: string; revision: string; receipt: string;
+  profile: 'agent-public-profile-v1' | 'agent-public-profile-v2'; agent: string; revision: string; receipt: string;
   replayed: boolean; sourcePosition: { dataEpoch: string; sequence: string };
 }
 
@@ -30,7 +32,7 @@ const headId = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-
 const key = /^[A-Za-z0-9:_./-]{1,128}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const controls = /\p{Cc}/u;
-export const AGENT_PROFILE_COST = { graphQueries: 7, graphCommands: 1, mediaPointReads: 1,
+export const AGENT_PROFILE_COST = { graphQueries: 8, graphCommands: 1, mediaPointReads: 1,
   accessQueries: 4, nameCharacters: 200, bioCharacters: 500 } as const;
 
 export function checkedAgentProfile(input: AgentProfileInput): AgentProfileInput {
@@ -39,6 +41,8 @@ export function checkedAgentProfile(input: AgentProfileInput): AgentProfileInput
   if (!native.test(input.agent) || !headId.test(input.expectedHead) || !key.test(input.idempotencyKey)
     || !displayName || displayName.length > AGENT_PROFILE_COST.nameCharacters
     || controls.test(displayName) || (input.avatarSelection !== null && !uuid.test(input.avatarSelection))
+    || (input.localizedName && (!validLocalizedText(input.localizedName, AGENT_PROFILE_COST.nameCharacters)
+      || input.localizedName.labels[input.localizedName.original] !== displayName))
     || (bio && (!bio.text || bio.text.length > AGENT_PROFILE_COST.bioCharacters
       || controls.test(bio.text) || bio.language.length > 35
       || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(bio.language)))) {
@@ -67,10 +71,13 @@ async function terminal(env: WorkActivationEnvironment, receipt: string): Promis
     epoch: row.epoch.value, sequence: row.sequence!.value };
 }
 
-async function currentHead(env: WorkActivationEnvironment, agent: string): Promise<string> {
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?base ?profile WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(agent)} a rv:Agent ; rv:head ?base .
+async function currentHead(env: WorkActivationEnvironment, agent: string) {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?base ?profile ?name ?localizedName WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(agent)} a rv:Agent ; rv:head ?base ; rdfs:label ?name .
       OPTIONAL { ${iri(agent)} rv:publicProfileHead ?profile }
+      OPTIONAL { ${iri(agent)} rv:localizedName ?localizedName }
       FILTER NOT EXISTS { ${iri(agent)} a rv:AgentTombstone }
       FILTER NOT EXISTS { ${iri(agent)} rv:profileDisclosure rv:Private }
       FILTER NOT EXISTS { ${iri(agent)} rv:protectionHead ?protection } }
@@ -78,8 +85,11 @@ async function currentHead(env: WorkActivationEnvironment, agent: string): Promi
       rv:modelRevision <https://rezics.com/definition/agent-provision-v1> .
       FILTER NOT EXISTS { ?base a rv:ErasedRevision } }
   } LIMIT 2`, 8192)).results?.bindings ?? [];
-  if (rows.length !== 1 || !rows[0]?.base) throw new AgentProfileDenied('Agent is unavailable');
-  return rows[0].profile?.value ?? rows[0].base.value;
+  if (rows.length !== 1 || !rows[0]?.base || !rows[0].name) {
+    throw new AgentProfileDenied('Agent is unavailable');
+  }
+  return { head: rows[0].profile?.value ?? rows[0].base.value,
+    name: rows[0].name.value, localizedName: rows[0].localizedName?.value ?? null };
 }
 
 /** One indexed Access controller check and one bounded graph CAS; no Agent roster scan.
@@ -104,16 +114,18 @@ export class AgentPublicProfiles {
       [principal.issuer, principal.subject])).rows[0];
       if (!actor) throw new AgentProfileDenied('Agent controller is unavailable');
       const receipt = receiptFor(actor.id, input.idempotencyKey);
-      const digest = hash(JSON.stringify({ family: 'agent-public-profile-v1', agent: input.agent,
+      const digest = hash(JSON.stringify({ family: input.localizedName ? 'agent-public-profile-v2'
+        : 'agent-public-profile-v1', agent: input.agent,
         expectedHead: input.expectedHead, displayName: input.displayName,
-        avatarSelection: input.avatarSelection, bio: input.bio }));
+        avatarSelection: input.avatarSelection, bio: input.bio,
+        ...(input.localizedName ? { localizedName: input.localizedName } : {}) }));
       const prior = await terminal(this.env, receipt);
       if (prior) {
         if (prior.digest !== digest || prior.agent !== input.agent) {
           throw new AgentProfileConflict('Idempotency key binds another profile change');
         }
         await client.query('COMMIT');
-        return { profile: 'agent-public-profile-v1', agent: input.agent,
+        return { profile: input.localizedName ? 'agent-public-profile-v2' : 'agent-public-profile-v1', agent: input.agent,
           revision: prior.revision, receipt, replayed: true,
           sourcePosition: { dataEpoch: prior.epoch, sequence: prior.sequence } };
       }
@@ -123,8 +135,25 @@ export class AgentPublicProfiles {
           AND r.active AND r.valid_until > clock_timestamp()
         LIMIT 1 FOR SHARE OF r, s`, [actor.id, input.agent]);
       if (control.rowCount !== 1) throw new AgentProfileDenied('Agent controller is unavailable');
-      const head = await currentHead(this.env, input.agent);
-      if (head !== input.expectedHead) throw new AgentProfileStale(head);
+      const current = await currentHead(this.env, input.agent);
+      if (current.head !== input.expectedHead) throw new AgentProfileStale(current.head);
+      let localizedName = input.localizedName;
+      if (!localizedName && current.localizedName) {
+        let priorName: LocalizedText;
+        try { priorName = JSON.parse(current.localizedName) as LocalizedText; }
+        catch { throw new AgentProfileUnavailable('Organization names are invalid'); }
+        if (!validLocalizedText(priorName, AGENT_PROFILE_COST.nameCharacters)
+          || priorName.labels[priorName.original] !== current.name) {
+          throw new AgentProfileUnavailable('Organization names are invalid');
+        }
+        localizedName = { ...priorName,
+          labels: { ...priorName.labels, [priorName.original]: input.displayName } };
+      }
+      if (input.localizedName) {
+        const kind = await this.env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+          GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rv:agentKind rv:OrganizationAgent } }`, 8192);
+        if (kind.boolean !== true) throw new AgentProfileInvalid('Only organizations have translated names');
+      }
       if (input.avatarSelection) {
         const image = await this.media.avatarDelivery(input.avatarSelection);
         if (!image || image.target !== input.agent || image.context !== DEFAULT_MEDIA_CONTEXT
@@ -142,11 +171,13 @@ export class AgentPublicProfiles {
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
           GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rdfs:label ?oldName .
             ${expected} ${iri(input.agent)} rv:profileBio ?oldBio .
-            ${iri(input.agent)} rv:profileAvatarSelection ?oldAvatar . } }
+            ${iri(input.agent)} rv:profileAvatarSelection ?oldAvatar .
+            ${iri(input.agent)} rv:localizedName ?oldLocalizedName . } }
         INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
           GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rdfs:label ${lit(input.displayName)} ;
             rv:publicProfileHead ${iri(revision)}
             ${input.bio ? `; rv:profileBio ${lit(input.bio.text)}@${input.bio.language}` : ''}
+            ${localizedName ? `; rv:localizedName ${lit(JSON.stringify(localizedName))}` : ''}
             ${input.avatarSelection ? `; rv:profileAvatarSelection ${lit(input.avatarSelection)}` : ''} . }
           GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:AgentPublicProfileRevision, rv:RevisionAnchor ;
             rv:component ${iri(input.agent)} ; rv:operation ${iri(operation)} ;
@@ -172,6 +203,7 @@ export class AgentPublicProfiles {
           GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} a rv:Agent ; rv:head ?base ;
             rdfs:label ?oldName . OPTIONAL { ${iri(input.agent)} rv:profileBio ?oldBio }
             OPTIONAL { ${iri(input.agent)} rv:profileAvatarSelection ?oldAvatar }
+            OPTIONAL { ${iri(input.agent)} rv:localizedName ?oldLocalizedName }
             ${expected} }
           ${initial ? `FILTER(?base = ${iri(input.expectedHead)}) FILTER NOT EXISTS {
             GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rv:publicProfileHead ?prior } }` : ''}
@@ -188,14 +220,14 @@ export class AgentPublicProfiles {
       const saved = await terminal(this.env, receipt);
       if (!saved) {
         const now = await currentHead(this.env, input.agent);
-        if (now !== input.expectedHead) throw new AgentProfileStale(now);
+        if (now.head !== input.expectedHead) throw new AgentProfileStale(now.head);
         throw new AgentProfileUnavailable('Agent profile outcome is unknown');
       }
       if (saved.digest !== digest || saved.agent !== input.agent) {
         throw new AgentProfileConflict('Idempotency key binds another profile change');
       }
       await client.query('COMMIT');
-      return { profile: 'agent-public-profile-v1', agent: input.agent,
+      return { profile: input.localizedName ? 'agent-public-profile-v2' : 'agent-public-profile-v1', agent: input.agent,
         revision: saved.revision, receipt, replayed: false,
         sourcePosition: { dataEpoch: saved.epoch, sequence: saved.sequence } };
     } catch (error) {

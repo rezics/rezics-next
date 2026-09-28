@@ -6,8 +6,10 @@ import { ChoiceSelect } from '@rezics/ui/select';
 import { Switch } from '@rezics/ui/switch';
 import { useEffect, useState, type ReactNode } from 'react';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
+import { CONTENT_LANGUAGES_COOKIE, contentLanguageCookie } from '../../i18n/display-languages.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { useOptionalShell } from '../shell/shell-provider.tsx';
+import { preferenceCookie } from '../shell/preferences.ts';
 import type { SettingsMessages } from './messages.ts';
 
 type Channel = 'inbox' | 'email';
@@ -222,6 +224,8 @@ function PersonControls({ agent, t, preview = false }: { agent: string; t: Setti
     let active = true;
     void read<PersonPreferences>(path).then(value => { if (active) {
       setCurrent(value); setLanguages(value.contentLanguages.join(', '));
+      document.cookie = preferenceCookie(CONTENT_LANGUAGES_COOKIE,
+        contentLanguageCookie(value.contentLanguages), location.protocol === 'https:');
     } }).catch(() => { if (active) setStatus(t.personUnavailable); });
     return () => { active = false; };
   }, [path, preview, t]);
@@ -233,6 +237,8 @@ function PersonControls({ agent, t, preview = false }: { agent: string; t: Setti
       const next = await write<PersonPreferences>('/v1/me/person-preferences', {
         actingSubject: agent, expectedVersion: current.version, ...prior, ...patch });
       setCurrent(next); setLanguages(next.contentLanguages.join(', ')); setStatus(t.personSaved);
+      document.cookie = preferenceCookie(CONTENT_LANGUAGES_COOKIE,
+        contentLanguageCookie(next.contentLanguages), location.protocol === 'https:');
     } catch (error) { setStatus(String(error).includes('409') ? t.sectionStale : t.sectionFailed); }
     setBusy(false);
   };

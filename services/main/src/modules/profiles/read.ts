@@ -8,6 +8,7 @@ import type { shelfWork } from './read-contract.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import { readWorkRating } from '../work/read-rating.ts';
+import { selectDisplayName, validLocalizedText, type LocalizedText } from '../display-language/select.ts';
 
 export function profileAccess(session: WorkReadSession) {
   if (!session.deps.profiles) throw new WorkReadUnavailable('Profile owner is unavailable');
@@ -41,10 +42,11 @@ export async function readAgent(session: WorkReadSession, agent: string) {
   const before = await owner.agentFence(agent);
   if (!before) throw new WorkReadMissing('Agent unavailable');
   const rows = await session.query(`SELECT ?displayName ?agentKind ?handle ?agentHead ?profileHead ?predecessor
-    ?bio ?avatarSelection WHERE { ${publicAgent(iri(agent))}
+    ?bio ?avatarSelection ?localizedName WHERE { ${publicAgent(iri(agent))}
     GRAPH ${iri(GRAPHS.current)} { OPTIONAL { ${iri(agent)} rv:publicProfileHead ?profileHead }
       OPTIONAL { ${iri(agent)} rv:profileBio ?bio }
-      OPTIONAL { ${iri(agent)} rv:profileAvatarSelection ?avatarSelection } }
+      OPTIONAL { ${iri(agent)} rv:profileAvatarSelection ?avatarSelection }
+      OPTIONAL { ${iri(agent)} rv:localizedName ?localizedName } }
     OPTIONAL { FILTER(BOUND(?profileHead)) GRAPH ${iri(GRAPHS.revisions)} {
       ?profileHead a rv:AgentPublicProfileRevision ;
       rv:component ${iri(agent)} ; rv:predecessor ?predecessor . } }
@@ -54,7 +56,18 @@ export async function readAgent(session: WorkReadSession, agent: string) {
   const kinds: Record<string, 'person' | 'organization' | 'service'> = {
     [`${RV}PersonAgent`]: 'person', [`${RV}OrganizationAgent`]: 'organization', [`${RV}ServiceAgent`]: 'service' };
   const kind = kinds[field(row, 'agentKind')];
-  const displayName = field(row, 'displayName');
+  const originalDisplayName = field(row, 'displayName');
+  let localizedNames: LocalizedText | null = null;
+  if (kind === 'organization' && row.localizedName) {
+    try { localizedNames = JSON.parse(row.localizedName.value) as LocalizedText; }
+    catch { throw new WorkReadUnavailable('Organization names are invalid'); }
+    if (!localizedNames || !validLocalizedText(localizedNames, 200)
+      || localizedNames.labels[localizedNames.original] !== originalDisplayName) {
+      throw new WorkReadUnavailable('Organization names are invalid');
+    }
+  }
+  const displayNameInfo = localizedNames ? selectDisplayName(localizedNames, session.displayLanguages) : null;
+  const displayName = displayNameInfo?.value ?? originalDisplayName;
   if (rows.length !== 1 || !kind || !displayName || displayName.length > 200
     || (row.profileHead && !row.predecessor)
     || field(row, 'handle') !== allocateAgentHandle(agent)) throw new WorkReadUnavailable('Agent profile is ambiguous');
@@ -91,6 +104,7 @@ export async function readAgent(session: WorkReadSession, agent: string) {
     throw new WorkReadMoved('Agent profile changed');
   }
   return { profile: 'agent-read-v1' as const, id: agent, displayName, kind, revision, bio,
+    displayNameInfo, originalDisplayName, localizedNames,
     avatarSelection, avatarUrl: avatarSelection ? `/v1/media/avatars/${avatarSelection}` : null,
     handle: currentHandle, disclosure: 'public' as const, sourcePosition: session.position,
     library: { visibility: library.visibility, statusShelvesVisible: statusShelves !== null },
@@ -112,12 +126,13 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
   const active = ids.filter(id => before.has(id));
   if (!active.length) return cards;
   const [rows, handles] = await Promise.all([session.query(`SELECT ?agent ?displayName ?agentKind ?handle
-    ?agentHead ?profileHead ?predecessor ?bio ?avatarSelection WHERE { VALUES ?agent { ${active.map(iri).join(' ')} }
+    ?agentHead ?profileHead ?predecessor ?bio ?avatarSelection ?localizedName WHERE { VALUES ?agent { ${active.map(iri).join(' ')} }
     ${publicAgent('?agent')}
     # Top-level OPTIONALs join the bound ?agent; inside one GRAPH group they would bind it themselves.
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?agent rv:publicProfileHead ?profileHead } }
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?agent rv:profileBio ?bio } }
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?agent rv:profileAvatarSelection ?avatarSelection } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?agent rv:localizedName ?localizedName } }
     OPTIONAL { FILTER(BOUND(?profileHead)) GRAPH ${iri(GRAPHS.revisions)} {
       ?profileHead a rv:AgentPublicProfileRevision ; rv:component ?agent ; rv:predecessor ?predecessor . } }
   } LIMIT ${active.length * 2 + 1}`, active.length * 2 + 1),
@@ -130,7 +145,17 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
     const matched = rows.filter(row => row.agent?.value === agent);
     if (!matched.length) continue;
     const row = matched[0]!;
-    const displayName = field(row, 'displayName');
+    const originalDisplayName = field(row, 'displayName');
+    let displayName = originalDisplayName;
+    if (field(row, 'agentKind') === `${RV}OrganizationAgent` && row.localizedName) {
+      let names: LocalizedText;
+      try { names = JSON.parse(row.localizedName.value) as LocalizedText; }
+      catch { throw new WorkReadUnavailable('Organization names are invalid'); }
+      if (!validLocalizedText(names, 200) || names.labels[names.original] !== originalDisplayName) {
+        throw new WorkReadUnavailable('Organization names are invalid');
+      }
+      displayName = selectDisplayName(names, session.displayLanguages)?.value ?? originalDisplayName;
+    }
     if (matched.length !== 1 || !kinds.has(field(row, 'agentKind')) || !displayName || displayName.length > 200
       || (row.profileHead && !row.predecessor)
       || field(row, 'handle') !== allocateAgentHandle(agent)) throw new WorkReadUnavailable('Agent profile is ambiguous');

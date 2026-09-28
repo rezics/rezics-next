@@ -1,7 +1,8 @@
 import { SeedApiError } from './api.ts';
-import { firstSeedTypes, seedKey, semanticTypes, works } from './plan.ts';
+import { grantHomeSeedAuthority } from './operator.ts';
+import { firstSeedTypes, seedKey, semanticTypes, works, type DemoWork } from './plan.ts';
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
-import type { SeedState, WorkReceipt } from './state.ts';
+import { afterCatchUp, type SeedState, type WorkReceipt } from './state.ts';
 
 export async function seedWorks(state: SeedState) {
   const { api, created } = state;
@@ -16,7 +17,7 @@ export async function seedWorks(state: SeedState) {
       : work.author ? session.actingSubject : undefined;
     if (work.author && !author) throw new Error(`Work author ${work.author} is unavailable`);
     const body = {
-      profile: 'metadata-only-v1', title: work.title, semanticTypes: semanticTypes(work.type),
+      profile: 'metadata-only-v1', title: work.seedTitle ?? work.title, semanticTypes: semanticTypes(work.type),
       language: work.language, actingSubject: author ?? owner.actingSubject,
       ...(author ? { authoring: 'own-work' } : {}) };
     const receipt: WorkReceipt = await api.post<WorkReceipt>('/v1/works', body, session.token, seedKey('work', work.id))
@@ -28,6 +29,20 @@ export async function seedWorks(state: SeedState) {
         return api.post<WorkReceipt>('/v1/works', { ...body, language: 'en', semanticTypes: firstSeedTypes(work.type) },
           session.token, seedKey('work', work.id));
       });
+    if (work.seedTitle && state.operatorInput) {
+      const actor = author ?? owner.actingSubject;
+      const current = await afterCatchUp(() => api.get<{ revision: string; title: { value: string } }>(
+        `/v1/works/${receipt.work.slice(-36)}?actingSubject=${encodeURIComponent(actor)}`, session.token));
+      if (current.title.value !== work.title) {
+        await grantHomeSeedAuthority({ ...state.operatorInput, ownerAccountSubject: session.accountId,
+          actingSubject: actor }, [{ action: 'work.edit', scope: `work:edit:${receipt.work}` }]);
+        const edited = await api.post<{ revision: string }>('/v1/content-edits', {
+          profile: 'metadata-only-v1', work: receipt.work, expectedHead: current.revision,
+          title: work.title, actingSubject: actor }, session.token,
+        seedKey('clean-work-title-v2', `${work.id}:${current.revision.slice(-12)}`));
+        receipt.workRevision = edited.revision;
+      } else receipt.workRevision = current.revision;
+    }
     created.set(work.id, receipt);
     if (work.tagline) await state.optional('Work serial summary', () => api.put(
       `/v1/works/${receipt.work.slice(-36)}/metadata`, {
@@ -36,6 +51,29 @@ export async function seedWorks(state: SeedState) {
           localized: [{ language: work.language, title: null, description: null,
             mainVersionLabel: null, tagline: work.tagline }] },
         actingSubject: author ?? owner.actingSubject }, session.token, seedKey('serial-metadata', work.id)));
+    if (work.seedTitle && state.operatorInput) {
+      const path = `/v1/works/${receipt.work.slice(-36)}/metadata`;
+      const current = await api.get<{ revision: string | null; originalTitle: { value: string; language: string } | null;
+        completionStatus: DemoWork['completionStatus'] | null;
+        localized: { language: string; title: string | null; description: string | null;
+          mainVersionLabel: string | null; tagline?: string | null }[] }>(
+        `${path}?actingSubject=${encodeURIComponent(author ?? owner.actingSubject)}`, session.token);
+      if (!current.localized.some(row => row.language === work.language && row.title === work.title)) {
+        const localized = current.localized.filter(row => row.language !== work.language);
+        const previous = current.localized.find(row => row.language === work.language);
+        localized.push({ language: work.language, title: work.title,
+          description: previous?.description ?? null, mainVersionLabel: previous?.mainVersionLabel ?? null,
+          tagline: previous?.tagline ?? null });
+        await api.put(path, { profile: 'work-metadata-details-v1', expectedHead: current.revision,
+          state: { kind: 'header', originalTitle: { value: work.title, language: work.language },
+            completionStatus: current.completionStatus, localized },
+          actingSubject: author ?? owner.actingSubject }, session.token,
+        seedKey('clean-title-v2', `${work.id}:${current.revision?.slice(-12) ?? 'first'}`));
+      }
+    }
+    if (work.seedTitle && !state.operatorInput) {
+      state.findings?.add(`Work ${work.id} needs the seed operator to replace its old title`);
+    }
     console.log(`Work ${created.size}/${works.length}: ${work.title}${receipt.replayed ? ' (replayed)' : ''}`);
   }
 }

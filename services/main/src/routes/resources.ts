@@ -12,6 +12,7 @@ import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { mediaError, mediaRoutes } from './media.ts';
 import { resourceSummaryBatch } from '../modules/media/summary-contract.ts';
+import { readerLanguages } from '../modules/display-language/select.ts';
 import { problem } from './problems.ts';
 
 const ID = 'https://rezics.com/id/';
@@ -57,7 +58,9 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
     return readResourceSummaries(work.environment, work.media?.store,
       await readerFor(request, input.actingSubject, batch), { resources: input.resources,
-        context: input.context ?? DEFAULT_MEDIA_CONTEXT, language: input.language ?? null });
+        context: input.context ?? DEFAULT_MEDIA_CONTEXT, language: input.language ?? null,
+        languages: readerLanguages([input.language, request.headers.get('x-rezics-display-languages')]
+          .filter(Boolean).join(',') || null, request.headers.get('accept-language')) });
   };
   // Summaries and previews revalidate on every use: generation-bound, never stale-served.
   const headers = (generation: { graph: string; media: string | null }, shared: boolean) => ({
@@ -103,13 +106,15 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       params: t.Object({ resource: uuid }),
       query: t.Object({ language: t.Optional(language) }, { additionalProperties: false }),
       response: { 200: t.Object({}, { additionalProperties: true }), ...readProblems },
-    }, async ({ params, query }) => {
+    }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         // Anonymous: only public resources resolve; private and absent share one answer.
         const batch = await readResourceSummaries(work.environment, work.media?.store, governanceReader,
           { resources: [`${ID}${params.resource}`], context: DEFAULT_MEDIA_CONTEXT,
-            language: query.language ?? null });
+            language: query.language ?? null,
+            languages: readerLanguages([query.language, request.headers.get('x-rezics-display-languages')]
+              .filter(Boolean).join(',') || null, request.headers.get('accept-language')) });
         const summary = batch.summaries[0]!;
         if (summary.status !== 'available' || summary.disclosure !== 'public') return unavailable();
         return Response.json({ profile: 'public-preview-v1', ...summary, generation: batch.generation },

@@ -40,7 +40,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (legacyAgent) cookies.push({ name: AGENT_COOKIE, value: '',
     options: cookieOptions(request.url, 0) });
   const headers = new Headers(request.headers);
-  if (pathLocale(pathname)) headers.set('x-rezics-page-url', request.nextUrl.origin + pathname);
+  if (pathLocale(pathname)) headers.set('x-rezics-page-url', request.nextUrl.origin + pathname + request.nextUrl.search);
   else headers.delete('x-rezics-page-url');
   headers.set('cookie', rewriteCookieHeader(request.headers.get('cookie'), Object.fromEntries(
     cookies.map(cookie => [cookie.name, cookie.value || null]))));

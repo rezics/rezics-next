@@ -45,7 +45,7 @@ export function realmProfileRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .put('/v1/realms/:realm/profile', {
       params: t.Object({ realm: readUuid }),
-      body: t.Object({ profile: t.Literal('realm-public-profile-v1'),
+      body: t.Object({ profile: t.Literal('realm-public-profile-v2'),
         expectedHead: t.Nullable(readId), actingSubject: readId,
         publication: publicProfile }, { additionalProperties: false }),
       response: { 200: write, 201: write, ...problems },

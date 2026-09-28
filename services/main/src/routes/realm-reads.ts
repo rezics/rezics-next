@@ -40,7 +40,8 @@ export const openApiOperations = {
 export function realmReadRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/realms/:realm', {
-      params, query: t.Object({ actingSubject: t.Optional(readId), language: t.Optional(readLanguage) }, { additionalProperties: false }),
+      params, query: t.Object({ actingSubject: t.Optional(readId), language: t.Optional(readLanguage),
+        languages: t.Optional(t.String({ maxLength: 720 })) }, { additionalProperties: false }),
       response: { 200: realmHeader, ...workReadProblems },
     }, async ({ request, params: path, query }) => {
       try { return Response.json(await workRead(work, request, query,

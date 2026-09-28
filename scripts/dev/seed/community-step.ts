@@ -4,7 +4,7 @@ import { communityPeople, communityRealms, type CommunityRealm } from './communi
 import { follow } from './feed.ts';
 import { grantRealmProfileSeed, realmProfileClient } from './official-authority.ts';
 import { grantHomeSeedAuthority, type LocalOperatorInput } from './operator.ts';
-import { people, seedKey } from './plan.ts';
+import { localizedBilingual, people, seedKey } from './plan.ts';
 import { refreshSeedTokens, stableId, type SeedState, type Session, type SpaceReceipt, type WorkReceipt }
   from './state.ts';
 
@@ -137,18 +137,22 @@ async function profile(state: SeedState, operator: LocalOperatorInput, plan: Com
     });
     moderators.push(moderator.actingSubject);
   }
-  const header = await readMain<{ profileRevision: string | null; description: { value: string } | null;
+  const header = await readMain<{ profileRevision: string | null; profileContract: string | null;
+    description: { value: string } | null;
     moderators: { items: string[] } }>(state.api, `${root}?language=en`);
-  if (header?.description?.value === plan.description.en
+  if (header?.profileContract === 'realm-public-profile-v2'
+    && header.description?.value === plan.description.en
     && JSON.stringify(header.moderators.items) === JSON.stringify(moderators)) return;
   await grantRealmProfileSeed({ ...operator, ownerAccountSubject: owner.accountId, actingSubject: owner.actingSubject },
     [{ action: 'realm.profile.publish', realm }]);
-  await client.put(`${root}/profile`, { profile: 'realm-public-profile-v1',
+  await client.put(`${root}/profile`, { profile: 'realm-public-profile-v2',
     expectedHead: header?.profileRevision ?? null, actingSubject: owner.actingSubject,
-    publication: { name: plan.name, description: plan.description, iconSelection: null, bannerSelection: null,
-      rules: plan.rules.map(rule => ({ ...rule, governanceRule: null })),
+    publication: { name: localizedBilingual(plan.name), description: localizedBilingual(plan.description),
+      iconSelection: null, bannerSelection: null,
+      rules: plan.rules.map(rule => ({ ...rule, title: localizedBilingual(rule.title),
+        body: localizedBilingual(rule.body), governanceRule: null })),
       count: { kind: 'exact', value: null }, moderators } },
-  await token(owner.id), seedKey('community-profile', `${plan.id}:${header?.profileRevision?.slice(-12) ?? 'first'}`));
+  await token(owner.id), seedKey('community-profile-v2', `${plan.id}:${header?.profileRevision?.slice(-12) ?? 'first'}`));
 }
 
 async function adopt(state: SeedState, operator: LocalOperatorInput, plan: CommunityRealm, realm: string,

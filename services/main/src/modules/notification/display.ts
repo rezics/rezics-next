@@ -3,6 +3,7 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import { readCurrentProfile } from '../realm-profile/commands.ts';
+import { selectDisplayName } from '../display-language/select.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/;
 
@@ -21,7 +22,7 @@ export async function notificationRealmDisplay(env: WorkActivationEnvironment, r
       }
     } LIMIT 3`, 8_192)).results?.bindings ?? [];
   if (rows.length > 2) throw new Error('notification Realm display is ambiguous');
-  const name = profile?.profile.name.en ?? rows[0]?.name?.value;
+  const name = profile ? selectDisplayName(profile.profile.name, [])?.value : rows[0]?.name?.value;
   const segment = rows.find(row => row.segment)?.segment?.value ?? match[1];
   return { ...(name ? { realmName: name.slice(0, 200) } : {}),
     ...(segment ? { realmRouteSegment: segment.slice(0, 100) } : {}) };

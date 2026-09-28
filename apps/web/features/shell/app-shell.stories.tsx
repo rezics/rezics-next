@@ -31,17 +31,17 @@ const longNames: Session = { ...signedIn,
 const realm = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-aaaa-4a6f-8c2d-3e7b5c1a9f40`;
 const communities: CommunityNavigation = { signedIn: true, avatarQuery: '',
   followed: { zones: [], realms: [
-    { id: realm(1), kind: 'realm', name: '中文网络小说 · Chinese Web Fiction', language: 'zh-Hans',
+    { id: realm(1), kind: 'realm', name: '中文网络小说', language: 'zh-Hans', direction: 'ltr',
       icon: { kind: 'fallback', key: 'fiction' }, href: `/r/${realm(1).slice(-36)}`, activity: 'new' },
     { id: realm(2), kind: 'realm', name: 'Classic Literature', language: 'en', icon: { kind: 'fallback', key: 'classics' },
       href: `/r/${realm(2).slice(-36)}`, activity: 'none' },
     // An official Zone's Realm, followed directly: it opens at the Zone's address and is not listed twice.
-    { id: realm(4), kind: 'realm', name: 'Books · 图书', language: 'en', icon: { kind: 'fallback', key: 'b' },
+    { id: realm(4), kind: 'realm', name: 'Books', language: 'en', icon: { kind: 'fallback', key: 'b' },
       href: '/r/books', activity: 'none' },
   ] },
-  official: [{ id: realm(3), kind: 'zone', realm: realm(13), name: 'Fiction · 小说', language: 'en',
+  official: [{ id: realm(3), kind: 'zone', realm: realm(13), name: 'Fiction', language: 'en',
     icon: { kind: 'fallback', key: 'f' }, href: '/r/fiction', activity: 'unknown' },
-  { id: realm(5), kind: 'zone', realm: realm(4), name: 'Books · 图书', language: 'en', icon: { kind: 'fallback', key: 'b' },
+  { id: realm(5), kind: 'zone', realm: realm(4), name: 'Books', language: 'en', icon: { kind: 'fallback', key: 'b' },
     href: '/r/books', activity: 'unknown' }],
   moderated: [{ realm: realm(2), open: 8, more: false, href: `/manage/r/${realm(2).slice(-36)}` }] };
 
@@ -227,14 +227,15 @@ export const Communities: Story = {
     const canvas = within(canvasElement);
     const nav = canvas.getByRole('navigation', { name: 'Main navigation' });
     const realms = within(nav).getByRole('region', { name: 'Your Realms' });
-    await expect(within(realms).getByRole('link', { name: /^中文网络小说 · Chinese Web Fiction\s*, new posts$/ }))
+    await expect(within(realms).getByRole('link', { name: /^中文网络小说\s*, new posts$/ }))
       .toHaveAttribute('href', `/en/r/${realm(1).slice(-36)}`);
+    await expect(within(realms).getByText('中文网络小说')).toHaveAttribute('lang', 'zh-Hans');
     await expect(within(realms).getByRole('link', { name: 'Classic Literature' })).toBeVisible();
     const official = within(nav).getByRole('region', { name: 'Official Zones' });
-    await expect(within(official).getByRole('link', { name: 'Fiction · 小说' })).toHaveAttribute('href', '/en/r/fiction');
+    await expect(within(official).getByRole('link', { name: 'Fiction' })).toHaveAttribute('href', '/en/r/fiction');
     // Books is followed, so it appears once, under Your Realms.
-    await expect(within(official).queryByRole('link', { name: 'Books · 图书' })).toBeNull();
-    await expect(within(realms).getByRole('link', { name: 'Books · 图书' })).toHaveAttribute('href', '/en/r/books');
+    await expect(within(official).queryByRole('link', { name: 'Books' })).toBeNull();
+    await expect(within(realms).getByRole('link', { name: 'Books' })).toHaveAttribute('href', '/en/r/books');
     // Manage sits above the Realm lists, so it stays in view on a short screen, and opens the one Realm managed.
     const manage = within(nav).getByRole('link', { name: /^Manage/ });
     await expect(manage).toHaveTextContent('8 waiting');
@@ -253,7 +254,29 @@ export const CommunitiesCollapsed: Story = {
   parameters: { navCollapsed: true, route: { pathname: '/en' } },
   async play({ canvasElement }) {
     const nav = within(canvasElement).getByRole('navigation', { name: 'Main navigation' });
-    await expect(within(nav).getByRole('link', { name: /^中文网络小说 · Chinese Web Fiction\s*, new posts$/ })).toBeVisible();
+    await expect(within(nav).getByRole('link', { name: /^中文网络小说\s*, new posts$/ })).toBeVisible();
+  },
+};
+
+export const CommunitiesChinese: Story = {
+  args: { locale: 'zh-Hans', messages: zhHansShellMessages, signedIn: true,
+    communities: <CommunityNav data={{ ...communities,
+      followed: { zones: [], realms: [
+        { ...communities.followed!.realms[0]!, name: '中文网络小说' },
+        { ...communities.followed!.realms[2]!, name: '图书', language: 'zh-Hans', direction: 'ltr' },
+      ] },
+      official: [{ ...communities.official[0]!, name: '小说', language: 'zh-Hans' }] }} />,
+    account: <AccountMenu accountOrigin="https://account.rezics.test" session={signedIn}
+      messages={auth['zh-Hans']} /> },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  parameters: { route: { pathname: '/zh-Hans/r' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: '打开导航' }));
+    const drawer = within(await within(document.body).findByRole('dialog'));
+    await expect(drawer.getByText('小说')).toHaveAttribute('lang', 'zh-Hans');
+    await expect(drawer.getByText('图书')).toHaveAttribute('dir', 'ltr');
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
 

@@ -9,9 +9,18 @@ export async function seedAccounts(state: SeedState) {
     const signed = await api.signInOrUp(person);
     const token = await api.token(signed.cookie);
     const agent = await api.post<AgentReceipt>('/v1/agents', {
-      profile: 'agent-provision-v1', kind: 'person', displayName: person.name },
+      profile: 'agent-provision-v1', kind: 'person', displayName: person.seedName ?? person.name },
     token, seedKey('agent', person.id));
     if (agent.state !== 'active') throw new Error(`Agent for ${person.id} is not active`);
+    if (person.seedName) {
+      const path = `/v1/agents/${agent.agent.slice(-36)}`;
+      const current = await api.get<{ revision: string; displayName: string;
+        avatarSelection: string | null; bio: { text: string; language: string } | null }>(path, token);
+      if (current.displayName !== person.name) await api.put(`${path}/profile`, {
+        profile: 'agent-public-profile-v1', expectedHead: current.revision,
+        displayName: person.name, avatarSelection: current.avatarSelection, bio: current.bio,
+      }, token, seedKey('agent-name-v2', `${person.id}:${current.revision.slice(-12)}`));
+    }
     await api.put(`/v1/agents/${agent.agent.slice(-36)}/handle`,
       { profile: 'agent-handle-v1', handle: person.handle, expectedHandle: null },
       token, seedKey('handle', person.id));
@@ -27,10 +36,26 @@ export async function seedAccounts(state: SeedState) {
       ownerAccountSubject: owner.accountId, actingSubject: owner.actingSubject } : null;
   state.operatorSession = state.operatorInput ? await operatorSeedSession(state.operatorInput) : null;
   if (!state.operatorInput) state.findings.add('Official Realm setup: local fixture operator is unavailable');
-  for (const { id, displayName, kind } of penNames) {
+  for (const { id, displayName, seedName, localizedName, kind } of penNames) {
     const agent = await state.optional('Pen name / organization Agent', () => api.post<AgentReceipt>('/v1/agents', {
-      profile: 'agent-provision-v1', kind, displayName }, owner.token, seedKey('agent', id)));
+      profile: 'agent-provision-v1', kind, displayName: seedName ?? displayName }, owner.token, seedKey('agent', id)));
     if (agent?.state === 'active') {
+      if (seedName) {
+        const path = `/v1/agents/${agent.agent.slice(-36)}`;
+        const current = await api.get<{ revision: string; displayName: string;
+          originalDisplayName?: string;
+          localizedNames?: { original: string; labels: Record<string, string> } | null;
+          avatarSelection: string | null; bio: { text: string; language: string } | null }>(path, owner.token);
+        if ((current.originalDisplayName ?? current.displayName) !== displayName || localizedName &&
+          current.localizedNames?.labels['zh-Hans'] !== localizedName.labels['zh-Hans']) {
+          await api.put(`${path}/profile`, {
+            profile: localizedName ? 'agent-public-profile-v2' : 'agent-public-profile-v1',
+            expectedHead: current.revision,
+            displayName, avatarSelection: current.avatarSelection, bio: current.bio,
+            ...(localizedName ? { localizedName } : {}),
+          }, owner.token, seedKey('agent-name-v2', `${id}:${current.revision.slice(-12)}`));
+        }
+      }
       state.agentCount++;
       state.penAgents.set(id, agent.agent);
     }

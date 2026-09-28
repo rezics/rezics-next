@@ -9,6 +9,7 @@ import type {} from '../../routes/media.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { readResourceSummaries, type ResourceSummary } from '../media/summary.ts';
+import { readerLanguages } from '../display-language/select.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from './activate.ts';
@@ -26,7 +27,7 @@ export class WorkReadUnavailable extends Error {}
 export class WorkReadLimit extends Error {}
 export type ReadRow = NonNullable<SparqlResult['results']>['bindings'][number];
 export interface ReadPosition { dataEpoch: string; sequence: string }
-export interface ReadOptions { language?: string; actingSubject?: string; cursor?: string; limit?: number;
+export interface ReadOptions { language?: string; languages?: string; actingSubject?: string; cursor?: string; limit?: number;
   scope?: 'global' | 'realm' | 'mine'; realm?: string;
   /** Internal owner promise: its continuation addresses retained immutable rows. */
   retainedBasis?: boolean;
@@ -77,6 +78,11 @@ export function decodeReadCursor(token: string | undefined, binding: unknown, po
 }
 
 export class WorkReadSession {
+  get displayLanguages(): string[] {
+    const ordered = this.request.headers.get('x-rezics-display-languages');
+    return readerLanguages([this.options.language, this.options.languages, ordered]
+      .filter(Boolean).join(',') || null, this.request.headers.get('accept-language'));
+  }
   principal: VerifiedPrincipal | null = null;
   stale = false;
   private readonly realmProofs = new Map<string, string>();
@@ -124,7 +130,8 @@ export class WorkReadSession {
     canReadWork: this.principal && this.options.actingSubject ? (work: string) =>
       this.deps.access.canReadWork(this.principal!, this.options.actingSubject!, work) : undefined };
     const result = await readResourceSummaries(this.deps.environment, this.deps.media?.store, reader,
-      { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null });
+      { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
+        languages: this.displayLanguages });
     if (result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
       if (this.options.movingGraph && result.generation.graph.startsWith(`${this.position.dataEpoch}:`)) {
         this.stale = true;

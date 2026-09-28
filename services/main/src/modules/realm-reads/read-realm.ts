@@ -2,7 +2,8 @@ import type { RealmVisibility, RealmReviewMode } from '../space/policy.ts';
 import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { chosenModerators, readCurrentProfile } from '../realm-profile/commands.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
-import { fallbackAvatar, selectName } from '../media/summary.ts';
+import { fallbackAvatar } from '../media/summary.ts';
+import { legacyLocalizedText, selectDisplayName } from '../display-language/select.ts';
 
 export interface RealmBasis { id: string; space: string; revision: string;
   visibility: RealmVisibility; reviewMode: RealmReviewMode; policyRevision: string | null }
@@ -24,9 +25,9 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
   await readRealmBasis(session, realm);
   const path = `/v1/realms/${realm.slice(-36)}`;
   const published = await readCurrentProfile(session.deps.environment, realm);
-  const selected = (value: { en: string; 'zh-CN': string }) =>
-    selectName(new Map([['en', value.en], ['zh-cn', value['zh-CN']]]),
-      session.options.language?.toLowerCase() ?? null)!;
+  const selected = (value: { original: string; labels: Record<string, string> }
+    | { en: string; 'zh-CN': string }) =>
+    selectDisplayName('labels' in value ? value : legacyLocalizedText(value), session.displayLanguages)!;
   const profile = published?.profile;
   let banner = null;
   if (profile?.bannerSelection && session.deps.media?.store) {
@@ -69,7 +70,9 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
   await readRealmBasis(session, realm);
   return { profile: 'realm-read-v1' as const, ...basis,
     name: profile ? selected(profile.name) : summary.name, icon,
+    originalName: profile ? selectDisplayName(profile.name, []) : summary.name,
     profileRevision: published?.revision ?? null,
+    profileContract: published?.contract ?? null,
     description: profile ? selected(profile.description) : null,
     banner, rules,
     membership: { count,

@@ -1,4 +1,5 @@
 import { selectName } from '../media/summary.ts';
+import { selectDisplayName } from '../display-language/select.ts';
 import { readRealmZone } from '../realm-reads/read-zone.ts';
 import { readZoneModuleData, readZonePublication } from '../zone/publication.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
@@ -54,8 +55,7 @@ export async function readZoneEditorLists(session: WorkReadSession, realm: strin
   const byWork = new Map(works.map((work, index) => [work, summaries[index]]));
   const lists = sources.flatMap(item => {
     const collection = item.source.kind === 'collection' ? item.source.collection : '';
-    const name = selectName(labels.get(collection) ?? new Map(),
-      session.options.language?.toLowerCase() ?? null);
+    const name = selectDisplayName(labels.get(collection) ?? new Map(), session.displayLanguages);
     if (!name || item.state === 'unavailable' || item.state === 'skipped') return [];
     return [{ collection, name, state: item.state,
       items: item.members.flatMap(member => {

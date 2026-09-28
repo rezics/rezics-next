@@ -1,5 +1,6 @@
-export interface DemoPerson { id: string; name: string; handle: string; email: string; password: string }
+export interface DemoPerson { id: string; name: string; seedName?: string; handle: string; email: string; password: string }
 export interface DemoWork { id: string; title: string; type: 'book' | 'document' | 'recipe' | 'prompt' | 'skill' | 'mod';
+  seedTitle?: string;
   language: 'en' | 'zh-Hans'; excerpt?: string; tagline?: string;
   completionStatus?: 'ongoing' | 'completed' | 'hiatus';
   author?: 'mei' | 'daniel' | 'an' | 'sophie' | 'jun' | 'aria' | 'leo' | 'moonlight';
@@ -8,14 +9,14 @@ export interface DemoWork { id: string; title: string; type: 'book' | 'document'
   chapters?: readonly { title: string; body: string }[] }
 
 export const people: readonly DemoPerson[] = [
-  { id: 'mei', handle: 'lin_mei', name: 'Lin Mei 林梅', email: 'rezics-demo-mei@example.test', password: 'Rezics-demo-2026-mei' },
-  { id: 'daniel', handle: 'daniel_chen', name: 'Daniel Chen 陈丹尼', email: 'rezics-demo-daniel@example.test', password: 'Rezics-demo-2026-daniel' },
-  { id: 'an', handle: 'an_wu', name: 'An Wu 吴安', email: 'rezics-demo-an@example.test', password: 'Rezics-demo-2026-an' },
-  { id: 'sophie', handle: 'sophie_li', name: 'Sophie Li 李素菲', email: 'rezics-demo-sophie@example.test', password: 'Rezics-demo-2026-sophie' },
-  { id: 'jun', handle: 'jun_zhang', name: 'Jun Zhang 张俊', email: 'rezics-demo-jun@example.test', password: 'Rezics-demo-2026-jun' },
-  { id: 'aria', handle: 'aria_wang', name: 'Aria Wang 王雅', email: 'rezics-demo-aria@example.test', password: 'Rezics-demo-2026-aria' },
-  { id: 'leo', handle: 'leo_sun', name: 'Leo Sun 孙乐', email: 'rezics-demo-leo@example.test', password: 'Rezics-demo-2026-leo' },
-  { id: 'mira', handle: 'mira_park', name: 'Mira Park 朴美罗', email: 'rezics-demo-mira@example.test', password: 'Rezics-demo-2026-mira' },
+  { id: 'mei', handle: 'lin_mei', name: '林梅', seedName: 'Lin Mei 林梅', email: 'rezics-demo-mei@example.test', password: 'Rezics-demo-2026-mei' },
+  { id: 'daniel', handle: 'daniel_chen', name: 'Daniel Chen', seedName: 'Daniel Chen 陈丹尼', email: 'rezics-demo-daniel@example.test', password: 'Rezics-demo-2026-daniel' },
+  { id: 'an', handle: 'an_wu', name: '吴安', seedName: 'An Wu 吴安', email: 'rezics-demo-an@example.test', password: 'Rezics-demo-2026-an' },
+  { id: 'sophie', handle: 'sophie_li', name: 'Sophie Li', seedName: 'Sophie Li 李素菲', email: 'rezics-demo-sophie@example.test', password: 'Rezics-demo-2026-sophie' },
+  { id: 'jun', handle: 'jun_zhang', name: '张俊', seedName: 'Jun Zhang 张俊', email: 'rezics-demo-jun@example.test', password: 'Rezics-demo-2026-jun' },
+  { id: 'aria', handle: 'aria_wang', name: 'Aria Wang', seedName: 'Aria Wang 王雅', email: 'rezics-demo-aria@example.test', password: 'Rezics-demo-2026-aria' },
+  { id: 'leo', handle: 'leo_sun', name: '孙乐', seedName: 'Leo Sun 孙乐', email: 'rezics-demo-leo@example.test', password: 'Rezics-demo-2026-leo' },
+  { id: 'mira', handle: 'mira_park', name: 'Mira Park', seedName: 'Mira Park 朴美罗', email: 'rezics-demo-mira@example.test', password: 'Rezics-demo-2026-mira' },
 ];
 
 export const works: readonly DemoWork[] = [
@@ -33,10 +34,10 @@ export const works: readonly DemoWork[] = [
     tagline: '一场西行取经之旅，从石猴出世开始。', completionStatus: 'completed' },
   { id: 'red-chamber', title: '红楼梦', type: 'book', language: 'zh-Hans' },
   { id: 'strange-tales', title: '聊斋志异', type: 'book', language: 'zh-Hans' },
-  { id: 'painted-skin', title: '聊斋志异 · 画皮', type: 'document', language: 'zh-Hans' },
+  { id: 'painted-skin', title: '画皮', type: 'document', language: 'zh-Hans' },
   { id: 'three-kingdoms', title: '三国演义', type: 'book', language: 'zh-Hans' },
   { id: 'water-margin', title: '水浒传', type: 'book', language: 'zh-Hans' },
-  { id: 'serial', title: '雨夜书店 · 连载小说', type: 'book', language: 'zh-Hans', author: 'mei',
+  { id: 'serial', title: '雨夜书店', seedTitle: '雨夜书店 · 连载小说', type: 'book', language: 'zh-Hans', author: 'mei',
     tagline: '一封没有地址的信，把雨夜书店带向二十年前的秘密。', completionStatus: 'ongoing',
     excerpt: '第一章 雨夜\n雨停在书店打烊前。林梅在门口发现一封没有地址的信。',
     chapters: [
@@ -44,16 +45,16 @@ export const works: readonly DemoWork[] = [
       { title: '第二章 未寄出的信', body: '信封里只有一张旧车票，日期是二十年前。' },
       { title: '第三章 最后一班车', body: '末班车到站时，整座站台只有她一个人。' },
     ] },
-  { id: 'moonlight-story', title: '月下书生 · 夜归人', type: 'book', language: 'zh-Hans', author: 'moonlight',
+  { id: 'moonlight-story', title: '夜归人', seedTitle: '月下书生 · 夜归人', type: 'book', language: 'zh-Hans', author: 'moonlight',
     tagline: '雨停以后，归来的人敲开了旧书店的门。', completionStatus: 'ongoing',
     excerpt: '第一章 夜归人\n雨停以后，有人敲响了旧书店的门。' },
-  { id: 'bun', title: 'Bun — JavaScript runtime', type: 'document', language: 'en', author: 'daniel',
+  { id: 'bun', title: 'Bun', seedTitle: 'Bun — JavaScript runtime', type: 'document', language: 'en', author: 'daniel',
     excerpt: 'Bun is a JavaScript runtime. Start with a small script, then compare its tooling with the needs of your project.' },
-  { id: 'elysia', title: 'Elysia — TypeScript web framework', type: 'document', language: 'en', author: 'daniel',
+  { id: 'elysia', title: 'Elysia', seedTitle: 'Elysia — TypeScript web framework', type: 'document', language: 'en', author: 'daniel',
     excerpt: 'Elysia provides a way to define HTTP routes with TypeScript. Check the request and response contract before adding a handler.' },
-  { id: 'react', title: 'React — user interface library', type: 'document', language: 'en', author: 'sophie',
+  { id: 'react', title: 'React', seedTitle: 'React — user interface library', type: 'document', language: 'en', author: 'sophie',
     excerpt: 'React builds interfaces from components. A small component is a useful place to test states and keyboard behavior.' },
-  { id: 'typescript', title: 'TypeScript — typed JavaScript', type: 'document', language: 'en', author: 'daniel',
+  { id: 'typescript', title: 'TypeScript', seedTitle: 'TypeScript — typed JavaScript', type: 'document', language: 'en', author: 'daniel',
     excerpt: 'TypeScript adds static types to JavaScript. Describe the data shape at an API boundary, then check callers against it.' },
   { id: 'dumplings', title: '韭菜鸡蛋饺子', type: 'recipe', language: 'zh-Hans', author: 'an' },
   { id: 'noodles', title: '番茄鸡蛋面', type: 'recipe', language: 'zh-Hans', author: 'an' },
@@ -73,25 +74,28 @@ export const works: readonly DemoWork[] = [
 ];
 
 export const realms = [
-  { id: 'fiction', name: 'Fiction · 小说', preset: 'serial',
+  { id: 'fiction', name: 'Fiction', seedName: 'Fiction · 小说', preset: 'serial',
     featured: ['serial', 'journey-west', 'red-chamber'] },
-  { id: 'books', name: 'Books · 图书', preset: 'editorial',
+  { id: 'books', name: 'Books', seedName: 'Books · 图书', preset: 'editorial',
     featured: ['pride', 'alice', 'jane-eyre', 'little-women'] },
-  { id: 'mods', name: 'Mods · 模组', preset: 'vibrant',
+  { id: 'mods', name: 'Mods', seedName: 'Mods · 模组', preset: 'vibrant',
     featured: ['mod-guide'] },
-  { id: 'ai-workshop', name: 'AI Workshop · AI 工作坊', preset: 'clean',
+  { id: 'ai-workshop', name: 'AI Workshop', seedName: 'AI Workshop · AI 工作坊', preset: 'clean',
     featured: ['prompt', 'skill'] },
-  { id: 'software', name: 'Software · 软件', preset: 'clean',
+  { id: 'software', name: 'Software', seedName: 'Software · 软件', preset: 'clean',
     featured: ['bun', 'elysia', 'react', 'typescript'] },
-  { id: 'kitchen', name: 'Kitchen · 厨房', preset: 'editorial',
+  { id: 'kitchen', name: 'Kitchen', seedName: 'Kitchen · 厨房', preset: 'editorial',
     featured: ['dumplings', 'noodles', 'pancakes', 'tea'] },
-  { id: 'games', name: 'Games · 游戏', preset: 'vibrant', featured: [] },
+  { id: 'games', name: 'Games', seedName: 'Games · 游戏', preset: 'vibrant', featured: [] },
 ] as const;
 
 /** Agents the first demo person also controls: a pen name and an organization. */
 export const penNames = [
-  { id: 'moonlight', displayName: '月下书生 · Moonlit Scribe', kind: 'person' },
-  { id: 'northstar', displayName: 'North Star Editions · 北辰出版', kind: 'organization' },
+  { id: 'moonlight', displayName: '月下书生', seedName: '月下书生 · Moonlit Scribe',
+    localizedName: null, kind: 'person' },
+  { id: 'northstar', displayName: 'North Star Editions', seedName: 'North Star Editions · 北辰出版',
+    localizedName: { original: 'en', labels: { en: 'North Star Editions', 'zh-Hans': '北辰出版' } },
+    kind: 'organization' },
 ] as const;
 
 /**
@@ -131,6 +135,11 @@ export const profilePlan = {
 
 export function seedKey(kind: string, id: string): string {
   return `dev-seed:v1:${kind}:${id}`;
+}
+
+/** Keep authored bilingual fixture text while publishing canonical language tags. */
+export function localizedBilingual(value: { en: string; 'zh-CN': string }, original: 'en' | 'zh-Hans' = 'en') {
+  return { original, labels: { en: value.en, 'zh-Hans': value['zh-CN'] } };
 }
 
 const typeIris = { book: 'https://schema.org/Book', document: 'https://schema.org/DigitalDocument',
