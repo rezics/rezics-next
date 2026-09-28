@@ -12,6 +12,9 @@ Install the Bun, Node.js and Task versions in the generated runtime table, a
 Docker-compatible daemon, and Python 3.10+ for documentation checks. The
 [installation guide](../operations/installation.md) gives the clean-checkout
 procedure. Host Java is unnecessary: the Fuseki image builds and runs it.
+A few integration tests start a host PostgreSQL 18 with `initdb`; install the
+server and its contrib extensions (Fedora: `postgresql-server postgresql-contrib`)
+because Content migrations create `pg_trgm`.
 
 Task is the command facade for developers and agents. Run `task --list`; pass
 extra arguments after `--`. Yarn installs dependencies with `task install` or
