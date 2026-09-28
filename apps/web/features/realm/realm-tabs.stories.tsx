@@ -111,7 +111,7 @@ export const About: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 3, name: 'Rule 1: Every pick gets a one-line hook' })).toBeVisible();
     const team = canvas.getByRole('region', { name: 'Moderators' });
-    await expect(within(team).getByRole('link', { name: /Lin Mei 林梅/ })).toHaveAttribute('href', '/@lin_mei');
+    await expect(within(team).getByRole('link', { name: /Lin Mei 林梅/ })).toHaveAttribute('href', '/en/@lin_mei');
     const members = canvas.getByRole('region', { name: 'Members' });
     await expect(within(members).getAllByRole('listitem')[0]).toHaveTextContent('北岛听风Featured');
     await expect(within(members).getByText('12,408 members')).toBeVisible();

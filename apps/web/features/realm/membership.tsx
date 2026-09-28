@@ -100,13 +100,17 @@ export function RealmMembership({ realm, realmName, initial, signedIn, actingSub
   }
   const ready = adapter;
 
-  /** Sets the Home follow; a follow changed elsewhere is read again and the reader's choice applied once more. */
+  /**
+   * Sets the Home follow; a follow changed elsewhere is read again and the
+   * reader's choice applied once more. Only the follow fields change, so a
+   * join that just landed stays.
+   */
   async function follow(next: boolean): Promise<boolean> {
     if (status === 'saving') return false;
-    const before = state;
-    setState({ ...before, following: next });
+    const { following: before, followRevision } = state;
+    setState(current => ({ ...current, following: next }));
     setStatus('saving');
-    let outcome = await ready.follow(next, before.followRevision).catch((): FollowOutcome => ({ kind: 'failed' }));
+    let outcome = await ready.follow(next, followRevision).catch((): FollowOutcome => ({ kind: 'failed' }));
     if (outcome.kind === 'stale') {
       const fresh = await ready.refresh().catch(() => null);
       outcome = !fresh || fresh.following === null ? { kind: 'failed' }
@@ -120,7 +124,7 @@ export function RealmMembership({ realm, realmName, initial, signedIn, actingSub
       setStatus('idle');
       return true;
     }
-    setState(before);
+    setState(current => ({ ...current, following: before }));
     setStatus('follow-failed');
     return false;
   }

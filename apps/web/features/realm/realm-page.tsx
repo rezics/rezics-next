@@ -1,14 +1,16 @@
 import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
 import { materializeData } from 'native-i18n';
 import { cookies, headers } from 'next/headers';
-import type { ReactNode } from 'react';
+import { cache, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { getMessages } from '../../i18n/server.ts';
 import { installedDigest, loadPackage } from '../../zones/official/index.ts';
 import { localizedPath } from '../../i18n/locale.ts';
+import { mainApiWithToken } from '../api/main.ts';
+import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { signInPath } from '../auth/paths.ts';
+import { sessionAgentState } from '../auth/session.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
-import { browseReader } from '../discover/server.ts';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
 import { ZONE_NONCE_HEADER } from '../zones/csp.ts';
 import { decideExecution, type Execution, isSafeMode, ZONE_LOOK_COOKIE, zoneLookEnabled } from '../zones/execution.ts';
@@ -68,6 +70,19 @@ async function runnablePackage(execution: Execution): Promise<{ execution: Execu
 }
 
 /**
+ * Who reads, once per request: signed in or not, and the session Agent Main
+ * keeps for this web session when it may act. Realm reads stay public; the
+ * reader's token goes only to their own membership, follow and media reads.
+ */
+const realmReader = cache(async () => {
+  const token = (await cookies()).get(ACCESS_COOKIE)?.value;
+  const state = token ? await sessionAgentState() : null;
+  const actingSubject = state?.sessionAgent.eligible ? state.sessionAgent.actingSubject ?? undefined : undefined;
+  return { signedIn: Boolean(token), actingSubject, personal: mainApiWithToken(actingSubject ? token : undefined),
+    avatarQuery: actingSubject ? `?actingSubject=${encodeURIComponent(actingSubject)}` : '' };
+});
+
+/**
  * Everything a Realm tab renders around its content: the Realm, its Zone's
  * presentation (or the default layout), whether the official package runs
  * for this view, and the theme. Missing and unavailable Realms return their
@@ -76,7 +91,7 @@ async function runnablePackage(execution: Execution): Promise<{ execution: Execu
 export async function loadRealmView(ref: string, locale: UiLocale, search: Search):
   Promise<RealmView | Exclude<RealmResolution, { kind: 'realm' }>> {
   const [realm, messages, zoneMessages, jar, reader] = await Promise.all([resolveRealm(ref, locale),
-    getMessages('realm', locale), getMessages('zones', locale), cookies(), browseReader()]);
+    getMessages('realm', locale), getMessages('zones', locale), cookies(), realmReader()]);
   if (realm.kind !== 'realm') return realm;
   const [read, membership] = await Promise.all([realm.zone ? readPresentation(realm.zone.id) : null,
     reader.actingSubject ? readMembership(reader.personal, realm.header.id, reader.actingSubject) : null]);

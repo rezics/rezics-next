@@ -65,13 +65,17 @@ export const JoinOnYourOwn: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Join' }));
     const dialog = within(await waitFor(() => within(document.body).getByRole('dialog')));
-    await expect(dialog.getByRole('heading', { name: 'Join Fiction 小说' })).toBeVisible();
+    // The dialog fades in; wait for its title rather than catching it mid-animation.
+    await waitFor(() => expect(dialog.getByRole('heading', { name: 'Join Fiction 小说' })).toBeVisible());
     await expect(dialog.getByRole('link', { name: 'Read the community rules' })).toHaveAttribute('href', '/en/r/fiction/about');
     const listed = dialog.getByRole('checkbox', { name: /Show me on the public member list/ });
     await expect(listed).not.toBeChecked();
     await userEvent.click(listed);
     await userEvent.click(dialog.getByRole('button', { name: 'Join' }));
     const joined = await canvas.findByRole('button', { name: /Joined/ });
+    // The follow that joining starts must not bring back the offer to join.
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await expect(canvas.queryByRole('button', { name: 'Join' })).toBeNull();
     await userEvent.click(joined);
     await expect(await within(document.body).findByRole('menuitemcheckbox', { name: 'Show its posts in my Home' }))
       .toHaveAttribute('aria-checked', 'true');

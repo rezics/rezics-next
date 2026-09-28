@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { bannerImage, liveBanners, mainExecution, zoneDecision, zoneImage, zoneText, zoneWork }
   from '../features/realm/adapt.ts';
-import { offerOf } from '../features/realm/membership-state.ts';
+import { type JoinPolicy, offerOf } from '../features/realm/membership-state.ts';
 import { chartMetric, withRealmCard } from '../features/realm/modules.ts';
 import { decisionAnchor, decisionHref, idOf, parseCursor, parseRealmRef, realmHref, realmWorkHref, repeatsTab, tabOf }
   from '../features/realm/route.ts';
@@ -139,10 +139,10 @@ describe('Main reads as Zone data', () => {
 });
 
 describe('Joining and following a Realm', () => {
-  const policy = { policyRevision: '1', termsRevision: 't', selfJoin: true, open: true, membershipGeneration: '0',
-    state: 'absent' as const };
+  const policy: JoinPolicy = { policyRevision: '1', termsRevision: 't', selfJoin: true, open: true,
+    membershipGeneration: '0', state: 'absent' };
   test('a member has joined; an open Realm asks to Join; any other Realm can be followed', () => {
-    const offer = (overrides: Partial<typeof policy> | null) => offerOf({ following: false, followRevision: null,
+    const offer = (overrides: Partial<JoinPolicy> | null) => offerOf({ following: false, followRevision: null,
       policy: overrides && { ...policy, ...overrides } });
     expect(offer({ state: 'joined' })).toBe('joined');
     expect(offer({ state: 'joined', open: false })).toBe('joined');
