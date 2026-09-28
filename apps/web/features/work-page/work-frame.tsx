@@ -11,6 +11,7 @@ import { coverImage, coverKindOf } from '../catalogue/work.ts';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { WorkPageMessages } from './messages.ts';
+import type { ReadStart } from './read.ts';
 import { workHref } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { WorkHeader } from './work-header.tsx';
@@ -23,9 +24,11 @@ import { WorkTabs } from './work-tabs.tsx';
  * beside it. On a phone the cover leads, centred, and the actions follow the
  * title. The left column stays in view while the page scrolls.
  */
-export function WorkFrame({ workRef, work, credits, ratingLine, signedIn = false, signInHref, actingSubject,
+export function WorkFrame({ workRef, work, credits, ratingLine, readAction, signedIn = false, signInHref, actingSubject,
   readerSeed, ratingTarget, readerActions, avatarQuery, locale, messages, children }: {
   workRef: string; work: Header; credits: ReactNode;
+  /** Where "Read" leads, streamed on its own; a link to Contents when left out. */
+  readAction?: ReactNode;
   /** The rating summary under the title, streamed on its own. */
   ratingLine?: ReactNode;
   signedIn?: boolean;
@@ -52,8 +55,8 @@ export function WorkFrame({ workRef, work, credits, ratingLine, signedIn = false
             image={coverImage(work.cover, avatarQuery)} loading="eager" className="w-44 sm:w-52 lg:w-full" />
         </div>
         <div className="order-3 mx-auto grid w-full max-w-sm content-start gap-3 lg:order-none">
-          <Link href={workHref(workRef, 'contents')} className={cn(buttonVariants({ size: 'lg', pill: true }), 'w-full')}>
-            <BookOpenIcon aria-hidden="true" />{messages.read}</Link>
+          {readAction === undefined ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} />
+            : readAction}
           <ShelfButton work={work.id} title={work.title.value} locale={locale} size="lg" variant="outline" />
           <RateWork work={work.id} locale={locale} className="mt-1" />
         </div>
@@ -72,19 +75,43 @@ export function WorkFrame({ workRef, work, credits, ratingLine, signedIn = false
 }
 
 /**
+ * The primary action: start at chapter 1, or continue at the next unread
+ * chapter, which is named under the button. A Work with nothing to read has
+ * no Read button, so "Want to read" leads; when Main could not say, Read
+ * opens Contents, which explains.
+ */
+export function ReadButton({ workRef, start, messages }: {
+  workRef: string; start: ReadStart; messages: WorkPageMessages;
+}) {
+  if (!start) return null;
+  const href = start.kind === 'contents' ? workHref(workRef, 'contents') : start.href;
+  const label = start.kind === 'continue' ? messages.continueReadingShort
+    : start.kind === 'start' ? messages.startReading : messages.read;
+  return <div className="grid gap-1.5">
+    <Link href={href} className={cn(buttonVariants({ size: 'lg', pill: true }), 'w-full')}>
+      <BookOpenIcon aria-hidden="true" />{label}</Link>
+    {start.kind === 'continue' && start.chapter ? <p className="truncate text-center text-muted-foreground text-xs">
+      {start.chapter}</p> : null}
+  </div>;
+}
+
+/**
  * The Overview's order: the description, genres and the folded details, then
- * ratings (whose ratings is switched beside their heading), the communities
- * that feature the Work and its author. An unknown scope is reported in
+ * ratings (whose ratings is switched beside their heading) and readers'
+ * reviews, the communities that feature the Work and its author. An unknown scope is reported in
  * place of the scoped sections, with the switch to choose another; it is
  * never replaced by everyone's view.
  */
-export function OverviewLayout({ about, scopeBar, ratings, classification, adoption, record, author, messages }: {
+export function OverviewLayout({ about, scopeBar, ratings, reviews, classification, adoption, record, author,
+  messages }: {
   /** The Work's description; it does not change with scope, so it comes first. */
   about?: ReactNode;
   /** Shown on its own only when the URL names no known scope; the ratings section carries it otherwise. */
   scopeBar: ReactNode;
   /** Null when the URL names no known scope. */
   ratings: ReactNode | null; classification: ReactNode; adoption: ReactNode; record: ReactNode;
+  /** Readers' reviews, under the rating summary they share a question with. */
+  reviews?: ReactNode;
   /** About the author and more by them, when the Work has a native author credit. */
   author?: ReactNode;
   messages: WorkPageMessages;
@@ -95,6 +122,7 @@ export function OverviewLayout({ about, scopeBar, ratings, classification, adopt
       {classification}
       {record}
       {ratings}
+      {reviews}
       {adoption}
     </>}
     {author}

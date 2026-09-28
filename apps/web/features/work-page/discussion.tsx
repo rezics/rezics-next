@@ -4,7 +4,7 @@ import { materializeData } from 'native-i18n';
 import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
-import { paragraphs } from './format.ts';
+import { formatDate, mintedAt, paragraphs } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { Region, RegionFailure } from './region.tsx';
 import { idOf, workHref } from './route.ts';
@@ -43,6 +43,8 @@ export function DiscussionRegion({ discussion, view, cursor, locale, messages }:
         const realm = idOf(item.realm);
         const label = realm ? realmLabel(view.realms.find(entry => entry.id === realm) ?? { id: realm, name: null },
           messages, locale) : item.realm;
+        // A reply is dated by its placement, which Main minted when the community placed it.
+        const placed = mintedAt(item.placement);
         return <li key={item.placement}>
           <article className="grid gap-3 rounded-xl border border-border/60 bg-background/60 p-4">
             <header className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -52,7 +54,8 @@ export function DiscussionRegion({ discussion, view, cursor, locale, messages }:
                   <UsersRoundIcon aria-hidden="true" className="size-3.5" />{t.replyIn({ realm: label })}</Link>
                 : <span className="flex items-center gap-1.5 font-medium">
                   <UsersRoundIcon aria-hidden="true" className="size-3.5" />{t.replyIn({ realm: label })}</span>}
-              <span className="text-muted-foreground tabular-nums">{t.sequence({ sequence: item.sequence })}</span>
+              {placed ? <time dateTime={placed.toISOString()} className="text-muted-foreground tabular-nums">
+                {formatDate(placed, locale)}</time> : null}
             </header>
             <div className="grid gap-2 text-pretty break-words text-sm/7">
               {paragraphs(item.body).map((line, index) => <p key={index}>{line}</p>)}

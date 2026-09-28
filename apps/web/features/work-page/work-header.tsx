@@ -4,25 +4,65 @@ import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import { Expandable } from './expandable.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
-import { languageName, paragraphs, typeNames } from './format.ts';
+import { formatCompact } from '../catalogue/work.ts';
+import { formatNumber, isoTime, languageName, paragraphs, sinceWhen, titleNeedsLanguageNote, typeNames }
+  from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import type { WorkHeader as Header } from './types.ts';
 
+function serialStats(work: Pick<Header, 'completionStatus' | 'chapterCount' | 'wordCount' | 'lastUpdatedAt'>,
+  now: Date, locale: UiLocale, t: ReturnType<typeof materializeData<WorkPageMessages>>) {
+  const updated = work.lastUpdatedAt ? sinceWhen(work.lastUpdatedAt, locale, now) : null;
+  return [
+    // `value` heads the strip; `text` says the same fact alone in a line.
+    work.completionStatus ? { term: t.status, value: t[work.completionStatus], text: t[work.completionStatus] } : null,
+    work.chapterCount ? { term: t.chapterCountLabel, value: formatNumber(work.chapterCount, locale),
+      text: t.chapters(work.chapterCount) } : null,
+    work.wordCount ? { term: t.wordCountLabel, value: formatCompact(work.wordCount, locale), text: t.words(work.wordCount) }
+      : null,
+    updated && work.lastUpdatedAt ? { term: t.lastUpdated, text: `${t.lastUpdated} ${updated}`,
+      value: <time dateTime={isoTime(work.lastUpdatedAt)}>{updated}</time> } : null,
+  ].filter(stat => stat !== null);
+}
+
+/**
+ * A serial's state at a glance, as KadoKado and Royal Road head a book page:
+ * whether it is finished, how long it is and when it last grew. Each fact
+ * shows only when Main knows it; a single fact joins the plain line above
+ * instead, rather than stand alone in a box.
+ */
+export function WorkStats({ work, now, locale, messages }: {
+  work: Pick<Header, 'completionStatus' | 'chapterCount' | 'wordCount' | 'lastUpdatedAt'>; now: Date; locale: UiLocale;
+  messages: WorkPageMessages;
+}) {
+  const stats = serialStats(work, now, locale, materializeData(messages, { locale }));
+  if (stats.length < 2) return null;
+  return <dl className="flex flex-wrap justify-center divide-x divide-border/70 rounded-2xl border border-border/60
+    py-2.5 lg:justify-start">
+    {stats.map(stat => <div key={stat.term} className="grid min-w-20 gap-0.5 px-4 text-center lg:text-start">
+      <dt className="order-last text-muted-foreground text-xs">{stat.term}</dt>
+      <dd className="font-semibold text-base tabular-nums">{stat.value}</dd>
+    </div>)}
+  </dl>;
+}
+
 /**
  * The Work's identity beside its cover, in Goodreads' order: title in the
- * Work-title face, who made it, the rating summary, and a plain line of what
- * it is. Model detail (Main Version, identifiers) lives in Details below.
+ * Work-title face, who made it, the rating summary, a plain line of what it
+ * is and, for a serial, its state. Model detail lives in Details below.
  */
-export function WorkHeader({ work, credits, ratingLine, locale, messages }: {
-  work: Header; credits: ReactNode; ratingLine?: ReactNode; locale: UiLocale; messages: WorkPageMessages;
+export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale, messages }: {
+  work: Header; credits: ReactNode; ratingLine?: ReactNode;
+  /** The moment "Updated 3 days ago" is measured from; stories fix it. */
+  now?: Date;
+  locale: UiLocale; messages: WorkPageMessages;
 }) {
   const t = materializeData(messages, { locale });
   const types = typeNames(work.types, t);
-  // What it is, in words a reader uses: "Book · English · Completed · 24 chapters · 86,400 words".
+  // What it is, in words a reader uses: "Book · English", and a lone serial fact ("Completed") with it.
+  const single = serialStats(work, now, locale, t);
   const facts = [types[0], work.selectedLanguage ? languageName(work.selectedLanguage, locale) : null,
-    work.completionStatus ? t[work.completionStatus] : null,
-    work.chapterCount ? t.chapters(work.chapterCount) : null, work.wordCount ? t.words(work.wordCount) : null]
-    .filter(fact => fact !== undefined && fact !== null);
+    single.length === 1 ? single[0]!.text : null].filter(fact => fact !== undefined && fact !== null);
   return <header className="grid min-w-0 content-start justify-items-center gap-3 text-center lg:justify-items-start
     lg:text-start">
     {work.disclosure === 'restricted'
@@ -31,7 +71,7 @@ export function WorkHeader({ work, credits, ratingLine, locale, messages }: {
       text-3xl/tight tracking-tight [overflow-wrap:anywhere] sm:text-[2.75rem]/[1.12]">{work.title.value}</h1>
     {work.tagline ? <p lang={work.tagline.language} dir={work.tagline.direction}
       className="max-w-2xl text-pretty font-medium text-foreground/80 text-lg">{work.tagline.value}</p> : null}
-    {work.title.basis === 'fallback' ? <p className="text-muted-foreground text-xs">
+    {titleNeedsLanguageNote(work.title, locale) ? <p className="text-muted-foreground text-xs">
       {t.titleFallback({ requested: languageName(locale, locale), shown: languageName(work.title.language, locale) })}
     </p> : null}
     {work.originalTitle && work.originalTitle.value !== work.title.value
@@ -41,6 +81,7 @@ export function WorkHeader({ work, credits, ratingLine, locale, messages }: {
     {credits}
     {ratingLine}
     {facts.length ? <p className="text-muted-foreground text-sm">{facts.join(' · ')}</p> : null}
+    <WorkStats work={work} now={now} locale={locale} messages={messages} />
   </header>;
 }
 

@@ -46,8 +46,12 @@ export const Versions: Story = {
     await expect(region).toHaveTextContent('4 on this page');
     const items = within(region).getAllByRole('listitem');
     await expect(items).toHaveLength(4);
-    await expect(items[0]).toHaveTextContent('Main Version');
-    await expect(items[3]).toHaveTextContent('Fixed release');
+    // Each version by its language, kind and date; the one shown by default is marked, and no IDs are listed.
+    await expect(items[0]).toHaveTextContent('English');
+    await expect(items[0]).toHaveTextContent('Shown by default');
+    await expect(items[0]).toHaveTextContent('Text version · revised Sep 20, 2026');
+    await expect(items[3]).toHaveTextContent('Fixed release · released Jun 1, 2026');
+    await expect(region).not.toHaveTextContent(/Contribution|Revision/);
     await expect(within(region).getByRole('link', { name: 'Next page' }))
       .toHaveAttribute('href', `/en/w/${fixture.workRef}/versions?cursor=next-page-cursor`);
     const filters = within(region).getByRole('form', { name: 'Filter versions' });
@@ -120,9 +124,13 @@ export const History: Story = {
     const region = within(canvasElement).getByRole('region', { name: 'History' });
     await expect(region).toHaveTextContent('Newest first.');
     const items = within(region).getAllByRole('listitem');
-    await expect(items.map(item => item.querySelector('p')?.textContent)).toEqual(['Reply placed in a community',
-      'Metadata revised', 'Version published', 'Metadata revised']);
-    await expect(within(region).getAllByRole('link', { name: 'View revision' })[0])
+    await expect(items.map(item => item.querySelector('p')?.textContent)).toEqual(['A reply was placed in a community',
+      'Details edited', 'A version was published', 'Details edited']);
+    // Dated by when each happened, not by a record sequence.
+    await expect(items[0]).toHaveTextContent('Sep 27, 2026');
+    await expect(items[1]).toHaveTextContent('Sep 20, 2026');
+    await expect(region).not.toHaveTextContent(/Sequence/);
+    await expect(within(region).getAllByRole('link', { name: 'See this edit' })[0])
       .toHaveAttribute('href', `/en/works/${fixture.work.revision.slice(-36)}`);
     const filter = within(region).getByRole('navigation', { name: 'Show activity' });
     await expect(within(filter).getByRole('link', { name: 'All' })).toHaveAttribute('aria-current', 'true');
@@ -166,7 +174,9 @@ export const Contents: Story = {
       .toHaveAttribute('href', `/en/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000002`);
     await expect(within(region).getByRole('link', { name: /Part One: The Delta/ }))
       .toHaveAttribute('href', `/en/w/${fixture.workRef}/contents?parent=b5c7d9e1-f3a5-4b7c-9d1e-000000000001`);
-    await expect(within(region).getByRole('link', { name: /Untitled chapter/ })).toBeVisible();
+    // A chapter without a title is named by its place, never "Untitled chapter".
+    await expect(within(region).getByRole('link', { name: /Chapter 3/ })).toBeVisible();
+    await expect(region).not.toHaveTextContent('Untitled chapter');
     // A chapter with no publication in this language is listed, not linked.
     await expect(within(region).queryByRole('link', { name: /Neap Tide/ })).toBeNull();
     await expect(region).toHaveTextContent('Not available to read yet');
@@ -223,6 +233,7 @@ export const Discussion: Story = {
     await expect(within(replies[0]!).getByRole('link', { name: 'In Tidewater Readers' }))
       .toHaveAttribute('href', `/en/w/${fixture.workRef}/discussion?scope=realm&realm=${fixture.realms[0]!.id}`);
     await expect(replies[1]).toHaveTextContent('In 海洋文学研究会');
+    await expect(replies[0]).toHaveTextContent('Sep 25, 2026');
     await expect(within(region).getByRole('link', { name: 'Next page' })).toBeVisible();
   },
 };

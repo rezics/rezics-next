@@ -1,16 +1,18 @@
 import { cookies } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { cache } from 'react';
+import { failureOf } from './failure.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { type ContentsQuery, iriOf, mainScope, parseWorkRef, type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
+import { chapterHref, type ContentsQuery, idOf, iriOf, mainScope, parseWorkRef, type VersionQuery, type WorkRef,
+  type WorkScope, workHref } from './route.ts';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, ChapterRead, ClassificationPage, ContentsPage, CreditPage,
   DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingContextPage, RatingRead, ReadFailure,
-  RealmHeader, VersionPage, WorkHeader } from './types.ts';
+  RealmHeader, Reviewer, ReviewPage, ReviewQuery, VersionPage, WorkHeader } from './types.ts';
 
 // Server reads for the Work page. Each returns a `Loaded` result instead of
 // throwing, so one region's failure never takes down another. Reads are
@@ -37,14 +39,7 @@ export async function readingAgent(): Promise<{ signedIn: boolean; actingSubject
   return { signedIn, actingSubject: actingSubject ?? null };
 }
 
-export function failureOf(status: number): ReadFailure {
-  if (status === 404 || status === 410) return 'missing';
-  if (status === 401 || status === 403) return 'sign-in';
-  if (status === 409) return 'moved';
-  if (status === 400) return 'invalid';
-  if (status === 422) return 'budget';
-  return 'unavailable';
-}
+export { failureOf };
 
 type Answer<T> = { data: T | null; error: { status: number } | null };
 
@@ -201,6 +196,19 @@ export const readAgentWorks = cache(async (agent: string, locale: UiLocale): Pro
     limit: 12 } }));
 });
 
+/** A page of this Work's reviews for one rating Context; the reader's own comes first on page one. */
+export async function readReviews(id: string, query: Omit<ReviewQuery, 'actingSubject'>): Promise<Loaded<ReviewPage>> {
+  const { main, actingSubject } = await reader();
+  return settle(() => main.v1.works({ id }).reviews.get({ query: { ...query, actingSubject } }), query.cursor);
+}
+
+/** An Agent's public name and handle, once per request, for reviews and credits Main names by IRI. */
+export const readReviewer = cache(async (agent: string): Promise<Reviewer | null> => {
+  const { main, actingSubject } = await reader();
+  const profile = await settle(() => main.v1.agents({ id: agent.slice(-36) }).get({ query: { actingSubject } }));
+  return profile.ok ? { name: profile.data.displayName, handle: profile.data.handle } : null;
+});
+
 /**
  * The reader's shelf status and own ratings for this Work. Null when they act
  * as no Agent or Main denies that Agent a reader library; empty when Main could
@@ -226,6 +234,40 @@ export async function readContents(id: string, query: ContentsQuery): Promise<Lo
     parent: query.parent ? iriOf(query.parent) : undefined, language: query.language, cursor: query.cursor } }),
   query.cursor);
 }
+
+/**
+ * Where "Read" leads. A reader already in the Work continues at the next
+ * chapter they have not read, as Main's Continue read gives it; anyone else
+ * starts at chapter 1, found by descending the first parts of the contents
+ * (at most three levels, one page each). Null when the Work has no contents
+ * to read; `contents` when Main could not say, so Contents explains.
+ */
+export const readStart = cache(async (id: string, work: string): Promise<ReadStart> => {
+  const { main, actingSubject } = await reader();
+  if (actingSubject) {
+    const next = await settle(() => main.v1.me.continue.get({ query: { actingSubject, limit: 6 } }));
+    const item = next.ok ? next.data.items.find(entry => entry.work === work) : undefined;
+    if (item) {
+      return { kind: item.lastPosition ? 'continue' : 'start', href: item.nextUnread.href, chapter: item.nextUnread.title };
+    }
+  }
+  let parent: string | undefined;
+  for (let depth = 0; depth < 3; depth += 1) {
+    const level = await readContents(id, { parent });
+    if (!level.ok) return depth === 0 && level.failure === 'missing' ? null : { kind: 'contents' };
+    const first = level.data.items.find(item => item.availability === 'available');
+    const occurrence = first ? idOf(first.occurrence) : null;
+    if (!first || !occurrence) return depth === 0 && !level.data.items.length ? null : { kind: 'contents' };
+    if (first.role === 'chapter') return { kind: 'start', href: chapterHref(id, occurrence), chapter: first.label?.value ?? null };
+    parent = occurrence;
+  }
+  return { kind: 'contents' };
+});
+
+export type ReadStart =
+  | { kind: 'start' | 'continue'; href: string; chapter: string | null }
+  | { kind: 'contents' }
+  | null;
 
 /** One chapter's exact body with its neighbours, in the Work's selected language unless one is named. */
 export const readChapter = cache(async (chapter: string, language: string | undefined):

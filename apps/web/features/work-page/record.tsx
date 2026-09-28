@@ -4,7 +4,7 @@ import { ChevronDownIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
-import { languageName, typeNames } from './format.ts';
+import { formatDate, languageName, mintedAt, typeNames } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { idOf } from './route.ts';
 import type { WorkHeader } from './types.ts';
@@ -20,9 +20,10 @@ function Fact({ term, value, href, mono = false, lang }: {
 }
 
 /**
- * The model behind the page, folded away as Goodreads folds "Book details &
- * editions": kind, Main Version, the exact identities this view was read
- * from and the graph position it reflects, and a citation to copy.
+ * Details folded away, as Goodreads folds "Book details & editions": what
+ * the Work is, in words a reader knows, then a citation to copy. The exact
+ * identities the page was read from, and the record position it reflects,
+ * sit one step further in, under Cite, for those who need to point at them.
  */
 export function WorkRecord({ work, citation, locale, messages }: {
   work: WorkHeader; citation?: string; locale: UiLocale; messages: WorkPageMessages;
@@ -30,6 +31,7 @@ export function WorkRecord({ work, citation, locale, messages }: {
   const t = materializeData(messages, { locale });
   const revision = idOf(work.revision);
   const types = typeNames(work.types, t);
+  const added = mintedAt(work.id);
   return <details className="group min-w-0 border-border/70 border-y">
     <summary className="flex cursor-pointer list-none items-center gap-2 py-4 font-semibold outline-none
       focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
@@ -44,18 +46,29 @@ export function WorkRecord({ work, citation, locale, messages }: {
           lang={work.mainVersionLabel.language} /> : null}
         {work.originalTitle ? <Fact term={t.originalTitle} value={work.originalTitle.value}
           lang={work.originalTitle.language} /> : null}
-        <Fact term={t.workId} value={work.id} mono />
-        <Fact term={t.mainVersionId} value={work.mainVersion} mono />
-        <Fact term={t.headRevision} value={work.revision} mono href={revision ? `/works/${revision}` : undefined} />
-        {work.metadataRevision ? <Fact term={t.metadataRevision} value={work.metadataRevision} mono /> : null}
+        {added ? <Fact term={t.addedOn} value={formatDate(added, locale)} /> : null}
       </dl>
-      <p className="text-muted-foreground text-xs">{t.asOf({ sequence: work.sourcePosition.sequence })}</p>
-      {citation ? <Clipboard value={citation} label={t.cite} className="flex-col items-stretch sm:flex-row">
-        <ClipboardValue className="h-auto min-h-9 flex-1 whitespace-normal py-2 text-sm" />
-        <ClipboardTrigger aria-label={t.copyCitation} className={buttonVariants({ variant: 'outline', size: 'md' })}>
-          <ClipboardIndicator copied={t.copied}>{t.copyCitation}</ClipboardIndicator>
-        </ClipboardTrigger>
-      </Clipboard> : null}
+      <section aria-labelledby="work-cite" className="grid gap-3">
+        <h3 id="work-cite" className="font-semibold text-sm">{t.cite}</h3>
+        {citation ? <Clipboard value={citation} label={t.cite} className="flex-col items-stretch sm:flex-row">
+          <ClipboardValue className="h-auto min-h-9 flex-1 whitespace-normal py-2 text-sm" />
+          <ClipboardTrigger aria-label={t.copyCitation} className={buttonVariants({ variant: 'outline', size: 'md' })}>
+            <ClipboardIndicator copied={t.copied}>{t.copyCitation}</ClipboardIndicator>
+          </ClipboardTrigger>
+        </Clipboard> : null}
+        <details className="group/ids">
+          <summary className="w-fit cursor-pointer list-none rounded-sm text-muted-foreground text-sm underline
+            decoration-dotted underline-offset-4 outline-none hover:text-foreground focus-visible:ring-2
+            focus-visible:ring-ring [&::-webkit-details-marker]:hidden">{t.identifiers}</summary>
+          <dl className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+            <Fact term={t.workId} value={work.id} mono />
+            <Fact term={t.mainVersionId} value={work.mainVersion} mono />
+            <Fact term={t.headRevision} value={work.revision} mono href={revision ? `/works/${revision}` : undefined} />
+            {work.metadataRevision ? <Fact term={t.metadataRevision} value={work.metadataRevision} mono /> : null}
+          </dl>
+          <p className="mt-3 text-muted-foreground text-xs">{t.asOf({ sequence: work.sourcePosition.sequence })}</p>
+        </details>
+      </section>
     </div>
   </details>;
 }

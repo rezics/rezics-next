@@ -49,7 +49,7 @@ function Chips({ items, label, view, t }: { items: readonly Classification[]; la
  * The genres accepted in a scope, each opening its Discover shelf. In a
  * community, its own choices are listed apart from those it inherits from
  * everyone. Mine has none: people rate, while everyone and communities
- * choose genres.
+ * choose genres. Everyone's view without genres shows nothing.
  */
 export function ClassificationRegion({ classifications, view, locale, messages }: {
   /** Null in Mine, which Main does not define for classification. */
@@ -74,6 +74,8 @@ export function ClassificationRegion({ classifications, view, locale, messages }
     </Region>;
   }
   const { items, nextCursor } = classifications.data;
+  // Everyone's view with no genres leaves the section out, as Goodreads does, rather than lead with an empty box.
+  if (!items.length && view.scope.kind === 'global') return null;
   if (!items.length) {
     return <Region id={CLASSIFICATION_REGION} title={t.classification}>
       {empty(view.scope.kind === 'realm' ? t.noClassificationRealm({ realm: name }) : t.noClassificationGlobal)}

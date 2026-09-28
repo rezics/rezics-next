@@ -46,6 +46,9 @@ export function ContentsRegion({ contents, workRef, query, locale, messages }: {
   const first = !query.parent && !query.cursor
     ? items.find(item => item.role === 'chapter' && item.availability === 'available') : undefined;
   const firstId = first ? idOf(first.occurrence) : null;
+  // A chapter without a title is named by its place, which a page after the first cannot know.
+  const numbers = new Map(query.cursor ? [] : items.filter(item => item.role === 'chapter')
+    .map((item, index) => [item.occurrence, index + 1] as const));
   return <Region id="work-contents" title={t.contents}
     aside={language ? <span className="text-muted-foreground text-sm">
       {t.contentsIn({ language: languageName(language, locale) })}</span> : null}>
@@ -58,8 +61,10 @@ export function ContentsRegion({ contents, workRef, query, locale, messages }: {
         const id = idOf(item.occurrence);
         const group = item.role === 'group';
         // Main withholds the label of a chapter the reader cannot read; that is not an untitled chapter.
+        const number = numbers.get(item.occurrence);
         const label = item.label?.value ?? (group ? t.untitledPart
-          : item.availability === 'unavailable' ? t.unavailableChapter : t.untitledChapter);
+          : item.availability === 'unavailable' ? t.unavailableChapter
+            : number && !query.parent ? t.chapterNumber(number) : t.untitledChapter);
         const Icon = group ? FolderIcon : FileTextIcon;
         const body = <>
           <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />

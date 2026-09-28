@@ -11,11 +11,28 @@ import { signInPath } from '../auth/paths.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { paragraphs } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
-import { ChapterKeys, ReaderSurface, ReadingProgress } from './reader-client.tsx';
+import { ChapterKeys, ReaderChrome, ReaderSurface, ReadingProgress } from './reader-client.tsx';
 import { parsePosition, type ReaderSettings } from './reader-settings.ts';
 import { RetryButton } from './retry-button.tsx';
 import { chapterHref, idOf, workHref } from './route.ts';
 import type { ChapterRead, Loaded, Progress, WorkHeader } from './types.ts';
+
+/** A chapter's heading: its title, or "Chapter 3" by its place when it has none, never "Untitled chapter". */
+export function chapterTitle(label: { value: string } | null, ordinal: number,
+  t: Pick<ReturnType<typeof materializeData<WorkPageMessages>>, 'chapterNumber'>): string {
+  return label?.value.trim() || t.chapterNumber(ordinal);
+}
+
+const folded = (text: string) => text.normalize('NFKC').replace(/[\s\p{P}]+/gu, '').toLowerCase();
+
+/**
+ * The body without a first line that only repeats the chapter's title, as
+ * imported text often opens with it ("第一章 雨夜"); the reader sets the
+ * title once, as the heading.
+ */
+export function bodyAfterTitle(lines: string[], title: string | undefined): string[] {
+  return title && lines.length > 1 && folded(lines[0]!) === folded(title) ? lines.slice(1) : lines;
+}
 
 function ProgressPanel({ progress, chapter, actingSubject, here, locale, messages }: {
   progress: Loaded<Progress>; chapter: ChapterRead; actingSubject: string | null; here: string; locale: UiLocale;
@@ -55,7 +72,8 @@ export function ChapterReader({ workRef, work, chapter, language, settings, prog
 }) {
   const t = materializeData(messages, { locale });
   const body: unknown = chapter.content.body.body;
-  const lines = typeof body === 'string' ? paragraphs(body) : null;
+  const title = chapterTitle(chapter.label, chapter.ordinal, t);
+  const lines = typeof body === 'string' ? bodyAfterTitle(paragraphs(body), chapter.label?.value) : null;
   const direction = chapter.content.reference.direction;
   const neighbour = (occurrence: string | null) => {
     const id = occurrence ? idOf(occurrence) : null;
@@ -96,13 +114,14 @@ export function ChapterReader({ workRef, work, chapter, language, settings, prog
           <header className="grid gap-2 border-border/60 border-b pb-4">
             {chapter.parentPath.map(item => <span key={item.occurrence} lang={item.label?.language}
               className="text-muted-foreground text-sm">{item.label?.value ?? t.untitledPart}</span>)}
-            <h1 lang={chapter.label?.language ?? chapter.language}
-              className="text-balance font-semibold font-work-title text-2xl/tight sm:text-3xl/tight">
-              {chapter.label?.value ?? t.untitledChapter}</h1>
+            <h1 lang={chapter.label?.language ?? locale}
+              className="text-balance font-semibold font-work-title text-2xl/tight sm:text-3xl/tight">{title}</h1>
             {resume ? <a href={`#p-${resume}`} className={cn(buttonVariants({ size: 'sm', variant: 'soft' }),
               'justify-self-start')}>{t.continueReading}</a> : null}
           </header>
-          {lines ? <div className="grid gap-[0.9em] text-(length:--reader-size) leading-[1.8] text-pretty
+          {/* Latin text reads well at 1.7; Chinese and Japanese, set solid, need 1.8. */}
+          {lines ? <div className="grid gap-[0.9em] text-(length:--reader-size) leading-[1.7] text-pretty
+            [&:lang(ja)]:leading-[1.8] [&:lang(zh)]:leading-[1.8]
             group-data-[face=serif]/reader:font-work-title
             group-data-[indent=true]/reader:[&>p]:indent-[2em]
             group-data-[cjk-spacing=none]/reader:[text-autospace:no-autospace]
@@ -124,6 +143,7 @@ export function ChapterReader({ workRef, work, chapter, language, settings, prog
       </ReaderSurface>
       <ChapterKeys previous={previous && localizedPath(previous, locale)} next={next && localizedPath(next, locale)}
         direction={direction} />
+      <ReaderChrome />
     </div>
   </div>;
 }

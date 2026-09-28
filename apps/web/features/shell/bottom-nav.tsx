@@ -15,7 +15,8 @@ export function BottomNav() {
   const pathname = usePathname();
   const unread = useUnread(signedIn);
   return <nav aria-label={t.navigation} className="fixed inset-x-0 bottom-0 z-40 border-border/60 border-t
-    bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
+    bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md transition-transform duration-300
+    motion-reduce:transition-none [html[data-reading=hidden]_&]:translate-y-full md:hidden">
     <ul className="grid h-16 grid-cols-5">
       {navigation.filter(item => item.bottom).map(item => {
         const count = item.href === '/notifications' && unread?.count ? unreadBadge(unread) : null;

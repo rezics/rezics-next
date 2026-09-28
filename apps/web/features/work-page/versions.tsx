@@ -7,10 +7,10 @@ import { materializeData } from 'native-i18n';
 import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
-import { languageName } from './format.ts';
+import { formatDate, languageName, mintedAt } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { Region, RegionFailure } from './region.tsx';
-import { shortId, type VersionQuery, workHref } from './route.ts';
+import { type VersionQuery, workHref } from './route.ts';
 import type { Loaded, VersionPage } from './types.ts';
 
 function VersionFilters({ workRef, query, languages, locale, messages }: {
@@ -43,9 +43,10 @@ function VersionFilters({ workRef, query, languages, locale, messages }: {
 }
 
 /**
- * Every published version of the Work, Modrinth-style: filter by kind and
- * content language, and page forward with Main's cursor. Main's page is
- * exact; there is no corpus total to show.
+ * Every published version of the Work, Modrinth-style: each by its language,
+ * kind and date, the one shown by default marked; filter by kind and content
+ * language, and page forward with Main's cursor. Main's page is exact; there
+ * is no corpus total to show.
  */
 export function VersionsRegion({ versions, workRef, query, locale, messages }: {
   /** Null when the URL's filters are malformed; Main is not asked. */
@@ -78,18 +79,22 @@ export function VersionsRegion({ versions, workRef, query, locale, messages }: {
     aside={items.length ? <span className="text-muted-foreground text-sm">{t.onThisPage(count.value)}</span> : null}>
     {header}
     {items.length ? <ul className="grid divide-y divide-border/60 border-border/60 border-y">
-      {items.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
-        <div className="grid min-w-0 gap-0.5">
-          <p className="font-medium">{languageName(item.language, locale)}
-            <span className="ms-2 font-mono text-muted-foreground text-xs">{item.language}</span></p>
-          <p className="font-mono text-muted-foreground text-xs">
-            {t.contribution} {shortId(item.contribution)} · {t.revision} {shortId(item.revision)}</p>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
+      {items.map(item => {
+        // The version's current revision was minted when it was last revised or, for a release, released.
+        const dated = mintedAt(item.revision);
+        return <li key={item.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
+          <div className="grid min-w-0 gap-0.5">
+            <p className="font-medium">{languageName(item.language, locale)}</p>
+            <p className="text-muted-foreground text-sm">
+              {item.kind === 'release' ? t.release : t.textVariant}
+              {dated ? <> · <time dateTime={dated.toISOString()}>{item.kind === 'release'
+                ? t.releasedOn({ date: formatDate(dated, locale) }) : t.revisedOn({ date: formatDate(dated, locale) })}</time></>
+                : null}
+            </p>
+          </div>
           {item.selected ? <Badge variant="soft">{t.selected}</Badge> : null}
-          <Badge variant="outline">{item.kind === 'release' ? t.release : t.textVariant}</Badge>
-        </div>
-      </li>)}
+        </li>;
+      })}
     </ul> : filtered
       ? <EmptyState icon={SearchXIcon} headingLevel={3} title={t.noMatchingVersions}>
         <Link href={workHref(workRef, 'versions')} className={buttonVariants({ variant: 'outline', size: 'sm' })}>

@@ -34,6 +34,13 @@ export type RatingContext = RatingContextPage['items'][number];
 export type RatingSummary = Ok<Work['ratings']['get']>;
 export type RealmHeader = Ok<ReturnType<Main['v1']['realms']>['get']>;
 export type AgentWorksPage = Ok<ReturnType<Main['v1']['agents']>['works']['get']>;
+export type AgentProfile = Ok<ReturnType<Main['v1']['agents']>['get']>;
+export type ReviewPage = Ok<Work['reviews']['get']>;
+export type Review = ReviewPage['items'][number];
+export type ReviewQuery = NonNullable<Parameters<Work['reviews']['get']>[0]>['query'];
+
+/** A reviewer as the page names them; null while Main cannot. */
+export interface Reviewer { name: string; handle: string }
 
 /** A scope's rating summary with the Context (question) it answers. */
 export interface RatingRead {

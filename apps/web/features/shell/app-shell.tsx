@@ -40,7 +40,9 @@ export function AppShell({ locale, messages, theme, navCollapsed, signedIn, acco
   return <ShellProvider locale={locale} messages={messages} initialTheme={theme} initialCollapsed={navCollapsed}
     signedIn={signedIn}>
     <SkipNavLink id={MAIN_CONTENT_ID}>{messages.skipToContent}</SkipNavLink>
-    <header className="sticky top-0 z-40 border-border/60 border-b bg-background/85 backdrop-blur-md">
+    {/* The reader hides the header and tab bar on phones while its reader scrolls down (html[data-reading]). */}
+    <header className="sticky top-0 z-40 border-border/60 border-b bg-background/85 backdrop-blur-md
+      transition-transform duration-300 motion-reduce:transition-none max-md:[html[data-reading=hidden]_&]:-translate-y-full">
       <div className="flex min-h-16 flex-wrap items-center gap-2 px-2 py-2 sm:h-16 sm:flex-nowrap sm:gap-3 sm:px-4 sm:py-0">
         <div className="flex shrink-0 items-center gap-1 md:w-56 md:group-data-[nav=collapsed]/shell:w-auto">
           <NavDrawer communities={communities} />

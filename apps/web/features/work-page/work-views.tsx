@@ -14,14 +14,16 @@ import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
 import { readAdoptions, readAgentCredits, readAgentWorks, readClassifications, readContents, readCredits,
-  readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm, readVersions } from './read.ts';
+  readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm, readReviewer, readReviews,
+  readStart, readVersions } from './read.ts';
 import { RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
 import { type ContentsQuery, type HistoryFilter, idOf, type VersionQuery, type WorkScope, workHref } from './route.ts';
 import { ScopeBar, ScopeBarSkeleton, type ScopeRealm, type ScopeView } from './scope-bar.tsx';
-import type { WorkHeader as Header } from './types.ts';
+import { ReviewsSection } from './reviews.tsx';
+import type { WorkHeader as Header, Reviewer } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
-import { InvalidScope, OverviewLayout, WorkFrame } from './work-frame.tsx';
+import { InvalidScope, OverviewLayout, ReadButton, WorkFrame } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 
 // Server compositions for the `/w/[ref]` routes: each region reads Main on its
@@ -54,6 +56,12 @@ async function RatingLineSlot({ id, locale, messages }: Common & { id: string })
   return <RatingLine ratings={await readRatings(id, { kind: 'global' }, undefined)} locale={locale} messages={messages} />;
 }
 
+/** "Read": the next unread chapter or chapter 1, read after the page has started to stream. */
+async function ReadSlot({ workRef, id, work, messages }: { workRef: string; id: string; work: string;
+  messages: WorkPageMessages }) {
+  return <ReadButton workRef={workRef} start={await readStart(id, work)} messages={messages} />;
+}
+
 /** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
 export async function WorkFrameView({ workRef, id, work, locale, messages, children }: Common & {
   workRef: string; id: string; work: Header; children: ReactNode;
@@ -69,7 +77,9 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, child
     signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       <Credits id={id} locale={locale} messages={messages} /></Suspense>}
-    ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} locale={locale} messages={messages} /></Suspense>}>
+    ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} locale={locale} messages={messages} /></Suspense>}
+    readAction={<Suspense fallback={<ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} />}>
+      <ReadSlot workRef={workRef} id={id} work={work.id} messages={messages} /></Suspense>}>
     {children}</WorkFrame>;
 }
 
@@ -115,6 +125,30 @@ async function Author({ id, locale, messages }: Common & { id: string }) {
     messages={messages} />;
 }
 
+/**
+ * Reviews answer the rating question the ratings above show (everyone's in
+ * Mine), so a review's stars mean the same as the summary's. The reader can
+ * write where the page's own stars rate: everyone's question.
+ */
+async function Reviews({ workRef, id, work, scope, context: chosen, locale, messages }: ScopedProps & {
+  work: Header; context: string | undefined }) {
+  const [ratings, everyone, { signedIn, actingSubject }] = await Promise.all([
+    readRatings(id, scope.kind === 'mine' ? { kind: 'global' } : scope, chosen),
+    readRatings(id, { kind: 'global' }, undefined), readingAgent()]);
+  const question = ratings.ok ? ratings.data.context : null;
+  if (!question) return null;
+  const initial = await readReviews(id, { context: question.context, sort: 'helpful', limit: 10 });
+  const authors = initial.ok ? [...new Set(initial.data.items.map(review => review.author))] : [];
+  const named = await Promise.all(authors.map(async author => [author, await readReviewer(author)] as const));
+  const writable = everyone.ok && everyone.data.context?.context === question.context;
+  return <ReviewsSection work={work.id} context={question.context} scale={question.scale.max} initial={initial}
+    reviewers={Object.fromEntries(named.filter((entry): entry is [string, Reviewer] => entry[1] !== null))}
+    viewer={actingSubject ? { kind: 'reader', actingSubject, canWrite: writable }
+      : signedIn ? { kind: 'no-identity' }
+        : { kind: 'signed-out', signInHref: signInPath(localizedPath(workHref(workRef), locale)) }}
+    locale={locale} messages={messages} />;
+}
+
 async function Classification(props: ScopedProps) {
   const [scopeView, classifications] = await Promise.all([view(props), props.scope.kind === 'mine' ? null
     : readClassifications(props.id, props.locale, props.scope)]);
@@ -144,6 +178,11 @@ export function WorkOverview({ workRef, id, work, scope, context, locale, messag
     classification={scope ? <Suspense fallback={<RegionSkeleton id="work-classification-loading"
       title={t.classification} label={loading} />}>
       <Classification workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />
+    </Suspense> : null}
+    reviews={scope ? <Suspense fallback={<RegionSkeleton id="work-reviews-loading" title={t.reviews} label={loading}
+      lines={6} />}>
+      <Reviews workRef={workRef} id={id} work={work} scope={scope} context={context} locale={locale}
+        messages={messages} />
     </Suspense> : null}
     adoption={scope ? <Suspense fallback={<RegionSkeleton id="work-adoption-loading" title={t.adoption}
       label={loading} lines={2} />}>

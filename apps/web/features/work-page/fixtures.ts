@@ -1,10 +1,11 @@
 // Typed Main responses for the Work page's stories. Shapes come from the Eden
 // types, so a contract change breaks the stories' build as well as the page's.
+import type { ReviewApi } from './reviews-api.ts';
 import type { WorkScope } from './route.ts';
 import type { ScopeRealm, ScopeView } from './scope-bar.tsx';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, ChapterRead, ClassificationPage, ContentsPage, CreditPage,
-  DiscussionPage, HistoryPage, Loaded, Progress, RatingContext, RatingRead, VersionPage, WorkHeader,
-  WorkName } from './types.ts';
+  DiscussionPage, HistoryPage, Loaded, Progress, RatingContext, RatingRead, Review, Reviewer, ReviewPage, VersionPage,
+  WorkHeader, WorkName } from './types.ts';
 
 const iri = (uuid: string) => `https://rezics.com/id/${uuid}`;
 const name = (value: string, language = 'en'): WorkName => ({ value, language, direction: 'ltr', basis: 'requested' });
@@ -13,7 +14,14 @@ const page = <T>(items: T[], nextCursor: string | null = null) =>
   ({ items, nextCursor, sourcePosition, count: { value: items.length, kind: 'exact-page' as const, total: null } });
 export const ok = <T>(data: T): Loaded<T> => ({ ok: true, data });
 
-export const workRef = '5f7a2c1e-8d3b-4c6a-9e2f-1b4d6a8c0e3f';
+/** Main mints UUIDv7s; a v7 ID dates what it names (`01995a2b-…` is 2026-09-12). */
+const v7 = (millis: number, tail: string) => {
+  const hex = millis.toString(16).padStart(12, '0');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7${tail.slice(0, 3)}-8${tail.slice(3, 6)}-${tail.slice(6, 18).padEnd(12, '0')}`;
+};
+const day = (date: string) => Date.parse(`${date}T09:30:00.000Z`);
+
+export const workRef = v7(day('2026-03-04'), 'a2c1e8d3b4c6a9e2f1');
 const workId = iri(workRef);
 const mainVersion = iri('0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d');
 const realmA = '7c3e9a1d-2b4f-4d6e-8a0c-5e7f9b1d3c2a';
@@ -21,7 +29,7 @@ const realmB = 'a2d4f6e8-1c3b-4a5d-9e7f-0b2c4d6e8f1a';
 const globalContext = iri('c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0a1c');
 
 export const work: WorkHeader = {
-  profile: 'work-read-v1', id: workId, revision: iri('e4a6c8b0-2d1f-4e3a-9c5b-7d9f1a3c5e7b'), mainVersion,
+  profile: 'work-read-v1', id: workId, revision: iri(v7(day('2026-09-20'), 'e3a9c5b7d9f1a3c5e7')), mainVersion,
   title: name('The Cartographer of Tides'),
   cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: '3fa2c9d17b8e4a6f0c2d5e8b1a4f7c90', resourceType: 'work' },
   types: ['https://schema.org/Book'], disclosure: 'public',
@@ -49,9 +57,16 @@ export const cjkWork: WorkHeader = { ...work,
 
 export const fallbackTitleWork: WorkHeader = { ...work, title: { ...work.title, basis: 'fallback' } };
 
+/** An older record that tags a Chinese title as English: to a Chinese reader it is not "shown in English". */
+export const mislabeledTitleWork: WorkHeader = { ...work,
+  title: { value: '雨夜书店 · 连载小说', language: 'en', direction: 'ltr', basis: 'fallback' } };
+
 export const credits = ok<CreditPage>(page([
   { id: iri('f1a3c5e7-9b0d-4f2a-8c4e-6a8c0e2a4c6e'), role: 'author', participantKind: 'external-reference',
-    provider: 'open-library', key: '/authors/OL2162284A', ordinal: 0, agent: null, displayName: null, handle: null },
+    provider: 'open-library', key: '/authors/OL2162284A', ordinal: 0, agent: null, displayName: 'Idris Vale',
+    handle: null, confirmation: 'source-reported' },
+  { id: iri('f1a3c5e7-9b0d-4f2a-8c4e-6a8c0e2a4c6f'), role: 'author', participantKind: 'external-reference',
+    provider: 'open-library', key: '/authors/OL7654321A', ordinal: 1, agent: null, displayName: null, handle: null },
 ]));
 export const noCredits = ok<CreditPage>(page([]));
 export const agentCredits = ok<AgentCreditPage>(page([
@@ -138,7 +153,7 @@ export const noClassifications = ok<ClassificationPage>({ ...page([]), scope: { 
 
 export const versions = ok<VersionPage>(page([
   { id: iri('11a3c5e7-9b0d-4f2a-8c4e-6a8c0e2a4c61'), kind: 'text-variant', language: 'en',
-    contribution: iri('11a3c5e7-9b0d-4f2a-8c4e-6a8c0e2a4c61'), revision: iri('21b4d6f8-0a1c-4e3b-9d5f-7b9d1f3b5d72'),
+    contribution: iri('11a3c5e7-9b0d-4f2a-8c4e-6a8c0e2a4c61'), revision: iri(v7(day('2026-09-20'), '4e3b9d5f7b9d1f3b5d')),
     selected: true },
   { id: iri('31c5e7a9-1b2d-4f4c-8e6a-8c0e2a4c6e83'), kind: 'text-variant', language: 'ja',
     contribution: iri('31c5e7a9-1b2d-4f4c-8e6a-8c0e2a4c6e83'), revision: iri('41d6f8b0-2c3e-4a5d-9f7b-9d1f3b5d7f94'),
@@ -147,17 +162,17 @@ export const versions = ok<VersionPage>(page([
     contribution: iri('51e7a9c1-3d4f-4b6e-8a8c-0e2a4c6e8a05'), revision: iri('61f8b0d2-4e5a-4c7f-9b9d-1f3b5d7f9b16'),
     selected: false },
   { id: iri('71a9c1e3-5f6b-4d8a-8c0e-2a4c6e8a0c27'), kind: 'release', language: 'en',
-    contribution: iri('11a3c5e7-9b0d-4f2a-8c4e-6a8c0e2a4c61'), revision: iri('81b0d2f4-6a7c-4e9b-9d1f-3b5d7f9b1d38'),
+    contribution: iri('11a3c5e7-9b0d-4f2a-8c4e-6a8c0e2a4c61'), revision: iri(v7(day('2026-06-01'), '4e9b9d1f3b5d7f9b1d')),
     selected: false },
 ], 'next-page-cursor'));
 export const noVersions = ok<VersionPage>(page([]));
 
 export const history = ok<HistoryPage>(page([
-  { id: iri('b7d9f1a3-5c6e-4a8b-9c0d-2e4f6a8b0c19'), kind: 'reply-placement', sequence: '4812',
+  { id: iri(v7(day('2026-09-27'), '4a8b9c0d2e4f6a8b0c')), kind: 'reply-placement', sequence: '4812',
     dataEpoch: sourcePosition.dataEpoch, href: null },
   { id: work.revision, kind: 'metadata-revision', sequence: '4790', dataEpoch: sourcePosition.dataEpoch,
     href: `/v1/revisions/${work.revision.slice(-36)}` },
-  { id: iri('c8e0a2b4-6d7f-4b9c-8d1e-3f5a7b9c1d28'), kind: 'publication-decision', sequence: '3977',
+  { id: iri(v7(day('2026-05-14'), '4b9c8d1e3f5a7b9c1d')), kind: 'publication-decision', sequence: '3977',
     dataEpoch: sourcePosition.dataEpoch, href: null },
   { id: iri('f9b1d3f5-7a8c-4e0b-9d2f-4b6d8f0b2d4f'), kind: 'metadata-revision', sequence: '1203',
     dataEpoch: sourcePosition.dataEpoch, href: '/v1/revisions/f9b1d3f5-7a8c-4e0b-9d2f-4b6d8f0b2d4f' },
@@ -166,7 +181,7 @@ export const noHistory = ok<HistoryPage>(page([]));
 
 const reply = (n: number, realm: string, body: string, sequence: string) => ({
   reply: iri(`d0e1f2a3-b4c5-4d6e-8f7a-${n.toString().padStart(12, '0')}`), realm: iri(realm),
-  placement: iri(`e1f2a3b4-c5d6-4e7f-8a9b-${n.toString().padStart(12, '0')}`),
+  placement: iri(v7(day(`2026-09-${String(28 - n * 3).padStart(2, '0')}`), `4e7f8a9b${n}`)),
   revisionId: `f2a3b4c5-d6e7-4f8a-9b0c-${n.toString().padStart(12, '0')}`, body, dataEpoch: sourcePosition.dataEpoch,
   sequence });
 export const discussion = ok<DiscussionPage>(page([
@@ -223,8 +238,90 @@ export const cjkChapter: ChapterRead = { ...chapter, language: 'zh-Hans', previo
     language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-Hans' } },
   serializedJson: JSON.stringify({ body: cjkText }), body: { body: cjkText } } };
 export const lastChapter: ChapterRead = { ...chapter, next: null };
+const headedText = ['第一章　雨夜', '雨停在书店打烊前。林梅在门口发现一封没有地址的信。', '信封上只写着一个日期：二十年前的今天。'].join('\n');
+/** An imported chapter whose text opens with its own title. */
+export const headedChapter: ChapterRead = { ...cjkChapter, label: { value: '第一章 雨夜', language: 'zh-Hans' },
+  content: { ...cjkChapter.content, serializedJson: JSON.stringify({ body: headedText }), body: { body: headedText } } };
 
 const openProgress: Progress = { structure, occurrence: occurrence(3), selectedRevision: contentRevision(3),
   completed: false, position: 'p:2', version: 3 };
 export const progress = ok(openProgress);
 export const completedProgress = ok<Progress>({ ...openProgress, completed: true });
+
+const reviewId = (n: number) => `9a8b7c6d-5e4f-4a3b-8c2d-${n.toString().padStart(12, '0')}`;
+const reader = (n: number) => iri(`e5f6a7b8-c9d0-4e1f-8a2b-${n.toString().padStart(12, '0')}`);
+/** The signed-in reader in review stories. */
+export const reviewReader = reader(1);
+const review = (n: number, author: string, rating: number, text: string | null, options: Partial<Review> = {}): Review => ({
+  id: reviewId(n), work: workId, context: globalContext, realm: null, author, rating,
+  ratingObservation: iri(`f6a7b8c9-d0e1-4f2a-8b3c-${n.toString().padStart(12, '0')}`),
+  ratingRevision: iri(`a7b8c9d0-e1f2-4a3b-8c4d-${n.toString().padStart(12, '0')}`), language: 'en', text,
+  spoiler: false, spoilerWithheld: false, startedOn: null, finishedOn: null, helpfulCount: 0, viewerHelpful: false,
+  viewerVoteRevision: null, revision: `b8c9d0e1-f2a3-4b4c-8d5e-${n.toString().padStart(12, '0')}`,
+  createdAt: `2026-09-${String(10 + n).padStart(2, '0')}T12:00:00.000Z`,
+  updatedAt: `2026-09-${String(10 + n).padStart(2, '0')}T12:00:00.000Z`, ...options });
+
+export const reviews: Review[] = [
+  review(2, reader(2), 5, 'The best novel about maps I have read. The flood chapters slow down exactly as the water '
+    + 'rises, and the ending earns its quiet.\nI read it twice in a week.', { helpfulCount: 41 }),
+  review(3, reader(3), 4, null, { spoiler: true, spoilerWithheld: true, helpfulCount: 12 }),
+  review(4, reader(4), 3, '潮汐的描写很美，但中段有些拖沓。', { language: 'zh-Hans', helpfulCount: 2 }),
+];
+export const ownReview = review(1, reviewReader, 4, 'Slow at first, then impossible to put down.',
+  { updatedAt: '2026-09-21T08:00:00.000Z' });
+export const spoilerText = 'The cartographer drew the city wrong on purpose, and the last map is the flood.';
+export const reviewers: Record<string, Reviewer> = { [reader(1)]: { name: 'Daniel Chen', handle: 'daniel_chen' },
+  [reader(2)]: { name: 'Aria Wang', handle: 'aria' }, [reader(3)]: { name: 'Tomás Rivera', handle: 'tomas' },
+  [reader(4)]: { name: '林梅', handle: 'linmei' } };
+export const reviewPage = (items: Review[], nextCursor: string | null = null): Loaded<ReviewPage> =>
+  ok({ profile: 'reader-review-page-v1', ...page(items, nextCursor) });
+export const reviewContext = globalContext;
+
+/**
+ * Reviews kept in memory, as Main would keep them for one reader: writes set
+ * the reader's own review, votes count once, spoilers are read on request.
+ */
+export function memoryReviewApi(initial: Review[] = reviews, more: Review[] = []): ReviewApi & { calls: string[] } {
+  let items = [...initial];
+  const calls: string[] = [];
+  return {
+    calls,
+    async page(filter, cursor) {
+      calls.push(`page:${filter.sort}:${filter.language ?? ''}:${filter.rating ?? ''}:${cursor ?? ''}`);
+      if (cursor) return reviewPage(more);
+      const own = items.filter(item => item.author === reviewReader);
+      const others = items.filter(item => item.author !== reviewReader && (!filter.language
+        || item.language === filter.language) && (!filter.rating || item.rating === filter.rating))
+        .sort((a, b) => filter.sort === 'new' ? b.createdAt.localeCompare(a.createdAt) : b.helpfulCount - a.helpfulCount);
+      return reviewPage([...own, ...others], more.length ? 'next' : null);
+    },
+    async one(id) {
+      const found = [...items, ...more].find(item => item.id === id) ?? (id === reviewId(9)
+        ? review(9, reader(4), 2, 'A review from further down the list.') : undefined);
+      return found ? { ...found, text: found.text ?? spoilerText, spoilerWithheld: false } : null;
+    },
+    async reviewers(agents) {
+      return Object.fromEntries(agents.flatMap(agent => reviewers[agent] ? [[agent, reviewers[agent]!]] : []));
+    },
+    async write(input) {
+      calls.push(`write:${input.expectedRevision ?? 'new'}:${input.language}:${input.spoiler}`);
+      const current = items.find(item => item.author === reviewReader);
+      const next = { ...(current ?? review(1, reviewReader, 4, input.text)), text: input.text, language: input.language,
+        spoiler: input.spoiler, updatedAt: '2026-09-28T09:00:00.000Z' };
+      items = [next, ...items.filter(item => item.author !== reviewReader)];
+      return 'saved';
+    },
+    async remove(id) {
+      calls.push(`remove:${id}`);
+      items = items.filter(item => item.id !== id);
+      return true;
+    },
+    async helpful(id, helpful) {
+      calls.push(`helpful:${id}:${helpful}`);
+      const item = items.find(entry => entry.id === id)!;
+      const count = item.helpfulCount + (helpful === item.viewerHelpful ? 0 : helpful ? 1 : -1);
+      items = items.map(entry => entry.id === id ? { ...entry, viewerHelpful: helpful, helpfulCount: count } : entry);
+      return { helpful, helpfulCount: count, revision: 'c9d0e1f2-a3b4-4c5d-8e6f-000000000001' };
+    },
+  };
+}

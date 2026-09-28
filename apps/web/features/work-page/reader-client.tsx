@@ -200,6 +200,32 @@ export function ReaderSurface({ initial, actingSubject, labels, toolbar, childre
   </div>;
 }
 
+/**
+ * While reading on a phone, the site's header and tab bar step aside as the
+ * reader scrolls down and come back when they scroll up or reach the end, as
+ * e-book apps do. The shell hides them for `html[data-reading=hidden]`.
+ */
+export function ReaderChrome() {
+  useEffect(() => {
+    const root = document.documentElement;
+    let last = window.scrollY;
+    root.dataset.reading = 'shown';
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (Math.abs(y - last) < 8) return;
+      const end = window.innerHeight + y >= document.documentElement.scrollHeight - 48;
+      root.dataset.reading = y > last && y > 64 && !end ? 'hidden' : 'shown';
+      last = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      delete root.dataset.reading;
+    };
+  }, []);
+  return null;
+}
+
 const editable = (target: EventTarget | null) => target instanceof HTMLElement
   && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 

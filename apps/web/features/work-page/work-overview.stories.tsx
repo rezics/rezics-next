@@ -15,7 +15,8 @@ import { type WorkScope, workHref } from './route.ts';
 import { ScopeBar, type ScopeRealm } from './scope-bar.tsx';
 import type { AdoptionPage, AgentCreditPage, ClassificationPage, CreditPage, Loaded, RatingRead,
   WorkHeader } from './types.ts';
-import { OverviewLayout, WorkFrame } from './work-frame.tsx';
+import type { ReadStart } from './read.ts';
+import { OverviewLayout, ReadButton, WorkFrame } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 
 interface OverviewArgs {
@@ -23,11 +24,13 @@ interface OverviewArgs {
   realms: ScopeRealm[];
   ratings: Loaded<RatingRead>; classifications: Loaded<ClassificationPage> | null; adoptions: Loaded<AdoptionPage>;
   locale: UiLocale; readerActions?: ReaderActions;
+  /** Where Read leads; the frame's Contents link when left out. */
+  readAction?: ReadStart;
 }
 
 /** The Overview as the route composes it, with each region's Main answer given directly. */
 function Overview({ work, agentCredits, credits, scope, realms, ratings, classifications, adoptions,
-  locale, readerActions }: OverviewArgs) {
+  locale, readerActions, readAction }: OverviewArgs) {
   const t = messages[locale];
   const view = scope ? fixture.scopeView(scope, realms) : null;
   const scopeBar = <ScopeBar workRef={fixture.workRef} scope={scope} realms={realms} locale={locale} messages={t} />;
@@ -35,7 +38,9 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
   return <WorkFrame workRef={fixture.workRef} work={work} locale={locale} messages={t} readerActions={readerActions}
     signedIn={Boolean(readerActions)} signInHref={`/auth/start?next=%2F${locale}%2Fw%2F${fixture.workRef}`}
     credits={<WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={t} />}
-    ratingLine={scope?.kind === 'global' ? <RatingLine ratings={ratings} locale={locale} messages={t} /> : null}>
+    ratingLine={scope?.kind === 'global' ? <RatingLine ratings={ratings} locale={locale} messages={t} /> : null}
+    readAction={readAction === undefined ? undefined
+      : <ReadButton workRef={fixture.workRef} start={readAction} messages={t} />}>
     <OverviewLayout messages={t} about={<WorkAbout work={work} messages={t} />} scopeBar={scopeBar}
       ratings={view ? <RatingSummaryRegion ratings={ratings} view={view} scopeBar={scopeBar} locale={locale}
         messages={t} /> : null}
@@ -75,12 +80,22 @@ export const Global: Story = {
     await expect(canvas.getByRole('heading', { level: 1, name: 'The Cartographer of Tides' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
     await expect(canvas.getByRole('link', { name: 'Read' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
-    await expect(canvas.getByRole('link', { name: /Open Library author OL2162284A/ }))
+    // Authors by name: a native author opens their profile, a source author the source's page.
+    const byline = canvas.getByRole('heading', { level: 1 }).parentElement!;
+    await expect(within(byline).getByRole('link', { name: 'Maren Osei' })).toHaveAttribute('href', '/en/@maren');
+    await expect(within(byline).getByRole('link', { name: /^Idris Vale/ }))
       .toHaveAttribute('href', 'https://openlibrary.org/authors/OL2162284A');
-    await expect(canvas.getAllByText('Maren Osei')[0]).toBeVisible();
+    await expect(within(byline).getByRole('link', { name: /Open Library author OL7654321A/ })).toBeVisible();
     await expect(canvas.getByText(/Translated by/)).toHaveTextContent('Translated by 林晓');
     await expect(canvas.getAllByText('La Cartographe des marées')[0]).toHaveAttribute('lang', 'fr');
-    await expect(canvas.getByText('Book · English · Completed · 24 chapters · 86,400 words')).toBeVisible();
+    await expect(canvas.getByText('Book · English')).toBeVisible();
+    // A serial's state at a glance: status, length and last update.
+    const stats = within(byline).getByText('Chapters').closest('dl')!;
+    // Terms precede their values for assistive technology; the value shows first on screen.
+    await expect(stats).toHaveTextContent(/Status\s*Completed/);
+    await expect(stats).toHaveTextContent(/Chapters\s*24/);
+    await expect(stats).toHaveTextContent(/Words\s*86\.4K/);
+    await expect(stats).toHaveTextContent('Updated');
     await expect(canvas.getByText('A novel of rivers, maps and the stories a city tells about itself.')).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'About this Work' })).toHaveTextContent('A surveyor maps a delta');
     // The summary under the title leads down to the full ratings.
@@ -110,11 +125,16 @@ export const Global: Story = {
     const more = within(author).getByRole('region', { name: 'More by Maren Osei' });
     // The Work itself is not offered again.
     await expect(within(more).getAllByRole('article')).toHaveLength(3);
-    // Model detail is folded away until asked for.
+    // Details say what the Work is in plain words; identifiers wait one step further in, under Cite.
     await expect(canvas.getByText(fixture.work.id)).not.toBeVisible();
-    await userEvent.click(canvas.getByText('Details and identifiers'));
-    await expect(canvas.getByText(fixture.work.id)).toBeVisible();
+    await userEvent.click(canvas.getByText('Details', { exact: true }));
+    await expect(canvas.getByText('Added to REZICS')).toBeVisible();
+    await expect(canvas.getByText('Mar 4, 2026')).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Copy citation' })).toBeVisible();
+    await expect(canvas.getByText(fixture.work.id)).not.toBeVisible();
+    await userEvent.click(canvas.getByText('Identifiers'));
+    await expect(canvas.getByText(fixture.work.id)).toBeVisible();
+    await expect(canvas.queryByText(/Main Version/)).toBeNull();
   },
 };
 
@@ -186,9 +206,10 @@ export const EmptyGlobal: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(within(canvas.getByRole('region', { name: 'Ratings' })).getByText('No ratings yet')).toBeVisible();
-    await expect(canvas.getByText('No genres yet')).toBeVisible();
+    // Everyone's view without genres leaves the section out rather than lead with an empty box.
+    await expect(canvas.queryByRole('region', { name: 'Genres' })).toBeNull();
     // Everyone's view offers the first community that features the Work, never silently switching to it.
-    await expect(canvas.getAllByRole('link', { name: 'See Tidewater Readers' })).toHaveLength(2);
+    await expect(canvas.getAllByRole('link', { name: 'See Tidewater Readers' })).toHaveLength(1);
   },
 };
 
@@ -246,7 +267,8 @@ export const MetadataOnly: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Private')).toBeVisible();
-    await expect(canvas.getByText('No confirmed credits yet')).toBeVisible();
+    // No credit is no line at all, not a sentence about credits.
+    await expect(canvas.queryByText(/credit/i)).toBeNull();
     await expect(canvas.getByText('No community features this Work yet', { exact: true })).toBeVisible();
     await expect(canvas.queryByRole('region', { name: 'About the author' })).toBeNull();
   },
@@ -257,6 +279,45 @@ export const TitleFallback: Story = {
   globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByText(/尚无.*标题，以英语显示/)).toBeVisible();
+  },
+};
+
+/** A Chinese title an older record tags as English reads as Chinese already; no "shown in English" note. */
+export const TitleAlreadyInReadersLanguage: Story = {
+  args: { work: fixture.mislabeledTitleWork, locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans' },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('heading', { level: 1 })).toHaveTextContent('雨夜书店');
+    await expect(within(canvasElement).queryByText(/以英语显示/)).toBeNull();
+  },
+};
+
+/** A reader part-way through continues at the next unread chapter, which is named under the button. */
+export const ContinueReading: Story = {
+  args: { readAction: { kind: 'continue', href: `/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000004`,
+    chapter: 'Chapter 4: Neap Tide' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Continue reading' }))
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000004`);
+    await expect(canvas.getByText('Chapter 4: Neap Tide')).toBeVisible();
+  },
+};
+
+/** Anyone else starts at chapter 1; a Work with nothing to read has no Read button. */
+export const StartReading: Story = {
+  args: { readAction: { kind: 'start', href: `/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000002`,
+    chapter: 'Low Water' } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('link', { name: 'Start reading' }))
+      .toHaveAttribute('href', `/en/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000002`);
+  },
+};
+
+export const NothingToRead: Story = {
+  args: { readAction: null },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).queryByRole('link', { name: /^(Read|Start reading)$/ })).toBeNull();
   },
 };
 
@@ -304,6 +365,6 @@ export const SomeCreditsUnavailable: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('alert')).toHaveTextContent('Some credits could not load.');
-    await expect(canvas.getByRole('link', { name: /Open Library author OL2162284A/ })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: /^Idris Vale/ })).toBeVisible();
   },
 };

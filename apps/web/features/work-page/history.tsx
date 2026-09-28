@@ -7,7 +7,8 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { Region, RegionFailure } from './region.tsx';
-import { type HistoryFilter, historyKinds, idOf, shortId, workHref } from './route.ts';
+import { formatDate, mintedAt } from './format.ts';
+import { type HistoryFilter, historyKinds, idOf, workHref } from './route.ts';
 import type { HistoryKind, HistoryPage, Loaded } from './types.ts';
 
 const kinds = {
@@ -48,14 +49,16 @@ export function HistoryRegion({ history, workRef, kind, cursor, locale, messages
       {items.map(item => {
         const { icon: Icon, label } = kinds[item.kind];
         const revision = item.kind === 'metadata-revision' ? idOf(item.id) : null;
+        // Each entry's ID was minted when it happened.
+        const when = mintedAt(item.id);
         return <li key={item.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
           <div className="flex min-w-0 items-center gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
               <Icon aria-hidden="true" className="size-4" /></span>
             <div className="grid min-w-0 gap-0.5">
               <p className="font-medium">{t[label]}</p>
-              <p className="text-muted-foreground text-xs tabular-nums">
-                {t.sequence({ sequence: item.sequence })} · <span className="font-mono">{shortId(item.id)}</span></p>
+              {when ? <time dateTime={when.toISOString()} className="text-muted-foreground text-xs tabular-nums">
+                {formatDate(when, locale)}</time> : null}
             </div>
           </div>
           {revision ? <Link href={`/works/${revision}`} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>

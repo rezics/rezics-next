@@ -99,12 +99,49 @@ export const UnsupportedFormat: Story = {
   },
 };
 
+const lineHeight = (paragraph: HTMLElement) => {
+  const style = getComputedStyle(paragraph);
+  return Number.parseFloat(style.lineHeight) / Number.parseFloat(style.fontSize);
+};
+
+export const LatinLineHeight: Story = {
+  async play({ canvasElement }) {
+    const paragraph = canvasElement.querySelector<HTMLElement>('p[data-paragraph]')!;
+    await expect(lineHeight(paragraph)).toBeCloseTo(1.7, 1);
+    // On a phone the site's header and tab bar step aside while the reader scrolls down.
+    await expect(document.documentElement.dataset.reading).toBe('shown');
+  },
+};
+
+export const UntitledChapter: Story = {
+  args: { chapter: { ...fixture.chapter, label: null, ordinal: 2 } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('heading', { level: 1 })).toHaveTextContent('Chapter 2');
+    await expect(within(canvasElement).queryByText('Untitled chapter')).toBeNull();
+  },
+};
+
+export const TitleNotRepeated: Story = {
+  args: { chapter: fixture.headedChapter, work: fixture.cjkWork, locale: 'zh-Hans', messages: messages['zh-Hans'] },
+  globals: { locale: 'zh-Hans' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1 })).toHaveTextContent('第一章 雨夜');
+    // The body's first line only repeated the title, so it is set once, as the heading.
+    const paragraphs = canvasElement.querySelectorAll<HTMLElement>('p[data-paragraph]');
+    await expect(paragraphs).toHaveLength(2);
+    await expect(paragraphs[0]).toHaveTextContent('雨停在书店打烊前。');
+  },
+};
+
 export const ChinesePhoneDark: Story = {
   args: { chapter: fixture.cjkChapter, work: fixture.cjkWork, locale: 'zh-Hans', messages: messages['zh-Hans'] },
   globals: { locale: 'zh-Hans', theme: 'dark', viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('article')).toHaveAttribute('lang', 'zh-Hans');
+    // Chinese and Japanese, set solid, read at 1.8.
+    await expect(lineHeight(canvasElement.querySelector<HTMLElement>('p[data-paragraph]')!)).toBeCloseTo(1.8, 1);
     await expect(canvas.getByRole('link', { name: '下一章' })).toBeVisible();
     await expect(canvas.getByTitle('这是第一章')).toHaveAttribute('aria-disabled', 'true');
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);

@@ -30,3 +30,66 @@ const typeLabels = {
 export function typeNames(types: readonly string[], t: Pick<WorkPageMessages, (typeof typeLabels)[keyof typeof typeLabels]>) {
   return types.flatMap(type => type in typeLabels ? [t[typeLabels[type as keyof typeof typeLabels]]] : []);
 }
+
+const uuidV7 = /([0-9a-f]{8})-([0-9a-f]{4})-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/**
+ * When Main minted a native ID. Main mints time-ordered UUIDv7s, whose first
+ * 48 bits are the Unix time in milliseconds, so a revision's or a
+ * publication's ID dates it. Null for any other kind of ID.
+ */
+export function mintedAt(iri: string): Date | null {
+  const match = uuidV7.exec(iri);
+  if (!match) return null;
+  const date = new Date(Number.parseInt(`${match[1]}${match[2]}`, 16));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * A Main timestamp as an ISO string. Main's contract types date-times as
+ * strings, but the Eden client revives them into `Date`s; every use goes
+ * through here so server and browser render the same attribute.
+ */
+export const isoTime = (value: string | Date): string => new Date(value).toISOString();
+
+/** "27 Sept 2026", "2026年9月27日": a calendar date in the interface language, in UTC so it never depends on the server. */
+export const formatDate = (date: Date, locale: UiLocale) =>
+  new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(date);
+
+const units = [['year', 365 * 86_400], ['month', 30 * 86_400], ['week', 7 * 86_400], ['day', 86_400],
+  ['hour', 3_600], ['minute', 60]] as const;
+
+/**
+ * "3 days ago" within a month, the date after that, as Royal Road and
+ * KadoKado date a serial's last update. `now` is passed in so the server and
+ * the browser agree.
+ */
+export function sinceWhen(iso: string | Date, locale: UiLocale, now: Date): string | null {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return null;
+  const seconds = (now.getTime() - then.getTime()) / 1000;
+  if (seconds < 0 || seconds >= 30 * 86_400) return formatDate(then, locale);
+  const [unit, size] = units.find(([, size]) => seconds >= size) ?? ['minute', 60];
+  return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-Math.floor(seconds / size), unit);
+}
+
+// Scripts that name a language family, for telling whether a title is already in the reader's language.
+const scripts: Record<string, RegExp> = {
+  zh: /\p{Script=Han}/u, ja: /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u, ko: /\p{Script=Hangul}/u,
+};
+
+/**
+ * Whether a title shown in another language than the reader asked for needs
+ * saying so. Main names a title's language as its record states it, and
+ * older records can mislabel one; a title whose script is the interface
+ * language's own ("雨夜书店" in Chinese) reads as the reader's already.
+ */
+export function titleNeedsLanguageNote(title: { value: string; language: string; basis: 'requested' | 'fallback' },
+  locale: UiLocale): boolean {
+  if (title.basis !== 'fallback') return false;
+  const wanted = locale.split('-')[0]!;
+  if (title.language.toLowerCase().split('-')[0] === wanted) return false;
+  // A CJK interface judges by script; a Latin-script one by the tag, since Latin text alone can't tell English from German.
+  const script = scripts[wanted];
+  return script ? !script.test(title.value) : true;
+}
