@@ -10,15 +10,19 @@ import type { Community, Moderated } from '../shell/communities.ts';
 // Server reads for home. Each returns its own outcome, so one region's
 // failure never takes down another; the rail streams in after the feed.
 
-/** The reader's default view as Main keeps it; a person who follows nothing starts on All. */
-async function readDefaults(hasFollows: boolean): Promise<FeedDefaults> {
+/** The reader's saved default view, read alongside their follows rather than after them. */
+async function readSavedDefaults(): Promise<FeedDefaults | null> {
   const reader = await shellReader();
-  const fallback: FeedDefaults = { tab: hasFollows ? 'following' : 'all', sort: 'best' };
-  if (!reader.actingSubject || !hasFollows) return fallback;
+  if (!reader.actingSubject) return null;
   const read = await settle(() => reader.main.v1.me['feed-preferences'].get({ query: {
     actingSubject: reader.actingSubject! } }));
   // Before a first choice Main answers its defaults with no revision; those fit a follower too.
-  return read.ok ? { tab: read.data.preferences.tab, sort: read.data.preferences.sort } : fallback;
+  return read.ok ? { tab: read.data.preferences.tab, sort: read.data.preferences.sort } : null;
+}
+
+/** The reader's default view as Main keeps it; a person who follows nothing starts on All. */
+function feedDefaults(hasFollows: boolean, saved: FeedDefaults | null): FeedDefaults {
+  return hasFollows && saved ? saved : { tab: hasFollows ? 'following' : 'all', sort: 'best' };
 }
 
 /** Whether the reader follows anything at all: a new person gets the interest picker instead of an empty feed. */
@@ -59,8 +63,9 @@ export async function readHomeFeed(params: Record<string, string | string[] | un
   locale: UiLocale): Promise<HomeFeed> {
   const reader = await shellReader();
   const actingSubject = reader.actingSubject ?? null;
-  const [realms, zones, any] = await Promise.all([readFollowed('realm'), readFollowed('zone'), followsAnything()]);
-  const defaults = await readDefaults(any === true);
+  const [realms, zones, any, saved] = await Promise.all([readFollowed('realm'), readFollowed('zone'), followsAnything(),
+    readSavedDefaults()]);
+  const defaults = feedDefaults(any === true, saved);
   // Without an Agent to act as, Main can only show the public feed.
   const state = parseFeedState(params, Boolean(actingSubject), defaults);
   const query = feedQuery(state, { language: locale, ...(actingSubject ? { actingSubject } : {}) });
@@ -108,8 +113,10 @@ export async function readTrending(): Promise<{ scope: 'followed' | 'global'; it
     realm: realms?.items.find(realm => realm.id === item.realm) ?? null })) : [] };
 }
 
-/** What the interest picker offers: the kinds Main has content for, and languages from the locale. */
-export async function readInterests(locale: UiLocale): Promise<Pick<InterestsResult, 'kinds' | 'languages'>> {
+/** What the interest picker offers a person who follows nothing yet: the kinds Main has content for, and
+ * languages from the locale. Null for everyone else, who never sees the picker. */
+export async function readInterests(locale: UiLocale): Promise<Pick<InterestsResult, 'kinds' | 'languages'> | null> {
+  if (await followsAnything() !== false) return null;
   const reader = await shellReader();
   const read = await settle(() => reader.anonymous.v1.onboarding.interests.get({ query: { locale } }));
   return read.ok ? read.data : { kinds: [], languages: [locale] };

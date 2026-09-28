@@ -38,11 +38,11 @@ function RailSkeleton() {
 /** The home route: the feed renders with the page; the rail streams in beside it. */
 export async function HomeRoute({ locale, searchParams }: { locale: UiLocale;
   searchParams: Record<string, string | string[] | undefined> }) {
-  const [home, feedMessages, feed, jar] = await Promise.all([getMessages('home', locale),
-    getMessages('feed', locale), readHomeFeed(searchParams, locale), cookies()]);
-  const [continueItems, official, interests] = await Promise.all([
-    feed.actingSubject ? readContinue() : null, readOfficialZones(locale),
-    feed.newPerson ? readInterests(locale) : { kinds: [], languages: [locale] }]);
+  // Every read that does not depend on the feed starts with it, so the page waits for the slowest one, not their sum.
+  const [home, feedMessages, feed, jar, continueItems, official, picker] = await Promise.all([getMessages('home', locale),
+    getMessages('feed', locale), readHomeFeed(searchParams, locale), cookies(), readContinue(),
+    readOfficialZones(locale), readInterests(locale)]);
+  const interests = picker ?? { kinds: [], languages: [locale] };
   // Sign-in returns to this view, with its filters.
   const signInHref = signInPath(localizedPath(`/${feedSearch(feed.state, feed.defaults)}`, locale));
   const followed = new Set(feed.followed ? [...followedRealmIds(feed.followed),
