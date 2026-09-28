@@ -16,7 +16,7 @@ import { publicWork, WorkReadMissing, type WorkReadSession } from './read-sessio
  * under a one-second timeout. Larger populations are reported as lower bounds.
  */
 export const WORK_STATS_COST = { graphQueries: 1, readerProbe: 10_000, reviewProbe: 10_000,
-  sqlStatements: { reading: 8, reviews: 4 }, sqlStatementMs: 1_000 } as const;
+  sqlStatements: { readerCounts: 8, reviews: 4 }, sqlStatementMs: 1_000 } as const;
 
 export const statCount = t.Object({ value: t.Integer({ minimum: 0 }),
   kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) });
@@ -27,6 +27,8 @@ export const workStatsQuery = t.Object({ actingSubject: t.Optional(readId),
 export const workStats = t.Object({ profile: t.Literal('work-reader-stats-v1'), work: readId,
   /** People whose public Person library has the Work on its Currently reading shelf. */
   reading: statCount,
+  /** People whose public Person library has the Work on Want to read. */
+  wantToRead: statCount,
   /** Visible reviews answering `context`; null when the read named none. */
   reviews: t.Nullable(statCount), sourcePosition: readPosition });
 
@@ -55,11 +57,12 @@ async function readOnly<T>(pool: Pool, work: (client: PoolClient) => Promise<T>)
 export class WorkReaderStats {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
 
-  async reading(work: string): Promise<StatCount> {
+  async readers(work: string, status: 'reading' | 'want-to-read'): Promise<StatCount> {
     if (!WORK.test(work)) throw new RangeError('Work is not a REZICS id');
-    // The status literal lets the planner use the partial `(work, agent)` index for reading or read shelves.
+    // Literal status queries use their respective partial (work, agent) indexes.
+    const source = status === 'reading' ? 'reading' : 'want-to-read';
     const candidates = await readOnly(this.content, async client => (await client.query<{ agent: string }>(`
-      SELECT agent FROM reader.library_status WHERE work = $1 AND status = 'reading'
+      SELECT agent FROM reader.library_status WHERE work = $1 AND status = '${source}'
       ORDER BY agent LIMIT ${WORK_STATS_COST.readerProbe + 1}`, [work])).rows);
     const agents = candidates.slice(0, WORK_STATS_COST.readerProbe).map(row => row.agent);
     if (!agents.length) return bounded(0, WORK_STATS_COST.readerProbe);
@@ -98,6 +101,7 @@ export async function readWorkStats(session: WorkReadSession, work: string, cont
   else if (!(await session.query(`SELECT ?main WHERE { ${publicWork(iri(work), '?main')} } LIMIT 2`, 2)).length) {
     throw new WorkReadMissing('Work is unavailable');
   }
-  const [reading, reviews] = await Promise.all([store.reading(work), context ? store.reviews(context, work) : null]);
-  return { profile: 'work-reader-stats-v1', work, reading, reviews, sourcePosition: session.position };
+  const [reading, wantToRead, reviews] = await Promise.all([store.readers(work, 'reading'),
+    store.readers(work, 'want-to-read'), context ? store.reviews(context, work) : null]);
+  return { profile: 'work-reader-stats-v1', work, reading, wantToRead, reviews, sourcePosition: session.position };
 }

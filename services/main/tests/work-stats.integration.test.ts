@@ -7,7 +7,7 @@ import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.
 import { GLOBAL_CONTEXT_SCOPE } from '../src/modules/rating/global.ts';
 import { WORK_STATS_COST, WorkReaderStats } from '../src/modules/work/read-stats.ts';
 
-interface Stats { work: string; reading: { value: number; kind: string };
+interface Stats { work: string; reading: { value: number; kind: string }; wantToRead: { value: number; kind: string };
   reviews: { value: number; kind: string } | null }
 
 test('G394: Work reader stats count public Person libraries and visible reviews within their statement budget', async () => {
@@ -70,6 +70,7 @@ test('G394: Work reader stats count public Person libraries and visible reviews 
     await stack.contentPool.query(`INSERT INTO reader.library_status (agent, work, status, version)
       VALUES ($1,$2,'reading',1)`, [people[2]!.actor, other.work]);
     expect((await read(book.work, context)).reading).toEqual({ value: 2, kind: 'exact' });
+    expect((await read(book.work, context)).wantToRead).toEqual({ value: 1, kind: 'exact' });
     await stack.accessPool.query(`UPDATE access.agent_library_visibility SET visibility = 'private', version = 2
       WHERE agent_id = $1`, [people[1]!.actor]);
     expect((await read(book.work, context)).reading).toEqual({ value: 1, kind: 'exact' });
@@ -93,7 +94,7 @@ test('G394: Work reader stats count public Person libraries and visible reviews 
     const queries = stack.fuseki.queries, statements = meter.count();
     await read(book.work, context);
     expect(stack.fuseki.queries - queries).toBeLessThanOrEqual(WORK_STATS_COST.graphQueries + 2);
-    expect(meter.count() - statements).toBeLessThanOrEqual(WORK_STATS_COST.sqlStatements.reading
+    expect(meter.count() - statements).toBeLessThanOrEqual(WORK_STATS_COST.sqlStatements.readerCounts
       + WORK_STATS_COST.sqlStatements.reviews);
     expect(meter.violations).toEqual([]);
 

@@ -159,12 +159,15 @@ export const communityGenres: CommunityGenres[] = [
 
 /** The numbers under the header's rating: public libraries reading it now and reviews of the same question. */
 export const workStats = ok<WorkStats>({ profile: 'work-reader-stats-v1', work: workId,
-  reading: { value: 38, kind: 'exact' }, reviews: { value: 214, kind: 'exact' }, sourcePosition });
+  reading: { value: 38, kind: 'exact' }, wantToRead: { value: 52, kind: 'exact' },
+  reviews: { value: 214, kind: 'exact' }, sourcePosition });
 /** Past what Main counts, a number says "at least". */
 export const busyWorkStats = ok<WorkStats>({ profile: 'work-reader-stats-v1', work: workId,
-  reading: { value: 10_000, kind: 'lower-bound' }, reviews: { value: 10_000, kind: 'lower-bound' }, sourcePosition });
+  reading: { value: 10_000, kind: 'lower-bound' }, wantToRead: { value: 10_000, kind: 'lower-bound' },
+  reviews: { value: 10_000, kind: 'lower-bound' }, sourcePosition });
 export const quietWorkStats = ok<WorkStats>({ profile: 'work-reader-stats-v1', work: workId,
-  reading: { value: 0, kind: 'exact' }, reviews: { value: 0, kind: 'exact' }, sourcePosition });
+  reading: { value: 0, kind: 'exact' }, wantToRead: { value: 0, kind: 'exact' },
+  reviews: { value: 0, kind: 'exact' }, sourcePosition });
 
 let picks = 0;
 /** A Work Main recommends beside this one, as its also-enjoyed read cards it. */

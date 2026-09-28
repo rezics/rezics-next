@@ -6,6 +6,7 @@ import Link from '../shell/localized-link.tsx';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { StarMeter } from '../catalogue/rating.tsx';
+import { messages as shelfMessages } from '../catalogue/messages.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import { formatNumber, formatShare } from './format.ts';
@@ -94,6 +95,15 @@ function ReadingNow({ count, locale, t }: { count: StatCount; locale: UiLocale; 
     {counted(count, t.readingNow, t.readingNowAtLeast, locale)}</p>;
 }
 
+function WantToRead({ count, locale }: { count: StatCount; locale: UiLocale }) {
+  if (!count.value) return null;
+  const shelf = materializeData(shelfMessages[locale], { locale });
+  return <p className="flex items-center gap-1.5 text-muted-foreground text-sm">
+    <UsersRoundIcon aria-hidden="true" className="size-4 shrink-0" />
+    <span className="tabular-nums">{formatNumber(count.value, locale)}{count.kind === 'lower-bound' ? '+' : ''}</span>
+    {shelf.wantToRead}</p>;
+}
+
 /**
  * The numbers under the title, as Goodreads heads a book page: everyone's
  * mean for the Work's first rating question with its ratings and reviews,
@@ -110,11 +120,12 @@ export function RatingLine({ ratings, stats, locale, messages }: {
   const t = materializeData(messages, { locale });
   const counts = stats?.ok ? stats.data : null;
   const reading = counts ? <ReadingNow count={counts.reading} locale={locale} t={t} /> : null;
+  const want = counts ? <WantToRead count={counts.wantToRead} locale={locale} /> : null;
   const group = 'grid justify-items-center gap-1.5 lg:justify-items-start';
-  if (!ratings.ok || ratings.data.summary.status !== 'available' || !ratings.data.summary.scale) return reading;
+  if (!ratings.ok || ratings.data.summary.status !== 'available' || !ratings.data.summary.scale) return <>{reading}{want}</>;
   const { summary } = ratings.data;
   if (!summary.count) {
-    return <div className={group}><p className="text-muted-foreground text-sm">{t.noRatingsGlobal}</p>{reading}</div>;
+    return <div className={group}><p className="text-muted-foreground text-sm">{t.noRatingsGlobal}</p>{reading}{want}</div>;
   }
   const reviews = counts?.reviews?.value ? <Link href={`#${REVIEWS_ANCHOR}`} className={countLink}>
     {counted(counts.reviews, t.reviewCount, t.reviewCountAtLeast, locale)}</Link> : null;
@@ -122,6 +133,7 @@ export function RatingLine({ ratings, stats, locale, messages }: {
     <Mean summary={summary} locale={locale} messages={messages} size="md" href={`#${RATINGS_REGION}`} reviews={reviews}
       className="justify-center lg:justify-start" />
     {reading}
+    {want}
   </div>;
 }
 
