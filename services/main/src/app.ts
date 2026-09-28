@@ -154,92 +154,90 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(memberReplyRoutes(work))
     .use(workMaintainerRoutes(work))
     .use(workReadRoutes(work));
-    .use(workReadRoutes(work))
-    .use(alsoEnjoyedRoutes(work))
-    .use(releaseRoutes(work))
-    .use(webPublicationRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(alsoEnjoyedRoutes(work))
+    .use(releaseRoutes(work))
+    .use(webPublicationRoutes(work))
     .use(realmReadRoutes(work))
     .use(preferencesRoutes(work))
     .use(realmReplyThreadRoutes(work))
     .use(zoneModuleRoutes(work))
     .use(rankingRoutes(work))
-    .use(realmDirectoryRoutes(work))
-    .use(continueRoutes(work))
-    .use(onboardingInterestsRoutes(work));
+    .use(realmDirectoryRoutes(work));
 }
 
 function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(continueRoutes(work))
+    .use(onboardingInterestsRoutes(work))
     .use(workContentsRoutes(work))
     .use(workActivityRoutes(work))
     .use(followsRoutes(work))
     .use(feedRoutes(work))
     .use(profileRoutes(work))
     .use(readingSettingsRoutes(work))
-    .use(onboardingRoutes(work))
-    .use(libraryRoutes(work))
-    .use(realmProfileRoutes(work));
+    .use(onboardingRoutes(work));
 }
 
 function extraRoutes3(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(libraryRoutes(work))
+    .use(realmProfileRoutes(work))
     .use(workMetadataRoutes(work))
     .use(discoveryRoutes(work))
     .use(ratingContextReadRoutes(work))
     .use(managementReadRoutes(work))
     .use(conceptRoutes(work))
     .use(realmSubmissionRoutes(work))
-    .use(collectionRoutes(fuseki, work))
-    .use(zoneRoutes(fuseki, work))
-    .use(hubDependencyRoutes(work));
+    .use(collectionRoutes(fuseki, work));
 }
 
 function extraRoutes4(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(zoneRoutes(fuseki, work))
+    .use(hubDependencyRoutes(work))
     .use(packageInstallRequestRoutes(work))
     .use(agentRoutes(work))
     .use(catalogRoutes(work))
     .use(erasureRoutes(work))
     .use(eventRoutes(work))
     .use(exportRoutes(work))
-    .use(notificationRoutes(work))
-    .use(reportRoutes(work))
-    .use(rightsRoutes(work));
+    .use(notificationRoutes(work));
 }
 
 function extraRoutes5(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(reportRoutes(work))
+    .use(rightsRoutes(work))
     .use(recommendationRoutes(work))
     .use(contentPrivateSearchRoutes(work))
     .use(graphLayoutRoutes(work))
     .use(graphQueryRoutes(work))
     .use(workRoutes(fuseki, work))
     .use(judgmentRoutes(work))
-    .use(proposalRoutes(work))
-    .use(recipeRoutes(fuseki, work))
-    .use(themeRoutes(work));
+    .use(proposalRoutes(work));
 }
 
 function extraRoutes6(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(recipeRoutes(fuseki, work))
+    .use(themeRoutes(work))
     .use(packageNixRoutes(work))
     .use(compositionRoutes(fuseki, work))
     .use(connectedAppRoutes(work))
     .use(ownerRoutes(work))
     .use(packageModRoutes(work))
     .use(gameFactRoutes(work))
-    .use(softwareFactRoutes(work))
-    .use(realmReplyRoutes(work))
-    .use(pollRoutes(work));
+    .use(softwareFactRoutes(work));
 }
 
 function extraRoutes7(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(realmReplyRoutes(work))
+    .use(pollRoutes(work))
     .use(semanticRoutes(fuseki, work))
     .use(relationRoutes(fuseki, work))
     .use(hubRoutes(work))
