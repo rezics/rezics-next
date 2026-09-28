@@ -16,7 +16,8 @@ const works: ZoneWork[] = titles.map((title, index) => {
       'Study magic in a seaside town.', 'Investigate a solar system caught in a time loop.'][index]!),
     status: null, chapters: null, words: null, updatedAt: null,
     decision: `/r/games/decisions#decision-${index}`,
-    game: { status: index === 2 ? 'upcoming' : 'released', releaseDate: null,
+    game: { source: `https://example.org/${title.toLowerCase().replaceAll(' ', '-')}`,
+      status: index === 2 ? 'upcoming' : 'released', releaseDate: null,
       platforms: ['Windows'], languages: ['English'], tags: index === 0 ? ['Farming', 'Life sim'] : ['Exploration'],
       screenshots: [], review: index === 0 ? { label: 'Very positive', count: 128, period: 'overall' } : null,
       modsZone: index === 0 } };
@@ -52,6 +53,8 @@ export const Desktop: Story = { async play({ canvasElement }) {
   await expect(canvas.getByRole('heading', { name: 'Featured games', level: 2 })).toBeVisible();
   await expect(canvas.getAllByText(/Very positive · 128 reviews/)[0]).toBeVisible();
   await expect(canvas.getAllByRole('link', { name: 'Browse mods' })[0]).toBeVisible();
+  await expect(canvas.getAllByRole('link', { name: 'Official page' })[0])
+    .toHaveAttribute('href', 'https://example.org/stardew-valley');
   await expect(canvas.getAllByRole('link', { name: 'Why Stardew Valley is here' })[0]).toBeVisible();
 } };
 export const Chinese: Story = { args: { locale: 'zh-Hans' }, async play({ canvasElement }) {

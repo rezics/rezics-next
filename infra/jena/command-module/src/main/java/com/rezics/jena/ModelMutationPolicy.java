@@ -206,11 +206,8 @@ final class ModelMutationPolicy {
                             NodeFactory.createURI("https://rezics.com/definition/work-metadata-v1"))
                         && data.contains(REVISIONS, parent, NodeFactory.createURI(RV + "shapeRevision"),
                             NodeFactory.createURI("https://rezics.com/definition/work-metadata-v1"))
-                        && profiles.get("work-type-v1") != null
-                        && CommandService.validateOne(data, new CommandService.Validation(
-                            "work-type-v1", profiles.get("work-type-v1"),
-                            "https://rezics.com/definition/work-type-v1/work-revision-shape",
-                            List.of(name), List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of())) == null;
+                        && (validWorkTypeRevision(profiles, data, name, "work-type-v1")
+                            || validWorkTypeRevision(profiles, data, name, "work-type-v2"));
                     if (typeChanged && !historicalAgentAnchor && !historicalWorkAnchor
                         && CanonicalPolicy.select(profiles, data, name, true) == null)
                         return "uncanonical reverse revision dependency requires staged lifecycle: " + name;
@@ -221,6 +218,15 @@ final class ModelMutationPolicy {
             }
         }
         return null;
+    }
+
+    private static boolean validWorkTypeRevision(ProfileRegistry profiles, DatasetGraph data,
+                                                  String name, String profile) {
+        if (profiles.get(profile) == null) return false;
+        return CommandService.validateOne(data, new CommandService.Validation(
+            profile, profiles.get(profile),
+            "https://rezics.com/definition/" + profile + "/work-revision-shape",
+            List.of(name), List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of())) == null;
     }
 
     private static Set<Node> values(DatasetGraph data, Node graph, Node subject, Node predicate) {

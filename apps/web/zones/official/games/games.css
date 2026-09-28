@@ -48,6 +48,9 @@
     .gz-review { color: var(--primary); }
     .gz-unknown, .gz-platforms { color: var(--muted-foreground); font-size: 0.78rem; }
     .gz-mods { color: var(--primary); font-size: 0.78rem; font-weight: 600; }
+    .gz-official { display: inline-flex; align-items: center; gap: 0.2rem;
+      color: var(--primary); font-size: 0.78rem; font-weight: 600; }
+    .gz-official svg { inline-size: 0.8rem; block-size: 0.8rem; }
     .gz-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
     .gz-tags li { border-radius: 999px; background: var(--muted); padding: 0.15rem 0.5rem;
       font-size: 0.72rem; line-height: 1.3; }

@@ -327,8 +327,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const credit = authorReady && intent.authorAgent ? { id: ID + Bun.randomUUIDv7(),
     revision: ID + Bun.randomUUIDv7(), agent: intent.authorAgent } : undefined;
   const validations = [...await workMetadataValidations(env, work, main),
-    ...await profileValidations(env.fuseki, 'work-kind-v1', [
-      { shape: profileRegistry['work-kind-v1'].shapes[0]!, focus: [work], graphs: [GRAPHS.current] },
+    ...await profileValidations(env.fuseki, 'work-kind-v2', [
+      { shape: profileRegistry['work-kind-v2'].shapes[0]!, focus: [work], graphs: [GRAPHS.current] },
     ]), ...(credit ? await profileValidations(env.fuseki, 'native-agent-credit-v1', [
       { shape: 'https://rezics.com/definition/native-agent-credit-v1/credit-shape',
         focus: [credit.id], graphs: [GRAPHS.current, GRAPHS.revisions] },

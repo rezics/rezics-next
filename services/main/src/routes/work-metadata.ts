@@ -3,7 +3,7 @@ import { pendingOperation, problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
 import { setWorkMetadata } from '../modules/work/metadata-command.ts';
 import { stateWorkType } from '../modules/work/type-command.ts';
-import { WorkTypeConflict, WORK_TYPE_OPTIONS } from '../modules/work/type-schema.ts';
+import { WorkTypeConflict, WORK_TYPE_OPTIONS, WORK_TYPE_OPTIONS_V1 } from '../modules/work/type-schema.ts';
 import { InvalidWorkSemanticTypes, MAX_WORK_SEMANTIC_TYPES } from '../modules/work/activate.ts';
 import { readWorkEdition, readWorkEditions, readWorkMetadata } from '../modules/work/metadata-read.ts';
 import { metadataWrite, metadataEditionState, metadataHeaderState, InvalidWorkMetadata,
@@ -33,11 +33,17 @@ function metadataError(error: unknown) {
 export function workMetadataRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .put('/v1/works/:id/type', { params,
-      body: t.Object({ profile: t.Literal('work-type-v1'), expectedHead: readId,
-        types: t.Array(t.String({ enum: WORK_TYPE_OPTIONS }),
-          { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true }),
-        actingSubject: readId }, { additionalProperties: false }),
-      response: { 200: t.Object({ profile: t.Literal('work-type-v1'), work: readId,
+      body: t.Union([
+        t.Object({ profile: t.Literal('work-type-v1'), expectedHead: readId,
+          types: t.Array(t.String({ enum: WORK_TYPE_OPTIONS_V1 }),
+            { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true }),
+          actingSubject: readId }, { additionalProperties: false }),
+        t.Object({ profile: t.Literal('work-type-v2'), expectedHead: readId,
+          types: t.Array(t.String({ enum: WORK_TYPE_OPTIONS }),
+            { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true }),
+          actingSubject: readId }, { additionalProperties: false }),
+      ]),
+      response: { 200: t.Object({ profile: t.Literal('work-type-v2'), work: readId,
         revision: readId, predecessor: readId,
         types: t.Array(t.String({ enum: WORK_TYPE_OPTIONS }),
           { maxItems: MAX_WORK_SEMANTIC_TYPES }),
@@ -52,7 +58,7 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
         const receipt = await stateWorkType(work.environment, work.account, work.access, request,
           { work: `https://rezics.com/id/${path.id}`, expectedHead: body.expectedHead,
             types: body.types, actingSubject: body.actingSubject, idempotencyKey });
-        return Response.json({ profile: 'work-type-v1', work: receipt.work,
+        return Response.json({ profile: 'work-type-v2', work: receipt.work,
           revision: receipt.revision, predecessor: receipt.predecessor,
           types: [...body.types].sort(), receipt: receipt.receipt,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,

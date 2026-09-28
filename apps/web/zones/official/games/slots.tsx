@@ -12,7 +12,8 @@ function Review({ game, locale }: { game: ZoneGameFacts | null | undefined; loca
     {' '}{t.reviews} ({game.review.period})</span>;
 }
 
-function Details({ work, locale, Link }: { work: ZoneWork; locale: string; Link: ComponentType<ZoneLinkProps> }) {
+function Details({ work, locale, Link, officialLink = true }: { work: ZoneWork; locale: string;
+  Link: ComponentType<ZoneLinkProps>; officialLink?: boolean }) {
   const game = work.game;
   if (!game) return <p className="gz-meta"><Review game={null} locale={locale} /></p>;
   const t = strings(locale);
@@ -22,6 +23,8 @@ function Details({ work, locale, Link }: { work: ZoneWork; locale: string; Link:
       {game.tags.slice(0, 3).map(tag => <li key={tag}>{tag}</li>)}</ul> : null}
     {game.platforms.length ? <p className="gz-platforms">{t.platforms}: {game.platforms.join(', ')}</p> : null}
     {game.languages.length ? <p className="gz-platforms">{t.languages}: {game.languages.join(', ')}</p> : null}
+    {officialLink ? <Link href={game.source} target="_blank" rel="noopener noreferrer" className="gz-official">
+      {t.officialPage}<ArrowUpRightIcon aria-hidden="true" /></Link> : null}
     {game.modsZone ? <Link href="/r/mods" className="gz-mods">{t.mods}</Link> : null}
   </div>;
 }
@@ -59,9 +62,11 @@ export function GamesHero({ zone, banners, card, whyHere, Link, fallback }: Hero
           <h3 lang={lead.title?.lang} dir={lead.title?.dir}>
             <Link href={lead.href}>{lead.title?.value ?? t.untitled}</Link></h3>
           {lead.tagline ? <p lang={lead.tagline.lang} dir={lead.tagline.dir}>{lead.tagline.value}</p> : null}
-          <Details work={lead} locale={zone.locale} Link={Link} />
-          <div className="gz-featured-actions"><Link href={lead.href} className="gz-action">
-            {t.details}<ArrowUpRightIcon aria-hidden="true" /></Link>{whyHere(lead)}</div>
+          <Details work={lead} locale={zone.locale} Link={Link} officialLink={false} />
+          <div className="gz-featured-actions">
+            {lead.game ? <Link href={lead.game.source} target="_blank" rel="noopener noreferrer" className="gz-action">
+              {t.officialPage}<ArrowUpRightIcon aria-hidden="true" /></Link> : null}
+            <Link href={lead.href}>{t.details}</Link>{whyHere(lead)}</div>
         </div>
       </div>
       {others.length ? <ul className="gz-featured-rail">{others.map(work =>

@@ -1,9 +1,8 @@
 import type { ProfileDefinition } from '../compiler/ir.ts';
 
-/** Type changes replace the structural rdf:types of one Work revision. Existing
- * work-kind-v1 remains the profile of earlier type declarations. */
-export const workTypeProfile = {
-  id: 'work-type-v1', layout: 'compact',
+/** Type replacement admits games while old work-type-v1 payloads remain valid. */
+export const workTypeV2Profile = {
+  id: 'work-type-v2', layout: 'compact',
   comments: ['A Work type selects an admitted shape or operation, not genre, form or topic.',
     'A Book with a composition remains a Book; the owning command guards that dependency.',
     'Work revision payloads keep their work-metadata-v1 model identity.'],
@@ -14,13 +13,13 @@ export const workTypeProfile = {
     ['rv', 'https://rezics.com/vocab/'],
     ['xsd', 'http://www.w3.org/2001/XMLSchema#'],
   ],
-  shapes: [{ iri: 'https://rezics.com/definition/work-type-v1/work-shape', properties: [
+  shapes: [{ iri: 'https://rezics.com/definition/work-type-v2/work-shape', properties: [
     { path: 'rdf:type', minCount: 1, maxCount: 4, hasValue: 'schema:CreativeWork',
       in: ['schema:CreativeWork', 'schema:Book', 'schema:DigitalDocument',
-        'schema:Recipe', 'schema:SoftwareApplication', 'schema:SoftwareSourceCode',
+        'schema:Recipe', 'schema:SoftwareApplication', 'schema:SoftwareSourceCode', 'schema:VideoGame',
         'rv:ModPackage', 'rv:SkillPackage', 'rv:PromptTemplate'] },
     { path: 'rv:mainVersion', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI', class: 'rv:MainVersion' },
-  ] }, { iri: 'https://rezics.com/definition/work-type-v1/work-revision-shape', properties: [
+  ] }, { iri: 'https://rezics.com/definition/work-type-v2/work-revision-shape', properties: [
     { path: 'rdf:type', hasValue: 'rv:RevisionAnchor' },
     { path: 'rv:component', minCount: 1, maxCount: 1, class: 'schema:CreativeWork' },
     { path: 'rv:operation', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },

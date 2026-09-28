@@ -20,6 +20,8 @@ const packages = {
   mods: ['header', 'hero', 'footer', 'workCard', 'module:chip-nav', 'module:ranking',
     'module:shelf', 'module:editorial-list'],
   'ai-workshop': ['header', 'hero', 'footer', 'workCard', 'module:shelf', 'module:editorial-list'],
+  games: ['hero', 'workCard', 'module:shelf', 'module:editorial-list'],
+  software: ['hero', 'workCard', 'module:shelf', 'module:editorial-list'],
 } as const;
 type Slug = keyof typeof packages;
 
@@ -41,6 +43,10 @@ type ThemeView = { revision: string | null; bundle: { packageDigest?: string } |
 
 export const themeNeedsRevision = (view: ThemeView, digest: string) =>
   view.bundle?.packageDigest !== digest;
+
+/** The Access receipt key binds built bytes and the basis within the API's 128-byte limit. */
+export const themeRevisionSeedKey = (slug: Slug, digest: string, revision: string | null, bundle: unknown) =>
+  seedKey('theme-revision', sha(`${slug}:${digest}:${revision ?? 'first'}:${sha(JSON.stringify(bundle))}`));
 
 export const themeNeedsActivation = (view: ThemeView, now: number) =>
   !view.activation || view.activationRevision !== view.revision || view.revoked
@@ -82,7 +88,8 @@ async function firstPartyView(state: SeedState, theme: string) {
 }
 
 /** Dev fixture review uses a second account; each state transition still passes through Main. */
-export async function seedOfficialThemes(state: SeedState) {
+export async function seedOfficialThemes(state: SeedState,
+  selected: readonly OfficialRealmId[] = state.createdRealms.map(realm => realm.id as OfficialRealmId)) {
   const operator = state.operatorSession, input = state.operatorInput;
   const reviewer = state.sessions.find(session => session.id === 'daniel');
   if (!operator || !input || !reviewer) {
@@ -90,70 +97,73 @@ export async function seedOfficialThemes(state: SeedState) {
     return;
   }
   let manifest: Manifest | null = null;
-  for (const realm of state.createdRealms) {
-    if (!packagedZone(realm.id as OfficialRealmId)) continue;
-    // Theme review performs several graph commands; start each Zone with a fresh operator assertion.
-    operator.token = await operator.api.token(operator.cookie);
-    operator.issuedAt = Date.now();
-    const slug = realm.id as Slug;
-    const zone = `https://rezics.com/id/${stableId(`zone:${slug}`)}`;
-    const theme = officialTheme(slug);
-    await grantOfficialThemeSeed(input, theme, reviewer);
-    const digest = await officialSourceDigest(slug);
-    let view = await firstPartyView(state, theme);
-    if (!view) {
-      await operator.api.post('/v1/themes', { theme: id(theme), owner: input.actingSubject,
-        hostZone: zone, actingSubject: input.actingSubject,
-        idempotencyKey: seedKey('theme-create', slug) }, operator.token, seedKey('theme-create', slug));
-      view = await firstPartyView(state, theme);
-    }
-    if (!view) throw new Error(`Official ${slug} theme was not created`);
-    if (themeNeedsRevision(view, digest)) {
-      if (!manifest) {
-        execFileSync('task', ['web:build'], { cwd: root, stdio: 'inherit' });
-        manifest = JSON.parse(await readFile(join(root, 'apps/web/dist/server/.vite/manifest.json'), 'utf8')) as Manifest;
+  for (const realmId of selected) {
+    if (!packagedZone(realmId)) continue;
+    await state.optional(`Official ${realmId} theme`, async () => {
+      // Theme review performs several graph commands; start each Zone with a fresh operator assertion.
+      operator.token = await operator.api.token(operator.cookie);
+      operator.issuedAt = Date.now();
+      const slug = realmId as Slug;
+      const zone = `https://rezics.com/id/${stableId(`zone:${slug}`)}`;
+      const theme = officialTheme(slug);
+      await grantOfficialThemeSeed(input, theme, reviewer);
+      const digest = await officialSourceDigest(slug);
+      let view = await firstPartyView(state, theme);
+      if (!view) {
+        await operator.api.post('/v1/themes', { theme: id(theme), owner: input.actingSubject,
+          hostZone: zone, actingSubject: input.actingSubject,
+          idempotencyKey: seedKey('theme-create', slug) }, operator.token, seedKey('theme-create', slug));
+        view = await firstPartyView(state, theme);
       }
-      if (await officialSourceDigest(slug) !== digest) throw new Error(`${slug} source changed during web build`);
-      const bundle = await officialBuildBundle(slug, digest, zone, manifest);
-      // A worktree's seed may have moved the live revision; the key names the head it replaces.
-      const key = seedKey('theme-revision', `${slug}:${digest.slice(-24)}:${(view.revision ?? 'none').slice(-12)}`);
-      await operator.api.post(`/v1/themes/${id(theme)}/revisions`, {
-        expectedRevision: view.revision, bundle, actingSubject: input.actingSubject,
-        idempotencyKey: key }, operator.token, key);
-      view = await firstPartyView(state, theme);
-      if (!view?.revision) throw new Error(`Official ${slug} revision was not created`);
-    }
-    if (!view?.revision || !view.bundle) throw new Error(`Official ${slug} revision is unavailable`);
-    if (view.decision === 'rejected') throw new Error(`Official ${slug} revision was rejected`);
-    if (view.decision !== 'approved') {
-      // This digest identifies local fixture evidence, never a production human review.
-      const evidence = sha(JSON.stringify(view.bundle));
-      const reviewKey = seedKey('theme-review', `${slug}:${view.revision.slice(-12)}`);
-      const reviewerToken = await operator.api.token(reviewer.cookie);
-      await operator.api.post(`/v1/themes/${id(theme)}/revisions/${id(view.revision)}/reviews`, {
-        decision: 'approved', reviewEvidenceDigest: evidence,
-        actingSubject: reviewer.actingSubject, idempotencyKey: reviewKey }, reviewerToken, reviewKey);
-      view = await firstPartyView(state, theme);
-    }
-    if (!view?.revision || view.decision !== 'approved') {
-      throw new Error(`Official ${slug} revision has no approval`);
-    }
-    if (themeNeedsActivation(view, Date.now())) {
-      await refreshSeedTokens(state);
-      const expiry = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
-      expiry.setUTCDate(expiry.getUTCDate() + 89);
-      const key = seedKey('theme-activation', `${slug}:${view.revision.slice(-12)}:${
-        view.activation?.slice(-12) ?? 'initial'}:${expiry.toISOString().slice(0, 10)}`);
-      await operator.api.post(`/v1/themes/${id(theme)}/first-party-activations`, {
-        revision: view.revision, expectedActivation: view.activation,
-        approvalExpiresAt: expiry.toISOString(),
-        actingSubject: input.actingSubject, idempotencyKey: key }, operator.token, key);
-    }
-    const presentation = await state.api.getPublic<{ execution: { state: string; packageDigest?: string } }>(
-      `/v1/zones/${id(zone)}/presentation`);
-    if (presentation.execution.state !== 'package' || presentation.execution.packageDigest !== digest) {
-      throw new Error(`Official ${slug} presentation did not activate its source digest`);
-    }
-    console.log(`Official ${slug}: package ${digest} approved on the dev stack.`);
+      if (!view) throw new Error(`Official ${slug} theme was not created`);
+      if (themeNeedsRevision(view, digest)) {
+        if (!manifest) {
+          execFileSync('task', ['web:build'], { cwd: root, stdio: 'inherit' });
+          manifest = JSON.parse(await readFile(join(root, 'apps/web/dist/server/.vite/manifest.json'), 'utf8')) as Manifest;
+        }
+        if (await officialSourceDigest(slug) !== digest) throw new Error(`${slug} source changed during web build`);
+        const bundle = await officialBuildBundle(slug, digest, zone, manifest);
+        // A new client build can emit different chunks for unchanged package source.
+        const key = themeRevisionSeedKey(slug, digest, view.revision, bundle);
+        await operator.api.post(`/v1/themes/${id(theme)}/revisions`, {
+          expectedRevision: view.revision, bundle, actingSubject: input.actingSubject,
+          idempotencyKey: key }, operator.token, key);
+        view = await firstPartyView(state, theme);
+        if (!view?.revision) throw new Error(`Official ${slug} revision was not created`);
+      }
+      if (!view?.revision || !view.bundle) throw new Error(`Official ${slug} revision is unavailable`);
+      if (view.decision === 'rejected') throw new Error(`Official ${slug} revision was rejected`);
+      if (view.decision !== 'approved') {
+        // This digest identifies local fixture evidence, never a production human review.
+        const evidence = sha(JSON.stringify(view.bundle));
+        const reviewKey = seedKey('theme-review', `${slug}:${view.revision.slice(-12)}`);
+        const reviewerToken = await operator.api.token(reviewer.cookie);
+        await operator.api.post(`/v1/themes/${id(theme)}/revisions/${id(view.revision)}/reviews`, {
+          decision: 'approved', reviewEvidenceDigest: evidence,
+          actingSubject: reviewer.actingSubject, idempotencyKey: reviewKey }, reviewerToken, reviewKey);
+        view = await firstPartyView(state, theme);
+      }
+      if (!view?.revision || view.decision !== 'approved') {
+        throw new Error(`Official ${slug} revision has no approval`);
+      }
+      if (themeNeedsActivation(view, Date.now())) {
+        await refreshSeedTokens(state);
+        const expiry = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
+        expiry.setUTCDate(expiry.getUTCDate() + 89);
+        const key = seedKey('theme-activation', `${slug}:${view.revision.slice(-12)}:${
+          view.activation?.slice(-12) ?? 'initial'}:${expiry.toISOString().slice(0, 10)}`);
+        await operator.api.post(`/v1/themes/${id(theme)}/first-party-activations`, {
+          revision: view.revision, expectedActivation: view.activation,
+          approvalExpiresAt: expiry.toISOString(),
+          actingSubject: input.actingSubject, idempotencyKey: key }, operator.token, key);
+      }
+      const presentation = await state.api.getPublic<{ execution: { state: string; packageDigest?: string } }>(
+        `/v1/zones/${id(zone)}/presentation`);
+      if (presentation.execution.state !== 'package' || presentation.execution.packageDigest !== digest) {
+        throw new Error(`Official ${slug} presentation is ${presentation.execution.state} at ${
+          presentation.execution.packageDigest ?? 'no digest'}, expected ${digest}`);
+      }
+      console.log(`Official ${slug}: package ${digest} approved on the dev stack.`);
+    });
   }
 }

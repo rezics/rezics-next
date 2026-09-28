@@ -34,14 +34,16 @@ import { seedReviews } from './reviews-step.ts';
 import { refreshSeedTokens, type SeedState, type SeedStep } from './state.ts';
 import { seedWorks } from './works-step.ts';
 
-interface Options { dryRun: boolean; resetOwn: boolean }
+interface Options { dryRun: boolean; resetOwn: boolean; themesOnly: boolean; zonesOnly: boolean }
 
 export function parseOptions(args: string[]): Options {
-  if (args.some(arg => !['--dry-run', '--reset-own'].includes(arg))
-    || new Set(args).size !== args.length) {
-    throw new Error('Usage: bun scripts/dev/seed/cli.ts [--dry-run] [--reset-own]');
+  if (args.some(arg => !['--dry-run', '--reset-own', '--themes-only', '--zones-only'].includes(arg))
+    || new Set(args).size !== args.length
+    || args.includes('--themes-only') && args.includes('--zones-only')) {
+    throw new Error('Usage: bun scripts/dev/seed/cli.ts [--dry-run] [--reset-own] [--themes-only | --zones-only]');
   }
-  return { dryRun: args.includes('--dry-run'), resetOwn: args.includes('--reset-own') };
+  return { dryRun: args.includes('--dry-run'), resetOwn: args.includes('--reset-own'),
+    themesOnly: args.includes('--themes-only'), zonesOnly: args.includes('--zones-only') };
 }
 
 function commonRoot(): string {
@@ -154,7 +156,10 @@ async function run(options: Options): Promise<boolean> {
     commentCount: 0, replyCount: 0, reviewCount: 0, profileCreditCount: 0, profileFollowCount: 0 };
   const timings: string[] = [];
   const started = performance.now();
-  for (const step of steps) {
+  const plan: readonly SeedStep[] = options.themesOnly
+    ? [seedAccounts, state => seedOfficialThemes(state, realms.map(realm => realm.id))]
+    : options.zonesOnly ? [seedAccounts, seedClassics, seedWorks, seedRealms, seedOfficialThemes] : steps;
+  for (const step of plan) {
     const begun = performance.now();
     await refreshSeedTokens(state);
     await step(state);
@@ -162,6 +167,10 @@ async function run(options: Options): Promise<boolean> {
   }
   console.log(`Step timings (${((performance.now() - started) / 1000).toFixed(1)} s in all):`);
   for (const line of timings) console.log(line);
+  if ((options.themesOnly || options.zonesOnly) && findings.size) {
+    console.log('Zone seed findings:');
+    for (const finding of findings) console.log(`  ${finding}`);
+  }
   return findings.size === 0;
 }
 

@@ -113,6 +113,8 @@ export interface ZoneModRelease {
 }
 
 export interface ZoneGameFacts {
+  /** Publisher or store listing supplied by the facts record; an external handoff. */
+  source: string;
   status: 'released' | 'upcoming';
   releaseDate: string | null;
   platforms: string[];

@@ -5,7 +5,8 @@ import { uiLocales } from '../../../apps/web/i18n/define.ts';
 import { editorList, extraWorks, fictionQuotes, fictionWorks, laterModReleases, officialMods, officialPresentation,
   type OfficialRealmId, penNames, officialTheme, packagedZone, publicTexts, realmProfiles, zoneContent }
   from './official-plan.ts';
-import { officialBuildBundle, officialSourceDigest, themeNeedsActivation, themeNeedsRevision }
+import { officialBuildBundle, officialSourceDigest, themeNeedsActivation, themeNeedsRevision,
+  themeRevisionSeedKey }
   from './official-theme-step.ts';
 import { people, penNames as basePenNames, realms, works } from './plan.ts';
 
@@ -93,6 +94,14 @@ describe('Official package approval plan', () => {
     expect(themeNeedsActivation({ ...view, revoked: true }, now)).toBe(true);
     expect(themeNeedsActivation({ ...view, approvalExpiresAt: '2026-09-30T00:00:00.000Z' }, now)).toBe(true);
     expect(themeNeedsActivation({ ...view, activationRevision: officialTheme('books') }, now)).toBe(true);
+  });
+
+  test('theme revision retry keys fit the API and change with emitted bytes or basis', () => {
+    const basis = officialTheme('games');
+    const first = themeRevisionSeedKey('games', 'sha256:source', basis, { files: ['first.js'] });
+    expect(first.length).toBeLessThanOrEqual(128);
+    expect(first).not.toBe(themeRevisionSeedKey('games', 'sha256:source', basis, { files: ['second.js'] }));
+    expect(first).not.toBe(themeRevisionSeedKey('games', 'sha256:source', null, { files: ['first.js'] }));
   });
 });
 

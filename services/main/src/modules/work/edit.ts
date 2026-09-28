@@ -72,7 +72,7 @@ export function workScalarEditDigest(work: string, expectedHead: string,
 export function workTypeEditDigest(work: string, expectedHead: string,
   types: readonly string[]): string {
   iri(work); iri(expectedHead);
-  return hash(JSON.stringify({ family: 'work-type-v1', work, expectedHead,
+  return hash(JSON.stringify({ family: 'work-type-v2', work, expectedHead,
     types: checkedWorkTypes(types) }));
 }
 
@@ -310,7 +310,7 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   }
   const revision = ID + Bun.randomUUIDv7();
   const validations = await workMetadataValidations(env, intent.work, main);
-  if (change.kind === 'types') validations.push(...await profileValidations(env.fuseki, 'work-type-v1', [
+  if (change.kind === 'types') validations.push(...await profileValidations(env.fuseki, 'work-type-v2', [
     { shape: `${WORK_TYPE_PROFILE}/work-shape`, focus: [intent.work], graphs: [GRAPHS.current] },
     { shape: `${WORK_TYPE_PROFILE}/work-revision-shape`, focus: [revision],
       graphs: [GRAPHS.current, GRAPHS.revisions] },
@@ -353,7 +353,7 @@ async function editWorkRevision(env: WorkActivationEnvironment,
         rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(intent.admission.id)} ;
         rv:authorityEpoch ${lit(intent.admission.authorityEpoch)} ; rv:admittedScope ${lit(intent.admission.scope)} ;
         rv:outcome rv:Succeeded ; rv:work ${iri(intent.work)} ; rv:workRevision ${iri(revision)} ;
-        ${change.kind === 'types' ? 'rv:commandFamily "work-type-v1" ;' : ''}
+        ${change.kind === 'types' ? 'rv:commandFamily "work-type-v2" ;' : ''}
         rv:expectedHead ${iri(intent.expectedHead)} ; rv:datasetId ${iri(DATASET)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;

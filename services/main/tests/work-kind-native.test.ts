@@ -9,8 +9,8 @@ import { interestKinds, interestSources, matchingWorkKinds, workKinds }
 
 test('G318: every native catalogue kind has a reviewed type, human interest and card intent', () => {
   expect([...WORK_SEMANTIC_TYPES] as string[]).toEqual(Object.keys(workKinds));
-  expect(profileRegistry['work-kind-v1'].shapes).toHaveLength(1);
-  const shape = readFileSync(resolve(import.meta.dir, '../../../generated/model/shapes/work-kind-v1.ttl'), 'utf8');
+  expect(profileRegistry['work-kind-v2'].shapes).toHaveLength(1);
+  const shape = readFileSync(resolve(import.meta.dir, '../../../generated/model/shapes/work-kind-v2.ttl'), 'utf8');
   expect(shape.match(/sh:in \( ([^)]+) \)/)?.[1]?.split(' ').filter(type => type !== 'schema:CreativeWork')
     .map(type => type.replace(/^schema:/, 'https://schema.org/')
       .replace(/^rv:/, 'https://rezics.com/vocab/')).sort()).toEqual([...WORK_SEMANTIC_TYPES].sort());
