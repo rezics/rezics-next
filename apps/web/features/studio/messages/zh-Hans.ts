@@ -59,6 +59,8 @@ export default {
   typeDocument: '一篇指南', typeDocumentHelp: '教程、文章、短篇故事或其他单篇作品。',
   typeRecipe: '一份食谱', typeRecipeHelp: '食材和步骤。',
   writingLanguage: '写作语言',
+  chooseWritingLanguage: '选择语言', languageUndetermined: '未确定',
+  languageError: '请选择作品语言，或选择“未确定”。',
   createAs: insert('以 {{agent}} 身份创建', { agent: String }),
   creating: '正在创建…',
   titleError: '请输入不超过 200 个字符的标题。',

@@ -303,13 +303,13 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     await initializeFreshGraph(fuseki, oldLineage);
     await initializeRelayCheckpoint(journal.pool, 'recovery-handoff', oldLineage.dataEpoch);
     let access = new AccessAdmissionRegistry(pool);
-    const createInput = { actingSubject: actor, idempotencyKey: 'before-backup-create', title: 'Backup Work' };
+    const createInput = { actingSubject: actor, idempotencyKey: 'before-backup-create', title: 'Backup Work', language: 'en' };
     const created = await createAdmittedMetadataWork(liveEnv, account, access, request, createInput);
     expect(created.sequence).toBe('1');
     const workApiRequest = () => new Request('http://localhost/v1/works', {
       method: 'POST', headers: { authorization: bearer,
         'content-type': 'application/json', 'idempotency-key': createInput.idempotencyKey },
-      body: JSON.stringify({ profile: 'metadata-only-v1', title: createInput.title,
+      body: JSON.stringify({ profile: 'metadata-only-v1', title: createInput.title, language: createInput.language,
         actingSubject: actor }),
     });
     const liveWorkReplay = await createMainApp(fuseki, { environment: liveEnv,
@@ -636,7 +636,8 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     const heldResponse = await heldApp.handle(new Request('http://localhost/v1/works', {
       method: 'POST', headers: { authorization: bearer,
         'content-type': 'application/json', 'idempotency-key': createInput.idempotencyKey },
-      body: JSON.stringify({ profile: 'metadata-only-v1', title: createInput.title, actingSubject: actor }),
+      body: JSON.stringify({ profile: 'metadata-only-v1', title: createInput.title,
+        language: createInput.language, actingSubject: actor }),
     }));
     expect(heldResponse.status).toBe(503);
     expect((await heldResponse.json() as { code: string }).code).toBe('recovery_hold');
@@ -799,12 +800,12 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     const laterEffect = await editAdmittedMetadataWork({ ...liveEnv, fuseki }, account, access, request, laterInput);
     expect(laterEffect.sequence).toBe('3');
     const laterCreateInput = { actingSubject: actor, idempotencyKey: 'later-create',
-      title: 'Created after saved cut' };
+      title: 'Created after saved cut', language: 'en' };
     const laterCreate = await createAdmittedMetadataWork({ ...liveEnv, fuseki },
       account, access, request, laterCreateInput);
     expect(laterCreate.sequence).toBe('4');
     const cancelledInput = { actingSubject: actor, idempotencyKey: 'later-cancelled-create',
-      title: 'Cancelled after saved cut' };
+      title: 'Cancelled after saved cut', language: 'en' };
     const cancelledAdmission = await access.register({ principal,
       actingSubject: actor, scope: 'work:create:root', action: 'work.create',
       idempotencyKey: cancelledInput.idempotencyKey,
@@ -1840,7 +1841,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       .rejects.toBeInstanceOf(CancelledActivation);
     await expect(createAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, { actingSubject: actor,
-        idempotencyKey: 'new-create-after-closure', title: 'Closed create scope' }))
+        idempotencyKey: 'new-create-after-closure', title: 'Closed create scope', language: 'en' }))
       .rejects.toBeInstanceOf(AdmissionDenied);
     await expect(createAdmittedMetadataWork({ ...olderEnv, objectDirectory: liveObjects },
       account, recoveredAccess, request, cancelledInput)).rejects.toBeInstanceOf(CancelledActivation);

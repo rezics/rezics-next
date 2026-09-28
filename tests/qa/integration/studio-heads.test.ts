@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { Elysia } from 'elysia';
 import { Pool } from 'pg';
 import { StudioAccess } from '../../../services/main/src/modules/studio/access.ts';
+import { STUDIO_CHAPTER_COST } from '../../../services/main/src/modules/studio/chapters.ts';
 import { authorWorkGeneration } from '../../../services/main/src/modules/access/author-baseline.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
@@ -29,6 +30,10 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     finally { await accountPool.end(); }
     f.account.tokenA = await f.account.tokenFor(f.account.a);
     f.access.configureBaseline(f.env.fuseki);
+    expect((await f.call('POST', '/v1/works', { profile: 'metadata-only-v1',
+      title: 'Missing language', actingSubject: f.actor })).status).toBe(400);
+    expect((await f.call('POST', '/v1/works', { profile: 'metadata-only-v1',
+      title: 'Invalid language', language: 'not_a_tag', actingSubject: f.actor })).status).toBe(400);
     const missing = await f.call('POST', '/v1/works', { profile: 'metadata-only-v1',
       authoring: 'own-work', title: 'Unready author', language: 'en', actingSubject: f.actor });
     expect(missing.status).toBe(409);
@@ -41,6 +46,11 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       semanticTypes: ['https://schema.org/Book'],
       localizedTitle: { value: 'A Japanese work', language: 'en' },
       description: { value: '作品の説明', language: 'ja' }, actingSubject: f.actor,
+    }), 201);
+    const undetermined = await f.json<{ work: string }>(await f.call('POST', '/v1/works', {
+      profile: 'metadata-only-v1', authoring: 'own-work',
+      title: 'Unknown original language', language: 'und',
+      actingSubject: f.actor,
     }), 201);
     await f.grant(`work:read:${created.work}`, 'work.read');
     const studio = new Elysia().use(studioRoutes({ environment: f.env,
@@ -64,6 +74,9 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       await studioCall(), 200);
     expect(listed.items).toContainEqual(expect.objectContaining({ id: created.work,
       state: 'empty', texts: [] }));
+    expect((await f.json<{ items: Array<{ id: string; title: { language: string } }> }>(
+      await studioCall(), 200)).items).toContainEqual(expect.objectContaining({ id: undetermined.work,
+      title: expect.objectContaining({ language: 'und' }) }));
     expect(await f.json<{ item: { id: string; relationship: string } }>(await studio.handle(new Request(
       `http://main.local/v1/me/agents/${shortId(f.actor)}/works/${shortId(created.work)}`,
       { headers: { authorization: `Bearer ${f.account.tokenA}` } })), 200))
@@ -104,7 +117,7 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     const content = new ContentCore(f.pool);
     const contentApp = new Elysia().use(contentRoutes(f.env.fuseki, {
       environment: f.env, account: f.account.verifier, access: f.access,
-      contentAuthoring: content,
+      content: content, contentAuthoring: content,
     })).use(studioRoutes({ environment: f.env, account: f.account.verifier,
       access: f.access, contentAuthoring: content, studioAccess: new StudioAccess(f.accessPool, f.env.fuseki) }));
     const contentCall = (method: string, path: string, body?: object) => contentApp.handle(new Request(
@@ -168,6 +181,15 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       expect(await authorWorkGeneration(chapterClient, f.env.fuseki, f.principalId, f.actor, chapter.work)).toBe('0');
     } finally { chapterClient.release(); }
     expect(chapter.variantId).toMatch(/^urn:rezics:variant:/);
+    const chapterReadPath = `/v1/me/agents/${shortId(f.actor)}/works/${shortId(created.work)}/chapters?language=ja`;
+    const chapterRead = async () => f.json<{ page: { items: Array<{ occurrence: string }> };
+      facts: Array<{ occurrence: string; writer: string | null; state: string | null;
+        target: string | null; label: { value: string } | null }> }>(
+      await contentCall('GET', chapterReadPath), 200);
+    const firstChapters = await chapterRead();
+    expect(firstChapters.page.items.map(item => item.occurrence)).toEqual([chapter.occurrence]);
+    expect(firstChapters.facts).toMatchObject([{ occurrence: chapter.occurrence,
+      writer: f.actor, state: 'empty', target: chapter.work, label: { value: '第一章' } }]);
     const mapping = await canonicalChapterWorks(new WorkReadSession(
       { environment: f.env } as MainWorkDependencies,
       new Request('http://main.local'), {},
@@ -212,7 +234,7 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       undefined, 'Imported studio classic');
     const imported = await f.adoptWork(source);
     const curated = await f.json<{ work: string }>(await f.call('POST', '/v1/works', {
-      profile: 'metadata-only-v1', title: 'Curated studio Work', actingSubject: f.actor,
+      profile: 'metadata-only-v1', title: 'Curated studio Work', language: 'en', actingSubject: f.actor,
     }), 201);
     const authored = await f.json<{ items: Array<{ id: string }> }>(await studioCall(), 200);
     expect(authored.items.map(item => item.id)).not.toContain(imported.work);
@@ -235,5 +257,74 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     const chapterVariants = `/v1/works/${shortId(chapter.work)}/content-variants?actingSubject=${encodeURIComponent(f.actor)}`;
     expect(await f.json<{ items: unknown[] }>(await contentCall('GET', chapterVariants), 200))
       .toMatchObject({ items: [{ variantId: chapter.variantId, draftHead: chapterDraft.revisionId }] });
+    expect((await chapterRead()).facts).toMatchObject([{ state: 'draft', target: chapter.work }]);
+    const writer = async (name: string, principal: string, controlled: boolean) => {
+      const agentId = `https://rezics.com/id/${randomUUID()}`;
+      await f.accessPool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [agentId]);
+      const profile = { kind: 'person' as const, displayName: name };
+      const graph = await createAgentGraph(f.env, { id: randomUUID(), agent: agentId,
+        ...profile, digest: agentProvisionDigest(profile) });
+      for (const [scope, action] of [[`work:edit:${created.work}`, 'work.edit'],
+        [`work:read:${created.work}`, 'work.read']] as const) {
+        await f.accessPool.query(`INSERT INTO access.representation
+          (id, principal_id, subject_id, action, valid_until)
+          VALUES ($1,$2,$3,$4,'infinity'::timestamptz)`, [randomUUID(), principal, agentId, action]);
+        await f.accessPool.query(`INSERT INTO access.permission_grant
+          (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+          VALUES ($1,$2,$2,$3,$4,'infinity'::timestamptz)`, [randomUUID(), agentId, scope, action]);
+      }
+      if (controlled) {
+        const control = randomUUID();
+        await f.accessPool.query(`INSERT INTO access.representation
+          (id, principal_id, subject_id, action, valid_until)
+          VALUES ($1,$2,$3,'agent.control','infinity'::timestamptz)`, [control, principal, agentId]);
+        await f.accessPool.query(`INSERT INTO access.agent_provision (id, principal_id, idempotency_key,
+          request_digest, agent_id, agent_kind, display_name, principal_epoch, state,
+          graph_data_epoch, graph_sequence, representation_id)
+          VALUES ($1,$2,$3,$4,$5,'person',$6,0,'active',$7,$8,$9)`, [randomUUID(), principal,
+          randomUUID(), agentProvisionDigest(profile), agentId, profile.displayName,
+          graph.dataEpoch, graph.sequence, control]);
+      }
+      return agentId;
+    };
+    const pen = await writer('Studio pen name', f.principalId, true);
+    const stranger = await writer('Another writer', f.otherPrincipal, false);
+    const chapterAs = async (actingSubject: string, token: string, title: string, expectedCompositionHead: string) =>
+      f.json<{ work: string; occurrence: string; compositionRevision: string }>(await studio.handle(new Request(
+        `http://main.local/v1/works/${shortId(created.work)}/chapters`, { method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
+            'idempotency-key': randomUUID() },
+          body: JSON.stringify({ ...chapterBody, title, actingSubject, expectedCompositionHead }) })), 200);
+    const penChapter = await chapterAs(pen, f.account.tokenA, '第二章', chapter.compositionRevision);
+    const strangerChapter = await chapterAs(stranger, f.account.tokenB, 'Private third chapter',
+      penChapter.compositionRevision);
+    const chapterAccess = new StudioAccess(f.accessPool, f.env.fuseki);
+    const principal = await f.account.verifier.verify(new Request('http://main.local',
+      { headers: { authorization: `Bearer ${f.account.tokenA}` } }), ['work:read']);
+    expect((await chapterAccess.chapterWriters(principal, f.actor, [penChapter.work])).get(penChapter.work))
+      .toEqual({ writer: pen, controlled: true });
+    expect(await chapterAccess.canReadContentVariants(principal, pen, penChapter.work)).toBe(true);
+    const disclosed = await chapterRead();
+    expect(disclosed.facts).toMatchObject([
+      { writer: f.actor, state: 'draft', target: chapter.work },
+      { writer: pen, otherIdentity: true, state: 'empty', target: penChapter.work,
+        label: { value: '第二章' } },
+      { writer: null, state: null, target: null, label: null },
+    ]);
+    expect(disclosed.page.items[2]).toMatchObject({ occurrence: strangerChapter.occurrence });
+    let statements = 0;
+    const measuredFuseki = new Proxy(f.env.fuseki, { get(target, key) {
+      if (key === 'query') return (...args: Parameters<typeof target.query>) => {
+        statements += 1; return target.query(...args);
+      };
+      const value = Reflect.get(target, key, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const measured = new Elysia().use(studioRoutes({ environment: { ...f.env, fuseki: measuredFuseki },
+      account: f.account.verifier, access: f.access, contentAuthoring: content,
+      studioAccess: new StudioAccess(f.accessPool, f.env.fuseki) }));
+    expect((await measured.handle(new Request(`http://main.local${chapterReadPath}`,
+      { headers: { authorization: `Bearer ${f.account.tokenA}` } }))).status).toBe(200);
+    expect(statements).toBeLessThanOrEqual(STUDIO_CHAPTER_COST.graphStatements);
   } finally { await f.close(); }
 }, 20_000);

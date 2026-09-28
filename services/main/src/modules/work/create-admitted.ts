@@ -17,7 +17,7 @@ export interface AdmittedMetadataWorkInput {
   authorityPath?: 'represented-agent' | 'direct-principal';
   idempotencyKey: string;
   title: string;
-  language?: string;
+  language: string;
   localizedTitle?: { value: string; language: string };
   description?: { value: string; language: string };
   semanticTypes?: readonly string[];

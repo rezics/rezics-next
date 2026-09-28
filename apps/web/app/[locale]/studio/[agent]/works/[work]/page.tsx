@@ -13,7 +13,7 @@ import { detailsValues } from '../../../../../../features/studio/details-api.ts'
 import type { StudioMessages } from '../../../../../../features/studio/messages.ts';
 import { openStates } from '../../../../../../features/studio/parts.tsx';
 import { readChapterFacts, readChapters, readPublishedTexts, readRealmChoices, readStudioWork, readTags,
-  readWorkLanguages, readWorkSubmissions, readWorkTexts, startChapters, type StudioWork, validCursor }
+  readWorkLanguages, readWorkSubmissions, readWorkTexts, type StudioWork, validCursor }
   from '../../../../../../features/studio/read.ts';
 import { studioAgent, studioContext } from '../../../../../../features/studio/route.ts';
 import { StudioWorkFrame, WorkTabBody, WorkTabPending, workTabs } from '../../../../../../features/studio/studio-work.tsx';
@@ -76,8 +76,6 @@ export default async function StudioWorkPage(props: Params) {
   if (!agent) return null;
   const locale = await requestLocale();
   const cursor = validCursor(query.cursor);
-  // A Book opens on its chapters: they are read alongside the Book's header, so both arrive together.
-  const started = !query.tab || query.tab === 'chapters' ? startChapters(agent.iri, work, cursor) : undefined;
   const [loaded, messages, { t }] = await Promise.all([readStudioWork(agent.iri, work, locale),
     getMessages('studio', locale), getTranslation('studio', [locale])]);
   if (!loaded.ok) {
@@ -103,10 +101,10 @@ export default async function StudioWorkPage(props: Params) {
       </Suspense>
     </StudioWorkFrame>;
   }
-  const [chapters, languages, { agents }] = await Promise.all([readChapters(agent.iri, header, { cursor, started }),
+  const [chapters, languages, { agents }] = await Promise.all([readChapters(agent.iri, header, { cursor }),
     readWorkLanguages(agent.iri, header), studioContext(segment)]);
   // Who writes each chapter and where it stands streams in after the list.
-  const facts = readChapterFacts(agent, agents, header.id, chapters, !cursor).catch(() => ({}));
+  const facts = readChapterFacts(agent, agents, header.id, chapters);
   const offset = cursor ? Math.max(0, Number.parseInt(query.from ?? '0', 10) || 0) : 0;
   const next = chapters.page.ok ? chapters.page.data.nextCursor : null;
   const shown = chapters.page.ok ? chapters.page.data.items.length : 0;

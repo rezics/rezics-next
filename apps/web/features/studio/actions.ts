@@ -35,7 +35,8 @@ export async function createWork(previous: NewWorkState, form: FormData): Promis
   const key = previous.status === 'pending' ? previous.key : String(form.get('key') ?? '');
   const values = { title, type, language: writing };
   if (!title || title.length > 200) return { status: 'error', message: t.titleError, key, values };
-  if (!Object.hasOwn(workTypes, type) || !language.test(writing) || !idempotencyKey.test(key)) {
+  if (!language.test(writing)) return { status: 'error', message: t.languageError, key, values };
+  if (!Object.hasOwn(workTypes, type) || !idempotencyKey.test(key)) {
     return { status: 'error', message: t.createUnavailable, key, values };
   }
   const agent = await studioAgent(form);

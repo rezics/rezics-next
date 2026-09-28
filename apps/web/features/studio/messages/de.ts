@@ -60,6 +60,8 @@ export default {
   typeDocument: 'Eine Geschichte', typeDocumentHelp: 'Eine Kurzgeschichte, ein Essay oder ein einzelner Text.',
   typeRecipe: 'Ein Rezept', typeRecipeHelp: 'Zutaten und Schritte.',
   writingLanguage: 'Sprache, in der du schreibst',
+  chooseWritingLanguage: 'Sprache auswählen', languageUndetermined: 'Unbestimmt',
+  languageError: 'Wähle die Sprache des Werks oder „Unbestimmt“ aus.',
   createAs: insert('Als {{agent}} erstellen', { agent: String }),
   creating: 'Wird erstellt…',
   titleError: 'Gib einen Titel mit höchstens 200 Zeichen ein.',

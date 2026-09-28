@@ -111,6 +111,30 @@ export class StudioAccess {
     });
   }
 
+  /** One indexed batch of chapter owners and at most twenty Agent-control probes. */
+  async chapterWriters(principal: VerifiedPrincipal, agent: string, works: readonly string[]) {
+    if (works.length > 20 || works.some(work => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work))) {
+      throw new WorkReadUnavailable('Studio chapter page exceeds its bound');
+    }
+    return this.transaction(async client => {
+      const actor = await requirePrincipal(client, principal);
+      await requireMandate(client, actor.id, agent, 'agent.control');
+      const rows = (await client.query<{ work: string; writer: string }>(`
+        SELECT s.work, a.acting_subject AS writer FROM access.work_maintainer_set s
+        JOIN access.admission a ON a.id = s.creation_admission
+        WHERE s.work = ANY($1::text[]) AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
+        FOR SHARE OF s`, [works])).rows;
+      if (rows.length > works.length || new Set(rows.map(row => row.work)).size !== rows.length) {
+        throw new WorkReadUnavailable('Studio chapter authors are ambiguous');
+      }
+      const control = new Map<string, boolean>();
+      for (const writer of new Set(rows.map(row => row.writer))) {
+        control.set(writer, writer === agent || !!await mandateFor(client, actor.id, writer, 'agent.control'));
+      }
+      return new Map(rows.map(row => [row.work, { writer: row.writer, controlled: control.get(row.writer) === true }]));
+    });
+  }
+
   /** One exact author proof or an explicit grant, fenced by the same scope gate. */
   async canReadContentVariants(principal: VerifiedPrincipal, actingSubject: string,
     work: string): Promise<boolean> {

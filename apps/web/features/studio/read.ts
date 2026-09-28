@@ -3,7 +3,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { mainApi, mainApiWithToken } from '../api/main.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { chapterVariant } from './content-api.ts';
-import { canonicalLanguage, type ClassificationPage, type ContentsItem, type ContentsPage, type ContentVariantPage, directionOf,
+import { canonicalLanguage, type ClassificationPage, type ContentsItem, type ContentsPage, directionOf,
   failureOf, idOf, iri, type InventoryPage, type InventoryState, type InventoryWork, type Loaded, type MainClient, type MyText,
   type NativeVariants, type RealmChoice, type ReviewMode, workKind, type Submission, type TextDraft, type TextHead,
   type WorkHeader, type WorkMetadata } from './types.ts';
@@ -232,35 +232,25 @@ export interface BookChaptersView {
   page: Loaded<ContentsPage> | { ok: false; failure: 'none' };
   /** The language the chapters are written and published in. */
   language: string;
+  facts: Array<{ occurrence: string; writer: string | null; otherIdentity: boolean;
+    state: ChapterState | null; target: string | null; label: ContentsItem['label']; language: string | null }>;
 }
 
 /**
- * Starts reading one page of a Book's chapters before the Book's header is
- * in, so both arrive together. Main reads them in the Main Version's language.
- */
-export async function startChapters(actingSubject: string, book: string, cursor: string | undefined):
-  Promise<Loaded<ContentsPage>> {
-  return contentsPage(await mainApi(), actingSubject, book, cursor);
-}
-
-/**
- * One page of a Book's chapters in order, in the language they are written
- * in: the Studio Agent's own published language when the Main Version has
- * several, the Main Version's when it has one, the Book's own while it has
- * none. `none` when the Book has no composition yet (Main answers 404 for
- * that and for an unreadable Book alike; the page already read the Book).
+ * Main resolves the chapter list and each writer's disclosed state together.
+ * One request carries the language Studio writes in and the page cursor.
  */
 export async function readChapters(actingSubject: string, header: Pick<WorkHeader, 'id' | 'mainVersion' | 'title'>,
-  { cursor, started, main: client }: { cursor?: string; started?: Promise<Loaded<ContentsPage>>; main?: MainClient } = {}):
+  { cursor, main: client }: { cursor?: string; main?: MainClient } = {}):
   Promise<BookChaptersView> {
   const main = client ?? await mainApi();
-  const [first, languages] = await Promise.all([started ?? contentsPage(main, actingSubject, header.id, cursor),
-    readWorkLanguages(actingSubject, header, main)]);
-  const language = first.ok && first.data.language !== null && languages.all.length < 2
-    ? canonicalLanguage(first.data.language) : languages.own;
-  const page = first.ok && first.data.language?.toLowerCase() !== language.toLowerCase()
-    ? await contentsPage(main, actingSubject, header.id, cursor, language) : first;
-  return { language, page: !page.ok && page.failure === 'missing' && !cursor ? { ok: false, failure: 'none' } : page };
+  const { own: language } = await readWorkLanguages(actingSubject, header, main);
+  const loaded = await settle(() => main.v1.me.agents({ agent: idOf(actingSubject) })
+    .works({ id: idOf(header.id) }).chapters.get({ query: { language,
+      ...(cursor ? { cursor } : {}) } }));
+  const page = loaded.ok ? { ok: true as const, data: loaded.data.page }
+    : !cursor && loaded.failure === 'missing' ? { ok: false as const, failure: 'none' as const } : loaded;
+  return { language, page, facts: loaded.ok ? loaded.data.facts : [] };
 }
 
 export type ChapterState = 'empty' | 'draft' | 'published' | 'changed';
@@ -280,86 +270,19 @@ export interface ChapterFact {
 /** What Studio learned about each chapter on a page, by occurrence. */
 export type ChapterFacts = Record<string, ChapterFact>;
 
-const revisionPrefix = 'urn:rezics:content:revision:';
-
-/**
- * Where a chapter stands, from its writer's Content variants: nothing saved
- * yet, drafts only, published, or published with a newer draft in the
- * language readers get it in (`selected` is the revision they get).
- */
-export function chapterState(variants: ContentVariantPage['items'], language: string, selected: string | null): ChapterState {
-  if (!variants.length) return 'empty';
-  const read = variants.find(item => item.language.tag?.toLowerCase() === language.toLowerCase());
-  if (selected && read) return read.draftHead === selected.slice(revisionPrefix.length) ? 'published' : 'changed';
-  return variants.some(item => item.publicationHead && item.eligibilityHead) ? 'published' : 'draft';
-}
-
-/** Runs `work` over `items` at most `limit` at a time, so one page never floods Main. */
-async function bounded<T, R>(items: readonly T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const index = next++;
-      results[index] = await work(items[index]!);
-    }
-  }));
-  return results;
-}
-
-/**
- * Who writes each chapter on a page and where it stands. Main lists a
- * chapter's Content variants only to the Agent that writes it (or holds a
- * grant to), so one read per chapter tells both. A chapter the Studio Agent doesn't write is
- * asked of this person's other identities: a chapter it can't even see (a
- * private one) through the Book's contents as each of them, a public one
- * through its variants, one identity after another. At most one read per
- * chapter and identity, five chapters at a time; a chapter none of them
- * writes stays `unknown`.
- */
+/** Names an owned writer from this person's current identity list. */
 export async function readChapterFacts(agent: AgentOption, agents: readonly AgentOption[], book: string,
-  chapters: BookChaptersView, first: boolean, client?: MainClient): Promise<ChapterFacts> {
-  if (!chapters.page.ok) return {};
-  const main = client ?? await mainApi();
-  const rows = chapters.page.data.items.filter(item => item.role === 'chapter');
-  const others = agents.filter(option => option.iri !== agent.iri);
-  const variantsOf = (target: string, actingSubject: string) => settle(() =>
-    main.v1.works({ id: idOf(target) })['content-variants'].get({ query: { actingSubject, limit: 20 } }), false);
-  const facts: ChapterFacts = {};
-  const state = (items: ContentVariantPage['items'], row: ContentsItem) =>
-    chapterState(items, chapters.language, row.availability === 'available' ? row.selectedRevision : null);
-  const unclaimed: ContentsItem[] = [];
-  await bounded(rows.filter(row => row.target), 5, async row => {
-    const own = await variantsOf(row.target!, agent.iri);
-    facts[row.occurrence] = own.ok ? { writer: { kind: 'self' }, state: state(own.data.items, row) }
-      : { writer: { kind: 'unknown' }, state: null };
-    // Main refused or didn't find the variants: another identity may write the chapter. A failure says nothing.
-    if (!own.ok && own.failure !== 'unavailable') unclaimed.push(row);
-  });
-  await bounded(unclaimed, 5, async row => {
-    for (const other of others) {
-      const theirs = await variantsOf(row.target!, other.iri);
-      if (!theirs.ok) continue;
-      facts[row.occurrence] = { writer: { kind: 'agent', agent: other }, state: state(theirs.data.items, row) };
-      return;
-    }
-  });
-  // A later page's cursor is bound to the Studio Agent, so only the first page can be read as another identity.
-  const hidden = rows.filter(row => !row.target);
-  if (!hidden.length || !first || !others.length) return facts;
-  const views = await bounded(others, 5, async other => ({ other,
-    page: await contentsPage(main, other.iri, book, undefined, chapters.language) }));
-  await bounded(hidden, 5, async row => {
-    const seen = views.flatMap(({ other, page }) => {
-      const item = page.ok ? page.data.items.find(entry => entry.occurrence === row.occurrence && entry.target) : undefined;
-      return item ? [{ other, item }] : [];
-    })[0];
-    if (!seen) { facts[row.occurrence] = { writer: { kind: 'unknown' }, state: null }; return; }
-    const theirs = await variantsOf(seen.item.target!, seen.other.iri);
-    facts[row.occurrence] = { writer: { kind: 'agent', agent: seen.other }, target: seen.item.target!,
-      label: seen.item.label, state: theirs.ok ? state(theirs.data.items, seen.item) : null };
-  });
-  return facts;
+  chapters: BookChaptersView): Promise<ChapterFacts> {
+  void book;
+  return Object.fromEntries(chapters.facts.map(fact => {
+    const other = fact.otherIdentity ? agents.find(option => option.iri === fact.writer) : undefined;
+    const writer: ChapterWriter = fact.writer === agent.iri ? { kind: 'self' }
+      : other ? { kind: 'agent', agent: other } : { kind: 'unknown' };
+    const hidden = chapters.page.ok && !chapters.page.data.items.find(item => item.occurrence === fact.occurrence)?.target;
+    return [fact.occurrence, { writer, state: fact.state,
+      ...(hidden && fact.target ? { target: fact.target } : {}),
+      ...(hidden && fact.label ? { label: fact.label } : {}) }];
+  }));
 }
 
 /** The Studio Agent's texts of one Work, one per language. */

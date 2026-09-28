@@ -288,6 +288,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
     throw new Error('invalid Work admission');
   }
   const semanticTypes = normalizeWorkSemanticTypes(intent.semanticTypes);
+  // Internal legacy and source fixtures still activate without an author-facing request.
+  // The public Work creation route requires the author to state this field.
   const language = intent.language ?? 'en';
   const digest = metadataWorkRequestDigest(intent.title, semanticTypes, language, intent);
   if (admission.requestDigest !== digest) throw new IdempotencyConflict('admission digest does not match Work intent');

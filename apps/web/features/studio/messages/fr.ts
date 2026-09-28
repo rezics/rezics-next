@@ -60,6 +60,8 @@ export default {
   typeDocument: 'Un récit', typeDocumentHelp: 'Une nouvelle, un essai ou un texte unique.',
   typeRecipe: 'Une recette', typeRecipeHelp: 'Ingrédients et étapes.',
   writingLanguage: 'Langue dans laquelle vous écrirez',
+  chooseWritingLanguage: 'Choisir une langue', languageUndetermined: 'Indéterminée',
+  languageError: 'Choisissez la langue de l’œuvre ou « Indéterminée ».',
   createAs: insert('Créer en tant que {{agent}}', { agent: String }),
   creating: 'Création…',
   titleError: 'Saisissez un titre de 200 caractères maximum.',

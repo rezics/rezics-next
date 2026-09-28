@@ -58,6 +58,8 @@ export default {
   typeDocument: '단편', typeDocumentHelp: '단편 소설, 에세이 또는 한 편으로 된 글.',
   typeRecipe: '레시피', typeRecipeHelp: '재료와 조리 순서.',
   writingLanguage: '작성 언어',
+  chooseWritingLanguage: '언어 선택', languageUndetermined: '미정',
+  languageError: '작품의 언어를 선택하거나 ‘미정’을 선택하세요.',
   createAs: insert('{{agent}} 프로필로 만들기', { agent: String }),
   creating: '만드는 중…',
   titleError: '200자 이내로 제목을 입력하세요.',

@@ -4,7 +4,7 @@ import { lengthUnit, manuscriptLength } from '../features/studio/counts.ts';
 import { detailsInvalid, detailsValues } from '../features/studio/details-api.ts';
 import { ids, storyMain } from '../features/studio/fixtures.ts';
 import { chapterMemoryKey, type DraftStorage, readChapterMemory, rememberChapter } from '../features/studio/local-draft.ts';
-import { chapterState, readChapterFacts, readChapters } from '../features/studio/read.ts';
+import { readChapterFacts, readChapters } from '../features/studio/read.ts';
 import { type MainClient, workKind, workLabel, type WorkMetadata } from '../features/studio/types.ts';
 
 const agent = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
@@ -186,6 +186,35 @@ function chaptersMain({ chapters, mainLanguage, mainTexts }: {
   const missing = () => ({ data: null, error: { status: 404, value: { code: 'work_unavailable' } } });
   const published = (chapter: Chapter) => `urn:rezics:content:revision:${chapter.target.slice(-36)}`;
   const main = { v1: {
+    me: { agents: () => ({ works: () => ({ chapters: { get: async ({ query }: {
+      query: { language: string; cursor?: string } }) => {
+      const language = query.language.toLowerCase();
+      calls.push(`chapters ${language}`);
+      const items = chapters.map((chapter, index) => {
+        const visible = chapter.published || chapter.writer === self;
+        const readable = chapter.published && language === (chapter.language ?? 'zh-hans');
+        return { occurrence: iri(200 + index), parent: iri(102), role: 'chapter',
+          label: visible && chapter.label ? { value: chapter.label, language } : null,
+          target: visible ? chapter.target : null, selectedRevision: readable ? published(chapter) : null,
+          progress: null, availability: readable ? 'available' : 'unavailable' };
+      });
+      const facts = chapters.map((chapter, index) => {
+        const controlled = chapter.writer === self || chapter.writer === pen;
+        const disclosed = controlled || chapter.published;
+        const selected = published(chapter).slice('urn:rezics:content:revision:'.length);
+        return { occurrence: iri(200 + index), writer: disclosed ? chapter.writer : null,
+          otherIdentity: chapter.writer === pen,
+          state: !disclosed ? null : !controlled ? 'published' : !chapter.draft ? 'empty'
+            : chapter.published ? chapter.draft === selected ? 'published' : 'changed' : 'draft',
+          target: disclosed ? chapter.target : null,
+          label: disclosed && chapter.label ? { value: chapter.label, language } : null,
+          language };
+      });
+      return ok({ profile: 'studio-chapters-v1', page: { profile: 'work-contents-v1', work: iri(100),
+        version: iri(101), composition: iri(102), compositionRevision: iri(103), language,
+        nextCursor: null, sourcePosition: { dataEpoch: 'e', sequence: '1' },
+        count: { value: chapters.length, kind: 'exact-page', total: null }, items }, facts });
+    } } }) }) },
     works: (params: { id: string }) => ({
       contents: { get: async ({ query }: { query: { actingSubject: string; language?: string } }) => {
         const language = query.language?.toLowerCase() ?? mainLanguage;
@@ -237,8 +266,8 @@ describe('Studio chapters in the language they are written in', () => {
     expect(read.language).toBe('zh-Hans');
     expect(read.page.ok && read.page.data.items.map(item => [item.label?.value, item.availability])).toEqual([
       ['第1章', 'available'], ['第2章', 'available']]);
-    // One contents read, in parallel with the Main Version's languages: no second read in another language.
-    expect(calls.filter(call => call.startsWith('contents'))).toEqual(['contents 1 zh-hans']);
+    expect(calls.filter(call => call.startsWith('chapters'))).toEqual(['chapters zh-hans']);
+    expect(calls.filter(call => call.startsWith('contents'))).toEqual([]);
   });
 
   test('a Book with no published text reads its chapters in its own language', async () => {
@@ -246,7 +275,7 @@ describe('Studio chapters in the language they are written in', () => {
     const read = await readChapters(self, serialHeader('ja'), { main });
     expect(read.language).toBe('ja');
     expect(read.page.ok && read.page.data.items[0]?.availability).toBe('available');
-    expect(calls.filter(call => call.startsWith('contents'))).toEqual(['contents 1 null', 'contents 1 ja']);
+    expect(calls.filter(call => call.startsWith('chapters'))).toEqual(['chapters ja']);
   });
 
   test('a Main Version in several languages reads the chapters in the Studio Agent’s own', async () => {
@@ -276,7 +305,7 @@ describe('Studio chapter writers and states', () => {
     }
     const read = await readChapters(self, serialHeader(), { main });
     const agents = [person(self, 'Lin Mei 林梅'), person(pen, '月下书生')];
-    const facts = await readChapterFacts(agents[0]!, agents, iri(100), read, true, main);
+    const facts = await readChapterFacts(agents[0]!, agents, iri(100), read);
     const at = (n: number) => facts[iri(200 + n)];
     expect(at(0)).toEqual({ writer: { kind: 'self' }, state: 'published' });
     expect(at(1)).toEqual({ writer: { kind: 'self' }, state: 'changed' });
@@ -286,23 +315,10 @@ describe('Studio chapter writers and states', () => {
       label: { value: '第四章', language: 'zh-hans' } });
     expect(at(4)).toEqual({ writer: { kind: 'unknown' }, state: null });
     expect(at(5)).toEqual({ writer: { kind: 'self' }, state: 'empty' });
-    // Other identities are asked only about chapters the Studio Agent doesn't write.
-    expect(calls.filter(call => call.startsWith('variants') && call.endsWith(' 2')).sort())
-      .toEqual(['variants 113 2', 'variants 114 2']);
-    // A later page's cursor is bound to the Studio Agent: no other identity reads it, so its hidden chapter stays closed.
-    const later = await readChapterFacts(agents[0]!, agents, iri(100), read, false, main);
-    expect(later[iri(203)]).toBeUndefined();
+    expect(calls.filter(call => call.startsWith('variants'))).toEqual([]);
+    const later = await readChapterFacts(agents[0]!, agents, iri(100), read);
+    expect(later[iri(203)]).toEqual(at(3));
     expect(later[iri(202)]).toEqual(at(2));
   });
 
-  test('a chapter published in another language than the Book’s still counts as published', () => {
-    const variant = (tag: string, published: boolean) => ({ variantId: `urn:rezics:variant:${tag}`,
-      language: { kind: 'tag', tag, originalTag: tag }, direction: 'ltr', draftHead: 'h',
-      publicationHead: published ? 'p' : null, eligibilityHead: published ? 'e' : null });
-    expect(chapterState([], 'zh-Hans', null)).toBe('empty');
-    expect(chapterState([variant('zh-Hans', false)], 'zh-Hans', null)).toBe('draft');
-    expect(chapterState([variant('en', true)], 'zh-Hans', null)).toBe('published');
-    expect(chapterState([variant('zh-Hans', true)], 'zh-Hans', 'urn:rezics:content:revision:h')).toBe('published');
-    expect(chapterState([variant('zh-Hans', true)], 'zh-hans', 'urn:rezics:content:revision:g')).toBe('changed');
-  });
 });

@@ -58,6 +58,8 @@ export default {
   typeDocument: '短編', typeDocumentHelp: '短編小説、エッセイ、または単独の作品。',
   typeRecipe: 'レシピ', typeRecipeHelp: '材料と手順。',
   writingLanguage: '執筆に使う言語',
+  chooseWritingLanguage: '言語を選択', languageUndetermined: '未確定',
+  languageError: '作品の言語を選ぶか、「未確定」を選択してください。',
   createAs: insert('{{agent}} として作成', { agent: String }),
   creating: '作成中…',
   titleError: '200 文字以内でタイトルを入力してください。',

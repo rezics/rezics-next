@@ -58,6 +58,8 @@ export default {
   typeDocument: '一篇短篇', typeDocumentHelp: '短篇故事、文章或單篇作品。',
   typeRecipe: '一份食譜', typeRecipeHelp: '食材與步驟。',
   writingLanguage: '寫作語言',
+  chooseWritingLanguage: '選擇語言', languageUndetermined: '未確定',
+  languageError: '請選擇作品語言，或選擇「未確定」。',
   createAs: insert('以 {{agent}} 身分建立', { agent: String }),
   creating: '正在建立…',
   titleError: '請輸入不超過 200 個字元的標題。',

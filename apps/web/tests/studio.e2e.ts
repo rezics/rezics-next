@@ -118,7 +118,12 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     const title = `雨夜书店 ${Date.now() % 1000}`;
     await page.getByRole('textbox', { name: 'Title' }).fill(title);
     await page.getByText('A book', { exact: true }).click();
-    await page.getByRole('combobox', { name: 'Language you’ll write in' }).selectOption('zh-Hans');
+    const writingLanguage = page.getByRole('combobox', { name: 'Language you’ll write in' });
+    await expect(writingLanguage).toHaveValue('');
+    await page.getByRole('button', { name: 'Create as Studio Writer 书生' }).click();
+    await expect(page).toHaveURL(`${studio}/new`);
+    await expect(page.getByText('Choose the language of this work, or select Undetermined.')).toBeVisible();
+    await writingLanguage.selectOption('zh-Hans');
     await shoot(page, info, 'studio-new-work');
     await page.getByRole('button', { name: 'Create as Studio Writer 书生' }).click();
     await page.waitForURL(/\/works\/[0-9a-f-]{36}\?tab=chapters$/);

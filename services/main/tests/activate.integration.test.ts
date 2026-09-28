@@ -219,7 +219,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     const request = new Request('https://main.rezics.test/works', {
       method: 'POST', headers: { authorization: 'Bearer verified-fixture' },
     });
-    const input = { actingSubject, idempotencyKey: 'bridged-create', title: 'Access admitted Work' };
+    const input = { actingSubject, idempotencyKey: 'bridged-create', title: 'Access admitted Work', language: 'en' };
     const bridged = await createAdmittedMetadataWork(env, account, access, request, input);
     expect(bridged.sequence).toBe('4');
     const admission = await pool.query<{ id: string; request_digest: string; authority_epoch: string;
@@ -245,7 +245,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     workApp.listen({ hostname: '127.0.0.1', port: workPort });
     try {
       const url = `http://127.0.0.1:${workPort}/v1/works`;
-      const body = { profile: 'metadata-only-v1', title: 'HTTP metadata Work', actingSubject };
+      const body = { profile: 'metadata-only-v1', title: 'HTTP metadata Work', language: 'en', actingSubject };
       const post = (key: string, value: unknown = body, authorization = 'Bearer verified-fixture') => fetch(url, {
         method: 'POST', headers: { authorization, 'idempotency-key': key, 'content-type': 'application/json' },
         body: JSON.stringify(value),
@@ -351,7 +351,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
       idempotencyKey: 'expired-before-dispatch', requestDigest: metadataWorkRequestDigest(expiredTitle) });
     await pool.query("UPDATE access.admission SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1", [expired.id]);
     await expect(createAdmittedMetadataWork(env, account, access, request,
-      { actingSubject, idempotencyKey: 'expired-before-dispatch', title: expiredTitle }))
+      { actingSubject, idempotencyKey: 'expired-before-dispatch', title: expiredTitle, language: 'en' }))
       .rejects.toBeInstanceOf(CancelledActivation);
     const expiredOutcome = await pool.query<{ state: string; graph_outcome: string }>(
       'SELECT state, graph_outcome FROM access.admission WHERE id = $1', [expired.id]);

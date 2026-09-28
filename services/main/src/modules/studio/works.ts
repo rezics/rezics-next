@@ -70,7 +70,7 @@ export async function readStudioWork(session: WorkReadSession, agent: string, wo
     details.edits[0]?.updated_at.valueOf() ?? 0)).toISOString();
   return { item: { id: work, mainVersion: head.main.value, workRevision: head.head.value,
     mainRevision: head.mainHead.value,
-    title: { value: head.title.value, language: head.title['xml:lang'] ?? 'en' },
+    title: { value: head.title.value, language: head.title['xml:lang'] ?? 'und' },
     relationship: first.row.action === 'work.edit' || credits.length ? 'authored' as const : 'curated' as const,
     cover: cover?.status === 'available' ? cover.avatar : { kind: 'fallback' as const,
       policy: FALLBACK_POLICY, key: work, resourceType: 'work' as const },
@@ -203,7 +203,7 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
     const createdAt = admission.created_at.toISOString();
     const updatedAt = new Date(Math.max(admission.created_at.valueOf(),
       editTimes.get(work)?.valueOf() ?? 0)).toISOString();
-    const language = row.title['xml:lang'] ?? 'en';
+    const language = row.title['xml:lang'] ?? 'und';
     return [{ id: work, mainVersion: row.main.value, workRevision: row.head.value,
       mainRevision: row.mainHead.value, title: { value: row.title.value, language },
       relationship: view,

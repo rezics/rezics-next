@@ -42,8 +42,9 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
   const [state, action, pending] = useActionState(create, initialState);
   const errorId = useId();
   // A person writing in this interface most likely writes in its language.
-  const values = state.values ?? { title: '', type: 'book', language: locale };
-  const languages: readonly string[] = writingLanguages.includes(values.language as never)
+  const values = state.values ?? { title: '', type: 'book', language: '' };
+  const languages: readonly string[] = !values.language || values.language === 'und'
+    || writingLanguages.includes(values.language as never)
     ? writingLanguages : [values.language, ...writingLanguages];
   return <form action={action} className="grid gap-7" aria-describedby={state.status === 'idle' ? undefined : errorId}>
     <input type="hidden" name="agent" value={agent.iri} />
@@ -69,10 +70,13 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
     </fieldset>
     <Field>
       <FieldLabel>{t.writingLanguage}</FieldLabel>
-      <NativeSelect name="language" defaultValue={values.language} className="sm:max-w-72">
+      <NativeSelect name="language" defaultValue={values.language} required className="sm:max-w-72">
+        <NativeSelectOption value="">{t.chooseWritingLanguage}</NativeSelectOption>
+        <NativeSelectOption value="und">{t.languageUndetermined}</NativeSelectOption>
         {languages.map(tag => <NativeSelectOption key={tag} value={tag} lang={tag}>
           {languageName(tag, locale)}</NativeSelectOption>)}
       </NativeSelect>
+      <FieldHelper>{t.languageError}</FieldHelper>
     </Field>
     {state.status === 'error' ? <Alert variant="destructive">
       <TriangleAlertIcon aria-hidden="true" />
