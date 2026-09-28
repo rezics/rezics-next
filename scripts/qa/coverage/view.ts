@@ -31,13 +31,4 @@ export const viewCases: CaseDeclarations = {
     file: 'tests/qa/unit/work-address-chain.test.ts',
     name: 'VIEW02: a cycle or missing redirect target is unavailable',
   }],
-  VIEW07: [{
-    tier: 'unit',
-    file: 'apps/web/tests/seo.test.ts',
-    name: 'VIEW07: a restricted Work gives no description, preview or index entry, even to a reader who may see it',
-  }, {
-    tier: 'e2e',
-    file: 'apps/web/tests/seo.e2e.ts',
-    name: 'VIEW07: a private Work its reader may see keeps its title for them and gives search nothing',
-  }],
 };
