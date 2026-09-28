@@ -1,18 +1,23 @@
 import type { Static } from 'typebox';
-import { readAgent } from '../profiles/read.ts';
+import { FOLLOWED_AUTHORS_COST, newestAuthorWorks, readExternalAuthorTarget } from '../author-page/follow.ts';
+import { readAgent, readAgentCards, shelfWorks } from '../profiles/read.ts';
+import { readAuthorNames } from '../source/author-name-read.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit, WorkReadMissing, WorkReadMoved,
   publicWork, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { ResourceSummary } from '../media/summary.ts';
-import { FOLLOWS_COST, type followsPage, type followTarget, type FollowKind } from './contract.ts';
+import { AUTHOR_FOLLOW_KINDS, externalAuthorKey, FOLLOWS_COST, type followedAuthorsPage, type followsPage,
+  type followTarget, type FollowKind } from './contract.ts';
 import type { FollowsStore } from './store.ts';
 import { readNewSince } from '../feed/new-since.ts';
+import { inOrder } from '../feed/settled.ts';
 
 /** Must receive an anonymous session: a bearer never widens follow disclosure. */
 export async function readFollowTarget(session: WorkReadSession, target: string, kind: FollowKind,
   summaries?: ReadonlyMap<string, ResourceSummary>): Promise<Static<typeof followTarget>> {
   if (session.principal) throw new WorkReadUnavailable('Public follow reader required');
+  if (kind === 'external-author') return readExternalAuthorTarget(session, target);
   if (kind === 'agent') {
     const agent = await readAgent(session, target);
     return { id: target, kind, name: { value: agent.displayName, language: 'und', direction: 'ltr', basis: 'fallback' },
@@ -143,4 +148,53 @@ export async function readFollows(session: WorkReadSession, store: FollowsStore,
   const last = page.rows[limit - 1];
   return { profile: 'follows-v1' as const, ...pageResult(session, items,
     page.rows.length > limit && last ? encodeReadCursor(binding, session.position, last.target, identity.revision ?? 'none') : null) };
+}
+
+type FollowedAuthor = Static<typeof followedAuthorsPage>['items'][number];
+
+/**
+ * `/v1/me/follows/authors`: followed Agents and Open Library authors in
+ * follow order, eight at a time, each with their newest public Work. An Agent
+ * is public as their profile is; an Open Library author while a public Work
+ * credits them, as their page. One Agent card batch, one newest-Work read,
+ * one name batch and one Work card batch, between two follow revision checks.
+ */
+export async function readFollowedAuthors(session: WorkReadSession, store: FollowsStore,
+  principal: VerifiedPrincipal, agent: string) {
+  if (session.principal) throw new WorkReadUnavailable('Public follow reader required');
+  const identity = await store.matches(principal, agent, []);
+  const binding = ['followed-authors-v1', identity.owner, agent, session.options.language ?? null];
+  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
+  if (cursor && cursor.order !== (identity.revision ?? 'none')) throw new WorkReadMoved('Follows changed');
+  const limit = Math.min(session.options.limit ?? FOLLOWED_AUTHORS_COST.authors, FOLLOWED_AUTHORS_COST.authors);
+  const page = await store.read(principal, agent, cursor?.after ?? '', AUTHOR_FOLLOW_KINDS, limit);
+  if (page.revision !== identity.revision) throw new WorkReadMoved('Follows changed');
+  const rows = page.rows.slice(0, limit);
+  const agents = rows.filter(row => row.kind === 'agent').map(row => row.target);
+  const keys = rows.flatMap(row => row.kind === 'external-author' ? [externalAuthorKey(row.target)!] : []);
+  const [cards, newest, names] = await inOrder(readAgentCards(session, agents),
+    newestAuthorWorks(session, { agents, keys }), readAuthorNames(session, keys));
+  const works = await shelfWorks(session, [...newest.values()]);
+  const items = rows.map((row): FollowedAuthor => {
+    const unavailable = { id: row.target, kind: row.kind as 'agent' | 'external-author', available: false as const,
+      revision: row.revision, name: null, icon: null, realm: null, href: null, newestWork: null };
+    const work = newest.get(row.target);
+    const newestWork = work ? works.get(work) ?? null : null;
+    const icon = { kind: 'fallback' as const, policy: 'avatar-fallback-v1', key: row.target, resourceType: 'agent' };
+    if (row.kind === 'agent') {
+      const card = cards.get(row.target);
+      return card ? { id: row.target, kind: 'agent', available: true, revision: row.revision,
+        name: { value: card.displayName, language: 'und', direction: 'ltr', basis: 'fallback' }, icon, realm: null,
+        href: card.links.profile, newestWork } : unavailable;
+    }
+    const key = externalAuthorKey(row.target)!, id = key.slice('/authors/'.length);
+    return work ? { id: row.target, kind: 'external-author', available: true, revision: row.revision,
+      name: { value: names.get(key)?.displayName ?? id, language: 'und', direction: 'ltr', basis: 'fallback' }, icon,
+      realm: null, href: `/authors/open-library/${id}`, newestWork } : unavailable;
+  });
+  if ((await store.matches(principal, agent, [])).revision !== page.revision) throw new WorkReadMoved('Follows changed');
+  const last = rows.at(-1);
+  return { profile: 'followed-authors-v1' as const, ...pageResult(session, items,
+    page.rows.length > limit && last ? encodeReadCursor(binding, session.position, last.target, identity.revision ?? 'none')
+      : null) };
 }

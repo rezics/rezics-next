@@ -27,6 +27,27 @@ function field(row: Record<string, { value: string } | undefined>, key: string):
 }
 
 /**
+ * `?id` a public, top-level Work crediting an Open Library author `?key` of
+ * `keys`: a human-confirmed graph credit, or one of the retained adoptions
+ * that report them (`reported`, pairs of Work and key). No chapter qualifies.
+ * Each branch starts from its own bindings: Jena evaluates a UNION branch
+ * before joining it, so keys bound outside it would scan every credit.
+ */
+export function creditedPublicWorks(keys: readonly string[],
+  reported: readonly (readonly [work: string, key: string])[]) {
+  return `{ VALUES ?key { ${keys.map(lit).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?credit a rv:AuthorCredit ; rv:work ?id ; rv:creditRevision ?creditHead ;
+        schema:roleName "author" ; rv:externalProvider "open-library" ; rv:externalNamespace "author" ;
+        rv:externalKey ?key ; rv:editControl rv:HumanConfirmed . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:AuthorCreditRevision ; rv:component ?credit ;
+        rv:work ?id ; rv:externalKey ?key . FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } } }
+    ${reported.length ? `UNION { VALUES (?id ?key) { ${reported.map(([work, key]) => `(${iri(work)} ${lit(key)})`)
+    .join(' ')} } }` : ''}
+    ${publicWork('?id', '?main')}
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?id schema:isPartOf ?parentWork } }`;
+}
+
+/**
  * Every public Work crediting the author: human-confirmed graph credits and
  * the retained adoptions that report them, joined in one graph query that
  * admits only current public selections and no chapter. Most rated first, as
@@ -35,14 +56,7 @@ function field(row: Record<string, { value: string } | undefined>, key: string):
 async function listedWorks(session: WorkReadSession, key: string) {
   const reported = await sourceReportedAuthorWorks(session, key);
   const rows = await session.query(`SELECT DISTINCT ?id ?main WHERE {
-    { GRAPH ${iri(GRAPHS.current)} { ?credit a rv:AuthorCredit ; rv:work ?id ; rv:creditRevision ?creditHead ;
-        schema:roleName "author" ; rv:externalProvider "open-library" ; rv:externalNamespace "author" ;
-        rv:externalKey ${lit(key)} ; rv:editControl rv:HumanConfirmed . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:AuthorCreditRevision ; rv:component ?credit ;
-        rv:work ?id ; rv:externalKey ${lit(key)} . FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } } }
-    ${reported.works.length ? `UNION { VALUES ?id { ${reported.works.map(iri).join(' ')} } }` : ''}
-    ${publicWork('?id', '?main')}
-    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?id schema:isPartOf ?parentWork } }
+    ${creditedPublicWorks([key], reported.works.map(work => [work, key] as const))}
   } ORDER BY STR(?id) LIMIT ${AUTHOR_PAGE_COST.works + 1}`, AUTHOR_PAGE_COST.works + 1);
   const works = rows.slice(0, AUTHOR_PAGE_COST.works).map(row => ({ id: field(row, 'id'), main: field(row, 'main') }));
   if (new Set(works.map(work => work.id)).size !== works.length) throw new WorkReadUnavailable('Author Works are ambiguous');

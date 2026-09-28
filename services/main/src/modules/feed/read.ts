@@ -19,7 +19,7 @@ import type { HomeExclusion } from './personal.ts';
 import { readWorkKindMatches } from '../onboarding-interests/read.ts';
 import { interestKinds, matchingActivityKinds } from '../work/work-kinds.ts';
 import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
-import { feedWorkPresentations, type FeedWorkPresentation } from './presentation.ts';
+import { feedWorkPresentations, followIdentities, type FeedWorkPresentation } from './presentation.ts';
 import type { Static } from 'typebox';
 import { inOrder, settle, unwrap, type Settled } from './settled.ts';
 
@@ -420,13 +420,15 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
         }))),
       query.tags ? readTagSets(session, query.language, candidates, query.tags) : new Map<string, Settled<string[]>>());
   });
-  const matchesRead = reader && scope === 'following' ? follows.matches(reader.principal, reader.agent,
-    sources.map(source => [source.realm, source.zone, source.work, source.actor].filter((id): id is string => !!id)))
-    : Promise.resolve(null);
+  const presentationRead = feedWorkPresentations(session, sources.flatMap(source => source.work ? [source.work] : []));
+  // A Work's news also answers to follows of the authors its card credits,
+  // which the page's presentation batch already holds.
+  const matchesRead = reader && scope === 'following' ? presentationRead.then(batch => follows.matches(
+    reader.principal, reader.agent, sources.map(source => followIdentities(source,
+      source.work ? batch.items.get(source.work)?.authors : undefined)))) : Promise.resolve(null);
   const [initialChapters, workKinds, summaries, presentationBatch, matches, candidates,
     [actors, workTargets, realmTargets, bodies, comments, cards, acceptedTags]] = await inOrder(
-    chapterPointers(session, sources), kindsRead, summariesRead,
-    feedWorkPresentations(session, sources.flatMap(source => source.work ? [source.work] : [])),
+    chapterPointers(session, sources), kindsRead, summariesRead, presentationRead,
     matchesRead, candidatesRead, partsRead);
   const presentations = presentationBatch.items;
   const items: FeedItem[] = [];

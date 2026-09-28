@@ -2,6 +2,7 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { pageFields, pageQuery, readAvatar, readId, readLanguage, readName, readUuid } from '../work/read-contract.ts';
 import { discoveryCredit } from '../discovery/contract.ts';
+import { followKind, followTargetId } from '../follows/contract.ts';
 
 export const feedKind = t.Union([t.Literal('work'), t.Literal('added'), t.Literal('contribution'), t.Literal('adoption'),
   t.Literal('decision'), t.Literal('discussion'), t.Literal('reply'), t.Literal('collection'), t.Literal('review')]);
@@ -9,8 +10,8 @@ export type FeedKind = Static<typeof feedKind>;
 export const feedSort = t.Union([t.Literal('best'), t.Literal('new'), t.Literal('top')]);
 export const feedWindow = t.Union([t.Literal('week'), t.Literal('month'), t.Literal('all')]);
 export const feedReason = t.Union([
-  t.Object({ kind: t.Literal('followed'), target: readId,
-    targetKind: t.Union([t.Literal('realm'), t.Literal('zone'), t.Literal('work'), t.Literal('agent')]) }),
+  /** The first follow the card answers to. An author's news answers to its credited authors before its Realm. */
+  t.Object({ kind: t.Literal('followed'), target: followTargetId, targetKind: followKind }),
   t.Object({ kind: t.Literal('recommended'), basis: t.Union([t.Literal('all'), t.Literal('thin-following')]) }),
   t.Object({ kind: t.Literal('trending-in-realm'), realm: readId }),
   t.Object({ kind: t.Literal('editorial'), selection: readId }),

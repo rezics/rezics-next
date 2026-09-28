@@ -7,7 +7,78 @@ import { metadataComponent, METADATA_PROFILE } from '../work/metadata-schema.ts'
 import { parsedMetadataState, selectedMetadata } from '../work/metadata-read.ts';
 import { type ReadRow, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
-import { FEED_COST } from './contract.ts';
+import { externalAuthorFollow, FOLLOWS_COST } from '../follows/contract.ts';
+import { FEED_COST, type FeedKind } from './contract.ts';
+import type { FeedSource } from './source.ts';
+
+/** Every author credit of the Works, Agents first, then Open Library authors by position; 64 per Work at most. */
+const authorCreditsQuery = (ids: readonly string[]) => `SELECT ?work ?id ?revision ?key ?ordinal ?agent WHERE {
+    VALUES ?work { ${ids.map(iri).join(' ')} }
+    { GRAPH ${iri(GRAPHS.current)} { ?id a rv:AuthorCredit ; rv:work ?work ;
+        rv:creditRevision ?revision ; schema:roleName "author" ; rv:externalProvider "open-library" ;
+        rv:externalNamespace "author" ; rv:externalKey ?key ; schema:position ?ordinal ; rv:editControl rv:HumanConfirmed . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:AuthorCreditRevision ; rv:component ?id ;
+        rv:work ?work ; rv:externalKey ?key ; schema:position ?ordinal .
+        FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
+    UNION
+    { GRAPH ${iri(GRAPHS.current)} { ?id a rv:NativeAgentCredit ; rv:work ?work ;
+        rv:creditRevision ?revision ; rv:agent ?agent ; schema:roleName "author" . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:NativeAgentCreditRevision ; rv:component ?id ;
+        rv:work ?work ; rv:agent ?agent ; schema:roleName "author" .
+        FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
+  } ORDER BY ?work ?ordinal STR(?id) LIMIT ${ids.length * 64 + 1}`;
+
+/** Card kinds that are an author's news: their Work published or added, and a new chapter or update of it. */
+export const AUTHOR_NEWS_KINDS: readonly FeedKind[] = ['work', 'added', 'contribution'];
+
+/** A credit as the author a reader follows: the Agent, or the keyed Open Library author. */
+export interface CreditedAuthor { agent: string | null; key: string | null }
+
+/**
+ * What a follow can match on a card, the first match being its reason: for
+ * an author's news the authors the card credits, in credit order, then its
+ * Realm, Zone, Work and actor. At most `FOLLOWS_COST.matchIdentities`.
+ */
+export function followIdentities(source: Pick<FeedSource, 'kind' | 'realm' | 'zone' | 'work' | 'actor'>,
+  authors: readonly CreditedAuthor[] = []): string[] {
+  const credited = AUTHOR_NEWS_KINDS.includes(source.kind)
+    ? authors.slice(0, DISCOVERY_COST.primaryCredits).map(author => author.agent
+      ?? (author.key ? externalAuthorFollow(author.key) : null)) : [];
+  const ids = [...new Set([...credited, source.realm, source.zone, source.work, source.actor]
+    .filter((id): id is string => !!id))];
+  if (ids.length > FOLLOWS_COST.matchIdentities) throw new WorkReadUnavailable('Feed follow match exceeds its bound');
+  return ids;
+}
+
+/**
+ * The authors each Work's card credits (the first three, in credit order),
+ * without the names a card draws: one credit query and one Source batch for
+ * at most twenty Works. The feed head matches follows with it.
+ */
+export async function feedWorkAuthors(session: WorkReadSession, works: readonly string[]) {
+  const ids = [...new Set(works)];
+  if (ids.length > FOLLOWS_COST.matchCards) throw new WorkReadUnavailable('Feed author batch exceeds its bound');
+  const authors = new Map<string, CreditedAuthor[]>();
+  if (!ids.length) return authors;
+  const rows = await session.query(authorCreditsQuery(ids), ids.length * 64 + 1);
+  if (rows.length > ids.length * 64 || rows.some(row => !row.work || !ids.includes(row.work.value) || !row.id
+    || !row.agent === !row.key)) throw new WorkReadUnavailable('Feed credits are ambiguous');
+  const confirmed = new Map(ids.map(work => [work, [] as (CreditedAuthor & { id: string; ordinal: number | null })[]]));
+  for (const row of rows) {
+    const list = confirmed.get(row.work!.value)!;
+    if (list.length < DISCOVERY_COST.primaryCredits) list.push({ id: row.id!.value, agent: row.agent?.value ?? null,
+      key: row.key?.value ?? null, ordinal: row.agent ? null : Number(row.ordinal?.value) });
+  }
+  const reported = await sourceReportedCredits(session, ids);
+  for (const work of ids) {
+    const own = confirmed.get(work)!;
+    const keys = new Set(own.flatMap(credit => credit.key ? [credit.key] : []));
+    authors.set(work, [...own, ...(reported.get(work) ?? []).filter(credit => !keys.has(credit.key))]
+      .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
+      .slice(0, DISCOVERY_COST.primaryCredits).map(credit => ({ agent: credit.agent, key: credit.key })));
+  }
+  return authors;
+}
 
 export interface FeedWorkPresentation { authors: DiscoveryCredit[]; excerpt: string | null; language: string | null;
   /** The Work's semantic types, so a card draws the cover every other page draws. */
@@ -72,21 +143,7 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
   const types = new Map<string, string[]>(ids.map(work => [work, []]));
   for (const [work, type] of originalTypes) types.get(work!)!.push(type!);
 
-  const creditQuery = `SELECT ?work ?id ?revision ?key ?ordinal ?agent WHERE {
-    VALUES ?work { ${values} }
-    { GRAPH ${iri(GRAPHS.current)} { ?id a rv:AuthorCredit ; rv:work ?work ;
-        rv:creditRevision ?revision ; schema:roleName "author" ; rv:externalProvider "open-library" ;
-        rv:externalNamespace "author" ; rv:externalKey ?key ; schema:position ?ordinal ; rv:editControl rv:HumanConfirmed . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:AuthorCreditRevision ; rv:component ?id ;
-        rv:work ?work ; rv:externalKey ?key ; schema:position ?ordinal .
-        FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
-    UNION
-    { GRAPH ${iri(GRAPHS.current)} { ?id a rv:NativeAgentCredit ; rv:work ?work ;
-        rv:creditRevision ?revision ; rv:agent ?agent ; schema:roleName "author" . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:NativeAgentCreditRevision ; rv:component ?id ;
-        rv:work ?work ; rv:agent ?agent ; schema:roleName "author" .
-        FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
-  } ORDER BY ?work ?ordinal STR(?id) LIMIT ${ids.length * 64 + 1}`;
+  const creditQuery = authorCreditsQuery(ids);
   const creditRows = await session.query(creditQuery, ids.length * 64 + 1);
   const creditSignature = (rows: typeof creditRows) => {
     if (rows.length > ids.length * 64 || rows.some(row => !row.work || !ids.includes(row.work.value)

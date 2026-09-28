@@ -3,13 +3,16 @@ import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { controlRead, controlTransaction, ControlConflict, ControlInvalid, ControlStale } from '../access/topology-control.ts';
 import { digest } from '../recommendation/derived-generation.ts';
-import { FOLLOWS_COST, type BatchFollowCommand, type BatchFollowResult,
+import { FOLLOWS_COST, followTargetMatches, type BatchFollowCommand, type BatchFollowResult,
   type FollowCommand, type FollowKind, type FollowResult } from './contract.ts';
 import { followPrincipal } from './authority.ts';
 
 export interface FollowRow { target: string; kind: FollowKind; following: boolean; revision: string }
 export function commandKey(key: string) {
   if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) throw new ControlInvalid('A valid Idempotency-Key is required');
+}
+function checkTarget(target: string, kind: FollowKind) {
+  if (!followTargetMatches(target, kind)) throw new ControlInvalid('Follow target does not name its kind');
 }
 export class FollowsStore {
   constructor(private readonly pool: Pool) {}
@@ -19,6 +22,7 @@ export class FollowsStore {
   async batch(principal: VerifiedPrincipal, input: BatchFollowCommand, key: string,
     disclose: (target: string, kind: FollowKind) => Promise<void>): Promise<BatchFollowResult> {
     commandKey(key);
+    for (const item of input.targets) checkTarget(item.target, item.kind);
     if (new Set(input.targets.map(item => item.target)).size !== input.targets.length) {
       throw new ControlInvalid('Batch follow targets must be unique');
     }
@@ -69,15 +73,21 @@ export class FollowsStore {
     });
   }
 
-  async read(principal: VerifiedPrincipal, agent: string, after = '', kind?: FollowKind, limit = 20) {
+  /** One kind uses the navigation index; several (authors) filter the page
+   * index's seek, which the 1,000-follow inventory bounds. */
+  async read(principal: VerifiedPrincipal, agent: string, after = '', kind?: FollowKind | readonly FollowKind[],
+    limit = 20) {
     if (!Number.isInteger(limit) || limit < 1 || limit > FOLLOWS_COST.pageSize) throw new ControlInvalid('Invalid page size');
+    const kinds = kind === undefined ? null : typeof kind === 'string' ? [kind] : [...kind];
     return controlRead(this.pool, async client => {
       const owner = await followPrincipal(client, principal, agent);
       const inventory = (await client.query<{ revision: string }>(
         'SELECT revision FROM access.follow_inventory WHERE principal_id = $1 FOR SHARE', [owner])).rows[0];
       const rows = await client.query<FollowRow>(`SELECT target, kind, following, revision FROM access.follow
-        WHERE principal_id = $1 AND following AND target > $2 ${kind ? 'AND kind = $4' : ''}
-        ORDER BY target LIMIT $3`, kind ? [owner, after, limit + 1, kind] : [owner, after, limit + 1]);
+        WHERE principal_id = $1 AND following AND target > $2
+          ${kinds?.length === 1 ? 'AND kind = $4' : kinds ? 'AND kind = ANY($4::text[])' : ''}
+        ORDER BY target LIMIT $3`, kinds ? [owner, after, limit + 1, kinds.length === 1 ? kinds[0] : kinds]
+        : [owner, after, limit + 1]);
       return { owner, revision: inventory?.revision ?? null, rows: rows.rows };
     });
   }
@@ -97,9 +107,12 @@ export class FollowsStore {
     });
   }
 
-  /** Candidate membership uses at most 80 indexed relationship lookups. */
+  /** Candidate membership uses at most 140 indexed relationship lookups. */
   async matches(principal: VerifiedPrincipal, agent: string, candidates: string[][]) {
-    if (candidates.length > 20 || candidates.some(ids => ids.length > 4)) throw new ControlInvalid('Follow match budget exceeded');
+    if (candidates.length > FOLLOWS_COST.matchCards
+      || candidates.some(ids => ids.length > FOLLOWS_COST.matchIdentities)) {
+      throw new ControlInvalid('Follow match budget exceeded');
+    }
     return controlRead(this.pool, async client => {
       const owner = await followPrincipal(client, principal, agent);
       const rows = await client.query<{ target: string; kind: FollowKind }>(`SELECT target, kind FROM access.follow
@@ -115,6 +128,7 @@ export class FollowsStore {
   async set(principal: VerifiedPrincipal, input: FollowCommand, key: string,
     disclose: () => Promise<void>): Promise<FollowResult> {
     commandKey(key);
+    checkTarget(input.target, input.kind);
     return controlTransaction(this.pool, async client => {
       const owner = await followPrincipal(client, principal, input.actingSubject);
       await client.query(`INSERT INTO access.follow_inventory (principal_id, revision) VALUES ($1,$2)

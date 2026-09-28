@@ -3,6 +3,7 @@ import { excludedFeedSource, visibleFeedSources } from './read.ts';
 import { WorkReadInvalid, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { readWorkClassifications } from '../work/read-classifications.ts';
 import { digest } from '../recommendation/derived-generation.ts';
+import { AUTHOR_NEWS_KINDS, feedWorkAuthors, followIdentities } from './presentation.ts';
 
 export const HEAD_COST = { candidates: 20 } as const;
 /** The head probe reports only currently admitted public references. When the
@@ -41,9 +42,11 @@ export async function readNewSince(session: WorkReadSession, afterSequence: stri
     }
     filtered.push(source);
   }
+  // The feed's own match: an author's news also answers to follows of its credited authors.
+  const authors = reader && scope === 'following' ? await feedWorkAuthors(session, filtered.flatMap(source =>
+    source.work && AUTHOR_NEWS_KINDS.includes(source.kind) ? [source.work] : [])) : null;
   const matches = reader && scope === 'following' ? await follows.matches(reader.principal, reader.agent,
-    filtered.map(source => [source.realm, source.zone, source.work, source.actor]
-      .filter((id): id is string => !!id))) : null;
+    filtered.map(source => followIdentities(source, source.work ? authors?.get(source.work) : undefined))) : null;
   const groups = new Set(filtered.filter((_, index) => !matches || matches.matches[index]).map(source =>
     source.kind === 'review' && source.readerReview
       ? digest(['review', source.actor, source.realm, source.readerReview.created_at.toISOString().slice(0, 13)])
