@@ -315,6 +315,8 @@ export const SaveFiltersAsTab: Story = {
     const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    // The dialog focuses its first field, the topic search, once it opens; typing waits for that.
+    await waitFor(() => expect(dialog.getByRole('searchbox', { name: 'Search topics' })).toHaveFocus());
     const form = within(dialog.getByRole('form', { name: 'Save these filters as a tab' }));
     await expect(form.getByRole('textbox', { name: 'Name' })).toHaveValue(`Japanese · ${realms.fiction.name.value}`);
     await userEvent.clear(form.getByRole('textbox', { name: 'Name' }));
