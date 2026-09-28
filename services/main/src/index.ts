@@ -130,6 +130,7 @@ import { NotificationProducer, NotificationProducerWorker } from './modules/noti
 import { notificationProducerSubjectReader } from './modules/notification-producers/subjects.ts';
 import { feedNotificationSubjectReader } from './modules/notification-producers/feed-subjects.ts';
 import { HttpDeliveryProvider } from './modules/notification/http-provider.ts';
+import { NotificationDigestWorker } from './modules/notification/digest.ts';
 import { RightsStore } from './modules/rights/store.ts';
 import { ThemeStore } from './modules/theme/store.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './operations/bounds.ts';
@@ -293,6 +294,9 @@ for (const basis of ['followed-chapter-v1', 'post-vote-v1']) notificationDispatc
 const notificationProducerWorker = new NotificationProducerWorker(new NotificationProducer(
   pool, relayPool ? erasureRelayPool! : null, contentPool, fuseki,
   notificationStore, config.MAIN_RELAY_CONSUMER ?? null, relayPool ?? null));
+const notificationDigestWorker = new NotificationDigestWorker(pool, notificationStore,
+  config.ACCOUNT_ISSUER, new URL('/api/internal/notification-digest',
+    config.ACCOUNT_INTROSPECT_URL).toString(), config.ACCOUNT_MAIN_CLIENT_SECRET);
 const notificationRealtime = relayPool ? new NotificationRealtimeHub(pool) : undefined;
 if (notificationRealtime) await notificationRealtime.start();
 const notificationDeliveryWorker = notificationDispatcher
@@ -460,6 +464,7 @@ serialStats?.start();
 readRankings.start();
 correctionWorker.start();
 notificationProducerWorker.start();
+notificationDigestWorker.start();
 notificationDeliveryWorker?.start();
 
 let stopping = false;
@@ -473,6 +478,7 @@ async function stop(): Promise<void> {
   await discoveryWorker?.stop();
   await correctionWorker.stop();
   await notificationProducerWorker.stop();
+  await notificationDigestWorker.stop();
   await notificationDeliveryWorker?.stop();
   await notificationRealtime?.stop();
   try {

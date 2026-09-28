@@ -4,17 +4,19 @@ import nodemailer from 'nodemailer';
 import type { Pool, PoolClient } from 'pg';
 
 export type AccountLocale = 'en' | 'zh-Hant' | 'zh-Hans' | 'ja' | 'ko' | 'de' | 'fr' | 'es';
-export type EmailPurpose = 'verify' | 'reset' | 'change-email' | 'notice';
+export type EmailPurpose = 'verify' | 'reset' | 'change-email' | 'notice' | 'digest';
 export interface AccountEmail {
   /** `message`: an operator's words to the user, sent only with `notice`. */
   enqueue(input: { userId: string; to: string; url: string; purpose: EmailPurpose;
     locale: AccountLocale; message?: string }): Promise<void>;
 }
 
-export async function enqueueAccountEmail(db: Pool | PoolClient, secret: string, input: Parameters<AccountEmail['enqueue']>[0]) {
+export async function enqueueAccountEmail(db: Pool | PoolClient, secret: string,
+  input: Parameters<AccountEmail['enqueue']>[0], id: string = randomUUID()) {
   const payload = await symmetricEncrypt({ key: secret, data: JSON.stringify(input) });
   await db.query(`INSERT INTO rezics_account_email (id, user_id, payload, expires_at)
-    VALUES ($1, $2, $3, now() + interval '30 minutes')`, [randomUUID(), input.userId, payload]);
+    VALUES ($1, $2, $3, now() + interval '30 minutes') ON CONFLICT (id) DO NOTHING`,
+  [id, input.userId, payload]);
 }
 
 export function accountLocale(request?: Request): AccountLocale {
@@ -38,6 +40,7 @@ const copy = {
     reset: ['Reset your password', 'Choose a new password for your REZICS account. This link expires in 30 minutes.', 'Reset password'],
     'change-email': ['Confirm your email change', 'Confirm the request to change your REZICS email address. You will then need to verify the new address.', 'Confirm email change'],
     notice: ['A message about your REZICS account', 'The REZICS team sent you this message about your account:', 'Open your REZICS account'],
+    digest: ['Your REZICS notification digest', 'Here is your daily notification digest.', 'Open REZICS'],
     ignore: 'If you did not request this, you can ignore this email.',
   },
   'zh-Hans': {
@@ -45,6 +48,7 @@ const copy = {
     reset: ['重置密码', '为你的 REZICS 账号设置新密码。此链接将在 30 分钟后失效。', '重置密码'],
     'change-email': ['确认更换邮箱', '请确认更换 REZICS 邮箱的请求。之后还需要验证新邮箱。', '确认更换邮箱'],
     notice: ['关于你的 REZICS 账号的消息', 'REZICS 团队就你的账号给你发送了以下消息：', '打开你的 REZICS 账号'],
+    digest: ['你的 REZICS 通知摘要', '这是你每天的通知摘要。', '打开 REZICS'],
     ignore: '如果你没有发起此请求，请忽略这封邮件。',
   },
 } as const;
@@ -59,6 +63,11 @@ export function renderAccountEmail(purpose: EmailPurpose, locale: AccountLocale,
   if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('Invalid Account email URL');
   const copyLocale = locale === 'zh-Hans' ? 'zh-Hans' : 'en';
   const [subject, message, action] = copy[copyLocale][purpose];
+  if (purpose === 'digest') {
+    if (!notice?.trim()) throw new Error('A digest needs its summary');
+    return { subject, text: `${message}\n\n${notice}`,
+      html: `<!doctype html><html lang="${locale}"><body><h1>${subject}</h1><p>${message}</p><p style="white-space:pre-line">${escapeHtml(notice)}</p></body></html>` };
+  }
   if (purpose === 'notice') {
     if (!notice?.trim()) throw new Error('A notice needs its message');
     // An operator's message is quoted as plain text; the link is always the account.
@@ -110,13 +119,15 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
             Parameters<AccountEmail['enqueue']>[0];
           // A changed or deleted account must not receive an old reset link.
           // Verification of a new address legitimately targets a different email.
-          const user = await pool.query<{ email: string }>('SELECT email FROM "user" WHERE id = $1', [row.user_id]);
+          const user = await pool.query<{ email: string; emailVerified: boolean }>(
+            'SELECT email, "emailVerified" FROM "user" WHERE id = $1', [row.user_id]);
           if (!user.rowCount) {
             await pool.query(`UPDATE rezics_account_email SET state = 'queued', started_at = NULL,
               available_at = now() + interval '10 seconds' WHERE id = $1`, [row.id]);
             continue;
           }
-          if (input.purpose !== 'verify' && user.rows[0]!.email !== input.to) {
+          if (input.purpose !== 'verify' && (user.rows[0]!.email !== input.to
+            || input.purpose === 'digest' && !user.rows[0]!.emailVerified)) {
             await pool.query(`UPDATE rezics_account_email SET state = 'expired', payload = NULL WHERE id = $1`, [row.id]);
             continue;
           }

@@ -10,6 +10,7 @@ test('settings list has one bounded read and preserves saved channel revisions',
   const client = { query: async (sql: string, args?: unknown[]) => {
     statements.push(sql);
     if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
+    if (sql.includes('INSERT INTO access.notification_seen')) return { rows: [{ principal_id: principalId }], rowCount: 1 };
     if (sql.includes('FROM access.principal')) return { rows: [{ id: principalId, active: true }] };
     if (sql.includes('FROM access.notification_preference')) {
       expect(args?.[1]).toEqual(SETTINGS_NOTIFICATION_TOPICS.map(item => item.topic));
@@ -24,7 +25,7 @@ test('settings list has one bounded read and preserves saved channel revisions',
   expect(choices.find(item => item.topic === 'reply' && item.channel === 'inbox')).toEqual({
     purpose: 'social', topic: 'reply', channel: 'inbox', state: 'disabled', revision: '3' });
   expect(choices.find(item => item.topic === 'reply' && item.channel === 'email')).toEqual({
-    purpose: 'social', topic: 'reply', channel: 'email', state: 'enabled', revision: null });
+    purpose: 'social', topic: 'reply', channel: 'email', state: 'disabled', revision: null });
   expect(statements.filter(sql => sql.includes('FROM access.notification_preference'))).toHaveLength(1);
 });
 
@@ -33,8 +34,9 @@ test('a disabled reply preference prevents the producer from adding an inbox ite
   const client = { query: async (sql: string) => {
     statements.push(sql);
     if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
-    if (sql.includes('AS active') && sql.includes('access.notification_preference')) {
-      return { rows: [{ active: false }] };
+    if (sql.includes('INSERT INTO access.notification_seen')) return { rows: [{ principal_id: principalId }], rowCount: 1 };
+    if (sql.includes('AS inbox') && sql.includes('access.notification_preference')) {
+      return { rows: [{ inbox: false, email: false }] };
     }
     return { rows: [] };
   }, release: () => {} };
@@ -44,4 +46,49 @@ test('a disabled reply preference prevents the producer from adding an inbox ite
     disclosureBasis: 'realm-reply-v1', recipients: [principalId] });
   expect(result).toEqual([]);
   expect(statements.some(sql => sql.includes('INSERT INTO access.notification_item'))).toBe(false);
+});
+
+test('email opt-in records a digest candidate when the inbox is disabled', async () => {
+  const statements: string[] = [];
+  const client = { query: async (sql: string) => {
+    statements.push(sql);
+    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
+    if (sql.includes('INSERT INTO access.notification_seen')) return { rows: [{ principal_id: principalId }], rowCount: 1 };
+    if (sql.includes('AS inbox') && sql.includes('access.notification_preference')) {
+      return { rows: [{ inbox: false, email: true }] };
+    }
+    return { rows: [] };
+  }, release: () => {} };
+  const store = new NotificationStore({ connect: async () => client } as unknown as Pool);
+  const result = await store.enqueue({ sourceOwner: 'graph', sourceEvent: 'reply:1',
+    purpose: 'social', topic: 'reply', subject: { owner: 'graph', ref: 'reply:1', revision: null },
+    disclosureBasis: 'realm-reply-v1', recipients: [principalId] });
+  expect(result).toEqual([]);
+  expect(statements.some(sql => sql.includes('INSERT INTO access.notification_digest_candidate'))).toBe(true);
+  expect(statements.some(sql => sql.includes('INSERT INTO access.notification_item'))).toBe(false);
+});
+
+test('replayed old event cannot enter a digest after email is enabled', async () => {
+  let first = true;
+  let emailEnabled = false;
+  const statements: string[] = [];
+  const client = { query: async (sql: string) => {
+    statements.push(sql);
+    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
+    if (sql.includes('INSERT INTO access.notification_seen')) {
+      if (first) { first = false; return { rows: [{ principal_id: principalId }], rowCount: 1 }; }
+      return { rows: [], rowCount: 0 };
+    }
+    if (sql.includes('AS inbox')) return { rows: [{ inbox: false, email: emailEnabled }] };
+    return { rows: [] };
+  }, release: () => {} };
+  const store = new NotificationStore({ connect: async () => client } as unknown as Pool);
+  const event = { sourceOwner: 'graph' as const, sourceEvent: 'reply:old', purpose: 'social' as const,
+    topic: 'reply', subject: { owner: 'graph' as const, ref: 'reply:old', revision: null },
+    disclosureBasis: 'realm-reply-v1', recipients: [principalId] };
+  await store.enqueue(event);
+  emailEnabled = true;
+  await store.enqueue(event);
+  expect(statements.some(sql => sql.includes('INSERT INTO access.notification_digest_candidate'))).toBe(false);
+  expect(statements.filter(sql => sql.includes('AS inbox'))).toHaveLength(1);
 });

@@ -19,6 +19,7 @@ import { adminApi } from './admin.ts';
 import { accountSettingsApi } from './account-settings.ts';
 import { displayPreferencesApi } from './display-preferences.ts';
 import { emailChangeApi } from './email-change.ts';
+import { notificationDigestApi } from './notification-digest.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
@@ -31,6 +32,7 @@ export interface AccountAppOptions {
   codeGuardConnections?: number;
   /** First-party web OAuth client IDs admitted to account display preferences. */
   displayPreferenceClientIds?: ReadonlySet<string>;
+  notificationDigest?: { accountSecret: string; mainSecret: string };
 }
 
 const installationView = t.Object({ installationId: t.String(), clientId: t.String(),
@@ -232,6 +234,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       const token = await presentedToken(request.clone());
       return currentIntrospection(pool, token, await auth.handler(request));
     })
+    .use(options.notificationDigest ? notificationDigestApi(pool,
+      options.notificationDigest.accountSecret, options.notificationDigest.mainSecret, origin) : new Elysia())
     .use(consentApi(auth, pool))
     .use(methodsApi(auth, pool))
     .use(emailChangeApi(auth, pool))

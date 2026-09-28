@@ -84,8 +84,8 @@ export const SETTINGS_NOTIFICATION_TOPICS = [
   { purpose: 'governance', topic: 'realm-invitation' },
   { purpose: 'governance', topic: 'claim-correction' },
 ] as const;
-/** One recovery check, one principal read, one indexed preference read; 3 purposes × 9 topics × 2 channels. */
-export const NOTIFICATION_SETTINGS_COST = { readStatements: 3, maxRows: 54,
+/** One recovery check, one principal read, one indexed preference read; 3 purposes × 12 topics × 2 channels. */
+export const NOTIFICATION_SETTINGS_COST = { readStatements: 3, maxRows: 72,
   responseItems: SETTINGS_NOTIFICATION_TOPICS.length * 2 } as const;
 export interface SettingsPreference { purpose: OptionalPurpose; topic: string;
   channel: 'inbox' | 'email'; state: 'enabled' | 'disabled'; revision: string | null }
@@ -176,6 +176,10 @@ export class NotificationStore {
     }
     this.readSubjects.set(disclosureBasis, reader);
   }
+  async resolveDigestSubject(input: Parameters<NotificationSubjectReader['resolve']>[0]) {
+    const resolver = this.readSubjects.get(input.disclosureBasis) ?? this.defaultReadSubject;
+    return resolver ? resolver.resolve(input) : { status: 'unavailable' as const };
+  }
   constructor(private readonly pool: Pool) {}
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -245,13 +249,44 @@ export class NotificationStore {
     return this.transaction(async client => {
       const results: EnqueuedItem[] = [];
       for (const principalId of recipients) {
-        const active = await client.query<{ active: boolean }>(
+        const first = await client.query(`INSERT INTO access.notification_seen
+          (principal_id, source_owner, source_event, topic)
+          SELECT p.id, $2, $3, $4 FROM access.principal p WHERE p.id = $1 AND p.active
+          ON CONFLICT DO NOTHING RETURNING principal_id`,
+        [principalId, event.sourceOwner, event.sourceEvent, event.topic]);
+        if (!first.rowCount) {
+          const previous = (await client.query<{ id: string; generation: string;
+            sequence: string; deliveries: number }>(`SELECT i.id, i.generation::text, i.sequence::text,
+              (SELECT count(*)::int FROM access.notification_delivery d WHERE d.item_id = i.id) AS deliveries
+              FROM access.notification_item i WHERE i.principal_id = $1 AND i.source_owner = $2
+                AND i.source_event = $3 AND i.topic = $4`,
+          [principalId, event.sourceOwner, event.sourceEvent, event.topic])).rows[0];
+          if (previous) results.push({ principalId, itemId: previous.id,
+            generation: previous.generation, sequence: previous.sequence,
+            deliveries: previous.deliveries, replayed: true });
+          continue;
+        }
+        const active = await client.query<{ inbox: boolean; email: boolean }>(
           `SELECT p.active AND NOT EXISTS (SELECT 1 FROM access.notification_preference n
              WHERE n.principal_id = p.id AND n.purpose = $2 AND n.topic = $3
-               AND n.channel = 'inbox' AND n.state = 'disabled') AS active
+               AND n.channel = 'inbox' AND n.state = 'disabled') AS inbox,
+           p.active AND EXISTS (SELECT 1 FROM access.notification_preference n
+             WHERE n.principal_id = p.id AND n.purpose = $2 AND n.topic = $3
+               AND n.channel = 'email' AND n.state = 'enabled') AS email
            FROM access.principal p WHERE p.id = $1 FOR SHARE`,
         [principalId, event.purpose, event.topic]);
-        if (active.rows[0]?.active !== true) continue;
+        if (active.rows[0]?.email && (optionalPurposes as readonly string[]).includes(event.purpose)) {
+          await client.query(`INSERT INTO access.notification_digest_day (principal_id, day)
+            VALUES ($1, (clock_timestamp() AT TIME ZONE 'UTC')::date) ON CONFLICT DO NOTHING`, [principalId]);
+          await client.query(`INSERT INTO access.notification_digest_candidate (principal_id, day,
+            source_owner, source_event, purpose, topic, subject_owner, subject_ref,
+            subject_revision, disclosure_basis, realm)
+            VALUES ($1, (clock_timestamp() AT TIME ZONE 'UTC')::date, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT DO NOTHING`, [principalId, event.sourceOwner, event.sourceEvent,
+            event.purpose, event.topic, event.subject.owner, event.subject.ref,
+            event.subject.revision, event.disclosureBasis, event.display?.realm ?? null]);
+        }
+        if (active.rows[0]?.inbox !== true) continue;
         await client.query(`INSERT INTO access.notification_stream (principal_id, stream)
           VALUES ($1, 'inbox') ON CONFLICT DO NOTHING`, [principalId]);
         const stream = (await client.query<{ generation: string; head_sequence: string }>(
@@ -286,10 +321,10 @@ export class NotificationStore {
             clock_timestamp() + ($5::bigint * interval '1 millisecond')
           FROM (SELECT * FROM access.notification_endpoint
             WHERE principal_id = $2 AND state = 'active' ORDER BY id LIMIT $6) e
-          WHERE $3 IN ('security', 'account') OR NOT EXISTS (
+          WHERE $3 IN ('security', 'account') OR (e.channel <> 'email' AND NOT EXISTS (
             SELECT 1 FROM access.notification_preference p
             WHERE p.principal_id = e.principal_id AND p.purpose = $3 AND p.topic = $4
-              AND p.channel = e.channel AND p.state = 'disabled')`,
+              AND p.channel = e.channel AND p.state = 'disabled'))`,
         [itemId, principalId, event.purpose, event.topic, NOTIFICATION_LIMITS.deliveryTtlMs,
           NOTIFICATION_LIMITS.endpointsPerRecipient]);
         results.push({ principalId, itemId, generation: stream.generation, sequence,
@@ -319,7 +354,7 @@ export class NotificationStore {
     });
   }
 
-  /** One bounded settings read; absent choices retain the default enabled state. */
+  /** One bounded settings read; absent inbox choices are enabled, email is opt-in. */
   async readSettingsPreferences(principal: VerifiedPrincipal): Promise<SettingsPreference[]> {
     return this.transaction(async client => {
       const principalId = await this.reader(client, principal);
@@ -332,7 +367,8 @@ export class NotificationStore {
       const known = new Map(rows.map(row => [`${row.purpose}:${row.topic}:${row.channel}`, row]));
       return SETTINGS_NOTIFICATION_TOPICS.flatMap(item => (['inbox', 'email'] as const).map(channel => {
         const saved = known.get(`${item.purpose}:${item.topic}:${channel}`);
-        return { ...item, channel, state: saved?.state ?? 'enabled', revision: saved?.revision ?? null };
+        return { ...item, channel, state: saved?.state ?? (channel === 'email' ? 'disabled' : 'enabled'),
+          revision: saved?.revision ?? null };
       }));
     });
   }
@@ -657,6 +693,12 @@ export class NotificationStore {
       const items = (await client.query(`UPDATE access.notification_item SET state = 'erased',
           state_changed_at = coalesce(state_changed_at, clock_timestamp())
         WHERE principal_id = ANY($1::uuid[]) AND state <> 'erased'`, [principalIds])).rowCount ?? 0;
+      await client.query('DELETE FROM access.notification_digest_candidate WHERE principal_id = ANY($1::uuid[])',
+        [principalIds]);
+      await client.query('DELETE FROM access.notification_digest_day WHERE principal_id = ANY($1::uuid[])',
+        [principalIds]);
+      await client.query('DELETE FROM access.notification_seen WHERE principal_id = ANY($1::uuid[])',
+        [principalIds]);
       return { deliveries, items };
     });
   }
