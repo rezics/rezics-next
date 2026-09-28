@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { libraryRoutes } from '../src/routes/library.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { ReaderImportBudgetExceeded } from '../src/modules/library-import/reader-import.ts';
 
 const agent = 'https://rezics.com/id/0194f314-9280-767f-89a6-000000000099';
 const iri = (suffix: string) => `https://rezics.com/id/0194f314-9280-767f-89a6-${suffix}`;
@@ -23,6 +24,7 @@ test('G428: Main searches a fixed Open Library URL and keeps the answer private'
   const app = libraryRoutes({
     account: { verify: async () => ({ issuer: 'test', subject: 'reader' }) },
     access: { canReadAsBaselineMember: async () => true },
+    libraryImport: { takeBudget: async () => {} },
     openLibraryFetch: (async (url: string) => { requested = url;
       return Response.json({ docs: [{ key: '/works/OL45804W', title: 'Frankenstein',
         author_name: ['Mary Shelley'] }] }); }) as typeof fetch,
@@ -37,16 +39,55 @@ test('G428: Main searches a fixed Open Library URL and keeps the answer private'
     authors: ['Mary Shelley'], coverId: null }] });
 });
 
+test('G428: exhausted reader search budget is a typed refusal before source contact', async () => {
+  let fetched = 0;
+  const app = libraryRoutes({
+    account: { verify: async () => ({ issuer: 'test', subject: 'reader' }) },
+    access: { canReadAsBaselineMember: async () => true },
+    libraryImport: { takeBudget: async () => { throw new ReaderImportBudgetExceeded('search'); } },
+    openLibraryFetch: (async () => { fetched++; return Response.json({ docs: [] }); }) as unknown as typeof fetch,
+  } as unknown as MainWorkDependencies);
+  const response = await app.handle(new Request(`http://main.local/v1/me/library-import/open-library?actingSubject=${
+    encodeURIComponent(agent)}&title=Frankenstein`, { headers: { authorization: 'Bearer reader' } }));
+  expect(response.status).toBe(429);
+  expect(await response.json()).toMatchObject({ code: 'reader_import_search_budget' });
+  expect(fetched).toBe(0);
+});
+
+test('G428: exhausted reader adoption budget refuses before acquisition', async () => {
+  let fetched = 0;
+  const app = libraryRoutes({
+    account: { verify: async () => ({ issuer: 'test', subject: 'reader' }) },
+    access: { canReadAsBaselineMember: async () => true, activePrincipalId: async () => 'reader' },
+    libraryImport: { withOpenLibraryWork: async (_id: string, action: () => Promise<unknown>) => action(),
+      adoptedOpenLibraryWork: async () => null,
+      takeBudget: async () => { throw new ReaderImportBudgetExceeded('acquisition'); } },
+    sourceIntake: { replay: async () => null }, sourceConversions: {}, sourceGraph: {},
+    sourceProposals: {}, sourceAdoptions: {},
+    openLibraryFetch: (async () => { fetched++; return Response.json({}); }) as unknown as typeof fetch,
+  } as unknown as MainWorkDependencies);
+  const response = await app.handle(new Request('http://main.local/v1/me/library-import/open-library/adoptions', {
+    method: 'POST', headers: { authorization: 'Bearer reader', 'idempotency-key': 'goodreads-budget',
+      'content-type': 'application/json' },
+    body: JSON.stringify({ actingSubject: agent, workId: 'OL45804W' }),
+  }));
+  expect(response.status).toBe(429);
+  expect(await response.json()).toMatchObject({ code: 'reader_import_adoption_budget' });
+  expect(fetched).toBe(0);
+});
+
 test('G428: adoption reuses source intent and returns the adopted native Work', async () => {
   let acquired = 0, converted = 0, projected = 0, proposed = 0, adopted = 0;
   const observation = { observation: iri('000000000001'), provider: 'open-library',
     namespace: 'work', externalId: 'OL45804W', capture: { profile: 'open-library-work-acquisition-v1' } };
   const app = libraryRoutes({
     account: { verify: async (_request: Request, required: string[]) => {
-      expect(required).toContain('source:adopt'); return { issuer: 'test', subject: 'reader' };
+      expect(required).toEqual(['work:read', 'work:create']); return { issuer: 'test', subject: 'reader' };
     } },
     access: { canReadAsBaselineMember: async () => true, activePrincipalId: async () =>
       '0194f314-9280-767f-89a6-000000000099' },
+    libraryImport: { withOpenLibraryWork: async (_id: string, action: () => Promise<unknown>) => action(),
+      adoptedOpenLibraryWork: async () => null, takeBudget: async () => {} },
     sourceIntake: { replay: async () => observation, reserveOpenLibrarySlot: async () => { acquired++; },
       submit: async () => { acquired++; return { observation }; } },
     sourceConversions: { convert: async () => { converted++;
@@ -76,6 +117,8 @@ test('G428: first adoption captures Open Library through Main and a retry does n
     account: { verify: async () => ({ issuer: 'test', subject: 'reader' }) },
     access: { canReadAsBaselineMember: async () => true, activePrincipalId: async () =>
       '0194f314-9280-767f-89a6-000000000099' },
+    libraryImport: { withOpenLibraryWork: async (_id: string, action: () => Promise<unknown>) => action(),
+      adoptedOpenLibraryWork: async () => null, takeBudget: async () => {} },
     openLibraryFetch: (async (url: string) => { captured++;
       expect(url).toBe('https://openlibrary.org/works/OL45804W.json');
       return Response.json({ key: '/works/OL45804W', type: { key: '/type/work' }, title: 'Frankenstein' });

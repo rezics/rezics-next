@@ -10,10 +10,10 @@ import { useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import { CatalogueCover } from '../catalogue/cover.tsx';
-import { adoptOpenLibraryBook, ensureImportedShelf, importSelectedBook, inspectImportedBook,
-  type ImportIssue, type ImportRowResult } from './import-api.ts';
+import { adoptOpenLibraryBook, REVIEWED_IMPORT_MAX_ROWS, submitReviewedBatch,
+  type ImportBatchProgress, type ImportIssue, type ImportRowResult } from './import-api.ts';
 import { LIBRARY_IMPORT_COST, LibraryImportInvalid, parseLibraryImport, type ImportedBook } from './import-csv.ts';
-import { lookupImportedBook, lookupOpenLibraryBook, matchImportedBook,
+import { lookupImportedBook, lookupOpenLibraryBook, matchImportedBook, ReaderImportBudgetError,
   type ImportMatch, type OpenLibraryCandidate } from './import-match.ts';
 import type { LibraryMessages } from './messages.ts';
 import type { CustomShelf } from './types.ts';
@@ -21,23 +21,21 @@ import type { CustomShelf } from './types.ts';
 interface PreviewRow { book: ImportedBook; match: ImportMatch | null; lookupFailed: boolean;
   selected: string; rating: number | null; visibility: 'private' | 'public'; result: ImportRowResult | null;
   search: string; searching: boolean; skipped: boolean; conflictChoice?: 'keep' | 'replace';
-  openLibrary: OpenLibraryCandidate[] | null; openLibraryBusy: boolean; openLibraryError: boolean;
+  openLibrary: OpenLibraryCandidate[] | null; openLibraryBusy: boolean;
+  openLibraryError: 'search-budget' | 'adoption-budget' | 'failed' | null;
   manual: boolean }
 const id = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
-const BATCH = 16;
 const PAGE = 20;
 
-/** The file stays in the browser. Matching is limited to three concurrent Main searches;
- * each saved row reports partial outcomes so a retry never hides an earlier success. */
+/** Matching stays in the browser; reviewed rows and their intent go to Main as
+ * one resumable import with durable per-row outcomes. */
 export function LibraryImport({ agent, context, customShelves = [], locale, messages, lookup = lookupImportedBook,
   lookupSource = lookupOpenLibraryBook, adoptSource = adoptOpenLibraryBook,
-  ensureShelf = ensureImportedShelf, inspectRow = inspectImportedBook,
-  importRow = importSelectedBook }: { agent: string; context: string | null;
+  importBatch = submitReviewedBatch }: { agent: string; context: string | null;
   customShelves?: readonly CustomShelf[]; locale: UiLocale; messages: LibraryMessages;
-  lookup?: typeof lookupImportedBook; ensureShelf?: typeof ensureImportedShelf;
+  lookup?: typeof lookupImportedBook;
   lookupSource?: typeof lookupOpenLibraryBook; adoptSource?: typeof adoptOpenLibraryBook;
-  inspectRow?: typeof inspectImportedBook;
-  importRow?: typeof importSelectedBook }) {
+  importBatch?: typeof submitReviewedBatch }) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
   const run = useRef(0);
@@ -73,10 +71,13 @@ export function LibraryImport({ agent, context, customShelves = [], locale, mess
       if (file.size > LIBRARY_IMPORT_COST.bytes) throw new LibraryImportInvalid('File too large');
       books = parseLibraryImport(await file.text()).books;
     } catch { setRows([]); setError(t.importInvalid); return; }
+    if (books.length > REVIEWED_IMPORT_MAX_ROWS) {
+      setRows([]); setError(t.importTooManyRows({ count: number(REVIEWED_IMPORT_MAX_ROWS) })); return;
+    }
     setRows(books.map(book => ({ book, match: null, lookupFailed: false, selected: '',
       rating: Number.isInteger(book.rating) ? book.rating : null,
       visibility: 'private', result: null, search: book.title, searching: false, skipped: false,
-      openLibrary: null, openLibraryBusy: false, openLibraryError: false, manual: false })));
+      openLibrary: null, openLibraryBusy: false, openLibraryError: null, manual: false })));
     setMatching(true);
     let next = 0;
     await Promise.all(Array.from({ length: Math.min(3, books.length) }, async () => {
@@ -105,60 +106,43 @@ export function LibraryImport({ agent, context, customShelves = [], locale, mess
   async function findSource(index: number) {
     const row = rows[index];
     if (!row) return;
-    change(index, { openLibraryBusy: true, openLibraryError: false });
+    change(index, { openLibraryBusy: true, openLibraryError: null });
     try { change(index, { openLibrary: await lookupSource(agent, row.book), openLibraryBusy: false }); }
-    catch { change(index, { openLibraryBusy: false, openLibraryError: true }); }
+    catch (error) { change(index, { openLibraryBusy: false,
+      openLibraryError: error instanceof ReaderImportBudgetError ? 'search-budget' : 'failed' }); }
   }
   async function addSource(index: number, workId: string) {
-    change(index, { openLibraryBusy: true, openLibraryError: false });
+    change(index, { openLibraryBusy: true, openLibraryError: null });
     try {
       const selected = await adoptSource(agent, workId, locale);
       change(index, { selected, skipped: false, openLibraryBusy: false,
         match: { kind: 'matched', selected, candidates: [], reason: 'review' } });
-    } catch { change(index, { openLibraryBusy: false, openLibraryError: true }); }
+    } catch (error) { change(index, { openLibraryBusy: false,
+      openLibraryError: error instanceof ReaderImportBudgetError ? 'adoption-budget' : 'failed' }); }
   }
   async function save() {
     const selected = rows.flatMap((row, index) => !row.skipped && id.test(row.selected) ? [{ row, index }] : []);
     if (!selected.length) return;
     setSaving(true); setSaved(0); setSummary(null);
-    let done = 0, issues = 0;
-    const pending: typeof selected = [];
-    for (const { row, index } of selected) {
-      const selection = { work: row.selected, rating: row.rating,
-        reviewVisibility: row.visibility, conflictChoice: row.conflictChoice };
-      try {
-        const found = await inspectRow(agent, row.book, selection, context);
-        if (found.length) { change(index, { result: { work: row.selected, applied: [], issues: found } }); issues++; }
-        else pending.push({ row, index });
-      } catch {
-        change(index, { result: { work: row.selected, applied: [], issues: ['state-unavailable'] } }); issues++;
-      }
-    }
-    setSaved(issues);
-    const shelfIds = new Map(customShelves.map(shelf => [shelf.name, shelf.id]));
-    const names = [...new Set(pending.flatMap(({ row }) => row.book.shelves))]
-      .filter(name => !['read', 'to-read', 'currently-reading', 'want-to-read'].includes(name.toLowerCase()));
-    for (const name of names) if (!shelfIds.has(name)) {
-      try { shelfIds.set(name, await ensureShelf(agent, name)); }
-      catch { /* Rows needing this shelf report a partial import below. */ }
-    }
-    for (let offset = 0; offset < pending.length; offset += BATCH) {
-      for (const { row, index } of pending.slice(offset, offset + BATCH)) {
-        try {
-          const outcome = await importRow(agent, row.book, { work: row.selected, rating: row.rating,
-            reviewVisibility: row.visibility, conflictChoice: row.conflictChoice }, context, locale, shelfIds);
-          change(index, { result: outcome });
-          if (outcome.issues.length) issues++;
-          else done++;
-        } catch {
-          issues++;
-          change(index, { result: { work: row.selected, applied: [], issues: ['state-unavailable'] } });
-        }
-        setSaved(count => count + 1);
-      }
-    }
-    setSaving(false); setSummary({ done, issues });
-    router.refresh();
+    const reviewed = selected.map(({ row }) => ({ work: row.selected, status: row.book.status,
+      startedOn: row.book.startedOn, finishedOn: row.book.finishedOn,
+      rating: row.rating, hasRating: row.book.rating !== null,
+      review: row.book.review, reviewVisibility: row.visibility, shelves: row.book.shelves,
+      ...(row.conflictChoice ? { conflictChoice: row.conflictChoice } : {}) }));
+    const showProgress = (progress: ImportBatchProgress) => {
+      const found = new Map(progress.items.map(item => [selected[item.index]?.index, item.result]));
+      setRows(current => current.map((row, index) => found.has(index)
+        ? { ...row, result: found.get(index)! } : row));
+      setSaved(progress.items.length);
+    };
+    try {
+      const progress = await importBatch(agent, context, locale, customShelves, reviewed, showProgress);
+      showProgress(progress);
+      const issues = progress.items.filter(item => item.result.issues.length).length;
+      setSummary({ done: progress.items.length - issues, issues });
+      router.refresh();
+    } catch { setError(t.importStateUnavailable); }
+    setSaving(false);
   }
   const needsAttention = (row: PreviewRow) => !row.skipped && (!id.test(row.selected) || !!row.result?.issues.length);
   const shown = filter === 'attention' ? rows.flatMap((row, index) => needsAttention(row) ? [{ row, index }] : [])
@@ -202,7 +186,7 @@ export function LibraryImport({ agent, context, customShelves = [], locale, mess
           {t.importAll}</Button>
         <Button size="sm" variant={filter === 'attention' ? 'default' : 'outline'}
           onClick={() => { setFilter('attention'); setPage(0); }}>{t.importAttention}</Button>
-        <Button size="sm" variant="outline" disabled={!attentionCount}
+        <Button size="sm" variant="outline" disabled={matching || !attentionCount}
           onClick={() => setRows(current => current.map(row => needsAttention(row)
             ? { ...row, skipped: true, selected: '' } : row))}>{t.importSkipAttention}</Button>
       </div>
@@ -263,7 +247,9 @@ export function LibraryImport({ agent, context, customShelves = [], locale, mess
                 <Button size="sm" variant="outline" disabled={row.openLibraryBusy}
                   onClick={() => void findSource(index)}>{t.importFindOpenLibrary}</Button>
                 {row.openLibraryError ? <p role="alert" className="text-destructive text-xs">
-                  {t.importOpenLibraryFailed}</p> : null}
+                  {row.openLibraryError === 'search-budget' ? t.importSearchBudget
+                    : row.openLibraryError === 'adoption-budget' ? t.importAdoptionBudget
+                      : t.importOpenLibraryFailed}</p> : null}
                 {row.openLibrary?.length === 0 ? <p className="text-muted-foreground text-xs">
                   {t.importOpenLibraryMissing}</p> : null}
                 {row.openLibrary?.map(candidate => <div key={candidate.workId}

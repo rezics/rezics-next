@@ -4,7 +4,7 @@ import { LibraryImport } from './library-import.tsx';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import type { ImportedBook } from './import-csv.ts';
-import type { ImportIssue, ImportSelection } from './import-api.ts';
+import { submitReviewedBatch, type ImportBatchProgress } from './import-api.ts';
 
 const csv = `Book Id,Title,Author,ISBN13,My Rating,Date Read,Bookshelves,Exclusive Shelf,My Review
 1,Pride and Prejudice,Jane Austen,9780141439518,5,2026/01/03,"classics, favorites",read,"A favorite."
@@ -27,10 +27,12 @@ const lookup = async (book: ImportedBook) => book.title === 'Unknown Book' ? []
 
 const meta = { title: 'Library/Import', component: LibraryImport,
   args: { agent: id(99), context: id(100), locale: 'en', messages, lookup,
-    ensureShelf: async () => id(1000),
-    inspectRow: async (_agent: string, _book: ImportedBook, _selection: ImportSelection,
-      _context: string | null): Promise<ImportIssue[]> => [],
-    importRow: async (_agent, _book, selection) => ({ work: selection.work, applied: ['status'], issues: [] }) },
+    importBatch: async (_agent, _context, _locale, _shelves, rows, onProgress) => {
+      const result: ImportBatchProgress = { items: rows.map((row, index) => ({ index,
+        result: { work: row.work, applied: ['status'], issues: [] } })), total: rows.length, pending: false };
+      onProgress?.(result);
+      return result;
+    } },
   parameters: { route: { pathname: '/en/library' } },
 } satisfies Meta<typeof LibraryImport>;
 export default meta;
@@ -77,16 +79,15 @@ export const ChineseDarkReview: Story = { args: { locale: 'zh-Hans', messages: {
 
 /** The first press preserves a newer personal edit and creates no stray imported shelf. */
 export const ConflictChoice: Story = { args: (() => {
-  let shelfWrites = 0;
+  const importBatch: typeof submitReviewedBatch = async (_agent, _context, _locale, _shelves,
+    rows, onProgress) => {
+    const result: ImportBatchProgress = { items: [{ index: 0, result: { work: rows[0]!.work, applied: [],
+      issues: rows[0]!.conflictChoice ? [] : ['status-changed'] } }], total: 1, pending: false };
+    onProgress?.(result);
+    return result;
+  };
   return { lookup: async (book: ImportedBook) => [{ work: id(1), title: book.title,
-    authors: [book.author], isbn13: [] }],
-  inspectRow: async (_agent: string, _book: ImportedBook, selection: { conflictChoice?: 'keep' | 'replace' }) =>
-    selection.conflictChoice ? [] : ['status-changed' as const],
-  ensureShelf: async () => { shelfWrites++; return id(1000); },
-  importRow: async (_agent: string, _book: ImportedBook, selection: { work: string }) => {
-    if (shelfWrites !== 1) throw new Error('Shelf must be created only after the conflict choice');
-    return { work: selection.work, applied: [], issues: [] };
-  } };
+    authors: [book.author], isbn13: [] }], importBatch };
 })(), async play({ canvasElement }) {
   const canvas = within(canvasElement);
   await userEvent.click(canvas.getByText('Import your books'));

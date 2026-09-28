@@ -18,7 +18,7 @@ export class LibraryStatusConflict extends Error {}
 export interface YearlyGoal { year: number; target: number | null; completed: number;
   version: number; changedAt: string | null; replayed?: boolean }
 export const READING_STATS_COST = { finishedWorks: 240, completedOccurrences: 2400,
-  sqlStatements: 2 } as const;
+  baseSqlStatements: 3, detailBatch: 20, conceptPairsPerWork: 8 } as const;
 export interface ReadingMonth { month: number; books: number; chapters: number }
 export interface ReadingYear { year: number; books: number; chapters: number; months: ReadingMonth[] }
 export interface PrivateImportReview { work: string; text: string; language: string;
@@ -142,6 +142,22 @@ export class ReaderLibraryStatusStore {
     }
     return { year, books: books.rows.length, chapters: months.reduce((total, month) => total + month.chapters, 0),
       months };
+  }
+
+  /** Private, bounded Work IDs for the richer year summary. The route never returns them. */
+  async finishedWorks(agent: string, year: number): Promise<string[]> {
+    if (!ID.test(agent) || !Number.isInteger(year) || year < 1900 || year > 2100) {
+      throw new InvalidLibraryStatus('invalid reading stats year');
+    }
+    const rows = await this.pool.query<{ work: string }>(`
+      SELECT work FROM reader.library_status
+      WHERE agent = $1 AND status = 'read' AND finished_on >= make_date($2,1,1)
+        AND finished_on < make_date($2 + 1,1,1)
+      ORDER BY finished_on, work LIMIT ${READING_STATS_COST.finishedWorks + 1}`, [agent, year]);
+    if (rows.rows.length > READING_STATS_COST.finishedWorks) {
+      throw new WorkReadLimit('Reading stats exceed the yearly read budget');
+    }
+    return rows.rows.map(row => row.work);
   }
 
   async goal(agent: string, year: number): Promise<YearlyGoal> {

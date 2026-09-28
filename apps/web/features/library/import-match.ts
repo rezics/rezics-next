@@ -6,6 +6,9 @@ import type { ImportedBook } from './import-csv.ts';
 export interface ImportCandidate { work: string; title: string; authors: string[]; isbn13: string[];
   cover?: CatalogueWork['cover']; kind?: CatalogueWork['kind'] }
 export interface OpenLibraryCandidate { workId: string; title: string; authors: string[]; coverId: number | null }
+export class ReaderImportBudgetError extends Error {
+  constructor(readonly kind: 'search' | 'adoption') { super(`reader import ${kind} budget reached`); }
+}
 export type ImportMatch = { kind: 'matched' | 'ambiguous' | 'not-found';
   selected: string | null; candidates: ImportCandidate[]; reason: 'isbn' | 'title-author' | 'review' | null };
 
@@ -55,10 +58,14 @@ export async function lookupOpenLibraryBook(agent: string, book: ImportedBook,
     main().v1.me['library-import']['open-library'].get({ query });
   if (book.isbn) {
     const found = await get({ actingSubject: agent, isbn: book.isbn });
+    if (found.status === 429 && (found.error?.value as { code?: string } | undefined)?.code
+      === 'reader_import_search_budget') throw new ReaderImportBudgetError('search');
     if (!found.data) throw new Error('Open Library search unavailable');
     if (found.data.items.length) return found.data.items;
   }
   const found = await get({ actingSubject: agent, title: book.title, author: book.author });
+  if (found.status === 429 && (found.error?.value as { code?: string } | undefined)?.code
+    === 'reader_import_search_budget') throw new ReaderImportBudgetError('search');
   if (!found.data) throw new Error('Open Library search unavailable');
   return found.data.items;
 }

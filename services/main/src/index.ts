@@ -36,6 +36,7 @@ import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
 import { StudioAccess } from './modules/studio/access.ts';
 import { ReaderLibraryStatusStore } from './modules/library/status.ts';
+import { ReaderLibraryImportStore } from './modules/library-import/reader-import.ts';
 import { ReaderLibraryRatings } from './modules/library/ratings.ts';
 import { ProtectionAdmissionSigner } from './modules/access/protection-admission.ts';
 import { ErasureService } from './modules/erasure/request.ts';
@@ -313,6 +314,7 @@ const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrec
 const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
   ? openLibraryFixtureFetch(config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT) : fetch;
+const libraryImport = new ReaderLibraryImportStore(contentPool);
 const app = createMainApp(fuseki, {
   follows: new FollowsStore(pool),
   feed: new FeedStore(pool),
@@ -330,6 +332,7 @@ const app = createMainApp(fuseki, {
   agentHandles: new AgentVanityHandles(pool),
   agentProfiles: new AgentPublicProfiles(pool, environment, media.store),
   libraryStatus: new ReaderLibraryStatusStore(contentPool),
+  libraryImport,
   authorReaders: new AuthorReaders(contentPool, pool),
   workStats: new WorkReaderStats(contentPool, pool),
   libraryRatings: new ReaderLibraryRatings(pool),
@@ -446,6 +449,7 @@ const app = createMainApp(fuseki, {
   ...(relayPool ? { relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) } : {}),
   ...(ownerRelayPool ? { ownerOperations: new OwnerOperations(ownerRelayPool, environment) } : {}),
 });
+libraryImport.setDispatch(request => app.handle(request));
 const worker = new ContentProjectionWorker(
   () => relayContentProjectionOnce(environment, content, cursor, consumer),
   config.CONTENT_PROJECTION_INTERVAL_MS);
