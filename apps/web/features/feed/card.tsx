@@ -215,6 +215,17 @@ function firstLine(text: string): { title: string; body: string } {
   return end < 0 ? { title: trimmed, body: '' } : { title: trimmed.slice(0, end).trim(), body: trimmed.slice(end + 1).trim() };
 }
 
+/** The compact view's meta: the Realm, or who posted outside one, and when. */
+function CompactMeta({ item }: { item: FeedItem }) {
+  const { avatarQuery, realmPath } = useFeed();
+  return <MetaLine icon={item.realm ? <CommunityIcon icon={item.realm.icon} name={item.realm.name.value}
+    avatarQuery={avatarQuery} size="xs" /> : <CommunityIcon icon={null} name={item.actor.name} person size="xs" />}
+  parts={[item.realm ? { name: true, node: <LocalizedLink href={realmPath(item.realm.id)} lang={item.realm.name.language}
+    className={cn(rowLink, 'font-semibold text-foreground')}>{item.realm.name.value}</LocalizedLink> }
+    : { name: true, node: <span className="font-semibold text-foreground">{item.actor.name}</span> },
+  { keep: true, node: <PostTime time={item.time} /> }]} />;
+}
+
 /** A review's title: its stars, then its opening line, or its rating when it keeps the plot back. */
 function reviewHeading(card: Extract<FeedItem['card'], { kind: 'review' }>, t: T, locale: string) {
   const rating = new Intl.NumberFormat(locale).format(card.rating);
@@ -347,6 +358,7 @@ function FeedPost({ item, position, total }: { item: FeedItem; position?: number
   const count = new Intl.NumberFormat(locale, { notation: 'compact' }).format(item.comments.value);
   const plainTitle = card.kind === 'review' ? workTitle : typeof title === 'string' ? title : workTitle;
   return <PostRow kind={item.kind} href={href} position={position} total={total}
+    compactMeta={<CompactMeta item={item} />}
     meta={<FeedMeta item={item} end={<>
       {item.realm ? <JoinButton realm={item.realm} /> : null}
       <MoreMenu item={item} share={href ? { href, title: plainTitle } : null} onDismiss={setDismissed} />

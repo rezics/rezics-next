@@ -72,12 +72,14 @@ export function WorkAttachment({ work }: { work: AttachedWork }) {
  * line, the post's own title, at most three lines of preview, then the bare
  * action bar with the Work attached beside it. Compact view keeps one line.
  */
-export function PostRow({ kind, href, meta, title, titleLang, titleDir, titleClass, label, preview, thumbnail,
-  attachment, vote, comments, actions, below, position, total }: {
+export function PostRow({ kind, href, meta, compactMeta, title, titleLang, titleDir, titleClass, label, preview,
+  thumbnail, attachment, vote, comments, actions, below, position, total }: {
   kind: string;
   /** Where the row leads; a post with nowhere to go is not clickable. */
   href: string | null;
   meta: ReactNode;
+  /** The shorter meta line of the compact view: where and when. */
+  compactMeta?: ReactNode;
   /** The post's own title; a reply has none and is named by `label` for assistive technology. */
   title: ReactNode | null; titleLang?: string; titleDir?: 'ltr' | 'rtl'; titleClass?: string; label?: string;
   preview?: ReactNode;
@@ -104,7 +106,7 @@ export function PostRow({ kind, href, meta, title, titleLang, titleDir, titleCla
       <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center sm:gap-3">
         <h3 id={titleId} lang={titleLang} dir={titleDir} className="min-w-0 truncate font-medium text-sm">
           {link(heading)}</h3>
-        <div className="min-w-0 shrink-0 text-xs sm:max-w-[45%] [&_p]:gap-x-1 [&>div]:h-5">{meta}</div>
+        <div className="min-w-0 shrink-0 text-xs sm:max-w-[45%] [&_p]:gap-x-1 [&>div]:h-5">{compactMeta ?? meta}</div>
       </div>
       {comments ? <div className="relative z-10 shrink-0">{comments}</div> : null}
     </article>;

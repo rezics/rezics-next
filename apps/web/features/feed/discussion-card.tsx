@@ -74,6 +74,11 @@ export function DiscussionCard({ post, menu, position, total }: { post: Discussi
       !post.realm && 'font-semibold text-foreground')}>{post.author.name}</LocalizedLink>
     : <span className="italic">{t.someone}</span>;
   return <PostRow kind={post.kind} href={post.href} position={position} total={total}
+    compactMeta={<MetaLine icon={post.realm ? <CommunityIcon icon={post.realm.icon} name={post.realm.name.value}
+      avatarQuery={avatarQuery} size="xs" /> : <CommunityIcon icon={null} name={post.author?.name ?? '·'} person size="xs" />}
+    parts={[post.realm ? { name: true, node: <LocalizedLink href={realmPath(post.realm.id)} lang={post.realm.name.language}
+      className={cn(rowLink, 'font-semibold text-foreground')}>{post.realm.name.value}</LocalizedLink> }
+      : { name: true, node: author }, { keep: true, node: <PostTime time={post.time} /> }]} />}
     meta={<MetaLine icon={post.realm ? <CommunityIcon icon={post.realm.icon} name={post.realm.name.value}
       avatarQuery={avatarQuery} size="xs" /> : <CommunityIcon icon={null} name={post.author?.name ?? '·'} person size="xs" />}
     parts={[
