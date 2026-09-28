@@ -14,6 +14,7 @@ const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const COMMUNITY_HANDLE = /^[a-z][a-z0-9-]{2,29}$/;
 export const SPACE_CREATE_COST = { topics: 3, topicValidationCalls: 1, handleChecks: 2,
   graphCommandCalls: 1, deadlineMs: 10_000 } as const;
+export const COMMUNITY_HANDLE_READ_COST = { resultRows: 2, queryBytes: 1024 } as const;
 
 export class InvalidSpaceInput extends Error {}
 

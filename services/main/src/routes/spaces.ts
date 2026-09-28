@@ -3,7 +3,7 @@ import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { iri } from '../modules/work/activate.ts';
 import { createAdmittedRealmSpace } from '../modules/space/create-admitted.ts';
-import { COMMUNITY_HANDLE } from '../modules/space/create.ts';
+import { COMMUNITY_HANDLE, COMMUNITY_HANDLE_READ_COST } from '../modules/space/create.ts';
 import { pendingOperation } from '../api-contract.ts';
 import { readProblems, spaceReadResult, spaceWriteResult, writeProblems }
   from '../api-responses.ts';
@@ -55,7 +55,8 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const rows = (await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT ?realm WHERE { GRAPH <urn:rezics:graph:current> {
             ?realm a rv:Realm ; rv:realmState rv:Active ; rv:communityHandle "${params.handle}" .
-          } } LIMIT 2`, 1024)).results?.bindings ?? [];
+          } } LIMIT ${COMMUNITY_HANDLE_READ_COST.resultRows}`,
+        COMMUNITY_HANDLE_READ_COST.queryBytes)).results?.bindings ?? [];
         if (!rows.length) return problem(404, 'realm_unavailable', 'Realm is unavailable');
         if (rows.length !== 1 || !rows[0]?.realm) return problem(503, 'realm_unavailable', 'Realm is unavailable');
         return Response.json({ realm: rows[0].realm.value, handle: params.handle },
