@@ -1,0 +1,12 @@
+# A Book group qualifier says how one group of a Book composition divides the book.
+# Volumes are numbered in reading order, parts are read by their titles, and extras (such as 番外) stay unnumbered.
+# The qualifier belongs to one placement of one generation; moving the group keeps it, and it copies no content.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/structure-book-v1/group-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:BookGroup ] ;
+    sh:property [ sh:path rv:generation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureGeneration ] ;
+    sh:property [ sh:path rv:bookDivision ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:VolumeDivision rv:PartDivision rv:ExtrasDivision ) ] .

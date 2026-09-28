@@ -679,6 +679,11 @@
       "file": "shapes/statement-v1.ttl"
     },
     {
+      "id": "structure-book-v1",
+      "sha256": "5598fd9d04b2729c3008a647c92c03c9f1580b5c103dbe2e1a84f10e226e6242",
+      "file": "shapes/structure-book-v1.ttl"
+    },
+    {
       "id": "structure-composition-v1",
       "sha256": "0043acb8748937d04d177a90695b06ac23fcccd5742b7d0da3c728e2d468d746",
       "file": "shapes/structure-composition-v1.ttl"
@@ -1549,6 +1554,16 @@
         {
           "profile": "ballot-v1",
           "shape": "https://rezics.com/definition/ballot-v1/share-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/BookGroup",
+      "routes": [
+        {
+          "profile": "structure-book-v1",
+          "shape": "https://rezics.com/definition/structure-book-v1/group-shape",
           "when": []
         }
       ]
@@ -2887,6 +2902,7 @@
     "contexts/statement-cutover-v1.jsonld": "6bafd791bb47c90b3411bd1592324dd9b16417df27fea0fa34f51ac9c2ed5e9a",
     "contexts/statement-decision-v1.jsonld": "6fde37ebce49b673eca2752de6e7041553b3d2f2a7fdcbf26b6466b2c6af32fd",
     "contexts/statement-v1.jsonld": "cfa9f2493ab50152388e2158a1771d418bbfba84e42ddd46a6aeb069c25f87de",
+    "contexts/structure-book-v1.jsonld": "eb28283f3d1f5f9325581a641f211f124d284707479cc7ef68830263079c54b2",
     "contexts/structure-composition-v1.jsonld": "d57e94df71e5eca10623c63af5886224a81d8218273c1caaaea8fa3833cf4294",
     "contexts/tag-proposal-concept-v1.jsonld": "2b3e27aeef3ecd4d89ab8ae49e9a010177313c0a325ab6e0b977019871a1db99",
     "contexts/text-contribution-v1.jsonld": "78215401ecbc983cb593884da5d0a66775d5a63507343a1bbe69a218043f8bb9",
@@ -2984,6 +3000,7 @@
     "shapes/statement-cutover-v1.ttl": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
     "shapes/statement-decision-v1.ttl": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
     "shapes/statement-v1.ttl": "da4cf542d30ca2d0af244fa86efd53e4a8780a7b8feae260abc05168c358aa2a",
+    "shapes/structure-book-v1.ttl": "5598fd9d04b2729c3008a647c92c03c9f1580b5c103dbe2e1a84f10e226e6242",
     "shapes/structure-composition-v1.ttl": "0043acb8748937d04d177a90695b06ac23fcccd5742b7d0da3c728e2d468d746",
     "shapes/tag-proposal-concept-v1.ttl": "a671d7af426d72082e47f328093c27c6088b2496a7d4925a38cd2ba29df0ca94",
     "shapes/text-contribution-v1.ttl": "4a42b1851eaa3cace3e06c5a142329e7c3c380e756123c3b131dc2584c9d2d8b",
@@ -3009,9 +3026,9 @@
     "shapes/work-type-v2.ttl": "94ef660d31ca8af44f51d5ecc6ad767ea97c6c39d1dcbf7db4321b1152632b2f",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "460f75ae2516f97a4fe20b2b48169a71928f642f1e358f6b1fc03fe151eeb687",
-    "packages/model/src/generated/profiles.ts": "3901cd69be3b8b19974c5804270d20004d574fbd5d92e9547f944963d25b553b",
-    "packages/model/src/generated/schemas.ts": "e6a4df610e676c08bf1ce5ab4ea40d3294fb99459c662f092d65debb5e5db753",
-    "packages/model/src/generated/vocabulary.ts": "307c04d8114eff13cdd4e4392c63fc71b33d12d5a921d856e3c6ba733e4a6fbe"
+    "packages/model/src/generated/arbitraries.ts": "69a8a3a5ad85eb87ca000ba7ec751f2603bd7649899e91dd912c6885e8452ca5",
+    "packages/model/src/generated/profiles.ts": "39b67ece1b02a176d1b275d7a9de9eca1494c319f48f8335e0f92c08364e73ec",
+    "packages/model/src/generated/schemas.ts": "fc28a1a3f336c8bd0fd5c7c275945fb1c4777092dd0df3ff1debb37d072fe2fa",
+    "packages/model/src/generated/vocabulary.ts": "33853dc7afddb7f2e2c0bc315984a0f30e4c67b91e60746ebb79efbf2ee2f98f"
   }
 }

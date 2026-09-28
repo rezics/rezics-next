@@ -1,0 +1,28 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:bookDivision": {
+      "@id": "https://rezics.com/vocab/bookDivision",
+      "@type": "@id"
+    },
+    "rv:generation": {
+      "@id": "https://rezics.com/vocab/generation",
+      "@type": "@id"
+    }
+  }
+}

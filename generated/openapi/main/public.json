@@ -45908,6 +45908,15 @@
                         "null"
                       ]
                     },
+                    "number": {
+                      "~elyTyp": 7,
+                      "minimum": 1,
+                      "nullable": true,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
                     "occurrence": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -45923,6 +45932,19 @@
                     "parentPath": {
                       "items": {
                         "properties": {
+                          "division": {
+                            "~elyTyp": 7,
+                            "enum": [
+                              "volume",
+                              "part",
+                              "extras"
+                            ],
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "label": {
                             "~elyTyp": 7,
                             "nullable": true,
@@ -45943,6 +45965,15 @@
                               "null"
                             ]
                           },
+                          "number": {
+                            "~elyTyp": 7,
+                            "minimum": 1,
+                            "nullable": true,
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
                           "occurrence": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -45950,7 +45981,9 @@
                         },
                         "required": [
                           "occurrence",
-                          "label"
+                          "label",
+                          "division",
+                          "number"
                         ],
                         "type": "object"
                       },
@@ -46030,6 +46063,7 @@
                     "parent",
                     "parentPath",
                     "ordinal",
+                    "number",
                     "label",
                     "language",
                     "selectedRevision",
@@ -61703,6 +61737,18 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "qualifier": {
+                            "additionalProperties": true,
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "type": "object"
+                          },
                           "removedBy": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -62126,6 +62172,14 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "division": {
+                              "enum": [
+                                "volume",
+                                "part",
+                                "extras"
+                              ],
+                              "type": "string"
+                            },
                             "label": {
                               "properties": {
                                 "language": {
@@ -62289,6 +62343,49 @@
                             },
                             "op": {
                               "const": "remove",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "op",
+                            "occurrence"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "division": {
+                              "enum": [
+                                "volume",
+                                "part",
+                                "extras"
+                              ],
+                              "type": "string"
+                            },
+                            "label": {
+                              "properties": {
+                                "language": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "maxLength": 500,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language"
+                              ],
+                              "type": "object"
+                            },
+                            "occurrence": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "op": {
+                              "const": "update",
                               "type": "string"
                             }
                           },
@@ -62336,6 +62433,14 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "division": {
+                              "enum": [
+                                "volume",
+                                "part",
+                                "extras"
+                              ],
+                              "type": "string"
+                            },
                             "label": {
                               "properties": {
                                 "language": {
@@ -62507,6 +62612,49 @@
                             "occurrence"
                           ],
                           "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "division": {
+                              "enum": [
+                                "volume",
+                                "part",
+                                "extras"
+                              ],
+                              "type": "string"
+                            },
+                            "label": {
+                              "properties": {
+                                "language": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "maxLength": 500,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language"
+                              ],
+                              "type": "object"
+                            },
+                            "occurrence": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "op": {
+                              "const": "update",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "op",
+                            "occurrence"
+                          ],
+                          "type": "object"
                         }
                       ]
                     },
@@ -62546,6 +62694,14 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "division": {
+                              "enum": [
+                                "volume",
+                                "part",
+                                "extras"
+                              ],
+                              "type": "string"
+                            },
                             "label": {
                               "properties": {
                                 "language": {
@@ -62709,6 +62865,49 @@
                             },
                             "op": {
                               "const": "remove",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "op",
+                            "occurrence"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "division": {
+                              "enum": [
+                                "volume",
+                                "part",
+                                "extras"
+                              ],
+                              "type": "string"
+                            },
+                            "label": {
+                              "properties": {
+                                "language": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "maxLength": 500,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language"
+                              ],
+                              "type": "object"
+                            },
+                            "occurrence": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "op": {
+                              "const": "update",
                               "type": "string"
                             }
                           },
@@ -63398,6 +63597,18 @@
                           "parent": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
+                          },
+                          "qualifier": {
+                            "additionalProperties": true,
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "type": "object"
                           },
                           "removedBy": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -66295,6 +66506,18 @@
                           "parent": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
+                          },
+                          "qualifier": {
+                            "additionalProperties": true,
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "type": "object"
                           },
                           "removedBy": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -131513,6 +131736,15 @@
               "minLength": 2,
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "parent",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -131549,6 +131781,31 @@
                             "nullable": true,
                             "type": [
                               "string",
+                              "null"
+                            ]
+                          },
+                          "length": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "unit": {
+                                "enum": [
+                                  "characters",
+                                  "words"
+                                ],
+                                "type": "string"
+                              },
+                              "value": {
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "unit",
+                              "value"
+                            ],
+                            "type": [
+                              "object",
                               "null"
                             ]
                           },
@@ -131599,7 +131856,8 @@
                           "state",
                           "target",
                           "label",
-                          "language"
+                          "language",
+                          "length"
                         ],
                         "type": "object"
                       },
@@ -131647,6 +131905,28 @@
                                 ],
                                 "type": "string"
                               },
+                              "childCount": {
+                                "~elyTyp": 7,
+                                "minimum": 0,
+                                "nullable": true,
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "division": {
+                                "~elyTyp": 7,
+                                "enum": [
+                                  "volume",
+                                  "part",
+                                  "extras"
+                                ],
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
                               "label": {
                                 "~elyTyp": 7,
                                 "nullable": true,
@@ -131664,6 +131944,15 @@
                                 ],
                                 "type": [
                                   "object",
+                                  "null"
+                                ]
+                              },
+                              "number": {
+                                "~elyTyp": 7,
+                                "minimum": 1,
+                                "nullable": true,
+                                "type": [
+                                  "integer",
                                   "null"
                                 ]
                               },
@@ -131688,6 +131977,7 @@
                                     "type": "string"
                                   },
                                   "selectedRevision": {
+                                    "pattern": "^urn:rezics:content:revision:[0-9a-f-]{36}$",
                                     "type": "string"
                                   }
                                 },
@@ -131711,6 +132001,7 @@
                               "selectedRevision": {
                                 "~elyTyp": 7,
                                 "nullable": true,
+                                "pattern": "^urn:rezics:content:revision:[0-9a-f-]{36}$",
                                 "type": [
                                   "string",
                                   "null"
@@ -131731,6 +132022,9 @@
                               "parent",
                               "role",
                               "label",
+                              "division",
+                              "number",
+                              "childCount",
                               "target",
                               "selectedRevision",
                               "progress",
@@ -350875,6 +351169,27 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "division": {
+                                    "enum": [
+                                      "volume",
+                                      "part",
+                                      "extras"
+                                    ]
+                                  },
+                                  "type": {
+                                    "const": "book-group",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "division"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
                                   "disclosure": {
                                     "enum": [
                                       "public",
@@ -433303,6 +433618,28 @@
                             ],
                             "type": "string"
                           },
+                          "childCount": {
+                            "~elyTyp": 7,
+                            "minimum": 0,
+                            "nullable": true,
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "division": {
+                            "~elyTyp": 7,
+                            "enum": [
+                              "volume",
+                              "part",
+                              "extras"
+                            ],
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "label": {
                             "~elyTyp": 7,
                             "nullable": true,
@@ -433320,6 +433657,15 @@
                             ],
                             "type": [
                               "object",
+                              "null"
+                            ]
+                          },
+                          "number": {
+                            "~elyTyp": 7,
+                            "minimum": 1,
+                            "nullable": true,
+                            "type": [
+                              "integer",
                               "null"
                             ]
                           },
@@ -433389,6 +433735,9 @@
                           "parent",
                           "role",
                           "label",
+                          "division",
+                          "number",
+                          "childCount",
                           "target",
                           "selectedRevision",
                           "progress",

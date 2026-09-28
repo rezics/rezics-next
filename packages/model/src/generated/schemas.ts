@@ -750,6 +750,10 @@ export const StatementV1RevisionShapeSchema = Type.Object({ "@id": Type.String({
 
 export type StatementV1RevisionShape = Static<typeof StatementV1RevisionShapeSchema>;
 
+export const StructureBookV1GroupShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/BookGroup"), { maxItems: 1, minItems: 1 }), "rv:generation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:bookDivision": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/VolumeDivision"), Type.Literal("https://rezics.com/vocab/PartDivision"), Type.Literal("https://rezics.com/vocab/ExtrasDivision")]), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type StructureBookV1GroupShape = Static<typeof StructureBookV1GroupShapeSchema>;
+
 export const StructureCompositionV1StructureShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/Structure"), { maxItems: 1, minItems: 1 }), "rv:structureOf": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:structureProfile": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/BookComposition"), Type.Literal("https://rezics.com/vocab/CollectionMembership"), Type.Literal("https://rezics.com/vocab/ZoneNavigation"), Type.Literal("https://rezics.com/vocab/WikiNavigation"), Type.Literal("https://rezics.com/vocab/RecipeComposition")]), { minItems: 1, maxItems: 1 }), "rv:structureHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:selectedGeneration": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type StructureCompositionV1StructureShape = Static<typeof StructureCompositionV1StructureShapeSchema>;
@@ -1186,6 +1190,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/statement-decision-v1/decision-shape": StatementDecisionV1DecisionShapeSchema,
   "https://rezics.com/definition/statement-v1/statement-shape": StatementV1StatementShapeSchema,
   "https://rezics.com/definition/statement-v1/revision-shape": StatementV1RevisionShapeSchema,
+  "https://rezics.com/definition/structure-book-v1/group-shape": StructureBookV1GroupShapeSchema,
   "https://rezics.com/definition/structure-composition-v1/structure-shape": StructureCompositionV1StructureShapeSchema,
   "https://rezics.com/definition/structure-composition-v1/generation-shape": StructureCompositionV1GenerationShapeSchema,
   "https://rezics.com/definition/structure-composition-v1/segment-shape": StructureCompositionV1SegmentShapeSchema,

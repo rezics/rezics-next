@@ -952,6 +952,16 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "structure-book-v1": {
+    "sha256": "5598fd9d04b2729c3008a647c92c03c9f1580b5c103dbe2e1a84f10e226e6242",
+    "file": "shapes/structure-book-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/structure-book-v1/group-shape"
+    ],
+    "focusRoles": [
+      "group"
+    ]
+  },
   "structure-composition-v1": {
     "sha256": "0043acb8748937d04d177a90695b06ac23fcccd5742b7d0da3c728e2d468d746",
     "file": "shapes/structure-composition-v1.ttl",
