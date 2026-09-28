@@ -30,6 +30,22 @@ export const Directory: Story = {
   },
 };
 
+const exportUsers = fn(async () => ({ ok: true as const, data: {
+  blob: new Blob(['id,name,email\r\n']), rows: 1, truncated: false } }));
+const savedFile = fn();
+export const DownloadFilteredUsers: Story = {
+  args: { initialState: { ...initialState, text: 'status:suspended' },
+    initial: { status: 'ok', data: { items: [radia], nextCursor: null, exact: null } } },
+  parameters: { admin: { section: 'users', api: { exportUsers }, client: { download: savedFile } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(exportUsers).toHaveBeenCalledWith(expect.objectContaining({ status: 'suspended' })));
+    await expect(exportUsers).toHaveBeenLastCalledWith(expect.not.objectContaining({ cursor: expect.anything() }));
+    await expect(savedFile).toHaveBeenCalledWith(expect.any(Blob), expect.stringMatching(/^rezics-account-users-.*\.csv$/));
+  },
+};
+
 const search = fn(async () => ({ ok: true as const, data: { items: [radia], nextCursor: null, exact: null } }));
 const replaceUrl = fn();
 /** Filters are text; the service is asked once typing pauses, and the URL keeps the search. */

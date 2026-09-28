@@ -4,12 +4,14 @@ import { Alert, AlertAction, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Menu, MenuCheckboxItem, MenuContent, MenuTrigger } from '@rezics/ui/menu';
 import { toast } from '@rezics/ui/toast';
-import { ChevronRightIcon, ChevronsLeftIcon, CircleAlertIcon, Columns3Icon, SearchXIcon, UsersIcon, XIcon } from 'lucide-react';
+import { ChevronRightIcon, ChevronsLeftIcon, CircleAlertIcon, Columns3Icon, DownloadIcon, SearchXIcon,
+  UsersIcon, XIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAdminClient } from '../api/admin-client.tsx';
 import type { AccountErrorCode, AdminAction, AdminUser, Directory, DirectoryColumn, Preferences } from '../api/types.ts';
 import { ActionDialog, type ActionRequest } from '../actions/action-dialog.tsx';
 import { actionPermission, bulkActionOrder } from '../actions/actions.ts';
+import { errorMessage } from '../actions/confirm.tsx';
 import { userHref } from '../audit/entry.tsx';
 import { PageHeading } from '../shell/admin-states.tsx';
 import { useAdmin } from '../shell/admin-context.tsx';
@@ -29,12 +31,13 @@ export type DirectoryRead = { status: 'ok'; data: Directory } | { status: 'error
 export function UserDirectory({ initialState, initial, preferences }: { initialState: DirectoryState; initial: DirectoryRead;
   preferences: Preferences }) {
   const { t } = useTranslation('admin');
-  const { api, navigate, replaceUrl } = useAdminClient();
+  const { api, navigate, replaceUrl, download } = useAdminClient();
   const { me, can } = useAdmin();
   const [state, setState] = useState(initialState);
   const [text, setText] = useState(initialState.text);
   const [read, setRead] = useState<DirectoryRead | null>(initial);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [previous, setPrevious] = useState<(string | null)[]>([]);
   // Selected users by ID, kept across pages and sorting (not a new search),
   // with the rows they were chosen from for the bulk preview.
@@ -138,9 +141,20 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
   const bulk = bulkActionOrder.filter(action => me.bulkActions.includes(action) && can(actionPermission[action]));
   const hasSearch = !!state.text.trim();
   const hiddenFilters = parseQuery(state.text).problems.length > 0;
+  async function exportUsers() {
+    setExporting(true);
+    const { limit: _limit, cursor: _cursor, ...params } = directoryParams(state);
+    const result = await api.exportUsers(params);
+    setExporting(false);
+    if (!result.ok) { toast.error({ title: errorMessage(result, t) }); return; }
+    download(result.data.blob, `rezics-account-users-${new Date().toISOString().slice(0, 10)}.csv`);
+    toast.success({ title: result.data.truncated ? `${t.exported(result.data.rows)} · ${t.moreAvailable}`
+      : t.exported(result.data.rows) });
+  }
 
   return <>
-    <PageHeading title={t.users} />
+    <PageHeading title={t.users} actions={<Button variant="outline" isLoading={exporting}
+      onClick={() => void exportUsers()}><DownloadIcon aria-hidden="true" />{exporting ? t.exporting : t.exportCsv}</Button>} />
     <div className="flex flex-col gap-4 group-data-[density=compact]/admin:gap-3">
       <ViewTabs text={state.text} views={views} onOpen={query => commit(query)}
         onSave={name => saveViews([...views, { id: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30)
@@ -195,4 +209,3 @@ export function UserDirectory({ initialState, initial, preferences }: { initialS
       onDone={() => { setRequest(null); setSelection(new Map()); setReload(value => value + 1); }} />
   </>;
 }
-

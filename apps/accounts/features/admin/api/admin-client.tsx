@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useAccountClient } from '../../api/account-client.tsx';
+import { saveFile } from '../../api/save-file.ts';
 import { type AdminApi, browserAdminApi } from './client.ts';
 
 /** What operator panel components may do beyond rendering. The app provides
@@ -24,12 +25,7 @@ const browserAdminClient: AdminClient = {
   navigate: url => window.location.assign(url),
   replaceUrl: (url, push = false) => window.history[push ? 'pushState' : 'replaceState'](window.history.state, '', url),
   refresh: () => window.location.reload(),
-  download(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const link = Object.assign(document.createElement('a'), { href: url, download: filename });
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1_000);
-  },
+  download: saveFile,
 };
 
 const Context = createContext<AdminClient | null>(null);

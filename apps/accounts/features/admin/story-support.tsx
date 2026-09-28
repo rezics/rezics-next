@@ -175,6 +175,7 @@ export function fakeAdminApi(overrides: Partial<AdminApi> = {}): AdminApi {
     activity: () => ok({ items: [], nextCursor: null, failedAttemptsLast24Hours: { count: 0, capped: false } }),
     timeline: () => ok({ items: timeline.items.slice(3), nextCursor: null }), audit: () => ok(auditPage),
     exportAudit: () => ok({ blob: new Blob(['occurred_at\r\n']), rows: 4, truncated: false }),
+    exportUsers: () => ok({ blob: new Blob(['id,name,email\r\n']), rows: users.length, truncated: false }),
     operators: () => ok(operators), clients: () => ok(clients), job: () => ok(finishedJob),
     act: () => ok({ status: true, requestId: '0b8e2d49-6c1c-4c1e-8a2b-8f0a3c7d5e21' }), bulk: () => ok({ jobId: 'job-2' }),
     cancelJob: () => ok({ cancelled: 0 }),

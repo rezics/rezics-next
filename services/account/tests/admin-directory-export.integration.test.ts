@@ -35,7 +35,7 @@ test('G411 admin download users: the filtered directory as safe CSV across pages
     expect(lines).toHaveLength(1205);
     // Sorted as asked, every user once, and no cell a spreadsheet would evaluate.
     const emails = lines.slice(1).map(line => line.split(',')[2]!.slice(1, -1));
-    expect(emails).toEqual(emails.toSorted());
+    expect(emails).toEqual([...emails].sort());
     expect(new Set(emails).size).toBe(1204);
     expect(text).toContain(`"'=HYPERLINK(""x"")"`);
     expect(text).toContain(`"support","true","false"`);

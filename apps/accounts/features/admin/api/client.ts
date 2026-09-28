@@ -37,7 +37,19 @@ async function call<T>(path: string, body?: unknown, signal?: AbortSignal): Prom
   return { ok: true, data: data as T };
 }
 
-interface AuditExport { blob: Blob; rows: number; truncated: boolean }
+interface FileExport { blob: Blob; rows: number; truncated: boolean }
+
+async function fileExport(url: string): Promise<AdminResult<FileExport>> {
+  let response: Response;
+  try { response = await fetch(url, { credentials: 'same-origin' }); }
+  catch { return { ok: false, code: 'network', status: 0 }; }
+  if (!response.ok) {
+    const data = await response.json().catch(() => null) as { error?: AccountErrorCode } | null;
+    return { ok: false, code: data?.error ?? 'temporarily_unavailable', status: response.status };
+  }
+  return { ok: true, data: { blob: await response.blob(), rows: Number(response.headers.get('x-rezics-rows') ?? 0),
+    truncated: response.headers.get('x-rezics-truncated') === 'true' } };
+}
 
 export interface AdminApi {
   me(): Promise<AdminResult<AdminMe>>;
@@ -45,13 +57,14 @@ export interface AdminApi {
   signals(): Promise<AdminResult<Signals>>;
   reviewSignal(body: ReviewBody): Promise<AdminResult<CommandResult>>;
   users(params: DirectoryParams, signal?: AbortSignal): Promise<AdminResult<Directory>>;
+  exportUsers(params: Omit<DirectoryParams, 'limit' | 'cursor'>): Promise<AdminResult<FileExport>>;
   user(userId: string): Promise<AdminResult<UserDetail>>;
   sessions(userId: string, cursor: string): Promise<AdminResult<SessionPage>>;
   apps(userId: string, cursor: string): Promise<AdminResult<AppPage>>;
   activity(userId: string, cursor: string): Promise<AdminResult<ActivityPage>>;
   timeline(userId: string, query: { category?: TimelineCategory; cursor?: string }): Promise<AdminResult<TimelinePage>>;
   audit(params: AuditParams): Promise<AdminResult<AuditPage>>;
-  exportAudit(params: AuditParams, format?: AuditExportFormat): Promise<AdminResult<AuditExport>>;
+  exportAudit(params: AuditParams, format?: AuditExportFormat): Promise<AdminResult<FileExport>>;
   operators(): Promise<AdminResult<Operators>>;
   clients(cursor?: string): Promise<AdminResult<ClientPage>>;
   job(jobId: string): Promise<AdminResult<Job>>;
@@ -75,23 +88,14 @@ export const browserAdminApi: AdminApi = {
   signals: () => call(`${admin}/signals`),
   reviewSignal: body => call(`${admin}/signals/review`, body),
   users: (params, signal) => call(`${admin}/users${queryString(params)}`, undefined, signal),
+  exportUsers: params => fileExport(`${admin}/users/export${queryString(params)}`),
   user: userId => call(`${admin}/users/${path(userId)}`),
   sessions: (userId, cursor) => call(`${admin}/users/${path(userId)}/sessions${queryString({ cursor, limit: 25 })}`),
   apps: (userId, cursor) => call(`${admin}/users/${path(userId)}/apps${queryString({ cursor, limit: 25 })}`),
   activity: (userId, cursor) => call(`${admin}/users/${path(userId)}/security-activity${queryString({ cursor, limit: 25 })}`),
   timeline: (userId, query) => call(`${admin}/users/${path(userId)}/timeline${queryString({ ...query, limit: 25 })}`),
   audit: params => call(`${admin}/audit${queryString(params)}`),
-  async exportAudit(params, format = 'csv') {
-    let response: Response;
-    try { response = await fetch(`${admin}/audit/export${queryString({ ...params, format })}`, { credentials: 'same-origin' }); }
-    catch { return { ok: false, code: 'network', status: 0 }; }
-    if (!response.ok) {
-      const data = await response.json().catch(() => null) as { error?: AccountErrorCode } | null;
-      return { ok: false, code: data?.error ?? 'temporarily_unavailable', status: response.status };
-    }
-    return { ok: true, data: { blob: await response.blob(), rows: Number(response.headers.get('x-rezics-rows') ?? 0),
-      truncated: response.headers.get('x-rezics-truncated') === 'true' } };
-  },
+  exportAudit: (params, format = 'csv') => fileExport(`${admin}/audit/export${queryString({ ...params, format })}`),
   operators: () => call(`${admin}/operators`),
   clients: cursor => call(`${admin}/clients${queryString({ cursor, limit: 100 })}`),
   job: jobId => call(`${admin}/bulk-actions/${path(jobId)}`),
