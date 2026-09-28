@@ -4,8 +4,16 @@ import type { WorkPageMessages } from './messages.ts';
 /** Content text keeps one paragraph per line; blank lines separate nothing. */
 export const paragraphs = (text: string) => text.split('\n').filter(line => line.trim());
 
+// Tags that name no one language: undetermined, several, none.
+const unstated = new Set(['und', 'mul', 'zxx']);
+const primary = (tag: string) => tag.toLowerCase().split('-')[0]!;
+
+/** CLDR's name for `und`; ICU names it after its root locale, "root", which no reader should see. */
+const unknownLanguage: Partial<Record<UiLocale, string>> = { en: 'Unknown language', 'zh-Hans': '未知语言' };
+
 /** A BCP 47 tag's name in the interface language ("zh-Hant" → "繁体中文"), or the tag itself. */
 export function languageName(tag: string, locale: UiLocale): string {
+  if (primary(tag) === 'und') return unknownLanguage[locale] ?? unknownLanguage.en!;
   try {
     return new Intl.DisplayNames([locale], { type: 'language', fallback: 'code' }).of(tag) ?? tag;
   } catch {
@@ -82,13 +90,14 @@ const scripts: Record<string, RegExp> = {
  * Whether a title shown in another language than the reader asked for needs
  * saying so. Main names a title's language as its record states it, and
  * older records can mislabel one; a title whose script is the interface
- * language's own ("雨夜书店" in Chinese) reads as the reader's already.
+ * language's own ("雨夜书店" in Chinese) reads as the reader's already. A
+ * record that states no language (`und`) is not known to be in another one.
  */
 export function titleNeedsLanguageNote(title: { value: string; language: string; basis: 'requested' | 'fallback' },
   locale: UiLocale): boolean {
-  if (title.basis !== 'fallback') return false;
-  const wanted = locale.split('-')[0]!;
-  if (title.language.toLowerCase().split('-')[0] === wanted) return false;
+  if (title.basis !== 'fallback' || unstated.has(primary(title.language))) return false;
+  const wanted = primary(locale);
+  if (primary(title.language) === wanted) return false;
   // A CJK interface judges by script; a Latin-script one by the tag, since Latin text alone can't tell English from German.
   const script = scripts[wanted];
   return script ? !script.test(title.value) : true;

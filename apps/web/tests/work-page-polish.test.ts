@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { materializeData } from 'native-i18n';
 import { messages as catalogue } from '../features/catalogue/messages.ts';
 import { fills } from '../features/discover/fills.ts';
-import { formatDate, mintedAt, sinceWhen, titleNeedsLanguageNote } from '../features/work-page/format.ts';
+import { formatDate, languageName, mintedAt, sinceWhen, titleNeedsLanguageNote } from '../features/work-page/format.ts';
 import { messages } from '../features/work-page/messages.ts';
 import { bodyAfterTitle, chapterTitle } from '../features/work-page/reader.tsx';
 import { linkedReview } from '../features/work-page/reviews.tsx';
@@ -39,6 +39,18 @@ describe('title language note', () => {
     // An older record tags a Chinese title as English: to a Chinese reader it is Chinese.
     expect(titleNeedsLanguageNote(title('雨夜书店 · 连载小说', 'en'), 'zh-Hans')).toBe(false);
     expect(titleNeedsLanguageNote(title('西遊記', 'zh-Hant'), 'ja')).toBe(false);
+  });
+
+  test('a title whose record states no language is never said to be in another one, nor in "root"', () => {
+    // Pride and Prejudice on the reseeded stack: Main tags its only title `und`.
+    for (const locale of ['en', 'zh-Hans'] as const) {
+      expect(titleNeedsLanguageNote(title('Pride and Prejudice', 'und'), locale)).toBe(false);
+      expect(titleNeedsLanguageNote(title('Pride and Prejudice', 'mul'), locale)).toBe(false);
+    }
+    expect(languageName('und', 'en')).toBe('Unknown language');
+    expect(languageName('und', 'zh-Hans')).toBe('未知语言');
+    expect(languageName('und', 'ja')).toBe('Unknown language');
+    expect(languageName('en', 'zh-Hans')).toBe('英语');
   });
 
   test('a title in another language is said to be one', () => {
