@@ -2,11 +2,14 @@ import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from '../modules/account/verify-assertion.ts';
-import { auditPage, managementQuery, moderationKind, moderationPage } from '../modules/management-reads/read-contract.ts';
+import { auditPage, managementQuery, MODERATION_CONTEXT_COST, moderationContext, moderationKind, moderationPage,
+  reportReason } from '../modules/management-reads/read-contract.ts';
+import { idList, readWorkContext } from '../modules/management-reads/context.ts';
+import { readId, readUuid } from '../modules/work/read-contract.ts';
+import { workReadError } from './work-reads.ts';
 import { ManagementReadLimit, ManagementReadMissing, ManagementReadUnavailable }
   from '../modules/management-reads/read-store.ts';
-import { WorkReadInvalid, WorkReadMoved } from '../modules/work/read-session.ts';
-import { readUuid } from '../modules/work/read-contract.ts';
+import { workRead, WorkReadInvalid, WorkReadMissing, WorkReadMoved } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { decisionBasisPage, DECISION_BASIS_COST } from '../modules/management-reads/decision-basis.ts';
@@ -20,7 +23,14 @@ export const openApiOperations = {
   '/v1/realms/{realm}/moderation': { get: { bearer: true } },
   '/v1/realms/{realm}/audit': { get: { bearer: true } },
   '/v1/realms/{realm}/moderation/{caseId}': { get: { bearer: true } },
+  '/v1/realms/{realm}/moderation/context': { get: { bearer: true } },
 } as const;
+
+/** The principal when the token carries `scope`, or null when it was not consented. */
+async function consented(work: MainWorkDependencies, request: Request, scope: string) {
+  try { return await work.account.verify(request, [scope]); }
+  catch (error) { if (error instanceof AccountAssertionDenied) return null; throw error; }
+}
 
 function readError(error: unknown): Response {
   if (error instanceof WorkReadInvalid) return problem(400, 'invalid_management_read', error.message);
@@ -48,10 +58,41 @@ export function managementReadRoutes(work: MainWorkDependencies) {
         return realmOperationError(error);
       }
     })
+    // Declared before `:caseId`, which is a UUID and never this word.
+    .get('/v1/realms/:realm/moderation/context', { params, detail,
+      query: t.Object({ actingSubject: readId,
+        agents: t.Optional(t.String({ maxLength: MODERATION_CONTEXT_COST.agents * 60 })),
+        works: t.Optional(t.String({ maxLength: MODERATION_CONTEXT_COST.works * 60 })) }, { additionalProperties: false }),
+      response: { 200: moderationContext, ...problems },
+    }, async ({ request, params: path, query }) => {
+      try {
+        const agents = idList(query.agents, MODERATION_CONTEXT_COST.agents);
+        const works = idList(query.works, MODERATION_CONTEXT_COST.works);
+        // Reports history needs the moderation consent, submissions history the review one, as the queue does.
+        const [moderator, reviewer] = await Promise.all([consented(work, request, 'governance:decide'),
+          consented(work, request, 'realm:adopt')]);
+        const principal = moderator ?? reviewer;
+        if (!principal) throw new AccountAssertionDenied('A management scope is required');
+        if (!work.managementReads) throw new ManagementReadUnavailable('Management owner is unavailable');
+        const realm = `https://rezics.com/id/${path.realm}`;
+        const people = await work.managementReads.people(principal, realm, query.actingSubject, agents,
+          { reports: !!moderator, submissions: !!reviewer && reviewer.subject === principal.subject
+            && reviewer.issuer === principal.issuer });
+        const context = works.length ? await workRead(work, request, { actingSubject: query.actingSubject },
+          session => readWorkContext(session, works)) : [];
+        return Response.json({ profile: 'moderation-context-v1', people, works: context }, { headers });
+      } catch (error) {
+        if (error instanceof WorkReadMissing) return problem(404, 'not_found', 'Realm management is unavailable');
+        if (error instanceof WorkReadInvalid || error instanceof ManagementReadMissing
+          || error instanceof ManagementReadUnavailable || error instanceof AccountAssertionDenied
+          || error instanceof AccountAssertionUnavailable) return readError(error);
+        return workReadError(error);
+      }
+    })
     .get('/v1/realms/:realm/moderation', { params, detail,
       query: t.Object({ ...managementQuery,
         state: t.Optional(t.Union([t.Literal('open'), t.Literal('closed')])),
-        type: t.Optional(moderationKind) },
+        type: t.Optional(moderationKind), reason: t.Optional(reportReason) },
       { additionalProperties: false }),
       response: { 200: moderationPage, ...problems },
     }, async ({ request, params: path, query }) => {
@@ -70,7 +111,7 @@ export function managementReadRoutes(work: MainWorkDependencies) {
         if (!work.managementReads) throw new ManagementReadUnavailable('Management owner is unavailable');
         const realm = `https://rezics.com/id/${path.realm}`;
         const result = await work.managementReads.moderation(principal, realm, query,
-          query.state ?? 'open', query.type ?? null, includeSubmissions);
+          query.state ?? 'open', query.type ?? null, includeSubmissions, query.reason ?? null);
         return Response.json(result, { headers });
       } catch (error) { return readError(error); }
     })

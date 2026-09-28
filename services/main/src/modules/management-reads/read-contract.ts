@@ -25,10 +25,16 @@ export const moderationItem = t.Object({ id: readUuid, kind: moderationKind,
     contribution: t.Nullable(readId), publicationDecision: t.Nullable(t.String()), selectedDraft: t.Nullable(readId),
     correctionOf: t.Nullable(readId) })) });
 
+/** A report reason code (`routes/reports.ts`); the queue can be narrowed to cases one report gave it for. */
+export const reportReason = t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' });
+
 export const auditItem = t.Object({ id: readUuid, caseId: t.Nullable(readUuid),
   kind: t.Union([t.Literal('content_moderation'), t.Literal('rights_disposition'),
     t.Literal('organization_publication_rejection'), t.Literal('realm_management')]),
+  /** A moderation decision's rationale, or a management change's reason. */
   reason: t.Nullable(t.String()),
+  /** What a moderation decision's case was about; null for management changes and publication rejections. */
+  target: t.Nullable(t.Object({ owner: t.String(), resource: t.String(), component: t.String() })),
   detail: t.Nullable(t.Object({ kind: t.Union([t.Literal('role'), t.Literal('assignment')]),
     role: t.Object({ id: readUuid, name: t.String() }), member: t.Nullable(readId),
     assigned: t.Nullable(t.Boolean()), validUntil: t.Nullable(t.String()),
@@ -39,6 +45,43 @@ export const auditItem = t.Object({ id: readUuid, caseId: t.Nullable(readUuid),
 
 export const moderationPage = t.Object({ items: t.Array(moderationItem, { maxItems: 20 }),
   ...pageFields });
+
+/**
+ * What a moderator reads beside one queue page: one Access transaction
+ * (two optional authority checks and one aggregate over at most `agents`
+ * people, each count stopping at `historyRows`) and one Work read session
+ * (one summary batch, two credit queries per Work, one name batch, one Hub
+ * batch and one mod-card lookup).
+ */
+export const MODERATION_CONTEXT_COST = { agents: 20, works: 20, historyRows: 1_000, sqlStatements: 6,
+  graphCalls: 48, authors: 8, hubCharacters: 4_000, statementTimeoutMs: 5_000 } as const;
+
+const historyCount = t.Integer({ minimum: 0, maximum: MODERATION_CONTEXT_COST.historyRows });
+/**
+ * A submitter's or reporter's record in this Realm. Submissions show to
+ * reviewers and reports to moderators, as the queue does; a count that
+ * reached `historyRows` is `capped`.
+ */
+export const personContext = t.Object({ agent: readId,
+  membership: t.Object({ state: t.Union([t.Literal('joined'), t.Literal('left'), t.Literal('not_joined')]),
+    joinedAt: t.Nullable(t.String()), banned: t.Boolean(), bannedUntil: t.Nullable(t.String()) }),
+  submissions: t.Nullable(t.Object({ open: historyCount, accepted: historyCount, rejected: historyCount,
+    changesRequested: historyCount, withdrawn: historyCount, total: historyCount, capped: t.Boolean() })),
+  reports: t.Nullable(t.Object({ open: historyCount, upheld: historyCount, dismissed: historyCount,
+    total: historyCount, capped: t.Boolean() })) });
+/** What a queue item's Work is beyond its header: who wrote it, and a mod's or prompt's own facts. */
+export const workContext = t.Object({ work: readId,
+  authors: t.Array(t.Object({ agent: t.Nullable(readId), name: t.String() }),
+    { maxItems: MODERATION_CONTEXT_COST.authors }),
+  mod: t.Nullable(t.Object({ game: t.String(), gameVersions: t.Array(t.String(), { maxItems: 8 }),
+    loaders: t.Array(t.String(), { maxItems: 8 }), latestRelease: t.Nullable(t.String()) })),
+  /** A public prompt's text or a public skill's description and instructions, cut at `hubCharacters`. */
+  hub: t.Nullable(t.Object({ kind: t.Union([t.Literal('prompt'), t.Literal('skill-package')]),
+    summary: t.String(), text: t.String(), truncated: t.Boolean(),
+    declaredModels: t.Array(t.String(), { maxItems: 64 }) })) });
+export const moderationContext = t.Object({ profile: t.Literal('moderation-context-v1'),
+  people: t.Array(personContext, { maxItems: MODERATION_CONTEXT_COST.agents }),
+  works: t.Array(workContext, { maxItems: MODERATION_CONTEXT_COST.works }) });
 export const auditPage = t.Object({ items: t.Array(auditItem, { maxItems: 20 }),
   ...pageFields });
 

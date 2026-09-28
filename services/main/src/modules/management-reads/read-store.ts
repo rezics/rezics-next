@@ -5,7 +5,8 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved } from '../work/read-session.ts';
-import { MANAGEMENT_READ_COST, type ManagementPosition } from './read-contract.ts';
+import { type PersonContext, readPeople } from './context.ts';
+import { MANAGEMENT_READ_COST, MODERATION_CONTEXT_COST, type ManagementPosition } from './read-contract.ts';
 
 export class ManagementReadMissing extends Error {}
 export class ManagementReadUnavailable extends Error {}
@@ -24,7 +25,7 @@ interface CaseRow { id: string; kind: 'content_report' | 'rights_complaint'
   reason_code: string | null; submission: unknown | null; escalation: unknown | null }
 interface DecisionRow { id: string; case_id: string | null; kind: 'content_moderation' | 'rights_disposition'
   | 'organization_publication_rejection' | 'realm_management'; outcome: string; acting_subject: string; decided_at: Date;
-  reason: string | null; detail: unknown | null;
+  reason: string | null; detail: unknown | null; target: { owner: string; resource: string; component: string } | null;
   decided_key: string;
   case_sequence: string | null }
 
@@ -147,11 +148,17 @@ export class ManagementReadStore {
     } finally { client.release(); }
   }
 
+  /**
+   * `reason` keeps the cases one of whose reports gave that reason code; the
+   * candidate branch then also reads each scanned case's report index, and
+   * submissions, which have no reason codes, drop out.
+   */
   moderation(principal: VerifiedPrincipal, realm: string, options: Options,
-    state: 'open' | 'closed', kind: CaseRow['kind'] | null, includeSubmissions = false) {
+    state: 'open' | 'closed', kind: CaseRow['kind'] | null, includeSubmissions = false, reason: string | null = null) {
     const scope = realmGovernanceScope(realm);
     const reviewOnly = kind?.endsWith('_submission') ?? false;
-    return this.page(principal, realm, options, 'moderation', `${state}:${kind ?? '*'}`,
+    return this.page(principal, realm, options, 'moderation',
+      `${state}:${kind ?? '*'}${reason ? `:${reason}` : ''}`,
       // Each indexed branch stops at pageSize + 1 before the bounded merge.
       // Review-only readers cannot inspect governance reports; governance-only
       // readers cannot inspect offers or their author-visible decision state.
@@ -171,6 +178,8 @@ export class ManagementReadStore {
             AND $8 AND context = $2
             AND (CASE WHEN decision_head IS NULL AND state = 'open' THEN 'open' ELSE 'closed' END) = $3
             AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
+            AND ($10::text IS NULL OR EXISTS (SELECT 1 FROM access.governance_report reason
+              WHERE reason.case_id = governance_case.id AND reason.reason_code = $10))
             AND ($5::timestamptz IS NULL OR (opened_at, id) > ($5::timestamptz, $6::uuid))
           ORDER BY opened_at, id LIMIT $7) cases
         LEFT JOIN LATERAL (SELECT acting_subject, reason_code FROM access.governance_report
@@ -186,13 +195,13 @@ export class ManagementReadStore {
           jsonb_build_object('revision', revision, 'state', state, 'contribution', contribution,
             'publicationDecision', publication_decision, 'selectedDraft', selected_draft,
             'correctionOf', correction_of) AS submission
-          FROM access.realm_submission WHERE realm = $2 AND $9
+          FROM access.realm_submission WHERE realm = $2 AND $9 AND $10::text IS NULL
             AND ${state === 'open' ? "state IN ('pending', 'deciding')" : "state IN ('accepted', 'rejected', 'changes-requested', 'withdrawn', 'stale')"}
             AND ${kind ? "kind = replace($4, '_submission', '')" : '$4::text IS NULL'}
             AND ($5::timestamptz IS NULL OR (opened_at, id) > ($5::timestamptz, $6::uuid))
           ORDER BY opened_at, id LIMIT $7)
         ) candidates ORDER BY opened_at, id LIMIT $7`, [scope, realm, state, kind, after?.time ?? null,
-        after?.id ?? null, limit, !reviewOnly, submissions])).rows,
+        after?.id ?? null, limit, !reviewOnly, submissions, reason])).rows,
       row => ({ id: row.id, kind: row.kind, state: row.state, generation: row.generation,
         decisionHead: row.decision_head, openedAt: row.opened_at.toISOString(),
         authorAgent: row.author_agent, reasonCode: row.reason_code,
@@ -202,15 +211,47 @@ export class ManagementReadStore {
       row => row.opened_key, reviewOnly, includeSubmissions);
   }
 
+  /**
+   * The records of the people a queue page names, in one short transaction:
+   * the reader must moderate or review here, and sees the history that both
+   * the permission and the token's consent cover.
+   */
+  async people(principal: VerifiedPrincipal, realm: string, actingSubject: string, agents: readonly string[],
+    consent: { reports: boolean; submissions: boolean }): Promise<PersonContext[]> {
+    if (!native.test(realm) || !native.test(actingSubject)) throw new WorkReadInvalid('Invalid Realm read');
+    const client = await this.pool.connect().catch(() => {
+      throw new ManagementReadUnavailable('Access owner is unavailable');
+    });
+    try {
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL statement_timeout = '${MODERATION_CONTEXT_COST.statementTimeoutMs}ms'`);
+      const scope = realmGovernanceScope(realm);
+      const sees = {
+        reports: consent.reports && await this.authority(client, principal, actingSubject, scope, true),
+        submissions: consent.submissions
+          && await this.authority(client, principal, actingSubject, `review:decide:${realm}`, true) };
+      if (!sees.reports && !sees.submissions) throw new ManagementReadMissing('Realm management is unavailable');
+      const people = await readPeople(client, realm, scope, agents, sees);
+      await client.query('COMMIT');
+      return people;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      if (error instanceof WorkReadInvalid || error instanceof ManagementReadMissing) throw error;
+      throw new ManagementReadUnavailable('Management read is unavailable');
+    } finally { client.release(); }
+  }
+
   audit(principal: VerifiedPrincipal, realm: string, options: Options, kind: DecisionRow['kind'] | null) {
     const scope = realmGovernanceScope(realm);
     return this.page(principal, realm, options, 'audit', kind,
-      async (client, after, limit) => (await client.query<DecisionRow>(`SELECT id, case_id, kind, outcome, reason, detail,
-        acting_subject, decided_at,
+      // The page's own cases name each decision's target: at most one primary-key lookup per row.
+      async (client, after, limit) => (await client.query<DecisionRow>(`SELECT candidates.id, case_id, candidates.kind,
+        outcome, reason, detail, acting_subject, decided_at,
         to_char(decided_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS decided_key,
-        case_sequence::text FROM (
+        case_sequence::text, CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object('owner', c.target_owner,
+          'resource', c.target_resource, 'component', c.target_component) END AS target FROM (
         (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence,
-          NULL::text AS reason, NULL::jsonb AS detail
+          rationale AS reason, NULL::jsonb AS detail
           FROM access.moderation_decision
           WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $2
             AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
@@ -218,7 +259,7 @@ export class ManagementReadStore {
           ORDER BY decided_at, id LIMIT $7)
         UNION ALL
         (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence,
-          NULL::text AS reason, NULL::jsonb AS detail
+          rationale AS reason, NULL::jsonb AS detail
           FROM access.moderation_decision
           WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $3
             AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
@@ -232,10 +273,11 @@ export class ManagementReadStore {
             AND ($4::text IS NULL OR $4 = 'realm_management')
             AND ($5::timestamptz IS NULL OR (created_at,id) > ($5::timestamptz,$6::uuid))
           ORDER BY created_at,id LIMIT $7)
-        ) candidates ORDER BY decided_at, id LIMIT $7`, [realm, scope, organizationScope(realm), kind,
+        ) candidates LEFT JOIN access.governance_case c ON c.id = candidates.case_id
+        ORDER BY decided_at, candidates.id LIMIT $7`, [realm, scope, organizationScope(realm), kind,
         after?.time ?? null, after?.id ?? null, limit])).rows,
       row => ({ id: row.id, caseId: row.case_id, kind: row.kind, outcome: row.outcome,
-        reason: row.reason ?? null, detail: row.detail ?? null,
+        reason: row.reason ?? null, detail: row.detail ?? null, target: row.target ?? null,
         actingSubject: row.acting_subject, decidedAt: row.decided_at.toISOString(),
         caseSequence: row.case_sequence }), row => row.decided_key);
   }
