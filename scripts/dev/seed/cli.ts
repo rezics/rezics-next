@@ -25,6 +25,7 @@ import { seedProfileCredits } from './profile-credits-step.ts';
 import { seedProfileFollows } from './profile-follows-step.ts';
 import { seedProfileShelves } from './profile-shelves-step.ts';
 import { seedRatings } from './ratings.ts';
+import { seedRecipes } from './recipes-step.ts';
 import { seedCoReaders } from './reading-lives-coreaders.ts';
 import { seedReadingLives } from './reading-lives-step.ts';
 import { seedRealms } from './realms-step.ts';
@@ -111,7 +112,7 @@ function describe(error: unknown): string {
 export const steps: readonly SeedStep[] = [
   seedAccounts, seedClassics, seedWorks, seedContributions, seedRealms, seedAdoptions,
   seedLibrary, seedChapters, seedModeration, seedHomeFeed,
-  seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedBookConcepts,
+  seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedRecipes, seedBookConcepts,
   seedOfficialThemes,
   seedProfileShelves, seedCommunityRealms, seedCommunityDiscussions, seedReadingLives, seedRatings,
   seedReviews, seedCommunityVotes, seedCoReaders,

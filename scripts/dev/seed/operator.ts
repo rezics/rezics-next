@@ -298,13 +298,14 @@ export async function grantCuratedCollectionSeed(input: LocalOperatorInput, coll
 /** Dev fixture authority for the seed's exact Work, Content and Realm targets.
  * Authoring and reader progress still use the ordinary Main commands. */
 export async function grantHomeSeedAuthority(input: LocalOperatorInput,
-  grants: readonly { action: 'work.edit' | 'work.read' | 'content.draft'
+  grants: readonly { action: 'work.edit' | 'recipe.edit' | 'work.read' | 'content.draft'
     | 'content.publish' | 'content.search-eligibility' | 'publication.adopt'
     | 'rating.context.create' | 'rating.observation.set' | 'context.create'
     | 'classification.proposition.define' | 'classification.context.configure'
     | 'classification.decision.set' | 'recommendation.generation.manage'; scope: string }[]) {
   loopback(input.accessDatabaseUrl);
   const scopePrefix = { 'work.edit': 'work:edit:https://rezics.com/id/',
+    'recipe.edit': 'work:edit:https://rezics.com/id/',
     'work.read': 'work:read:https://rezics.com/id/',
     'content.draft': 'content:draft:https://rezics.com/id/',
     'content.publish': 'content:publish:https://rezics.com/id/',
