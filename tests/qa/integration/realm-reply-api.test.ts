@@ -1,10 +1,9 @@
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
+import { readEnv } from '../../../scripts/dev/config.ts';
 import { ContentCore, contentDraftIntentDigest, type SaveDraftCommand } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -21,35 +20,26 @@ import { captureContentRecoveryCoverage, graphContentReferences }
   from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 
 test('SUB05/SUB06: exact reviewed revisions place independently in two Realms and revocation suppresses one', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.ACCESS_DATABASE_URL
-    || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
+    || !Bun.env.CONTENT_DATABASE_URL || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
     throw new Error('Run through isolated QA integration');
   }
   const state = join(root, '.temp', `realm-reply-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const contentPool = new Pool({ host: '127.0.0.1', port, user: process.env.USER,
-    database: 'postgres', max: 8 });
+  const stack = join(root, '.temp', 'stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`);
+  const compose = readEnv(join(stack, 'compose.env'));
+  const adminUrl = `postgres://postgres:${encodeURIComponent(compose.POSTGRES_PASSWORD!)}@127.0.0.1:${compose.POSTGRES_PORT}/postgres`;
+  const database = `qa_realm_reply_${randomUUID().replaceAll('-', '')}`;
+  const admin = new Client({ connectionString: adminUrl });
+  await admin.connect();
+  try { await admin.query(`CREATE DATABASE ${database} WITH TEMPLATE template0 OWNER content`); }
+  finally { await admin.end(); }
+  const contentUrl = new URL(Bun.env.CONTENT_DATABASE_URL);
+  contentUrl.pathname = `/${database}`;
+  const contentPool = new Pool({ connectionString: contentUrl.toString(), max: 8 });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   try {
     await migrateContent(contentPool);
@@ -244,7 +234,10 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
   } finally {
     await contentPool.end();
     await accessPool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
+    const cleanup = new Client({ connectionString: adminUrl });
+    await cleanup.connect();
+    try { await cleanup.query(`DROP DATABASE ${database} WITH (FORCE)`); }
+    finally { await cleanup.end(); }
     rmSync(state, { recursive: true, force: true });
   }
 }, 180_000);
