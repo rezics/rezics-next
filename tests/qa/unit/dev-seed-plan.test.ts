@@ -341,9 +341,12 @@ describe('dev seed plan', () => {
     }
     expect(steps.map(step => step.name)).toEqual([
       'seedAccounts', 'seedClassics', 'seedWorks', 'seedContributions', 'seedRealms', 'seedAdoptions',
-      'seedRatings', 'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
-      'seedProfileCredits', 'seedProfileBios', 'seedProfileShelves', 'seedProfileFollows', 'seedOfficialZones',
+      'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
+      'seedProfileCredits', 'seedProfileBios', 'seedProfileFollows', 'seedOfficialZones',
       'seedOfficialThemes',
+      // Shelves, ratings and votes wait for readable classics and community Realms (G-385).
+      'seedProfileShelves', 'seedCommunityRealms', 'seedCommunityDiscussions', 'seedReadingLives',
+      'seedRatings', 'seedReviews', 'seedCommunityVotes', 'seedCoReaders',
       'checkPublicReads', 'printSeedReport',
     ]);
   });
