@@ -1,6 +1,7 @@
-import type { ZoneDecision, ZoneImage, ZoneText, ZoneWork } from '@rezics/zone-sdk';
+import type { ZoneDecision, ZoneImage, ZonePerson, ZoneText, ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { profileHref } from '../profile/route.ts';
 import { coverKindOf } from '../catalogue/work.ts';
 import type { FallbackReason, MainExecution, PresentationBanner } from '../zones/presentation.ts';
 import { decisionHref, realmWorkHref } from './route.ts';
@@ -52,6 +53,38 @@ export function zoneWork(card: WorkCard & { primaryCredits?: { displayName: stri
     status: card.completionStatus, chapters: card.chapterCount, words: card.wordCount,
     updatedAt: card.lastUpdatedAt,
     decision: decision ? decisionHref(context.locale, context.ref, decision) : null };
+}
+
+/** A Work's credited author as Main's module reads name them: a REZICS Agent, or a source such as Open Library. */
+export interface ModuleCredit {
+  agent: string | null; handle: string | null; displayName: string | null; provider: string | null; key: string | null;
+}
+
+/**
+ * The people behind a feed's Works, as a people module shows them: each named
+ * author once, in the order their Works arrived here, with those Works as the
+ * note. An Agent links to their profile; a source-reported author to a search
+ * for their name, which is where their other Works are found.
+ */
+export function zonePeople(works: readonly { title: MainName; primaryCredits?: readonly ModuleCredit[] }[],
+  limit: number): ZonePerson[] {
+  const found = new Map<string, { person: Omit<ZonePerson, 'note'>; titles: MainName[] }>();
+  for (const work of works) {
+    for (const credit of work.primaryCredits ?? []) {
+      if (!credit.displayName) continue;
+      const id = credit.agent ?? `${credit.provider}:${credit.key ?? credit.displayName}`;
+      const entry = found.get(id);
+      if (entry) { if (!entry.titles.some(title => title.value === work.title.value)) entry.titles.push(work.title); continue; }
+      if (found.size >= limit) continue;
+      found.set(id, { titles: [work.title], person: { id, name: { value: credit.displayName, lang: '', dir: 'ltr' },
+        href: credit.handle ? profileHref(credit.handle) : `/search?${new URLSearchParams({ q: credit.displayName })}`,
+        avatar: null } });
+    }
+  }
+  return [...found.values()].map(({ person, titles }) => {
+    const lang = titles.every(title => title.language === titles[0]!.language) ? titles[0]!.language : '';
+    return { ...person, note: { value: titles.map(title => title.value).join(' · '), lang, dir: 'ltr' } };
+  });
 }
 
 /** A Decision in the Zone's words, titled from the Works this page already read. */

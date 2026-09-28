@@ -5,7 +5,8 @@ import { discoverHref } from '../discover/state.ts';
 import { feedOf, placedModule, type PresentationModule, type RealmFeed, type ZonePresentation }
   from '../zones/presentation.ts';
 import type { ModuleState, PlacedModule } from '../zones/zone-home.tsx';
-import { type AdaptContext, bannerImage, liveBanners, zoneDecision, zoneText, zoneWork } from './adapt.ts';
+import { type AdaptContext, bannerImage, liveBanners, type ModuleCredit, zoneDecision, zonePeople, zoneText, zoneWork }
+  from './adapt.ts';
 import { readLatestChapters, readNewAdoptions, readRankings, readRealmWorks, readRecentDecisions,
   readRecentlyCompleted, readRising, readZoneDiscussions, readZoneEditorLists, readZoneGenres,
   readZoneQuotes } from './read.ts';
@@ -142,6 +143,31 @@ async function rising(module: PresentationModule, context: AdaptContext): Promis
   return items.length ? { state: 'ready', data: { items } } : empty;
 }
 
+/** A feed's Works with their credited authors, as Main's module reads return them. */
+async function creditedWorks(feed: RealmFeed, context: AdaptContext):
+  Promise<Loaded<{ title: MainName; primaryCredits: readonly ModuleCredit[] }[]>> {
+  const { realm, locale } = context;
+  if (feed === 'new-adoptions' || feed === 'recently-completed') {
+    const page = await (feed === 'new-adoptions' ? readNewAdoptions : readRecentlyCompleted)(realm, locale);
+    return page.ok ? { ok: true, data: page.data.items } : page;
+  }
+  if (feed === 'latest-chapters') {
+    const page = await readLatestChapters(realm, locale);
+    return page.ok ? { ok: true, data: page.data.items.map(item => item.work) } : page;
+  }
+  return { ok: false, failure: 'invalid' };
+}
+
+/** People to follow: the authors of the Works a feed brings to this Realm (Books' "Authors to follow"). */
+async function people(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'people'>> {
+  const feed = feedOf(module.source);
+  if (!feed || feed === 'recent-decisions') return unsupported;
+  const works = await creditedWorks(feed, context);
+  if (!works.ok) return failed;
+  const items = zonePeople(works.data, module.options?.limit ?? 6);
+  return items.length ? { state: 'ready', data: { items } } : empty;
+}
+
 async function decisions(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'decision-log'>> {
   const [page, works] = await Promise.all([readRecentDecisions(context.realm), readRealmWorks(context.realm,
     context.locale)]);
@@ -219,6 +245,7 @@ async function load(module: PresentationModule, presentation: ZonePresentation, 
     case 'chip-nav': return genres(module, context);
     case 'ranking': return rankings(module, context);
     case 'rising': return rising(module, context);
+    case 'people': return people(module, context);
     case 'announcement': return { state: 'ready',
       data: { text: { value: module.title, lang: '', dir: 'ltr' }, href: null } satisfies ZoneModuleData['announcement'] };
     default: return unsupported;

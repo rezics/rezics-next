@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { bannerImage, liveBanners, mainExecution, zoneDecision, zoneImage, zoneText, zoneWork }
+import { bannerImage, liveBanners, mainExecution, zoneDecision, zoneImage, zonePeople, zoneText, zoneWork }
   from '../features/realm/adapt.ts';
 import { type JoinPolicy, offerOf } from '../features/realm/membership-state.ts';
 import { chartMetric, withRealmCard } from '../features/realm/modules.ts';
@@ -89,6 +89,32 @@ describe('Main reads as Zone data', () => {
       words: null, updatedAt: '2026-09-27T12:00:00.000Z',
       decision: `/en/r/fiction/decisions?decision=${decision}#decision-${decision}` });
     expect(zoneWork(card({ tagline: null }), context, null)).toMatchObject({ tagline: null, decision: null });
+  });
+
+  test('a people module names each credited author once, with their Works here, and links where to find more', () => {
+    const name = (value: string, language = 'en') => ({ value, language, direction: 'ltr' as const,
+      basis: 'requested' as const });
+    const austen = { agent: null, handle: null, displayName: 'Jane Austen', provider: 'open-library', key: 'OL21594A' };
+    const maren = { agent: iri('00000000-0000-4000-8000-0000000000aa'), handle: 'maren', displayName: 'Maren Osei',
+      provider: null, key: null };
+    const people = zonePeople([
+      { title: name('Pride and Prejudice'), primaryCredits: [austen] },
+      { title: name('The Cartographer of Tides'), primaryCredits: [maren, { ...austen, displayName: null }] },
+      { title: name('Emma'), primaryCredits: [austen] },
+      { title: name('Persuasion'), primaryCredits: [austen] },
+    ], 6);
+    expect(people).toEqual([
+      { id: 'open-library:OL21594A', name: { value: 'Jane Austen', lang: '', dir: 'ltr' }, avatar: null,
+        href: '/search?q=Jane+Austen', note: { value: 'Pride and Prejudice · Emma · Persuasion', lang: 'en', dir: 'ltr' } },
+      { id: maren.agent, name: { value: 'Maren Osei', lang: '', dir: 'ltr' }, avatar: null, href: '/@maren',
+        note: { value: 'The Cartographer of Tides', lang: 'en', dir: 'ltr' } },
+    ]);
+    // A limit keeps the first authors; a note in two languages declares none.
+    expect(zonePeople([{ title: name('Emma'), primaryCredits: [austen] },
+      { title: name('西游记', 'zh-Hans'), primaryCredits: [austen] }], 1)[0]!.note).toEqual(
+      { value: 'Emma · 西游记', lang: '', dir: 'ltr' });
+    expect(zonePeople([{ title: name('Emma'), primaryCredits: [austen] }, { title: name('Tides'), primaryCredits: [maren] }], 1))
+      .toHaveLength(1);
   });
 
   test('a generated fallback cover is no image, so the cover seam sets the title instead', () => {

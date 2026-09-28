@@ -43,6 +43,8 @@ export interface PerfSample {
   inp: number | null;
   /** Main-thread time beyond 50 ms per long task, from first paint until the page settled. */
   tbt: number;
+  /** The same over the whole load, first paint or not: work a faster first paint moves into TBT counts here too. */
+  blocking: number;
   requests: number;
   /** Everything the page fetched until the network settled, prefetches for likely next pages included. */
   transfer: Record<ResourceKind | 'total', number>;
@@ -61,7 +63,7 @@ export interface PerfTarget {
 
 const observers = () => {
   const state = { lcp: 0, lcpElement: '', cls: 0, windowValue: 0, windowStart: 0, windowLast: 0,
-    tbt: 0, fcp: 0, interactions: new Map<number, number>(),
+    tbt: 0, blocking: 0, fcp: 0, interactions: new Map<number, number>(),
     shifts: [] as { value: number; at: number; nodes: string[] }[] };
   (globalThis as unknown as { __perf: typeof state }).__perf = state;
   const describe = (node: Element | null | undefined) => node
@@ -95,6 +97,7 @@ const observers = () => {
   }).observe({ type: 'paint', buffered: true });
   new PerformanceObserver(list => {
     for (const entry of list.getEntries()) {
+      state.blocking += Math.max(0, entry.duration - 50);
       if (state.fcp && entry.startTime >= state.fcp) state.tbt += Math.max(0, entry.duration - 50);
     }
   }).observe({ type: 'longtask', buffered: true });
@@ -181,9 +184,10 @@ export async function measure(browser: Browser, baseURL: string, target: PerfTar
     }
     const vitals = await page.evaluate(() => {
       const state = (globalThis as unknown as { __perf: { lcp: number; lcpElement: string; cls: number;
-        fcp: number; tbt: number; shifts: { value: number; at: number; nodes: string[] }[] } }).__perf;
+        fcp: number; tbt: number; blocking: number; shifts: { value: number; at: number; nodes: string[] }[] } }).__perf;
       const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
       return { lcp: state.lcp, lcpElement: state.lcpElement, cls: state.cls, fcp: state.fcp, tbt: state.tbt,
+        blocking: state.blocking,
         shifts: state.shifts.toSorted((a, b) => b.value - a.value).slice(0, 5),
         ttfb: navigation ? navigation.responseStart : 0 };
     });
