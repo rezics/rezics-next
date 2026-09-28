@@ -45,7 +45,7 @@ const client = treaty<MainApp>('http://127.0.0.1:1');
 type CreateWork = Parameters<typeof client.v1.works.post>[0];
 type PublicQuery = Parameters<typeof client.v1.queries.post>[0];
 const work: CreateWork = {
-  profile: 'metadata-only-v1', title: 'A Work',
+  profile: 'metadata-only-v1', title: 'A Work', language: 'en',
   actingSubject: 'https://rezics.com/id/11111111-1111-4111-8111-111111111111',
 };
 const query: PublicQuery = { profile: 'public-main-phrase-v1',

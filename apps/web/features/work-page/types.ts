@@ -1,9 +1,8 @@
-import type { treaty } from '@elysia/eden';
-import type { MainApp } from '@rezics/main/app';
+import type { MainClient } from '../discover/types.ts';
 
 // Main's Work read responses (`services/main/src/modules/work/read-contract.ts`),
 // taken from the typed Eden client so a contract change breaks this build.
-type Main = ReturnType<typeof treaty<MainApp>>;
+type Main = MainClient;
 type Work = ReturnType<Main['v1']['works']>;
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
 

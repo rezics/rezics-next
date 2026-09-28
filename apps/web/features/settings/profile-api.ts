@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from 'node:crypto';
 import { serviceOrigin } from '../api/origins.ts';
 import type { PublicAgentProfile } from '../auth/agent-profile.ts';
 
@@ -7,6 +6,12 @@ export type ProfileSaveResult = 'saved' | 'invalid' | 'conflict' | 'denied' | 'u
 export type ProfileSender = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 const avatarTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const avatarMaxBytes = 4 * 1024 * 1024;
+
+/** Web Crypto, so the module stays free of server-only builtins. */
+async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
+}
 
 interface SaveInput {
   token: string;
@@ -48,10 +53,10 @@ export async function saveAgentProfile(input: SaveInput, send: ProfileSender = f
       mediaStage = true;
       const bytes = new Uint8Array(await input.avatar.arrayBuffer());
       const reserved = await send(`${origin}/v1/media/uploads`, { method: 'POST',
-        headers: { ...headers, 'idempotency-key': randomUUID() }, cache: 'no-store',
+        headers: { ...headers, 'idempotency-key': crypto.randomUUID() }, cache: 'no-store',
         body: JSON.stringify({ profile: 'media-image-upload-v1', asset: null,
           mediaType: input.avatar.type, byteLength: bytes.length,
-          sha256: createHash('sha256').update(bytes).digest('hex'), disclosure: 'public',
+          sha256: await sha256Hex(bytes), disclosure: 'public',
           actingSubject: input.agent }) });
       if (!reserved.ok) return problem(reserved, true);
       const upload = await reserved.json() as { asset: string; upload: string };
@@ -67,7 +72,7 @@ export async function saveAgentProfile(input: SaveInput, send: ProfileSender = f
     if (input.avatar || input.removeAvatar && input.expectedAvatarSelection) {
       mediaStage = true;
       const selected = await send(`${origin}/v1/resources/${id}/avatar`, { method: 'PUT',
-        headers: { ...headers, 'idempotency-key': randomUUID() }, cache: 'no-store',
+        headers: { ...headers, 'idempotency-key': crypto.randomUUID() }, cache: 'no-store',
         body: JSON.stringify({ profile: 'resource-avatar-selection-v1', expectedSelection: input.expectedAvatarSelection,
           asset, actingSubject: input.agent }) });
       if (!selected.ok) return problem(selected, true);

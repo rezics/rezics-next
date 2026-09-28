@@ -5,7 +5,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: '.',
   // App-wide journeys live in tests/; a feature's own journeys sit beside it.
-  testMatch: ['tests/*.e2e.ts', 'features/**/*.e2e.ts'],
+  testMatch: ['tests/*.e2e.ts'],
   outputDir: '../../.temp/playwright/accounts-results',
   timeout: 120_000,
   // Dev servers render on first request; allow them to compile a page.

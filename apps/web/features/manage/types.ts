@@ -1,12 +1,11 @@
-import type { treaty } from '@elysia/eden';
-import type { MainApp } from '@rezics/main/app';
+import type { MainClient } from '../discover/types.ts';
 
 // Main's management shapes (`services/main/src/modules/management-reads/read-contract.ts`,
 // `modules/realm-admin/contract.ts`, `modules/realm-submission/schema.ts`), taken from
 // the typed Eden client so a contract change breaks this build.
 
 /** The Eden client for Main: `mainApiWithToken()` on the server, `browserMainApi()` in the browser. */
-export type MainClient = ReturnType<typeof treaty<MainApp>>;
+export type { MainClient };
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
 type Body<Call> = Call extends (body: infer Input, ...rest: never[]) => unknown ? Input : never;
 type Realm = ReturnType<MainClient['v1']['realms']>;
