@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
-import { expect, screen, userEvent, within } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { WorkCredits } from './credits.tsx';
 import * as fixture from './fixtures.ts';
@@ -126,7 +126,9 @@ export const History: Story = {
     // What History leaves out is a help tip, not a sentence in the list's way.
     await expect(region).not.toHaveTextContent('Who made each change');
     await userEvent.click(within(region).getByRole('button', { name: 'About this history' }));
-    await expect(await screen.findByText(/Who made each change, and the text before it, are not shown/)).toBeVisible();
+    // The popover fades in; wait for it rather than catch its first frame.
+    const note = await screen.findByText(/Who made each change, and the text before it, are not shown/);
+    await waitFor(() => expect(note).toBeVisible());
     await userEvent.keyboard('{Escape}');
     const items = within(region).getAllByRole('listitem');
     await expect(items.map(item => item.querySelector('p')?.textContent)).toEqual(['A reply was placed in a community',

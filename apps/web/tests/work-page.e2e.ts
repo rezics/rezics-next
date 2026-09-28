@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { type BrowserContext, expect, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 
-interface Seed { work: string; realm: string; title: string; reply: string; chapters: string[]; targets: string[] }
+interface Seed { work: string; realm: string; title: string; reply: string; chapters: string[]; targets: string[];
+  single: { work: string; title: string } }
 
 // One public Work with versions, Realm adoption, classification, credits,
 // ratings, contents and a reviewed reply, seeded once into this isolated QA stack.
@@ -181,6 +182,28 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   expect(await page.locator('[data-face]').evaluate(element => (element as HTMLElement).style
     .getPropertyValue('--reader-size'))).toBe('19px');
   await expect(page.getByText('Sign in to keep your place')).toBeVisible();
+
+  // A chapter Work's own address is its place in the Book's reader, never a Work page of its own.
+  await page.goto(`/en/w/${uuid(seed.targets[1]!)}`);
+  await expect(page).toHaveURL(`/en/w/${id}/read/${second}`);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Surveyor’s Chain');
+
+  // A Book with no chapters is read as one text: Start reading opens it, and Contents lists it once.
+  const single = uuid(seed.single.work);
+  await page.goto(`/en/w/${single}`);
+  const startText = page.getByRole('link', { name: 'Start reading' }).first();
+  await expect(startText).toHaveAttribute('href', `/en/w/${single}/read`);
+  await startText.click();
+  await expect(page).toHaveURL(`/en/w/${single}/read`);
+  await expect(page.getByRole('heading', { level: 1, name: seed.single.title })).toBeVisible();
+  await expect(page.getByRole('article')).toContainText('The tables were right for a hundred years');
+  await expect(page.getByRole('navigation', { name: 'Chapters' })).toHaveCount(0);
+  await page.goto(`/en/w/${single}/contents`);
+  const oneText = page.getByRole('region', { name: 'Contents' });
+  await expect(oneText).toContainText('This book is read as one text.');
+  await expect(oneText.getByRole('listitem')).toHaveCount(1);
+  await expect(oneText).not.toContainText('Main Version');
+
   await page.goto(`/en/w/${id}/read/${randomUUID()}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Chapter not found' })).toBeVisible();
   // Streamed metadata lands in the body for browsers; crawlers get the blocking render with it in the head.
@@ -224,6 +247,7 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await page.request.post('/locale/select', { form: { locale: 'en' } });
   await shoot(page, context, `/en/w/${id}/read/${first}`, 'reader-en', info);
   await shoot(page, context, `/en/w/${id}/history`, 'history-en', info);
+  await shoot(page, context, `/en/w/${single}/read`, 'text-reader-en', info);
   expect(errors).toEqual([]);
 });
 
@@ -288,8 +312,24 @@ test('a signed-in reader shelves and rates a Work, sees their rating in Mine and
   await page.goto(`/en/w/${id}/read/${second}`);
   await expect(page.getByText('Progress isn’t kept for this Work yet.')).toBeVisible();
 
-  // Last, since it adds to the counts earlier cases assert: the stars write the reader's own rating.
+  // Chapter 1 read and the Work on the reader's shelf: Continue opens chapter 2 and names it.
+  await page.goto(`/en/w/${id}/read/${first}`);
+  await page.getByRole('button', { name: 'Mark chapter as read' }).click();
+  await expect(page.getByText('Chapter read')).toBeVisible();
   if (!libraryOpen) return;
+  await page.goto(`/en/w/${id}`);
+  await page.getByRole('button', { name: 'Want to read', exact: true }).click();
+  await shelved('Want to read').click();
+  await page.getByRole('menuitemradio', { name: 'Currently reading' }).click();
+  await expect(shelved('Currently reading')).toBeVisible();
+  await page.reload();
+  const resume = page.getByRole('link', { name: 'Continue reading' });
+  await expect(resume).toHaveAttribute('href', new RegExp(`^/en/w/${id}/read/${second}(\\?|$)`));
+  await expect(page.getByText('The Surveyor’s Chain', { exact: true }).first()).toBeVisible();
+  await resume.click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Surveyor’s Chain');
+
+  // Last, since it adds to the counts earlier cases assert: the stars write the reader's own rating.
   await page.goto(`/en/w/${id}`);
   await page.getByRole('radio').nth(3).click();
   await expect(page.getByText('Your rating', { exact: true })).toBeVisible();

@@ -2,10 +2,11 @@
 // e2e harness started: English and Japanese versions, a Realm that adopted it,
 // Global and Realm classification with relevance, an original title and
 // description, an Open Library and a native Agent credit, Global and Realm
-// ratings, a table of contents with published chapters and a reviewed reply.
-// It writes through the owner commands and Main routes the Main integration
-// tests use (work-read, work-metadata, work-contents, work-activity, profiles)
-// and prints the IDs.
+// ratings, a table of contents with published chapters and a reviewed reply,
+// an older chapter Work with a public text of its own, and a second Book read
+// as one text. It writes through the owner commands and Main routes the Main
+// integration tests use (work-read, work-metadata, work-contents,
+// work-activity, profiles) and prints the IDs.
 import { createHash, randomUUID } from 'node:crypto';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -193,6 +194,35 @@ try {
           label: { value: 'Neap Tide', language: 'en' } },
       ] }), 200);
 
+  // An older chapter Work with a public text of its own, as early serial seeds made them: its address is the
+  // chapter's place in the Book's reader, not a Work page.
+  const chainText = await stack.contribution(chain, a!.actor, 'en', 'She set the chain across the mud.');
+  const chainMain = (await stack.fuseki.query(`SELECT ?main WHERE { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(chain)} <${RV}mainVersion> ?main } }`)).results?.bindings[0]?.main?.value;
+  if (!chainMain) throw new Error('Chapter Work has no Main Version');
+  const chainSelection = { context: { kind: 'main-version-default' as const, id: chainMain }, work: chain,
+    contribution: chainText.contribution, publicationDecision: chainText.decision, expectedSelectionHead: null,
+    selectionBasis: 'main-maintainer' as const, actingSubject: a!.actor };
+  if ((await selectMainDefault(stack.env, stack.admission(a!.actor, `publication:select:${chainMain}`,
+    'publication.select', mainSelectionDigest(chainSelection)), chainSelection)).outcome !== 'succeeded') {
+    throw new Error('Chapter Work text was not selected');
+  }
+
+  // A Book with no chapters: its Main Version is one selected text, read as a whole.
+  const singleTitle = `Tide Tables ${randomUUID().slice(0, 8)}`;
+  const single = await activateMetadataWork(stack.env, { title: singleTitle, semanticTypes: types,
+    admission: stack.admission(a!.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(singleTitle, types)) });
+  if (!single.work || !single.mainVersion) throw new Error('Single-text Book was not created');
+  const singleText = await stack.contribution(single.work, a!.actor, 'en',
+    ['High water at dawn, low water by noon.', 'The tables were right for a hundred years, then the river moved.'].join('\n'));
+  const singleSelection = { context: { kind: 'main-version-default' as const, id: single.mainVersion },
+    work: single.work, contribution: singleText.contribution, publicationDecision: singleText.decision,
+    expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: a!.actor };
+  if ((await selectMainDefault(stack.env, stack.admission(a!.actor, `publication:select:${single.mainVersion}`,
+    'publication.select', mainSelectionDigest(singleSelection)), singleSelection)).outcome !== 'succeeded') {
+    throw new Error('Single-text Book text was not selected');
+  }
+
   // A reply reviewed and placed in the Realm, so Discussion and History have one.
   const reply = `https://rezics.com/id/${randomUUID()}`;
   const replyVariant = `urn:rezics:variant:${randomUUID()}`;
@@ -224,7 +254,7 @@ try {
     reviewDecisionId: review.decisionId, expectedHead: null, actingSubject: a!.actor }));
 
   console.log(JSON.stringify({ work: work.work, realm: realm.realm, title, reply: replyText,
-    chapters: arranged.occurrences, targets: [low, chain] }));
+    chapters: arranged.occurrences, targets: [low, chain], single: { work: single.work, title: singleTitle } }));
 } finally {
   await stack.stop();
 }
