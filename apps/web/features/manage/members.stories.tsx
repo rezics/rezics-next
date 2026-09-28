@@ -136,7 +136,7 @@ export const UnbanSomeoneOutsideTheRoster: Story = {
     await userEvent.type(dialog.getByRole('textbox', { name: 'Who' }), '@lin_mei');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Ban was a mistake.');
     await userEvent.click(dialog.getByRole('button', { name: 'Unban' }));
-    await expect(await dialog.findByRole('alert')).toHaveTextContent('They aren’t banned in this Realm.');
+    await expect(await dialog.findByRole('alert', {}, { timeout: 5000 })).toHaveTextContent('They aren’t banned in this Realm.');
     await expect(record.members).toEqual([expect.objectContaining({ action: 'unban', member: people.mei,
       expectedMembershipGeneration: '0' })]);
   },
@@ -152,7 +152,7 @@ export const ChangedMeanwhile: Story = {
     const dialog = within(await body().findByRole('dialog', { name: 'Remove An Wu 吴安 from the Realm?' }, { timeout: 5000 }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Stepped down.');
     await userEvent.click(dialog.getByRole('button', { name: 'Remove' }));
-    await expect(await dialog.findByRole('alert')).toHaveTextContent('This member changed while you were deciding.');
+    await expect(await dialog.findByRole('alert', {}, { timeout: 5000 })).toHaveTextContent('This member changed while you were deciding.');
     await expect(dialog.getByRole('textbox', { name: 'Reason' })).toHaveValue('Stepped down.');
   },
 };

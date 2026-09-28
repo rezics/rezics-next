@@ -32,8 +32,9 @@ export const Person: Story = {
 };
 
 export const PenName: Story = {
+  // A pen name has a public profile of its own; the settings show its name, not the person's.
   args: { agent: { ...person, label: 'Aster', handle: 'aster', kind: 'pen-name',
-    path: 'represented-agent' } },
+    path: 'represented-agent' }, profile: { ...profile, displayName: 'Aster', bio: null } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Aster')).toBeVisible();
