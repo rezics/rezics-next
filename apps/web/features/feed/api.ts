@@ -1,5 +1,4 @@
 import { browserMainApi } from '../api/browser.ts';
-import type { InterestKind } from './state.ts';
 import { type FeedbackKind, type FeedbackStrength, type FeedHead, type FeedPage, type FeedQuery, type FollowKind,
   type Loaded, type MainClient, settle, type SuggestedFollow, uuidOf, type Vote } from './types.ts';
 
@@ -23,8 +22,8 @@ export interface FeedApi {
   /** Follows several at once, in one idempotent command. */
   batchFollow(targets: readonly { target: string; kind: FollowKind }[], actingSubject: string,
     key: string): Promise<Loaded<unknown>>;
-  /** Realms and Zones to follow for chosen interests, each with its reason. */
-  suggestions(input: { interests: readonly InterestKind[]; languages: readonly string[]; locale: string;
+  /** Realms and Zones to follow for chosen Concepts and languages, each with its reason. */
+  suggestions(input: { concepts: readonly string[]; languages: readonly string[]; locale: string;
     actingSubject?: string }): Promise<Loaded<SuggestedFollow[]>>;
   feedback(input: { actingSubject: string; kind: FeedbackKind; target: string; strength: FeedbackStrength },
     key: string): Promise<Loaded<unknown>>;
@@ -56,8 +55,8 @@ export function mainFeedApi(main: MainClient = browserMainApi()): FeedApi {
 
     async suggestions(input) {
       const read = await settle(() => main.v1.onboarding['suggested-follows'].get({ query: { locale: input.locale,
-        ...(input.interests.length ? { interests: input.interests.join(',') } : {}),
-        ...(input.languages.length ? { languages: input.languages.join(',') } : {}),
+        ...(input.concepts.length ? { concepts: [...input.concepts] } : {}),
+        ...(input.languages.length ? { languages: [...input.languages] } : {}),
         ...(input.actingSubject ? { actingSubject: input.actingSubject } : {}) } }));
       return read.ok ? { ok: true, data: read.data.items } : read;
     },

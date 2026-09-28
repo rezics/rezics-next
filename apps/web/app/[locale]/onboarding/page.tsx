@@ -52,7 +52,7 @@ export default async function OnboardingPage({ params, searchParams }: {
             <span className="text-muted-foreground text-sm">{t.displayNameHelp}</span>
           </div>
         </HandleField>
-        <p className="text-muted-foreground text-sm">{t.interestsLater}</p>
+        <p className="text-muted-foreground text-sm">{t.topicsLater}</p>
       </> : <>
         <h1 className="font-semibold text-2xl">{t.pending}</h1>
         <p className="text-muted-foreground">{outcome.kind === 'pending' ? t.pendingHelp : t.failed}</p>

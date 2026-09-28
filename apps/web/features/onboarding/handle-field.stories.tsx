@@ -21,7 +21,7 @@ const meta = { title: 'Onboarding/Choose handle', component: HandleField,
     className="grid gap-6 p-6 sm:p-8"><header className="grid gap-2">
       <h1 className="font-semibold text-2xl">{t.welcome}</h1>
       <p className="text-muted-foreground">{t.welcomeHelp}</p>
-    </header><Story /><p className="text-muted-foreground text-sm">{t.interestsLater}</p>
+    </header><Story /><p className="text-muted-foreground text-sm">{t.topicsLater}</p>
     </CardContent></Card></PageContainer>;
   }],
 } satisfies Meta<typeof HandleField>;
@@ -32,7 +32,7 @@ export const Available: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('available'));
-    await expect(canvas.getByRole('button', { name: 'Continue to home' })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: 'Continue' })).toBeEnabled();
   },
 };
 
@@ -41,7 +41,7 @@ export const AlreadyTaken: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('already in use'));
-    await expect(canvas.getByRole('button', { name: 'Continue to home' })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: 'Continue' })).toBeDisabled();
     await userEvent.clear(canvas.getByRole('textbox', { name: 'Your handle' }));
     await userEvent.type(canvas.getByRole('textbox', { name: 'Your handle' }), 'ab');
     await expect(canvas.getByRole('status')).toHaveTextContent('3–30');
@@ -59,7 +59,7 @@ export const Chinese: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('textbox', { name: '您的用户名' })).toHaveValue('ada_lovelace');
-    await waitFor(() => expect(canvas.getByRole('button', { name: '前往首页' })).toBeEnabled());
+    await waitFor(() => expect(canvas.getByRole('button', { name: '继续' })).toBeEnabled());
   },
 };
 

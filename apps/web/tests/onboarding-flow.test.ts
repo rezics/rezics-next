@@ -6,10 +6,11 @@ import { changeHandle } from '../features/onboarding/change-handle.ts';
 const person: OnboardingResult = { agent: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
   state: 'active', suggestedHandle: 'ada', sessionAgent: null, replayed: false };
 
-test('new Person Agent goes to handle choice; returning and selected sessions keep their destination', () => {
+test('G-431: a new Person Agent chooses a handle, then sets up Home; returning and selected sessions keep their destination', () => {
   const created = { kind: 'active' as const, person, firstVisit: true };
-  expect(onboardingDestination(created, false, '/zh-Hans/studio', 'zh-Hans'))
-    .toBe('/zh-Hans/onboarding?next=%2Fzh-Hans%2Fstudio');
+  const destination = onboardingDestination(created, false, '/zh-Hans/studio', 'zh-Hans');
+  expect(destination).toBe(`/zh-Hans/onboarding?next=${encodeURIComponent('/zh-Hans/welcome?next=%2Fzh-Hans%2Fstudio')}`);
+  expect(new URL(destination, 'https://rezics.test').searchParams.get('next')).toBe('/zh-Hans/welcome?next=%2Fzh-Hans%2Fstudio');
   expect(onboardingDestination({ ...created, firstVisit: false }, false, '/en/studio', 'en'))
     .toBe('/en/studio');
   expect(onboardingDestination(created, true, '/en/studio', 'en')).toBe('/en/studio');

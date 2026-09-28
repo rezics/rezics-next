@@ -1,7 +1,7 @@
 import type { browserMainApi } from '../api/browser.ts';
 
 // Main's home shapes (`services/main/src/modules/feed/contract.ts`, `feed/personal.ts`,
-// `modules/follows`, `modules/continue`, `modules/onboarding-interests`), taken
+// `modules/follows`, `modules/continue`, `modules/onboarding`), taken
 // from the typed Eden client so a contract change breaks this build.
 
 /** The Eden client for Main: `mainApi()` on the server, `browserMainApi()` in the browser. */
@@ -23,7 +23,7 @@ export type FollowEntry = FollowsPage['items'][number];
 export type FollowKind = FollowEntry['kind'];
 export type FeedHead = Ok<MainClient['v1']['feed']['head']['get']>;
 export type ContinueItem = Ok<MainClient['v1']['me']['continue']['get']>['items'][number];
-export type InterestsResult = Ok<MainClient['v1']['onboarding']['interests']['get']>;
+export type OnboardingChoices = Ok<MainClient['v1']['onboarding']['choices']['get']>;
 export type SuggestedFollow = Ok<MainClient['v1']['onboarding']['suggested-follows']['get']>['items'][number];
 export type TrendingItem = Ok<MainClient['v1']['trending']['get']>['items'][number];
 type FeedbackBody = Parameters<MainClient['v1']['me']['feed-feedback']['post']>[0];

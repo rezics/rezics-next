@@ -20,5 +20,4 @@ export default {
   retry: 'Reintentar',
   failed: 'No se pudo terminar de configurar tu perfil. Inténtalo de nuevo.',
   changeConflict: 'Ese nombre de usuario cambió o ya no está disponible. Compruébalo de nuevo.',
-  interestsLater: 'Más adelante podrás elegir los temas y las comunidades que quieres seguir.',
 } satisfies Partial<OnboardingMessages>;

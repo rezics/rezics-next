@@ -22,6 +22,14 @@ export interface RealmChoice { id: string; name: string; language: string }
 
 const sortIcons: Record<FeedSort, typeof FlameIcon> = { best: FlameIcon, new: ClockIcon, top: TrophyIcon };
 
+/** One view's tab: the current one underlined, as X's timeline tabs. */
+export const tabLink = cn('relative grid h-12 min-w-24 shrink-0 place-items-center whitespace-nowrap px-4 font-medium',
+  'text-muted-foreground text-sm outline-none transition-colors hover:bg-foreground/[0.03] hover:text-foreground',
+  'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset aria-[current=page]:font-semibold',
+  'aria-[current=page]:text-foreground sm:px-6 aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-4',
+  'aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-1 aria-[current=page]:after:rounded-full',
+  'aria-[current=page]:after:bg-primary');
+
 /** A menu's trigger in the control line: its current choice and a caret, as Reddit's `Best ▾`. */
 export const lineTrigger = cn(buttonVariants({ variant: 'ghost', size: 'sm', pill: true }),
   'h-8 gap-1 px-2.5 font-semibold text-foreground');
@@ -55,17 +63,19 @@ export function LinkMenu<V extends string>({ label, value, options, icon, classN
 }
 
 /**
- * Home's controls, as Reddit and X keep them: the tabs (Following and All;
- * pinned Saved Filters take their place after these once readers can pin
- * them), then one compact line with the sort menu, Top's period, and the
- * Filters with each active filter as a removable chip. Home has one view of
- * posts, so there is no card/compact switch. Every choice has its own
- * address; filters survive tab and sort changes.
+ * Home's controls, as Reddit and X keep them: the tabs (Following, All, then
+ * the Saved Filters the reader pinned, which Home passes as `tabs`), then one
+ * compact line with the sort menu, Top's period, and the Filters with each
+ * active filter as a removable chip. A pinned tab is its own filter, so it
+ * keeps only the sort. Home has one view of posts, so there is no card/compact
+ * switch. Every choice has its own address; filters survive tab and sort changes.
  */
-export function FeedControls({ state, defaults, signedIn, locale, messages, realms }: {
+export function FeedControls({ state, defaults, signedIn, locale, messages, realms, tabs }: {
   state: FeedState; defaults: FeedDefaults; signedIn: boolean; locale: UiLocale; messages: FeedMessages;
   /** Realms the reader can narrow to: those they follow. */
   realms: readonly RealmChoice[];
+  /** The tab strip, when the page draws its own (Home's pinned tabs); otherwise Following and All. */
+  tabs?: ReactNode;
 }) {
   const t = materializeData(messages, { locale });
   const href = (change: Partial<FeedState>) => localizedPath(`/${feedSearch(withChange(state, change), defaults)}`, locale);
@@ -78,18 +88,11 @@ export function FeedControls({ state, defaults, signedIn, locale, messages, real
       href: href({ languages: state.languages.filter(item => item !== language) }) })),
     ...state.realms.map(realm => ({ key: `realm:${realm}`, label: realms.find(item => item.id === realm)?.name ?? t.realms,
       href: href({ realms: state.realms.filter(item => item !== realm) }) })),
-    // A kind from an older address still narrows the feed; it shows here so it can be removed.
-    ...state.kind ? [{ key: `kind:${state.kind}`, label: t[state.kind], href: href({ kind: null }) }] : [],
   ];
   return <div className="grid grid-cols-[minmax(0,1fr)] border-border/60 border-b">
-    {signedIn ? <nav aria-label={t.views} className="flex border-border/60 border-b">
+    {signedIn ? tabs ?? <nav aria-label={t.views} className="flex border-border/60 border-b">
       {(['following', 'all'] as const).map(tab => <Link key={tab} href={href({ tab })}
-        aria-current={state.tab === tab ? 'page' : undefined} className="relative grid h-12 min-w-24 flex-1
-          place-items-center px-4 font-medium text-muted-foreground text-sm outline-none transition-colors
-          hover:bg-foreground/[0.03] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset
-          aria-[current=page]:font-semibold aria-[current=page]:text-foreground sm:flex-none sm:px-6
-          aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-4 aria-[current=page]:after:bottom-0
-          aria-[current=page]:after:h-1 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary">
+        aria-current={state.tab === tab ? 'page' : undefined} className={cn(tabLink, 'flex-1 sm:flex-none')}>
         {tab === 'following' ? t.following : t.all}</Link>)}
     </nav> : null}
     <div className="flex min-h-12 items-center gap-1 px-2 py-1.5 sm:px-3">
@@ -98,7 +101,7 @@ export function FeedControls({ state, defaults, signedIn, locale, messages, real
       {state.sort === 'top' ? <LinkMenu label={t.period} value={state.window} options={topWindows.map(window =>
         ({ value: window, label: window === 'week' ? t.week : window === 'month' ? t.month : t.allTime,
           href: href({ window }) }))} /> : null}
-      <Filters state={state} defaults={defaults} locale={locale} t={t} realms={realms} />
+      {state.tab === 'pinned' ? null : <Filters state={state} defaults={defaults} locale={locale} t={t} realms={realms} />}
       {chips.length ? <ul aria-label={t.activeFilters} className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto
         [scrollbar-width:none]">
         {chips.map(chip => <li key={chip.key} className="shrink-0">

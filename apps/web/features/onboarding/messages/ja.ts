@@ -20,5 +20,4 @@ export default {
   retry: 'もう一度試す',
   failed: 'プロフィールを設定できませんでした。もう一度お試しください。',
   changeConflict: 'ユーザー名が変更されたか、利用できなくなりました。もう一度確認してください。',
-  interestsLater: 'フォローするトピックやコミュニティは後から選べます。',
 } satisfies Partial<OnboardingMessages>;

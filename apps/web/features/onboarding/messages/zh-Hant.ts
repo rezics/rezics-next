@@ -20,5 +20,4 @@ export default {
   retry: '再試一次',
   failed: '無法完成個人檔案設定，請再試一次。',
   changeConflict: '此使用者名稱已變更或無法使用，請重新檢查。',
-  interestsLater: '您可以稍後再選擇想追蹤的主題和社群。',
 } satisfies Partial<OnboardingMessages>;

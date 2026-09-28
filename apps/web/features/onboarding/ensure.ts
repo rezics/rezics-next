@@ -38,9 +38,13 @@ export async function ensureOnboarding(token: string, sessionKey: string,
   return { kind: 'pending' };
 }
 
+/**
+ * Where a sign-in lands. A new person chooses a handle, then sets up Home
+ * (languages, topics, communities), then reaches where they were going.
+ */
 export function onboardingDestination(outcome: OnboardingOutcome,
   selectedBefore: boolean, next: string, locale: string): string {
   if (selectedBefore || outcome.kind === 'active' && !outcome.firstVisit) return next;
-  const path = `/${locale}/onboarding`;
-  return `${path}?next=${encodeURIComponent(next)}`;
+  const setup = `/${locale}/welcome?next=${encodeURIComponent(next)}`;
+  return `/${locale}/onboarding?next=${encodeURIComponent(setup)}`;
 }

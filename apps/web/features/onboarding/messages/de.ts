@@ -20,5 +20,4 @@ export default {
   retry: 'Erneut versuchen',
   failed: 'Dein Profil konnte nicht eingerichtet werden. Bitte versuche es erneut.',
   changeConflict: 'Der Benutzername wurde geändert oder ist nicht mehr verfügbar. Prüfe ihn erneut.',
-  interestsLater: 'Themen und Communities, denen du folgen möchtest, kannst du später auswählen.',
 } satisfies Partial<OnboardingMessages>;

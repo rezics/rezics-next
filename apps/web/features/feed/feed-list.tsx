@@ -69,16 +69,17 @@ function FeedFailure({ failure }: { failure: ReadFailure }) {
  * Asks Main, while the page is visible, how many posts arrived since the one
  * the reader is looking at began; never inserts them above the reader.
  */
-function useNewPosts(page: FeedPage, scope: 'following' | 'all', interval: number) {
+function useNewPosts(page: FeedPage, scope: 'following' | 'all' | null, interval: number) {
   const { api, actingSubject, signedIn } = useFeed();
   const [head, setHead] = useState<FeedHead | null>(null);
   useEffect(() => {
-    if (signedIn && !actingSubject) return;
+    if (signedIn && !actingSubject || !scope) return;
+    const polled = scope;
     let stopped = false;
     const after = page.projection.sequence;
     async function check() {
       if (document.visibilityState !== 'visible') return;
-      const read = await api().head({ after, scope, ...(actingSubject ? { actingSubject } : {}) });
+      const read = await api().head({ after, scope: polled, ...(actingSubject ? { actingSubject } : {}) });
       if (stopped) return;
       // A Main without the head read (404) is not asked again on this page.
       if (!read.ok && read.failure === 'missing') { stopped = true; clearInterval(timer); return; }
@@ -91,12 +92,12 @@ function useNewPosts(page: FeedPage, scope: 'following' | 'all', interval: numbe
 }
 
 /** Records how far the reader has seen, so the navigation's new-activity dots clear. */
-function useWatermark(page: FeedPage, scope: 'following' | 'all') {
+function useWatermark(page: FeedPage, scope: 'following' | 'all' | null) {
   const { api, actingSubject } = useFeed();
   const sent = useRef<string | null>(null);
   useEffect(() => {
     const position = `${scope}:${page.sourcePosition.dataEpoch}:${page.projection.sequence}`;
-    if (!actingSubject || sent.current === position) return;
+    if (!actingSubject || !scope || sent.current === position) return;
     sent.current = position;
     void api().watermark(scope, { actingSubject, dataEpoch: page.sourcePosition.dataEpoch,
       sequence: page.projection.sequence }, commandKey());
@@ -131,7 +132,8 @@ function FeedPages({ page, query, empty, allHref, headInterval }: { page: FeedPa
   const router = useRouter();
   const [state, setState] = useState(() => initialState(page));
   const sentinel = useRef<HTMLDivElement>(null);
-  const scope = query.scope ?? 'all';
+  // A pinned tab is only part of All: its new posts and what was seen are not All's.
+  const scope = query.savedFilter ? null : query.scope ?? 'all';
   const fresh = useNewPosts(page, scope, headInterval);
   useWatermark(page, scope);
 

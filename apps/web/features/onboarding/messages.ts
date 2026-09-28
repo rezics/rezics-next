@@ -1,3 +1,4 @@
+import { asValue, insert, number, plural } from 'native-i18n';
 import { defineMessages } from '../../i18n/define.ts';
 import zhHans from './messages/zh-Hans.ts';
 
@@ -16,13 +17,43 @@ const en = {
   reserved: 'This handle cannot be used. Try another.',
   invalid: 'Use 3–30 letters, numbers or underscores.',
   checkFailed: 'Could not check this handle. Try again.',
-  continue: 'Continue to home',
+  continue: 'Continue',
   pending: 'Your profile is being prepared',
   pendingHelp: 'This usually takes a moment. Your sign-in is saved.',
   retry: 'Try again',
   failed: 'We could not finish setting up your profile. Try again.',
   changeConflict: 'That handle changed or became unavailable. Check it again.',
-  interestsLater: 'You can choose topics and communities to follow later.',
+  topicsLater: 'Next, choose the languages you read and a few topics for your Home.',
+
+  // The first-minute setup (/welcome): languages, topics that become Home tabs, communities
+  setupTitle: 'Set up your Home', skipSetup: 'Skip setup',
+  step: insert('Step {{step}} of {{total}}', { step: String, total: String }),
+  languagesTitle: 'Which languages do you read?',
+  languagesBody: 'Posts in these languages fill your Home. You can change this any time in Settings.',
+  topicsTitle: 'Pick a few topics',
+  topicsBody: 'Each topic you pick becomes a tab on your Home, and brings its posts to Following.',
+  topicsChosen: plural({ one: insert('{{count}} of 8 chosen'), other: insert('{{count}} of 8 chosen') },
+    { count: asValue(number()) }),
+  topicsFull: 'Eight topics fill your Home’s tabs. Unpick one to choose another.',
+  inTopic: insert('in {{topic}}', { topic: String }),
+  noTopics: 'There are no topics to choose yet. You can pin topics from Home later.',
+  typeBooks: 'Books & novels', typeGames: 'Games', typeSoftware: 'Software', typeMods: 'Mods',
+  typeRecipes: 'Recipes', typePrompts: 'Prompts', typeSkills: 'AI skills', typeScreen: 'Film & TV',
+  typeVideo: 'Video', typeMusic: 'Music', typeGuides: 'Guides',
+  communitiesTitle: 'Follow a few communities',
+  communitiesBody: 'Picked for what you chose. Untick any you don’t want.',
+  findingCommunities: 'Finding communities…',
+  noSuggestions: 'No communities to suggest yet. You’ll find more in Discover.',
+  reasonTopic: insert('For {{topic}}', { topic: String }),
+  reasonLanguage: insert('Popular in {{language}}', { language: String }),
+  reasonPopular: 'Popular on REZICS',
+  members: plural({ one: insert('{{count}} member'), other: insert('{{count}} members') }, { count: asValue(number()) }),
+  membersAbout: plural({ one: insert('About {{count}} member'), other: insert('About {{count}} members') },
+    { count: asValue(number()) }),
+  back: 'Back', next: 'Next', skip: 'Skip', finish: 'Finish',
+  followAndFinish: plural({ one: insert('Follow {{count}} and finish'), other: insert('Follow {{count}} and finish') },
+    { count: asValue(number()) }),
+  saveFailed: 'Couldn’t save your choices. Try again.',
 };
 
 export const englishMessages = en;

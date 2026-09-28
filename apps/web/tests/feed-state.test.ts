@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { activeFilterCount, feedQuery, feedSearch, interestFilter, interestKinds, kindAvailable, parseFeedState,
-  withChange } from '../features/feed/state.ts';
+import { activeFilterCount, feedQuery, feedSearch, parseFeedState, pinnedTab, withChange } from '../features/feed/state.ts';
 import { relativeTime } from '../features/feed/time.ts';
 
 const realm = 'https://rezics.com/id/01a0e430-e167-7384-9cb3-e3eba0e0cd3f';
+const saved = '0192f3a0-6f1e-7c2d-9a4b-1c2d3e4f5a6b';
 const following = { tab: 'following', sort: 'best' } as const;
 
 describe('home feed URL state', () => {
@@ -19,18 +19,17 @@ describe('home feed URL state', () => {
     expect(withChange(parseFeedState({ tab: 'all', sort: 'top' }, true), { tab: 'following' }).sort).toBe('best');
   });
 
-  test('unknown or malformed values are dropped instead of failing the page', () => {
-    const state = parseFeedState({ tab: 'hot', sort: 'rising', t: 'decade', kind: 'podcasts',
+  test('unknown or malformed values are dropped instead of failing the page, including the retired kind', () => {
+    const state = parseFeedState({ tab: 'hot', sort: 'rising', t: 'decade', kind: 'books',
       lang: 'en,klingon,ja,en', realm: [realm, 'not-an-iri', realm] }, true);
-    expect(state).toEqual({ tab: 'following', sort: 'best', window: 'week', kind: null, languages: ['en', 'ja'],
+    expect(state).toEqual({ tab: 'following', filter: null, sort: 'best', window: 'week', languages: ['en', 'ja'],
       realms: [realm] });
   });
 
   test('a URL carries only what differs from the defaults, and reads back the same', () => {
-    const state = parseFeedState({ tab: 'all', sort: 'top', t: 'month', kind: 'discussions', lang: ['ja', 'ko'],
-      realm }, true);
+    const state = parseFeedState({ tab: 'all', sort: 'top', t: 'month', lang: ['ja', 'ko'], realm }, true);
     const search = feedSearch(state, following);
-    expect(search).toBe(`?tab=all&sort=top&t=month&kind=discussions&lang=ja%2Cko&realm=${encodeURIComponent(realm)}`);
+    expect(search).toBe(`?tab=all&sort=top&t=month&lang=ja%2Cko&realm=${encodeURIComponent(realm)}`);
     expect(parseFeedState(new URLSearchParams(search), true)).toEqual(state);
     expect(feedSearch(parseFeedState({}, true), following)).toBe('');
   });
@@ -41,6 +40,24 @@ describe('home feed URL state', () => {
     expect(all).toMatchObject({ tab: 'all', sort: 'new', languages: ['ja'], realms: [realm] });
     expect(withChange(all, { sort: 'best' })).toMatchObject({ languages: ['ja'], realms: [realm] });
     expect(activeFilterCount(all)).toBe(2);
+  });
+});
+
+describe('pinned tabs', () => {
+  test('G-431: a tab names a Saved Filter by its UUID, signed in only; its filter carries every Condition', () => {
+    const state = parseFeedState({ tab: saved, lang: 'ja', realm, sort: 'top' }, true);
+    expect(state).toEqual({ tab: 'pinned', filter: saved, sort: 'top', window: 'week', languages: [], realms: [] });
+    expect(feedSearch(state, following)).toBe(`?tab=${saved}&sort=top`);
+    expect(parseFeedState(new URLSearchParams(feedSearch(state, following)), true)).toEqual(state);
+    expect(parseFeedState({ tab: saved }, false)).toMatchObject({ tab: 'all', filter: null });
+    expect(parseFeedState({ tab: 'not-a-uuid' }, true)).toMatchObject({ tab: 'following', filter: null });
+  });
+
+  test('G-431: leaving a pinned tab leaves its filter; pinning keeps the sort and drops Home Filters', () => {
+    const pinned = pinnedTab(parseFeedState({ sort: 'new', lang: 'ja' }, true), saved);
+    expect(pinned).toMatchObject({ tab: 'pinned', filter: saved, sort: 'new', languages: [] });
+    expect(withChange(pinned, { tab: 'following' })).toMatchObject({ tab: 'following', filter: null, sort: 'new' });
+    expect(withChange({ ...pinned, sort: 'top' }, { tab: 'following' }).sort).toBe('best');
   });
 });
 
@@ -59,13 +76,13 @@ describe('the feed query sent to Main', () => {
       contentLanguages: ['ja'], realms: [realm], language: 'en', actingSubject: agent, cursor: 'c2' });
   });
 
-  test('people choose from six kinds; each maps to a Main filter', () => {
-    expect(interestKinds).toHaveLength(6);
-    expect(feedQuery(parseFeedState({ kind: 'discussions' }, false), { language: 'en' }).kinds)
-      .toEqual(['discussion', 'reply']);
-    expect(interestKinds.every(kindAvailable)).toBe(true);
-    expect(feedQuery(parseFeedState({ kind: 'recipes' }, false), { language: 'en' }).interests).toBe('recipes');
-    expect(Object.keys(interestFilter)).toEqual([...interestKinds]);
+  test('G-431: a pinned tab reads All through its Saved Filter and sends no Conditions of its own', () => {
+    const agent = 'https://rezics.com/id/ef4ffe88-cffd-4b05-9c7f-590b8b3b6486';
+    expect(feedQuery(parseFeedState({ tab: saved, sort: 'top', lang: 'ja' }, true),
+      { language: 'en', actingSubject: agent })).toEqual({ scope: 'all', sort: 'top', window: 'week',
+      savedFilter: saved, language: 'en', actingSubject: agent });
+    expect(feedQuery(parseFeedState({ kind: 'recipes' }, false), { language: 'en' })).toEqual({ scope: 'all',
+      sort: 'best', language: 'en' });
   });
 });
 

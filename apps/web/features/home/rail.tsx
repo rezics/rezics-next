@@ -31,12 +31,10 @@ export function membersLabel(count: SuggestedFollow['membership']['count'], t: T
   return null;
 }
 
-function reasonLabel(item: SuggestedFollow, t: T, kinds: Record<string, string>): string {
-  if (item.reason.kind === 'official') return t.reasonOfficial;
-  if (item.reason.kind === 'matching-kind' && item.reason.interest) {
-    return t.reasonKind({ kind: kinds[item.reason.interest] ?? item.reason.interest });
-  }
-  return t.reasonPopular;
+/** Why Main suggests a community: the chosen topic its Works carry, or its activity. */
+export function reasonLabel(item: SuggestedFollow, t: T): string {
+  return item.reason.kind === 'matching-concept' && item.reason.concept.name
+    ? t.reasonConcept({ concept: item.reason.concept.name.value }) : t.reasonPopular;
 }
 
 export interface RailData {
@@ -54,10 +52,8 @@ export interface RailData {
  * moderators, and how Home orders posts. Its footer lives here, so infinite
  * scroll never hides one.
  */
-export function Rail({ data, signedIn, locale, messages, kinds, avatarQuery = '' }: {
+export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
   data: RailData; signedIn: boolean; locale: UiLocale; messages: HomeMessages;
-  /** The six kinds' names, for suggestion reasons. */
-  kinds: Record<string, string>;
   avatarQuery?: string;
 }) {
   const t = materializeData(messages, { locale });
@@ -105,7 +101,7 @@ export function Rail({ data, signedIn, locale, messages, kinds, avatarQuery = ''
                 lang={item.name.language}
                 className="truncate font-medium text-sm hover:underline">{item.name.value}</LocalizedLink>
               <span className="truncate text-muted-foreground text-xs">
-                {[reasonLabel(item, t, kinds), members].filter(Boolean).join(' · ')}</span>
+                {[reasonLabel(item, t), members].filter(Boolean).join(' · ')}</span>
             </span>
             <FollowButton target={item.id} kind={item.kind} realm={item.realm}
               label={t.followRealm({ realm: item.name.value })}
@@ -122,6 +118,7 @@ export function Rail({ data, signedIn, locale, messages, kinds, avatarQuery = ''
         <p>{t.howCap({ cap: String(data.ranking.realmCap), window: String(data.ranking.diversityWindow) })}</p>
         <p>{t.howNew}</p>
         {signedIn ? <p>{t.howFollowing}</p> : null}
+        {signedIn ? <p>{t.howPinned}</p> : null}
       </div>
     </details> : null}
     <p className="px-1 text-muted-foreground text-xs">© REZICS</p>

@@ -7,6 +7,8 @@ import { messages as feed } from '../feed/messages.ts';
 import feedZhHans from '../feed/messages/zh-Hans.ts';
 import { type FeedDefaults, type FeedState, feedQuery } from '../feed/state.ts';
 import type { FeedPage, Loaded } from '../feed/types.ts';
+import { memorySavedFilters, noFilters, readerFilters, topics } from '../saved-filter/fixtures.ts';
+import type { SavedFilter, SavedFilters } from '../saved-filter/types.ts';
 import { continueItems, followedCommunities, officialZones, railData, suggestions } from './fixtures.ts';
 import { HomePage, type HomePageProps, HomePosts } from './home-page.tsx';
 import { messages as home } from './messages.ts';
@@ -15,40 +17,45 @@ import { Rail } from './rail.tsx';
 
 // Home as each kind of visitor meets it, over an in-memory Main. The feed's
 // own rules are in Feed/Posts; these stories carry the frame: signed out,
-// a new person's first Home, a returning reader, and filters that name why a
-// view is empty and never switch to another view on their own.
+// a new person's first Home, a returning reader with pinned tabs, and filters
+// that name why a view is empty and never switch to another view on their own.
 
-const kinds = { books: 'Books & web novels', software: 'Mods & software', ai: 'AI skills & prompts',
-  recipes: 'Recipes', media: 'Film & media', discussions: 'Discussions' };
 const reader = storyId(801, 'bbbb');
 const name = (value: string) => ({ value, language: 'en', direction: 'ltr' as const, basis: 'requested' as const });
 const signInHref = '/auth/start?next=%2Fen';
 const following: FeedDefaults = { tab: 'following', sort: 'best' };
 const state = (change: Partial<FeedState> = {}): FeedState =>
-  ({ tab: 'following', sort: 'best', window: 'week', kind: null, languages: [], realms: [], ...change });
+  ({ tab: 'following', filter: null, sort: 'best', window: 'week', languages: [], realms: [], ...change });
+const fantasy = readerFilters.pinned[0]!;
+const pinnedState = (filter: SavedFilter = fantasy) => state({ tab: 'pinned', filter: filter.id });
 
 type Args = HomePageProps & { withRail?: boolean };
 
 /** A Home over the in-memory Main; `page` and `personalRefused` shape the posts, as the route's read does. */
 function props(options: { signedIn?: boolean; state?: FeedState; page?: Loaded<FeedPage>; locale?: UiLocale;
-  personalRefused?: boolean } & Partial<Args> = {}): Args {
-  const { signedIn = true, locale = 'en', page: shown, personalRefused, ...rest } = options;
+  personalRefused?: boolean; filters?: SavedFilters; recommendations?: boolean | null } & Partial<Args> = {}): Args {
+  const { signedIn = true, locale = 'en', page: shown, personalRefused, filters = readerFilters,
+    recommendations = null, ...rest } = options;
   const view = options.state ?? state(signedIn ? {} : { tab: 'all' });
   const zh = locale === 'zh-Hans';
   const messages = { home: zh ? { ...home, ...homeZhHans } : home, feed: zh ? { ...feed, ...feedZhHans } : feed };
   const defaults: FeedDefaults = signedIn ? following : { tab: 'all', sort: 'best' };
+  const pinned = view.tab === 'pinned' ? [...filters.pinned, ...filters.unpinned].find(item => item.id === view.filter)
+    ?? null : null;
   return {
     locale, now: NOW, signedIn, actingSubject: signedIn ? reader : null, avatarQuery: '', messages,
     state: view, defaults,
-    posts: <HomePosts locale={locale} messages={messages.feed} signedIn={signedIn} actingSubject={signedIn ? reader : null}
-      signInHref={signInHref} state={view} defaults={defaults} personalRefused={personalRefused}
+    posts: <HomePosts locale={locale} messages={messages} signedIn={signedIn} actingSubject={signedIn ? reader : null}
+      signInHref={signInHref} state={view} defaults={defaults} personalRefused={personalRefused} pinned={pinned}
+      recommendations={recommendations} saveRecommendations={async () => true}
       query={feedQuery(view, { language: locale, ...(signedIn ? { actingSubject: reader } : {}) })}
       page={shown ?? { ok: true, data: page(signedIn ? [everyKind[0]!, suggestion, ...everyKind.slice(1, 4)]
-        : everyKind.slice(2, 6), { scope: view.tab }) }}
+        : everyKind.slice(2, 6), { scope: view.tab === 'following' ? 'following' : 'all' }) }}
       readerActions={signedIn ? memoryReaderActions({}) : undefined} />,
     newPerson: false, followed: signedIn ? followedCommunities : null, continueItems: null, official: officialZones,
-    interests: { kinds: [], languages: [locale] }, pickerSkipped: false, welcomeDismissed: false,
-    signInHref, signUpHref: `${signInHref}&create=1`, api: memoryFeed({ suggestions }),
+    savedFilters: signedIn ? filters : null, setupHref: '/en/welcome?next=%2Fen', setupLater: false,
+    welcomeDismissed: false, signInHref, signUpHref: `${signInHref}&create=1`, api: memoryFeed({ suggestions }),
+    filtersApi: memorySavedFilters(filters),
     ...rest,
   };
 }
@@ -58,7 +65,7 @@ const meta = {
   component: HomePage,
   render: ({ withRail = true, ...args }: Args) => <HomePage {...args} rail={withRail
     ? <Rail data={args.signedIn ? railData : { ...railData, moderated: [], trending: { ...railData.trending, scope: 'global' } }}
-      signedIn={args.signedIn} locale={args.locale} messages={args.messages.home} kinds={kinds} /> : undefined} />,
+      signedIn={args.signedIn} locale={args.locale} messages={args.messages.home} /> : undefined} />,
   parameters: { route: { pathname: '/en' } },
   globals: { viewport: { value: 'desktop' } },
 } satisfies Meta<Args>;
@@ -164,40 +171,186 @@ export const ZoneAddresses: Story = {
   },
 };
 
-/** A new person picks kinds and languages, then follows the suggested communities in one step. */
+/** A new person is invited to the first-minute setup; All · Best stays below, and `+` pins a topic any time. */
 export const NewPerson: Story = {
-  args: props({ newPerson: true, followed: { realms: [], zones: [], complete: true },
+  args: props({ newPerson: true, followed: { realms: [], zones: [], complete: true }, filters: noFilters,
     state: state({ tab: 'all' }), page: { ok: true, data: page(everyKind.slice(2, 5), { scope: 'all' }) } }),
-  async play({ canvasElement, args }) {
+  async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const picker = canvas.getByRole('region', { name: 'What do you come to REZICS for?' });
-    await expect(picker).toHaveTextContent('Step 1 of 3');
-    await userEvent.click(within(picker).getByRole('button', { name: 'Mods & software' }));
-    await expect(within(picker).getByRole('button', { name: 'Mods & software' })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(within(picker).getByRole('button', { name: 'Next' }));
-    const languages = canvas.getByRole('region', { name: 'Which languages do you read?' });
-    await expect(within(languages).getByRole('button', { name: /English/ })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(within(languages).getByRole('button', { name: /日本語/ }));
-    await userEvent.click(within(languages).getByRole('button', { name: 'Next' }));
-    const communities = canvas.getByRole('region', { name: 'Follow a few communities' });
-    // Every suggestion starts ticked, with its reason; the reader unticks what they do not want.
-    const classics = await within(communities).findByRole('checkbox', { name: /Classic Literature/ });
-    await expect(within(communities).getByText(/For Mods & software · 12,480 members/)).toBeVisible();
-    await expect(within(communities).getByText(/Official Zone · About 48,000 members/)).toBeVisible();
-    await userEvent.click(classics);
-    await userEvent.click(within(communities).getByRole('button', { name: 'Follow 2 and continue' }));
-    await waitFor(() => expect((args.api as ReturnType<typeof memoryFeed>).calls).toContain('batch:2'));
+    const invite = canvas.getByRole('region', { name: 'Make Home yours' });
+    await expect(within(invite).getByRole('link', { name: 'Choose topics' })).toHaveAttribute('href', '/en/welcome?next=%2Fen');
+    // With no pinned tab yet, `+` says what it does.
+    const tabs = canvas.getByRole('navigation', { name: 'Feed' });
+    await expect(within(tabs).getByRole('button', { name: 'Pin a topic' })).toBeVisible();
+    await expect(within(tabs).getByRole('link', { name: 'All' })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getAllByRole('article').length).toBeGreaterThan(0);
+    await userEvent.click(within(invite).getByRole('button', { name: 'Not now' }));
+    await expect(document.cookie).toContain('rezics_home_picker=skipped');
+    await expect(canvas.getByRole('region', { name: 'Make Home yours' })).toHaveTextContent('Pin topics as tabs');
   },
 };
 
-/** Skipped once, the picker waits as a slim card rather than returning in full. */
-export const PickerSkipped: Story = {
-  args: props({ newPerson: true, pickerSkipped: true, followed: { realms: [], zones: [], complete: true },
-    state: state({ tab: 'all' }) }),
+/** Put off once, the invitation waits as a slim line rather than returning in full. */
+export const SetupPutOff: Story = {
+  args: props({ newPerson: true, setupLater: true, followed: { realms: [], zones: [], complete: true },
+    filters: noFilters, state: state({ tab: 'all' }) }),
+  async play({ canvasElement }) {
+    const invite = within(canvasElement).getByRole('region', { name: 'Make Home yours' });
+    await expect(within(invite).queryByRole('button', { name: 'Not now' })).toBeNull();
+    await expect(within(invite).getByRole('link', { name: 'Choose topics' })).toBeVisible();
+  },
+};
+
+/** Pinned topics and filters are tabs after Following and All, each with its own address. */
+export const PinnedTabs: Story = {
+  args: props(),
+  async play({ canvasElement }) {
+    const tabs = within(canvasElement).getByRole('navigation', { name: 'Feed' });
+    await expect(within(tabs).getAllByRole('link').map(link => link.textContent))
+      .toEqual(['Following', 'All', 'Fantasy', 'English & Japanese', '仙侠']);
+    await expect(within(tabs).getByRole('link', { name: 'Fantasy' })).toHaveAttribute('href', `/en?tab=${fantasy.id}`);
+    await expect(within(tabs).getByRole('link', { name: '仙侠' })).toHaveAttribute('lang', 'zh-Hans');
+    await expect(within(tabs).getByRole('button', { name: 'Pin a topic or filter' })).toBeVisible();
+  },
+};
+
+/** A pinned tab reads All through its filter with the same Best/New/Top line; the tab is its own filter. */
+export const PinnedTab: Story = {
+  args: props({ state: pinnedState(), page: { ok: true, data: page(everyKind.slice(0, 3), { scope: 'all' }) } }),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Pick interests' }));
-    await expect(canvas.getByRole('region', { name: 'What do you come to REZICS for?' })).toBeVisible();
+    const tabs = canvas.getByRole('navigation', { name: 'Feed' });
+    await expect(within(tabs).getByRole('link', { name: 'Fantasy' })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.queryByRole('button', { name: /^Filters/ })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Sort: Best' }));
+    await waitFor(() => expect(screen.getByRole('menuitemradio', { name: /^Top/ })).toBeVisible());
+    await userEvent.keyboard('{Escape}');
+  },
+};
+
+/** An empty pinned tab names its topic and leads to the topic's page, never widening on its own. */
+export const PinnedTabEmpty: Story = {
+  args: props({ state: pinnedState(), page: { ok: true, data: page([], { scope: 'all' }) } }),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: 'Nothing about Fantasy yet' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Open Fantasy' }))
+      .toHaveAttribute('href', `/en/concepts/${topics.fantasy.id.slice(-36)}`);
+    await expect(canvas.getByRole('link', { name: 'Browse All' })).toHaveAttribute('href', '/en?tab=all');
+  },
+};
+
+/** A tab's menu moves it with the keyboard, renames it and takes it off Home; a topic's tab unfollows it. */
+export const TabMenu: Story = {
+  args: props({ state: pinnedState() }),
+  async play({ canvasElement, args }) {
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    const canvas = within(canvasElement);
+    // Each choice is made with the keyboard, as a reader without a mouse moves a tab.
+    const choose = async (item: string) => {
+      await userEvent.click(canvas.getByRole('button', { name: 'Options for Fantasy' }));
+      await waitFor(() => expect(screen.getByRole('menuitem', { name: item })).toBeVisible());
+      for (let step = 0; step < 6 && !screen.getByRole('menuitem', { name: item }).hasAttribute('data-highlighted'); step++) {
+        await userEvent.keyboard('{ArrowDown}');
+      }
+      await userEvent.keyboard('{Enter}');
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    };
+    await userEvent.click(canvas.getByRole('button', { name: 'Options for Fantasy' }));
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Unfollow Fantasy' })).toBeVisible());
+    await expect(screen.queryByRole('menuitem', { name: 'Move left' })).toBeNull();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+
+    await choose('Move right');
+    await waitFor(() => expect(api.calls).toContain('reorder:03,01,02'));
+    // The new order shows at once, before Main's list returns.
+    const tabs = canvas.getByRole('navigation', { name: 'Feed' });
+    await expect(within(tabs).getAllByRole('link').slice(2).map(link => link.textContent))
+      .toEqual(['English & Japanese', 'Fantasy', '仙侠']);
+
+    await choose('Rename');
+    const dialog = await screen.findByRole('dialog', { name: 'Rename tab' });
+    const field = within(dialog).getByRole('textbox', { name: 'Name' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Magic');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.calls).toContain('update:01:{"name":"Magic"}'));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rename tab' })).toBeNull());
+
+    await choose('Remove from Home');
+    await waitFor(() => expect(api.calls).toContain('update:01:{"pinned":false}'));
+  },
+};
+
+/** `+` searches topics in the reader's language, refines through broader and narrower ones, and pins one. */
+export const PinATopic: Story = {
+  args: props(),
+  async play({ canvasElement, args }) {
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    // Before searching: the reader's unpinned topics and popular ones.
+    await expect(dialog.getByRole('region', { name: 'Your topics' })).toHaveTextContent('Mystery');
+    await waitFor(() => expect(dialog.getByRole('button', { name: 'Cozy games' })).toBeVisible());
+    await userEvent.type(dialog.getByRole('searchbox', { name: 'Search topics' }), 'fan');
+    await userEvent.click(await dialog.findByRole('button', { name: 'Fantasy' }));
+    await expect(await dialog.findByRole('heading', { name: 'Fantasy' })).toBeVisible();
+    await expect(dialog.getByRole('region', { name: 'Broader' })).toHaveTextContent('Fiction');
+    await userEvent.click(within(dialog.getByRole('region', { name: 'Narrower' })).getByRole('button', { name: '仙侠' }));
+    await expect(await dialog.findByRole('heading', { name: '仙侠' })).toBeVisible();
+    await userEvent.click(dialog.getByRole('button', { name: 'Back' }));
+    await userEvent.clear(dialog.getByRole('searchbox', { name: 'Search topics' }));
+    await userEvent.click(await dialog.findByRole('button', { name: 'Cozy games' }));
+    await userEvent.click(await dialog.findByRole('button', { name: 'Pin “Cozy games”' }));
+    await waitFor(() => expect(api.calls).toContain(`follow:${topics.cozy.id.slice(-12)}:true`));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
+  },
+};
+
+/** The Filters Home shows now become one named tab. */
+export const SaveFiltersAsTab: Story = {
+  args: props({ state: state({ tab: 'all', languages: ['ja'], realms: [realms.fiction.id] }) }),
+  async play({ canvasElement, args }) {
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    const form = within(dialog.getByRole('form', { name: 'Save these filters as a tab' }));
+    await expect(form.getByRole('textbox', { name: 'Name' })).toHaveValue(`Japanese · ${realms.fiction.name.value}`);
+    await userEvent.clear(form.getByRole('textbox', { name: 'Name' }));
+    await userEvent.type(form.getByRole('textbox', { name: 'Name' }), 'Japanese fiction');
+    await userEvent.click(form.getByRole('button', { name: 'Save as tab' }));
+    await waitFor(() => expect(api.calls).toContain('create:Japanese fiction'));
+  },
+};
+
+/** Eight tabs fill Home: `+` says so instead of failing a pin. */
+export const TabsFull: Story = {
+  args: props({ filters: { revision: readerFilters.revision, unpinned: [], pinned: Array.from({ length: 8 },
+    (_, index) => ({ ...readerFilters.pinned[1]!, id: `00000000-0000-4000-8000-0000000007${index}0`,
+      name: `Tab ${index + 1}`, position: index })) } }),
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
+    await expect(dialog.getByRole('status')).toHaveTextContent('Home has room for eight tabs');
+  },
+};
+
+/** A quiet Following fills with labelled suggestions, which the reader can turn off. */
+export const SuggestionsInFollowing: Story = {
+  args: props({ recommendations: true }),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Suggested posts fill in while your communities are quiet.')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Turn off' })).toBeVisible();
+  },
+};
+
+/** Turned off, Following says so and offers them back. */
+export const SuggestionsOff: Story = {
+  args: props({ recommendations: false, page: { ok: true, data: page(everyKind.slice(0, 2)) } }),
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('button', { name: 'Turn on' })).toBeVisible();
   },
 };
 
@@ -280,12 +433,16 @@ export const SignedOutChinese: Story = {
 export const Dark: Story = { args: props({ continueItems }), globals: { theme: 'dark' } };
 
 export const Phone: Story = {
-  args: props({ continueItems }),
+  args: props({ continueItems, state: pinnedState(readerFilters.pinned[2]) }),
   globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     // The rail's modules are for wide screens; the feed and Continue come first.
     await expect(within(canvasElement).queryByRole('complementary', { name: 'More on REZICS' })).toBeNull();
+    // Tabs scroll sideways inside their strip; the page never does, and `+` stays in reach.
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    const tabs = within(canvasElement).getByRole('navigation', { name: 'Feed' });
+    await expect(within(tabs).getByRole('button', { name: 'Pin a topic or filter' })).toBeVisible();
+    await waitFor(() => expect(within(tabs).getByRole('link', { name: '仙侠' })).toBeVisible());
   },
 };
 

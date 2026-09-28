@@ -2,22 +2,23 @@ import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readReaderSeed } from '../catalogue/reader-store.ts';
 import { type FeedDefaults, type FeedState, feedQuery, parseFeedState } from '../feed/state.ts';
-import { type ContinueItem, type FeedPage, type FeedQuery, type InterestsResult, type Loaded, settle,
-  type SuggestedFollow, type TrendingItem } from '../feed/types.ts';
+import { type ContinueItem, type FeedPage, type FeedQuery, type Loaded, settle, type SuggestedFollow,
+  type TrendingItem } from '../feed/types.ts';
 import { readFollowed, readModerated, readOfficialZones, shellReader } from '../shell/communities-read.ts';
 import type { Community, Moderated } from '../shell/communities.ts';
 
 // Server reads for home. Each returns its own outcome, so one region's
 // failure never takes down another; the rail streams in after the feed.
 
-/** The reader's saved default view, read alongside their follows rather than after them. */
-async function readSavedDefaults(): Promise<FeedDefaults | null> {
+/** The reader's saved default view and suggestion choice, read alongside their follows rather than after them. */
+async function readSavedDefaults(): Promise<{ defaults: FeedDefaults; recommendations: boolean } | null> {
   const reader = await shellReader();
   if (!reader.actingSubject) return null;
   const read = await settle(() => reader.main.v1.me['feed-preferences'].get({ query: {
     actingSubject: reader.actingSubject! } }));
   // Before a first choice Main answers its defaults with no revision; those fit a follower too.
-  return read.ok ? { tab: read.data.preferences.tab, sort: read.data.preferences.sort } : null;
+  return read.ok ? { defaults: { tab: read.data.preferences.tab, sort: read.data.preferences.sort },
+    recommendations: read.data.preferences.recommendations } : null;
 }
 
 /** The reader's default view as Main keeps it; a person who follows nothing starts on All. */
@@ -25,7 +26,7 @@ function feedDefaults(hasFollows: boolean, saved: FeedDefaults | null): FeedDefa
   return hasFollows && saved ? saved : { tab: hasFollows ? 'following' : 'all', sort: 'best' };
 }
 
-/** Whether the reader follows anything at all: a new person gets the interest picker instead of an empty feed. */
+/** Whether the reader follows anything at all: a new person is invited to choose topics and communities. */
 const followsAnything = cache(async (): Promise<boolean | null> => {
   const reader = await shellReader();
   if (!reader.actingSubject) return null;
@@ -53,6 +54,8 @@ export interface HomeView {
   query: FeedQuery;
   /** Null signed out; true for a person who follows nothing yet. */
   newPerson: boolean | null;
+  /** Whether Following fills a quiet page with suggestions; null signed out or unread. */
+  recommendations: boolean | null;
   followed: { realms: Community[]; zones: Community[]; complete: boolean } | null;
 }
 
@@ -72,12 +75,12 @@ export async function readHomeView(params: Record<string, string | string[] | un
   const actingSubject = reader.actingSubject ?? null;
   const [realms, zones, any, saved] = await Promise.all([readFollowed('realm'), readFollowed('zone'), followsAnything(),
     readSavedDefaults()]);
-  const defaults = feedDefaults(any === true, saved);
+  const defaults = feedDefaults(any === true, saved?.defaults ?? null);
   // Without an Agent to act as, Main can only show the public feed.
   const state = parseFeedState(params, Boolean(actingSubject), defaults);
   const query = feedQuery(state, { language: locale, ...(actingSubject ? { actingSubject } : {}) });
   return { signedIn: reader.signedIn, actingSubject, avatarQuery: reader.avatarQuery, state, defaults, query,
-    newPerson: any === null ? null : !any,
+    newPerson: any === null ? null : !any, recommendations: saved?.recommendations ?? null,
     followed: realms && zones ? { realms: realms.items, zones: zones.items, complete: realms.complete && zones.complete }
       : null };
 }
@@ -87,9 +90,10 @@ export async function readHomePosts(view: HomeView, locale: UiLocale): Promise<H
   let page = await readFeedPage(view.query);
   let shown = view.query;
   // A personal view Main cannot serve still leaves the reader something to read: the public feed, with a note.
-  const personalRefused = Boolean(view.actingSubject) && !page.ok;
+  // A pinned tab's failure is its own and shows as such.
+  const personalRefused = Boolean(view.actingSubject) && !page.ok && view.state.tab !== 'pinned';
   if (personalRefused) {
-    shown = feedQuery({ ...view.state, tab: 'all' }, { language: locale });
+    shown = feedQuery({ ...view.state, tab: 'all', filter: null }, { language: locale });
     page = await readFeedPage(shown);
   }
   const works = page.ok ? page.data.items.flatMap(item => item.primaryAction.kind === 'want-to-read'
@@ -122,15 +126,6 @@ export async function readTrending(): Promise<{ scope: 'followed' | 'global'; it
       ? { actingSubject: reader.actingSubject } : {}) } })), readFollowed('realm')]);
   return { scope, items: read.ok ? read.data.items.map(item => ({ item,
     realm: realms?.items.find(realm => realm.id === item.realm) ?? null })) : [] };
-}
-
-/** What the interest picker offers a person who follows nothing yet: the kinds Main has content for, and
- * languages from the locale. Null for everyone else, who never sees the picker. */
-export async function readInterests(locale: UiLocale): Promise<Pick<InterestsResult, 'kinds' | 'languages'> | null> {
-  if (await followsAnything() !== false) return null;
-  const reader = await shellReader();
-  const read = await settle(() => reader.anonymous.v1.onboarding.interests.get({ query: { locale } }));
-  return read.ok ? read.data : { kinds: [], languages: [locale] };
 }
 
 /** Realms and Zones to follow, each with Main's reason; the signed-out rail uses the same suggestions. */

@@ -9,10 +9,7 @@ export const messages = {
   newHelp: 'Newest first, nothing reordered',
   topHelp: 'Most upvoted in a period',
   period: 'Period', week: 'This week', month: 'This month', allTime: 'All time',
-  kinds: 'Show', everything: 'Everything',
-  books: 'Books & web novels', software: 'Mods & software', ai: 'AI skills & prompts',
-  recipes: 'Recipes', media: 'Film & media', discussions: 'Discussions',
-  soon: 'Soon', kindSoon: insert('Filtering by {{kind}} is coming soon', { kind: String }),
+  soon: 'Soon',
   filters: 'Filters',
   filtersOn: plural({ one: insert('{{count}} filter on'), other: insert('{{count}} filters on') },
     { count: asValue(number()) }),
@@ -151,9 +148,8 @@ export const messages = {
   emptyFiltered: 'No posts match these filters',
   emptyFilteredLanguages: insert('Nothing in {{languages}} here yet.', { languages: String }),
   emptyFilteredRealms: 'The Realms you chose have no posts here yet.',
-  emptyFilteredKind: insert('No {{kind}} posts here yet.', { kind: String }),
   includeAllLanguages: 'Include every language', includeAllRealms: 'Include every Realm',
-  showEverything: 'Show everything', searchAll: 'Search all of REZICS',
+  searchAll: 'Search all of REZICS',
 };
 
 export type FeedMessages = typeof messages;

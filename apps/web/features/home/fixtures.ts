@@ -45,14 +45,15 @@ export const officialZones: Community[] = [
 
 export const suggestions: SuggestedFollow[] = [
   { id: realms.mods.id, kind: 'realm', realm: realms.mods.id, name: realms.mods.name, icon: realms.mods.icon,
-    membership: { count: { kind: 'exact', value: 12_480, revision: '1' } }, reason: { kind: 'matching-kind', interest: 'software' },
+    membership: { count: { kind: 'exact', value: 12_480, revision: '1' } },
+    reason: { kind: 'matching-concept', concept: { id: storyId(311, 'eeee'), name: name('Farming sims') } },
     sampleWorks: [{ id: storyId(71, 'cccc'), title: name('Crop Planner'), cover: cover('crop') }] },
   { id: storyId(955, 'aaaa'), kind: 'zone', realm: storyId(956, 'aaaa'), name: name('Fiction · 小说'), icon: cover('fiction-zone'),
-    membership: { count: { kind: 'estimated', value: 48_000 } }, reason: { kind: 'official', interest: null },
+    membership: { count: { kind: 'estimated', value: 48_000 } }, reason: { kind: 'popular', language: 'zh-Hans' },
     sampleWorks: [{ id: storyId(72, 'cccc'), title: name('雨夜书店', 'zh-Hans'), cover: cover('rain') },
       { id: storyId(73, 'cccc'), title: name('The Last Lantern'), cover: cover('lantern') }] },
   { id: realms.classics.id, kind: 'realm', realm: realms.classics.id, name: realms.classics.name, icon: realms.classics.icon,
-    membership: { count: { kind: 'unknown', value: null } }, reason: { kind: 'popular', interest: null }, sampleWorks: [] },
+    membership: { count: { kind: 'unknown', value: null } }, reason: { kind: 'popular' }, sampleWorks: [] },
 ];
 
 const trend = (n: number, title: string, realm: typeof followedCommunities.realms[number], language = 'en',

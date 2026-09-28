@@ -20,5 +20,4 @@ export default {
   retry: '다시 시도',
   failed: '프로필을 설정하지 못했습니다. 다시 시도해 주세요.',
   changeConflict: '사용자 이름이 변경되었거나 사용할 수 없게 되었습니다. 다시 확인해 주세요.',
-  interestsLater: '관심 있는 주제와 커뮤니티는 나중에 선택할 수 있습니다.',
 } satisfies Partial<OnboardingMessages>;
