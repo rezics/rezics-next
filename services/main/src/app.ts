@@ -98,6 +98,7 @@ import { ratingContextReadRoutes } from './routes/rating-contexts.ts';
 import { managementReadRoutes } from './routes/management-reads.ts';
 import { facetRoutes } from './routes/facets.ts';
 import { queryRoutes } from './routes/query.ts';
+import { savedFilterRoutes } from './routes/saved-filters.ts';
 
 export type { MainWorkDependencies } from './routes/dependencies.ts';
 
@@ -143,6 +144,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(queryRoutes(fuseki, work))
+    .use(savedFilterRoutes(work))
     .use(reviewRoutes(work))
     .use(managedRealmRoutes(work))
     .use(studioRoutes(work))

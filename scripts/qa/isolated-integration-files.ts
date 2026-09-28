@@ -97,6 +97,8 @@ export const isolatedIntegrationFileList = [
   // Home replays prior receipts; public paging requires coherent card owners.
   'tests/qa/integration/follows-authors.test.ts',
   'tests/qa/integration/paging-authority-search.test.ts',
+  // Saved Filter tabs read Home's feed, which is global across the QA project's files.
+  'tests/qa/integration/saved-filter.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */

@@ -8,6 +8,8 @@ import { admitFeedVote, readFeed } from '../modules/feed/read.ts';
 import { readNewSince } from '../modules/feed/new-since.ts';
 import { TRENDING_COST, trendingQuery, trendingResult } from '../modules/feed/trending.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
+import { savedFilterFeedQuery } from '../modules/saved-filter/feed.ts';
+import { savedFilterError } from './saved-filters.ts';
 import { workRead, WorkReadLimit, WorkReadUnavailable } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { homeError, homeHeaders } from './follows.ts';
@@ -26,6 +28,9 @@ export const openApiOperations = {
 } as const;
 
 const privateQuery = t.Object({ actingSubject: readId }, { additionalProperties: false });
+/** Home's feed, or a pinned tab's: the reader's Saved Filter compiled onto the feed's Conditions. */
+const homeFeedQuery = t.Object({ ...feedQuery.properties, savedFilter: t.Optional(readUuid) },
+  { additionalProperties: false });
 const preferencesResult = t.Object({ profile: t.Literal('home-preferences-v1'),
   revision: t.Nullable(readUuid), preferences: homePreferences, replayed: t.Optional(t.Boolean()) });
 const exclusionResult = t.Object({ profile: t.Literal('home-exclusion-v1'),
@@ -52,18 +57,21 @@ const headResult = t.Object({ profile: t.Literal('home-feed-head-v1'), scope: t.
   projection: t.Object({ sequence: t.String(), reviewSequence: t.String(), dataEpoch: t.String() }) });
 
 export function feedRoutes(work: MainWorkDependencies) {
-  return new Elysia().get('/v1/feed', { query: feedQuery,
+  return new Elysia().get('/v1/feed', { query: homeFeedQuery,
     detail: { security: [{}, { bearerAuth: [] }] }, response: { 200: feedPage, ...workReadProblems },
-  }, async ({ request, query }) => {
+  }, async ({ request, query: requested }) => {
     try {
       const principal = request.headers.has('authorization') ? await work.account.verify(request, ['work:read', 'follow:read']) : null;
-      if (!!principal !== !!query.actingSubject) throw new ControlInvalid('Authentication and actingSubject are required together');
+      if (!!principal !== !!requested.actingSubject) throw new ControlInvalid('Authentication and actingSubject are required together');
+      const { savedFilter, ...rest } = requested;
+      const query = savedFilter ? await savedFilterFeedQuery(work.environment, work.savedFilters, principal, rest,
+        savedFilter) : rest;
       const result = await workRead(work, new Request(request.url), { language: query.language }, session => readFeed(session,
         query, principal ? { principal, agent: query.actingSubject! } : undefined));
       const body = JSON.stringify(result);
       if (Buffer.byteLength(body) > FEED_COST.responseBytes) throw new WorkReadLimit('Feed response budget exceeded');
       return new Response(body, { headers: { ...homeHeaders, 'content-type': 'application/json' } });
-    } catch (error) { return homeError(error); }
+    } catch (error) { return savedFilterError(error); }
   }).get('/v1/feed/head', { query: headQuery,
     detail: { security: [{}, { bearerAuth: [] }] }, response: { 200: headResult, ...workReadProblems },
   }, async ({ request, query }) => {

@@ -104,6 +104,7 @@ export interface MainWorkDependencies {
   reviews?: import('../modules/review/store.ts').ReaderReviews;
   homePersonal?: import('../modules/feed/personal.ts').HomePersonalStore;
   personPreferences?: import('../modules/preferences/store.ts').PersonPreferencesStore;
+  savedFilters?: import('../modules/saved-filter/store.ts').SavedFilterStore;
   homeTrending?: import('../modules/feed/trending.ts').HomeTrendingReader;
   feedViewerState?: FeedViewerStateReader;
   maintainers?: import('../modules/work/maintainers.ts').WorkMaintainers;
