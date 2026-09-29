@@ -1,0 +1,27 @@
+---
+import '../styles/global.css';
+import { localeNames, uiLocales } from '../i18n/locales.ts';
+import { copy } from '../i18n/format.ts';
+import { pagePath } from '../pages.ts';
+
+const text = copy('site', 'en').notFound;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{text.title}</title>
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="min-h-dvh bg-background px-5 py-24 text-foreground">
+    <main class="mx-auto max-w-xl">
+      <h1 class="display text-4xl font-extrabold">{text.title}</h1>
+      <p class="prose-lede mt-4 text-lg text-muted-foreground">{text.body}</p>
+      <ul class="mt-8 flex flex-wrap gap-x-5 gap-y-2">
+        {uiLocales.map(locale => <li><a class="text-primary underline underline-offset-4" href={pagePath(locale, 'home')} hreflang={locale} lang={locale}>{localeNames[locale]}</a></li>)}
+      </ul>
+    </main>
+  </body>
+</html>

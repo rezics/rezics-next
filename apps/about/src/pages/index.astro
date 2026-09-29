@@ -1,0 +1,29 @@
+---
+import '../styles/global.css';
+import { localeNames, uiLocales } from '../i18n/locales.ts';
+import { pagePath } from '../pages.ts';
+import { absoluteUrl } from '../lib/site.ts';
+
+// The Worker sends `/` to the visitor's locale before this page is served; it is the
+// fallback for hosts without the Worker and for crawlers that ignore redirects.
+const canonical = absoluteUrl(pagePath('en', 'home'), Astro.site);
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>REZICS</title>
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="canonical" href={canonical} />
+    <meta http-equiv="refresh" content="0; url=/en/" />
+  </head>
+  <body class="grid min-h-dvh place-items-center bg-background p-8 text-foreground">
+    <nav aria-label="Languages">
+      <ul class="flex flex-wrap gap-4">
+        {uiLocales.map(locale => <li><a class="text-primary underline underline-offset-4" href={pagePath(locale, 'home')} hreflang={locale} lang={locale}>{localeNames[locale]}</a></li>)}
+      </ul>
+    </nav>
+  </body>
+</html>

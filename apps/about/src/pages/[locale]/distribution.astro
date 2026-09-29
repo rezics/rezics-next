@@ -1,0 +1,14 @@
+---
+import { EditionOnSale } from '../../illustrations/EditionOnSale.tsx';
+import { copy } from '../../i18n/format.ts';
+import type { UiLocale } from '../../i18n/locales.ts';
+import ProductPage from '../../layouts/ProductPage.astro';
+import { localePaths } from '../../lib/site.ts';
+
+export const getStaticPaths = localePaths;
+const locale = Astro.params.locale as UiLocale;
+const words = copy('illustrations', locale);
+---
+<ProductPage locale={locale} page="distribution">
+  <EditionOnSale slot="scene" words={words} locale={locale} />
+</ProductPage>

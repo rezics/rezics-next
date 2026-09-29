@@ -1,0 +1,84 @@
+---
+import { buttonVariants } from '@rezics/ui/button';
+import FeatureList from '../../components/FeatureList.astro';
+import NotifyPanel from '../../components/NotifyPanel.astro';
+import Section from '../../components/Section.astro';
+import StatusBadge from '../../components/StatusBadge.astro';
+import { copy } from '../../i18n/format.ts';
+import { uiLocales, type UiLocale } from '../../i18n/locales.ts';
+import { HeroEditions } from '../../illustrations/HeroEditions.tsx';
+import Base from '../../layouts/Base.astro';
+import { features, featuresOf, type FeatureId } from '../../features.ts';
+import { localePaths } from '../../lib/site.ts';
+import { pagePath, productLineIds } from '../../pages.ts';
+
+export const getStaticPaths = localePaths;
+const locale = Astro.params.locale as UiLocale;
+const text = copy('home', locale);
+const site = copy('site', locale);
+const words = copy('illustrations', locale);
+const featureText = copy('features', locale);
+const scenarios = ['series-tracking', 'portable-library', 'serial-reading', 'vn-releases'] as const satisfies readonly FeatureId[];
+const application = {
+  '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'REZICS', applicationCategory: 'EntertainmentApplication',
+  operatingSystem: 'Web', description: site.brand.description, url: new URL(pagePath(locale, 'home'), Astro.site).toString(),
+  inLanguage: uiLocales, publisher: { '@type': 'Organization', name: 'REZICS Inc.' },
+};
+---
+<Base locale={locale} page="home" title={text.meta.title} description={text.meta.description} structuredData={[application]}>
+  <div class="mx-auto w-full max-w-300 px-5 sm:px-8">
+    <header class="grid gap-12 pb-16 pt-14 md:pb-24 md:pt-24 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-center lg:gap-16">
+      <div>
+        <h1 class="display text-[clamp(2.5rem,6.2vw,4.75rem)] font-extrabold">{text.hero.title}</h1>
+        <p class="prose-lede mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl">{text.hero.lede}</p>
+        <div class="mt-9 flex flex-wrap gap-3">
+          <a href="#notify" class={buttonVariants({ size: 'xl' })}>{text.hero.primary}</a>
+          <a href={pagePath(locale, 'roadmap')} class={buttonVariants({ size: 'xl', variant: 'outline' })}>{text.hero.secondary}</a>
+        </div>
+      </div>
+      <div>
+        <HeroEditions words={words} />
+        <p class="sr-only">{text.illustrationLabel}</p>
+      </div>
+    </header>
+
+    <Section id="scenarios" title={text.scenarios.title}>
+      <p class="prose-lede mb-6 max-w-xl text-lg text-muted-foreground">{text.scenarios.lede}</p>
+      <ul class="grid gap-x-10 border-t border-border sm:grid-cols-2">
+        {scenarios.map(id => (
+          <li class="border-b border-border py-6" data-feature={id}>
+            <div class="flex items-start justify-between gap-4">
+              <h3 class="text-lg font-semibold">
+                <a href={pagePath(locale, features[id].line)} class="underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring rounded-md">{featureText[id].title}</a>
+              </h3>
+              <StatusBadge status={features[id].status} locale={locale} />
+            </div>
+            <p class="prose-lede mt-1.5 text-muted-foreground">{featureText[id].body}</p>
+          </li>
+        ))}
+      </ul>
+      <p class="mt-4 text-sm text-muted-foreground">{site.status.legend}</p>
+    </Section>
+
+    <Section id="lines" title={text.lines.title}>
+      <p class="prose-lede mb-6 max-w-xl text-lg text-muted-foreground">{text.lines.lede}</p>
+      <ul class="grid gap-x-10 border-t border-border sm:grid-cols-2">
+        {productLineIds.map(id => (
+          <li class="border-b border-border">
+            <a href={pagePath(locale, id)} class="group block rounded-md py-5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <span class="block text-xl font-semibold underline-offset-4 group-hover:underline">{site.pages[id].name}</span>
+              <span class="mt-1 block text-muted-foreground">{site.pages[id].summary}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </Section>
+
+    <Section id="why" title={text.why.title}>
+      <p class="prose-lede mb-6 max-w-xl text-lg text-muted-foreground">{text.why.lede}</p>
+      <FeatureList locale={locale} ids={featuresOf('home')} />
+    </Section>
+
+    <NotifyPanel locale={locale} />
+  </div>
+</Base>

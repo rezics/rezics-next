@@ -81,6 +81,8 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | --- | --- | --- |
 | @ark-ui/react | 5.39.2 | packages/ui |
 | @ast-grep/cli | 0.45.3 | . |
+| @astrojs/check | 0.9.10 | apps/about |
+| @astrojs/react | 7.0.0 | apps/about |
 | @better-auth/core | 1.7.5 | services/account |
 | @better-auth/oauth-provider | 1.7.5 | services/account |
 | @better-auth/passkey | 1.7.5 | services/account |
@@ -89,35 +91,39 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @cloudflare/vite-plugin | 1.58.0 | apps/accounts, apps/web |
 | @elysia/eden | 2.0.0-beta.5 | apps/web, services/account, services/main |
 | @elysia/openapi | 2.0.0-beta.4 | services/account, services/main |
-| @fontsource-variable/geist-mono | 5.3.0 | apps/web |
-| @fontsource-variable/manrope | 5.3.0 | apps/accounts, apps/web |
-| @fontsource-variable/source-serif-4 | 5.3.0 | apps/web |
+| @emnapi/runtime | 1.11.3 | apps/about |
+| @fontsource-variable/geist-mono | 5.3.0 | apps/about, apps/web |
+| @fontsource-variable/manrope | 5.3.0 | apps/about, apps/accounts, apps/web |
+| @fontsource-variable/source-serif-4 | 5.3.0 | apps/about, apps/web |
+| @fontsource/manrope | 5.3.0 | apps/about |
 | @js-temporal/polyfill | 0.5.1 | services/main |
 | @microsoft/aspire-cli | 13.5.4 | apphost |
 | @playwright/test | 1.63.0 | . |
+| @resvg/resvg-js | 2.6.2 | apps/about |
 | @rezics/account | workspace:* | apps/accounts |
 | @rezics/main | workspace:* | apps/web |
-| @rezics/ui | workspace:* | apps/accounts, apps/web |
+| @rezics/ui | workspace:* | apps/about, apps/accounts, apps/web |
 | @rezics/zone-sdk | workspace:* | apps/web |
 | @scalar/types | 0.18.3 | services/account, services/main |
 | @storybook/addon-a11y | 11.0.0-alpha.1 | apps/accounts, apps/web |
 | @storybook/addon-mcp | 11.0.0-alpha.1 | apps/web |
 | @storybook/addon-vitest | 11.0.0-alpha.1 | apps/accounts, apps/web |
 | @storybook/react-vite | 11.0.0-alpha.1 | apps/accounts, apps/web |
-| @tailwindcss/vite | 4.3.3 | apps/accounts, apps/web |
+| @tailwindcss/vite | 4.3.3 | apps/about, apps/accounts, apps/web |
 | @tanstack/react-query | 5.103.2 | apps/web |
-| @types/bun | 1.4.2 | apps/accounts, packages/model, services/account, services/content, services/main |
-| @types/node | 26.6.2 | apphost, apps/accounts, apps/web |
+| @types/bun | 1.4.2 | apps/about, apps/accounts, packages/model, services/account, services/content, services/main |
+| @types/node | 26.6.2 | apphost, apps/about, apps/accounts, apps/web |
 | @types/nodemailer | 8.0.2 | services/account |
 | @types/pg | 8.23.1 | services/account, services/content, services/main |
-| @types/react | 19.2.18 | apps/accounts, apps/web, packages/ui, packages/zone-sdk |
-| @types/react-dom | 19.2.7 | apps/accounts, apps/web, packages/ui |
+| @types/react | 19.2.18 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
+| @types/react-dom | 19.2.7 | apps/about, apps/accounts, apps/web, packages/ui |
 | @vinext/cloudflare | 1.0.0-beta.9 | apps/web |
 | @vitejs/plugin-react | 6.1.1 | apps/accounts, apps/web |
 | @vitejs/plugin-rsc | 0.5.35 | apps/accounts, apps/web |
 | @vitest/browser-playwright | 5.0.2 | apps/accounts, apps/web |
+| astro | 7.3.5 | apps/about |
 | aws4fetch | 1.0.20 | services/main |
-| axe-core | 4.13.0 | apps/web |
+| axe-core | 4.13.0 | apps/about, apps/web |
 | better-auth | 1.7.5 | services/account, services/main |
 | better-call | 1.4.0 | services/account |
 | dependency-cruiser | 18.4.0 | . |
@@ -129,7 +135,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | jose | 6.2.12 | services/account, services/main |
 | knip | 6.38.0 | . |
 | kysely | 0.29.6 | services/account |
-| lucide-react | 1.47.0 | apps/accounts, apps/web, packages/ui |
+| lucide-react | 1.47.0 | apps/about, apps/accounts, apps/web, packages/ui |
 | nanostores | 1.5.3 | services/account |
 | native-i18n | 0.2.0 | apps/accounts, apps/web |
 | next | 16.3.6 | apps/accounts, apps/web |
@@ -141,24 +147,26 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | oxlint-tsgolint | 7.0.2003 | . |
 | pg | 8.23.0 | services/account, services/content, services/main |
 | playwright | 1.63.0 | apps/accounts, apps/web |
-| react | 19.3.0 | apps/accounts, apps/web, packages/ui, packages/zone-sdk |
-| react-dom | 19.3.0 | apps/accounts, apps/web, packages/ui |
+| react | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
+| react-dom | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui |
 | react-is | 19.3.0 | packages/ui |
 | react-server-dom-webpack | 19.3.0 | apps/accounts, apps/web |
 | recharts | 3.10.1 | packages/ui |
+| satori | 0.33.5 | apps/about |
 | storybook | 11.0.0-alpha.1 | apps/accounts, apps/web |
 | tailwind-variants | 3.3.1 | packages/ui |
-| tailwindcss | 4.3.3 | apps/accounts, apps/web |
+| tailwindcss | 4.3.3 | apps/about, apps/accounts, apps/web |
 | tsx | 4.23.13 | apphost |
 | tw-animate-css | 1.4.0 | packages/ui |
 | typebox | 1.3.34 | packages/model, services/account, services/main |
 | typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/model, packages/ui, packages/zone-sdk, services/account, services/content, services/main |
+| typescript-6 | npm:typescript@6.0.2 | apps/about |
 | vinext | 1.0.0-beta.11 | apps/accounts, apps/web |
-| vite | 8.3.0 | apps/accounts, apps/web |
+| vite | 8.3.0 | apps/about, apps/accounts, apps/web |
 | vitest | 5.0.2 | apps/accounts, apps/web |
 | vscode-jsonrpc | 8.2.1 | apphost |
 | webpack | 5.110.3 | apps/accounts, apps/web |
-| wrangler | 4.137.0 | apps/accounts, apps/web |
+| wrangler | 4.137.0 | apps/about, apps/accounts, apps/web |
 
 ### Service and Fuseki build images
 
@@ -243,6 +251,10 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task accounts:storybook` | Run the Accounts Storybook on port 6007. |
 | `task accounts:storybook:test` | Run the Accounts stories as Vitest browser tests with accessibility checks. |
 | `task accounts:e2e` | Run the Accounts Playwright journeys against a running Accounts app (ACCOUNTS_URL, default http://127.0.0.1:3004). |
+| `task about:dev` | Run the about site with Astro on 127.0.0.1:4321 (pass -- --port <n>), with a local D1 for the notify form. |
+| `task about:build` | Build the about site into apps/about/dist, the assets directory of its Worker. |
+| `task about:check` | Check the about site's types (Astro, TypeScript), lint, format and unit tests. |
+| `task about:e2e` | Build the about site, serve it with its Worker and a local D1 on 127.0.0.1:4322, and run the Playwright smoke and axe tests. |
 | `task ui:typecheck` | Type-check Rezics UI. |
 | `task check` | Run every static gate (types, generated contracts, docs, lint, format, code shape, unused files, imports). |
 | `task check:backend` | Run the static gates without UI and web sources. |

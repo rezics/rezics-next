@@ -5,6 +5,7 @@
   "workspaces": [
     "apps/web",
     "apps/accounts",
+    "apps/about",
     "packages/model",
     "packages/ui",
     "packages/zone-sdk",

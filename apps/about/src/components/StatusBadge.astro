@@ -1,0 +1,20 @@
+---
+import { badgeVariants } from '@rezics/ui/badge';
+import { CircleCheck, CircleDashed, Hammer } from 'lucide-react';
+import { copy } from '../i18n/format.ts';
+import type { UiLocale } from '../i18n/locales.ts';
+import type { Availability } from '../features.ts';
+
+interface Props { status: Availability; locale: UiLocale }
+const { status, locale } = Astro.props;
+const words = copy('site', locale).status;
+// Each status has its own icon and word, so color is never the only cue.
+const label = { available: words.available, 'in-development': words.inDevelopment, planned: words.planned }[status];
+const help = { available: words.availableHelp, 'in-development': words.inDevelopmentHelp, planned: words.plannedHelp }[status];
+const variant = { available: 'success', 'in-development': 'info', planned: 'outline' } as const;
+const Icon = { available: CircleCheck, 'in-development': Hammer, planned: CircleDashed }[status];
+---
+<span class={badgeVariants({ variant: variant[status], size: 'md' })} data-status={status} title={help}>
+  <Icon aria-hidden />
+  {label}
+</span>

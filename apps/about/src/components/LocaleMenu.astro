@@ -1,0 +1,25 @@
+---
+import { Languages } from 'lucide-react';
+import { localeNames, uiLocales, type UiLocale } from '../i18n/locales.ts';
+import { pagePath, type PageId } from '../pages.ts';
+
+interface Props { locale: UiLocale; page: PageId; label: string; class?: string }
+const { locale, page, label } = Astro.props;
+---
+<details class="group/lang relative">
+  <summary class="flex h-9 cursor-pointer list-none items-center gap-2 rounded-xl px-3 text-sm font-medium outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden" aria-label={label}>
+    <Languages className="size-4" aria-hidden="true" />
+    <span lang={locale} class="hidden sm:inline">{localeNames[locale]}</span>
+  </summary>
+  <ul class="absolute end-0 top-full z-50 mt-2 w-48 rounded-2xl border border-border bg-popover p-1.5 shadow-(--aura-shadow-float)">
+    {uiLocales.map(other => (
+      <li>
+        <a href={pagePath(other, page)} hreflang={other} lang={other} data-locale={other}
+          aria-current={other === locale ? 'true' : undefined}
+          class="block rounded-xl px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent aria-[current=true]:font-semibold aria-[current=true]:text-primary">
+          {localeNames[other]}
+        </a>
+      </li>
+    ))}
+  </ul>
+</details>

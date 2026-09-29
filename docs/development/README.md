@@ -5,7 +5,7 @@ contract, implementation owner and acceptance cases of one change. The
 [repository map](repository-structure.md) locates workspaces and generated files;
 the [toolchain](toolchain.md) records pinned tools and root commands. Frontend
 owners are in [web organization](web-features.md), the [design system](design-system.md)
-and [Storybook review](storybook.md).
+[Storybook review](storybook.md) and the [about site](about-site.md).
 
 Run commands from the repository root through Task. `task --list` shows the
 current facade; `task urls` and `task env` show running addresses and masked

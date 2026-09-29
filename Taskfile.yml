@@ -217,6 +217,36 @@ tasks:
     cmds:
       - node_modules/.bin/playwright test --config apps/accounts/playwright.config.ts {{.CLI_ARGS}}
 
+  # About site (apps/about): the public product site, static pages plus a small Worker
+
+  about:dev:
+    desc: Run the about site with Astro on 127.0.0.1:4321 (pass -- --port <n>), with a local D1 for the notify form.
+    dir: apps/about
+    cmds:
+      - ../../node_modules/.bin/wrangler d1 migrations apply DB --local
+      - ../../node_modules/.bin/astro dev {{.CLI_ARGS}}
+
+  about:build:
+    desc: Build the about site into apps/about/dist, the assets directory of its Worker.
+    dir: apps/about
+    cmds:
+      - ../../node_modules/.bin/astro build
+
+  about:check:
+    desc: Check the about site's types (Astro, TypeScript), lint, format and unit tests.
+    dir: apps/about
+    cmds:
+      - node astro-check.cjs
+      - ../../node_modules/.bin/oxlint --type-aware .
+      - ../../node_modules/.bin/oxfmt --check .
+      - bun test tests
+
+  about:e2e:
+    desc: Build the about site, serve it with its Worker and a local D1 on 127.0.0.1:4322, and run the Playwright smoke and axe tests.
+    deps: [about:build]
+    cmds:
+      - node_modules/.bin/playwright test --config apps/about/playwright.config.ts {{.CLI_ARGS}}
+
   ui:typecheck:
     desc: Type-check Rezics UI.
     dir: packages/ui

@@ -1,0 +1,45 @@
+---
+import { localeNames, uiLocales, type UiLocale } from '../i18n/locales.ts';
+import { copy } from '../i18n/format.ts';
+import { infoPageIds, links, pagePath, productLineIds, type PageId } from '../pages.ts';
+import Logo from './Logo.astro';
+
+interface Props { locale: UiLocale; page: PageId }
+const { locale, page } = Astro.props;
+const site = copy('site', locale);
+const link = 'inline-block py-1.5 text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring rounded-md';
+---
+<footer class="mt-24 border-t border-border">
+  <div class="mx-auto grid w-full max-w-300 gap-10 px-5 py-14 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+    <div class="max-w-xs">
+      <Logo locale={locale} label={site.pages.home.name} />
+      <p class="mt-4 text-sm text-muted-foreground">{site.brand.tagline}</p>
+      <p class="mt-4 text-sm text-muted-foreground">{site.footer.cookies}</p>
+    </div>
+    <nav aria-label={site.footer.products}>
+      <h2 class="text-sm font-semibold">{site.footer.products}</h2>
+      <ul class="mt-2">
+        {productLineIds.map(id => <li><a class={link} href={pagePath(locale, id)}>{site.pages[id].name}</a></li>)}
+      </ul>
+    </nav>
+    <nav aria-label={site.footer.project}>
+      <h2 class="text-sm font-semibold">{site.footer.project}</h2>
+      <ul class="mt-2">
+        {infoPageIds.map(id => <li><a class={link} href={pagePath(locale, id)}>{site.pages[id].name}</a></li>)}
+        <li><a class={link} href={links.source} rel="noopener">{site.footer.openSource}</a></li>
+        <li><a class={link} href={links.source} rel="noopener">{site.footer.follow}</a></li>
+      </ul>
+    </nav>
+    <nav aria-label={site.footer.languages}>
+      <h2 class="text-sm font-semibold">{site.footer.languages}</h2>
+      <ul class="mt-2">
+        {uiLocales.map(other => (
+          <li><a class={link} href={pagePath(other, page)} hreflang={other} lang={other} data-locale={other} aria-current={other === locale ? 'true' : undefined}>{localeNames[other]}</a></li>
+        ))}
+      </ul>
+    </nav>
+  </div>
+  <div class="border-t border-border/60">
+    <p class="mx-auto w-full max-w-300 px-5 py-5 text-sm text-muted-foreground sm:px-8">© {new Date().getFullYear()} {site.footer.rights}</p>
+  </div>
+</footer>

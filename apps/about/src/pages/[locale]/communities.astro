@@ -1,0 +1,14 @@
+---
+import { RealmCard } from '../../illustrations/RealmCard.tsx';
+import { copy } from '../../i18n/format.ts';
+import type { UiLocale } from '../../i18n/locales.ts';
+import ProductPage from '../../layouts/ProductPage.astro';
+import { localePaths } from '../../lib/site.ts';
+
+export const getStaticPaths = localePaths;
+const locale = Astro.params.locale as UiLocale;
+const words = copy('illustrations', locale);
+---
+<ProductPage locale={locale} page="communities">
+  <RealmCard slot="scene" words={words} />
+</ProductPage>

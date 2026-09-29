@@ -1,0 +1,102 @@
+/* Self-hosted faces (no font CDN); the stacks that use them are in @rezics/ui/styles.css. */
+@import '@fontsource-variable/manrope';
+@import '@fontsource-variable/source-serif-4';
+@import '@fontsource-variable/geist-mono';
+@import '@rezics/ui/styles.css';
+
+/*
+ * Tailwind scans this app's own files plus only the Rezics UI sources the site
+ * imports, so the stylesheet does not carry the whole component library.
+ * tests/ui-sources.test.ts fails when an imported component is missing here.
+ */
+@source "../../../../packages/ui/src/utils.ts";
+@source "../../../../packages/ui/src/components/badge.tsx";
+@source "../../../../packages/ui/src/components/button.tsx";
+@source "../../../../packages/ui/src/components/field.tsx";
+@source "../../../../packages/ui/src/components/input.tsx";
+@source "../../../../packages/ui/src/components/separator.tsx";
+@source "../../../../packages/ui/src/components/skip-nav.tsx";
+@source "../../../../packages/ui/src/components/spinner.tsx";
+@source "../../../../packages/ui/src/components/work-cover.tsx";
+
+/* Traditional Chinese, Japanese and Korean fall back to the platform's own faces, as Simplified does. */
+:root:lang(zh-Hant) {
+  --font-interface:
+    'Manrope Variable', 'Manrope', 'PingFang TC', 'Hiragino Sans CNS', 'Microsoft JhengHei UI',
+    'Microsoft JhengHei', 'Noto Sans CJK TC', 'Noto Sans TC', 'Source Han Sans TC', ui-sans-serif,
+    system-ui, sans-serif;
+  --font-work-serif:
+    'Iowan Old Style', 'Source Serif 4 Variable', 'Source Serif 4', 'Songti TC', 'PMingLiU',
+    'Noto Serif CJK TC', 'Noto Serif TC', 'Source Han Serif TC', Georgia, serif;
+}
+:root:lang(ja) {
+  --font-interface:
+    'Manrope Variable', 'Manrope', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI',
+    'Yu Gothic', 'Meiryo', 'Noto Sans CJK JP', 'Noto Sans JP', 'Source Han Sans JP', ui-sans-serif,
+    system-ui, sans-serif;
+  --font-work-serif:
+    'Iowan Old Style', 'Source Serif 4 Variable', 'Source Serif 4', 'Hiragino Mincho ProN',
+    'Yu Mincho', 'Noto Serif CJK JP', 'Noto Serif JP', 'Source Han Serif JP', Georgia, serif;
+}
+:root:lang(ko) {
+  --font-interface:
+    'Manrope Variable', 'Manrope', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans CJK KR',
+    'Noto Sans KR', 'Source Han Sans K', ui-sans-serif, system-ui, sans-serif;
+  --font-work-serif:
+    'Iowan Old Style', 'Source Serif 4 Variable', 'Source Serif 4', 'AppleMyungjo', 'Batang',
+    'Noto Serif CJK KR', 'Noto Serif KR', 'Source Han Serif K', Georgia, serif;
+}
+
+@layer base {
+  html {
+    scroll-padding-top: 5rem;
+    text-size-adjust: 100%;
+  }
+  /* Latin display type is set tight; CJK glyphs fill their em box and must not be. */
+  .display {
+    letter-spacing: -0.035em;
+    line-height: 1.04;
+    text-wrap: balance;
+  }
+  :lang(zh-Hant) .display,
+  :lang(zh-Hans) .display,
+  :lang(ja) .display,
+  :lang(ko) .display {
+    letter-spacing: 0;
+    line-height: 1.22;
+  }
+  .heading {
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+  :lang(zh-Hant) .heading,
+  :lang(zh-Hans) .heading,
+  :lang(ja) .heading,
+  :lang(ko) .heading {
+    letter-spacing: 0;
+    line-height: 1.3;
+  }
+  .prose-lede {
+    text-wrap: pretty;
+  }
+  :lang(zh-Hant) .prose-lede,
+  :lang(zh-Hans) .prose-lede,
+  :lang(ja) .prose-lede,
+  :lang(ko) .prose-lede {
+    line-height: 1.85;
+  }
+  /* Chinese text sits closer to Latin words and numerals when the browser spaces them. */
+  :lang(zh-Hant),
+  :lang(zh-Hans),
+  :lang(ja) {
+    text-autospace: normal;
+  }
+  :lang(ja) {
+    line-break: strict;
+    word-break: auto-phrase;
+  }
+  :lang(ko) {
+    word-break: keep-all;
+  }
+}

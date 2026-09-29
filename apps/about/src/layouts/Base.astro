@@ -1,0 +1,79 @@
+---
+import '../styles/global.css';
+import { SkipNavLink } from '@rezics/ui/skip-nav';
+import Footer from '../components/Footer.astro';
+import Header from '../components/Header.astro';
+import { copy } from '../i18n/format.ts';
+import { localeDirection, openGraphLocale, uiLocales, type UiLocale } from '../i18n/locales.ts';
+import { absoluteUrl, alternates } from '../lib/site.ts';
+import { copyStatus } from '../copy-status.ts';
+import { pagePath, pageSlug, type PageId } from '../pages.ts';
+
+interface Props {
+  locale: UiLocale;
+  page: PageId;
+  title: string;
+  description: string;
+  /** Extra JSON-LD objects for this page. */
+  structuredData?: object[];
+  noindex?: boolean;
+}
+
+const { locale, page, title, description, structuredData = [], noindex = false } = Astro.props;
+const site = Astro.site;
+const url = absoluteUrl(pagePath(locale, page), site);
+const image = absoluteUrl(`/og/${page === 'home' ? 'home' : pageSlug(page)}.png`, site);
+const chrome = copy('site', locale);
+const data = [
+  { '@context': 'https://schema.org', '@type': 'Organization', name: 'REZICS Inc.', url: absoluteUrl('/', site),
+    logo: absoluteUrl('/favicon.svg', site), sameAs: ['https://github.com/rezics/rezics-next'] },
+  ...structuredData,
+];
+---
+<!doctype html>
+<html lang={locale} dir={localeDirection[locale]}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f9f6f2" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d1218" media="(prefers-color-scheme: dark)" />
+    {noindex && <meta name="robots" content="noindex" />}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    {!noindex && <link rel="canonical" href={url} />}
+    {!noindex && alternates(page, site).map(alternate => <link rel="alternate" hreflang={alternate.hreflang} href={alternate.href} />)}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="REZICS" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={url} />
+    <meta property="og:image" content={image} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content={openGraphLocale[locale]} />
+    {uiLocales.filter(other => other !== locale).map(other => <meta property="og:locale:alternate" content={openGraphLocale[other]} />)}
+    <meta name="twitter:card" content="summary_large_image" />
+    {data.map(item => <script type="application/ld+json" set:html={JSON.stringify(item)} />)}
+    <!-- Applies the saved theme before first paint and remembers a chosen language: the only script besides islands. -->
+    <script is:inline data-about-boot>
+      (function () {
+        var m = document.cookie.match(/(?:^|; )rezics_theme=(light|dark)/);
+        if (m) { document.documentElement.classList.add(m[1]); document.documentElement.dataset.theme = m[1]; }
+        document.addEventListener('click', function (e) {
+          var a = e.target && e.target.closest && e.target.closest('a[data-locale]');
+          if (a) document.cookie = 'rezics_locale=' + a.getAttribute('data-locale') + '; path=/; max-age=31536000; samesite=lax';
+        });
+      })();
+    </script>
+  </head>
+  <body class="min-h-dvh bg-background text-foreground">
+    <SkipNavLink>{chrome.skip}</SkipNavLink>
+    <Header locale={locale} page={page} />
+    <main id="skip-nav-content" tabindex="-1" class="outline-none" data-copy={copyStatus[page]}>
+      <slot />
+    </main>
+    <Footer locale={locale} page={page} />
+  </body>
+</html>

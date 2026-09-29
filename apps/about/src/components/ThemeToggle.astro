@@ -1,0 +1,46 @@
+---
+import { Monitor, Moon, Sun } from 'lucide-react';
+
+interface Props { labels: { theme: string; light: string; dark: string; system: string } }
+const { labels } = Astro.props;
+---
+<!--
+  One button that cycles system, light and dark. Plain script instead of a React island so
+  the React runtime stays off pages that never show the notify form. The boot script in
+  Base.astro has already set `data-theme` from the cookie before first paint.
+-->
+<button type="button" data-theme-toggle data-labels={JSON.stringify(labels)} aria-label={labels.theme} title={labels.theme}
+  class="inline-flex size-9 items-center justify-center rounded-xl outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring">
+  <Monitor aria-hidden className="block size-4 in-data-[theme]:hidden" />
+  <Sun aria-hidden className="hidden size-4 in-data-[theme=light]:block" />
+  <Moon aria-hidden className="hidden size-4 in-data-[theme=dark]:block" />
+</button>
+<script>
+  import { THEME_COOKIE } from '../i18n/locales.ts';
+
+  type Theme = 'system' | 'light' | 'dark';
+  const order: Theme[] = ['system', 'light', 'dark'];
+  const root = document.documentElement;
+  const button = document.querySelector<HTMLButtonElement>('[data-theme-toggle]')!;
+  const labels = JSON.parse(button.dataset.labels!) as Record<string, string>;
+  const current = (): Theme => (root.dataset.theme as Theme | undefined) ?? 'system';
+
+  function show(theme: Theme) {
+    const text = `${labels.theme}: ${labels[theme]}`;
+    button.setAttribute('aria-label', text);
+    button.title = text;
+  }
+
+  function apply(theme: Theme) {
+    root.classList.remove('light', 'dark');
+    if (theme === 'system') delete root.dataset.theme;
+    else { root.classList.add(theme); root.dataset.theme = theme; }
+    document.cookie = theme === 'system'
+      ? `${THEME_COOKIE}=; path=/; max-age=0; samesite=lax`
+      : `${THEME_COOKIE}=${theme}; path=/; max-age=31536000; samesite=lax`;
+    show(theme);
+  }
+
+  show(current());
+  button.addEventListener('click', () => apply(order[(order.indexOf(current()) + 1) % order.length]!));
+</script>
