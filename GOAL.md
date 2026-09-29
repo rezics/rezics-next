@@ -303,16 +303,56 @@ many surfaces. Each is built once, used everywhere, and guarded in code
     transferred), and purchased credit at 100 credits to US$1 only after each
     market's prepaid-value rules are checked. A separate PostgreSQL database
     with Blnk as the ledger once value is spendable.
-32. **The about site sells the direction** (maintainer). `apps/about` (Astro
-    and React) in eight locales, one page per product line, written to win
-    users; every feature carries its availability from one registry, so the
-    site sells the future without claiming what does not exist. Fundraising
+32. **The about site wins users** (maintainer). `apps/about` (Astro and React)
+    in eight locales, one page per product line. Before launch it presents the
+    direction; from launch it leads with what works (decision 37), and every
+    feature carries its availability from one registry. Fundraising
     research lives in the marketing repository.
 33. **Developer extras, non-core.** GitHub-style settings, OAuth apps,
     Realm-level OAuth installations and MCP management follow the authority
     model (decision 8) in M7.
 
-### Deferred
+#### Platform thesis
+
+34. **The vertical engine is the product** (maintainer). Cost is why REZICS
+    exists: a new vertical (a visual-novel database for Chinese, Japanese or
+    German readers, a science-fiction book index, an LLM and benchmark index
+    with ratings, an indie game catalogue) is configuration, not code. Every
+    type gets a **default page** assembled from reusable parts: cover or avatar,
+    names per language, facts rendered from its property schema, relations,
+    ratings, reviews, discussion, wiki, lists and sources. Only the core
+    families have **custom pages**, Books, Games (including software) and Media
+    (anime, manga, film and TV), and a custom page overrides a few slots of the
+    default rather than reimplementing it. Views, rating contexts, import
+    mappings, Zone templates and page sections are shared assets, never
+    per-vertical copies. Few structural primitives stay code (Work, series
+    membership, edition and release coverage, parts and episodes, people,
+    organisations and characters, typed relations, ratings and reviews,
+    progress with units, dated events); everything else is data under decisions
+    12 and 15. The test: an LLM index with ratings opens in days without new
+    code; if it cannot, the platform has failed.
+35. **One graph, many language fronts.** A vertical is one shared multilingual
+    graph with per-language community Realms as front-ends, not separate
+    databases per language: a correction in any language improves every
+    language. Seeds come from open dumps with their licences honoured (VNDB's
+    ODbL keeps derived data open).
+36. **Beat the weakest incumbent, with cost** (maintainer). In each niche and
+    language market REZICS aims to be better than the weakest competitor, not
+    the best, using its cost advantage: open dumps, the vertical engine,
+    agents and community tools.
+37. **Hype only what works** (maintainer). Marketing and the about site lead with
+    what people can do today; the future stays on the roadmap. Growth rides
+    events: when a model, volume, game or season is released, importers and
+    agents create or update its page within minutes with sourced facts, open
+    ratings, discussion, spoiler rules and share cards, and nothing is
+    fabricated.
+38. **AI speed through open interfaces** (maintainer). Text analysis such as
+    building a Work's wiki from its novel or visual-novel script is done by the
+    people who hold the text, with their own agents, through REZICS's API and
+    contribution protocol (decision 24); REZICS supplies evidence contracts,
+    review and publication, not the compute.
+
+## Deferred
 
 Direct messages, Pro subscriptions, package installation and execution,
 institutional voting, Zone custom CSS, 500-million-entity qualification, Redis,
@@ -341,13 +381,19 @@ and the `product-audit` skill finds no open P0 or P1 class in its area.
   principal budgets, the registry and its adapters. Exit: inventories traverse
   past every former bound; a retried operation has one effect; policy holds on
   every channel; pending contributions and legal cases reach real outcomes.
-- **M6 The four scenarios, Light Novels and ACGN.** Library import, sessions and
-  export; series, edition and availability tracking; serial drafting,
-  scheduling, reading and discussion; VN discovery by release; the two Zones
-  over them, with ACGN episode tracking on the same progress foundation. Exit:
+- **M6 The vertical engine, the four scenarios and the first verticals.** The
+  engine of decision 34 (default pages from property schemas, slot overrides
+  for Books, Games and Media, shared views, rating contexts, import mappings
+  and Zone templates, all creatable through the API and an administrator UI);
+  then, as configuration on it: library import, sessions and export; series,
+  edition and availability tracking; serial drafting, scheduling, reading and
+  discussion; VN discovery by release; the Light Novels and ACGN Zones with
+  episode tracking on the shared progress foundation; and the LLM index with
+  ratings as the engine's proof. Exit:
   paired API and browser journeys pass with ambiguous editions, expired loans,
   mixed formats, non-UI languages, thousand-chapter inventories, revoked
-  editors, interrupted exports and two-device progress.
+  editors, interrupted exports and two-device progress; a new vertical opened
+  from configuration alone.
 - **M7 Contribution, knowledge and assistance.** Classification and
   corrections, the review lifecycle, subscriptions and inbox, community
   completeness, settings and modes, saved views, the editor and Realm wikis,
