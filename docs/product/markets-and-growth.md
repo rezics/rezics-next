@@ -108,6 +108,44 @@ after observation separately from publication latency after approval, correction
 rate, reviewer time, cost, duplicate alerts, share-to-useful-action conversion and
 return at the next relevant release. Registrations and page counts are insufficient.
 
+## Small launches
+
+Maintainer, 2026-09-29. Hype does not need to be large. A single, specific,
+visual result that works today can spread on its own: the maintainer's example
+is a one-page site that turns a person's character into a small bot icon with
+two prompt variants, five example results, "copy" and "open in ChatGPT", five
+UI languages and a link to its creator. It is a prompt plus a Zone that solves
+one problem, and it needed no new model.
+
+On REZICS such a launch is a Hub prompt with its recipe presentation on the
+default page (decision 34), not a new site: prompt variants, inputs, example
+outputs labelled with the model and version that produced them, one-click
+opening in the tools people already use, every language, a share card and the
+creator's identity. What a standalone page cannot give, REZICS adds: every
+recipe discoverable in one place, people's own results as reproduction evidence
+with model and version, remixes, following the creator, and the same recipe
+through the API and MCP. Generation runs in the person's own tool, so a launch
+costs REZICS little. REZICS runs a few itself, tied to its communities (for
+example turning an original character into a light-novel-cover style, or a
+year of reading into a poster). Example images pass the media clearance of the
+[trust and safety runbook](../operations/trust-and-safety.md); recipes use
+original characters, not copyrighted ones.
+
+## Home message
+
+Maintainer, 2026-09-29. The home page shows all of REZICS, not only the
+library, and speaks in three lines without criticising other platforms:
+
+1. You do not need to read Japanese: REZICS presents a work's details from its
+   original language in English, or in any language you read.
+2. If the community around your platform falls short, REZICS gives the complete
+   experience.
+3. REZICS brings fans together beyond any one platform.
+
+Every kind of story sits on the page as one showcase: web novels and serials,
+light novels, books, visual novels, anime and manga, games and software, AI
+prompts and recipes, wikis and worlds, communities.
+
 ## About site
 
 Decision 32, maintainer, 2026-09-29. The about site wins users through one page
