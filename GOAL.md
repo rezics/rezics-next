@@ -8,7 +8,11 @@ against this plan before any dispatch. Backend phase 1 finished on 2026-09-27:
 recorded run `20260927t101230-1616d8`, local tag `goal/backend-phase1`, with its
 history on the local orphan branch `archive/goals`. The research behind every
 decision is in `.temp/research/` (local): R1–R9 (round one), R10–R20 and G1
-(round two) and R21 (red-team synthesis).
+(round two), R21 (red-team synthesis) and R22–R28 with G2 (round three:
+worldbuilding, big-work wikis, zero-cost safety, knowledge agents, commerce,
+incentives, fundraising and marketing). The maintainer asked not to advance the
+main site until the direction is confirmed; the public about site (G-480 to
+G-482) presents this direction meanwhile.
 
 ## Outcome
 
@@ -39,6 +43,13 @@ Reviews, catalogue correction, communities, structured organisation (saved
 views) and a maintainable Realm wiki serve all four. The Light Novels and ACGN
 Zones present them over one catalogue. Every Zone stays visible and truthful
 about what it supports.
+
+**Beyond the first scenarios**, the direction the site sells: every Work gets a
+wiki as complete as a big franchise's, drafted by agents from its sources and
+reviewed by its community; authors get a world bible that replaces separate
+worldbuilding tools; agents, official and third-party, keep REZICS's knowledge
+current through one open contribution protocol; REZICS distributes books and
+games directly to fund itself; and communities reward helpful contribution.
 
 **Ready for production** means deploying to the prepared fleet is operations
 work. Deployment is the next phase; the
@@ -81,7 +92,18 @@ contracts or the [frontend direction](docs/plan/frontend.md) as it is built.
    TAKE IT DOWN non-consensual intimate imagery removal within 48 hours with
    identical-copy handling, child-safety response with known-CSAM hash matching
    at upload, and a safety inbox independent of optional notifications.
-   REZICS Inc, a US company, operates the site (maintainer).
+   REZICS Inc, a US company, operates the site (maintainer). **Zero budget**
+   (maintainer): no paid counsel or scanning; imperfect compliance is an
+   accepted risk until about one million users or investment, except the
+   catastrophic classes (child exploitation, non-consensual intimate imagery,
+   credible threats), which are handled from day one. Free means: policies
+   adapted from GitHub's CC0 site policies; the $6 DMCA designation; PhotoDNA's
+   free service (upload clearance; new image uploads stay off until approved),
+   Cloudflare's CSAM scanning as backup, NCMEC registration as an electronic
+   service provider; NSFWJS or OpenNSFW2 on CPU for explicit-image screening;
+   Turnstile. Launch is text-first with typographic covers until media
+   clearance works. The EU stays reachable while its representative waits for
+   revenue (accepted risk); marketing leads with the US and Asian markets.
 3. **AI disclosure and consent.** Prose, artwork and translations carry a
    structured, revision-aware declaration of AI use (none, assisted,
    generated) with human-review status; readers filter by it; it is separate
@@ -202,13 +224,24 @@ many surfaces. Each is built once, used everywhere, and guarded in code
     infoboxes, links and backlinks, discussion, review, watch, history, diff,
     restore and export; saved views (list, table, gallery) over Collections and
     filters; reading notes.
-24. **Agents, bounded.** Agent, AI configuration, assignment and run stay
-    distinct; tasks with runs, checkpoints, approvals and receipts; durable
-    event reads with resumable SSE; an inbound task-oriented `/mcp`. The first
-    experience is library migration and edition reconciliation with evidence.
-    Owners choose and replace assistants; private data leaves only with
-    explicit authority. Taste memory and a spoiler-safe reading companion come
-    after, on the same contracts.
+24. **Agents, through one open contribution protocol.** Official and
+    third-party agents submit the same proposals: targets with expected
+    revisions, changes, evidence (exact selectors, coverage, rights), method,
+    confidence as an assertion, and disclosure; review binds the exact
+    candidate; application gives receipts; reversal is compensating. Agent,
+    AI configuration, assignment and run stay distinct; scoped credentials,
+    budgets per operator and trust per task and language; third parties bring
+    their own compute through the API and `/mcp` (maintainer). Official
+    inference defaults to $0 with an operator cap. **First batch**: advertisement
+    and spam review on TypeSafe's Jev (typed, confidence-aware decisions,
+    about $20 per million items), with evidence spans and human override
+    (maintainer); auto-tagging of posts and books against the shared
+    vocabulary; relation maintenance (a new character, person or place is
+    proposed into its Works and entities); normalisation of free-form posts into
+    structured content such as recipes (video later); and the library-migration
+    assistant. **Next**: the wiki builder (decision 29), then taste memory and a
+    spoiler-safe reading companion. Durable event reads with resumable SSE and
+    tasks with checkpoints and approvals carry all of them.
 25. **Developers and phones.** A registry-generated portal, an external
     TypeScript SDK, scoped personal and delegated credentials, RFC 9457 errors
     and durable event replay. Responsive web, optional installation as a PWA,
@@ -222,15 +255,67 @@ many surfaces. Each is built once, used everywhere, and guarded in code
     stewards, is a separate deliverable. Availability is dated observation.
 27. **Libraries first**; vendor with licence, upstream commit and patch record.
 
+### Growth and revenue
+
+28. **Worldbuilding that replaces the author's other tools.** A private World
+    beside the manuscript (characters, places, organisations, events, items,
+    lore; versioned templates, not code) publishes selected pages as the Work's
+    Realm wiki without exposing private history. Maps on custom images with
+    Leaflet, relationship views with Cytoscape.js, fictional chronologies with
+    D3 scales and uncertain dates; every visual has an accessible list. Export
+    is a coherent, re-importable bundle, never paywalled. Azgaar map import and
+    scene tracks come later.
+29. **A big-franchise wiki for every Work.** A sourced, position-aware
+    knowledge layer per Work: fictional entities, claims with chapter
+    evidence, multilingual names and aliases, event time separate from
+    revelation position. Agents build it chapter by chapter from licensed,
+    public-domain or author-supplied text and structured dumps; reviewers
+    publish coherent bundles; readers see only what they have read; new
+    chapters produce reviewed deltas. The first version gives entity indexes,
+    concise articles, graph infoboxes, navboxes, chapter guides, appearances,
+    relationship lists, basic timelines, citations and backlinks; family trees,
+    adaptation alignment, world maps and chronologies follow. Completeness means
+    coverage of an identified corpus, not page count.
+30. **Distribution** (maintainer: books and games, Stripe). REZICS is the
+    distributor for contracted creators first: rights-cleared, DRM-free EPUB and
+    PDF books and small games and visual novels, with samples, one-time
+    purchases, updates, receipts, refunds and re-downloads from private R2. One
+    US Stripe account with hosted Checkout and Stripe Managed Payments (which
+    administers indirect tax) if Stripe approves the model; a 90/10 split of
+    receipts after tax, fees and refunds as the hypothesis, every deduction
+    visible. No sale of `r18`/`r18g` works (Stripe prohibits sexually explicit
+    material). Better than the weakest stores first, and better than Steam at
+    precise multilingual editions, portable files, cross-medium creator
+    identity and connected community and wiki. Later: a Connect marketplace
+    (Taiwan and Korea sellers need another payout route), keys and chapter
+    bundles. No launcher, DRM or open seller registration at first.
+31. **Recognition, then points, then credit** (maintainer; low priority). Per-Realm
+    experience and levels from accepted contributions (reviews judged helpful,
+    corrections, translations, moderation quality, substantive creation),
+    never spendable, never authority, never for attendance or streaks. Later,
+    earned points redeemable for REZICS-supplied goods (never bought, cashed or
+    transferred), and purchased credit at 100 credits to US$1 only after each
+    market's prepaid-value rules are checked. A separate PostgreSQL database
+    with Blnk as the ledger once value is spendable.
+32. **The about site sells the direction** (maintainer). `apps/about` (Astro
+    and React) in eight locales, one page per product line, written to win
+    users; every feature carries its availability from one registry, so the
+    site sells the future without claiming what does not exist. Fundraising
+    research lives in the marketing repository.
+33. **Developer extras, non-core.** GitHub-style settings, OAuth apps,
+    Realm-level OAuth installations and MCP management follow the authority
+    model (decision 8) in M7.
+
 ### Deferred
 
-Direct messages, commerce and Pro, package installation and execution,
+Direct messages, Pro subscriptions, package installation and execution,
 institutional voting, Zone custom CSS, 500-million-entity qualification, Redis,
 large-scale import runs, native apps, general offline collaboration,
 unrestricted formulas and templates, specialist collector and study tools, full
-wiki-host migration, reputation gamification, webhooks, character polls and
-tournaments, and acquisition campaigns for music, recipes, software, mods and AI
-resources (their Zones stay visible and truthful).
+wiki-host migration, streaks and attendance rewards, webhooks, character polls
+and tournaments, an open marketplace, keys, DRM and launchers, and acquisition
+campaigns for music, recipes, software, mods and AI resources (their Zones stay
+visible and truthful).
 
 ## Milestones
 
@@ -260,15 +345,18 @@ and the `product-audit` skill finds no open P0 or P1 class in its area.
 - **M7 Contribution, knowledge and assistance.** Classification and
   corrections, the review lifecycle, subscriptions and inbox, community
   completeness, settings and modes, saved views, the editor and Realm wikis,
-  developer onboarding, the agent platform and the library-migration
-  assistant. Exit: propose, review, revise, decide, notify and recover work
+  developer onboarding and non-core developer extras, worldbuilding and the
+  first wiki-builder pilot, the agent platform with the first-batch agents, and
+  distribution's first scope behind the payment gate. Exit: propose, review, revise, decide, notify and recover work
   end to end; changed candidates invalidate approval; historical wiki rendering
   and export survive dependency changes; replacing an assistant keeps its
   authorized artifacts.
 - **M8 Production qualification.** Deployment artifacts, production bootstrap
   and the launch catalogue, timed recovery, security review, email operations,
-  legal configuration, staffed safety drills, privacy-preserving measurement,
-  and real-device and accessibility acceptance. Exit: no open P0 or P1 class or
+  legal configuration within the zero-budget decision, safety drills,
+  privacy-preserving measurement, real-device and accessibility acceptance,
+  and Stripe's approval before any sale. Recognition ships here; points and
+  credit follow launch. Exit: no open P0 or P1 class or
   High security finding; launch workloads meet budgets; recovery and takeout
   demonstrated; every supported capability has acceptance evidence; market
   gates and named responders ready.
