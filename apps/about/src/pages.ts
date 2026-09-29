@@ -6,6 +6,7 @@ export const pageIds = [
   'serial-fiction',
   'acgn',
   'wikis',
+  'agents',
   'communities',
   'distribution',
   'developers',
@@ -21,6 +22,7 @@ export const productLineIds = [
   'serial-fiction',
   'acgn',
   'wikis',
+  'agents',
   'communities',
   'distribution',
 ] as const satisfies readonly PageId[];

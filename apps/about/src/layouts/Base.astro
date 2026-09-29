@@ -17,9 +17,11 @@ interface Props {
   /** Extra JSON-LD objects for this page. */
   structuredData?: object[];
   noindex?: boolean;
+  /** The language of the page's content when it differs from the locale (see `contentLanguage`). */
+  contentLang?: UiLocale;
 }
 
-const { locale, page, title, description, structuredData = [], noindex = false } = Astro.props;
+const { locale, page, title, description, structuredData = [], noindex = false, contentLang = locale } = Astro.props;
 const site = Astro.site;
 const url = absoluteUrl(pagePath(locale, page), site);
 const image = absoluteUrl(`/og/${page === 'home' ? 'home' : pageSlug(page)}.png`, site);
@@ -71,7 +73,7 @@ const data = [
   <body class="min-h-dvh bg-background text-foreground">
     <SkipNavLink>{chrome.skip}</SkipNavLink>
     <Header locale={locale} page={page} />
-    <main id="skip-nav-content" tabindex="-1" class="outline-none" data-copy={copyStatus[page]}>
+    <main id="skip-nav-content" tabindex="-1" class="outline-none" data-copy={copyStatus[page]} lang={contentLang === locale ? undefined : contentLang}>
       <slot />
     </main>
     <Footer locale={locale} page={page} />

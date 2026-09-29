@@ -1,14 +1,10 @@
 ---
-import { RealmCard } from '../../illustrations/RealmCard.tsx';
-import { copy } from '../../i18n/format.ts';
 import type { UiLocale } from '../../i18n/locales.ts';
-import ProductPage from '../../layouts/ProductPage.astro';
+import LinePage from '../../layouts/LinePage.astro';
 import { localePaths } from '../../lib/site.ts';
 
+// G-483 gives this page its pictures (PATTERNS.md); until then it shows its text in the standard order.
 export const getStaticPaths = localePaths;
 const locale = Astro.params.locale as UiLocale;
-const words = copy('illustrations', locale);
 ---
-<ProductPage locale={locale} page="communities">
-  <RealmCard slot="scene" words={words} />
-</ProductPage>
+<LinePage locale={locale} page="communities" />

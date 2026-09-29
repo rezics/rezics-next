@@ -28,15 +28,18 @@ export interface SiteCopy {
   status: {
     available: string;
     inDevelopment: string;
-    planned: string;
-    now: string;
+    /** Planned for the stages that follow what is being built now. */
     next: string;
+    /** Planned for the stages after those. */
     later: string;
     availableHelp: string;
     inDevelopmentHelp: string;
-    plannedHelp: string;
+    nextHelp: string;
+    laterHelp: string;
     legend: string;
   };
+  /** The control that pauses the site's looping illustrations. */
+  motion: { pause: string };
   notify: {
     title: string;
     body: string;
@@ -76,32 +79,33 @@ const en: SiteCopy = {
     cta: 'Get notified',
   },
   pages: {
-    home: { name: 'REZICS', summary: 'Your reading, in every language and edition.' },
-    reading: { name: 'Reading', summary: 'A library that goes wherever you read.' },
+    home: { name: 'REZICS', summary: 'One story. Every language and edition. Yours to keep.' },
+    reading: { name: 'Reading', summary: 'A library that remembers every edition.' },
     'light-novels': {
       name: 'Light novels',
-      summary: 'Follow a series across editions and translations.',
+      summary: 'Every volume and translation of a series, in one place.',
     },
     'serial-fiction': {
       name: 'Serial fiction',
-      summary: 'Write and read stories one chapter at a time.',
+      summary: 'Write chapter by chapter. Read without losing your place.',
     },
     acgn: {
       name: 'Visual novels, anime and manga',
-      summary: 'Find a release you can actually play or watch.',
+      summary: 'The release you can play, the episode you are on.',
     },
-    wikis: { name: 'Wikis', summary: 'Worldbuilding that stays accurate, with help from agents.' },
+    wikis: { name: 'Wikis', summary: 'Wikis with sources, and a world bible for authors.' },
+    agents: { name: 'Agents', summary: 'Agents propose with evidence. People decide.' },
     communities: {
       name: 'Realms',
       summary: 'Communities for one story, one language or one idea.',
     },
-    distribution: { name: 'Publishing', summary: 'Publish and sell books and games.' },
-    developers: { name: 'Developers', summary: 'An API, an SDK and agents you bring yourself.' },
-    trust: { name: 'Trust', summary: 'Safety, ratings, AI disclosure and your data.' },
-    roadmap: {
-      name: 'Roadmap',
-      summary: 'What is available, what is being built, what comes later.',
+    distribution: { name: 'Publishing', summary: 'Books and games sold as files people keep.' },
+    developers: {
+      name: 'Developers',
+      summary: 'The whole product as an API, for apps and agents.',
     },
+    trust: { name: 'Trust', summary: 'Safety, ratings, AI disclosure and your data.' },
+    roadmap: { name: 'Roadmap', summary: 'Five stages to launch, and where each one stands.' },
   },
   footer: {
     products: 'Product lines',
@@ -115,15 +119,16 @@ const en: SiteCopy = {
   status: {
     available: 'Available',
     inDevelopment: 'In development',
-    planned: 'Planned',
-    now: 'Now',
-    next: 'Next',
+    next: 'Up next',
     later: 'Later',
     availableHelp: 'Works today.',
     inDevelopmentHelp: 'Being built now.',
-    plannedHelp: 'Decided, not started.',
-    legend: 'Each statement on this site shows whether it is available, in development or planned.',
+    nextHelp: 'Follows what is being built now.',
+    laterHelp: 'Comes after that.',
+    legend:
+      'Every capability on this site shows its status: available, in development, up next or later.',
   },
+  motion: { pause: 'Pause animation' },
   notify: {
     title: 'Registration is not open yet',
     body: 'Leave your email and we will write once, when you can register. Nothing else.',
@@ -168,17 +173,18 @@ export const site = defineCopy<SiteCopy>({
       cta: '通知我',
     },
     pages: {
-      home: { name: 'REZICS', summary: '你的閱讀，跨越每一種語言與版本。' },
-      reading: { name: '閱讀', summary: '跟著你到處走的書庫。' },
-      'light-novels': { name: '輕小說', summary: '跨版本與翻譯追蹤一部系列。' },
-      'serial-fiction': { name: '連載小說', summary: '一章一章地寫，一章一章地讀。' },
-      acgn: { name: '視覺小說、動畫與漫畫', summary: '找到真正能玩、能看的發行版本。' },
-      wikis: { name: 'Wiki', summary: '世界觀設定始終準確，還有代理協助。' },
+      home: { name: 'REZICS', summary: '同一個故事，每種語言與版本，永遠屬於你。' },
+      reading: { name: '閱讀', summary: '記得每一個版本的書庫。' },
+      'light-novels': { name: '輕小說', summary: '一部系列的每一冊、每種翻譯，盡在一處。' },
+      'serial-fiction': { name: '連載小說', summary: '一章一章地寫，讀到哪裡都不會迷路。' },
+      acgn: { name: '視覺小說、動畫與漫畫', summary: '能玩的發行版本，正在看的那一集。' },
+      wikis: { name: 'Wiki', summary: '附出處的 Wiki，以及作者的世界觀設定集。' },
+      agents: { name: '代理', summary: '代理附上證據提出建議，由人來決定。' },
       communities: { name: '社群', summary: '為一部作品、一種語言或一個想法而設的社群。' },
-      distribution: { name: '出版', summary: '出版並販售書籍與遊戲。' },
-      developers: { name: '開發者', summary: 'API、SDK，以及自帶的代理。' },
+      distribution: { name: '出版', summary: '以讀者能永久保存的檔案販售書籍與遊戲。' },
+      developers: { name: '開發者', summary: '整個產品都是 API，供應用程式與代理使用。' },
       trust: { name: '信任', summary: '安全、分級、AI 揭露與你的資料。' },
-      roadmap: { name: '路線圖', summary: '哪些已可使用、哪些正在打造、哪些留待日後。' },
+      roadmap: { name: '路線圖', summary: '邁向上線的五個階段，以及各自的進度。' },
     },
     footer: {
       products: '產品線',
@@ -192,15 +198,15 @@ export const site = defineCopy<SiteCopy>({
     status: {
       available: '已提供',
       inDevelopment: '開發中',
-      planned: '規劃中',
-      now: '現在',
       next: '接下來',
       later: '之後',
       availableHelp: '現在就能使用。',
       inDevelopmentHelp: '正在打造。',
-      plannedHelp: '已決定，尚未開始。',
-      legend: '本站每項說明都會標示為已提供、開發中或規劃中。',
+      nextHelp: '緊接在目前的工作之後。',
+      laterHelp: '在那之後推出。',
+      legend: '本網站的每項功能都標示狀態：已提供、開發中、接下來或之後。',
     },
+    motion: { pause: '暫停動畫' },
     notify: {
       title: '註冊尚未開放',
       body: '留下電子郵件，開放註冊時我們只會寫一次信通知你。',
@@ -239,17 +245,18 @@ export const site = defineCopy<SiteCopy>({
       cta: '通知我',
     },
     pages: {
-      home: { name: 'REZICS', summary: '你的阅读，跨越每一种语言与版本。' },
-      reading: { name: '阅读', summary: '跟着你到处走的书库。' },
-      'light-novels': { name: '轻小说', summary: '跨版本与翻译追踪一部系列。' },
-      'serial-fiction': { name: '连载小说', summary: '一章一章地写，一章一章地读。' },
-      acgn: { name: '视觉小说、动画与漫画', summary: '找到真正能玩、能看的发行版本。' },
-      wikis: { name: 'Wiki', summary: '世界观设定始终准确，还有智能体协助。' },
+      home: { name: 'REZICS', summary: '同一个故事，每种语言与版本，永远属于你。' },
+      reading: { name: '阅读', summary: '记得每一个版本的书库。' },
+      'light-novels': { name: '轻小说', summary: '一部系列的每一册、每种翻译，尽在一处。' },
+      'serial-fiction': { name: '连载小说', summary: '一章一章地写，读到哪里都不会迷路。' },
+      acgn: { name: '视觉小说、动画与漫画', summary: '能玩的发行版本，正在看的那一集。' },
+      wikis: { name: 'Wiki', summary: '附出处的 Wiki，以及作者的世界观设定集。' },
+      agents: { name: '智能体', summary: '智能体附上证据提出建议，由人来决定。' },
       communities: { name: '社区', summary: '为一部作品、一种语言或一个想法而设的社区。' },
-      distribution: { name: '出版', summary: '出版并销售书籍与游戏。' },
-      developers: { name: '开发者', summary: 'API、SDK，以及自带的智能体。' },
+      distribution: { name: '出版', summary: '以读者能永久保存的文件销售书籍与游戏。' },
+      developers: { name: '开发者', summary: '整个产品都是 API，供应用与智能体使用。' },
       trust: { name: '信任', summary: '安全、分级、AI 披露与你的数据。' },
-      roadmap: { name: '路线图', summary: '哪些已可使用、哪些正在打造、哪些留待日后。' },
+      roadmap: { name: '路线图', summary: '迈向上线的五个阶段，以及各自的进度。' },
     },
     footer: {
       products: '产品线',
@@ -263,15 +270,15 @@ export const site = defineCopy<SiteCopy>({
     status: {
       available: '已提供',
       inDevelopment: '开发中',
-      planned: '规划中',
-      now: '现在',
       next: '接下来',
       later: '之后',
       availableHelp: '现在就能使用。',
       inDevelopmentHelp: '正在打造。',
-      plannedHelp: '已决定，尚未开始。',
-      legend: '本站每项说明都会标明为已提供、开发中或规划中。',
+      nextHelp: '紧接在当前工作之后。',
+      laterHelp: '在那之后推出。',
+      legend: '本网站的每项功能都标明状态：已提供、开发中、接下来或之后。',
     },
+    motion: { pause: '暂停动画' },
     notify: {
       title: '注册尚未开放',
       body: '留下电子邮箱，开放注册时我们只会写一封信通知你。',
@@ -310,23 +317,36 @@ export const site = defineCopy<SiteCopy>({
       cta: '通知を受け取る',
     },
     pages: {
-      home: { name: 'REZICS', summary: 'あなたの読書を、あらゆる言語と版で。' },
-      reading: { name: '読書', summary: '読む場所を選ばないライブラリ。' },
-      'light-novels': { name: 'ライトノベル', summary: '版と翻訳をまたいでシリーズを追う。' },
-      'serial-fiction': { name: '連載小説', summary: '一話ずつ書き、一話ずつ読む。' },
+      home: {
+        name: 'REZICS',
+        summary: 'ひとつの物語を、あらゆる言語と版で。ずっとあなたのものに。',
+      },
+      reading: { name: '読書', summary: 'すべての版を覚えているライブラリ。' },
+      'light-novels': {
+        name: 'ライトノベル',
+        summary: 'シリーズの全巻と全翻訳を、ひとつの場所に。',
+      },
+      'serial-fiction': { name: '連載小説', summary: '一話ずつ書き、読んだ場所を見失わない。' },
       acgn: {
         name: 'ビジュアルノベル・アニメ・マンガ',
-        summary: '実際に遊べる・観られるリリースを見つける。',
+        summary: '遊べるリリースと、いま観ている話数。',
       },
-      wikis: { name: 'ウィキ', summary: 'エージェントの力も借りて、世界観を正確に保つ。' },
+      wikis: { name: 'ウィキ', summary: '出典つきのウィキと、作者のための設定資料集。' },
+      agents: { name: 'エージェント', summary: 'エージェントは根拠を添えて提案し、決めるのは人。' },
       communities: {
         name: 'コミュニティ',
         summary: 'ひとつの物語、ひとつの言語、ひとつの関心のために。',
       },
-      distribution: { name: '出版', summary: '本とゲームを公開し、販売する。' },
-      developers: { name: '開発者', summary: 'API、SDK、そして持ち込みのエージェント。' },
+      distribution: { name: '出版', summary: '手元に残るファイルで、本とゲームを販売。' },
+      developers: {
+        name: '開発者',
+        summary: 'プロダクトのすべてを API で。アプリとエージェントのために。',
+      },
       trust: { name: '信頼', summary: '安全、年齢区分、AI の開示、そしてあなたのデータ。' },
-      roadmap: { name: 'ロードマップ', summary: '今できること、開発中のこと、これから先のこと。' },
+      roadmap: {
+        name: 'ロードマップ',
+        summary: 'ローンチまでの五つの段階と、それぞれの進み具合。',
+      },
     },
     footer: {
       products: 'プロダクト',
@@ -340,15 +360,15 @@ export const site = defineCopy<SiteCopy>({
     status: {
       available: '提供中',
       inDevelopment: '開発中',
-      planned: '計画中',
-      now: '今',
-      next: '次',
-      later: 'その先',
+      next: '次に着手',
+      later: 'その後',
       availableHelp: '今すぐ使えます。',
-      inDevelopmentHelp: '現在開発中です。',
-      plannedHelp: '決定済み、未着手です。',
-      legend: 'このサイトの各記述には、提供中・開発中・計画中のいずれかが表示されます。',
+      inDevelopmentHelp: 'いま開発しています。',
+      nextHelp: '現在の開発の次に取りかかります。',
+      laterHelp: 'その後に取りかかります。',
+      legend: 'このサイトの各機能には状態を表示しています：提供中、開発中、次に着手、その後。',
     },
+    motion: { pause: 'アニメーションを一時停止' },
     notify: {
       title: '登録はまだ始まっていません',
       body: 'メールアドレスを残していただければ、登録開始時に一度だけご連絡します。',
@@ -391,26 +411,27 @@ export const site = defineCopy<SiteCopy>({
       cta: '알림 받기',
     },
     pages: {
-      home: { name: 'REZICS', summary: '모든 언어와 판본에 걸친 나의 독서.' },
-      reading: { name: '독서', summary: '어디서 읽든 따라오는 서재.' },
-      'light-novels': {
-        name: '라이트 노벨',
-        summary: '판본과 번역을 넘나들며 시리즈를 추적합니다.',
-      },
-      'serial-fiction': { name: '연재 소설', summary: '한 화씩 쓰고, 한 화씩 읽습니다.' },
+      home: { name: 'REZICS', summary: '하나의 이야기, 모든 언어와 판본, 언제까지나 내 것으로.' },
+      reading: { name: '독서', summary: '모든 판본을 기억하는 서재.' },
+      'light-novels': { name: '라이트 노벨', summary: '시리즈의 모든 권과 번역을 한곳에.' },
+      'serial-fiction': { name: '연재 소설', summary: '한 화씩 쓰고, 읽던 자리를 잃지 않고 읽기.' },
       acgn: {
         name: '비주얼 노벨·애니메이션·만화',
-        summary: '실제로 즐길 수 있는 릴리스를 찾습니다.',
+        summary: '플레이할 수 있는 발매판, 지금 보는 화.',
       },
-      wikis: { name: '위키', summary: '에이전트의 도움으로 세계관을 정확하게 유지합니다.' },
+      wikis: { name: '위키', summary: '출처가 있는 위키와 작가를 위한 설정집.' },
+      agents: {
+        name: '에이전트',
+        summary: '에이전트는 근거와 함께 제안하고, 결정은 사람이 합니다.',
+      },
       communities: {
         name: '커뮤니티',
         summary: '하나의 이야기, 하나의 언어, 하나의 관심사를 위한 공간.',
       },
-      distribution: { name: '출판', summary: '책과 게임을 출판하고 판매합니다.' },
-      developers: { name: '개발자', summary: 'API, SDK, 그리고 직접 가져오는 에이전트.' },
+      distribution: { name: '출판', summary: '간직할 수 있는 파일로 파는 책과 게임.' },
+      developers: { name: '개발자', summary: '제품 전체를 API로, 앱과 에이전트를 위해.' },
       trust: { name: '신뢰', summary: '안전, 등급, AI 공개, 그리고 내 데이터.' },
-      roadmap: { name: '로드맵', summary: '지금 쓸 수 있는 것, 만드는 중인 것, 나중에 올 것.' },
+      roadmap: { name: '로드맵', summary: '출시까지의 다섯 단계와 각 단계의 현황.' },
     },
     footer: {
       products: '제품군',
@@ -422,17 +443,17 @@ export const site = defineCopy<SiteCopy>({
       cookies: '이 사이트는 언어와 테마, 두 가지 쿠키만 설정합니다. 트래커는 없습니다.',
     },
     status: {
-      available: '이용 가능',
+      available: '제공 중',
       inDevelopment: '개발 중',
-      planned: '계획됨',
-      now: '지금',
-      next: '다음',
+      next: '다음 단계',
       later: '이후',
       availableHelp: '지금 사용할 수 있습니다.',
       inDevelopmentHelp: '지금 만들고 있습니다.',
-      plannedHelp: '결정되었으나 시작 전입니다.',
-      legend: '이 사이트의 모든 설명에는 이용 가능, 개발 중, 계획됨 중 하나가 표시됩니다.',
+      nextHelp: '지금 만드는 작업 바로 다음입니다.',
+      laterHelp: '그다음에 이어집니다.',
+      legend: '이 사이트의 모든 기능에는 상태가 표시됩니다: 제공 중, 개발 중, 다음 단계, 이후.',
     },
+    motion: { pause: '애니메이션 일시 정지' },
     notify: {
       title: '아직 가입을 받지 않습니다',
       body: '이메일을 남겨 주시면 가입이 열릴 때 한 번만 알려 드립니다.',
@@ -474,41 +495,48 @@ export const site = defineCopy<SiteCopy>({
       cta: 'Benachrichtigen',
     },
     pages: {
-      home: { name: 'REZICS', summary: 'Dein Lesen, in jeder Sprache und Ausgabe.' },
-      reading: { name: 'Lesen', summary: 'Eine Bibliothek, die dich überallhin begleitet.' },
+      home: {
+        name: 'REZICS',
+        summary: 'Eine Geschichte. Jede Sprache und Ausgabe. Für immer deine.',
+      },
+      reading: { name: 'Lesen', summary: 'Eine Bibliothek, die sich jede Ausgabe merkt.' },
       'light-novels': {
         name: 'Light Novels',
-        summary: 'Eine Reihe über Ausgaben und Übersetzungen hinweg verfolgen.',
+        summary: 'Jeder Band und jede Übersetzung einer Reihe an einem Ort.',
       },
       'serial-fiction': {
         name: 'Serielle Literatur',
-        summary: 'Geschichten Kapitel für Kapitel schreiben und lesen.',
+        summary: 'Kapitel für Kapitel schreiben. Lesen, ohne die Stelle zu verlieren.',
       },
       acgn: {
         name: 'Visual Novels, Anime und Manga',
-        summary: 'Eine Veröffentlichung finden, die du wirklich spielen oder sehen kannst.',
+        summary: 'Die Veröffentlichung, die du spielen kannst, die Folge, bei der du bist.',
       },
-      wikis: { name: 'Wikis', summary: 'Weltenbau, der stimmig bleibt, mit Hilfe von Agenten.' },
+      wikis: {
+        name: 'Wikis',
+        summary: 'Wikis mit Quellen und eine Weltenbibel für Autorinnen und Autoren.',
+      },
+      agents: {
+        name: 'Agenten',
+        summary: 'Agenten schlagen mit Belegen vor, Menschen entscheiden.',
+      },
       communities: {
         name: 'Realms',
         summary: 'Communitys für eine Geschichte, eine Sprache oder eine Idee.',
       },
       distribution: {
         name: 'Veröffentlichen',
-        summary: 'Bücher und Spiele veröffentlichen und verkaufen.',
+        summary: 'Bücher und Spiele als Dateien, die man behält.',
       },
       developers: {
         name: 'Entwickler',
-        summary: 'Eine API, ein SDK und Agenten, die du selbst mitbringst.',
+        summary: 'Das ganze Produkt als API, für Apps und Agenten.',
       },
       trust: {
         name: 'Vertrauen',
         summary: 'Sicherheit, Einstufungen, KI-Kennzeichnung und deine Daten.',
       },
-      roadmap: {
-        name: 'Roadmap',
-        summary: 'Was verfügbar ist, was entsteht und was später kommt.',
-      },
+      roadmap: { name: 'Roadmap', summary: 'Fünf Etappen bis zum Start und wo jede steht.' },
     },
     footer: {
       products: 'Produktlinien',
@@ -523,16 +551,16 @@ export const site = defineCopy<SiteCopy>({
     status: {
       available: 'Verfügbar',
       inDevelopment: 'In Entwicklung',
-      planned: 'Geplant',
-      now: 'Jetzt',
       next: 'Als Nächstes',
       later: 'Später',
-      availableHelp: 'Funktioniert heute.',
+      availableHelp: 'Funktioniert schon heute.',
       inDevelopmentHelp: 'Wird gerade gebaut.',
-      plannedHelp: 'Beschlossen, noch nicht begonnen.',
+      nextHelp: 'Folgt auf das, was gerade gebaut wird.',
+      laterHelp: 'Kommt danach.',
       legend:
-        'Jede Aussage auf dieser Website zeigt, ob sie verfügbar, in Entwicklung oder geplant ist.',
+        'Jede Funktion auf dieser Website zeigt ihren Stand: verfügbar, in Entwicklung, als Nächstes oder später.',
     },
+    motion: { pause: 'Animation anhalten' },
     notify: {
       title: 'Die Registrierung ist noch nicht geöffnet',
       body: 'Hinterlasse deine E-Mail-Adresse, und wir schreiben dir einmal, sobald du dich registrieren kannst. Sonst nichts.',
@@ -577,29 +605,42 @@ export const site = defineCopy<SiteCopy>({
       cta: 'Être prévenu',
     },
     pages: {
-      home: { name: 'REZICS', summary: 'Vos lectures, dans toutes les langues et éditions.' },
-      reading: { name: 'Lecture', summary: 'Une bibliothèque qui vous suit partout.' },
+      home: {
+        name: 'REZICS',
+        summary: 'Une histoire. Toutes les langues et éditions. À vous pour de bon.',
+      },
+      reading: { name: 'Lecture', summary: 'Une bibliothèque qui se souvient de chaque édition.' },
       'light-novels': {
         name: 'Light novels',
-        summary: 'Suivre une série à travers éditions et traductions.',
+        summary: 'Chaque tome et chaque traduction d’une série, au même endroit.',
       },
       'serial-fiction': {
         name: 'Fiction en feuilleton',
-        summary: 'Écrire et lire des histoires chapitre par chapitre.',
+        summary: 'Écrire chapitre par chapitre. Lire sans perdre sa page.',
       },
       acgn: {
         name: 'Visual novels, anime et manga',
-        summary: 'Trouver une sortie que vous pouvez vraiment jouer ou regarder.',
+        summary: 'La version à laquelle vous pouvez jouer, l’épisode où vous en êtes.',
       },
-      wikis: { name: 'Wikis', summary: 'Un univers qui reste cohérent, avec l’aide d’agents.' },
+      wikis: {
+        name: 'Wikis',
+        summary: 'Des wikis sourcés et une bible d’univers pour les auteurs.',
+      },
+      agents: {
+        name: 'Agents',
+        summary: 'Les agents proposent, preuves à l’appui ; les humains décident.',
+      },
       communities: {
         name: 'Realms',
         summary: 'Des communautés pour une histoire, une langue ou une idée.',
       },
-      distribution: { name: 'Édition', summary: 'Publier et vendre des livres et des jeux.' },
+      distribution: {
+        name: 'Édition',
+        summary: 'Des livres et des jeux vendus en fichiers que l’on garde.',
+      },
       developers: {
         name: 'Développeurs',
-        summary: 'Une API, un SDK et des agents que vous apportez.',
+        summary: 'Tout le produit en API, pour les applications et les agents.',
       },
       trust: {
         name: 'Confiance',
@@ -607,7 +648,7 @@ export const site = defineCopy<SiteCopy>({
       },
       roadmap: {
         name: 'Feuille de route',
-        summary: 'Ce qui existe, ce qui se construit, ce qui viendra.',
+        summary: 'Cinq étapes jusqu’au lancement, et où en est chacune.',
       },
     },
     footer: {
@@ -622,16 +663,16 @@ export const site = defineCopy<SiteCopy>({
     status: {
       available: 'Disponible',
       inDevelopment: 'En développement',
-      planned: 'Prévu',
-      now: 'Maintenant',
       next: 'Ensuite',
       later: 'Plus tard',
-      availableHelp: 'Fonctionne aujourd’hui.',
+      availableHelp: 'Fonctionne dès aujourd’hui.',
       inDevelopmentHelp: 'En cours de construction.',
-      plannedHelp: 'Décidé, pas commencé.',
+      nextHelp: 'Suit ce qui est construit en ce moment.',
+      laterHelp: 'Vient après.',
       legend:
-        'Chaque affirmation de ce site indique si elle est disponible, en développement ou prévue.',
+        'Chaque fonctionnalité de ce site affiche son état : disponible, en développement, ensuite ou plus tard.',
     },
+    motion: { pause: 'Mettre l’animation en pause' },
     notify: {
       title: 'L’inscription n’est pas encore ouverte',
       body: 'Laissez votre adresse e-mail : nous vous écrirons une seule fois, quand l’inscription ouvrira. Rien d’autre.',
@@ -674,31 +715,41 @@ export const site = defineCopy<SiteCopy>({
       cta: 'Avísame',
     },
     pages: {
-      home: { name: 'REZICS', summary: 'Tu lectura, en cada idioma y edición.' },
-      reading: { name: 'Lectura', summary: 'Una biblioteca que va contigo a todas partes.' },
+      home: { name: 'REZICS', summary: 'Una historia. Cada idioma y edición. Tuya para siempre.' },
+      reading: { name: 'Lectura', summary: 'Una biblioteca que recuerda cada edición.' },
       'light-novels': {
         name: 'Light novels',
-        summary: 'Sigue una serie a través de ediciones y traducciones.',
+        summary: 'Cada volumen y cada traducción de una serie, en un solo lugar.',
       },
       'serial-fiction': {
         name: 'Ficción por entregas',
-        summary: 'Escribe y lee historias capítulo a capítulo.',
+        summary: 'Escribe capítulo a capítulo. Lee sin perder tu sitio.',
       },
       acgn: {
         name: 'Novelas visuales, anime y manga',
-        summary: 'Encuentra una edición que de verdad puedas jugar o ver.',
+        summary: 'La versión que puedes jugar, el episodio por el que vas.',
       },
-      wikis: { name: 'Wikis', summary: 'Mundos coherentes, con la ayuda de agentes.' },
+      wikis: { name: 'Wikis', summary: 'Wikis con fuentes y una biblia del mundo para autores.' },
+      agents: {
+        name: 'Agentes',
+        summary: 'Los agentes proponen con pruebas; las personas deciden.',
+      },
       communities: {
         name: 'Realms',
         summary: 'Comunidades para una historia, un idioma o una idea.',
       },
-      distribution: { name: 'Publicación', summary: 'Publica y vende libros y juegos.' },
-      developers: { name: 'Desarrolladores', summary: 'Una API, un SDK y agentes que traes tú.' },
+      distribution: {
+        name: 'Publicación',
+        summary: 'Libros y juegos vendidos como archivos que conservas.',
+      },
+      developers: {
+        name: 'Desarrolladores',
+        summary: 'Todo el producto como API, para apps y agentes.',
+      },
       trust: { name: 'Confianza', summary: 'Seguridad, clasificaciones, aviso de IA y tus datos.' },
       roadmap: {
         name: 'Hoja de ruta',
-        summary: 'Qué está disponible, qué se está construyendo y qué viene después.',
+        summary: 'Cinco etapas hasta el lanzamiento y cómo va cada una.',
       },
     },
     footer: {
@@ -713,16 +764,16 @@ export const site = defineCopy<SiteCopy>({
     status: {
       available: 'Disponible',
       inDevelopment: 'En desarrollo',
-      planned: 'Planificado',
-      now: 'Ahora',
-      next: 'Después',
+      next: 'A continuación',
       later: 'Más adelante',
-      availableHelp: 'Funciona hoy.',
+      availableHelp: 'Ya funciona.',
       inDevelopmentHelp: 'Se está construyendo ahora.',
-      plannedHelp: 'Decidido, sin empezar.',
+      nextHelp: 'Sigue a lo que se construye ahora.',
+      laterHelp: 'Llega después.',
       legend:
-        'Cada afirmación de este sitio indica si está disponible, en desarrollo o planificada.',
+        'Cada función de este sitio muestra su estado: disponible, en desarrollo, a continuación o más adelante.',
     },
+    motion: { pause: 'Pausar la animación' },
     notify: {
       title: 'El registro aún no está abierto',
       body: 'Deja tu correo y te escribiremos una sola vez, cuando puedas registrarte. Nada más.',

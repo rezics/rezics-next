@@ -1,0 +1,16 @@
+---
+/**
+ * The big statement band: one sentence set huge that inks in as it crosses the viewport,
+ * and a supporting paragraph. Put a status badge in the `meta` slot when the sentence is a
+ * feature's claim.
+ */
+interface Props { id: string; text: string; body?: string; class?: string }
+const { id, text, body, class: className = '' } = Astro.props;
+---
+<section aria-labelledby={id} class={`dark band chapter ${className}`}>
+  <div class="page-frame">
+    <h2 id={id} class="type-statement statement-text"><span class="ink-reveal">{text}</span></h2>
+    {body && <p class="type-lede mt-8 text-muted-foreground">{body}</p>}
+    {Astro.slots.has('meta') && <div class="mt-6"><slot name="meta" /></div>}
+  </div>
+</section>

@@ -1,6 +1,7 @@
 import { beforeAll, expect, test } from 'bun:test';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { copyStatus } from '../src/copy-status.ts';
 import { features, featureIds } from '../src/features.ts';
 import { localeDirection, uiLocales } from '../src/i18n/locales.ts';
 import { pageIds, pagePath } from '../src/pages.ts';
@@ -26,11 +27,22 @@ const pages = pageIds.flatMap((page) =>
 
 test('every page exists in every locale with its language and direction set', () => {
   expect(pages).toHaveLength(pageIds.length * uiLocales.length);
-  for (const { locale, path } of pages) {
+  for (const { page, locale, path } of pages) {
     const source = html(path);
     expect(source, path).toContain(`<html lang="${locale}" dir="${localeDirection[locale]}">`);
     expect(source.match(/<h1[ >]/g)?.length, `${path} h1`).toBe(1);
-    expect(source, path).toMatch(/<main id="skip-nav-content"[^>]*data-copy="placeholder"/);
+    expect(source, path).toMatch(
+      new RegExp(`<main id="skip-nav-content"[^>]*data-copy="${copyStatus[page]}"`),
+    );
+  }
+});
+
+test('content still in English is marked English on every other locale', () => {
+  // While G-482 translates, pages read English catalogs; <main> must say so.
+  for (const { locale, path } of pages) {
+    const main = html(path).match(/<main id="skip-nav-content"[^>]*>/)![0];
+    if (locale === 'en') expect(main, path).not.toContain(' lang=');
+    else expect(main, path).toContain('lang="en"');
   }
 });
 
@@ -150,15 +162,16 @@ test('the roadmap files each planned or in-development statement under its colum
   for (const locale of uiLocales) {
     const source = html(pagePath(locale, 'roadmap'));
     const columns = new Map(
-      [...source.matchAll(/data-horizon="(\w+)">([\s\S]*?)(?=<div data-horizon|<\/section>)/g)].map(
-        ([, key, body]) => [key, body!],
-      ),
+      [
+        ...source.matchAll(
+          /data-roadmap-column="(\w+)">([\s\S]*?)(?=<div data-roadmap-column|<\/section>)/g,
+        ),
+      ].map(([, key, body]) => [key, body!]),
     );
     for (const id of featureIds) {
-      const entry: { status: string; horizon?: string } = features[id];
-      const column = entry.status === 'in-development' ? 'now' : entry.horizon;
-      if (!column) continue;
-      expect(columns.get(column), `${locale} ${column}`).toContain(`data-feature="${id}"`);
+      const { horizon } = features[id];
+      if (horizon === 'available') continue;
+      expect(columns.get(horizon), `${locale} ${horizon}`).toContain(`data-feature="${id}"`);
     }
   }
 });

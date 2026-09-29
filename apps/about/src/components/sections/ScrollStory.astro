@@ -1,0 +1,21 @@
+---
+import SectionHeading from './SectionHeading.astro';
+
+/**
+ * The pinned scroll story. Its `StoryStep` children scroll past on the left while their
+ * frames take turns on one sticky stage on the right (desktop, with scroll-driven animation
+ * support and no reduced-motion preference). Everywhere else each frame follows its text,
+ * so the story reads the same as a plain page. At most six steps (`timeline-scope`).
+ */
+interface Props { id: string; title: string; lede?: string; steps: number; class?: string }
+const { id, title, lede, steps, class: className = '' } = Astro.props;
+if (steps > 6) throw new Error('A scroll story holds at most six steps.');
+---
+<section aria-labelledby={id} class={`story chapter ${className}`}>
+  <div class="page-frame">
+    <SectionHeading id={id} title={title} lede={lede} />
+    <div class="story-grid mt-14 md:mt-20" style={`--steps: ${steps}`}>
+      <slot />
+    </div>
+  </div>
+</section>

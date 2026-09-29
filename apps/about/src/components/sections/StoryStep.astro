@@ -1,0 +1,18 @@
+---
+/**
+ * One step of a `ScrollStory`: its text (a heading and a paragraph, plus an optional
+ * `meta` slot such as a status badge) and its picture in the `frame` slot. `index` is the
+ * step's position from 0; `number` shows it when the steps are a real sequence.
+ */
+interface Props { index: number; title: string; body: string; number?: boolean }
+const { index, title, body, number = false } = Astro.props;
+---
+<div class="story-step" style={`--row: ${index + 1}; --step: --step-${index}`}>
+  <div class="story-step-text">
+    {number && <p class="mb-4 text-lg font-bold text-primary tabular-nums" aria-hidden="true">{index + 1}</p>}
+    <h3 class="type-title max-w-lg">{title}</h3>
+    <p class="type-lede mt-4 max-w-lg text-muted-foreground">{body}</p>
+    {Astro.slots.has('meta') && <div class="mt-6"><slot name="meta" /></div>}
+  </div>
+  <div class="story-frame"><slot name="frame" /></div>
+</div>

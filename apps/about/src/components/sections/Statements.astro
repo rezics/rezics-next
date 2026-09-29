@@ -1,0 +1,31 @@
+---
+import { copy } from '../../i18n/format.ts';
+import type { UiLocale } from '../../i18n/locales.ts';
+import type { FeatureId } from '../../features.ts';
+import StatusBadge from '../StatusBadge.astro';
+
+/**
+ * Several big statements on one band, each a feature's title set huge with its body and
+ * status: the home page's "Why REZICS". Each statement inks in as it crosses the viewport.
+ */
+interface Props { locale: UiLocale; id: string; title: string; lede?: string; ids: readonly FeatureId[]; class?: string }
+const { locale, id, title, lede, ids, class: className = '' } = Astro.props;
+const text = copy('features', locale);
+---
+<section aria-labelledby={id} class={`dark band chapter ${className}`}>
+  <div class="page-frame">
+    <h2 id={id} class="text-lg font-semibold text-muted-foreground">{title}</h2>
+    {lede && <p class="mt-2 text-lg text-muted-foreground">{lede}</p>}
+    <ul class="mt-14 flex flex-col gap-20 md:mt-20 md:gap-32">
+      {ids.map(featureId => (
+        <li data-feature={featureId} class="grid gap-6 lg:grid-cols-[minmax(0,8fr)_minmax(0,4fr)] lg:items-end lg:gap-16">
+          <h3 class="type-statement statement-text"><span class="ink-reveal">{text[featureId].title}</span></h3>
+          <div class="lg:pb-3">
+            <p class="type-body text-lg text-muted-foreground">{text[featureId].body}</p>
+            <StatusBadge id={featureId} locale={locale} class="mt-5" />
+          </div>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>

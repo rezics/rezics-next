@@ -1,43 +1,37 @@
 ---
-import { CircleDashed, Hammer } from 'lucide-react';
-import FeatureList from '../../components/FeatureList.astro';
-import NotifyPanel from '../../components/NotifyPanel.astro';
-import PageHero from '../../components/PageHero.astro';
-import Section from '../../components/Section.astro';
-import { copy } from '../../i18n/format.ts';
+import CallToAction from '../../components/sections/CallToAction.astro';
+import ChapterHero from '../../components/sections/ChapterHero.astro';
+import Glance from '../../components/sections/Glance.astro';
+import SectionHeading from '../../components/sections/SectionHeading.astro';
+import { copy, pageLanguage } from '../../i18n/format.ts';
 import type { UiLocale } from '../../i18n/locales.ts';
 import Base from '../../layouts/Base.astro';
-import { featureIds, horizonOf, type Horizon } from '../../features.ts';
+import { featureIds, features, horizons } from '../../features.ts';
 import { localePaths } from '../../lib/site.ts';
 
+// G-483 designs this page with the patterns in PATTERNS.md; this is its complete, plain form.
 export const getStaticPaths = localePaths;
 const locale = Astro.params.locale as UiLocale;
 const text = copy('roadmap', locale);
-const site = copy('site', locale);
 const featureText = copy('features', locale);
-const columns: { key: Horizon; title: string; help: string; Icon: typeof Hammer }[] = [
-  { key: 'now', title: site.status.now, help: site.status.inDevelopmentHelp, Icon: Hammer },
-  { key: 'next', title: site.status.next, help: site.status.plannedHelp, Icon: CircleDashed },
-  { key: 'later', title: site.status.later, help: site.status.plannedHelp, Icon: CircleDashed },
-];
-const available = featureIds.filter(id => horizonOf(id) === 'available');
+const available = featureIds.filter(id => features[id].horizon === 'available');
 ---
-<Base locale={locale} page="roadmap" title={text.meta.title} description={text.meta.description}>
-  <div class="mx-auto w-full max-w-300 px-5 sm:px-8">
-    <PageHero title={text.hero.title} lede={text.hero.lede} />
-    <Section id="available" title={text.availableTitle}>
-      <FeatureList locale={locale} ids={available} />
-    </Section>
-    <section aria-label={site.header.products} class="border-t border-border py-14 md:py-20">
-      <div class="grid gap-10 md:grid-cols-3 md:gap-8">
-        {columns.map(({ key, title, help, Icon }) => (
-          <div data-horizon={key}>
-            <h2 class="heading flex items-center gap-2 text-2xl font-bold"><Icon aria-hidden className="size-5 text-primary" />{title}</h2>
-            <p class="mt-1 text-sm text-muted-foreground">{help}</p>
-            <ul class="mt-5 divide-y divide-border border-y border-border">
-              {featureIds.filter(id => horizonOf(id) === key).map(id => (
+<Base locale={locale} page="roadmap" title={text.meta.title} description={text.meta.description}
+  contentLang={pageLanguage(locale, 'roadmap', 'features')}>
+  <ChapterHero locale={locale} page="roadmap" title={text.hero.title} lede={text.hero.lede} />
+  <Glance locale={locale} id="stages" title={text.hero.title} />
+  <section aria-labelledby="columns" class="chapter">
+    <div class="page-frame">
+      <h2 id="columns" class="sr-only">{text.meta.title}</h2>
+      <div class="grid gap-12 md:grid-cols-3 md:gap-8">
+        {horizons.map(horizon => (
+          <div data-roadmap-column={horizon}>
+            <h3 class="type-title">{text.horizons[horizon].title}</h3>
+            <p class="mt-2 text-muted-foreground">{text.horizons[horizon].body}</p>
+            <ul class="mt-6 divide-y divide-border border-y border-border">
+              {featureIds.filter(id => features[id].horizon === horizon).map(id => (
                 <li class="py-4" data-feature={id}>
-                  <h3 class="font-semibold">{featureText[id].title}</h3>
+                  <h4 class="font-semibold">{featureText[id].title}</h4>
                   <p class="mt-1 text-sm text-muted-foreground">{featureText[id].body}</p>
                 </li>
               ))}
@@ -45,9 +39,19 @@ const available = featureIds.filter(id => horizonOf(id) === 'available');
           </div>
         ))}
       </div>
-      <p class="mt-10 max-w-2xl text-sm text-muted-foreground">{text.note}</p>
-      <p class="mt-2 text-sm text-muted-foreground">{site.status.legend}</p>
-    </section>
-    <NotifyPanel locale={locale} />
-  </div>
+      <div class="mt-20">
+        <SectionHeading id="available" title={text.availableTitle} lede={text.availableLede} />
+        <ul class="mt-6 divide-y divide-border border-y border-border">
+          {available.map(id => (
+            <li class="py-4" data-feature={id}>
+              <h3 class="font-semibold">{featureText[id].title}</h3>
+              <p class="mt-1 text-sm text-muted-foreground">{featureText[id].body}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <p class="mt-12 max-w-2xl text-muted-foreground">{text.note}</p>
+    </div>
+  </section>
+  <CallToAction locale={locale} title={text.cta.title} body={text.cta.body} />
 </Base>

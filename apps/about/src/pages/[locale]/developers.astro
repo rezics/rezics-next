@@ -1,12 +1,10 @@
 ---
-import { ApiSketch } from '../../illustrations/ApiSketch.tsx';
 import type { UiLocale } from '../../i18n/locales.ts';
-import ProductPage from '../../layouts/ProductPage.astro';
+import LinePage from '../../layouts/LinePage.astro';
 import { localePaths } from '../../lib/site.ts';
 
+// G-483 gives this page its pictures (PATTERNS.md); until then it shows its text in the standard order.
 export const getStaticPaths = localePaths;
 const locale = Astro.params.locale as UiLocale;
 ---
-<ProductPage locale={locale} page="developers">
-  <ApiSketch slot="scene" />
-</ProductPage>
+<LinePage locale={locale} page="developers" />

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { copyStatus } from '../../src/copy-status.ts';
 import { localeNames, uiLocales } from '../../src/i18n/locales.ts';
 import { pageIds, pagePath } from '../../src/pages.ts';
 import { axeViolations, formatViolations } from './axe.ts';
@@ -37,7 +38,7 @@ for (const [viewportName, viewport] of Object.entries(viewports)) {
           await expect(page.locator('html')).toHaveAttribute('lang', locale);
           await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
           await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-          await expect(page.locator('main')).toHaveAttribute('data-copy', 'placeholder');
+          await expect(page.locator('main')).toHaveAttribute('data-copy', copyStatus[id]);
           await fitsWidth(page);
           const violations = await axeViolations(page);
           expect(violations, formatViolations(violations)).toEqual([]);
@@ -151,8 +152,14 @@ test.describe('get notified', () => {
     await expect(page.locator('#notify')).toContainText('name@example.com');
     await expect(form.locator('input[name=email]')).toBeVisible();
     // The error fades in; contrast is measured on the settled color.
+    // Only the form's own animations: the page also runs a looping hero and scroll timelines.
     await page.evaluate(() =>
-      Promise.all(document.getAnimations().map((animation) => animation.finished)),
+      Promise.all(
+        document
+          .querySelector('#notify')!
+          .getAnimations({ subtree: true })
+          .map((animation) => animation.finished),
+      ),
     );
     const violations = await axeViolations(page);
     expect(violations, formatViolations(violations)).toEqual([]);
@@ -186,4 +193,60 @@ test('the phone menu, language menu and form work with a touch-sized screen', as
   await page.getByRole('button', { name: /^主题/ }).click();
   await page.locator('header summary[aria-label="语言"]').click();
   await expect(page.locator('header').getByRole('link', { name: 'Deutsch' })).toBeVisible();
+});
+
+test.describe('motion', () => {
+  test.use({ viewport: viewports.desktop });
+
+  test('the pinned story hands the stage from frame to frame as its steps scroll past', async ({
+    page,
+  }) => {
+    await page.goto('/en/light-novels/');
+    const frames = page.locator('.story .story-frame');
+    await expect(frames).toHaveCount(4);
+    expect(await frames.first().evaluate((frame) => getComputedStyle(frame).position)).toBe(
+      'sticky',
+    );
+    const opacities = () =>
+      frames.evaluateAll((all) => all.map((frame) => Number(getComputedStyle(frame).opacity)));
+    // Centre the third step's heading: its frame holds the stage alone.
+    await page
+      .locator('.story-step-text')
+      .nth(2)
+      .evaluate((text) => text.scrollIntoView({ block: 'center' }));
+    await expect.poll(opacities).toEqual([0, 0, 1, 0]);
+  });
+
+  test('with reduced motion every frame follows its text and nothing moves', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/en/');
+    const frame = page.locator('.story-frame').first();
+    expect(await frame.evaluate((element) => getComputedStyle(element).position)).toBe('static');
+    const running = await page.evaluate(
+      () =>
+        document.getAnimations().filter((animation) => animation.playState === 'running').length,
+    );
+    expect(running).toBe(0);
+    // The statement is plain text in its final color, not a clipped gradient.
+    const statement = page.locator('.ink-reveal').first();
+    expect(await statement.evaluate((element) => getComputedStyle(element).color)).not.toBe(
+      'rgba(0, 0, 0, 0)',
+    );
+    await expect(page.locator('.motion-toggle')).toBeHidden();
+  });
+
+  test('the hero loop pauses from the keyboard', async ({ page }) => {
+    await page.goto('/en/');
+    const toggle = page.getByRole('checkbox', { name: 'Pause animation' });
+    await toggle.focus();
+    await page.keyboard.press('Space');
+    await expect(toggle).toBeChecked();
+    const states = await page
+      .locator('.fan-cover')
+      .evaluateAll((covers) =>
+        covers.flatMap((cover) => cover.getAnimations().map((animation) => animation.playState)),
+      );
+    expect(states.length).toBeGreaterThan(0);
+    expect(new Set(states)).toEqual(new Set(['paused']));
+  });
 });

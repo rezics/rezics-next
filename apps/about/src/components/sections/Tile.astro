@@ -1,0 +1,30 @@
+---
+import type { PageId } from '../../pages.ts';
+
+/**
+ * One cell of a `Showcase`. `span` is its width in the six-column grid; `surface` is paper
+ * (the card color), `cloth` (a product line's cloth, with `cloth` naming the line) or `band`.
+ * With `href` the whole tile is one link. The picture goes in the `visual` slot.
+ */
+interface Props {
+  title: string;
+  body: string;
+  span?: 2 | 3 | 4 | 6;
+  surface?: 'paper' | 'cloth' | 'band';
+  cloth?: PageId;
+  href?: string;
+  /** Names the title for a cross-document view transition into the page it links to. */
+  transition?: string;
+  class?: string;
+}
+const { title, body, span = 2, surface = 'paper', cloth, href, transition, class: className = '' } = Astro.props;
+const Element = href ? 'a' : 'article';
+const surfaceClass = surface === 'cloth' ? 'dark cloth' : surface === 'band' ? 'dark band' : '';
+---
+<Element href={href} class={`tile tile-span-${span} ${surfaceClass} ${className}`} style={cloth ? `--cloth: var(--cloth-${cloth})` : undefined}>
+  {Astro.slots.has('visual') && <div class="tile-visual" aria-hidden="true"><slot name="visual" /></div>}
+  <div class="tile-text mt-auto">
+    <h3 class="text-xl font-bold tracking-[-0.01em]" style={transition ? `view-transition-name: ${transition}` : undefined}>{title}</h3>
+    <p class="type-body mt-2 text-muted-foreground">{body}</p>
+  </div>
+</Element>

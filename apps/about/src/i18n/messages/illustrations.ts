@@ -1,326 +1,218 @@
-import { defineCopy } from '../define.ts';
+import { defineEnglishCopy } from '../define.ts';
 
-/** Words inside the product illustrations. Sample titles and names stay in their own language. */
+/**
+ * Interface words inside the illustrations, which are drawn from real Rezics UI components.
+ * Sample titles, names and quoted text are sample data in their own languages (`sample.ts`
+ * and the components), not copy.
+ */
 export interface IllustrationCopy {
-  read: string;
-  owned: string;
-  next: string;
-  upcoming: string;
-  volume: string;
-  edition: string;
-  paperback: string;
-  ebook: string;
-  translation: string;
-  progress: string;
-  published: string;
-  scheduled: string;
-  draft: string;
-  chapter: string;
-  resumeHere: string;
-  release: string;
-  language: string;
-  platform: string;
-  translator: string;
-  translated: string;
-  sources: string;
-  history: string;
-  revision: string;
-  reviewed: string;
-  members: string;
-  rules: string;
-  realm: string;
-  rights: string;
-  general: string;
-  aiAssisted: string;
-  humanReviewed: string;
-  rightsHeld: string;
-  price: string;
+  shelf: {
+    read: string;
+    owned: string;
+    reading: string;
+    next: string;
+    upcoming: string;
+    volume: string;
+    volumes: string;
+    yourPlace: string;
+    chapter: string;
+    paperback: string;
+    ebook: string;
+    audiobook: string;
+    borrowed: string;
+    dueBack: string;
+  };
+  release: {
+    note: string;
+    out: string;
+    friday: string;
+    dated: string;
+    expected: string;
+    original: string;
+    official: string;
+    fan: string;
+    machine: string;
+    translatedBy: string;
+    covers: string;
+    complete: string;
+    platform: string;
+  };
+  importer: {
+    file: string;
+    matched: string;
+    choose: string;
+    unmatched: string;
+    notCarried: string;
+    apply: string;
+  };
+  serial: {
+    stoppedHere: string;
+    comments: string;
+    scheduled: string;
+    when: string;
+    revision: string;
+    saved: string;
+  };
+  wiki: {
+    character: string;
+    place: string;
+    firstAppears: string;
+    safeThrough: string;
+    hiddenUntil: string;
+    sources: string;
+    reviewed: string;
+    apprenticeAt: string;
+    keeps: string;
+    teaches: string;
+    rivals: string;
+    siblings: string;
+    home: string;
+    teacher: string;
+    family: string;
+    sourceLine: string;
+    faction: string;
+    item: string;
+    lore: string;
+    public: string;
+    private: string;
+  };
+  agent: {
+    proposal: string;
+    automated: string;
+    runBy: string;
+    readRevision: string;
+    confidence: string;
+    evidence: string;
+    accept: string;
+    edit: string;
+    reject: string;
+    accepted: string;
+    receipt: string;
+    reviewedBy: string;
+    reversed: string;
+    keptEdits: string;
+    unsolicitedAd: string;
+    ownWork: string;
+    moderatorDecides: string;
+    queue: string;
+    remove: string;
+    keep: string;
+    historyApplied: string;
+    historyHuman: string;
+    historyReversed: string;
+    scopes: string;
+    budget: string;
+    setByYou: string;
+    matchedCount: string;
+    chooseCount: string;
+    unmatchedCount: string;
+    proposedFact: string;
+    proposedLink: string;
+  };
 }
 
-export const illustrations = defineCopy<IllustrationCopy>({
-  en: {
+export const illustrations = defineEnglishCopy<IllustrationCopy>({
+  shelf: {
     read: 'Read',
     owned: 'Owned',
+    reading: 'Reading',
     next: 'Next',
     upcoming: 'Upcoming',
     volume: 'Vol. {n}',
-    edition: 'Edition',
+    volumes: 'Vol. {from}–{to}',
+    yourPlace: 'Your place',
+    chapter: 'Chapter {n}',
     paperback: 'Paperback',
     ebook: 'Ebook',
-    translation: 'Translation',
-    progress: '{n}% read',
-    published: 'Published',
-    scheduled: 'Scheduled',
-    draft: 'Draft',
-    chapter: 'Chapter {n}',
-    resumeHere: 'You are here',
-    release: 'Release',
-    language: 'Language',
+    audiobook: 'Audiobook',
+    borrowed: 'Borrowed',
+    dueBack: 'Due back {day}',
+  },
+  release: {
+    note: 'Vol. {n} in {language}',
+    out: 'Out {day}',
+    friday: 'Friday',
+    dated: 'Dated',
+    expected: 'Expected',
+    original: 'Original',
+    official: 'Official translation',
+    fan: 'Fan translation',
+    machine: 'Machine translation',
+    translatedBy: 'Translated by {name}',
+    covers: 'Covers {n}% of the game',
+    complete: 'Complete',
     platform: 'Platform',
-    translator: 'Translator',
-    translated: '{n}% translated',
-    sources: 'Sources',
-    history: 'History',
+  },
+  importer: {
+    file: 'library-export.csv',
+    matched: 'Matched to the {year} paperback',
+    choose: 'Two editions look alike. Which one did you read?',
+    unmatched: 'No match yet. Kept in your report.',
+    notCarried: 'Not carried over: custom shelf colours',
+    apply: 'Apply import',
+  },
+  serial: {
+    stoppedHere: 'You stopped here',
+    comments: 'Discuss this chapter',
+    scheduled: 'Scheduled',
+    when: 'Friday 20:00, your time',
     revision: 'Revision {n}',
-    reviewed: 'Reviewed',
-    members: '{n} members',
-    rules: 'Rules',
-    realm: 'Realm',
-    rights: 'Rights',
-    general: 'General audience',
-    aiAssisted: 'AI-assisted',
-    humanReviewed: 'Reviewed by a person',
-    rightsHeld: 'Rights held by the author',
-    price: 'Price',
+    saved: 'Saved on this device',
   },
-  'zh-Hant': {
-    read: '已讀',
-    owned: '已擁有',
-    next: '下一冊',
-    upcoming: '即將出版',
-    volume: '第 {n} 冊',
-    edition: '版本',
-    paperback: '紙本',
-    ebook: '電子書',
-    translation: '翻譯本',
-    progress: '已讀 {n}%',
-    published: '已發布',
-    scheduled: '已排程',
-    draft: '草稿',
-    chapter: '第 {n} 章',
-    resumeHere: '你讀到這裡',
-    release: '發行版本',
-    language: '語言',
-    platform: '平台',
-    translator: '翻譯者',
-    translated: '已翻譯 {n}%',
-    sources: '來源',
-    history: '歷史',
-    revision: '第 {n} 版',
-    reviewed: '已審閱',
-    members: '{n} 位成員',
-    rules: '規則',
-    realm: '社群',
-    rights: '權利',
-    general: '一般讀者',
-    aiAssisted: '使用 AI 協助',
-    humanReviewed: '經人審閱',
-    rightsHeld: '權利屬於作者',
-    price: '價格',
-  },
-  'zh-Hans': {
-    read: '已读',
-    owned: '已拥有',
-    next: '下一册',
-    upcoming: '即将出版',
-    volume: '第 {n} 册',
-    edition: '版本',
-    paperback: '纸质书',
-    ebook: '电子书',
-    translation: '翻译本',
-    progress: '已读 {n}%',
-    published: '已发布',
-    scheduled: '已排期',
-    draft: '草稿',
-    chapter: '第 {n} 章',
-    resumeHere: '你读到这里',
-    release: '发行版本',
-    language: '语言',
-    platform: '平台',
-    translator: '翻译者',
-    translated: '已翻译 {n}%',
-    sources: '来源',
-    history: '历史',
-    revision: '第 {n} 版',
-    reviewed: '已审阅',
-    members: '{n} 位成员',
-    rules: '规则',
-    realm: '社区',
-    rights: '权利',
-    general: '一般读者',
-    aiAssisted: '使用 AI 协助',
-    humanReviewed: '经人审阅',
-    rightsHeld: '权利属于作者',
-    price: '价格',
-  },
-  ja: {
-    read: '読了',
-    owned: '所有',
-    next: '次の巻',
-    upcoming: '発売予定',
-    volume: '第{n}巻',
-    edition: '版',
-    paperback: '紙の本',
-    ebook: '電子書籍',
-    translation: '翻訳版',
-    progress: '{n}% 読了',
-    published: '公開済み',
-    scheduled: '予約済み',
-    draft: '下書き',
-    chapter: '第{n}話',
-    resumeHere: 'ここまで読みました',
-    release: 'リリース',
-    language: '言語',
-    platform: 'プラットフォーム',
-    translator: '翻訳者',
-    translated: '{n}% 翻訳済み',
-    sources: '出典',
-    history: '履歴',
-    revision: '改訂 {n}',
-    reviewed: '確認済み',
-    members: 'メンバー {n} 人',
-    rules: 'ルール',
-    realm: 'コミュニティ',
-    rights: '権利',
-    general: '全年齢',
-    aiAssisted: 'AI 支援あり',
-    humanReviewed: '人が確認',
-    rightsHeld: '権利は著者に帰属',
-    price: '価格',
-  },
-  ko: {
-    read: '읽음',
-    owned: '보유',
-    next: '다음 권',
-    upcoming: '출간 예정',
-    volume: '{n}권',
-    edition: '판본',
-    paperback: '종이책',
-    ebook: '전자책',
-    translation: '번역본',
-    progress: '{n}% 읽음',
-    published: '공개됨',
-    scheduled: '예약됨',
-    draft: '초고',
-    chapter: '{n}화',
-    resumeHere: '여기까지 읽음',
-    release: '릴리스',
-    language: '언어',
-    platform: '플랫폼',
-    translator: '번역자',
-    translated: '{n}% 번역됨',
-    sources: '출처',
-    history: '이력',
-    revision: '개정 {n}',
-    reviewed: '검토됨',
-    members: '멤버 {n}명',
-    rules: '규칙',
-    realm: '커뮤니티',
-    rights: '권리',
-    general: '전체 이용가',
-    aiAssisted: 'AI 지원',
-    humanReviewed: '사람이 검토함',
-    rightsHeld: '권리는 작가에게 있음',
-    price: '가격',
-  },
-  de: {
-    read: 'Gelesen',
-    owned: 'Besessen',
-    next: 'Als Nächstes',
-    upcoming: 'Kommend',
-    volume: 'Bd. {n}',
-    edition: 'Ausgabe',
-    paperback: 'Taschenbuch',
-    ebook: 'E-Book',
-    translation: 'Übersetzung',
-    progress: '{n} % gelesen',
-    published: 'Veröffentlicht',
-    scheduled: 'Geplant',
-    draft: 'Entwurf',
-    chapter: 'Kapitel {n}',
-    resumeHere: 'Hier bist du',
-    release: 'Veröffentlichung',
-    language: 'Sprache',
-    platform: 'Plattform',
-    translator: 'Übersetzer',
-    translated: '{n} % übersetzt',
-    sources: 'Quellen',
-    history: 'Verlauf',
-    revision: 'Fassung {n}',
-    reviewed: 'Geprüft',
-    members: '{n} Mitglieder',
-    rules: 'Regeln',
-    realm: 'Realm',
-    rights: 'Rechte',
-    general: 'Allgemein',
-    aiAssisted: 'KI-unterstützt',
-    humanReviewed: 'Von einem Menschen geprüft',
-    rightsHeld: 'Rechte beim Autor',
-    price: 'Preis',
-  },
-  fr: {
-    read: 'Lu',
-    owned: 'Possédé',
-    next: 'Suivant',
-    upcoming: 'À paraître',
-    volume: 'T. {n}',
-    edition: 'Édition',
-    paperback: 'Poche',
-    ebook: 'Ebook',
-    translation: 'Traduction',
-    progress: '{n} % lu',
-    published: 'Publié',
-    scheduled: 'Programmé',
-    draft: 'Brouillon',
-    chapter: 'Chapitre {n}',
-    resumeHere: 'Vous en êtes là',
-    release: 'Sortie',
-    language: 'Langue',
-    platform: 'Plateforme',
-    translator: 'Traducteur',
-    translated: '{n} % traduit',
+  wiki: {
+    character: 'Character',
+    place: 'Place',
+    firstAppears: 'First appears',
+    safeThrough: 'Safe through chapter {n}',
+    hiddenUntil: 'Hidden until chapter {n}',
     sources: 'Sources',
-    history: 'Historique',
-    revision: 'Révision {n}',
-    reviewed: 'Relu',
-    members: '{n} membres',
-    rules: 'Règles',
-    realm: 'Realm',
-    rights: 'Droits',
-    general: 'Tout public',
-    aiAssisted: 'Assisté par IA',
-    humanReviewed: 'Relu par une personne',
-    rightsHeld: 'Droits détenus par l’auteur',
-    price: 'Prix',
+    reviewed: 'Reviewed',
+    apprenticeAt: 'apprentice at',
+    keeps: 'keeps',
+    teaches: 'teaches',
+    rivals: 'rival of',
+    siblings: 'siblings',
+    home: 'Home',
+    teacher: 'Teacher',
+    family: 'Family',
+    sourceLine: 'English edition, chapters 1 to 9',
+    faction: 'Faction',
+    item: 'Item',
+    lore: 'Lore',
+    public: 'Public',
+    private: 'Private',
   },
-  es: {
-    read: 'Leído',
-    owned: 'Tuyo',
-    next: 'Siguiente',
-    upcoming: 'Próximo',
-    volume: 'Vol. {n}',
-    edition: 'Edición',
-    paperback: 'Bolsillo',
-    ebook: 'Ebook',
-    translation: 'Traducción',
-    progress: '{n} % leído',
-    published: 'Publicado',
-    scheduled: 'Programado',
-    draft: 'Borrador',
-    chapter: 'Capítulo {n}',
-    resumeHere: 'Vas por aquí',
-    release: 'Edición',
-    language: 'Idioma',
-    platform: 'Plataforma',
-    translator: 'Traductor',
-    translated: '{n} % traducido',
-    sources: 'Fuentes',
-    history: 'Historial',
-    revision: 'Revisión {n}',
-    reviewed: 'Revisado',
-    members: '{n} miembros',
-    rules: 'Normas',
-    realm: 'Realm',
-    rights: 'Derechos',
-    general: 'Todo público',
-    aiAssisted: 'Con ayuda de IA',
-    humanReviewed: 'Revisado por una persona',
-    rightsHeld: 'Derechos del autor',
-    price: 'Precio',
+  agent: {
+    proposal: 'Proposed tags',
+    automated: 'Automated',
+    runBy: 'Tagging agent, run by {name}',
+    readRevision: 'Read revision {n}',
+    confidence: 'Confidence {n}%',
+    evidence: 'Evidence',
+    accept: 'Accept',
+    edit: 'Edit',
+    reject: 'Reject',
+    accepted: 'Applied',
+    receipt: 'Receipt {id}',
+    reviewedBy: 'Reviewed by {name}',
+    reversed: 'Reversed',
+    keptEdits: 'Later human edits kept',
+    unsolicitedAd: 'Unsolicited advertisement',
+    ownWork: 'Author announcing their own book',
+    moderatorDecides: 'A moderator decides',
+    queue: 'Spam and advertising review',
+    remove: 'Remove',
+    keep: 'Keep',
+    historyApplied: 'Tags applied by the tagging agent',
+    historyHuman: 'Tag added by {name}',
+    historyReversed: 'Agent change reversed',
+    scopes: 'Scopes',
+    budget: 'Budget',
+    setByYou: 'Set by you',
+    matchedCount: '{n} matched',
+    chooseCount: '{n} to choose',
+    unmatchedCount: '{n} not matched',
+    proposedFact: 'Proposed fact',
+    proposedLink: 'Proposed link',
   },
 });
-
-/** Fill the `{n}` placeholder of an illustration label. */
-export function fill(template: string, n: number | string): string {
-  return template.replace('{n}', String(n));
-}

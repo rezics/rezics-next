@@ -1,6 +1,7 @@
 import type { PageId } from '../../pages.ts';
 import type { UiLocale } from '../locales.ts';
 import { acgn } from './acgn.ts';
+import { agents } from './agents.ts';
 import { communities } from './communities.ts';
 import { developers } from './developers.ts';
 import { distribution } from './distribution.ts';
@@ -8,7 +9,7 @@ import { featureCopy } from './features.ts';
 import { home } from './home.ts';
 import { illustrations } from './illustrations.ts';
 import { lightNovels } from './light-novels.ts';
-import type { PageCopy } from './page.ts';
+import type { LinePageCopy } from './page.ts';
 import { reading } from './reading.ts';
 import { roadmap } from './roadmap.ts';
 import { serialFiction } from './serial-fiction.ts';
@@ -27,6 +28,7 @@ export const catalogs = {
   'serial-fiction': serialFiction,
   acgn,
   wikis,
+  agents,
   communities,
   distribution,
   developers,
@@ -34,16 +36,15 @@ export const catalogs = {
   roadmap,
 } as const;
 
-/** The product pages that share the `PageCopy` shape, by page id. */
-export const productPages: Record<
-  Exclude<PageId, 'home' | 'roadmap'>,
-  Record<UiLocale, PageCopy>
-> = {
+/** The product line pages, which share the `LinePageCopy` shape, by page id. */
+export type LinePageId = Exclude<PageId, 'home' | 'roadmap'>;
+export const linePages: Record<LinePageId, Record<UiLocale, LinePageCopy>> = {
   reading,
   'light-novels': lightNovels,
   'serial-fiction': serialFiction,
   acgn,
   wikis,
+  agents,
   communities,
   distribution,
   developers,

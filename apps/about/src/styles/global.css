@@ -3,6 +3,7 @@
 @import '@fontsource-variable/source-serif-4';
 @import '@fontsource-variable/geist-mono';
 @import '@rezics/ui/styles.css';
+@import './about.css';
 
 /*
  * Tailwind scans this app's own files plus only the Rezics UI sources the site
@@ -51,40 +52,6 @@
   html {
     scroll-padding-top: 5rem;
     text-size-adjust: 100%;
-  }
-  /* Latin display type is set tight; CJK glyphs fill their em box and must not be. */
-  .display {
-    letter-spacing: -0.035em;
-    line-height: 1.04;
-    text-wrap: balance;
-  }
-  :lang(zh-Hant) .display,
-  :lang(zh-Hans) .display,
-  :lang(ja) .display,
-  :lang(ko) .display {
-    letter-spacing: 0;
-    line-height: 1.22;
-  }
-  .heading {
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-    text-wrap: balance;
-  }
-  :lang(zh-Hant) .heading,
-  :lang(zh-Hans) .heading,
-  :lang(ja) .heading,
-  :lang(ko) .heading {
-    letter-spacing: 0;
-    line-height: 1.3;
-  }
-  .prose-lede {
-    text-wrap: pretty;
-  }
-  :lang(zh-Hant) .prose-lede,
-  :lang(zh-Hans) .prose-lede,
-  :lang(ja) .prose-lede,
-  :lang(ko) .prose-lede {
-    line-height: 1.85;
   }
   /* Chinese text sits closer to Latin words and numerals when the browser spaces them. */
   :lang(zh-Hant),

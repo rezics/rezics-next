@@ -1,14 +1,24 @@
 ---
-import { SeriesTimeline } from '../../illustrations/SeriesTimeline.tsx';
 import { copy } from '../../i18n/format.ts';
 import type { UiLocale } from '../../i18n/locales.ts';
-import ProductPage from '../../layouts/ProductPage.astro';
+import { LineVignette } from '../../illustrations/LineVignette.tsx';
+import { SeriesBoard, SeriesShelf } from '../../illustrations/SeriesBoard.tsx';
+import { Vignette } from '../../illustrations/Vignettes.tsx';
+import LinePage from '../../layouts/LinePage.astro';
 import { localePaths } from '../../lib/site.ts';
 
 export const getStaticPaths = localePaths;
 const locale = Astro.params.locale as UiLocale;
 const words = copy('illustrations', locale);
 ---
-<ProductPage locale={locale} page="light-novels">
-  <SeriesTimeline slot="scene" words={words} />
-</ProductPage>
+<LinePage locale={locale} page="light-novels" alsoFeatures={['spoiler-safe-wiki']}
+  tileSpans={{ omnibus: 3, calendar: 3, zone: 2, wiki: 4 }} clothTiles={['zone']}>
+  <SeriesShelf slot="hero" words={words} />
+  <SeriesBoard slot="step-lined" words={words} />
+  <SeriesBoard slot="step-yours" words={words} marks />
+  <SeriesBoard slot="step-next" words={words} marks upcoming />
+  <SeriesBoard slot="step-provenance" words={words} provenance />
+  <Vignette slot="tile-omnibus" page="light-novels" tile="omnibus" words={words} />
+  <Vignette slot="tile-calendar" page="light-novels" tile="calendar" words={words} />
+  <LineVignette slot="tile-wiki" line="wikis" words={words} />
+</LinePage>

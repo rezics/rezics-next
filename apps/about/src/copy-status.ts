@@ -1,22 +1,24 @@
 import type { PageId } from './pages.ts';
 
 /**
- * Whether each page's copy is final. Everything G-480 wrote is a placeholder that
- * shows the intended structure and length; G-481 writes the final copy and flips
- * its pages here. Rendered as `data-copy` on `<main>` so a review can see it.
+ * Whether each page's copy is final. G-480 wrote placeholders to show structure; G-481
+ * wrote the final English copy for every page (translations follow in G-482). A page goes
+ * back to `placeholder` while its copy is being rewritten. Rendered as `data-copy` on
+ * `<main>` so a review can see it.
  */
 export type CopyStatus = 'placeholder' | 'final';
 
 export const copyStatus: Record<PageId, CopyStatus> = {
-  home: 'placeholder',
-  reading: 'placeholder',
-  'light-novels': 'placeholder',
-  'serial-fiction': 'placeholder',
-  acgn: 'placeholder',
-  wikis: 'placeholder',
-  communities: 'placeholder',
-  distribution: 'placeholder',
-  developers: 'placeholder',
-  trust: 'placeholder',
-  roadmap: 'placeholder',
+  home: 'final',
+  reading: 'final',
+  'light-novels': 'final',
+  'serial-fiction': 'final',
+  acgn: 'final',
+  wikis: 'final',
+  agents: 'final',
+  communities: 'final',
+  distribution: 'final',
+  developers: 'final',
+  trust: 'final',
+  roadmap: 'final',
 };

@@ -14,8 +14,8 @@ const { notify } = copy('site', locale);
 <Base locale={locale} page="home" title={notify.successTitle} description={notify.successBody} noindex>
   <div class="mx-auto w-full max-w-2xl px-5 py-24 sm:px-8">
     <CircleCheck aria-hidden className="size-10 text-success-foreground" />
-    <h1 class="display mt-6 text-4xl font-extrabold">{notify.successTitle}</h1>
-    <p class="prose-lede mt-4 text-lg text-muted-foreground">{notify.successBody}</p>
+    <h1 class="type-section mt-6">{notify.successTitle}</h1>
+    <p class="type-lede mt-4 text-muted-foreground">{notify.successBody}</p>
     <a href={pagePath(locale, 'home')} class={`${buttonVariants({ size: 'lg', variant: 'outline' })} mt-8`}>{notify.back}</a>
   </div>
 </Base>

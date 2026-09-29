@@ -1,0 +1,775 @@
+/*
+ * The about site's art direction: bands, cloth, type scale and the motion system.
+ * PATTERNS.md names the section components that use these classes.
+ *
+ * Motion is progressive: every class here renders a complete, readable static
+ * page first. Animations are added only inside `prefers-reduced-motion:
+ * no-preference`, and scroll-driven ones only where `animation-timeline` is
+ * supported, so an older browser or a reduced-motion setting gets the final state.
+ * Everything animates transform, opacity or background-position, never layout.
+ */
+
+:root {
+  /* A deep ink band in daylight; lamplight after dark. Both carry dark-theme tokens (class "dark"). */
+  --band: #15213a;
+  --band-glow: color-mix(in oklab, #86aee8 22%, transparent);
+  --band-muted: #aeb4bf;
+  /* Book cloth for each product line's chapter, from the WorkCover book swatches. Cream type sits on all of them. */
+  --cloth-ink: oklch(0.96 0.025 85);
+  --cloth-rule: oklch(0.82 0.1 85);
+  --cloth-reading: oklch(0.36 0.09 255);
+  --cloth-light-novels: oklch(0.37 0.11 22);
+  --cloth-serial-fiction: oklch(0.38 0.07 158);
+  --cloth-acgn: oklch(0.36 0.08 320);
+  --cloth-wikis: oklch(0.41 0.07 210);
+  --cloth-agents: oklch(0.3 0.012 260);
+  --cloth-communities: oklch(0.4 0.075 55);
+  --cloth-distribution: oklch(0.36 0.07 285);
+  --cloth-developers: oklch(0.28 0.03 262);
+  --cloth-trust: oklch(0.37 0.06 180);
+  --cloth-roadmap: oklch(0.33 0.08 255);
+  --header-height: 4rem;
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --band: #1c1813;
+    --band-glow: color-mix(in oklab, #e9a93a 16%, transparent);
+    --band-muted: #b3a893;
+  }
+}
+:root.dark {
+  --band: #1c1813;
+  --band-glow: color-mix(in oklab, #e9a93a 16%, transparent);
+  --band-muted: #b3a893;
+}
+
+/*
+ * Surfaces sit outside the layer and above the UI's own `.dark` tokens (unlayered, one
+ * class), so a band or cloth element can use class "dark" for its tokens and still
+ * replace the ones it needs.
+ */
+/* A full-bleed band for statements and moments of weight. Pair with class "dark" for its tokens. */
+.band.dark,
+.tile.band {
+  background-color: var(--band);
+  background-image: radial-gradient(90% 70% at 12% 0%, var(--band-glow), transparent 70%);
+  color: var(--foreground);
+  --muted-foreground: var(--band-muted);
+  --border: color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+
+/* A product line's chapter ground: its book cloth with cream type. Pair with class "dark". */
+.cloth.dark,
+.tile.cloth {
+  background-color: var(--cloth);
+  color: var(--cloth-ink);
+  --foreground: var(--cloth-ink);
+  --muted-foreground: color-mix(in oklab, var(--cloth-ink) 80%, var(--cloth));
+  --border: color-mix(in oklab, var(--cloth-ink) 22%, transparent);
+  --card: color-mix(in oklab, var(--cloth-ink) 7%, var(--cloth));
+  --popover: var(--card);
+  --background: color-mix(in oklab, var(--cloth-ink) 4%, var(--cloth));
+  /* On cloth, colored text is cream or a pale tint: the dark theme's blues and greens are too
+     close in lightness to the mid-dark cloths. */
+  --primary: var(--cloth-ink);
+  --primary-foreground: var(--cloth);
+  --accent: color-mix(in oklab, var(--cloth-ink) 14%, var(--cloth));
+  --accent-foreground: var(--cloth-ink);
+  --success-foreground: oklch(0.92 0.09 150);
+  --info-foreground: oklch(0.92 0.05 235);
+  --warning-foreground: oklch(0.93 0.09 85);
+  --ring: var(--cloth-ink);
+}
+.cloth-button {
+  background: var(--cloth-ink);
+  color: var(--cloth);
+}
+.cloth-button:hover {
+  background: color-mix(in oklab, var(--cloth-ink) 88%, var(--cloth));
+}
+
+@layer components {
+  /* ---------- Layout ---------- */
+
+  .page-frame {
+    width: 100%;
+    max-width: 80rem;
+    margin-inline: auto;
+    padding-inline: clamp(1.25rem, 4vw, 2.5rem);
+  }
+  .chapter {
+    padding-block: clamp(4.5rem, 8vw, 8rem);
+  }
+  /* Two paper chapters in a row share one gap instead of adding theirs. */
+  .chapter:not(.band) + .chapter:not(.band) {
+    padding-block-start: clamp(1.5rem, 3vw, 3rem);
+  }
+
+  /* ---------- Type ---------- */
+
+  .type-hero,
+  .type-chapter,
+  .type-statement,
+  .type-section {
+    font-weight: 800;
+    text-wrap: balance;
+  }
+  .type-hero {
+    font-size: clamp(2.75rem, 1rem + 4.7vw, 5.75rem);
+    line-height: 0.96;
+    letter-spacing: -0.045em;
+  }
+  .type-chapter {
+    font-size: clamp(3.25rem, 0.5rem + 10vw, 10.5rem);
+    line-height: 0.9;
+    letter-spacing: -0.055em;
+  }
+  .type-statement {
+    font-size: clamp(2.125rem, 0.9rem + 4.4vw, 5.5rem);
+    line-height: 1.02;
+    letter-spacing: -0.04em;
+  }
+  .type-section {
+    font-size: clamp(2rem, 1.1rem + 2.9vw, 3.75rem);
+    line-height: 1.04;
+    letter-spacing: -0.035em;
+  }
+  .type-title {
+    font-size: clamp(1.625rem, 1.1rem + 1.5vw, 2.5rem);
+    font-weight: 750;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+  .type-lede {
+    font-size: clamp(1.125rem, 1rem + 0.45vw, 1.375rem);
+    line-height: 1.55;
+    max-width: 38em;
+    text-wrap: pretty;
+  }
+  .type-body {
+    line-height: 1.6;
+    text-wrap: pretty;
+  }
+  /* CJK glyphs fill their em box: no negative tracking, looser lines. */
+  :is(:lang(zh-Hant), :lang(zh-Hans), :lang(ja), :lang(ko))
+    :is(.type-hero, .type-chapter, .type-statement, .type-section, .type-title) {
+    letter-spacing: 0;
+    line-height: 1.2;
+  }
+  :is(:lang(zh-Hant), :lang(zh-Hans), :lang(ja), :lang(ko)) :is(.type-lede, .type-body) {
+    line-height: 1.85;
+  }
+
+  /* ---------- Surfaces ---------- */
+
+  /* The ribbon bookmark: the logo red marking "your place". A mark, never text. */
+  .ribbon {
+    display: block;
+    width: 0.875rem;
+    height: 4.5rem;
+    background: var(--brand);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 84%, 0 100%);
+  }
+
+  /* ---------- Chapter hero (product line pages) ---------- */
+
+  .chapter-hero {
+    position: relative;
+    overflow: clip;
+    padding-block: clamp(3.5rem, 7vw, 7rem) clamp(4rem, 8vw, 8rem);
+  }
+  .chapter-name {
+    display: block;
+  }
+  /* The line's name in all eight languages: a quiet colophon under the giant name. */
+  .chapter-names {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1.25rem;
+    font-size: 0.9375rem;
+    color: var(--muted-foreground);
+  }
+
+  /* ---------- Home hero: one story, three editions ---------- */
+
+  .edition-fan {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 1.75rem;
+  }
+  .fan-stage {
+    position: relative;
+    width: min(100%, 31rem);
+    aspect-ratio: 1 / 1.02;
+  }
+  .fan-cover {
+    position: absolute;
+    inset-block-start: 3%;
+    inset-inline-start: 21%;
+    width: 58%;
+    transform-origin: 50% 110%;
+  }
+  /* Static arrangement: the first edition in front, the others fanned behind it. */
+  .fan-cover[data-slot-index='0'] {
+    z-index: 3;
+  }
+  .fan-cover[data-slot-index='1'] {
+    z-index: 1;
+    transform: translateX(34%) rotate(8deg) scale(0.86);
+  }
+  .fan-cover[data-slot-index='2'] {
+    z-index: 2;
+    transform: translateX(-34%) rotate(-8deg) scale(0.86);
+  }
+  .fan-ribbon {
+    position: absolute;
+    z-index: 4;
+    inset-block-start: 0;
+    inset-inline-end: 29%;
+    height: 34%;
+    width: 1rem;
+    filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.25));
+  }
+  .fan-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .fan-langs {
+    position: relative;
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border-radius: 999px;
+    background: var(--card);
+    box-shadow: var(--aura-shadow-card);
+  }
+  .fan-lang {
+    position: relative;
+    z-index: 1;
+    padding: 0.375rem 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  /* A red mark under the language of the edition in front. */
+  .fan-lang::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0.875rem;
+    inset-block-end: 0.125rem;
+    height: 0.1875rem;
+    border-radius: 999px;
+    background: var(--brand);
+    opacity: 0;
+  }
+  .fan-lang[data-slot-index='0']::after {
+    opacity: 1;
+  }
+
+  /* A CSS-only pause for looping illustrations (WCAG 2.2.2): a checkbox inside a label. */
+  .motion-toggle {
+    display: none;
+  }
+
+  /* ---------- Word band: the word "story" in many languages, set huge ---------- */
+
+  .word-band {
+    overflow: clip;
+    padding-block: clamp(2rem, 5vw, 4rem);
+  }
+  .word-row {
+    display: flex;
+    gap: 0.5em;
+    width: max-content;
+    font-family: var(--font-work-serif);
+    font-size: clamp(3rem, 1rem + 8vw, 9rem);
+    font-weight: 600;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
+  .word-row + .word-row {
+    color: var(--primary);
+    transform: translateX(-22%);
+  }
+  .word-row > span::after {
+    content: '';
+    display: inline-block;
+    width: 0.12em;
+    height: 0.5em;
+    margin-inline-start: 0.5em;
+    vertical-align: 0.15em;
+    background: var(--brand);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%);
+  }
+
+  /* ---------- Pinned scroll story ---------- */
+
+  .story {
+    timeline-scope: --step-0, --step-1, --step-2, --step-3, --step-4, --step-5;
+  }
+  .story-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3rem;
+  }
+  .story-step {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+  .story-step-text {
+    view-timeline-name: var(--step);
+  }
+  .story-frame {
+    display: grid;
+    place-items: center;
+  }
+  @media (min-width: 64rem) {
+    .story-grid {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+      column-gap: clamp(3rem, 5vw, 6rem);
+      row-gap: 6rem;
+    }
+    .story-step {
+      display: contents;
+    }
+    .story-step-text {
+      grid-column: 1;
+      grid-row: var(--row);
+      align-self: center;
+    }
+    .story-frame {
+      grid-column: 2;
+      grid-row: var(--row);
+    }
+  }
+
+  /* ---------- Showcase grid ---------- */
+
+  .showcase {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (min-width: 40rem) {
+    .showcase {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 64rem) {
+    .showcase {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 1.25rem;
+    }
+    .tile-span-2 {
+      grid-column: span 2;
+    }
+    .tile-span-3 {
+      grid-column: span 3;
+    }
+    .tile-span-4 {
+      grid-column: span 4;
+    }
+    .tile-span-6 {
+      grid-column: span 6;
+    }
+  }
+  @media (min-width: 40rem) and (max-width: 63.99rem) {
+    .tile-span-4,
+    .tile-span-6 {
+      grid-column: span 2;
+    }
+  }
+  .tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: clip;
+    border-radius: 1.75rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+  }
+  .tile.cloth,
+  .tile.band {
+    border-color: transparent;
+  }
+  .tile-visual {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: 12rem;
+    padding: 1.5rem 1.5rem 0;
+  }
+  .tile-text {
+    padding: 1.5rem 1.75rem 1.75rem;
+  }
+  a.tile {
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  a.tile:hover {
+    border-color: color-mix(in oklab, var(--foreground) 32%, transparent);
+  }
+  a.tile:focus-visible {
+    box-shadow:
+      0 0 0 3px var(--background),
+      0 0 0 5px var(--ring);
+  }
+
+  /* ---------- Statement band ---------- */
+
+  .statement-text {
+    max-width: 18em;
+  }
+  :is(:lang(zh-Hant), :lang(zh-Hans), :lang(ja), :lang(ko)) .statement-text {
+    max-width: 14em;
+  }
+
+  /* ---------- Compare ---------- */
+
+  .compare {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .compare th,
+  .compare td {
+    text-align: start;
+    vertical-align: top;
+    padding: 1.25rem 0;
+    border-block-end: 1px solid var(--border);
+  }
+  .compare thead th {
+    padding-block: 0 0.75rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+  .compare td + td,
+  .compare th + th {
+    padding-inline-start: clamp(1rem, 4vw, 3rem);
+  }
+  .compare-today {
+    color: var(--muted-foreground);
+  }
+  .compare-rezics {
+    font-weight: 650;
+  }
+
+  /* ---------- Glance: the five stages ---------- */
+
+  .glance {
+    display: grid;
+    gap: 2rem;
+    counter-reset: stage;
+  }
+  @media (min-width: 64rem) {
+    .glance {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 1.5rem;
+    }
+  }
+  .glance-stage {
+    position: relative;
+    padding-block-start: 1.75rem;
+    border-block-start: 2px solid var(--border);
+  }
+  .glance-stage[data-horizon='now'] {
+    border-block-start-color: var(--primary);
+  }
+  .glance-stage .ribbon {
+    position: absolute;
+    inset-block-start: -2px;
+    inset-inline-end: 0;
+    height: 3rem;
+    width: 0.75rem;
+  }
+}
+
+/* ---------- Motion ---------- */
+
+@view-transition {
+  navigation: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-group(*) {
+    animation-duration: 0.45s;
+    animation-timing-function: var(--ease-out-soft);
+  }
+
+  /* The home hero: three editions of one story take turns in front; your place stays marked. */
+  .motion-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 999px;
+    color: var(--muted-foreground);
+    cursor: pointer;
+  }
+  .motion-toggle:hover {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+  .motion-toggle:has(:focus-visible) {
+    box-shadow: 0 0 0 2px var(--ring);
+  }
+  .motion-toggle .icon-play,
+  .motion-toggle:has(:checked) .icon-pause {
+    display: none;
+  }
+  .motion-toggle:has(:checked) .icon-play {
+    display: block;
+  }
+  [data-loop]:has(.motion-toggle :checked) * {
+    animation-play-state: paused !important;
+  }
+
+  .fan-cover {
+    animation: fan-turn 10.5s var(--ease-out-soft) infinite both;
+    animation-delay: calc(var(--turn) * -3.5s);
+  }
+  .fan-lang::after {
+    animation: fan-mark 10.5s var(--ease-out-soft) infinite both;
+    animation-delay: calc(var(--turn) * -3.5s);
+  }
+  @keyframes fan-turn {
+    0%,
+    27% {
+      transform: none;
+      z-index: 3;
+    }
+    33.3%,
+    60% {
+      transform: translateX(34%) rotate(8deg) scale(0.86);
+      z-index: 1;
+    }
+    66.6%,
+    94% {
+      transform: translateX(-34%) rotate(-8deg) scale(0.86);
+      z-index: 2;
+    }
+    100% {
+      transform: none;
+      z-index: 3;
+    }
+  }
+  @keyframes fan-mark {
+    0%,
+    27% {
+      opacity: 1;
+      transform: none;
+    }
+    33.3%,
+    94% {
+      opacity: 0;
+      transform: scaleX(0.2);
+    }
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* Scroll-driven motion: only where supported, only without a reduced-motion preference. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* Pinned story, desktop: frames share one sticky stage and take turns as their step passes. */
+    @media (min-width: 64rem) {
+      .story-grid {
+        row-gap: 0;
+      }
+      .story-step-text {
+        min-height: 88vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .story-frame {
+        grid-row: 1 / span var(--steps);
+        align-self: start;
+        position: sticky;
+        top: var(--header-height);
+        height: calc(100vh - var(--header-height));
+        animation: story-frame linear both;
+        animation-timeline: var(--step);
+        /* A step's text is centred in its tall block, so its frame takes the stage from when
+           the heading passes the lower third until the next heading reaches it. */
+        animation-range: cover 38% cover 92%;
+      }
+      .story-step:first-child .story-frame {
+        animation-name: story-frame-first;
+      }
+      .story-step:last-child .story-frame {
+        animation-name: story-frame-last;
+      }
+    }
+
+    /* Parts of an illustration that arrive as it scrolls into view, `--at` percent apart. */
+    [data-arrive] {
+      animation: arrive linear both;
+      animation-timeline: view();
+      animation-range: entry calc(30% + var(--at, 0) * 1%) entry calc(70% + var(--at, 0) * 1%);
+    }
+    /* In a pinned story they arrive with their step instead; `--step` is the step's timeline. */
+    @media (min-width: 64rem) {
+      .story-frame [data-arrive] {
+        animation-timeline: var(--step);
+        animation-range: cover calc(45% + var(--at, 0) * 0.5%) cover calc(52% + var(--at, 0) * 0.5%);
+      }
+    }
+
+    /* The word band's rows slide in opposite directions as it crosses the viewport. */
+    .word-row {
+      animation: word-drift-start linear both;
+      animation-timeline: view();
+      animation-range: cover;
+    }
+    .word-row + .word-row {
+      animation-name: word-drift-end;
+    }
+
+    /* The chapter hero's giant name drifts up a little slower than the page. */
+    .chapter-name {
+      animation: chapter-drift linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 70vh;
+    }
+
+    /* A statement inks in as it crosses the viewport, from muted to full, never below legible contrast. */
+    .ink-reveal {
+      color: transparent;
+      background-image: linear-gradient(
+        90deg,
+        var(--foreground) 0 50%,
+        var(--muted-foreground) 50% 100%
+      );
+      background-size: 200% 100%;
+      background-position: 100% 0;
+      -webkit-background-clip: text;
+      background-clip: text;
+      animation: ink-in linear both;
+      animation-timeline: view();
+      animation-range: cover 18% cover 58%;
+    }
+
+    /* Compare rows: today's workaround is struck through as the REZICS answer arrives. */
+    .compare-today span {
+      background-image: linear-gradient(currentColor, currentColor);
+      background-repeat: no-repeat;
+      background-position: 0 58%;
+      background-size: 0% 1px;
+      animation: strike linear both;
+      animation-timeline: view();
+      animation-range: cover 30% cover 50%;
+    }
+
+    /* The glance track: the stage in development pulses its ribbon once as it arrives. */
+    .glance-stage[data-horizon='now'] .ribbon {
+      animation: ribbon-drop linear both;
+      animation-timeline: view();
+      animation-range: entry 40% cover 40%;
+    }
+  }
+}
+
+@keyframes story-frame {
+  0% {
+    opacity: 0;
+    transform: translateY(2.5rem) scale(0.97);
+  }
+  12%,
+  88% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-2.5rem) scale(0.97);
+  }
+}
+@keyframes story-frame-first {
+  0%,
+  88% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-2.5rem) scale(0.97);
+  }
+}
+@keyframes story-frame-last {
+  0% {
+    opacity: 0;
+    transform: translateY(2.5rem) scale(0.97);
+  }
+  12%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes word-drift-start {
+  from {
+    transform: translateX(4%);
+  }
+  to {
+    transform: translateX(-26%);
+  }
+}
+@keyframes word-drift-end {
+  from {
+    transform: translateX(-30%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes chapter-drift {
+  to {
+    transform: translateY(-18%);
+  }
+}
+@keyframes ink-in {
+  to {
+    background-position: 0 0;
+  }
+}
+@keyframes strike {
+  to {
+    background-size: 100% 1px;
+  }
+}
+@keyframes ribbon-drop {
+  from {
+    transform: translateY(-60%);
+  }
+  to {
+    transform: none;
+  }
+}

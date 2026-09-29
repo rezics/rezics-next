@@ -1,0 +1,23 @@
+---
+import { copy } from '../../i18n/format.ts';
+import type { UiLocale } from '../../i18n/locales.ts';
+import { ContributionFlow } from '../../illustrations/ContributionFlow.tsx';
+import { SpamReview } from '../../illustrations/SpamReview.tsx';
+import { Vignette } from '../../illustrations/Vignettes.tsx';
+import LinePage from '../../layouts/LinePage.astro';
+import { localePaths } from '../../lib/site.ts';
+
+export const getStaticPaths = localePaths;
+const locale = Astro.params.locale as UiLocale;
+const words = copy('illustrations', locale);
+const tiles = ['spam-review', 'auto-tagging', 'relation-maintenance', 'normalisation', 'migration-assistant', 'wiki-builder', 'byo'] as const;
+---
+<LinePage locale={locale} page="agents" numbered alsoFeatures={['wiki-builder', 'no-training', 'ai-disclosure']}
+  tileSpans={{ 'spam-review': 4, 'wiki-builder': 3, byo: 3 }} clothTiles={['byo']}>
+  <SpamReview slot="hero" words={words} />
+  <ContributionFlow slot="step-propose" words={words} stage="propose" />
+  <ContributionFlow slot="step-review" words={words} stage="review" />
+  <ContributionFlow slot="step-apply" words={words} stage="apply" />
+  <ContributionFlow slot="step-undo" words={words} stage="undo" />
+  {tiles.map(tile => <Vignette slot={`tile-${tile}`} page="agents" tile={tile} words={words} />)}
+</LinePage>

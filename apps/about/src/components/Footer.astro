@@ -9,7 +9,7 @@ const { locale, page } = Astro.props;
 const site = copy('site', locale);
 const link = 'inline-block py-1.5 text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring rounded-md';
 ---
-<footer class="mt-24 border-t border-border">
+<footer class="border-t border-border">
   <div class="mx-auto grid w-full max-w-300 gap-10 px-5 py-14 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
     <div class="max-w-xs">
       <Logo locale={locale} label={site.pages.home.name} />

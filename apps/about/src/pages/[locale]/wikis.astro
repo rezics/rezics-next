@@ -1,14 +1,28 @@
 ---
-import { WikiPage } from '../../illustrations/WikiPage.tsx';
 import { copy } from '../../i18n/format.ts';
 import type { UiLocale } from '../../i18n/locales.ts';
-import ProductPage from '../../layouts/ProductPage.astro';
+import { LineVignette } from '../../illustrations/LineVignette.tsx';
+import { Vignette } from '../../illustrations/Vignettes.tsx';
+import { WikiArticle } from '../../illustrations/WikiArticle.tsx';
+import { WikiGrowth } from '../../illustrations/WikiGrowth.tsx';
+import LinePage from '../../layouts/LinePage.astro';
 import { localePaths } from '../../lib/site.ts';
 
 export const getStaticPaths = localePaths;
 const locale = Astro.params.locale as UiLocale;
 const words = copy('illustrations', locale);
 ---
-<ProductPage locale={locale} page="wikis">
-  <WikiPage slot="scene" words={words} />
-</ProductPage>
+<LinePage locale={locale} page="wikis" alsoFeatures={['sourced-knowledge']}
+  tileSpans={{ bible: 4, publish: 2, maps: 2, timelines: 4, relations: 3, history: 3 }} clothTiles={['relations']}>
+  <WikiArticle slot="hero" words={words} />
+  <WikiGrowth slot="step-arrival" words={words} stage={1} />
+  <WikiGrowth slot="step-place" words={words} stage={2} />
+  <WikiGrowth slot="step-relations" words={words} stage={3} />
+  <WikiGrowth slot="step-reveal" words={words} stage={4} />
+  <Vignette slot="tile-bible" page="wikis" tile="bible" words={words} />
+  <Vignette slot="tile-publish" page="wikis" tile="publish" words={words} />
+  <Vignette slot="tile-maps" page="wikis" tile="maps" words={words} />
+  <Vignette slot="tile-timelines" page="wikis" tile="timelines" words={words} />
+  <LineVignette slot="tile-relations" line="wikis" words={words} />
+  <Vignette slot="tile-history" page="wikis" tile="history" words={words} />
+</LinePage>

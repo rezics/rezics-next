@@ -1,0 +1,16 @@
+---
+/**
+ * A band of one word in many languages, set huge in the work serif, two rows sliding in
+ * opposite directions as it scrolls past: the site's picture of "every language" without a
+ * picture. Decorative, so hidden from assistive technology; the words carry their `lang`.
+ */
+interface Props { words: readonly { lang: string; text: string }[]; class?: string }
+const { words, class: className = '' } = Astro.props;
+const half = Math.ceil(words.length / 2);
+const rows = [words.slice(0, half), words.slice(half)];
+---
+<div class={`word-band ${className}`} aria-hidden="true">
+  {rows.map(row => (
+    <p class="word-row">{[...row, ...row].map(word => <span lang={word.lang}>{word.text}</span>)}</p>
+  ))}
+</div>

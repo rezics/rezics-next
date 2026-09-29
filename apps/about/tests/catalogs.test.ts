@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { uiLocales as webLocales } from '../../web/i18n/define.ts';
-import { featureIds, features } from '../src/features.ts';
+import { featureIds, features, milestoneHorizon } from '../src/features.ts';
+import { awaitsTranslation } from '../src/i18n/define.ts';
 import { catalogs } from '../src/i18n/messages/index.ts';
 import { localeNames, uiLocales } from '../src/i18n/locales.ts';
 import { pageIds } from '../src/pages.ts';
@@ -48,10 +49,39 @@ test('placeholders such as {n} survive translation', () => {
   }
 });
 
+test('the catalogs awaiting translation are exactly the ones G-482 translates', () => {
+  // G-481 wrote these in English only (`defineEnglishCopy`); G-482 translates them and
+  // empties this list. Nothing else may fall back to English.
+  expect(
+    Object.entries(catalogs)
+      .filter(([, catalog]) => awaitsTranslation(catalog))
+      .map(([name]) => name)
+      .sort(),
+  ).toEqual(
+    [
+      'features',
+      'illustrations',
+      'home',
+      'reading',
+      'light-novels',
+      'serial-fiction',
+      'acgn',
+      'wikis',
+      'agents',
+      'communities',
+      'distribution',
+      'developers',
+      'trust',
+      'roadmap',
+    ].sort(),
+  );
+});
+
 test('only the English catalogs may contain untranslated English sentences', () => {
   // A copy-paste of English into another locale would pass the key check; the
   // long, sentence-like values of a locale must differ from English unless they are names.
   for (const [name, catalog] of Object.entries(catalogs)) {
+    if (awaitsTranslation(catalog)) continue;
     const english = new Map(leaves(catalog.en));
     for (const locale of uiLocales.filter((locale) => locale !== 'en')) {
       for (const [path, text] of leaves(catalog[locale])) {
@@ -73,6 +103,7 @@ test('every feature has a statement, and every page has a name, a summary and se
       'serial-fiction',
       'acgn',
       'wikis',
+      'agents',
       'communities',
       'distribution',
       'developers',
@@ -85,11 +116,16 @@ test('every feature has a statement, and every page has a name, a summary and se
   }
 });
 
-test('every feature owns exactly one status, and planned features say Next or Later', () => {
+test('every feature takes its status from the milestone that delivers it', () => {
   for (const id of featureIds) {
-    const entry: { status: string; horizon?: string } = features[id];
-    expect(['available', 'in-development', 'planned'], id).toContain(entry.status);
-    if (entry.status === 'planned') expect(['next', 'later'], id).toContain(entry.horizon ?? '');
-    else expect(entry.horizon, id).toBeUndefined();
+    const { status, horizon, milestone } = features[id];
+    if (!milestone) {
+      // Only the site's own policies can be available before launch.
+      expect(id).toBe('no-trackers');
+      expect([status, horizon]).toEqual(['available', 'available']);
+      continue;
+    }
+    expect(horizon, id).toBe(milestoneHorizon[milestone]);
+    expect(status, id).toBe(horizon === 'now' ? 'in-development' : 'planned');
   }
 });

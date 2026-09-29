@@ -1,0 +1,31 @@
+---
+import SectionHeading from './SectionHeading.astro';
+
+/** Today's workaround beside the REZICS way, as a two-column table read row by row. */
+interface Props {
+  id: string;
+  title: string;
+  lede?: string;
+  today: string;
+  rezics: string;
+  rows: Record<string, { today: string; rezics: string }>;
+  class?: string;
+}
+const { id, title, lede, today, rezics, rows, class: className = '' } = Astro.props;
+---
+<section aria-labelledby={id} class={`chapter ${className}`}>
+  <div class="page-frame grid gap-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
+    <SectionHeading id={id} title={title} lede={lede} />
+    <table class="compare self-end text-lg">
+      <thead><tr><th scope="col">{today}</th><th scope="col">{rezics}</th></tr></thead>
+      <tbody>
+        {Object.entries(rows).map(([key, row]) => (
+          <tr data-row={key}>
+            <td class="compare-today"><span>{row.today}</span></td>
+            <td class="compare-rezics">{row.rezics}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</section>

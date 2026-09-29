@@ -1,84 +1,94 @@
 ---
 import { buttonVariants } from '@rezics/ui/button';
-import FeatureList from '../../components/FeatureList.astro';
-import NotifyPanel from '../../components/NotifyPanel.astro';
-import Section from '../../components/Section.astro';
+import CallToAction from '../../components/sections/CallToAction.astro';
+import Glance from '../../components/sections/Glance.astro';
+import ScrollStory from '../../components/sections/ScrollStory.astro';
+import Showcase from '../../components/sections/Showcase.astro';
+import Statements from '../../components/sections/Statements.astro';
+import StoryStep from '../../components/sections/StoryStep.astro';
+import Tile from '../../components/sections/Tile.astro';
+import WordBand from '../../components/sections/WordBand.astro';
 import StatusBadge from '../../components/StatusBadge.astro';
-import { copy } from '../../i18n/format.ts';
+import { copy, pageLanguage } from '../../i18n/format.ts';
 import { uiLocales, type UiLocale } from '../../i18n/locales.ts';
-import { HeroEditions } from '../../illustrations/HeroEditions.tsx';
+import { ChapterResume } from '../../illustrations/ChapterResume.tsx';
+import { EditionFan } from '../../illustrations/EditionFan.tsx';
+import { ImportReview } from '../../illustrations/ImportReview.tsx';
+import { LineVignette } from '../../illustrations/LineVignette.tsx';
+import { ReleaseTable } from '../../illustrations/ReleaseTable.tsx';
+import { SeriesBoard } from '../../illustrations/SeriesBoard.tsx';
 import Base from '../../layouts/Base.astro';
-import { features, featuresOf, type FeatureId } from '../../features.ts';
+import { featuresOf } from '../../features.ts';
 import { localePaths } from '../../lib/site.ts';
 import { pagePath, productLineIds } from '../../pages.ts';
+import { storyWords } from '../../illustrations/sample.ts';
 
 export const getStaticPaths = localePaths;
 const locale = Astro.params.locale as UiLocale;
 const text = copy('home', locale);
 const site = copy('site', locale);
 const words = copy('illustrations', locale);
-const featureText = copy('features', locale);
-const scenarios = ['series-tracking', 'portable-library', 'serial-reading', 'vn-releases'] as const satisfies readonly FeatureId[];
 const application = {
   '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'REZICS', applicationCategory: 'EntertainmentApplication',
   operatingSystem: 'Web', description: site.brand.description, url: new URL(pagePath(locale, 'home'), Astro.site).toString(),
   inLanguage: uiLocales, publisher: { '@type': 'Organization', name: 'REZICS Inc.' },
 };
+const steps = Object.entries(text.story.steps) as [keyof typeof text.story.steps, { title: string; body: string }][];
+// The showcase's shape: which lines lead, which sit on their cloth. Six columns on desktop.
+const tiles = {
+  'light-novels': { span: 3, surface: 'cloth' },
+  reading: { span: 3, surface: 'paper' },
+  'serial-fiction': { span: 2, surface: 'paper' },
+  acgn: { span: 2, surface: 'cloth' },
+  agents: { span: 2, surface: 'paper' },
+  wikis: { span: 4, surface: 'cloth' },
+  communities: { span: 2, surface: 'paper' },
+  distribution: { span: 3, surface: 'paper' },
+  developers: { span: 3, surface: 'band' },
+} as const satisfies Record<(typeof productLineIds)[number] | 'developers', { span: 2 | 3 | 4; surface: 'paper' | 'cloth' | 'band' }>;
 ---
-<Base locale={locale} page="home" title={text.meta.title} description={text.meta.description} structuredData={[application]}>
-  <div class="mx-auto w-full max-w-300 px-5 sm:px-8">
-    <header class="grid gap-12 pb-16 pt-14 md:pb-24 md:pt-24 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-center lg:gap-16">
-      <div>
-        <h1 class="display text-[clamp(2.5rem,6.2vw,4.75rem)] font-extrabold">{text.hero.title}</h1>
-        <p class="prose-lede mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl">{text.hero.lede}</p>
-        <div class="mt-9 flex flex-wrap gap-3">
-          <a href="#notify" class={buttonVariants({ size: 'xl' })}>{text.hero.primary}</a>
-          <a href={pagePath(locale, 'roadmap')} class={buttonVariants({ size: 'xl', variant: 'outline' })}>{text.hero.secondary}</a>
+<Base locale={locale} page="home" title={text.meta.title} description={text.meta.description} structuredData={[application]}
+  contentLang={pageLanguage(locale, 'home', 'features', 'illustrations', 'roadmap')}>
+  <section class="page-frame grid items-center gap-14 overflow-x-clip pb-20 pt-12 md:pt-20 lg:grid-cols-[minmax(0,13fr)_minmax(0,11fr)] lg:gap-12 lg:pb-28">
+    <div>
+      <h1 class="type-hero">{text.hero.title}</h1>
+      <p class="type-lede mt-8 text-muted-foreground">{text.hero.lede}</p>
+      <div class="mt-10 flex flex-wrap gap-3">
+        <a href="#notify" class={buttonVariants({ size: 'xl' })}>{text.hero.primary}</a>
+        <a href={pagePath(locale, 'roadmap')} class={buttonVariants({ size: 'xl', variant: 'outline' })}>{text.hero.secondary}</a>
+      </div>
+    </div>
+    <EditionFan caption={text.heroPicture} pause={site.motion.pause} />
+  </section>
+
+  <WordBand words={storyWords} />
+
+  <ScrollStory id="scenarios" title={text.story.title} lede={text.story.lede} steps={steps.length}>
+    {steps.map(([id, step], index) => (
+      <StoryStep index={index} title={step.title} body={step.body}>
+        <StatusBadge slot="meta" id={id} locale={locale} />
+        <div slot="frame" class="w-full max-w-2xl" data-feature-frame={id}>
+          {id === 'series-tracking' && <SeriesBoard words={words} marks upcoming />}
+          {id === 'library-import' && <ImportReview words={words} />}
+          {id === 'serial-reading' && <ChapterResume words={words} />}
+          {id === 'vn-releases' && <ReleaseTable words={words} />}
         </div>
-      </div>
-      <div>
-        <HeroEditions words={words} />
-        <p class="sr-only">{text.illustrationLabel}</p>
-      </div>
-    </header>
+      </StoryStep>
+    ))}
+  </ScrollStory>
 
-    <Section id="scenarios" title={text.scenarios.title}>
-      <p class="prose-lede mb-6 max-w-xl text-lg text-muted-foreground">{text.scenarios.lede}</p>
-      <ul class="grid gap-x-10 border-t border-border sm:grid-cols-2">
-        {scenarios.map(id => (
-          <li class="border-b border-border py-6" data-feature={id}>
-            <div class="flex items-start justify-between gap-4">
-              <h3 class="text-lg font-semibold">
-                <a href={pagePath(locale, features[id].line)} class="underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring rounded-md">{featureText[id].title}</a>
-              </h3>
-              <StatusBadge status={features[id].status} locale={locale} />
-            </div>
-            <p class="prose-lede mt-1.5 text-muted-foreground">{featureText[id].body}</p>
-          </li>
-        ))}
-      </ul>
-      <p class="mt-4 text-sm text-muted-foreground">{site.status.legend}</p>
-    </Section>
+  <Showcase id="lines" title={text.lines.title} lede={text.lines.lede}>
+    {Object.entries(tiles).map(([id, tile]) => (
+      <Tile title={site.pages[id as keyof typeof tiles].name} body={site.pages[id as keyof typeof tiles].summary}
+        href={pagePath(locale, id as keyof typeof tiles)} span={tile.span} surface={tile.surface} cloth={id as keyof typeof tiles} transition={`line-${id}`}>
+        <LineVignette slot="visual" line={id as keyof typeof tiles} words={words} />
+      </Tile>
+    ))}
+  </Showcase>
 
-    <Section id="lines" title={text.lines.title}>
-      <p class="prose-lede mb-6 max-w-xl text-lg text-muted-foreground">{text.lines.lede}</p>
-      <ul class="grid gap-x-10 border-t border-border sm:grid-cols-2">
-        {productLineIds.map(id => (
-          <li class="border-b border-border">
-            <a href={pagePath(locale, id)} class="group block rounded-md py-5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <span class="block text-xl font-semibold underline-offset-4 group-hover:underline">{site.pages[id].name}</span>
-              <span class="mt-1 block text-muted-foreground">{site.pages[id].summary}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </Section>
+  <Statements locale={locale} id="why" title={text.why.title} lede={text.why.lede} ids={featuresOf('home')} />
 
-    <Section id="why" title={text.why.title}>
-      <p class="prose-lede mb-6 max-w-xl text-lg text-muted-foreground">{text.why.lede}</p>
-      <FeatureList locale={locale} ids={featuresOf('home')} />
-    </Section>
+  <Glance locale={locale} id="direction" title={text.glance.title} lede={text.glance.lede} link={text.glance.link} />
 
-    <NotifyPanel locale={locale} />
-  </div>
+  <CallToAction locale={locale} title={text.cta.title} body={text.cta.body} />
 </Base>

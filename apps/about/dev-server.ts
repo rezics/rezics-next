@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
+import { pageIds, pageSlug } from './src/pages.ts';
 import { handleDynamic } from './worker/dynamic.ts';
 import type { AboutEnv } from './worker/env.ts';
 
@@ -49,8 +50,12 @@ export function aboutDevServer(): Plugin {
   };
 }
 
-const unprefixedPage =
-  /^\/(reading|light-novels|serial-fiction|acgn|wikis|communities|distribution|developers|trust|roadmap)\/?$/;
+const unprefixedPage = new RegExp(
+  `^/(${pageIds
+    .filter((id) => id !== 'home')
+    .map(pageSlug)
+    .join('|')})/?$`,
+);
 
 async function toRequest(req: IncomingMessage): Promise<Request> {
   const chunks: Buffer[] = [];
