@@ -51,7 +51,7 @@ and runs worker processes, claims and integration waves through the
 | [Development](development/README.md) | Repository organization, generation, development workflow and frontend code boundaries. |
 | [Plan](plan/README.md) | Dependency order, active documentation scope and qualification status. |
 | [Research](research/README.md) | Questions that still affect implementation choices. |
-| Legal publication | Agreement and privacy artifacts must be supplied by their release owner; they are absent from this checkout and are not created by engineering design. |
+| [Legal drafts](legal/README.md) | Terms, privacy, ratings, AI, copyright, takedown, child-safety, API and creator-agreement drafts adapted from openly licensed policies (2026-09-29). Not reviewed by counsel; the zero-budget decision in the [Goal](../GOAL.md) accepts that until counsel is affordable. |
 
 ## Implementation and verification
 
