@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
-export type Engine = 'claude' | 'fable' | 'codex' | 'luna' | 'astra' | 'grok' | 'cursor';
+export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'luna' | 'astra' | 'grok' | 'cursor';
 export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
@@ -45,12 +45,16 @@ export const MODEL = 'claude-opus-5-5';
 // Fable runs through Claude Code. Its weekly allowance may be its own, but it shares the Claude 5h session
 // limit (both hit 'session limit' together on 2026-09-28), so the 5h gate applies to it as to Opus.
 export const FABLE_MODEL = 'claude-fable-5-1';
+// Sonnet runs through Claude Code on the same subscription, so the Claude usage gate applies to it too.
+// Claude Code 2.1.284 is the first release here that accepts claude-sonnet-5-5 (2.1.283 rejected it).
+export const SONNET_MODEL = process.env.GOAL_SONNET_MODEL ?? 'claude-sonnet-5-5';
 export const CODEX_MODEL = 'gpt-6-sol';
 export const LUNA_MODEL = 'gpt-6-luna';
 export const ASTRA_MODEL = 'gpt-6-astra';
 export const GROK_MODEL = 'grok-4.7';
 const ENGINE_EFFORTS: Record<Engine, string[]> = {
   claude: ['low', 'medium', 'high', 'xhigh', 'max'],
+  sonnet: ['low', 'medium', 'high', 'xhigh', 'max'],
   fable: ['low', 'medium', 'high', 'xhigh', 'max'],
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   luna: ['low', 'medium', 'high', 'xhigh', 'max'],
@@ -66,12 +70,12 @@ export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undef
 export const CODEX_HOME = process.env.GOAL_CODEX_HOME ?? join(homedir(), '.codex');
 export const ASTRA_HOME = process.env.GOAL_ASTRA_CODEX_HOME ?? join(homedir(), '.codex-1');
 const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
-const MODELS: Record<Engine, string> = { claude: MODEL, fable: FABLE_MODEL, codex: CODEX_MODEL, luna: LUNA_MODEL, astra: ASTRA_MODEL,
+const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, fable: FABLE_MODEL, codex: CODEX_MODEL, luna: LUNA_MODEL, astra: ASTRA_MODEL,
   grok: GROK_MODEL, cursor: `${GROK_MODEL} (Cursor)` };
 const modelOf = (engine: Engine): string => MODELS[engine];
 const effortsOf = (engine: Engine): string[] => ENGINE_EFFORTS[engine] ?? [];
 const isCodex = (engine: Engine): boolean => engine === 'codex' || engine === 'luna' || engine === 'astra';
-const isClaudeCode = (engine: Engine): boolean => engine === 'claude' || engine === 'fable';
+const isClaudeCode = (engine: Engine): boolean => engine === 'claude' || engine === 'sonnet' || engine === 'fable';
 // Process name that /proc/<pid>/cmdline carries for a live worker of each engine.
 const programOf = (engine: Engine): string =>
   isCodex(engine) ? 'codex' : engine === 'cursor' ? 'cursor-agent' : isClaudeCode(engine) ? 'claude' : engine;
