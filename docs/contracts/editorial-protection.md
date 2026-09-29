@@ -51,3 +51,17 @@ entries per page. These are unqualified ceilings; incomplete manifests are rejec
 Old writers fail closed. Restore decision/application, authority and erasure coverage
 before routing; a new epoch cannot reconstruct lost protection. Qualify skew, writer
 occupancy and fan-out separately from full-corpus capacity.
+
+## Shared collaboration lifecycle
+
+Decision 19, product manager under maintainer delegation, 2026-09-29.
+Catalogue corrections, wiki edits and translations share a review lifecycle at
+GitHub's level: exact candidates, stewardship, required reviewers, and changed
+candidates invalidating approval. Actionable requests differ from discussions;
+subscriptions and an inbox distinguish Read, Saved and Done.
+
+The reason is accountable decisions and a reliable return path, not merely
+alternative revisions. [GitHub protected reviews](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
+and its [notification inbox](https://docs.github.com/en/subscriptions-and-notifications/how-tos/viewing-and-triaging-notifications/managing-notifications-from-your-inbox)
+are the precedents. The installed correction schema above already owns exact
+candidate binding; this decision extends that lifecycle across contribution kinds.

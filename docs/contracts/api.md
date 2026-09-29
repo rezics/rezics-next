@@ -39,3 +39,33 @@ verified historical bytes and private uncached responses.
   semantics. MCP input, retrieved text and package text are data, not authority
   to use secrets or perform unrelated actions. [Connected apps](connected-apps.md)
   owns delegated ceilings.
+
+## Executable capability registry
+
+Decision 14, product manager under maintainer delegation, 2026-09-29.
+Each supported capability is to declare authority, inputs, outcomes, pagination,
+retry/recovery, SDK/MCP mapping and the human journey: discover, act, confirm,
+return, recover, leave. Internal and deferred capabilities retain a reason.
+The registry generates the developer portal and fails checks on undeclared gaps.
+This is a target beyond installed OpenAPI, not a second prose endpoint inventory.
+
+The reason is that a callable route alone says neither how to complete a task
+nor how to recover it. [OpenAPI](https://spec.openapis.org/oas/latest.html)
+describes transport, while [GitHub's MCP toolsets](https://github.com/github/github-mcp-server)
+illustrate task-oriented discovery. REZICS adds explicit journey coverage rather
+than exposing one undifferentiated tool per endpoint.
+
+## Developers and phones
+
+Decision 25, product manager under maintainer delegation, 2026-09-29.
+Deliver the registry-generated portal, an external TypeScript SDK, scoped
+personal/delegated credentials, [RFC 9457 errors](https://www.rfc-editor.org/rfc/rfc9457.html)
+and durable event replay. Responsive web is the first mobile client, with optional
+PWA installation, web push, durable cross-device progress and rights-aware offline
+downloads. Correctness never depends on background execution.
+
+The reason is one complete API experience across interactive and unattended
+clients. [Service-worker lifecycle constraints](https://www.w3.org/TR/service-workers/#service-worker-lifetime)
+motivate resumable foreground recovery; installation is not a promise that the
+OS will keep work running. [Synchronization](client-synchronization.md) owns
+pending writes, cache custody and revocation limits.

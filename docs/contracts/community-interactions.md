@@ -28,3 +28,17 @@ do not supply a general conversation service.
 Collection ordering, private favorites/progress and follow subscriptions remain
 separate interaction profiles; each needs identity, disclosure and recovery
 contracts before its presence in the product map can count as delivered.
+
+## Community completeness
+
+Decision 20, product manager under maintainer delegation, 2026-09-29.
+Reach Reddit-level task completeness through independent posts in any content
+language, follow distinct from join, newcomer trust and budgets, moderation
+cases with correspondence, rules per language, founder activation and reviewed
+communities that can actually receive contributions. Private messaging remains
+a deferred rollout despite the prospective conversation profile above.
+
+The reason is a working community lifecycle, from first contribution to response
+and appeal, rather than a collection of empty pages. [Discourse trust levels](https://blog.discourse.org/2018/06/understanding-discourse-trust-levels/)
+offer a precedent for progressive participation; REZICS still needs calibration
+and may not turn raw activity or multiple personas into authority.

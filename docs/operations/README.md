@@ -10,6 +10,7 @@ for Fuseki/TDB2 and jena-text/Lucene restart and restore checks. The product
 - [Recovery](recovery.md): offline backup/restore, epochs and Lucene rebuild.
 - [Observability](observability.md): graph/text readiness, progress and diagnosis.
 - [Security](security.md): private service access, admission and disclosure.
+- [Trust and safety](trust-and-safety.md): launch restrictions, public intake, responders and urgent-harm procedures.
 - [Erasure](erasure.md): current RDF, revision payloads, indexes and retained copies.
 - [Executable theme review and incident response](custom-theme-review-and-incident-response.md).
 

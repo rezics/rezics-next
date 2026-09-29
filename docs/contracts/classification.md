@@ -43,3 +43,33 @@ and owner tests identify the replacement profile's required behavior.
 - Derived edges and inverse reads need admitted context-bound rules and exact
   provenance. Inference cannot grant authority or accept a statement. Bound
   query, invalidation and recovery work before declaring broad qualification.
+
+## Restricted structure and open vocabulary
+
+Decision 15, product manager under maintainer delegation, 2026-09-29.
+Structural types come from a versioned registry; descriptive types and properties
+can be added under a namespace and steward without adding behaviour. Anyone may
+propose; definition, application, acceptance and activation are separate powers.
+Ship everyday application, contest, translation and alias review first. Merge
+and split retain IDs but wait for a later workbench.
+
+The reason is safe extension without forcing each subject into a new executable
+profile. [SHACL's open and closed shapes](https://www.w3.org/TR/shacl/#ClosedConstraintComponent)
+support controlled structural boundaries; [SKOS](https://www.w3.org/TR/skos-reference/)
+supports multilingual descriptive vocabulary. Neither label nor namespace creates
+authority. The [vertical manifest](../product/platform-thesis.md#the-vertical-engine-is-the-product)
+composes these admitted definitions.
+
+## Classification journeys
+
+Decision 17, product manager under maintainer delegation, 2026-09-29.
+One multilingual selector serves applying and voting, term/translation proposals,
+review, Concept pages, saved include/exclude Home filters and onboarding interests
+without a cap. Fit and spoiler judgments stay separate; spoiler reveal respects
+the reader's consumption position. Concrete vote and query meaning stays in the
+[judgment](classification-judgments.md) and [query](queries.md) owners.
+
+The reason is a reusable path from discovery to contribution and return, rather
+than isolated tag widgets. [AO3's tag filtering](https://archiveofourown.org/faq/search-and-browse?language_id=en)
+is a precedent for inclusion/exclusion, and SKOS above supplies language-aware
+labels without conflating translated words with new identities.

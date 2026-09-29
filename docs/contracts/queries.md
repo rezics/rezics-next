@@ -9,7 +9,7 @@ from the queried Resource to it.
 | Term | Meaning |
 | --- | --- |
 | Resource | Anything with an IRI: a Work, a class such as `schema:Book`, a Concept, a franchise such as Blue Archive, a character, a value such as Female. |
-| Type | A Resource's `rdf:type`. It selects shapes and admitted operations: a Book has compositions and chapters, a SoftwareApplication has releases. |
+| Type | A Resource's `rdf:type`. A registered structural type selects shapes and admitted operations; descriptive types add no behaviour under the [open-vocabulary decision](classification.md#restricted-structure-and-open-vocabulary). |
 | Concept | A `skos:Concept` in a vocabulary, such as a genre, form, trope or theme: Fiction, Web novel, 後宮. |
 | Statement, relation occurrence | An attributed claim, and an identified association with roles, such as one character's appearance in one Work ([classification](classification.md), [relationship graph](relationship-graph.md)). |
 | Context | Whose accepted Statements a read uses: Global or a Realm's ([Context](context.md)). |
@@ -34,9 +34,11 @@ For example, fiction based on Blue Archive with a female lead, as Global reads i
 
 ## Decisions
 
-- **Type is structure, not grouping.** A distinction that changes neither shape
-  nor operations is not a type. Genre, form and topic are Concepts: a web novel
-  is a Book carrying a form Concept. A class used as a subject heading forks
+- **Structural type is not grouping.** The 2026-09-29
+  [open-vocabulary decision](classification.md#restricted-structure-and-open-vocabulary)
+  distinguishes registered structural types from descriptive types without
+  behaviour. Genre, form and topic remain Concepts: a web novel is a Book
+  carrying a form Concept. A structural class used as a subject heading forks
   shapes whenever the heading changes, and a heading made a class cannot be
   attributed, contested or read per Context. schema.org likewise separates
   `@type` from `genre`, `about` and `isBasedOn`, and Wikidata separates
@@ -162,3 +164,17 @@ the feed remains. Still to come: one Query input that Main compiles onto
 admitted, bounded templates, with today's profiles as the first templates;
 Saved Filters for groupings such as Zone scopes; and labels read from the
 Resources themselves.
+
+## Complete traversal
+
+Decision 12, product manager under maintainer delegation, 2026-09-29.
+Previews, ranked retrieval and exhaustive inventories are different promises.
+Every inventory continues through its whole population and states count precision
+and freshness. A request bound is never a product limit. This matters for exports,
+imports and heavy readers as much as catalogue browsing: silently missing later
+items cannot be repaired by a larger first page.
+
+[Notion's search limitations](https://developers.notion.com/reference/search-optimizations-and-limitations)
+explicitly distinguish search from exhaustive enumeration. REZICS therefore gives
+inventory traversal its own contract; the query and paging implementations linked
+above retain their concrete bounds and qualification status.

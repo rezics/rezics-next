@@ -50,3 +50,31 @@ General external distribution creation, partial bundle validation, versioned
 language applicability and release-specific availability/download rights still
 need owner operations and evidence. A Work representative image must point to an
 eligible original Use without losing its release origin or source-primary status.
+
+## Creator distribution
+
+Decision 30, maintainer (books, games and Stripe), with product-manager rollout
+judgment, 2026-09-29. Begin as distributor for contracted creators: rights-cleared,
+DRM-free EPUB/PDF books and small games/VNs, samples, one-time purchases, updates,
+receipts, refunds and re-downloads from private R2. No launcher, DRM, open seller
+registration or sale of `r18`/`r18g` Works at first.
+
+Select one US Stripe account with hosted Checkout and Managed Payments if Stripe
+approves the model. [Managed Payments](https://docs.stripe.com/payments/managed-payments)
+handles indirect tax for admitted transactions; its
+[eligibility](https://docs.stripe.com/payments/managed-payments/eligibility) is a
+gate, not an assumption. [Stripe's restrictions](https://stripe.com/legal/restricted-businesses)
+prohibit sexually explicit material; excluding grotesque adult Works too is
+REZICS's policy. The 90/10 split of receipts after tax, fees and refunds is a
+hypothesis, with each deduction visible.
+
+The reason is funding the platform through a bounded creator offering, aiming
+first beyond the weakest stores and beyond Steam specifically at precise
+multilingual editions, portable files, creator identity across media and connected
+community/wiki knowledge. This is a product target, not measured superiority.
+Later consider a Connect marketplace, keys and chapter bundles;
+Taiwan/Korea sellers need another payout route under the researched configuration.
+Recheck [cross-border coverage](https://docs.stripe.com/connect/cross-border-payouts)
+before seller admission. The [creator agreement draft](../legal/creator-distribution-agreement-outline.md)
+and [commercial rollout](../operations/deployment.md#commercial-rollout) retain
+the approval and consumer-policy gates. No live commerce is qualified by this choice.

@@ -156,3 +156,19 @@ designs awaiting implementation; this documentation update adds no API behavior
 or rendered acceptance. Grouped-statement response shapes retain their own owner
 implementation status. Future implementation must verify the owner APIs before
 their frontend consumers and record rendered evidence separately.
+
+## Document editor choice
+
+Decision 22, product manager under maintainer delegation, 2026-09-29.
+Use BlockNote's MPL-2.0 core/React packages, excluding GPL XL, behind a
+REZICS-owned immutable block contract with stable IDs. Tiptap is the fallback.
+One editor serves Studio, posts, wiki, reviews and notes; a pure static renderer
+and block-anchored paragraph comments preserve reading and review independently
+of the editing runtime.
+
+The reason is to reuse editing mechanics without making library JSON the custody
+contract. [BlockNote's licence split](https://github.com/TypeCellOS/BlockNote#license)
+and [Tiptap's static renderer](https://tiptap.dev/docs/editor/api/utilities/static-renderer)
+support that boundary. Admission still requires package licence review, a vinext
+Workers build, real CJK IMEs on phones and lossless migration. This decision does
+not assert those gates have passed or add a dependency.

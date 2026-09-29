@@ -92,3 +92,20 @@ content remain different states. Direction, mixed scripts, transliteration,
 analyzer choice and export round trips need their own executable profiles and
 tests. A free-text predicate value and a localized label must preserve stable
 predicate identity and authored meaning.
+
+## One native-language contract
+
+Decision 7, product manager under maintainer delegation, 2026-09-29.
+Use one BCP 47 parser and localized-value, selection and retrieval contract
+everywhere. Unknown language is preserved, never replaced by English; UI locale
+cannot become authored content language. Account owns interface locale and Main
+reading languages. Direction follows script, including mixed-script content;
+Japanese reading supports ruby, emphasis and vertical presentation.
+
+All eight interface catalogs must be complete and the catalog gate must fail on
+gaps. This is a delivery target, not a statement that the current checker qualifies
+it. [BCP 47](https://www.rfc-editor.org/rfc/rfc5646.html) and
+[Japanese layout requirements](https://www.w3.org/TR/jlreq/) explain why a fixed
+locale enum or primary-language direction heuristic cannot represent native
+content. The reason for one contract is to prevent each adapter from making a
+different fallback decision and losing meaning on export or re-edit.

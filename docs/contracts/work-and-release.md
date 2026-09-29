@@ -57,3 +57,19 @@ Multi-member native release manifests, general external distribution matching,
 release-specific availability and entitlement remain separate implementation
 work. Export must state residual mapping and loss when external bibliographic or
 music grains do not correspond exactly to REZICS identities.
+
+## Explicit identities, targets and units
+
+Decision 6, product manager under maintainer delegation, 2026-09-29.
+Versioned profiles must distinguish series and independently identified volumes,
+editions/releases and coverage (omnibus, partial, region, platform), anime
+series/seasons/episodes, characters and contextual credits, reading sessions,
+copies and loans. Reviews identify story, translation, narration or production;
+Collection entries do not become Works. Matching titles never establish identity.
+
+The reason is task fidelity: a person can own an omnibus, reread one volume and
+review its translation without making those three acts target the same object.
+[IFLA LRM](https://www.ifla.org/files/assets/cataloguing/frbr-lrm/ifla-lrm-august-2017.pdf)
+supports distinct creative and publication grains; REZICS extends that reasoning
+to progress, community judgments and cross-medium coverage. Installed release
+profiles above carry their field-level contracts; unknown correspondence stays unknown.

@@ -23,3 +23,34 @@ coverage or losses.
 [Post media](media.md#post-attachments-and-preview-selection) retains the pending
 cover, banner and preview design. Its visual interaction belongs with the
 frontend implementation and stories.
+
+## Creator experience
+
+Decision 21, product manager under maintainer delegation, 2026-09-29.
+Prioritize manuscript safety, Main-owned scheduling with time zones, rights and
+translation declarations, collaborators scoped to read/suggest/edit/publish,
+a feedback inbox and a complete author backup. Publication rights are distinct
+from edit access, and a scheduled release survives the browser closing.
+
+The reason is dependable custody across the author's whole workflow.
+[YouTube channel permissions](https://support.google.com/youtube/answer/9481328?hl=en)
+provide a delegation precedent; [W3C time-zone guidance](https://www.w3.org/TR/timezone/)
+explains why a local scheduled time alone is insufficient. Installed publication
+commands above and the [job owner](events-and-jobs.md) carry the execution contract.
+
+## Private worldbuilding
+
+Decision 28, product manager under maintainer delegation, 2026-09-29.
+Give authors a private World beside the manuscript: characters, places,
+organizations, events, items and lore in versioned templates, not code. Selected
+pages publish into the Work's Realm wiki without private history. A coherent,
+re-importable export and the core world bible are never subscription gates.
+
+Use [Leaflet custom-image maps](https://leafletjs.com/examples/crs-simple/crs-simple.html),
+[Cytoscape.js relationships](https://js.cytoscape.org/) and
+[D3 numeric scales](https://d3js.org/d3-scale/linear) for fictional chronologies
+with uncertain dates; each visual has an accessible list. These libraries supply
+mechanics, not the privacy or historical model. The reason is one maintained
+source for the writer and selected reader knowledge, with portable custody.
+An optional continuity assistant flags contradictions in the author's own notes
+and manuscript; it never writes the chapter. Azgaar import and scene tracks wait.

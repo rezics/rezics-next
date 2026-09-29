@@ -40,20 +40,25 @@ The most urgent factual work is to establish working public safety intake, a rea
 
 **2. REZICS decisions used**
 
-The drafts use `GOAL.md`, especially decisions 1–5, 26, 30 and 31, together with the Account–Agent authority model and the two local research notes:
+The decisions and primary evidence used by these drafts now have lasting owners:
+[suitability](../contracts/classification-judgments.md#suitability-and-disclosure),
+[safety and legal readiness](../operations/trust-and-safety.md#safety-and-legal-readiness),
+[AI consent](../contracts/license-grants.md#ai-disclosure-and-consent),
+[authority](../contracts/identity-and-access.md#one-authority-model),
+[launch](../operations/deployment.md#launch-shape),
+[imports](../contracts/source-lifecycle.md#import-rollout),
+[distribution](../contracts/distribution.md#creator-distribution) and
+[recognition and value](../product/markets-and-growth.md#recognition-points-and-credit).
 
-- `.temp/research/R19-trust-safety.md`.
-- `.temp/research/R24-zero-cost-safety.md`.
-
-The current GOAL takes precedence where the research proposed a different direction. In particular:
-
-- R19’s statement that TAKE IT DOWN was absent is superseded by the current decision.
-- R24 recommended deferring intentional EEA access or targeting; the maintainer’s later decision keeps the EU reachable while representation waits for revenue.
-- Distribution excludes both `r18` and `r18g` works, in addition to sexually explicit goods.
-- Recognition is not money or authority. Redeemable points and purchased credit remain separate future programmes.
-- New media stays off until clearance works; the initial service uses text and typographic covers.
-
-The maintainer accepts imperfect compliance while funding is unavailable, potentially until roughly one million users or investment. This is an internal risk decision, not a legal exemption, waiver by users or assurance that obligations begin at that size. The public policies must not suggest otherwise.
+Decision 2, maintainer, 2026-09-29: the zero-budget risk acceptance keeps the EU
+reachable while representatives wait for revenue and defers paid counsel until
+affordable, potentially around one million users or investment. The urgent-harm
+processes operate from day one; TAKE IT DOWN handling is included. Earlier
+research advice to defer EEA access was not selected. This is an internal risk
+decision, not a legal exemption, waiver by users or assurance that obligations
+begin at that size. The public policies must not suggest otherwise. The safety
+owner records the reason and launch controls; the references below explain why
+legal applicability still needs review.
 
 **3. Policy sources**
 

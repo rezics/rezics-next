@@ -4,8 +4,10 @@
 
 A Resource has a stable logical identity, owner, lifecycle and admitted
 capabilities. RDF types describe it without changing its writer or granting
-authority. A type selects shapes and operations; genre, form and topic are
-Concepts, and groupings are [Saved Filters](queries.md#decisions). Native IDs use UUIDv7 and `https://rezics.com/id/{uuid}` in RDF;
+authority. Registered structural types select shapes and operations;
+[descriptive types](classification.md#restricted-structure-and-open-vocabulary)
+add no behaviour. Genre, form and topic are Concepts, and groupings are
+[Saved Filters](queries.md#decisions). Native IDs use UUIDv7 and `https://rezics.com/id/{uuid}` in RDF;
 routes, dataset placement, internal TDB2 nodes and external IRIs remain separate.
 An ID is neither a causal clock nor an access secret. Identity correction
 retains old references under the [correction protocol](identity-correction.md).

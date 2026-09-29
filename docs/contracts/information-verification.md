@@ -63,3 +63,38 @@ Method evaluations must report held-out errors, calibration, coverage and
 abstention; deterministic policy tests alone cannot qualify a method. Exports
 retain exact policy, provenance, uncertainty and disclosure losses. Funding and
 subscription status cannot buy a verdict. Untrusted source/tool content stays data.
+
+## Knowledge workspace
+
+Decision 23, product manager under maintainer delegation, 2026-09-29.
+Realm wikis combine multilingual addresses, citations, graph infoboxes, links and
+backlinks, discussion, review, watch, exact history/diff/restore and export.
+Saved list/table/gallery views over Collections and filters, plus private reading
+notes, make the knowledge useful beyond article reading. [MediaWiki page history](https://www.mediawiki.org/wiki/Help:History)
+and [Notion views](https://developers.notion.com/guides/data-apis/working-with-views)
+are precedents for inspectable knowledge and reusable organization; the reason
+to compose existing owners is to preserve one identity and disclosure policy.
+
+## A big-franchise wiki for every Work
+
+Decision 29, product manager under maintainer delegation, 2026-09-29.
+Build sourced, position-aware knowledge: fictional entities, chapter-evidenced
+claims, multilingual names/aliases, and event time separate from revelation
+position. Agents propose chapter-by-chapter facts and structure from licensed,
+public-domain or author-supplied text and structured dumps. Reviewers publish
+coherent bundles and new-chapter deltas; nothing reaches readers without human
+review, and readers see only what their consumption position admits.
+
+Each Realm decides whether agents may draft and whether generated prose is
+permitted. Facts and structure are the default because fluent prose can hide
+invented citations. [Wookieepedia sourcing](https://starwars.fandom.com/wiki/Wookieepedia%3ASourcing)
+and [Coppermind spoiler guidance](https://coppermind.net/wiki/Help%3ASpoilers)
+show the editorial and revelation boundaries; [BookWorm](https://arxiv.org/abs/2410.10372)
+supports investigating retrieval but does not prove complete or accurate wikis.
+
+Start with entity indexes, concise articles, infoboxes, navboxes, chapter guides,
+appearances, relationship lists, basic timelines, citations and backlinks.
+Family trees, adaptation alignment, world maps and chronologies follow.
+Completeness means coverage of an identified corpus, never page count. The
+[agent contribution owner](skills-and-prompts.md#open-agent-contribution-protocol)
+supplies the common review boundary and holder-provided compute.

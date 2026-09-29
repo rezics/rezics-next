@@ -38,3 +38,18 @@ The selected Better Auth 1.7.5 provider did not revoke refresh tokens when
 consent was deleted. The product's separate generation fence is therefore
 required. [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html) is the
 security basis; provider behavior is qualified against the selected build.
+
+## First-party sessions and developer extras
+
+Decision 8's first-party consequence and decision 33, 2026-09-29: the authority
+model is the maintainer's; the product manager under that delegation deferred
+developer extras. First-party REZICS shows no OAuth consent and appears in
+Accounts as a product session. External apps still receive explicit, scoped
+authorization. The reason is to distinguish signing into a REZICS product from
+granting another application access; [Google's connection management](https://support.google.com/accounts/answer/13533235?hl=en)
+is the product precedent, and RFC 9700 above remains the security basis.
+
+GitHub-style developer settings, OAuth apps, Realm-level OAuth installations and
+MCP management are non-core extras, sequenced after the shared authority model
+(M7 in the production-readiness Goal). Their UI does not create a second grant
+model; the [identity owner](identity-and-access.md#one-authority-model) owns it.

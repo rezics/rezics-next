@@ -62,3 +62,17 @@ and fences before effects resume. Metrics distinguish ingest, relay, consumer
 and active-generation lag. A successful event delivery alone does not prove
 Lucene projection readiness. [Worker practice](../services/workers.md) records
 the remaining deployment and recovery decisions.
+
+## Main owns business tasks
+
+Decision 11, product manager under maintainer delegation, 2026-09-29.
+Import matching, publication, scheduling, bulk moderation, onboarding,
+save-and-pin, discovery composition and search recovery are resumable Main
+operations. Clients present and poll their outcomes. Exact inputs, expected
+heads, idempotency, receipts and explicit pending, partial or uncertain states
+use the command and job owners above rather than a browser-only workflow.
+
+The reason is continuity across client loss, retries and agents: closing a tab
+must not erase a task's outcome. [Google's long-running operation guidance](https://google.aip.dev/151)
+is a precedent for discoverable asynchronous outcomes, not a requirement to copy
+its wire format or a claim that acceptance means completion.

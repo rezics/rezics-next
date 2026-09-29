@@ -127,8 +127,11 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
   Mods follow the best mod platform, Modrinth before CurseForge and Nexus:
   search-first browsing by game version, loader and category, with versions
   and dependencies. Software follows the best software directories. Each
-  vertical needs its own listing, browse and detail presentation, and the
-  fields to fill them come from Main.
+  vertical needs a fitting listing, browse and detail presentation, with fields
+  from Main. The maintainer's 2026-09-29
+  [vertical-engine decision](../product/platform-thesis.md#the-vertical-engine-is-the-product)
+  refines how: shared default pages and templates, with slot overrides for the
+  core families, rather than copied per-vertical implementations.
 - **One visual language.** Zones use REZICS's shared visual language for now.
   A Zone changes colours or type only when it explicitly asks to; until one
   can, the host applies only a Zone's structure tokens, and a test keeps
@@ -158,13 +161,17 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
 ## Languages and themes
 
 The UI ships the old site's eight locales (`apps/web/i18n/define.ts`), separate
-from content languages; missing keys fall back to English, and translation runs
-on cheap models. "Realm" stays a product name in English, like Reddit's
+from content languages. Translation may use cheap models; English fallback is
+not acceptance of an incomplete catalog under the
+[native-language decision](../contracts/content-languages.md#one-native-language-contract).
+"Realm" stays a product name in English, like Reddit's
 "subreddit"; other locales use their plain word for a community, since readers
 should not have to learn the model's vocabulary. The locale is a path prefix so
 each language version of a public page has its own indexable URL with
 `hreflang` alternates; content language belongs to a version and never enters
-the route. Signed out, a language select and a theme button sit in the header;
+the route. [URLs and SEO](../product/urls-and-seo.md) owns durable identifiers,
+per-language slugs, canonical redirects and eligible alternates. Signed out, a
+language select and a theme button sit in the header;
 signed in, they live in the avatar menu and settings. Zones may carry their
 own themes, which people can turn off.
 
@@ -234,3 +241,17 @@ and domain commands stay in Elysia Main on Bun. The [stack comparison](../resear
 records vinext's compatibility gaps. Data fetching follows
 [web organization](../development/web-features.md#data-fetching). Screens are
 reviewed in light and dark, desktop and phone, English and a CJK locale.
+
+## Presentation modes and settings
+
+Decision 16, product manager under maintainer delegation, 2026-09-29.
+Simple, Advanced and reserved Agent mode are viewing Account preferences:
+feature override, then global default, then Simple. The API never takes a mode,
+and modes grant no authority. Advanced increases density in the spirit of GitHub;
+settings on both sites are searchable. Material consequences remain visible in
+every mode and ordinary edits retain advanced saved state.
+
+The reason is to make common tasks direct while keeping the full capability
+available. [WAI disclosure guidance](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/)
+supports accessible progressive disclosure; it is not evidence that a particular
+layout or density has passed usability testing.

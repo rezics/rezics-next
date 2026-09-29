@@ -58,3 +58,20 @@ Bootstrap and change feeds overlap at a recorded frontier. Gaps need reconciliat
 or a new baseline; an empty query does not prove deletion. Runs retain provider
 contracts and examples without freezing future versions. Keep source coverage,
 mapping, query and export qualification separate; see [source acceptance](../testing/source-conformance.md) and [workers](../services/workers.md).
+
+## Import rollout
+
+Decision 26, maintainer, 2026-09-29. Imports write only through Main commands;
+qualification uses functional tests, not large import campaigns. Start with
+downloadable dumps from VNDB, Open Library, Wikidata, Bangumi, MusicBrainz core
+and the old site. The later [vertical-engine seeds](../product/platform-thesis.md#one-graph-many-language-fronts)
+add Arena and ISFDB within the same dump boundary. Principal-class rate limits
+and backpressure preserve shared capacity. Availability remains a dated observation.
+
+A bounded, rights-cleared launch catalogue with named stewards is a separate
+deliverable. The reason is reproducible intake without bypassing native authority,
+review and recovery. [Wikidata dumps](https://www.wikidata.org/wiki/Wikidata:Database_download)
+and [Open Library dumps](https://openlibrary.org/developers/dumps) provide bulk
+acquisition precedents; an API response saved as JSON does not silently expand
+the source scope. The broader reuse policy above still distinguishes intake
+from publication rights.

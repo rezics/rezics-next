@@ -125,6 +125,20 @@ counts before retrying after a lost acknowledgement.
 
 ## Commercial rollout
 
-Only the fake payment adapter is admitted. Select a real provider, currency,
-tax, collection, refund and payout policy before taking transactions.
-Seller onboarding and persistent hosting need their own operating arrangements.
+Only the fake payment adapter is admitted. The 2026-09-29
+[creator-distribution decision](../contracts/distribution.md#creator-distribution)
+selects Stripe conditionally; establish provider approval, currency, tax,
+collection, refund and payout policy before taking transactions. Seller
+onboarding and persistent hosting need their own operating arrangements.
+
+## Launch shape
+
+Decision 5, product manager under maintainer delegation, 2026-09-29.
+There is no closed beta. Open registration quietly after launch gates pass;
+announce after one to two weeks of healthy operation. Operators can separately
+pause registration, uploads or public posting while reporting and recovery stay
+available. This gives operators time to observe real demand before promotion
+without creating artificial scarcity. [StoryGraph's founder account](https://buttondown.com/nodunayo/archive/55-the-storygraph-explodes/)
+illustrates how a sudden migration queue can overwhelm a young service; it does
+not establish REZICS capacity. The [safety runbook](trust-and-safety.md) owns
+responder coverage and drills.

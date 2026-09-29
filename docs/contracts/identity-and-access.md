@@ -78,3 +78,39 @@ explains Access's placement inside Main.
 representation creates no voting weight. See the
 [authorization bridge](../implementation/authorization-bridge.md) and
 [identity acceptance](../testing/identity-and-access.md) for integration and evidence.
+
+## Visible is not permitted
+
+Decision 4, maintainer, 2026-09-29. Every Zone remains visible, while role and
+trust gate creation. Ordinary participants browse, rate, shelve, review, discuss
+and report; authors create their own Works; administrator-appointed editors
+maintain the catalogue with history. Administrators create Zones, official
+Realms, Software and Mod entries and run imports. These are product roles,
+not permission implied by a visible control.
+
+Permission-backed translations need explicit publication eligibility. A private
+unmatched library record cannot create a public catalogue entry. This protects
+both private reading custody and catalogue stewardship; the independent
+[translation rights](content-languages.md#user-submitted-translations) supply
+the publication basis, and installed Access profiles above remain authoritative.
+
+## One authority model
+
+Decision 8, maintainer's YouTube model, 2026-09-29. Account signs the operator in;
+the operator represents a Person or Organization Agent; the Agent grants resource
+authority; app and AI credentials only narrow it. [YouTube channel permissions](https://support.google.com/youtube/answer/9481328?hl=en)
+are the precedent for delegated management without sharing the owner's private
+account. REZICS applies the distinction across all resources. First-party REZICS
+shows no consent and appears in Accounts as a product session; external apps
+retain their explicit, scoped authorization.
+
+Main owns public identities, each Agent's permissions page (invite, accept,
+change, revoke), Realm roles, resource-scoped installations and AI assignments
+through one scoped authorization object. “Manage as yourself” differs from
+public attribution as that identity. Discovery is independent of task eligibility;
+confirm the public identity before publishing private Account data. Delegation
+never exposes private reading history. Transfers, last-controller protection,
+recovery and revocation cover queued and running work. Handles retain redirects,
+reuse restrictions and confusable protection; creators can claim imported
+identities. [Durable addresses](../product/urls-and-seo.md#durable-addresses)
+records the rename rationale. These extensions are targets beyond installed profiles.

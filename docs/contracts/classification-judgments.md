@@ -30,3 +30,27 @@ prevents persona multiplication, while aggregate disclosure follows policy.
 
 These requirements have no complete owner API or qualification yet; retain them
 until their schemas and behavioral tests carry them.
+
+## Suitability and disclosure
+
+Decision 1, product manager under maintainer delegation, 2026-09-29.
+Keep recognizable `general`, `r15`, `r18` (sexual) and `r18g` (grotesque) labels,
+with independent sexual and grotesque gates: material with both requires both
+opt-ins. Missing assessment is `unassessed`, never `general`. Signed-out viewers
+and people under 15 receive only general-eligible representations; `r15` starts
+at 15, and separate adult opt-ins at 18, subject to
+[market restrictions](../operations/trust-and-safety.md#safety-and-legal-readiness).
+
+Imports retain source meaning: VNDB age 18 maps to `r18`, image sexual level 2
+is not stored, image violence level 2 maps to `r18g`, and Bangumi `nsfw` maps to
+`r18`. The separate [VNDB image dimensions](https://api.vndb.org/kana)
+and [Bangumi schema](https://bangumi.github.io/api/) motivate source-qualified
+mapping rather than treating absence as clearance. These are product mappings,
+not proof that provider ratings establish legal eligibility.
+
+External indexing and share previews use the anonymous representation; internal
+search follows the viewer's eligibility. Adult material never enters email or
+push. Originals, media, derivatives, history, caches and exports follow the same
+policy; Realms can strengthen it, never weaken it. Classification cannot override
+suitability. Neither sexual disclosure nor community agreement implies consent
+to grotesque content; that is why the gates are independent.

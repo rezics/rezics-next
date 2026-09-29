@@ -52,3 +52,18 @@ Logical candidate, call and byte ceilings are code contracts. They do not prove
 physical engine work or mixed-load latency at rollout scale. The
 [complexity procedure](../testing/complexity.md) and
 [recorded qualification](../plan/qualification.md) carry measured scope and runs.
+
+## Multilingual retrieval direction
+
+Decision 18, product manager under maintainer delegation, 2026-09-29.
+Build one retrieval capability on Jena/Lucene: per-language analysis, aliases
+and readings, Simplified/Traditional folding, and Works, people, Realms, posts
+and Concepts in cross-entity results. Main owns typo recovery and discovery with
+real explanations and reader controls. Introduce a dedicated search engine only
+after a measured advantage.
+
+The reason is to preserve shared graph/disclosure semantics while improving
+language relevance, rather than duplicate them in a second service prematurely.
+[Jena text](https://jena.apache.org/documentation/query/text-query.html)
+provides the binding; language quality, recovery and mixed-load performance still
+require REZICS measurements under the selected language contract.

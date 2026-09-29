@@ -25,3 +25,18 @@ owns saved bodies and publication outcomes.
 The first fixed native text release pins one selected published draft. Broader
 multi-member and cross-owner release closure remains a separate dependency; an
 exact release must never imply coverage that its manifest did not seal.
+
+## Durable custody
+
+Decision 10, product manager under maintainer delegation, 2026-09-29.
+People must be able to recover what they authored and what they read. Existing
+immutable revision and release owners above supply the basis; the remaining
+custody work is stable block locators, historical dependency manifests,
+recoverable local pending writes, explicit conversion losses, saved empty drafts,
+private draft media, restore as a new revision and lossless export/re-import.
+
+Keeping identity and exact historical selection prevents comments and evidence
+from moving when today's document changes. [W3C Annotation selectors and states](https://www.w3.org/TR/annotation-model/)
+support precise targets, and [Peritext](https://www.inkandswitch.com/peritext/)
+illustrates the difficulty of preserving rich-text intent. Neither establishes
+REZICS's recovery or migration quality; owner tests must qualify those outcomes.

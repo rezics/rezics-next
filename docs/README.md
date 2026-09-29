@@ -35,6 +35,12 @@ and runs worker processes, claims and integration waves through the
 7. [Implementation blueprints](implementation/README.md): graph records, API/events,
    authorization bridge and recoverable package/vertical workflows.
 
+Lasting product decisions: [vertical engine](product/platform-thesis.md),
+[markets and growth](product/markets-and-growth.md), [URLs and SEO](product/urls-and-seo.md),
+and [trust and safety operations](operations/trust-and-safety.md). These pages
+retain intent and evidence independently of the active Goal; installed contracts
+remain in code and the contract owners linked by the Goal's decision index.
+
 ## Document roles
 
 | Owner | Responsibility |
@@ -51,7 +57,7 @@ and runs worker processes, claims and integration waves through the
 | [Development](development/README.md) | Repository organization, generation, development workflow and frontend code boundaries. |
 | [Plan](plan/README.md) | Dependency order, active documentation scope and qualification status. |
 | [Research](research/README.md) | Questions that still affect implementation choices. |
-| [Legal drafts](legal/README.md) | Terms, privacy, ratings, AI, copyright, takedown, child-safety, API and creator-agreement drafts adapted from openly licensed policies (2026-09-29). Not reviewed by counsel; the zero-budget decision in the [Goal](../GOAL.md) accepts that until counsel is affordable. |
+| [Legal drafts](legal/README.md) | Terms, privacy, ratings, AI, copyright, takedown, child-safety, API and creator-agreement drafts adapted from openly licensed policies (2026-09-29). Not reviewed by counsel; the [safety and legal-readiness decision](operations/trust-and-safety.md#safety-and-legal-readiness) records the accepted risk until counsel is affordable. |
 
 ## Implementation and verification
 

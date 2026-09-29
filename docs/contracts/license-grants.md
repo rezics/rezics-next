@@ -17,4 +17,21 @@ and [dated legal/provider evidence](../research/source-data-rights.md) explain
 why corporate status, wiki purpose, NC/ShareAlike labels and fair use require
 material- and use-specific analysis. Exports preserve exact asset/contribution/
 occurrence scope, territory/time, attribution and uncertainty without inventing
-broader permission. The release agreement remains a publication artifact outside this checkout.
+broader permission. The [creator agreement draft](../legal/creator-distribution-agreement-outline.md)
+is a publication artifact awaiting factual and legal review.
+
+## AI disclosure and consent
+
+Decision 3, product manager under maintainer delegation, 2026-09-29.
+Prose, artwork and translations carry revision-aware AI-use declarations
+(none, assisted, generated) and human-review status that readers can filter.
+Declarations remain separate from rights: identifying a method cannot grant
+permission to publish. REZICS does not train on private drafts or reading records
+by default, fabricate reviews, votes or participation, or treat an AI detector as
+a verdict. Automated actors are disclosed.
+
+The reason is reader choice and accountable provenance without claiming machine
+detection establishes authorship. [GitHub's synthetic-media policy](https://github.com/github/site-policy/blob/main/Policies/acceptable-use-policies/github-synthetic-media-and-ai-tools.md)
+is a safety-policy precedent; REZICS's broader reader filtering and private-data
+commitments are product choices. The [public AI-policy draft](../legal/ai-policy.md)
+must describe only implemented practice.
