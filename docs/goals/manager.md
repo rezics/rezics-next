@@ -52,17 +52,20 @@ maintainer changes them.
    the documents that code replaces. Keep documents only for what code cannot
    carry, such as intent, decisions with their reasons, and operating procedures.
    The frontend follows the same principle.
-3. **Spend the Claude week on milestone work, keep the manager alive.** Opus
-   5.5 runs the manager and takes first-of-kind design and review; Sonnet 5.5 is
-   the main Claude worker. Unused allowance is lost at the weekly reset, so aim
-   to spend it, but on milestone work rather than open-ended research. Never let
-   the 5-hour window run out: the manager is also Claude, and if it hits the
-   limit, the Goal stops until the window resets.
+3. **Use at most half the Claude week, keep the manager alive** (2026-09-29).
+   Opus 5.5 runs the manager and takes first-of-kind design and review; Sonnet
+   5.5 is the main Claude worker. Leave at least 50% of each Claude week unused
+   (`goalctl` enforces it through `WEEK_CAP`). Never let the 5-hour window run
+   out: the manager is also Claude, and if it hits the limit, the Goal stops
+   until the window resets.
 4. **Other accounts run until exhausted.** The Codex account (GPT-6 Sol and Luna),
    the Astra account (`codex-1`), the Grok CLI and Cursor Agent (Grok 4.7) have
    no reserve to protect. Use them for whatever they do well until they run
    out; the Grok CLI and Cursor are two separate quotas and two full lanes of
-   feature work, frontend included. The Astra account has usage-limit reset
+   feature work, frontend included. On 2026-09-29 the maintainer asked for every
+   reset credit on both Codex accounts to be spent within 24 hours, at the best
+   value per unit: reset an account only when it hits its limit, never early,
+   and never burn usage on low-value work. GPT-6 Astra runs on both accounts. The Astra account has usage-limit reset
    credits; use one when Astra is exhausted and still the best choice for the
    remaining work.
 5. **Human-role agents.** Opus 5.5, GPT-6 Astra and GPT-6 Sol can take the human
@@ -119,9 +122,10 @@ the import-pipeline and scale design review.
   keep five or fewer, verify with `storybook:test` rather than a Storybook dev
   server, and run one dev server at a time.
 - **Claude 7d.** `goalctl status` projects the week at reset from the recent
-  burn rate. Below 95% it prints `widen`; add Opus workers or raise their effort.
-  New Claude dispatch stops when the week would run out before its reset, or at
-  97% used, so the rest carries the manager to the reset.
+  burn rate against `WEEK_CAP` (50%). Ten points below the cap it prints
+  `widen`. New Claude dispatch stops when the week would pass five points below
+  the cap before its reset, or at that level used, so the rest carries the
+  manager to the reset.
 - **Claude 5h.** New Claude dispatch stops while the 5-hour projection reaches
   95% at its reset, and at 95% used only merge and test continue. When Claude is
   paused, continue on other engines; the manager's own turns stay short while

@@ -105,10 +105,10 @@ describe('goalctl runtime policy', () => {
     // 50% after 1h projects 250%: stop early instead of waiting for 80%.
     expect(usageLevel(snap(50, 4 * 3600), now * 1000).level).toBe('restricted');
     expect(usageLevel(snap(96, 60), now * 1000).level).toBe('critical');
-    // The weekly window stops new Claude work only when it would run out before its reset:
-    // 90% after 4 days projects about 157%.
-    expect(usageLevel(snap(10, 4 * 3600, 90), now * 1000)).toMatchObject({ level: 'restricted' });
-    expect(usageLevel(snap(10, 4 * 3600, 97), now * 1000)).toMatchObject({ level: 'critical' });
+    // The weekly window stops new Claude work when it would pass the cap's margin before its reset:
+    // under the default 50% cap, 30% after 4 days projects about 53%.
+    expect(usageLevel(snap(10, 4 * 3600, 30), now * 1000)).toMatchObject({ level: 'restricted' });
+    expect(usageLevel(snap(10, 4 * 3600, 45), now * 1000)).toMatchObject({ level: 'critical' });
   });
 
   test('advises widening Claude work while the week would end unspent', () => {

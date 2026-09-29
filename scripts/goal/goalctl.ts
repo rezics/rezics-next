@@ -226,12 +226,14 @@ const SEVEN_DAYS = 7 * 24 * 3600;
 // window at PROJECTED_LIMIT or more, and at CRITICAL_USED only merge and test continue.
 export const PROJECTED_LIMIT = 95;
 export const CRITICAL_USED = 95;
-// The 7d window is a budget to spend, not one to save: below WEEK_TARGET at reset the report advises
-// widening Claude work. New Claude work stops only when the week would run out before its reset or
-// WEEK_CRITICAL_USED is reached, so the rest still carries the manager to the reset.
-export const WEEK_TARGET = 95;
-export const WEEK_PROJECTED_LIMIT = 100;
-export const WEEK_CRITICAL_USED = 97;
+// The 7d window is spent up to WEEK_CAP, the share of the week the maintainer allows (2026-09-29: keep at
+// least half the week unused, so 50). Below WEEK_TARGET at reset the report advises widening Claude work.
+// New Claude work stops when the week would pass WEEK_PROJECTED_LIMIT before its reset or WEEK_CRITICAL_USED
+// is reached; the five points below the cap carry the manager to the reset.
+export const WEEK_CAP = Number(process.env.GOAL_CLAUDE_WEEK_CAP ?? 50);
+export const WEEK_TARGET = WEEK_CAP - 10;
+export const WEEK_PROJECTED_LIMIT = WEEK_CAP - 5;
+export const WEEK_CRITICAL_USED = WEEK_CAP - 5;
 
 function resetSeconds(value: string | number | undefined): number | undefined {
   if (typeof value === 'number') return value > 1e12 ? value / 1000 : value;
