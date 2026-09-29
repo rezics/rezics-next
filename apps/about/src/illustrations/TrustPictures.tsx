@@ -318,8 +318,8 @@ function Trackers({ words }: Words) {
 function Safety({ words }: Words) {
   const t = words.trust;
   return (
-    <ul className="flex w-full max-w-sm flex-col gap-2">
-      <li className={row}>
+    <ul className="flex w-full max-w-md flex-col gap-2">
+      <li className={cn(row, 'flex-wrap')}>
         <span className="flex items-center gap-2">
           <ShieldCheck aria-hidden className="size-4 text-primary" />
           {t.abuseImagery}
@@ -328,7 +328,7 @@ function Safety({ words }: Words) {
           {t.blockedAtUpload}
         </Badge>
       </li>
-      <li className={row}>
+      <li className={cn(row, 'flex-wrap')}>
         <span className="flex items-center gap-2">
           <Clock aria-hidden className="size-4 text-primary" />
           {t.intimateImages}

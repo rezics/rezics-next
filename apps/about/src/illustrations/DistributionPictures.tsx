@@ -236,7 +236,7 @@ function Update({ words }: Words) {
             <span className="flex items-center gap-2 text-muted-foreground">
               {version.note}
               {version.latest ? (
-                <Badge variant="soft" size="sm">
+                <Badge variant="outline" size="sm">
                   {words.desk.latest}
                 </Badge>
               ) : null}

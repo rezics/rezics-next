@@ -30,7 +30,7 @@ const Dim = ({ children }: { children: ReactNode }) => (
   <span className="text-muted-foreground">{children}</span>
 );
 
-const path = '/libraries/7d1f…/imports';
+const path = '/imports';
 
 /* ---------- Hero ---------- */
 
@@ -213,7 +213,7 @@ function Follow({ words }: Words) {
                 row,
                 'font-mono text-xs',
                 event.id === 'evt_102' && 'border-primary bg-accent',
-                !event.done && 'border-dashed opacity-80',
+                !event.done && 'border-dashed',
               )}
             >
               <span>{event.id}</span>
@@ -291,7 +291,7 @@ function Portal({ words }: Words) {
       {['GET /works/{id}/editions', 'POST /libraries/{id}/imports'].map((operation) => (
         <li key={operation} className={cn(row, 'font-mono text-xs')}>
           <span>{operation}</span>
-          <Badge variant="soft" size="sm" className="font-sans">
+          <Badge variant="outline" size="sm" className="font-sans">
             {words.api.generated}
           </Badge>
         </li>

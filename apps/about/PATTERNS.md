@@ -38,7 +38,10 @@ statement, ledger, call to action. Pass pictures as named slots:
 ```
 
 Pages whose copy does not fit the order (home, roadmap) compose the section components
-directly, as `pages/[locale]/index.astro` does. The home page shows the whole product, not one
+directly, as `pages/[locale]/index.astro` does. The roadmap opens with a route to launch (the five
+stages as stops, the ribbon on the one being built), tells the stages as a pinned story whose
+frames show where each sits and a few of its capabilities, files every capability in Now, Next
+and Later columns, and ends on a statement about dates. The home page shows the whole product, not one
 line: hero deck, word band, then its three messages (a work in your language, the whole
 community, fans from every platform), every kind of story, the product lines, why, the stages
 and the call to action. Each message is a heading, one interactive or arriving picture and
@@ -75,13 +78,24 @@ Reusable pieces: `SeriesBoard` (a series across editions; `marks`, `upcoming`, `
 `SeriesShelf`, `WikiGrowth` (`stage` 1–4), `WikiArticle`, `ContributionFlow` (`stage`),
 `SpamReview`, `RealmGathering` (one story's versions on five platforms leading into one Realm
 conversation), `KindsGrid` (every kind of story with one example each), `LineVignette` (one
-per product line) and `Vignette` (showcase tiles by page and key). `sample.ts` also holds
+per product line) and `Vignette` (showcase tiles by page and key). Every line page has its own
+file of pictures: a hero, one `*Flow` component with a `stage` prop for its four story steps,
+and a record of vignettes registered in `Vignettes.tsx`. `ReadingPictures` (`LibraryHero`,
+`ImportFlow`), `SerialPictures` (`ChapterDesk`, `SerialFlow`), `AcgnPictures` (`ThreeReleases`,
+`AcgnFlow`), `CommunityPictures` (`RealmScene`, a Realm conversation beside the wiki it feeds, and
+`RealmFlow`), `DistributionPictures` (`PurchaseHero`, `StoreFlow`), `DeveloperPictures`
+(`TwoClients`, `ApiFlow`), `TrustPictures` (`SuitabilityChoices`, `CaseFlow`) and
+`RoadmapPictures` (`RoadmapRoute`, `StageFrame`). Shared parts live in `parts.tsx` (`row`, the
+`Words` and `Picture` types, `Connect`). `sample.ts` also holds
 `kindsOfStory` (a work per kind, named in several scripts), `lanternRecord` (one record in
-four reading languages) and `lanternThread` (posts and wiki facts by chapter). G-481's
-`ImportReview`, `ChapterResume` and `ReleaseTable` pictured the old home page's four scenarios
-(an import review, a chapter resumed on a phone, a visual novel's releases); they fit
-`/reading`, `/serial-fiction` and `/acgn` and can be restored from commit `706be2e1` (`git
-show 706be2e1:apps/about/src/illustrations/<name>.tsx`).
+four reading languages) and `lanternThread` (posts and wiki facts by chapter).
+
+Rules the pictures follow: sample content keeps its own `lang` and interface words come from
+`messages/illustrations.ts`; code and identifiers carry `lang="en" translate="no"`; a tile whose
+text is the whole point may go without a picture, but every hero and story step has one. Muted
+text must reach 4.5:1 on its surface, so never dim a whole row with `opacity`; use a dashed
+border for "not yet" and reserve `soft` small badges for paper, not tinted rows (axe checks both).
+A cover shows its title only from 4.5 rem wide (`WorkCover`); narrower ones are colour and shape.
 
 ## Motion
 
