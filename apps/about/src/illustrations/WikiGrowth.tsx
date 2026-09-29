@@ -159,8 +159,8 @@ export function WikiGrowth({
           {stage === 4 ? (
             <span className="mt-2.5 block h-3 w-3/4 rounded-full bg-muted" />
           ) : (
-            <p lang="en" className="mt-1 font-work-title leading-relaxed">
-              {fact.text}
+            <p className="mt-1 font-work-title leading-relaxed">
+              <span lang="en">{fact.text}</span>
               <sup className="ms-0.5 font-sans text-xs font-semibold text-primary">
                 {fill(words.shelf.chapter, { n: fact.chapter })}
               </sup>

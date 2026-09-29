@@ -98,7 +98,7 @@ export function RealmGathering({ words }: { words: IllustrationCopy }) {
                 className="w-full rounded-[6px] shadow-[0_18px_30px_-18px_rgb(0_0_0/0.6)]"
               />
             </div>
-            <span className="text-center text-xs font-semibold text-muted-foreground sm:text-sm">
+            <span className="max-w-full text-center text-xs font-semibold text-muted-foreground [overflow-wrap:anywhere] sm:text-sm">
               {realm[version.key]}
             </span>
           </li>
@@ -129,9 +129,7 @@ export function RealmGathering({ words }: { words: IllustrationCopy }) {
             <UsersRound className="size-5" />
           </span>
           <div className="min-w-0">
-            <p lang="en" className="font-work-title text-xl font-semibold">
-              {realm.name}
-            </p>
+            <p className="font-work-title text-xl font-semibold">{realm.name}</p>
             <p className="text-sm text-muted-foreground">{realm.members}</p>
           </div>
         </div>
@@ -145,7 +143,11 @@ export function RealmGathering({ words }: { words: IllustrationCopy }) {
             >
               <p className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <span className="font-semibold">{fan.by}</span>
-                <Badge variant="soft" size="sm">
+                <Badge
+                  variant="soft"
+                  size="sm"
+                  className="h-auto max-w-full whitespace-normal py-0.5"
+                >
                   {realm.cameFrom[fan.from]}
                 </Badge>
               </p>

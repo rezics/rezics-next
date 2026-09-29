@@ -74,7 +74,7 @@ function Propose({ words }: { words: IllustrationCopy }) {
             style={{ '--at': index * 6 } as CSSProperties}
             className="rounded-2xl border border-border bg-background p-3"
           >
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <Badge variant="outline" size="md" lang="en">
                 {item.tag}
               </Badge>
@@ -108,7 +108,7 @@ function Review({ words }: { words: IllustrationCopy }) {
             key={item.tag}
             data-arrive
             style={{ '--at': index * 6 } as CSSProperties}
-            className="flex items-center justify-between gap-3"
+            className="flex flex-wrap items-center justify-between gap-3"
           >
             <Badge variant="outline" size="md" lang="en">
               {item.tag}

@@ -81,7 +81,7 @@ function Credential({ words }: Words) {
   const a = words.api;
   return (
     <>
-      <p className="flex items-center justify-between gap-3">
+      <p className="flex flex-wrap items-center justify-between gap-3">
         <span className="flex items-center gap-2 font-semibold">
           <KeyRound aria-hidden className="size-4 text-primary" />
           {a.credential}
@@ -148,7 +148,7 @@ function Apply({ words }: Words) {
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <p className="flex items-center justify-between gap-2 text-sm">
+        <p className="flex flex-wrap items-center justify-between gap-2 text-sm">
           <span className="font-semibold">{a.firstAttempt}</span>
           <Badge variant="warning" size="sm">
             <Clock aria-hidden />
@@ -163,11 +163,11 @@ function Apply({ words }: Words) {
         </Code>
       </div>
       <div data-arrive className="flex flex-col gap-1.5">
-        <p className="flex items-center justify-between gap-2 text-sm">
+        <p className="flex flex-wrap items-center justify-between gap-2 text-sm">
           <span className="font-semibold">{a.retry}</span>
-          <Badge variant="success" size="sm">
+          <Badge variant="success" size="sm" className="h-auto whitespace-normal py-0.5">
             <Check aria-hidden />
-            {a.sameReceipt}
+            <span>{a.sameReceipt}</span>
           </Badge>
         </p>
         <Code className="border-primary">
@@ -287,10 +287,12 @@ function Sdk({ words }: Words) {
 
 function Portal({ words }: Words) {
   return (
-    <ul lang="en" translate="no" className="flex w-full max-w-sm flex-col gap-2">
+    <ul className="flex w-full max-w-sm flex-col gap-2">
       {['GET /works/{id}/editions', 'POST /libraries/{id}/imports'].map((operation) => (
         <li key={operation} className={cn(row, 'font-mono text-xs')}>
-          <span>{operation}</span>
+          <span lang="en" translate="no">
+            {operation}
+          </span>
           <Badge variant="outline" size="sm" className="font-sans">
             {words.api.generated}
           </Badge>

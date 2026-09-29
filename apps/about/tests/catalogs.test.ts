@@ -49,39 +49,18 @@ test('placeholders such as {n} survive translation', () => {
   }
 });
 
-test('the catalogs awaiting translation are exactly the ones G-482 translates', () => {
-  // G-481 wrote these in English only (`defineEnglishCopy`); G-482 translates them and
-  // empties this list. Nothing else may fall back to English.
+test('every catalog is translated with no English fallback', () => {
   expect(
     Object.entries(catalogs)
       .filter(([, catalog]) => awaitsTranslation(catalog))
-      .map(([name]) => name)
-      .sort(),
-  ).toEqual(
-    [
-      'features',
-      'illustrations',
-      'home',
-      'reading',
-      'light-novels',
-      'serial-fiction',
-      'acgn',
-      'wikis',
-      'agents',
-      'communities',
-      'distribution',
-      'developers',
-      'trust',
-      'roadmap',
-    ].sort(),
-  );
+      .map(([name]) => name),
+  ).toEqual([]);
 });
 
 test('only the English catalogs may contain untranslated English sentences', () => {
   // A copy-paste of English into another locale would pass the key check; the
   // long, sentence-like values of a locale must differ from English unless they are names.
   for (const [name, catalog] of Object.entries(catalogs)) {
-    if (awaitsTranslation(catalog)) continue;
     const english = new Map(leaves(catalog.en));
     for (const locale of uiLocales.filter((locale) => locale !== 'en')) {
       for (const [path, text] of leaves(catalog[locale])) {
@@ -127,5 +106,14 @@ test('every feature takes its status from the milestone that delivers it', () =>
     }
     expect(horizon, id).toBe(milestoneHorizon[milestone]);
     expect(status, id).toBe(horizon === 'now' ? 'in-development' : 'planned');
+  }
+});
+
+test('Realm is an English product name; other locales use their word for a community', () => {
+  for (const [name, catalog] of Object.entries(catalogs)) {
+    for (const locale of uiLocales.filter((locale) => locale !== 'en')) {
+      for (const [path, text] of leaves(catalog[locale]))
+        expect(text, `${name}/${locale}/${path}`).not.toMatch(/\bRealms?\b/);
+    }
   }
 });

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { copyStatus } from '../../src/copy-status.ts';
+import { catalogs } from '../../src/i18n/messages/index.ts';
 import { localeNames, uiLocales } from '../../src/i18n/locales.ts';
 import { pageIds, pagePath } from '../../src/pages.ts';
 import { axeViolations, formatViolations } from './axe.ts';
@@ -11,6 +12,40 @@ const viewports = {
   phone: { width: 390, height: 844 },
   desktop: { width: 1440, height: 900 },
 } as const;
+
+/** Catalog prose must keep the interface language, including labels inside a foreign-language sample. */
+function copyLeaves(value: unknown): string[] {
+  return typeof value === 'string'
+    ? [value]
+    : Object.values(value as Record<string, unknown>).flatMap(copyLeaves);
+}
+
+async function translatedLabelsHaveTheirLanguage(page: Page, locale: (typeof uiLocales)[number]) {
+  if (locale === 'en') return;
+  const english = new Set(copyLeaves(catalogs.illustrations.en));
+  const translated = copyLeaves(catalogs.illustrations[locale]).filter(
+    (value) => !english.has(value) && !value.includes('{'),
+  );
+  const mismatches = await page.locator('main').evaluate(
+    (main, { locale, translated }) => {
+      const labels = new Set(translated);
+      const mismatches: string[] = [];
+      const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        const text = node.textContent?.trim() ?? '';
+        if (!labels.has(text)) continue;
+        // The decorative word band deliberately repeats "Story" in many content languages.
+        if (node.parentElement?.closest('.word-band')) continue;
+        const language = node.parentElement?.closest('[lang]')?.getAttribute('lang');
+        if (language !== locale) mismatches.push(`${text}: ${language}`);
+      }
+      return mismatches;
+    },
+    { locale, translated },
+  );
+  expect(mismatches, 'translated illustration labels inherit the UI locale').toEqual([]);
+}
 
 /** The notify island hydrates when it scrolls into view; wait for it so a click is handled by React. */
 async function formReady(page: Page) {
@@ -61,6 +96,22 @@ async function fitsWidth(page: Page) {
   expect(scroll, 'horizontal overflow').toBeLessThanOrEqual(client);
 }
 
+/** A page can fit while a translated badge or chapter name is clipped inside its container. */
+async function labelsFit(page: Page) {
+  const clipped = await page
+    .locator('main .chapter-name, main [data-slot="badge"]')
+    .evaluateAll((labels) =>
+      labels.flatMap((label) => {
+        if (!(label instanceof HTMLElement) || !label.checkVisibility()) return [];
+        return label.scrollWidth > label.clientWidth + 2 ||
+          (label.dataset.slot === 'badge' && label.scrollHeight > label.clientHeight + 2)
+          ? [label.innerText]
+          : [];
+      }),
+    );
+  expect(clipped, 'chapter names and badges keep every translated word visible').toEqual([]);
+}
+
 for (const [viewportName, viewport] of Object.entries(viewports)) {
   for (const scheme of ['light', 'dark'] as const) {
     test.describe(`${viewportName} ${scheme}`, () => {
@@ -73,8 +124,21 @@ for (const [viewportName, viewport] of Object.entries(viewports)) {
           await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
           await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
           await expect(page.locator('main')).toHaveAttribute('data-copy', copyStatus[id]);
+          // Translated copy inherits the route locale; it must not retain the staging English override.
+          await expect(page.locator('main')).not.toHaveAttribute('lang', 'en');
           await fitsWidth(page);
           await settled(page);
+          await labelsFit(page);
+          await translatedLabelsHaveTheirLanguage(page, locale);
+          if (id === 'acgn' && viewportName === 'desktop') {
+            await page.evaluate(() => document.fonts.ready);
+            const lines = await page.locator('.chapter-name').evaluate((heading) => {
+              const range = document.createRange();
+              range.selectNodeContents(heading);
+              return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+            });
+            expect(lines, `${locale} ACGN chapter name at 1440px`).toBe(1);
+          }
           const violations = await axeViolations(page);
           expect(violations, formatViolations(violations)).toEqual([]);
           if (id === 'home') await expect(page.locator('#notify')).toBeAttached();

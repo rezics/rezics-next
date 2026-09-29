@@ -66,7 +66,7 @@ const why = ['native-multilingual', 'portable-data', 'sourced-knowledge', 'api-a
     <div class="page-frame">
       <div class="grid items-start gap-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
         <SectionHeading id="language" title={text.language.title} lede={text.language.lede} class="lg:sticky lg:top-28" />
-        <ListingInPlace client:idle words={{ record: words.record, release: words.release }}
+        <ListingInPlace locale={locale} client:idle words={{ record: words.record, release: words.release }}
           languageNames={{ ja: localeNames.ja, en: localeNames.en, 'zh-Hant': localeNames['zh-Hant'], ko: localeNames.ko }} />
       </div>
       <FeatureList locale={locale} ids={['names-every-script', 'shared-tags', 'reviewed-translations']}

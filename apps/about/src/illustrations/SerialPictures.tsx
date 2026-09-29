@@ -113,7 +113,7 @@ function Revisions({ words }: Words) {
   ] as const;
   return (
     <>
-      <p className="flex items-center justify-between gap-3">
+      <p className="flex flex-wrap items-center justify-between gap-3">
         <span lang="en" className="font-work-title text-lg font-semibold">
           {serial.title}
         </span>
@@ -176,7 +176,7 @@ function Schedule({ words }: Words) {
               {reader.own ? (
                 <span className="font-semibold">{d.yourTime}</span>
               ) : (
-                <span lang="en">{fill(d.readerTime, { city: reader.city })}</span>
+                <span>{fill(d.readerTime, { city: reader.city })}</span>
               )}
             </span>
             <span className="font-semibold tabular-nums">
@@ -369,9 +369,7 @@ export function AiDeclaration({ words }: Words) {
           </li>
         ))}
       </ul>
-      <p lang="en" className="text-sm text-muted-foreground">
-        {d.aiDetail}
-      </p>
+      <p className="text-sm text-muted-foreground">{d.aiDetail}</p>
     </div>
   );
 }

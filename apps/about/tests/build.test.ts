@@ -39,12 +39,10 @@ test('every page exists in every locale with its language and direction set', ()
   }
 });
 
-test('content still in English is marked English on every other locale', () => {
-  // While G-482 translates, pages read English catalogs; <main> must say so.
-  for (const { locale, path } of pages) {
+test('every page inherits its locale instead of marking translated copy as English', () => {
+  for (const { path } of pages) {
     const main = html(path).match(/<main id="skip-nav-content"[^>]*>/)![0];
-    if (locale === 'en') expect(main, path).not.toContain(' lang=');
-    else expect(main, path).toContain('lang="en"');
+    expect(main, path).not.toContain(' lang=');
   }
 });
 

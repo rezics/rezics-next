@@ -83,8 +83,8 @@ function Fact({
         marked ? 'border-primary ring-2 ring-primary/25' : 'border-border',
       )}
     >
-      <p lang="en" className="font-work-title font-semibold">
-        {fact.text}
+      <p className="font-work-title font-semibold">
+        <span lang="en">{fact.text}</span>
         <sup className="ms-0.5 font-sans text-xs font-semibold text-primary">
           {fill(words.shelf.chapter, { n: fact.chapter })}
         </sup>
@@ -114,9 +114,7 @@ export function RealmScene({ words }: Words) {
         <span className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
           <UsersRound aria-hidden className="size-5" />
         </span>
-        <p lang="en" className="font-work-title text-xl font-semibold">
-          {words.realm.name}
-        </p>
+        <p className="font-work-title text-xl font-semibold">{words.realm.name}</p>
       </div>
       <div className="grid items-start gap-4 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
         <div>
@@ -162,9 +160,7 @@ function Rules({ words }: Words) {
   return (
     <>
       <p className="flex flex-wrap items-center justify-between gap-2">
-        <span lang="en" className="font-work-title text-lg font-semibold">
-          {words.realm.name}
-        </span>
+        <span className="font-work-title text-lg font-semibold">{words.realm.name}</span>
         <Badge variant="soft" size="md">
           {words.community.sameForEveryone}
         </Badge>
@@ -369,13 +365,13 @@ function WikiOwnership({ words }: Words) {
       <p className={row}>
         <span className="flex items-center gap-2">
           <BookOpen aria-hidden className="size-4 text-primary" />
-          <span lang="en">{words.realm.name}</span>
+          <span>{words.realm.name}</span>
         </span>
         <Badge variant="soft" size="sm">
           {c.knowledge}
         </Badge>
       </p>
-      <p className={row}>
+      <p className={cn(row, 'flex-wrap')}>
         <span>{c.agentsMayHelp}</span>
         <Badge variant="outline" size="sm">
           <Lock aria-hidden />
@@ -415,7 +411,7 @@ function Cases({ words }: Words) {
           key={item.reason}
           className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
         >
-          <p className="flex items-center justify-between gap-2">
+          <p className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-semibold">{item.reason}</span>
             {item.badge ? (
               <Badge variant="warning" size="sm">

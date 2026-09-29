@@ -320,7 +320,6 @@ function Connected({ words }: Words) {
         {tabs.map((tab, index) => (
           <li
             key={tab}
-            lang={index === 1 ? 'en' : undefined}
             className={cn(
               'rounded-full px-3 py-1 text-sm font-semibold',
               index === 0 ? 'bg-(--cloth-ink) text-(--cloth)' : 'border border-current opacity-75',

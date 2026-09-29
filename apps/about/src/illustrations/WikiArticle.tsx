@@ -32,15 +32,27 @@ export function WikiArticle({ words, className }: { words: IllustrationCopy; cla
         </Badge>
       </div>
       <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_12rem]">
-        <article lang="en">
-          <h3 className="font-work-title text-3xl font-semibold">{world.kaede}</h3>
+        <article>
+          <h3 lang="en" className="font-work-title text-3xl font-semibold">
+            {world.kaede}
+          </h3>
           <p className="mt-3 font-work-title leading-relaxed">
-            Kaede arrives at the Lantern Archive on the last ferry of the year, carrying a letter of
-            apprenticeship{cite(words, 1)}. The archive lights one lantern for every book on loan,
-            and she is given the task of tending them{cite(words, 4)}.
+            <span lang="en">
+              Kaede arrives at the Lantern Archive on the last ferry of the year, carrying a letter
+              of apprenticeship
+            </span>
+            {cite(words, 1)}
+            <span lang="en">
+              . The archive lights one lantern for every book on loan, and she is given the task of
+              tending them
+            </span>
+            {cite(words, 4)}.
           </p>
           <p className="mt-3 font-work-title leading-relaxed">
-            Her teacher, the keeper Ren Tachibana, trusts her with the marsh ledgers after the flood
+            <span lang="en">
+              Her teacher, the keeper Ren Tachibana, trusts her with the marsh ledgers after the
+              flood
+            </span>
             {cite(words, 9)}.
           </p>
         </article>
@@ -58,8 +70,8 @@ export function WikiArticle({ words, className }: { words: IllustrationCopy; cla
             </div>
             <div>
               <dt className="text-muted-foreground">{w.teacher}</dt>
-              <dd lang="en" className="font-semibold">
-                {world.ren}
+              <dd className="font-semibold">
+                <span lang="en">{world.ren}</span>
                 {cite(words, 9)}
               </dd>
             </div>

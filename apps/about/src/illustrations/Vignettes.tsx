@@ -341,7 +341,7 @@ function Migration({ words }: Words) {
 function Builder({ words }: Words) {
   return (
     <div className="w-full max-w-sm rounded-xl border border-border bg-background p-3 text-sm">
-      <p className="flex items-center justify-between gap-2">
+      <p className="flex flex-wrap items-center justify-between gap-2">
         <span lang="en" className="font-semibold">
           {world.archive}
         </span>
@@ -350,8 +350,8 @@ function Builder({ words }: Words) {
           {words.agent.proposedFact}
         </Badge>
       </p>
-      <p lang="en" className="mt-2 font-work-title">
-        Lights one lantern for every book on loan.
+      <p className="mt-2 font-work-title">
+        <span lang="en">Lights one lantern for every book on loan.</span>
         <sup className="ms-0.5 font-sans text-xs font-semibold text-primary">
           {fill(words.shelf.chapter, { n: 4 })}
         </sup>

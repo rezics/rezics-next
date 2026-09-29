@@ -164,7 +164,7 @@ function Choose({ words }: Words) {
               authors={[saltMarsh.author]}
               className="w-8 shrink-0 rounded-[2px]"
             />
-            <span className="text-sm">
+            <span className="min-w-0 text-sm [overflow-wrap:anywhere]">
               <span className="block font-semibold tabular-nums">{year}</span>
               <span className="block text-muted-foreground">{words.shelf.paperback}</span>
             </span>
@@ -211,7 +211,7 @@ function Upload({ words }: Words) {
         className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary/50 bg-background px-4 py-9 text-center"
       >
         <FileSpreadsheet aria-hidden className="size-9 text-primary" />
-        <p lang="en" translate="no" className="font-mono text-sm font-semibold">
+        <p translate="no" className="font-mono text-sm font-semibold">
           {words.importer.file}
         </p>
         <p className="text-sm text-muted-foreground">{words.library.sources}</p>
@@ -267,7 +267,7 @@ function Resume({ words }: Words) {
               className="w-10 shrink-0 rounded-[3px]"
             />
             <div className="min-w-0 flex-1">
-              <p className="flex items-baseline justify-between gap-2">
+              <p className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-2">
                 <span lang={read.lang} className="truncate font-work-title font-semibold">
                   {read.title}
                 </span>

@@ -59,7 +59,11 @@ export function ThreeReleases({ words }: Words) {
               <p lang={release.lang} className="font-semibold">
                 {localeNames[release.lang]}
               </p>
-              <Badge variant={kinds[release.kind].variant} size="md">
+              <Badge
+                variant={kinds[release.kind].variant}
+                size="md"
+                className="h-auto max-w-full whitespace-normal py-0.5 text-center [overflow-wrap:anywhere]"
+              >
                 {kinds[release.kind].name}
               </Badge>
               <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -328,7 +332,7 @@ function Season({ words }: Words) {
   const anime = kind('anime');
   return (
     <ul className="flex w-full max-w-xs flex-col gap-2">
-      <li className={row}>
+      <li className={cn(row, 'flex-wrap')}>
         <span className="flex items-center gap-3">
           <WorkCover
             kind={anime.cover}
@@ -421,7 +425,7 @@ function Credits({ words }: Words) {
             </Badge>
           </p>
           {credit.character ? (
-            <p lang="en" className="mt-0.5 text-muted-foreground">
+            <p className="mt-0.5 text-muted-foreground">
               {fill(a.asCharacter, { name: credit.character })}
             </p>
           ) : null}
@@ -437,7 +441,7 @@ function Zone({ words }: Words) {
   const shown = ['anime', 'game', 'manga'] as const;
   return (
     <div className="flex w-full max-w-sm flex-col gap-4">
-      <ul className="flex gap-1.5">
+      <ul className="flex flex-wrap gap-1.5">
         {[tabs.seasons, tabs.releases, tabs.discussion].map((tab, index) => (
           <li
             key={tab}

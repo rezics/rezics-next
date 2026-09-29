@@ -1,7 +1,7 @@
 import type { PageId } from '../../pages.ts';
 import { defineCopy } from '../define.ts';
 
-/** Shared chrome: header, footer, status names and the notify form. Copy marked draft is replaced in G-481. */
+/** Shared chrome: header, footer, status names and the notify form. */
 export interface SiteCopy {
   brand: { tagline: string; description: string };
   skip: string;
@@ -63,9 +63,9 @@ export interface SiteCopy {
 
 const en: SiteCopy = {
   brand: {
-    tagline: 'Read across languages. Keep it all.',
+    tagline: 'Every story. Every language. One home.',
     description:
-      'REZICS is a home for readers and writers of novels, visual novels, anime and manga: one library, every language and edition.',
+      'Web novels, light novels, books, visual novels, anime, manga, games and more, each with a complete page in the language you read, a whole community around it, and fans from every platform in one place.',
   },
   skip: 'Skip to content',
   header: {
@@ -79,7 +79,10 @@ const en: SiteCopy = {
     cta: 'Get notified',
   },
   pages: {
-    home: { name: 'REZICS', summary: 'One story. Every language and edition. Yours to keep.' },
+    home: {
+      name: 'REZICS',
+      summary: 'Every story, every language, and fans together beyond any one platform.',
+    },
     reading: { name: 'Reading', summary: 'A library that remembers every edition.' },
     'light-novels': {
       name: 'Light novels',
@@ -90,7 +93,7 @@ const en: SiteCopy = {
       summary: 'Write chapter by chapter. Read without losing your place.',
     },
     acgn: {
-      name: 'Visual novels, anime and manga',
+      name: 'ACGN',
       summary: 'The release you can play, the episode you are on.',
     },
     wikis: { name: 'Wikis', summary: 'Wikis with sources, and a world bible for authors.' },
@@ -157,9 +160,9 @@ export const site = defineCopy<SiteCopy>({
   en,
   'zh-Hant': {
     brand: {
-      tagline: '跨越語言閱讀，全都留在身邊。',
+      tagline: '所有故事。所有語言。共同的家。',
       description:
-        'REZICS 是小說、視覺小說、動畫與漫畫讀者與作者的家：一個書庫，涵蓋每一種語言與版本。',
+        '網路小說、輕小說、書籍、視覺小說、動畫、漫畫、遊戲……每部作品都有完整的介紹，以你閱讀的語言呈現，還有完整的社群，讓來自各個平台的同好相聚。',
     },
     skip: '跳到主要內容',
     header: {
@@ -173,18 +176,18 @@ export const site = defineCopy<SiteCopy>({
       cta: '通知我',
     },
     pages: {
-      home: { name: 'REZICS', summary: '同一個故事，每種語言與版本，永遠屬於你。' },
+      home: { name: 'REZICS', summary: '所有故事、所有語言，讓同好跨越平台相聚。' },
       reading: { name: '閱讀', summary: '記得每一個版本的書庫。' },
       'light-novels': { name: '輕小說', summary: '一部系列的每一冊、每種翻譯，盡在一處。' },
-      'serial-fiction': { name: '連載小說', summary: '一章一章地寫，讀到哪裡都不會迷路。' },
-      acgn: { name: '視覺小說、動畫與漫畫', summary: '能玩的發行版本，正在看的那一集。' },
+      'serial-fiction': { name: '連載小說', summary: '一章章寫下去，隨時接著上次讀。' },
+      acgn: { name: 'ACGN', summary: '能玩的發行版本，正在看的那一集。' },
       wikis: { name: 'Wiki', summary: '附出處的 Wiki，以及作者的世界觀設定集。' },
-      agents: { name: '代理', summary: '代理附上證據提出建議，由人來決定。' },
+      agents: { name: '代理程式', summary: '代理程式附上證據提案，由人決定。' },
       communities: { name: '社群', summary: '為一部作品、一種語言或一個想法而設的社群。' },
-      distribution: { name: '出版', summary: '以讀者能永久保存的檔案販售書籍與遊戲。' },
-      developers: { name: '開發者', summary: '整個產品都是 API，供應用程式與代理使用。' },
+      distribution: { name: '出版', summary: '以能保留的檔案販售書籍與遊戲。' },
+      developers: { name: '開發者', summary: '完整產品都能透過 API 使用，供 App 與代理程式開發。' },
       trust: { name: '信任', summary: '安全、分級、AI 揭露與你的資料。' },
-      roadmap: { name: '路線圖', summary: '邁向上線的五個階段，以及各自的進度。' },
+      roadmap: { name: '開發規劃', summary: '邁向上線的五個階段，以及各自的進度。' },
     },
     footer: {
       products: '產品線',
@@ -229,9 +232,9 @@ export const site = defineCopy<SiteCopy>({
   },
   'zh-Hans': {
     brand: {
-      tagline: '跨越语言阅读，全都留在身边。',
+      tagline: '所有故事。所有语言。共同的家。',
       description:
-        'REZICS 是小说、视觉小说、动画与漫画读者和作者的家：一个书库，涵盖每一种语言与版本。',
+        '网络小说、轻小说、图书、视觉小说、动画、漫画、游戏……每部作品都有完整的介绍，以你阅读的语言呈现，还有完整的社区，让来自各个平台的同好相聚。',
     },
     skip: '跳到主要内容',
     header: {
@@ -245,18 +248,18 @@ export const site = defineCopy<SiteCopy>({
       cta: '通知我',
     },
     pages: {
-      home: { name: 'REZICS', summary: '同一个故事，每种语言与版本，永远属于你。' },
+      home: { name: 'REZICS', summary: '所有故事、所有语言，让同好跨越平台相聚。' },
       reading: { name: '阅读', summary: '记得每一个版本的书库。' },
-      'light-novels': { name: '轻小说', summary: '一部系列的每一册、每种翻译，尽在一处。' },
-      'serial-fiction': { name: '连载小说', summary: '一章一章地写，读到哪里都不会迷路。' },
-      acgn: { name: '视觉小说、动画与漫画', summary: '能玩的发行版本，正在看的那一集。' },
+      'light-novels': { name: '轻小说', summary: '一个系列的每一卷、每种翻译，都在一处。' },
+      'serial-fiction': { name: '连载小说', summary: '一章章写下去，随时接着上次读。' },
+      acgn: { name: 'ACGN', summary: '能玩的发行版本，正在看的那一集。' },
       wikis: { name: 'Wiki', summary: '附出处的 Wiki，以及作者的世界观设定集。' },
       agents: { name: '智能体', summary: '智能体附上证据提出建议，由人来决定。' },
       communities: { name: '社区', summary: '为一部作品、一种语言或一个想法而设的社区。' },
-      distribution: { name: '出版', summary: '以读者能永久保存的文件销售书籍与游戏。' },
+      distribution: { name: '出版', summary: '以能保留的文件销售图书与游戏。' },
       developers: { name: '开发者', summary: '整个产品都是 API，供应用与智能体使用。' },
       trust: { name: '信任', summary: '安全、分级、AI 披露与你的数据。' },
-      roadmap: { name: '路线图', summary: '迈向上线的五个阶段，以及各自的进度。' },
+      roadmap: { name: '开发计划', summary: '迈向上线的五个阶段，以及各自的进度。' },
     },
     footer: {
       products: '产品线',
@@ -265,7 +268,7 @@ export const site = defineCopy<SiteCopy>({
       follow: '关注开发进度',
       languages: '语言',
       rights: 'REZICS Inc.',
-      cookies: '本网站只设置两个 Cookie：语言与主题。没有任何追踪器。',
+      cookies: '本网站只设置两个 Cookie：语言与主题。没有任何跟踪器。',
     },
     status: {
       available: '已提供',
@@ -301,9 +304,9 @@ export const site = defineCopy<SiteCopy>({
   },
   ja: {
     brand: {
-      tagline: '言語をまたいで読み、すべて手元に。',
+      tagline: 'すべての物語。すべての言語。ひとつの居場所。',
       description:
-        'REZICS は、小説・ビジュアルノベル・アニメ・マンガの読者と作り手の場所です。ひとつのライブラリに、あらゆる言語と版。',
+        'Web小説、ライトノベル、本、ビジュアルノベル、アニメ、マンガ、ゲームまで。読める言語で作品の情報を知り、充実したコミュニティで、プラットフォームを越えてファンと出会えます。',
     },
     skip: '本文へスキップ',
     header: {
@@ -319,19 +322,19 @@ export const site = defineCopy<SiteCopy>({
     pages: {
       home: {
         name: 'REZICS',
-        summary: 'ひとつの物語を、あらゆる言語と版で。ずっとあなたのものに。',
+        summary: 'あらゆる物語を、あらゆる言語で。プラットフォームを越えてファンが集まる場所。',
       },
       reading: { name: '読書', summary: 'すべての版を覚えているライブラリ。' },
       'light-novels': {
         name: 'ライトノベル',
         summary: 'シリーズの全巻と全翻訳を、ひとつの場所に。',
       },
-      'serial-fiction': { name: '連載小説', summary: '一話ずつ書き、読んだ場所を見失わない。' },
+      'serial-fiction': { name: '小説連載', summary: '一章ずつ書く。読んだところから続きを。' },
       acgn: {
-        name: 'ビジュアルノベル・アニメ・マンガ',
-        summary: '遊べるリリースと、いま観ている話数。',
+        name: 'ACGN',
+        summary: '遊べる版を見つけ、観た話数を記録。',
       },
-      wikis: { name: 'ウィキ', summary: '出典つきのウィキと、作者のための設定資料集。' },
+      wikis: { name: 'Wiki', summary: '出典つきのWikiと、作者のための世界設定集。' },
       agents: { name: 'エージェント', summary: 'エージェントは根拠を添えて提案し、決めるのは人。' },
       communities: {
         name: 'コミュニティ',
@@ -360,13 +363,13 @@ export const site = defineCopy<SiteCopy>({
     status: {
       available: '提供中',
       inDevelopment: '開発中',
-      next: '次に着手',
-      later: 'その後',
+      next: '次に取り組むこと',
+      later: 'その先',
       availableHelp: '今すぐ使えます。',
       inDevelopmentHelp: 'いま開発しています。',
       nextHelp: '現在の開発の次に取りかかります。',
       laterHelp: 'その後に取りかかります。',
-      legend: 'このサイトの各機能には状態を表示しています：提供中、開発中、次に着手、その後。',
+      legend: '各機能に、提供中・開発中・次に取り組むこと・その先のいずれかを表示しています。',
     },
     motion: { pause: 'アニメーションを一時停止' },
     notify: {
@@ -395,9 +398,9 @@ export const site = defineCopy<SiteCopy>({
   },
   ko: {
     brand: {
-      tagline: '언어를 넘나들며 읽고, 모두 간직하세요.',
+      tagline: '모든 이야기, 모든 언어가 모이는 곳.',
       description:
-        'REZICS는 소설, 비주얼 노벨, 애니메이션, 만화의 독자와 작가를 위한 공간입니다. 하나의 서재에 모든 언어와 판본을 담습니다.',
+        '웹소설, 라이트 노벨, 책, 비주얼 노벨, 애니메이션, 만화, 게임까지. 읽을 수 있는 언어로 작품 정보를 살펴보고, 풍성한 커뮤니티에서 플랫폼을 넘어 팬들과 만납니다.',
     },
     skip: '본문으로 건너뛰기',
     header: {
@@ -411,13 +414,13 @@ export const site = defineCopy<SiteCopy>({
       cta: '알림 받기',
     },
     pages: {
-      home: { name: 'REZICS', summary: '하나의 이야기, 모든 언어와 판본, 언제까지나 내 것으로.' },
+      home: { name: 'REZICS', summary: '모든 이야기와 언어, 플랫폼을 넘어 함께하는 팬들.' },
       reading: { name: '독서', summary: '모든 판본을 기억하는 서재.' },
       'light-novels': { name: '라이트 노벨', summary: '시리즈의 모든 권과 번역을 한곳에.' },
-      'serial-fiction': { name: '연재 소설', summary: '한 화씩 쓰고, 읽던 자리를 잃지 않고 읽기.' },
+      'serial-fiction': { name: '웹소설', summary: '한 화씩 쓰고, 읽던 자리를 잃지 않고 읽기.' },
       acgn: {
-        name: '비주얼 노벨·애니메이션·만화',
-        summary: '플레이할 수 있는 발매판, 지금 보는 화.',
+        name: 'ACGN',
+        summary: '즐길 수 있는 버전과 지금 보고 있는 회차.',
       },
       wikis: { name: '위키', summary: '출처가 있는 위키와 작가를 위한 설정집.' },
       agents: {
@@ -440,7 +443,7 @@ export const site = defineCopy<SiteCopy>({
       follow: '개발 소식 따라가기',
       languages: '언어',
       rights: 'REZICS Inc.',
-      cookies: '이 사이트는 언어와 테마, 두 가지 쿠키만 설정합니다. 트래커는 없습니다.',
+      cookies: '이 사이트는 언어와 테마를 기억하는 쿠키 두 개만 사용합니다. 추적기는 없습니다.',
     },
     status: {
       available: '제공 중',
@@ -479,9 +482,9 @@ export const site = defineCopy<SiteCopy>({
   },
   de: {
     brand: {
-      tagline: 'Über Sprachen hinweg lesen. Alles behalten.',
+      tagline: 'Jede Geschichte. Jede Sprache. Ein Zuhause.',
       description:
-        'REZICS ist ein Zuhause für Leserinnen und Autoren von Romanen, Visual Novels, Anime und Manga: eine Bibliothek, jede Sprache und jede Ausgabe.',
+        'Webromane, Light Novels, Bücher, Visual Novels, Anime, Manga und Spiele: mit vollständigen Seiten in deiner Sprache und einer Community, die Fans über Plattformen hinweg verbindet.',
     },
     skip: 'Zum Inhalt springen',
     header: {
@@ -497,7 +500,7 @@ export const site = defineCopy<SiteCopy>({
     pages: {
       home: {
         name: 'REZICS',
-        summary: 'Eine Geschichte. Jede Sprache und Ausgabe. Für immer deine.',
+        summary: 'Jede Geschichte, jede Sprache: Fans finden über Plattformen hinweg zusammen.',
       },
       reading: { name: 'Lesen', summary: 'Eine Bibliothek, die sich jede Ausgabe merkt.' },
       'light-novels': {
@@ -505,11 +508,11 @@ export const site = defineCopy<SiteCopy>({
         summary: 'Jeder Band und jede Übersetzung einer Reihe an einem Ort.',
       },
       'serial-fiction': {
-        name: 'Serielle Literatur',
+        name: 'Serienromane',
         summary: 'Kapitel für Kapitel schreiben. Lesen, ohne die Stelle zu verlieren.',
       },
       acgn: {
-        name: 'Visual Novels, Anime und Manga',
+        name: 'ACGN',
         summary: 'Die Veröffentlichung, die du spielen kannst, die Folge, bei der du bist.',
       },
       wikis: {
@@ -521,7 +524,7 @@ export const site = defineCopy<SiteCopy>({
         summary: 'Agenten schlagen mit Belegen vor, Menschen entscheiden.',
       },
       communities: {
-        name: 'Realms',
+        name: 'Communitys',
         summary: 'Communitys für eine Geschichte, eine Sprache oder eine Idee.',
       },
       distribution: {
@@ -554,8 +557,8 @@ export const site = defineCopy<SiteCopy>({
       next: 'Als Nächstes',
       later: 'Später',
       availableHelp: 'Funktioniert schon heute.',
-      inDevelopmentHelp: 'Wird gerade gebaut.',
-      nextHelp: 'Folgt auf das, was gerade gebaut wird.',
+      inDevelopmentHelp: 'Wird gerade entwickelt.',
+      nextHelp: 'Folgt auf die aktuelle Entwicklung.',
       laterHelp: 'Kommt danach.',
       legend:
         'Jede Funktion auf dieser Website zeigt ihren Stand: verfügbar, in Entwicklung, als Nächstes oder später.',
@@ -589,15 +592,15 @@ export const site = defineCopy<SiteCopy>({
   },
   fr: {
     brand: {
-      tagline: 'Lisez d’une langue à l’autre. Gardez tout.',
+      tagline: 'Toutes les histoires. Toutes les langues. Un même lieu.',
       description:
-        'REZICS est un lieu pour les lecteurs et les auteurs de romans, de visual novels, d’anime et de manga : une seule bibliothèque, toutes les langues et toutes les éditions.',
+        'Romans web, light novels, livres, visual novels, anime, manga, jeux… Chaque œuvre a sa page dans votre langue et sa communauté, où se retrouvent les fans de toutes les plateformes.',
     },
     skip: 'Aller au contenu',
     header: {
       menu: 'Menu',
       language: 'Langue',
-      products: 'Gammes de produits',
+      products: 'À découvrir',
       theme: 'Thème',
       light: 'Clair',
       dark: 'Sombre',
@@ -607,7 +610,8 @@ export const site = defineCopy<SiteCopy>({
     pages: {
       home: {
         name: 'REZICS',
-        summary: 'Une histoire. Toutes les langues et éditions. À vous pour de bon.',
+        summary:
+          'Toutes les histoires, toutes les langues : les fans se retrouvent au-delà des plateformes.',
       },
       reading: { name: 'Lecture', summary: 'Une bibliothèque qui se souvient de chaque édition.' },
       'light-novels': {
@@ -615,11 +619,11 @@ export const site = defineCopy<SiteCopy>({
         summary: 'Chaque tome et chaque traduction d’une série, au même endroit.',
       },
       'serial-fiction': {
-        name: 'Fiction en feuilleton',
+        name: 'Feuilletons',
         summary: 'Écrire chapitre par chapitre. Lire sans perdre sa page.',
       },
       acgn: {
-        name: 'Visual novels, anime et manga',
+        name: 'ACGN',
         summary: 'La version à laquelle vous pouvez jouer, l’épisode où vous en êtes.',
       },
       wikis: {
@@ -631,7 +635,7 @@ export const site = defineCopy<SiteCopy>({
         summary: 'Les agents proposent, preuves à l’appui ; les humains décident.',
       },
       communities: {
-        name: 'Realms',
+        name: 'Communautés',
         summary: 'Des communautés pour une histoire, une langue ou une idée.',
       },
       distribution: {
@@ -652,7 +656,7 @@ export const site = defineCopy<SiteCopy>({
       },
     },
     footer: {
-      products: 'Gammes de produits',
+      products: 'À découvrir',
       project: 'Le projet',
       openSource: 'Code source',
       follow: 'Suivre le développement',
@@ -666,8 +670,8 @@ export const site = defineCopy<SiteCopy>({
       next: 'Ensuite',
       later: 'Plus tard',
       availableHelp: 'Fonctionne dès aujourd’hui.',
-      inDevelopmentHelp: 'En cours de construction.',
-      nextHelp: 'Suit ce qui est construit en ce moment.',
+      inDevelopmentHelp: 'En cours de développement.',
+      nextHelp: 'Vient juste après le développement en cours.',
       laterHelp: 'Vient après.',
       legend:
         'Chaque fonctionnalité de ce site affiche son état : disponible, en développement, ensuite ou plus tard.',
@@ -699,15 +703,15 @@ export const site = defineCopy<SiteCopy>({
   },
   es: {
     brand: {
-      tagline: 'Lee entre idiomas. Conserva todo.',
+      tagline: 'Todas las historias. Todos los idiomas. Un mismo hogar.',
       description:
-        'REZICS es un hogar para lectores y autores de novelas, novelas visuales, anime y manga: una biblioteca, todos los idiomas y todas las ediciones.',
+        'Novelas web, novelas ligeras, libros, novelas visuales, anime, manga y juegos: cada obra con su página completa en tu idioma y una comunidad que reúne a fans de todas las plataformas.',
     },
     skip: 'Saltar al contenido',
     header: {
       menu: 'Menú',
       language: 'Idioma',
-      products: 'Líneas de producto',
+      products: 'Qué ofrece REZICS',
       theme: 'Tema',
       light: 'Claro',
       dark: 'Oscuro',
@@ -715,18 +719,21 @@ export const site = defineCopy<SiteCopy>({
       cta: 'Avísame',
     },
     pages: {
-      home: { name: 'REZICS', summary: 'Una historia. Cada idioma y edición. Tuya para siempre.' },
+      home: {
+        name: 'REZICS',
+        summary: 'Todas las historias, todos los idiomas: fans unidos más allá de las plataformas.',
+      },
       reading: { name: 'Lectura', summary: 'Una biblioteca que recuerda cada edición.' },
       'light-novels': {
-        name: 'Light novels',
+        name: 'Novelas ligeras',
         summary: 'Cada volumen y cada traducción de una serie, en un solo lugar.',
       },
       'serial-fiction': {
-        name: 'Ficción por entregas',
+        name: 'Por entregas',
         summary: 'Escribe capítulo a capítulo. Lee sin perder tu sitio.',
       },
       acgn: {
-        name: 'Novelas visuales, anime y manga',
+        name: 'ACGN',
         summary: 'La versión que puedes jugar, el episodio por el que vas.',
       },
       wikis: { name: 'Wikis', summary: 'Wikis con fuentes y una biblia del mundo para autores.' },
@@ -735,7 +742,7 @@ export const site = defineCopy<SiteCopy>({
         summary: 'Los agentes proponen con pruebas; las personas deciden.',
       },
       communities: {
-        name: 'Realms',
+        name: 'Comunidades',
         summary: 'Comunidades para una historia, un idioma o una idea.',
       },
       distribution: {
@@ -753,7 +760,7 @@ export const site = defineCopy<SiteCopy>({
       },
     },
     footer: {
-      products: 'Líneas de producto',
+      products: 'Qué ofrece REZICS',
       project: 'El proyecto',
       openSource: 'Código fuente',
       follow: 'Seguir el desarrollo',
@@ -767,8 +774,8 @@ export const site = defineCopy<SiteCopy>({
       next: 'A continuación',
       later: 'Más adelante',
       availableHelp: 'Ya funciona.',
-      inDevelopmentHelp: 'Se está construyendo ahora.',
-      nextHelp: 'Sigue a lo que se construye ahora.',
+      inDevelopmentHelp: 'En desarrollo ahora.',
+      nextHelp: 'Sigue al desarrollo actual.',
       laterHelp: 'Llega después.',
       legend:
         'Cada función de este sitio muestra su estado: disponible, en desarrollo, a continuación o más adelante.',

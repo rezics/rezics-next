@@ -6,11 +6,14 @@ import { useInView } from 'motion/react';
 import * as m from 'motion/react-m';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { fill } from '../i18n/fill.ts';
+import type { UiLocale } from '../i18n/locales.ts';
 import type { IllustrationCopy } from '../i18n/messages/illustrations.ts';
 import { lantern, lanternRecord, type RecordLang } from '../illustrations/sample.ts';
 import { instant, MotionRoot, useMotion, type Motion } from './motion.tsx';
 
 export interface ListingInPlaceProps {
+  /** UI labels keep this language even inside a record shown in another language. */
+  locale: UiLocale;
   words: Pick<IllustrationCopy, 'record' | 'release'>;
   /** Each reading language's name in itself, from `localeNames`; a prop, so the island does not bundle the locale table. */
   languageNames: Record<RecordLang, string>;
@@ -73,7 +76,7 @@ function Swap({
  * marked. Server-rendered in English; once hydrated, it starts in Japanese and turns into
  * English when it first comes into view (not with reduced motion), then follows the reader.
  */
-export function ListingInPlace({ words, languageNames }: ListingInPlaceProps) {
+export function ListingInPlace({ words, languageNames, locale }: ListingInPlaceProps) {
   const [lang, setLang] = useState<RecordLang>('en');
   const [autoplay, setAutoplay] = useState(false);
   // The reset to the original happens out of sight, so it is instant.
@@ -168,7 +171,7 @@ export function ListingInPlace({ words, languageNames }: ListingInPlaceProps) {
                   <span className="text-sm">&nbsp;</span>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    <span lang="en">{text.originalTitle}</span>{' '}
+                    <span lang={locale}>{text.originalTitle}</span>{' '}
                     <span lang="ja" className="font-semibold text-foreground">
                       {lanternRecord.title.ja}
                     </span>
@@ -178,7 +181,7 @@ export function ListingInPlace({ words, languageNames }: ListingInPlaceProps) {
             </Swap>
 
             <dl className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2 text-sm">
-              <dt lang="en" className="text-muted-foreground">
+              <dt lang={locale} className="text-muted-foreground">
                 {text.story}
               </dt>
               <dd>
@@ -202,7 +205,7 @@ export function ListingInPlace({ words, languageNames }: ListingInPlaceProps) {
                   }}
                 </Swap>
               </dd>
-              <dt lang="en" className="text-muted-foreground">
+              <dt lang={locale} className="text-muted-foreground">
                 {text.illustration}
               </dt>
               <dd>
@@ -217,7 +220,7 @@ export function ListingInPlace({ words, languageNames }: ListingInPlaceProps) {
         </div>
 
         <div className="mt-6 border-t border-border pt-5">
-          <p lang="en" className="text-sm font-semibold text-muted-foreground">
+          <p lang={locale} className="text-sm font-semibold text-muted-foreground">
             {text.synopsis}
           </p>
           <Swap active={lang} order={4} motion={motion} langOf={synopsisLang} className="mt-2">
@@ -227,7 +230,7 @@ export function ListingInPlace({ words, languageNames }: ListingInPlaceProps) {
                   {lanternRecord.synopsis[synopsisLang(option)]}
                 </p>
                 {option === 'ko' ? (
-                  <p lang="en" className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                  <p lang={locale} className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                     <span className={badgeVariants({ variant: 'outline', size: 'sm' })}>
                       {text.original}
                     </span>
@@ -244,7 +247,7 @@ export function ListingInPlace({ words, languageNames }: ListingInPlaceProps) {
 
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
           <div>
-            <p lang="en" className="text-sm font-semibold text-muted-foreground">
+            <p lang={locale} className="text-sm font-semibold text-muted-foreground">
               {text.tags}
             </p>
             <Swap active={lang} order={5} motion={motion} className="mt-2">
@@ -260,7 +263,7 @@ export function ListingInPlace({ words, languageNames }: ListingInPlaceProps) {
             </Swap>
           </div>
           <div>
-            <p lang="en" className="text-sm font-semibold text-muted-foreground">
+            <p lang={locale} className="text-sm font-semibold text-muted-foreground">
               {text.editions}
             </p>
             <ul className="mt-2 flex flex-col gap-1.5 text-sm">
@@ -275,7 +278,7 @@ export function ListingInPlace({ words, languageNames }: ListingInPlaceProps) {
                   <span lang={edition.lang} className="truncate font-semibold">
                     {edition.title}
                   </span>
-                  <span lang="en" className="shrink-0 text-muted-foreground">
+                  <span lang={locale} className="shrink-0 text-muted-foreground">
                     {edition.lang === 'ja' ? words.release.original : words.release.official}
                   </span>
                 </li>

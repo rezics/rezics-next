@@ -155,7 +155,7 @@ function Review({ words }: Words) {
         <mark className="rounded bg-warning/25 px-0.5 text-foreground">DM me</mark>
       </div>
       <ul className="flex flex-col gap-2">
-        <li className={row}>
+        <li className={cn(row, 'flex-wrap')}>
           <span>{t.flagged}</span>
           <Badge variant="outline" size="sm">
             {words.agent.automated}
