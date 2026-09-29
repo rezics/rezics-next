@@ -1,6 +1,7 @@
 # REZICS Goal
 
-Status: prepared on 2026-09-29 and started the same day. The previous,
+Status: direction under research since 2026-09-29; not started. Implementation
+waits until the research rounds settle the direction below. The previous,
 frontend-centred Goal paused after its third milestone at `59a85a96`. Backend
 phase 1 finished on 2026-09-27: recorded run `20260927t101230-1616d8`, local tag
 `goal/backend-phase1`, with its history on the local orphan branch
