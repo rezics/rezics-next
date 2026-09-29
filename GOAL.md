@@ -263,15 +263,21 @@ many surfaces. Each is built once, used everywhere, and guarded in code
     Realm wiki without exposing private history. Maps on custom images with
     Leaflet, relationship views with Cytoscape.js, fictional chronologies with
     D3 scales and uncertain dates; every visual has an accessible list. Export
-    is a coherent, re-importable bundle, never paywalled. Azgaar map import and
-    scene tracks come later.
+    is a coherent, re-importable bundle, never paywalled; the core world bible
+    is never a subscription. An optional continuity assistant reads the
+    author's own notes and manuscript and flags contradictions; it never writes
+    the chapter. Azgaar map import and scene tracks come later.
 29. **A big-franchise wiki for every Work.** A sourced, position-aware
     knowledge layer per Work: fictional entities, claims with chapter
     evidence, multilingual names and aliases, event time separate from
     revelation position. Agents build it chapter by chapter from licensed,
     public-domain or author-supplied text and structured dumps; reviewers
     publish coherent bundles; readers see only what they have read; new
-    chapters produce reviewed deltas. The first version gives entity indexes,
+    chapters produce reviewed deltas. Fan wikis reject generated articles that
+    invent citations, so agents propose sourced facts and structure by default,
+    generated prose only where a Realm allows it, nothing reaches readers
+    without human review, and each Realm decides whether agents may draft for
+    it. The first version gives entity indexes,
     concise articles, graph infoboxes, navboxes, chapter guides, appearances,
     relationship lists, basic timelines, citations and backlinks; family trees,
     adaptation alignment, world maps and chronologies follow. Completeness means
