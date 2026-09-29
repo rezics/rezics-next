@@ -36,37 +36,44 @@ third-party account, a payment or a product decision that changes the outcome.
 
 ## Standing directions
 
-Maintainer directions of 2026-09-27. They bind until the maintainer changes them.
+Maintainer directions of 2026-09-27, revised 2026-09-29. They bind until the
+maintainer changes them.
 
-1. **Outcome.** Advance REZICS by best practice. This Goal centres on the
-   frontend: the main site (user and management surfaces) and the Accounts site,
-   plus the backend changes they need. Both main-site surfaces must be
-   excellent to use. The Accounts site follows the model of Google Account; it
-   stays simple because few people will use it early on, but its admin panel
-   deserves real design work and must be good to use.
+1. **Outcome.** Make REZICS production-ready as the [Goal](../../GOAL.md)
+   describes, by best practice. The maintainer wants the manager's own judgment
+   as product manager, not only execution of instructions: treat a reported
+   defect as a symptom, audit the product for its class and fix that. The main
+   site's user and management surfaces must be excellent to use; the Accounts
+   site follows Google Account and stays simple, with an admin panel that is
+   good to use.
 2. **Code over documents.** The documentation grew large because the system did
    not exist yet. Now it does: express in code (types, schemas, tests, lint
    rules, generators, stories, comments) whatever code can express, and delete
    the documents that code replaces. Keep documents only for what code cannot
    carry, such as intent, decisions with their reasons, and operating procedures.
    The frontend follows the same principle.
-3. **Spend the Claude week, keep the manager alive.** Use Opus 5.5 as the main
-   worker, especially for frontend work, where it is strong. Aim to spend the
-   whole Claude 7-day allowance by each weekly reset. Never let the 5-hour window
-   run out: the manager is also Claude, and if it hits the limit, the Goal stops
-   until the window resets.
+3. **Spend the Claude week on milestone work, keep the manager alive.** Opus
+   5.5 runs the manager and takes first-of-kind design and review; Sonnet 5.5 is
+   the main Claude worker. Unused allowance is lost at the weekly reset, so aim
+   to spend it, but on milestone work rather than open-ended research. Never let
+   the 5-hour window run out: the manager is also Claude, and if it hits the
+   limit, the Goal stops until the window resets.
 4. **Other accounts run until exhausted.** The Codex account (GPT-6 Sol and Luna),
    the Astra account (`codex-1`), the Grok CLI and Cursor Agent (Grok 4.7) have
    no reserve to protect. Use them for whatever they do well until they run
-   out. The Astra account has usage-limit reset credits; use one when Astra is
-   exhausted and still the best choice for the remaining work.
+   out; the Grok CLI and Cursor are two separate quotas and two full lanes of
+   feature work, frontend included. The Astra account has usage-limit reset
+   credits; use one when Astra is exhausted and still the best choice for the
+   remaining work.
 5. **Human-role agents.** Opus 5.5, GPT-6 Astra and GPT-6 Sol can take the human
    role: they may challenge a brief, correct documentation and process in their
-   area, and propose a re-plan. GPT-6 Luna and Grok 4.7 carry out bounded briefs
-   and report problems instead of changing process.
+   area, and propose a re-plan. Sonnet 5.5, GPT-6 Luna and Grok 4.7 carry out
+   briefs and report problems instead of changing process.
 6. **Boundaries.** Work locally and commit on `main`; do not push, deploy to
    production, provision paid services or send repository data to other services
-   unless the maintainer asks. APIs own business operations; UI consumes them.
+   unless the maintainer asks. Deployment is the next phase: this Goal prepares
+   it as the [production plan](../operations/deployment.md) lists. APIs own
+   business operations; UI consumes them.
 7. **Maintainer edits win.** The maintainer may change any document at any
    time. Detect such changes, adapt running work and never revert them silently
    (see [documentation changes](README.md#maintainer-documentation-changes)).
@@ -76,6 +83,7 @@ Maintainer directions of 2026-09-27. They bind until the maintainer changes them
 | Engine (`goalctl`) | Model | Account and usage readout | Efforts |
 | --- | --- | --- | --- |
 | `claude` | Claude Opus 5.5 | Claude subscription shared with the manager; 5-hour and 7-day windows from the status line (`goalctl usage`) | `low`–`max` |
+| `sonnet` | Claude Sonnet 5.5 | Same subscription and gate as `claude`; measure its draw on both windows in the first two hours | `low`–`max` |
 | `fable` | Claude Fable 5.1 | Not used (maintainer, 2026-09-28): it shares the Claude 5-hour session limit with Opus (both hit it together) and does less than Opus 5.5 | `low`–`max` |
 | `astra` | GPT-6 Astra | Codex account in `~/.codex-1` (the `codex-1` wrapper); weekly window from its session rollouts | `low`–`ultra` |
 | `codex` | GPT-6 Sol | Default Codex account in `~/.codex`; weekly window | `low`–`ultra` |
@@ -93,17 +101,23 @@ or a Grok X/web lookup from an empty temporary directory.
 
 ### Usage strategy
 
-The manager revises this strategy from measurements. As of 2026-09-27 22:40 CST:
-Claude 7d was 24% used and reset on 2026-09-28 at 23:00 CST, and each weekly
-reset follows at the same time; Codex was 45% used (reset 2026-10-04 02:50 CST);
-`codex-1` was 4% used (reset 2026-10-04 20:16 CST).
+The manager revises this strategy from measurements. As of 2026-09-29: Claude 7d
+was 2% used and resets on 2026-10-05 at 23:00 CST (weekly at the same time);
+Codex was 87% used (reset about 2026-10-04); `codex-1` was 97% used (reset about
+2026-10-05). Two Astra reset credits remain, expiring 2026-10-05 and 2026-10-23:
+spend the first at the start of this Goal, since it expires unused otherwise, on
+the import-pipeline and scale design review.
 
 - **Measured ratio (2026-09-28).** A full 5-hour window is about 15% of the
   Claude week: the first 96 minutes moved the 5-hour window 32 points and the
   week 5 points, with the manager, 4–5 Opus workers and research subagents. Four
   to five saturated windows fill the rest of a day, so with a day left before
   the weekly reset the week and the 5-hour window bind together; beyond two or
-  three Opus workers, extra width goes to Codex and Astra.
+  three Opus workers, extra width goes to Sonnet, then to the other accounts.
+- **Host memory.** About seven workers exhausted this machine's memory on
+  2026-09-28 (Docker, dev servers, Storybook, type checkers and Playwright);
+  keep five or fewer, verify with `storybook:test` rather than a Storybook dev
+  server, and run one dev server at a time.
 - **Claude 7d.** `goalctl status` projects the week at reset from the recent
   burn rate. Below 95% it prints `widen`; add Opus workers or raise their effort.
   New Claude dispatch stops when the week would run out before its reset, or at
@@ -140,8 +154,16 @@ Observations so far, to be revised with evidence:
   authority, erasure and recovery.
 - **GPT-6 Luna.** Bounded mechanical work. At `max` it gave complete handoffs; at
   `high` and `xhigh` it more often returned partial ones.
-- **Grok 4.7.** Bounded tasks and current X and web evidence; treat its research
-  as leads to verify.
+- **Grok 4.7.** Eight tasks through the Grok CLI and Cursor in the frontend
+  Goal, all verified: frontend polish (G-429), filter UX (G-434), release
+  profiles with their Jena policy (G-441), seed and regression repairs (G-430,
+  G-442), research and eight-locale mail. One returned for editing a persisted
+  profile in place, a mistake caught five times across engines, which the
+  Goal's M4 turns into a check. Untested at first-of-kind UX design, which went to Opus.
+  Treat its research as leads to verify.
+- **Sonnet 5.5.** New and unmeasured here; give it template-following work with
+  browser acceptance first and record what it does well. `goalctl` pins
+  `claude-sonnet-5-5`, which needs Claude Code 2.1.284 or later.
 
 ## How to run the Goal
 
@@ -155,18 +177,14 @@ These steps describe one workable approach, not a fixed procedure.
    (`apps/web`), the UI package (`packages/ui`) and Storybook, the Main, Content
    and Account service APIs, the product intent in `docs/product` and the
    decisions in `docs/plan/frontend.md`.
-3. **Keep researching the frontend.** How the main site and the Accounts site
-   should work is an open question that the manager owns throughout the Goal.
-   Study strong comparable products (Google Account for Accounts; mature
-   community, catalogue and moderation tools for the main site), turn the
-   findings into information architecture, flows and a small set of excellent
-   interaction patterns, build vertical slices, use them in a real browser, and
-   revise. Keep design decisions in code, such as tokens, components, stories and
+3. **Research only what a decision needs.** The frontend Goal already studied
+   the comparable products; research now serves a milestone decision (an import
+   source's fields and terms, a compliance duty, a moderation flow), not a survey.
+   Keep design decisions in code, such as tokens, components, stories and
    route structure, plus short notes where the reason is not obvious.
-4. **Move documents into code.** Early in the Goal, audit `docs/` page by page:
-   delete what code already states; encode what code can carry and then delete
-   it; shorten what must stay; archive history on the orphan branch
-   `archive/goals`. Keep `task docs:check` passing or replace it.
+4. **Move documents into code as you touch them.** When a task changes an area,
+   delete what code now states and shorten what must stay; no standalone audit
+   batches in this Goal. Keep `task docs:check` passing or replace it.
 5. **Change the backend where needed.** When a screen needs an API that is
    missing or awkward, change the API rather than work around it in the client.
 6. **Integrate continuously.** Merge in waves and run the affected checks. For

@@ -1,17 +1,86 @@
-# Initial host deployment
+# Production deployment
 
-Start with one Fuseki JVM owning local TDB2 and Lucene, Main and Account on Bun,
-and separately owned PostgreSQL data for Content, Account, Access and operations.
-Only Main and admitted maintenance tools may reach Fuseki. The principal host
-holds stateful services; a second host may run API/edge or Account over
-authenticated private calls. The available 16-core/64GB and 12-core/32GB hosts
-are placement constraints, not qualified production capacity. Keep encrypted
-complete recovery sets and pinned release artifacts under separate custody.
+Deployment follows the production-readiness [Goal](../../GOAL.md); that Goal
+delivers what this page lists as [ready to deploy](#ready-to-deploy) and does not
+deploy. The maintainer has prepared the hosts and the Cloudflare side.
 
-Inventory durable disk, IOPS, backup bandwidth, page cache, JVM heap, Lucene
-merge space, PostgreSQL WAL, object staging and other host workloads before
-setting process and worker limits. One JVM owns each TDB2 directory; a second
-host cannot mount the live files as a replica.
+## Production fleet
+
+A private NixOS flake (the maintainer's `nixos` repository) defines two hosts.
+The old REZICS site's `deploy/nomad` jobspecs ran on them and are the precedent
+for this system's jobs.
+
+- **A, edge and control.** The sole Nomad server and an `edge` client; Traefik,
+  the release gateway, the private image registry, and SigNoz's UI and OTLP
+  collector. A two-server Nomad quorum was rejected: it tolerates no failure.
+  The hosts are 16-core/64 GB and 12-core/32 GB: placement constraints, not
+  qualified production capacity.
+- **B, data.** A `data` client with the stateful volumes, SigNoz's ClickHouse
+  and Databasus backups.
+- **Network.** WireGuard between A and B. The public interface exposes only
+  SSH; Cloudflare Tunnel carries public routes to loopback listeners on A.
+- **Releases.** A stable tag sends one GitHub OIDC request to the gateway, which
+  runs fixed, pre-registered Nomad jobs: image build, database release,
+  maintenance cutover behind an HTTP 503 fallback, then API and worker rollout.
+  Web and Accounts are Cloudflare Workers released from GitHub's protected
+  `production` environment, outside the Nomad graph.
+
+Proposed placement, to confirm by measurement when deploying:
+
+| Component | Placement | Reason |
+| --- | --- | --- |
+| Fuseki (TDB2, Lucene) and Main | B | Main is Fuseki's only client and issues several graph calls per request; keep them on one host. |
+| PostgreSQL for Content, Account, Access and operations | B | Separate databases and roles per owner, with continuous WAL archiving. |
+| Account and Content services | A or B | Decide from measured latency over WireGuard. |
+| Imports, index rebuilds, restore drills | B, as batch jobs | They read and write the data volumes. |
+| Media and snapshots | Cloudflare R2 | `MAIN_S3_*` already speaks S3. |
+| Web and Accounts | Cloudflare Workers | Authenticated private calls to Main and Account through the Tunnel. |
+| Telemetry | SigNoz | Services export OTLP; no separate error tracker. |
+
+## Open decision: NixOS and Nomad
+
+Settle this when the deployment phase starts. Planning view of 2026-09-29:
+
+- **Keep NixOS.** Declarative hosts, sops secrets, pinned closures and
+  whole-host rollback already work; nothing here needs another OS.
+- **Keep Nomad for stateless services and batch work.** The release graph,
+  maintenance fallback, autoscaler and SigNoz jobs exist, and bulk imports,
+  rebuilds, migrations and restore drills are batch jobs by nature.
+- **Stateful singletons are the open question.** Fuseki and PostgreSQL gain
+  little from a scheduler, and a scheduling mistake there is the costliest (a
+  second JVM on live TDB2). Either run them as Nomad jobs pinned to B with host
+  volumes, one allocation, no canary and stop-before-start, backed by the
+  application's writer fence; or run them as NixOS services on B and keep Nomad
+  for the rest. The first keeps one release path; the second removes the failure
+  mode at the cost of two. Try the first, with a drill that starts a second
+  Fuseki allocation and proves it is refused; move to NixOS services if the
+  drill cannot pass.
+- **Not recommended:** Kubernetes or k3s (more machinery than two hosts need)
+  and Compose (loses Nix pinning and the release graph).
+
+## Ready to deploy
+
+The production-readiness Goal leaves deployment as operations work:
+
+- OCI images with pinned digests for Main, Account, Content, the workers and the
+  Fuseki bundle; web and Accounts Worker builds with a production environment.
+- Configuration only through the validated environment specs, with production
+  examples and no development defaults that could reach production.
+- Migrations runnable as their own job before a rollout; readiness endpoints that
+  reflect storage, schema, graph epoch and index generation.
+- A production bootstrap that creates operators, official Realms, Zones and the
+  shared vocabulary without demo data, then runs imports as resumable batch jobs.
+- Backup and restore commands per owner, encrypted complete recovery sets and
+  pinned release artifacts held under separate custody, and a timed restore
+  drill at launch data scale on an isolated copy.
+- OTLP traces, metrics and logs with redaction as [observability](observability.md)
+  requires.
+- Runbooks for first installation, release, rollback, restore and bulk import.
+
+The host inventory in [practical load](#practical-load-objective) still applies:
+measure disk, IOPS, page cache, JVM heap, Lucene merge space, WAL and object
+staging on the real hosts before setting process and worker limits. One JVM owns
+each TDB2 directory; a second host cannot mount the live files as a replica.
 
 ## Practical load objective
 
@@ -47,10 +116,11 @@ cross-host recovery time remain unmeasured. Follow the
 
 Configure `ACCOUNT_SMTP_*` and `ACCOUNT_EMAIL_FROM` from
 [Account's example environment](../../services/account/.env.example).
-Development uses Mailpit; a remote sender needs verified identity, TLS,
-bounce/complaint handling and separately held secrets. Account mail serves
-security and recovery. Optional notification mail requires consent,
-suppression and signed unsubscribe before rollout. Inspect uncertain delivery
+Development uses Mailpit; a remote sender needs verified identity (SPF, DKIM,
+DMARC), TLS, bounce/complaint handling and separately held secrets. Account mail
+serves security and recovery. Optional notification mail, such as the daily
+digest, requires consent, suppression and signed unsubscribe; none of these
+exist yet, and the production-readiness Goal builds them. Inspect uncertain delivery
 counts before retrying after a lost acknowledgement.
 
 ## Commercial rollout

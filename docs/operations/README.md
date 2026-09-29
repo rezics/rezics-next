@@ -6,7 +6,7 @@ substrate drill uses a versioned [raw-update fixture](../../infra/jena/fuseki-te
 for Fuseki/TDB2 and jena-text/Lucene restart and restore checks. The product
 [assembler](../../infra/jena/fuseki-text.ttl) uses the guarded command endpoint.
 
-- [Deployment](deployment.md): initial host placement, private endpoints and budgets.
+- [Deployment](deployment.md): production fleet, placement, the NixOS and Nomad decision, and what must be ready to deploy.
 - [Recovery](recovery.md): offline backup/restore, epochs and Lucene rebuild.
 - [Observability](observability.md): graph/text readiness, progress and diagnosis.
 - [Security](security.md): private service access, admission and disclosure.
