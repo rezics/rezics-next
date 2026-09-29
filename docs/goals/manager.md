@@ -118,6 +118,10 @@ the import-pipeline and scale design review.
   to five saturated windows fill the rest of a day, so with a day left before
   the weekly reset the week and the 5-hour window bind together; beyond two or
   three Opus workers, extra width goes to Sonnet, then to the other accounts.
+- **Model cost matches the task** (maintainer, 2026-09-29). Simple translation,
+  catalog completion and mechanical edits go to cheap models (Luna at `max`,
+  Grok or Cursor); Astra, Opus and Sonnet are for design, copywriting,
+  architecture, review and hard debugging.
 - **Host memory.** About seven workers exhausted this machine's memory on
   2026-09-28 (Docker, dev servers, Storybook, type checkers and Playwright);
   keep five or fewer, verify with `storybook:test` rather than a Storybook dev
