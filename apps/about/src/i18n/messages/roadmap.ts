@@ -10,8 +10,15 @@ export interface RoadmapCopy {
   horizons: Record<Horizon, { title: string; body: string }>;
   /** GOAL.md's milestones as stages a reader can follow, in order. */
   milestones: Record<Milestone, { name: string; body: string }>;
+  /** The pinned story of the five stages, one step each (the step text is `milestones`). */
+  story: { title: string; lede: string };
+  /** The caption of a stage's picture and how many capabilities it holds beyond those shown. */
+  stageOf: string;
+  more: string;
+  /** The columns that file every capability under the stage that builds it. */
+  columns: { title: string; lede: string };
   /** Says what order and missing dates mean. */
-  note: string;
+  statement: { text: string; body: string };
   cta: { title: string; body: string };
 }
 
@@ -63,7 +70,20 @@ export const roadmap = defineEnglishCopy<RoadmapCopy>({
       body: 'Production checks, recovery drills, safety readiness and accessibility on real devices. Then registration opens.',
     },
   },
-  note: 'There are no dates on purpose. A stage is finished when its checks pass, and a capability can move between stages as we learn.',
+  story: {
+    title: 'Each stage stands on the one before it.',
+    lede: 'Foundations come first because every scenario stands on them.',
+  },
+  stageOf: 'Stage {n} of {total}',
+  more: 'and {n} more',
+  columns: {
+    title: 'Every capability, in its stage.',
+    lede: 'The same plan, filed by when each stage is built.',
+  },
+  statement: {
+    text: 'There are no dates on purpose.',
+    body: 'A stage is finished when its checks pass, and a capability can move between stages as we learn.',
+  },
   cta: {
     title: 'Hear the day registration opens.',
     body: 'Leave your email and we will write once, when registration opens. Nothing else.',

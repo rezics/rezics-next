@@ -14,7 +14,7 @@ import {
 import type { CSSProperties } from 'react';
 import { fill } from '../i18n/fill.ts';
 import { localeNames } from '../i18n/locales.ts';
-import { row, type Picture, type Words } from './parts.ts';
+import { row, type Picture, type Words } from './parts.tsx';
 import { Plate } from './Plate.tsx';
 import { serial } from './sample.ts';
 

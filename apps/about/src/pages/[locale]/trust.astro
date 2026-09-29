@@ -1,10 +1,21 @@
 ---
+import { copy } from '../../i18n/format.ts';
 import type { UiLocale } from '../../i18n/locales.ts';
 import LinePage from '../../layouts/LinePage.astro';
 import { localePaths } from '../../lib/site.ts';
+import { CaseFlow, SuitabilityChoices } from '../../illustrations/TrustPictures.tsx';
+import { Vignette } from '../../illustrations/Vignettes.tsx';
 
-// G-483 gives this page its pictures (PATTERNS.md); until then it shows its text in the standard order.
 export const getStaticPaths = localePaths;
 const locale = Astro.params.locale as UiLocale;
+const words = copy('illustrations', locale);
+const tiles = ['suitability', 'ai', 'training', 'trackers', 'export', 'safety'] as const;
 ---
-<LinePage locale={locale} page="trust" />
+<LinePage locale={locale} page="trust" numbered tileSpans={{ suitability: 2, ai: 2, training: 2, trackers: 2, export: 4, safety: 6 }} clothTiles={['training']}>
+  <SuitabilityChoices slot="hero" words={words} />
+  <CaseFlow slot="step-report" words={words} stage="report" />
+  <CaseFlow slot="step-review" words={words} stage="review" />
+  <CaseFlow slot="step-decide" words={words} stage="decide" />
+  <CaseFlow slot="step-appeal" words={words} stage="appeal" />
+  {tiles.map(tile => <Vignette slot={`tile-${tile}`} page="trust" tile={tile} words={words} />)}
+</LinePage>

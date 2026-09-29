@@ -1,10 +1,21 @@
 ---
+import { copy } from '../../i18n/format.ts';
 import type { UiLocale } from '../../i18n/locales.ts';
 import LinePage from '../../layouts/LinePage.astro';
 import { localePaths } from '../../lib/site.ts';
+import { PurchaseHero, StoreFlow } from '../../illustrations/DistributionPictures.tsx';
+import { Vignette } from '../../illustrations/Vignettes.tsx';
 
-// G-483 gives this page its pictures (PATTERNS.md); until then it shows its text in the standard order.
 export const getStaticPaths = localePaths;
 const locale = Astro.params.locale as UiLocale;
+const words = copy('illustrations', locale);
+const tiles = ['statements', 'rights', 'connected', 'creators'] as const;
 ---
-<LinePage locale={locale} page="distribution" />
+<LinePage locale={locale} page="distribution" tileSpans={{ statements: 3, rights: 3, connected: 3, creators: 3 }} clothTiles={['connected']}>
+  <PurchaseHero slot="hero" words={words} />
+  <StoreFlow slot="step-choose" words={words} stage="choose" />
+  <StoreFlow slot="step-buy" words={words} stage="buy" />
+  <StoreFlow slot="step-keep" words={words} stage="keep" />
+  <StoreFlow slot="step-update" words={words} stage="update" />
+  {tiles.map(tile => <Vignette slot={`tile-${tile}`} page="distribution" tile={tile} words={words} />)}
+</LinePage>

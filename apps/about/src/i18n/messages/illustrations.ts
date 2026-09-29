@@ -186,6 +186,128 @@ export interface IllustrationCopy {
     asCharacter: string;
     zoneTabs: { seasons: string; releases: string; discussion: string };
   };
+  community: {
+    conversation: string;
+    knowledge: string;
+    confirmedIn: string;
+    startedIn: string;
+    keepInWiki: string;
+    rules: string;
+    sameForEveryone: string;
+    follow: string;
+    join: string;
+    followBlurb: string;
+    joinBlurb: string;
+    readAlong: string;
+    post: string;
+    reply: string;
+    review: string;
+    newcomer: string;
+    limits: string;
+    limitsLift: string;
+    postsPerDay: string;
+    case: string;
+    reason: string;
+    decision: string;
+    appeal: string;
+    appealOpen: string;
+    removed: string;
+    readIn: string;
+    translatedFrom: string;
+    agentsMayHelp: string;
+    off: string;
+    setByRealm: string;
+    level: string;
+    accepted: string;
+    perContribution: string;
+  };
+  store: {
+    edition: string;
+    translator: string;
+    sample: string;
+    price: string;
+    tax: string;
+    total: string;
+    buy: string;
+    receipt: string;
+    inLibrary: string;
+    noDrm: string;
+    downloadAgain: string;
+    files: string;
+    version: string;
+    corrected: string;
+    patched: string;
+    earlierKept: string;
+    statement: string;
+    sales: string;
+    paymentFees: string;
+    refunds: string;
+    payout: string;
+    madeBy: string;
+    readersMay: string;
+    readersMayDo: string;
+    store: string;
+    follow: string;
+    creator: string;
+    book: string;
+    game: string;
+  };
+  api: {
+    website: string;
+    yourCode: string;
+    sameOperation: string;
+    credential: string;
+    oneLibrary: string;
+    oneTask: string;
+    revoke: string;
+    revocableHere: string;
+    preview: string;
+    firstAttempt: string;
+    retry: string;
+    sameReceipt: string;
+    cursor: string;
+    disconnected: string;
+    resumeHere: string;
+    problem: string;
+    cause: string;
+    nextStep: string;
+    typed: string;
+    generated: string;
+    operation: string;
+  };
+  trust: {
+    suitability: string;
+    teen: string;
+    sexual: string;
+    grotesque: string;
+    shown: string;
+    hidden: string;
+    unrated: string;
+    neverGeneral: string;
+    report: string;
+    privateLink: string;
+    anyone: string;
+    flagged: string;
+    person: string;
+    passage: string;
+    rule: string;
+    whatChanged: string;
+    outcome: string;
+    upheld: string;
+    reviewedAgain: string;
+    recorded: string;
+    reviewedByPerson: string;
+    privateDraft: string;
+    training: string;
+    optIn: string;
+    advertisingTrackers: string;
+    analytics: string;
+    none: string;
+    blockedAtUpload: string;
+    abuseImagery: string;
+    within48: string;
+    intimateImages: string;
+  };
   agent: {
     proposal: string;
     automated: string;
@@ -417,6 +539,128 @@ export const illustrations = defineEnglishCopy<IllustrationCopy>({
     director: 'Director',
     asCharacter: 'as {name}',
     zoneTabs: { seasons: 'Seasons', releases: 'Releases', discussion: 'Discussion' },
+  },
+  community: {
+    conversation: 'Conversation',
+    knowledge: 'Wiki',
+    confirmedIn: 'Confirmed in chapter {n}',
+    startedIn: 'Started in this thread',
+    keepInWiki: 'Keep in the wiki',
+    rules: 'Rules',
+    sameForEveryone: 'The same for everyone',
+    follow: 'Follow',
+    join: 'Join',
+    followBlurb: 'Read along quietly',
+    joinBlurb: 'Take part',
+    readAlong: 'Read discussion',
+    post: 'Post',
+    reply: 'Reply',
+    review: 'Review',
+    newcomer: 'New member',
+    limits: 'Gentle limits',
+    limitsLift: 'They lift as you take part',
+    postsPerDay: '{n} posts a day',
+    case: 'Case',
+    reason: 'Reason',
+    decision: 'Decision',
+    appeal: 'Appeal',
+    appealOpen: 'Appeal open',
+    removed: 'Removed',
+    readIn: 'Read in {language}',
+    translatedFrom: 'Posted in {language}',
+    agentsMayHelp: 'Agents may help',
+    off: 'Off',
+    setByRealm: 'Set by the Realm',
+    level: 'Level {n}',
+    accepted: '{n} accepted contributions',
+    perContribution: 'Earned from accepted help, never streaks',
+  },
+  store: {
+    edition: 'Edition',
+    translator: 'Translator',
+    sample: 'Read a sample',
+    price: 'Price',
+    tax: 'Tax',
+    total: 'Total',
+    buy: 'Buy',
+    receipt: 'Receipt',
+    inLibrary: 'In your library',
+    noDrm: 'DRM-free',
+    downloadAgain: 'Download again',
+    files: 'Files',
+    version: 'Version {n}',
+    corrected: 'Corrected edition',
+    patched: 'Patched build',
+    earlierKept: 'Earlier versions stay available',
+    statement: 'Statement',
+    sales: 'Sales',
+    paymentFees: 'Payment fees',
+    refunds: 'Refunds',
+    payout: 'Paid out',
+    madeBy: 'Made by',
+    readersMay: 'Readers may',
+    readersMayDo: 'Keep it and read it on any device',
+    store: 'Store',
+    follow: 'Follow',
+    creator: 'Creator',
+    book: 'Book',
+    game: 'Game',
+  },
+  api: {
+    website: 'The website',
+    yourCode: 'Your code',
+    sameOperation: 'One operation, two clients',
+    credential: 'Credential',
+    oneLibrary: 'One library',
+    oneTask: 'One task',
+    revoke: 'Revoke',
+    revocableHere: 'Revocable in one place',
+    preview: 'Preview',
+    firstAttempt: 'First attempt',
+    retry: 'Retry after a timeout',
+    sameReceipt: 'Same receipt, no second import',
+    cursor: 'Cursor',
+    disconnected: 'Disconnected',
+    resumeHere: 'Resumes exactly here',
+    problem: 'Problem details',
+    cause: 'Cause',
+    nextStep: 'Next step',
+    typed: 'Typed from the same definitions as the API',
+    generated: 'Generated',
+    operation: 'Operation',
+  },
+  trust: {
+    suitability: 'What you see',
+    teen: 'Teen',
+    sexual: 'Sexual',
+    grotesque: 'Grotesque',
+    shown: 'Shown',
+    hidden: 'Hidden',
+    unrated: 'Unrated',
+    neverGeneral: 'Unrated is never shown as general',
+    report: 'Report',
+    privateLink: 'A private link to follow this case',
+    anyone: 'Anyone, signed in or not',
+    flagged: 'Flagged by an automated check',
+    person: 'Decided by a person',
+    passage: 'The reported passage',
+    rule: 'Rule applied',
+    whatChanged: 'What changed',
+    outcome: 'Outcome',
+    upheld: 'Decision upheld',
+    reviewedAgain: 'Reviewed again',
+    recorded: 'Recorded with the case',
+    reviewedByPerson: 'Reviewed by a person',
+    privateDraft: 'Private draft',
+    training: 'Used for training',
+    optIn: 'Only if you opt in',
+    advertisingTrackers: 'Advertising trackers',
+    analytics: 'Third-party analytics',
+    none: 'None',
+    blockedAtUpload: 'Blocked at upload',
+    abuseImagery: 'Known abuse imagery',
+    within48: 'Removed within 48 hours',
+    intimateImages: 'Intimate images shared without consent',
   },
   agent: {
     proposal: 'Proposed tags',

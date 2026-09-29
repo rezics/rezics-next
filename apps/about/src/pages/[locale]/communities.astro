@@ -1,10 +1,21 @@
 ---
+import { copy } from '../../i18n/format.ts';
 import type { UiLocale } from '../../i18n/locales.ts';
 import LinePage from '../../layouts/LinePage.astro';
 import { localePaths } from '../../lib/site.ts';
+import { RealmFlow, RealmScene } from '../../illustrations/CommunityPictures.tsx';
+import { Vignette } from '../../illustrations/Vignettes.tsx';
 
-// G-483 gives this page its pictures (PATTERNS.md); until then it shows its text in the standard order.
 export const getStaticPaths = localePaths;
 const locale = Astro.params.locale as UiLocale;
+const words = copy('illustrations', locale);
+const tiles = ['languages', 'wiki', 'recognition', 'cases'] as const;
 ---
-<LinePage locale={locale} page="communities" />
+<LinePage locale={locale} page="communities" tileSpans={{ languages: 2, wiki: 4, recognition: 3, cases: 3 }} clothTiles={['wiki']}>
+  <RealmScene slot="hero" words={words} />
+  <RealmFlow slot="step-found" words={words} stage="found" />
+  <RealmFlow slot="step-gather" words={words} stage="gather" />
+  <RealmFlow slot="step-keep" words={words} stage="keep" />
+  <RealmFlow slot="step-protect" words={words} stage="protect" />
+  {tiles.map(tile => <Vignette slot={`tile-${tile}`} page="communities" tile={tile} words={words} />)}
+</LinePage>

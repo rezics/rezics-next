@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { fill } from '../i18n/fill.ts';
-import { row, type Picture, type Words } from './parts.ts';
+import { row, type Picture, type Words } from './parts.tsx';
 import { Plate } from './Plate.tsx';
 import { lantern, saltMarsh, shelf } from './sample.ts';
 

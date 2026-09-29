@@ -1,24 +1,16 @@
 import { Badge } from '@rezics/ui/badge';
 import { WorkCover } from '@rezics/ui/work-cover';
 import { cn } from '@rezics/ui/utils';
-import {
-  Bot,
-  Check,
-  CircleDashed,
-  Eye,
-  EyeOff,
-  KeyRound,
-  Lock,
-  MapPin,
-  Megaphone,
-  PenLine,
-  Wallet,
-} from 'lucide-react';
+import { Bot, Check, CircleDashed, Eye, EyeOff, MapPin, Megaphone, PenLine } from 'lucide-react';
 import type { JSX } from 'react';
 import { fill } from '../i18n/fill.ts';
 import { localeNames } from '../i18n/locales.ts';
-import { row, type Words } from './parts.ts';
+import { Connect, row, type Words } from './parts.tsx';
 import { acgnVignettes } from './AcgnPictures.tsx';
+import { communityVignettes } from './CommunityPictures.tsx';
+import { developerVignettes } from './DeveloperPictures.tsx';
+import { distributionVignettes } from './DistributionPictures.tsx';
+import { trustVignettes } from './TrustPictures.tsx';
 import { readingVignettes } from './ReadingPictures.tsx';
 import { serialVignettes } from './SerialPictures.tsx';
 import { cloths, lantern, world } from './sample.ts';
@@ -368,43 +360,14 @@ function Builder({ words }: Words) {
   );
 }
 
-function Connect({ words }: Words) {
-  const w = words.agent;
-  return (
-    <dl className="grid w-full max-w-xs gap-2 text-sm">
-      <div className={row}>
-        <dt className="flex items-center gap-2 text-muted-foreground">
-          <KeyRound aria-hidden className="size-4" />
-          {w.scopes}
-        </dt>
-        <dd translate="no" className="font-mono text-xs">
-          tags:propose
-        </dd>
-      </div>
-      <div className={row}>
-        <dt className="flex items-center gap-2 text-muted-foreground">
-          <Lock aria-hidden className="size-4" />
-          MCP
-        </dt>
-        <dd lang="en" className="truncate">
-          Salt Marsh Readers
-        </dd>
-      </div>
-      <div className={row}>
-        <dt className="flex items-center gap-2 text-muted-foreground">
-          <Wallet aria-hidden className="size-4" />
-          {w.budget}
-        </dt>
-        <dd>{w.setByYou}</dd>
-      </div>
-    </dl>
-  );
-}
-
 const vignettes = {
   reading: readingVignettes,
   'serial-fiction': serialVignettes,
   acgn: acgnVignettes,
+  communities: communityVignettes,
+  distribution: distributionVignettes,
+  developers: developerVignettes,
+  trust: trustVignettes,
   'light-novels': { omnibus: Omnibus, calendar: Calendar },
   wikis: { bible: Bible, publish: Publish, maps: WorldMap, timelines: Timeline, history: Diff },
   agents: {
