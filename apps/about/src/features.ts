@@ -43,6 +43,14 @@ const plan = {
   'sourced-knowledge': ['home', 'M7'],
   'api-agent-first': ['home', 'M5'],
   'open-source': ['home', 'M8'],
+  // Home: every language, the whole community, fans together, every kind
+  'names-every-script': ['home', 'M6'],
+  'shared-tags': ['home', 'M7'],
+  'reviewed-translations': ['home', 'M7'],
+  'saved-lists': ['home', 'M7'],
+  'one-identity': ['home', 'M7'],
+  'works-across-platforms': ['home', 'M6'],
+  'every-kind': ['home', 'M6'],
   // Reading and the portable library
   'portable-library': ['reading', 'M6'],
   'reading-sessions': ['reading', 'M6'],

@@ -4,7 +4,9 @@
 when registration opens. It is Astro with React only where a page needs script, styled with
 the same tokens, fonts and components as the app (`packages/ui`), in the eight interface
 locales. G-480 built the foundation; G-481 set the art direction, the motion system, the
-home and flagship pages and every page's English copy. `apps/about/PATTERNS.md` names the
+home and flagship pages and every page's English copy; G-485 repositioned the home page
+around the whole product (every language, the whole community, fans beyond any platform,
+every kind of story) and added Motion for its islands. `apps/about/PATTERNS.md` names the
 section patterns new pages are built from.
 
 ## Run it
@@ -40,15 +42,29 @@ the background in an agent session; stop it with `astro dev stop` in `apps/about
 - **Copy status is marked.** `src/copy-status.ts` says whether a page's copy is final; it shows
   as `data-copy` on `<main>`. G-481 made every page's English copy final.
 - **JavaScript.** Pages ship a 0.5 kB boot script (saved theme before paint, remembers a
-  chosen language), the theme button's module and one React island, the notify form, which
-  loads only when it scrolls into view (`tests/build.test.ts` holds this and the size budget).
-  Menus are `<details>`, and the form also works as a plain post without script.
-- **Motion is CSS.** Scroll-driven animations (`animation-timeline: view()`), sticky pinned
-  stories and cross-document view transitions do everything the pages need, so the site adds
-  no animation library and no script: it keeps 60 fps on a throttled phone and the only
-  island stays the form. Browsers without scroll timelines, and readers who prefer reduced
-  motion, get the static page, which is complete on its own. The one looping picture has a
-  CSS-only pause control.
+  chosen language), the theme button's module and React islands: the notify form on every
+  page, which loads when it scrolls into view, and on the home page three Motion islands,
+  which load when the browser is idle (`tests/build.test.ts` holds the list, when each
+  loads and the size budget: 448 kB of scripts in all, 146 kB gzip, at G-485). Menus are
+  `<details>`, the form also works as a plain post without script, and every island is
+  server-rendered complete, so it reads the same before it hydrates.
+- **Motion: CSS first, then the Motion library in islands.** Scroll-driven animations
+  (`animation-timeline: view()`), sticky pinned stories and cross-document view transitions
+  stay CSS: no script, 60 fps on a throttled phone. G-481 chose CSS only; G-485 added
+  [Motion](https://motion.dev) (MIT, `motion/react`) because the home page's messages are
+  things to try, not to watch: swiping a deck, changing a record's language field by field,
+  moving your place in a story. Those need gestures, springs, orchestrated sequences and
+  layout animation, which CSS cannot drive. Motion stays inside React islands, loads its
+  gesture and layout features once through `LazyMotion` (about 43 kB gzip) and takes its
+  transitions from one vocabulary (`src/islands/motion.tsx`, described in `PATTERNS.md`).
+  Browsers without scroll timelines, and readers who prefer reduced motion, get complete
+  static pages; with reduced motion the islands still work and change instantly.
+- **Budgets.** LCP under 1 s on a phone with 4× CPU throttling (0.6–0.9 s for the home page
+  at G-485) and no layout shift. The page preloads the Latin interface face and work serif,
+  because without them text laid out in fallback fonts moved when they arrived (CLS 0.03
+  on the home page and `/light-novels` before G-485). On slow 4G as well as 4× CPU the home page's LCP is about
+  1.9 s, 0.3 s more than without the preloads; zero shift was the budget. `tests/e2e` holds
+  the shift check.
 - **Share images are Latin only.** `src/lib/og.ts` draws one 1200×630 image per page with
   Satori. CJK text would need the four Noto CJK font families in the build, so localized pages
   share the English image; their titles and descriptions are localized in the page metadata.

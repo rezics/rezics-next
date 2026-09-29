@@ -1,24 +1,22 @@
 ---
 import { buttonVariants } from '@rezics/ui/button';
 import CallToAction from '../../components/sections/CallToAction.astro';
+import FeatureList from '../../components/sections/FeatureList.astro';
 import Glance from '../../components/sections/Glance.astro';
-import ScrollStory from '../../components/sections/ScrollStory.astro';
+import SectionHeading from '../../components/sections/SectionHeading.astro';
 import Showcase from '../../components/sections/Showcase.astro';
 import Statements from '../../components/sections/Statements.astro';
-import StoryStep from '../../components/sections/StoryStep.astro';
 import Tile from '../../components/sections/Tile.astro';
 import WordBand from '../../components/sections/WordBand.astro';
-import StatusBadge from '../../components/StatusBadge.astro';
 import { copy, pageLanguage } from '../../i18n/format.ts';
-import { uiLocales, type UiLocale } from '../../i18n/locales.ts';
-import { ChapterResume } from '../../illustrations/ChapterResume.tsx';
-import { EditionFan } from '../../illustrations/EditionFan.tsx';
-import { ImportReview } from '../../illustrations/ImportReview.tsx';
+import { localeNames, uiLocales, type UiLocale } from '../../i18n/locales.ts';
+import { KindsGrid } from '../../illustrations/KindsGrid.tsx';
 import { LineVignette } from '../../illustrations/LineVignette.tsx';
-import { ReleaseTable } from '../../illustrations/ReleaseTable.tsx';
-import { SeriesBoard } from '../../illustrations/SeriesBoard.tsx';
+import { RealmGathering } from '../../illustrations/RealmGathering.tsx';
+import { ListingInPlace } from '../../islands/ListingInPlace.tsx';
+import { PlaceInStory } from '../../islands/PlaceInStory.tsx';
+import { StoryDeck } from '../../islands/StoryDeck.tsx';
 import Base from '../../layouts/Base.astro';
-import { featuresOf } from '../../features.ts';
 import { localePaths } from '../../lib/site.ts';
 import { pagePath, productLineIds } from '../../pages.ts';
 import { storyWords } from '../../illustrations/sample.ts';
@@ -33,7 +31,6 @@ const application = {
   operatingSystem: 'Web', description: site.brand.description, url: new URL(pagePath(locale, 'home'), Astro.site).toString(),
   inLanguage: uiLocales, publisher: { '@type': 'Organization', name: 'REZICS Inc.' },
 };
-const steps = Object.entries(text.story.steps) as [keyof typeof text.story.steps, { title: string; body: string }][];
 // The showcase's shape: which lines lead, which sit on their cloth. Six columns on desktop.
 const tiles = {
   'light-novels': { span: 3, surface: 'cloth' },
@@ -46,6 +43,8 @@ const tiles = {
   distribution: { span: 3, surface: 'paper' },
   developers: { span: 3, surface: 'band' },
 } as const satisfies Record<(typeof productLineIds)[number] | 'developers', { span: 2 | 3 | 4; surface: 'paper' | 'cloth' | 'band' }>;
+// The five commitments behind every part of REZICS.
+const why = ['native-multilingual', 'portable-data', 'sourced-knowledge', 'api-agent-first', 'open-source'] as const;
 ---
 <Base locale={locale} page="home" title={text.meta.title} description={text.meta.description} structuredData={[application]}
   contentLang={pageLanguage(locale, 'home', 'features', 'illustrations', 'roadmap')}>
@@ -58,24 +57,55 @@ const tiles = {
         <a href={pagePath(locale, 'roadmap')} class={buttonVariants({ size: 'xl', variant: 'outline' })}>{text.hero.secondary}</a>
       </div>
     </div>
-    <EditionFan caption={text.heroPicture} pause={site.motion.pause} pauseLang={locale} />
+    <StoryDeck client:idle words={{ kinds: words.kinds, deck: words.deck }} caption={text.heroPicture} />
   </section>
 
   <WordBand words={storyWords} />
 
-  <ScrollStory id="scenarios" title={text.story.title} lede={text.story.lede} steps={steps.length}>
-    {steps.map(([id, step], index) => (
-      <StoryStep index={index} title={step.title} body={step.body}>
-        <StatusBadge slot="meta" id={id} locale={locale} />
-        <div slot="frame" class="w-full max-w-2xl" data-feature-frame={id}>
-          {id === 'series-tracking' && <SeriesBoard words={words} marks upcoming />}
-          {id === 'library-import' && <ImportReview words={words} />}
-          {id === 'serial-reading' && <ChapterResume words={words} />}
-          {id === 'vn-releases' && <ReleaseTable words={words} />}
-        </div>
-      </StoryStep>
-    ))}
-  </ScrollStory>
+  <section aria-labelledby="language" class="chapter">
+    <div class="page-frame">
+      <div class="grid items-start gap-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
+        <SectionHeading id="language" title={text.language.title} lede={text.language.lede} class="lg:sticky lg:top-28" />
+        <ListingInPlace client:idle words={{ record: words.record, release: words.release }}
+          languageNames={{ ja: localeNames.ja, en: localeNames.en, 'zh-Hant': localeNames['zh-Hant'], ko: localeNames.ko }} />
+      </div>
+      <FeatureList locale={locale} ids={['names-every-script', 'shared-tags', 'reviewed-translations']}
+        class="mt-14 border-t border-border pt-10 sm:grid-cols-2 lg:grid-cols-3" />
+    </div>
+  </section>
+
+  <section aria-labelledby="community" class="chapter">
+    <div class="page-frame">
+      <SectionHeading id="community" title={text.community.title} lede={text.community.lede} />
+      <div class="mt-12 md:mt-16">
+        <PlaceInStory client:idle words={{ thread: words.thread, wiki: words.wiki }} />
+      </div>
+      <FeatureList locale={locale} ids={['spoiler-position', 'review-targets', 'saved-lists', 'spoiler-safe-wiki', 'moderation-cases', 'one-identity']}
+        class="mt-14 border-t border-border pt-10 sm:grid-cols-2 lg:grid-cols-3" />
+    </div>
+  </section>
+
+  <section aria-labelledby="together" class="dark band chapter">
+    <div class="page-frame">
+      <h2 id="together" class="type-statement statement-text"><span class="ink-reveal">{text.together.title}</span></h2>
+      <div class="mt-12 grid items-center gap-12 md:mt-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
+        <p class="type-lede text-muted-foreground">{text.together.lede}</p>
+        <RealmGathering words={words} />
+      </div>
+      <FeatureList locale={locale} ids={['works-across-platforms', 'realms', 'library-import']}
+        class="mt-14 border-t border-border pt-10 sm:grid-cols-2 lg:grid-cols-3" />
+    </div>
+  </section>
+
+  <section aria-labelledby="kinds" class="chapter">
+    <div class="page-frame">
+      <div class="grid gap-10 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:items-end lg:gap-16">
+        <SectionHeading id="kinds" title={text.kinds.title} lede={text.kinds.lede} />
+        <FeatureList locale={locale} ids={['every-kind']} />
+      </div>
+      <div class="mt-12 md:mt-16"><KindsGrid words={words} /></div>
+    </div>
+  </section>
 
   <Showcase id="lines" title={text.lines.title} lede={text.lines.lede}>
     {Object.entries(tiles).map(([id, tile]) => (
@@ -86,7 +116,7 @@ const tiles = {
     ))}
   </Showcase>
 
-  <Statements locale={locale} id="why" title={text.why.title} lede={text.why.lede} ids={featuresOf('home')} />
+  <Statements locale={locale} id="why" title={text.why.title} lede={text.why.lede} ids={why} />
 
   <Glance locale={locale} id="direction" title={text.glance.title} lede={text.glance.lede} link={text.glance.link} />
 

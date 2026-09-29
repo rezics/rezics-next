@@ -18,6 +18,40 @@ async function formReady(page: Page) {
   await expect(page.locator('#notify astro-island')).not.toHaveAttribute('ssr', /.*/);
 }
 
+/** An island has hydrated once Astro removes its `ssr` marker. */
+async function hydrated(page: Page, component: string) {
+  await expect(page.locator(`astro-island[component-export="${component}"]`)).not.toHaveAttribute(
+    'ssr',
+    /.*/,
+  );
+}
+
+/**
+ * Islands that load when the browser is idle have hydrated, and every finite animation and
+ * transition has finished, so axe measures settled colors rather than a fade.
+ */
+async function settled(page: Page) {
+  await expect(page.locator('astro-island[client="idle"][ssr]')).toHaveCount(0);
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation.timeline === document.timeline &&
+            animation.effect?.getComputedTiming().endTime !== Infinity,
+        )
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  );
+}
+
+/** Choose a reading language in the record by its pill, as a reader does. */
+async function pick(page: Page, name: string) {
+  await page.locator('.record-language', { hasText: name }).click();
+  await expect(page.getByRole('radio', { name })).toBeChecked();
+}
+
 /** No horizontal scrolling and no clipped words: the document is exactly as wide as the window. */
 async function fitsWidth(page: Page) {
   const { scroll, client } = await page.evaluate(() => ({
@@ -40,6 +74,7 @@ for (const [viewportName, viewport] of Object.entries(viewports)) {
           await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
           await expect(page.locator('main')).toHaveAttribute('data-copy', copyStatus[id]);
           await fitsWidth(page);
+          await settled(page);
           const violations = await axeViolations(page);
           expect(violations, formatViolations(violations)).toEqual([]);
           if (id === 'home') await expect(page.locator('#notify')).toBeAttached();
@@ -152,7 +187,7 @@ test.describe('get notified', () => {
     await expect(page.locator('#notify')).toContainText('name@example.com');
     await expect(form.locator('input[name=email]')).toBeVisible();
     // The error fades in; contrast is measured on the settled color.
-    // Only the form's own animations: the page also runs a looping hero and scroll timelines.
+    // Only the form's own animations: the page also runs islands and scroll timelines.
     await page.evaluate(() =>
       Promise.all(
         document
@@ -219,7 +254,7 @@ test.describe('motion', () => {
 
   test('with reduced motion every frame follows its text and nothing moves', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/en/');
+    await page.goto('/en/light-novels/');
     const frame = page.locator('.story-frame').first();
     expect(await frame.evaluate((element) => getComputedStyle(element).position)).toBe('static');
     const running = await page.evaluate(
@@ -235,18 +270,113 @@ test.describe('motion', () => {
     await expect(page.locator('.motion-toggle')).toBeHidden();
   });
 
-  test('the hero loop pauses from the keyboard', async ({ page }) => {
+  test('the hero deck turns from its buttons and from a swipe', async ({ page }) => {
     await page.goto('/en/');
-    const toggle = page.getByRole('checkbox', { name: 'Pause animation' });
-    await toggle.focus();
-    await page.keyboard.press('Space');
-    await expect(toggle).toBeChecked();
-    const states = await page
-      .locator('.fan-cover')
-      .evaluateAll((covers) =>
-        covers.flatMap((cover) => cover.getAnimations().map((animation) => animation.playState)),
-      );
-    expect(states.length).toBeGreaterThan(0);
-    expect(new Set(states)).toEqual(new Set(['paused']));
+    await hydrated(page, 'StoryDeck');
+    const names = page.locator('.deck-names');
+    await expect(names).toContainText('Light novel');
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(names).toContainText('Visual novel');
+    await expect(names).toContainText('Glass Tide');
+    const card = page.locator('.deck-grip-front');
+    const box = (await card.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 - 220, box.y + box.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await expect(names).toContainText('Web serial');
+    await page.getByRole('button', { name: 'Previous' }).click();
+    await expect(names).toContainText('Visual novel');
+  });
+
+  test('the Japanese record turns into English as it arrives, then into any language chosen', async ({
+    page,
+  }) => {
+    await page.goto('/en/');
+    await hydrated(page, 'ListingInPlace');
+    const choice = (name: string) => page.getByRole('radio', { name });
+    // Hydrated before the reader reaches it, the record is set back to its original.
+    await expect(choice('日本語')).toBeChecked();
+    await page.locator('#language').scrollIntoViewIfNeeded();
+    await page.getByRole('radio', { name: 'English' }).scrollIntoViewIfNeeded();
+    await expect(choice('English')).toBeChecked();
+    const shown = page.locator('.swap > [data-active="true"]');
+    await expect(shown.filter({ hasText: 'The Lantern Archive' }).first()).toBeVisible();
+    await pick(page, '繁體中文');
+    await expect(shown.filter({ hasText: '燈籠書庫' }).first()).toBeVisible();
+    await expect(shown.filter({ hasText: '奇幻' })).toBeVisible();
+    // Korean has no synopsis translation: the original shows, marked, and nothing is guessed.
+    await pick(page, '한국어');
+    await expect(shown.filter({ hasText: '등롱 서고' }).first()).toBeVisible();
+    await expect(page.getByText('No 한국어 translation yet. This is the original.')).toBeVisible();
+    await expect(page.locator('.swap > [data-active="false"]').first()).toBeHidden();
+  });
+
+  test('moving your place reveals and hides discussion and wiki facts', async ({ page }) => {
+    await page.goto('/en/');
+    await page.locator('#community').scrollIntoViewIfNeeded();
+    await hydrated(page, 'PlaceInStory');
+    const place = page.getByRole('slider', { name: 'Your place in the story' });
+    await expect(place).toHaveValue('12');
+    const later = page.getByText('Posts about later chapters stay hidden until you reach them.');
+    await expect(later).toBeVisible();
+    await expect(page.getByText('Nobody warned me', { exact: false })).toHaveCount(0);
+    await place.focus();
+    await page.keyboard.press('End');
+    await expect(place).toHaveAttribute('aria-valuetext', 'Chapter 30 of 30');
+    await expect(page.getByText('Nobody warned me', { exact: false })).toBeVisible();
+    await expect(later).toHaveCount(0);
+    await expect(
+      page.locator('dd [data-active="true"]', { hasText: 'The Lamplighters' }),
+    ).toBeVisible();
+    await page.keyboard.press('Home');
+    await expect(page.getByText('Worth the wait', { exact: false })).toHaveCount(0);
+    await expect(
+      page.locator('dd [data-active="true"]', { hasText: 'The Salt Marsh' }),
+    ).toHaveCount(0);
+  });
+
+  test('with reduced motion the islands still work and nothing travels', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/en/');
+    await hydrated(page, 'ListingInPlace');
+    // No autoplay: the record stays in the reader's language.
+    await expect(page.getByRole('radio', { name: 'English' })).toBeChecked();
+    await pick(page, '日本語');
+    const shown = page.locator('.swap > [data-active="true"]');
+    await expect(shown.filter({ hasText: '灯籠の書庫' }).first()).toHaveCSS('opacity', '1');
+    // Colour transitions on the chosen pill may run; nothing that moves may.
+    const running = await page.evaluate(
+      () =>
+        document
+          .getAnimations()
+          .filter(
+            (animation) =>
+              animation.playState === 'running' && !(animation instanceof CSSTransition),
+          ).length,
+    );
+    expect(running).toBe(0);
+  });
+
+  test('the home page does not shift as it loads, hydrates and scrolls', async ({ page }) => {
+    await page.addInitScript(() => {
+      const record = window as unknown as { shift: number };
+      record.shift = 0;
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries() as (PerformanceEntry & {
+          value: number;
+          hadRecentInput: boolean;
+        })[])
+          if (!entry.hadRecentInput) record.shift += entry.value;
+      }).observe({ type: 'layout-shift', buffered: true });
+    });
+    await page.goto('/en/');
+    await hydrated(page, 'ListingInPlace');
+    for (let y = 0; y < 9000; y += 600) {
+      await page.evaluate((top) => window.scrollTo(0, top), y);
+      await page.waitForTimeout(150);
+    }
+    await page.waitForTimeout(1500);
+    expect(await page.evaluate(() => (window as unknown as { shift: number }).shift)).toBe(0);
   });
 });

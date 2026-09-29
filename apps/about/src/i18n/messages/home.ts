@@ -1,72 +1,71 @@
 import { defineEnglishCopy } from '../define.ts';
 
+/** A home section's heading and lede. */
+interface Section {
+  title: string;
+  lede: string;
+}
+
 export interface HomeCopy {
   meta: { title: string; description: string };
   hero: { title: string; lede: string; primary: string; secondary: string };
-  /** What the hero picture shows, for people who cannot see it. */
+  /** What the hero's deck shows, for people who cannot see it. */
   heroPicture: string;
-  /** The four first scenarios as a pinned scroll story; step keys are the scenario's feature ids. */
-  story: {
-    title: string;
-    lede: string;
-    steps: Record<
-      'series-tracking' | 'library-import' | 'serial-reading' | 'vn-releases',
-      { title: string; body: string }
-    >;
-  };
-  lines: { title: string; lede: string };
-  why: { title: string; lede: string };
-  glance: { title: string; lede: string; link: string };
+  /** Message one: a work's details in the language you read. */
+  language: Section;
+  /** Message two: the whole community around a story. */
+  community: Section;
+  /** Message three: fans of one story from every platform, together. */
+  together: Section;
+  /** Every kind of story, from the same parts. */
+  kinds: Section;
+  lines: Section;
+  why: Section;
+  glance: Section & { link: string };
   cta: { title: string; body: string };
 }
 
 export const home = defineEnglishCopy<HomeCopy>({
   meta: {
-    title: 'REZICS: one story, every language and edition, yours to keep',
+    title: 'REZICS: every story, every language, one home',
     description:
-      'Follow light novels, books, web serials, visual novels, anime and manga across every language and edition, keep a library you can take anywhere, and read the wiki at your chapter.',
+      'Web novels, light novels, books, visual novels, anime, manga, games and more, each with a complete page in the language you read, a whole community around it, and fans from every platform in one place.',
   },
   hero: {
-    title: 'One story. Every language and edition. Yours to keep.',
-    lede: 'REZICS follows a story from its original through every translation and edition, remembers your place in each, and lets you take the whole library with you. For novels, light novels, web serials, visual novels, anime and manga.',
+    title: 'Every story. Every language. One home.',
+    lede: 'Web novels and light novels, books and visual novels, anime, manga and games, even AI prompts and recipes. REZICS gives each one a complete home, shows it in the language you read, and brings together everyone who loves it, wherever they found it.',
     primary: 'Get notified',
     secondary: 'See the roadmap',
   },
   heroPicture:
-    'One light novel in Japanese, Traditional Chinese and English. The covers change language while your place in the story stays marked.',
-  story: {
-    title: 'Start with what you do every week.',
-    lede: 'Four jobs readers repeat all year come first. Everything else on REZICS grows from them.',
-    steps: {
-      'series-tracking': {
-        title: 'Know which volume comes next.',
-        body: 'Your series lined up in Japanese, English and Traditional Chinese, with what you own and what you have read. When volume 7 is dated in the language you read, it is on your page that day.',
-      },
-      'library-import': {
-        title: 'Bring your library. Keep every edition.',
-        body: 'Import years of history from another site. Each book is matched to the edition you actually read, you decide when two look alike, and you see what will not carry over before anything changes.',
-      },
-      'serial-reading': {
-        title: 'Pick up exactly where you stopped.',
-        body: 'Web serials that remember your paragraph on every device, keep later chapters out of the comments and put the discussion beside the chapter you just finished.',
-      },
-      'vn-releases': {
-        title: 'Find the release you can play.',
-        body: 'Choose a visual novel by the language, platform and translation you need, and see who translated it and how complete it is before you start.',
-      },
-    },
+    'A deck of stories of every kind: a light novel, a visual novel, a web serial, an anime, a manga, a game, an AI prompt and a recipe, each named in the several languages it is read in.',
+  language: {
+    title: 'Don’t read Japanese? It doesn’t matter.',
+    lede: 'REZICS keeps a work’s details in the language they were written in, from titles and synopsis to credits, tags, editions and releases, and presents them in English or in any language you read. Choose a language and watch the record change in place.',
+  },
+  community: {
+    title: 'Want more from a story’s community? It’s all here.',
+    lede: 'Discussion that knows where you are in the story, reviews, lists, wikis, moderation that explains itself, and one identity that goes with you everywhere. Move your place in the story and see what waits for you.',
+  },
+  together: {
+    title: 'Bring fans together, beyond any one platform.',
+    lede: 'One story is read as a web serial, bought as a light novel, watched as an anime and played as a game, in a dozen languages. On REZICS every version meets on one page, and everyone who loves it meets in one Realm.',
+  },
+  kinds: {
+    title: 'One home for every kind of story.',
+    lede: 'Every kind gets a complete page from the same parts, so a recipe is as well kept as a light novel, and each shows the facts that matter for it.',
   },
   lines: {
-    title: 'Every part of a story’s life, on one catalogue.',
-    lede: 'Reading, writing, wikis, communities and publishing share the same records, so a book, its translations, its wiki and its readers are never more than a link apart.',
+    title: 'Reading is one room. Here is the whole house.',
+    lede: 'A library for readers, a studio for writers, wikis, Realms, agents and publishing share the same records, so a story, its translations, its wiki and its people are never more than a link apart.',
   },
   why: {
     title: 'Why REZICS',
-    lede: 'Five commitments hold every product line together.',
+    lede: 'Five commitments hold every part of it together.',
   },
   glance: {
     title: 'Where it is going',
-    lede: 'Registration opens when the four first scenarios are complete and the launch checks pass. This is the order the work happens in.',
+    lede: 'Registration opens once the first scenarios work end to end: following a series across languages, a library you can take with you, serial fiction, and finding the visual-novel release you can play. This is the order the work happens in.',
     link: 'Read the roadmap',
   },
   cta: {

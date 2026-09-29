@@ -1,3 +1,4 @@
+import type { KindKey } from '../../illustrations/sample.ts';
 import { defineEnglishCopy } from '../define.ts';
 
 /**
@@ -6,6 +7,41 @@ import { defineEnglishCopy } from '../define.ts';
  * and the components), not copy.
  */
 export interface IllustrationCopy {
+  /** Each kind of story's name and one fact its page shows, for the home page's kinds. */
+  kinds: Record<KindKey, { name: string; fact: string }>;
+  deck: { previous: string; next: string; position: string };
+  record: {
+    showIn: string;
+    originalTitle: string;
+    story: string;
+    illustration: string;
+    synopsis: string;
+    tags: string;
+    editions: string;
+    original: string;
+    untranslated: string;
+    suggest: string;
+  };
+  thread: {
+    yourPlace: string;
+    chapterOf: string;
+    about: string;
+    later: string;
+    realm: string;
+    wikiName: string;
+    role: string;
+    revealedLater: string;
+  };
+  realm: {
+    name: string;
+    members: string;
+    webSerial: string;
+    lightNovel: string;
+    manga: string;
+    anime: string;
+    game: string;
+    cameFrom: Record<'serial' | 'anime' | 'game' | 'edition', string>;
+  };
   shelf: {
     read: string;
     owned: string;
@@ -112,6 +148,58 @@ export interface IllustrationCopy {
 }
 
 export const illustrations = defineEnglishCopy<IllustrationCopy>({
+  kinds: {
+    webSerial: { name: 'Web serial', fact: 'Chapter 24 on Friday, 20:00 your time' },
+    lightNovel: { name: 'Light novel', fact: 'Vol. 7 in English, dated 2 October' },
+    book: { name: 'Book', fact: 'Paperback, ebook and audiobook as one work' },
+    visualNovel: { name: 'Visual novel', fact: 'Original, official and fan releases' },
+    anime: { name: 'Anime', fact: 'Episode 7 of 12, season two dated' },
+    manga: { name: 'Manga', fact: 'Chapter 41, and Vol. 5 in French' },
+    game: { name: 'Game', fact: 'PC and Switch, version 1.4' },
+    software: { name: 'Software', fact: 'Every version with its release notes' },
+    aiPrompt: { name: 'AI prompt', fact: 'Rated on three models, runs attached' },
+    recipe: { name: 'Recipe', fact: 'Serves four, 35 minutes' },
+    wiki: { name: 'Wiki and world', fact: 'Places and people cited to the chapter' },
+    community: { name: 'Community', fact: 'One Realm, rules in three languages' },
+  },
+  deck: { previous: 'Previous', next: 'Next', position: '{n} of {total}' },
+  record: {
+    showIn: 'Show in',
+    originalTitle: 'Original title',
+    story: 'Story',
+    illustration: 'Illustration',
+    synopsis: 'Synopsis',
+    tags: 'Tags',
+    editions: 'Editions',
+    original: 'Original',
+    untranslated: 'No {language} translation yet. This is the original.',
+    suggest: 'Suggest a translation',
+  },
+  thread: {
+    yourPlace: 'Your place in the story',
+    chapterOf: 'Chapter {n} of {total}',
+    about: 'Chapter {n}',
+    later: 'Posts about later chapters stay hidden until you reach them.',
+    realm: 'Discussion',
+    wikiName: 'Ren Tachibana',
+    role: 'Role',
+    revealedLater: 'Revealed later',
+  },
+  realm: {
+    name: 'The Lantern Archive',
+    members: 'Readers, viewers and players in one Realm',
+    webSerial: 'Web serial',
+    lightNovel: 'Light novel',
+    manga: 'Manga',
+    anime: 'Anime',
+    game: 'Game',
+    cameFrom: {
+      serial: 'Followed the web serial',
+      anime: 'Came from the anime',
+      game: 'Played the game first',
+      edition: 'Reads the 繁體中文 edition',
+    },
+  },
   shelf: {
     read: 'Read',
     owned: 'Owned',

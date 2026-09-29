@@ -13,6 +13,7 @@
     "@tailwindcss/vite": "4.3.3",
     "astro": "7.3.5",
     "lucide-react": "1.47.0",
+    "motion": "13.4.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "satori": "0.33.5",

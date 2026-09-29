@@ -13,6 +13,8 @@ const site = 'https://rezics.com';
 beforeAll(() => {
   const build = Bun.spawnSync([join(root, '../../node_modules/.bin/astro'), 'build'], {
     cwd: root,
+    // bun test sets NODE_ENV=test, which would build React's development runtime.
+    env: { ...process.env, NODE_ENV: 'production' },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -97,6 +99,19 @@ test('structured data parses: Organization everywhere, SoftwareApplication on Ho
   }
 });
 
+/**
+ * The site's islands and when each hydrates. The home page's Motion islands load when the
+ * browser is idle, after the page has painted, so they are live before the reader reaches
+ * them (the language record is set back to its original out of sight). The form loads when
+ * it scrolls into view; pages without Motion islands download React only then.
+ */
+const islandLoading = {
+  NotifyForm: 'visible',
+  StoryDeck: 'idle',
+  ListingInPlace: 'idle',
+  PlaceInStory: 'idle',
+} as const;
+
 test('client JavaScript is islands plus one tiny boot script', () => {
   const inline = new Set<string>();
   for (const { path } of pages) {
@@ -116,16 +131,15 @@ test('client JavaScript is islands plus one tiny boot script', () => {
         `${path}: ${attributes}`,
       ).toBe(true);
     }
-    const islands = [...source.matchAll(/<astro-island[^>]*component-export="(\w+)"/g)].map(
-      ([, name]) => name,
-    );
-    expect(
-      islands.every((name) => name === 'NotifyForm'),
-      `${path}: ${islands.join()}`,
-    ).toBe(true);
-    // The React runtime loads only when the form scrolls into view.
-    for (const [, client] of source.matchAll(/<astro-island[^>]*client="(\w+)"/g))
-      expect(client, path).toBe('visible');
+    const islands = [
+      ...source.matchAll(/<astro-island[^>]*component-export="(\w+)"[^>]*client="(\w+)"/g),
+    ].map(([, name, client]) => [name!, client!] as const);
+    for (const [name, client] of islands) {
+      expect(Object.keys(islandLoading), `${path}: ${name}`).toContain(name);
+      expect(client, `${path}: ${name}`).toBe(islandLoading[name as keyof typeof islandLoading]);
+    }
+    if (path === pagePath('en', 'home'))
+      expect(islands.map(([name]) => name).sort()).toEqual(Object.keys(islandLoading).sort());
   }
   expect(inline.size, 'one boot script for every page').toBe(1);
   expect([...inline][0]!.length).toBeLessThan(700);
@@ -137,9 +151,10 @@ test('JavaScript and CSS stay within budget', () => {
     assets
       .filter((name) => name.endsWith(extension))
       .reduce((sum, name) => sum + statSync(join(dist, '_astro', name)).size, 0);
-  // All chunks together: React's client runtime (about 400 kB raw, 130 kB gzip) plus the
-  // form. A page downloads them only when its notify form becomes visible.
-  expect(size('.js')).toBeLessThan(520_000);
+  // All chunks together: React's client runtime (about 210 kB raw, 66 kB gzip), Motion's
+  // gesture and layout features (about 130 kB raw, 43 kB gzip) and the islands. Pages
+  // without Motion islands download React only when the notify form becomes visible.
+  expect(size('.js')).toBeLessThan(480_000);
   expect(size('.css')).toBeLessThan(160_000);
 });
 

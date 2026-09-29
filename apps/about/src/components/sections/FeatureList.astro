@@ -1,0 +1,23 @@
+---
+import { copy } from '../../i18n/format.ts';
+import type { UiLocale } from '../../i18n/locales.ts';
+import type { FeatureId } from '../../features.ts';
+import StatusBadge from '../StatusBadge.astro';
+
+/**
+ * Feature statements from `features.ts`, each with its title, body and status: the ledger's
+ * list, and the claims beside a home section's picture. `class` sets the grid's columns.
+ */
+interface Props { locale: UiLocale; ids: readonly FeatureId[]; class?: string }
+const { locale, ids, class: className = '' } = Astro.props;
+const text = copy('features', locale);
+---
+<ul class={`grid gap-x-10 gap-y-10 ${className}`}>
+  {ids.map(featureId => (
+    <li data-feature={featureId} class="flex flex-col items-start">
+      <h3 class="text-lg font-bold">{text[featureId].title}</h3>
+      <p class="type-body mt-2 text-muted-foreground">{text[featureId].body}</p>
+      <StatusBadge id={featureId} locale={locale} class="mt-4" />
+    </li>
+  ))}
+</ul>

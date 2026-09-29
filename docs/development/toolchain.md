@@ -136,6 +136,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | knip | 6.38.0 | . |
 | kysely | 0.29.6 | services/account |
 | lucide-react | 1.47.0 | apps/about, apps/accounts, apps/web, packages/ui |
+| motion | 13.4.4 | apps/about |
 | nanostores | 1.5.3 | services/account |
 | native-i18n | 0.2.0 | apps/accounts, apps/web |
 | next | 16.3.6 | apps/accounts, apps/web |

@@ -31,6 +31,35 @@ export const featureCopy = defineEnglishCopy<FeatureCopy>({
     title: 'Built in the open.',
     body: 'The code is public: read how REZICS works, run it yourself and help improve it.',
   },
+  // Home: every language, the whole community, fans together, every kind
+  'names-every-script': {
+    title: 'Names in every script',
+    body: 'Titles, people and characters carry their names in each language and script, with readings, so a work is found however you spell it and shown the way you read it.',
+  },
+  'shared-tags': {
+    title: 'Tags in your language',
+    body: 'Tags come from one shared vocabulary, translated once for everyone, so a tag applied in Japanese reads in English, 繁體中文 or any language it has a name in.',
+  },
+  'reviewed-translations': {
+    title: 'Synopses translated by people',
+    body: 'Readers propose translations of a synopsis or a description, and others review them like any change. Until one exists you see the original, marked as such, never a guess.',
+  },
+  'saved-lists': {
+    title: 'Lists you shape',
+    body: 'Keep lists of anything on REZICS and see them as a list, a table or a gallery, filtered your way, private or shared.',
+  },
+  'one-identity': {
+    title: 'One identity, everywhere',
+    body: 'One profile follows you across every Realm, every kind of story and every language, so what you write and what you are known for stays yours wherever you post.',
+  },
+  'works-across-platforms': {
+    title: 'Every version, one story',
+    body: 'The web serial, the light novel, the manga, the anime and the game are linked as one story, each with its own releases, so fans who met it in different places arrive on the same page.',
+  },
+  'every-kind': {
+    title: 'A complete page for every kind',
+    body: 'Every kind of work gets a full page from the same parts: cover, names in every language, facts, relations, ratings, reviews, discussion, wiki, lists and sources. A new kind opens as configuration, not code.',
+  },
   // Reading
   'portable-library': {
     title: 'A library that knows the edition',

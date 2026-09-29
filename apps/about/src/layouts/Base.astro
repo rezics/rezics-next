@@ -1,5 +1,7 @@
 ---
 import '../styles/global.css';
+import manrope from '@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url';
+import sourceSerif from '@fontsource-variable/source-serif-4/files/source-serif-4-latin-wght-normal.woff2?url';
 import { SkipNavLink } from '@rezics/ui/skip-nav';
 import Footer from '../components/Footer.astro';
 import Header from '../components/Header.astro';
@@ -43,6 +45,10 @@ const data = [
     <meta name="theme-color" content="#f9f6f2" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0d1218" media="(prefers-color-scheme: dark)" />
     {noindex && <meta name="robots" content="noindex" />}
+    <!-- The interface face and the work serif (covers, titles) set the first screen; fetched with the
+         page so its text is not laid out twice when they arrive (CLS 0). -->
+    <link rel="preload" href={manrope} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={sourceSerif} as="font" type="font/woff2" crossorigin />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     {!noindex && <link rel="canonical" href={url} />}
     {!noindex && alternates(page, site).map(alternate => <link rel="alternate" hreflang={alternate.hreflang} href={alternate.href} />)}
