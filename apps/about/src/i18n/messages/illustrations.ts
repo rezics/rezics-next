@@ -112,6 +112,80 @@ export interface IllustrationCopy {
     public: string;
     private: string;
   };
+  library: {
+    counted: string;
+    formats: string;
+    page: string;
+    minute: string;
+    firstRead: string;
+    reread: string;
+    setAside: string;
+    finished: string;
+    note: string;
+    private: string;
+    story: string;
+    translation: string;
+    narration: string;
+    export: string;
+    fileNotes: string;
+    fileDates: string;
+    fileShelves: string;
+    nothingApplied: string;
+    sources: string;
+    nowReading: string;
+  };
+  desk: {
+    chapter: string;
+    noSignal: string;
+    waitingToSync: string;
+    restore: string;
+    latest: string;
+    goesOutAs: string;
+    atTime: string;
+    yourTime: string;
+    readerTime: string;
+    laterHidden: string;
+    onParagraph: string;
+    author: string;
+    editor: string;
+    betaReader: string;
+    coAuthor: string;
+    reads: string;
+    suggests: string;
+    edits: string;
+    publishes: string;
+    revisions: string;
+    notes: string;
+    world: string;
+    openFormat: string;
+    aiNone: string;
+    aiAssisted: string;
+    aiDrafted: string;
+    aiDetail: string;
+    character: string;
+    original: string;
+    translation: string;
+  };
+  acgn: {
+    route: string;
+    episode: string;
+    ofTotal: string;
+    madeFrom: string;
+    translationGroup: string;
+    released: string;
+    hiddenUntil: string;
+    posts: string;
+    unlocked: string;
+    thisSeason: string;
+    airs: string;
+    adaptation: string;
+    heldBack: string;
+    source: string;
+    voice: string;
+    director: string;
+    asCharacter: string;
+    zoneTabs: { seasons: string; releases: string; discussion: string };
+  };
   agent: {
     proposal: string;
     automated: string;
@@ -269,6 +343,80 @@ export const illustrations = defineEnglishCopy<IllustrationCopy>({
     lore: 'Lore',
     public: 'Public',
     private: 'Private',
+  },
+  library: {
+    counted: 'Counted as one read',
+    formats: 'Formats',
+    page: 'Page {n} of {total}',
+    minute: 'Minute {n}',
+    firstRead: 'First read',
+    reread: 'Reread',
+    setAside: 'Set aside',
+    finished: 'Finished',
+    note: 'Note on this passage',
+    private: 'Only you can see this',
+    story: 'Story',
+    translation: 'Translation',
+    narration: 'Narration',
+    export: 'Export library',
+    fileNotes: 'Notes and passages',
+    fileDates: 'Reads with dates',
+    fileShelves: 'Shelves and copies',
+    nothingApplied: 'Nothing applied yet',
+    sources: 'From Goodreads, StoryGraph or a spreadsheet',
+    nowReading: 'Now reading',
+  },
+  desk: {
+    chapter: 'Chapter {n}',
+    noSignal: 'No signal',
+    waitingToSync: 'Waiting to sync',
+    restore: 'Restore',
+    latest: 'Latest',
+    goesOutAs: 'Goes out as',
+    atTime: '{day} {time}',
+    yourTime: 'Your time',
+    readerTime: 'Reader in {city}',
+    laterHidden: 'Comments on chapter {n} stay hidden until you reach it.',
+    onParagraph: 'On paragraph {n}',
+    author: 'You',
+    editor: 'Editor',
+    betaReader: 'Beta reader',
+    coAuthor: 'Co-author',
+    reads: 'Reads',
+    suggests: 'Suggests',
+    edits: 'Edits',
+    publishes: 'Publishes',
+    revisions: 'Every revision',
+    notes: 'Notes',
+    world: 'World',
+    openFormat: 'Open format',
+    aiNone: 'No AI',
+    aiAssisted: 'AI-assisted',
+    aiDrafted: 'AI-drafted',
+    aiDetail: 'Pacing suggestions on chapters 3 to 9, each reviewed by the author.',
+    character: 'Character',
+    original: 'Original',
+    translation: 'Translation',
+  },
+  acgn: {
+    route: 'Route {n}',
+    episode: 'Episode {n}',
+    ofTotal: '{n} of {total}',
+    madeFrom: 'Made from the original, version {n}',
+    translationGroup: 'Translation group',
+    released: 'Released',
+    hiddenUntil: 'Hidden until {place}',
+    posts: 'Discussion',
+    unlocked: 'You have reached this',
+    thisSeason: 'This season',
+    airs: 'Airs {day}',
+    adaptation: 'Adaptation',
+    heldBack: 'Held back: beyond volume 3',
+    source: 'Source',
+    voice: 'Voice',
+    director: 'Director',
+    asCharacter: 'as {name}',
+    zoneTabs: { seasons: 'Seasons', releases: 'Releases', discussion: 'Discussion' },
   },
   agent: {
     proposal: 'Proposed tags',

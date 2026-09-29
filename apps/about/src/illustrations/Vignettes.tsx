@@ -17,7 +17,10 @@ import {
 import type { JSX } from 'react';
 import { fill } from '../i18n/fill.ts';
 import { localeNames } from '../i18n/locales.ts';
-import type { IllustrationCopy } from '../i18n/messages/illustrations.ts';
+import { row, type Words } from './parts.ts';
+import { acgnVignettes } from './AcgnPictures.tsx';
+import { readingVignettes } from './ReadingPictures.tsx';
+import { serialVignettes } from './SerialPictures.tsx';
 import { cloths, lantern, world } from './sample.ts';
 
 /**
@@ -25,10 +28,6 @@ import { cloths, lantern, world } from './sample.ts';
  * in. Each shows one true scene in a few real UI pieces; tiles without a vignette show
  * their text alone.
  */
-type Words = { words: IllustrationCopy };
-
-const row =
-  'flex items-center justify-between gap-3 rounded-xl border border-border bg-background px-3 py-2 text-sm';
 
 /* ---------- Light novels ---------- */
 
@@ -403,6 +402,9 @@ function Connect({ words }: Words) {
 }
 
 const vignettes = {
+  reading: readingVignettes,
+  'serial-fiction': serialVignettes,
+  acgn: acgnVignettes,
   'light-novels': { omnibus: Omnibus, calendar: Calendar },
   wikis: { bible: Bible, publish: Publish, maps: WorldMap, timelines: Timeline, history: Diff },
   agents: {

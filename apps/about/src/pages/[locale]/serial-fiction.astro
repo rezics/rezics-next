@@ -1,10 +1,21 @@
 ---
+import { copy } from '../../i18n/format.ts';
 import type { UiLocale } from '../../i18n/locales.ts';
 import LinePage from '../../layouts/LinePage.astro';
 import { localePaths } from '../../lib/site.ts';
+import { ChapterDesk, SerialFlow } from '../../illustrations/SerialPictures.tsx';
+import { Vignette } from '../../illustrations/Vignettes.tsx';
 
-// G-483 gives this page its pictures (PATTERNS.md); until then it shows its text in the standard order.
 export const getStaticPaths = localePaths;
 const locale = Astro.params.locale as UiLocale;
+const words = copy('illustrations', locale);
+const tiles = ['collaborators', 'backup', 'ai', 'world', 'languages'] as const;
 ---
-<LinePage locale={locale} page="serial-fiction" />
+<LinePage locale={locale} page="serial-fiction" numbered tileSpans={{ collaborators: 2, backup: 2, ai: 2, world: 3, languages: 3 }} clothTiles={['world']}>
+  <ChapterDesk slot="hero" words={words} />
+  <SerialFlow slot="step-draft" words={words} stage="draft" />
+  <SerialFlow slot="step-schedule" words={words} stage="schedule" />
+  <SerialFlow slot="step-resume" words={words} stage="resume" />
+  <SerialFlow slot="step-discuss" words={words} stage="discuss" />
+  {tiles.map(tile => <Vignette slot={`tile-${tile}`} page="serial-fiction" tile={tile} words={words} />)}
+</LinePage>
