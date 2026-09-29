@@ -37,6 +37,7 @@ const text = linePages[page][locale];
 const steps = Object.entries(text.story.steps);
 const tiles = Object.entries(text.showcase.tiles);
 const ids = [...featuresOf(page), ...alsoFeatures];
+const framed = steps.some(([key]) => Astro.slots.has(`step-${key}`));
 ---
 <Base locale={locale} page={page} title={text.meta.title} description={text.meta.description}
   contentLang={pageLanguage(locale, page, 'features', 'illustrations')}>
@@ -44,12 +45,14 @@ const ids = [...featuresOf(page), ...alsoFeatures];
     <slot name="hero" slot="visual" />
   </ChapterHero>
 
-  <ScrollStory id="story" title={text.story.title} lede={text.story.lede} steps={steps.length}>
+  <ScrollStory id="story" title={text.story.title} lede={text.story.lede} steps={steps.length} framed={framed}>
     {steps.map(([key, step], index) => (
       <StoryStep index={index} title={step.title} body={step.body} number={numbered}>
-        <div slot="frame" class="w-full max-w-2xl" data-step={key}>
-          {Astro.slots.has(`step-${key}`) && <Fragment set:html={Astro.slots.render(`step-${key}`)} />}
-        </div>
+        {Astro.slots.has(`step-${key}`) && (
+          <div slot="frame" class="w-full max-w-2xl" data-step={key}>
+            <Fragment set:html={Astro.slots.render(`step-${key}`)} />
+          </div>
+        )}
       </StoryStep>
     ))}
   </ScrollStory>

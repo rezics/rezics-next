@@ -3,7 +3,9 @@
 `apps/about` is the public product site: what REZICS is, where it is going and how to hear
 when registration opens. It is Astro with React only where a page needs script, styled with
 the same tokens, fonts and components as the app (`packages/ui`), in the eight interface
-locales. G-480 built the foundation; G-481 writes the final copy and page designs on it.
+locales. G-480 built the foundation; G-481 set the art direction, the motion system, the
+home and flagship pages and every page's English copy. `apps/about/PATTERNS.md` names the
+section patterns new pages are built from.
 
 ## Run it
 
@@ -25,19 +27,28 @@ the background in an agent session; stop it with `astro dev stop` in `apps/about
 - **Complete catalogs, no fallback.** The public site never shows English in another locale,
   so `defineCopy` requires every key in every locale and `tests/catalogs.test.ts` checks keys,
   placeholders and empty text. The eight locales duplicate `apps/web/i18n/define.ts`, as the
-  Accounts app does, and a test keeps them equal.
-- **One registry for feature claims.** `src/features.ts` lists every capability statement with
-  its status (available, in development, planned Next or Later); pages render the status
-  beside each statement and the roadmap groups by it. The initial statuses are the
-  maintainer's to confirm: only "no trackers" is marked available, because nothing else is
-  public yet.
-- **Placeholder copy is marked.** `src/copy-status.ts` says which pages still carry
-  placeholder copy; it shows as `data-copy` on `<main>` and a test fixes the value until G-481
-  flips a page to `final`.
+  Accounts app does, and a test keeps them equal. While copy is written in English ahead of
+  its translation, its catalog uses `defineEnglishCopy`: every locale renders the English text
+  inside `<main lang="en">`, and the catalog test names each such catalog. The site is not
+  deployed while that list is not empty (G-482 translates the copy G-481 wrote).
+- **One registry for feature claims.** `src/features.ts` lists every capability statement and
+  the `GOAL.md` milestone that delivers it; the milestone sets the status: M4 is in
+  development, M5 and M6 are up next, M7 and M8 come later. Pages render the status beside
+  each statement and the roadmap groups by it, so the copy describes the product as it will
+  work without hedging. Only "no trackers" is available, because nothing else is public yet.
+  The maintainer confirms the mapping when a milestone starts or ends.
+- **Copy status is marked.** `src/copy-status.ts` says whether a page's copy is final; it shows
+  as `data-copy` on `<main>`. G-481 made every page's English copy final.
 - **JavaScript.** Pages ship a 0.5 kB boot script (saved theme before paint, remembers a
   chosen language), the theme button's module and one React island, the notify form, which
   loads only when it scrolls into view (`tests/build.test.ts` holds this and the size budget).
   Menus are `<details>`, and the form also works as a plain post without script.
+- **Motion is CSS.** Scroll-driven animations (`animation-timeline: view()`), sticky pinned
+  stories and cross-document view transitions do everything the pages need, so the site adds
+  no animation library and no script: it keeps 60 fps on a throttled phone and the only
+  island stays the form. Browsers without scroll timelines, and readers who prefer reduced
+  motion, get the static page, which is complete on its own. The one looping picture has a
+  CSS-only pause control.
 - **Share images are Latin only.** `src/lib/og.ts` draws one 1200×630 image per page with
   Satori. CJK text would need the four Noto CJK font families in the build, so localized pages
   share the English image; their titles and descriptions are localized in the page metadata.

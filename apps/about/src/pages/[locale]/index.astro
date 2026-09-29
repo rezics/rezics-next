@@ -58,7 +58,7 @@ const tiles = {
         <a href={pagePath(locale, 'roadmap')} class={buttonVariants({ size: 'xl', variant: 'outline' })}>{text.hero.secondary}</a>
       </div>
     </div>
-    <EditionFan caption={text.heroPicture} pause={site.motion.pause} />
+    <EditionFan caption={text.heroPicture} pause={site.motion.pause} pauseLang={locale} />
   </section>
 
   <WordBand words={storyWords} />
@@ -80,7 +80,7 @@ const tiles = {
   <Showcase id="lines" title={text.lines.title} lede={text.lines.lede}>
     {Object.entries(tiles).map(([id, tile]) => (
       <Tile title={site.pages[id as keyof typeof tiles].name} body={site.pages[id as keyof typeof tiles].summary}
-        href={pagePath(locale, id as keyof typeof tiles)} span={tile.span} surface={tile.surface} cloth={id as keyof typeof tiles} transition={`line-${id}`}>
+        href={pagePath(locale, id as keyof typeof tiles)} lang={locale} span={tile.span} surface={tile.surface} cloth={id as keyof typeof tiles} transition={`line-${id}`}>
         <LineVignette slot="visual" line={id as keyof typeof tiles} words={words} />
       </Tile>
     ))}

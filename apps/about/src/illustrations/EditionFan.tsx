@@ -12,7 +12,15 @@ const turns: Record<EditionLang, number> = { ja: 0, en: 1, 'zh-Hant': 2 };
  * on the same cloth, taking turns in front while the red ribbon (your place) stays put.
  * The loop has a CSS-only pause toggle; with reduced motion it is a still fan.
  */
-export function EditionFan({ caption, pause }: { caption: string; pause: string }) {
+export function EditionFan({
+  caption,
+  pause,
+  pauseLang,
+}: {
+  caption: string;
+  pause: string;
+  pauseLang?: string;
+}) {
   const editions = [...lantern.editions].sort((a, b) => turns[a.lang] - turns[b.lang]);
   return (
     <figure data-loop className="edition-fan">
@@ -55,7 +63,9 @@ export function EditionFan({ caption, pause }: { caption: string; pause: string 
           <input type="checkbox" className="sr-only" />
           <Pause aria-hidden className="icon-pause size-4" />
           <Play aria-hidden className="icon-play size-4" />
-          <span className="sr-only">{pause}</span>
+          <span lang={pauseLang} className="sr-only">
+            {pause}
+          </span>
         </label>
       </div>
       <figcaption className="sr-only">{caption}</figcaption>

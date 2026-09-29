@@ -330,12 +330,12 @@
     place-items: center;
   }
   @media (min-width: 64rem) {
-    .story-grid {
+    .story:not(.story-plain) .story-grid {
       grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
       column-gap: clamp(3rem, 5vw, 6rem);
       row-gap: 6rem;
     }
-    .story-step {
+    .story:not(.story-plain) .story-step {
       display: contents;
     }
     .story-step-text {
@@ -347,6 +347,15 @@
       grid-column: 2;
       grid-row: var(--row);
     }
+  }
+  /* Steps without pictures sit side by side. */
+  .story-plain .story-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    gap: 2.5rem;
+  }
+  .story-plain .story-step-text {
+    grid-column: auto;
+    grid-row: auto;
   }
 
   /* ---------- Showcase grid ---------- */
@@ -590,10 +599,10 @@
   @media (prefers-reduced-motion: no-preference) {
     /* Pinned story, desktop: frames share one sticky stage and take turns as their step passes. */
     @media (min-width: 64rem) {
-      .story-grid {
+      .story:not(.story-plain) .story-grid {
         row-gap: 0;
       }
-      .story-step-text {
+      .story:not(.story-plain) .story-step-text {
         min-height: 88vh;
         display: flex;
         flex-direction: column;

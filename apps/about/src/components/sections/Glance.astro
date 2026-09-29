@@ -25,7 +25,7 @@ const horizonName = { now: status.inDevelopment, next: status.next, later: statu
       {milestones.map(milestone => (
         <li class="glance-stage" data-horizon={milestoneHorizon[milestone]}>
           {milestoneHorizon[milestone] === 'now' && <span class="ribbon" aria-hidden="true"></span>}
-          <p class="text-sm font-semibold text-muted-foreground">{horizonName[milestoneHorizon[milestone]]}</p>
+          <p class="text-sm font-semibold text-muted-foreground" lang={locale}>{horizonName[milestoneHorizon[milestone]]}</p>
           <h3 class="mt-2 text-xl font-bold tracking-[-0.01em]">{stages[milestone].name}</h3>
           <p class="type-body mt-3 text-muted-foreground">{stages[milestone].body}</p>
         </li>

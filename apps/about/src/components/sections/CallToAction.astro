@@ -15,10 +15,10 @@ const { notify } = copy('site', locale);
   <div class="page-frame grid gap-10 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:items-end lg:gap-16">
     <div>
       <span class="ribbon mb-8 h-14" aria-hidden="true"></span>
-      <h2 id="notify-title" class="type-section max-w-2xl">{title ?? notify.title}</h2>
-      <p class="type-lede mt-5 text-muted-foreground">{body ?? notify.body}</p>
+      <h2 id="notify-title" class="type-section max-w-2xl" lang={title ? undefined : locale}>{title ?? notify.title}</h2>
+      <p class="type-lede mt-5 text-muted-foreground" lang={body ? undefined : locale}>{body ?? notify.body}</p>
     </div>
-    <div class="rounded-[1.75rem] border border-border bg-card p-6 sm:p-8">
+    <div class="rounded-[1.75rem] border border-border bg-card p-6 sm:p-8" lang={locale}>
       <NotifyForm client:visible locale={locale} labels={{ emailLabel: notify.emailLabel, submit: notify.submit, sending: notify.sending,
         successTitle: notify.successTitle, successBody: notify.successBody, errors: notify.errors }} />
       <p class="mt-4 text-sm text-muted-foreground">{notify.privacy}</p>

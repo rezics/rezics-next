@@ -6,6 +6,7 @@
  */
 interface Props { index: number; title: string; body: string; number?: boolean }
 const { index, title, body, number = false } = Astro.props;
+const frame = Astro.slots.has('frame') ? (await Astro.slots.render('frame')).trim() : '';
 ---
 <div class="story-step" style={`--row: ${index + 1}; --step: --step-${index}`}>
   <div class="story-step-text">
@@ -14,5 +15,5 @@ const { index, title, body, number = false } = Astro.props;
     <p class="type-lede mt-4 max-w-lg text-muted-foreground">{body}</p>
     {Astro.slots.has('meta') && <div class="mt-6"><slot name="meta" /></div>}
   </div>
-  <div class="story-frame"><slot name="frame" /></div>
+  {frame && <div class="story-frame" set:html={frame} />}
 </div>

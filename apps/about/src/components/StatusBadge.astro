@@ -17,7 +17,8 @@ const help = { available: words.availableHelp, 'in-development': words.inDevelop
 const variant = { available: 'success', 'in-development': 'info', next: 'soft', later: 'outline', now: 'info' } as const;
 const Icon = { available: CircleCheck, 'in-development': Hammer, next: ArrowRight, later: CircleDashed, now: Hammer }[shown];
 ---
-<span class={badgeVariants({ variant: variant[shown], size: 'md', className })} data-status={status} data-horizon={horizon} title={help}>
+<!-- Status words come from the translated site catalog, so they carry the locale even inside English page copy. -->
+<span class={badgeVariants({ variant: variant[shown], size: 'md', className })} data-status={status} data-horizon={horizon} title={help} lang={locale}>
   <Icon aria-hidden className="rtl:-scale-x-100" />
   {label}
 </span>

@@ -14,23 +14,24 @@ const { locale, page, title, lede } = Astro.props;
 const site = catalogs.site[locale];
 const name = site.pages[page].name;
 const seen = new Set([name]);
+const visual = Astro.slots.has('visual') ? (await Astro.slots.render('visual')).trim() : '';
 const otherNames = uiLocales
   .map(other => ({ lang: other, name: catalogs.site[other].pages[page].name }))
   .filter(entry => !seen.has(entry.name) && seen.add(entry.name));
 ---
 <header class="dark cloth chapter-hero" style={`--cloth: var(--cloth-${page})`}>
   <div class="page-frame">
-    <p class="chapter-name type-chapter" style={`view-transition-name: line-${page}`}>{name}</p>
+    <p class="chapter-name type-chapter" lang={locale} style={`view-transition-name: line-${page}`}>{name}</p>
     <ul class="chapter-names mt-5" aria-hidden="true">
       {otherNames.map(entry => <li lang={entry.lang}>{entry.name}</li>)}
     </ul>
-    <div class="mt-12 grid items-center gap-12 md:mt-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
+    <div class:list={['mt-12 grid items-center gap-12 md:mt-16 lg:gap-16', visual && 'lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]']}>
       <div>
         <h1 class="type-title max-w-xl">{title}</h1>
         <p class="type-lede mt-6 text-muted-foreground">{lede}</p>
-        <a href="#notify" class={buttonVariants({ size: 'xl', className: 'cloth-button mt-9' })}>{site.header.cta}</a>
+        <a href="#notify" lang={locale} class={buttonVariants({ size: 'xl', className: 'cloth-button mt-9' })}>{site.header.cta}</a>
       </div>
-      <div class="min-w-0"><slot name="visual" /></div>
+      {visual && <div class="min-w-0" set:html={visual} />}
     </div>
   </div>
 </header>
