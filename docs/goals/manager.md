@@ -89,6 +89,7 @@ maintainer changes them.
 | `sonnet` | Claude Sonnet 5.5 | Same subscription and gate as `claude`; measure its draw on both windows in the first two hours | `low`–`max` |
 | `fable` | Claude Fable 5.1 | Not used (maintainer, 2026-09-28): it shares the Claude 5-hour session limit with Opus (both hit it together) and does less than Opus 5.5 | `low`–`max` |
 | `astra` | GPT-6 Astra | Codex account in `~/.codex-1` (the `codex-1` wrapper); weekly window from its session rollouts | `low`–`ultra` |
+| `astra-codex` | GPT-6 Astra | Default Codex account in `~/.codex`, shared with `codex` and `luna` | `low`–`ultra` |
 | `codex` | GPT-6 Sol | Default Codex account in `~/.codex`; weekly window | `low`–`ultra` |
 | `luna` | GPT-6 Luna | Same account as `codex` | `low`–`max` |
 | `grok` | Grok 4.7 | Grok Build CLI; no readout, quota errors show exhaustion | `low`–`high` |

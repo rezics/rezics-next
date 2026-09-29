@@ -209,6 +209,7 @@ describe('goalctl runtime policy', () => {
     expect(validateBrief(brief('claude', 'max'))).toEqual([]);
     expect(validateBrief(brief('fable', 'max'))).toEqual([]);
     expect(validateBrief(brief('sonnet', 'max'))).toEqual([]);
+    expect(validateBrief(brief('astra-codex', 'ultra'))).toEqual([]);
     expect(validateBrief(brief('cursor', 'xhigh'))).toEqual([]);
     expect(validateBrief(brief('luna', 'ultra')).join()).toContain('luna effort');
     expect(validateBrief(brief('grok', 'xhigh')).join()).toContain('grok effort');

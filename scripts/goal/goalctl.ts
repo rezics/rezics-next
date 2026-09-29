@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
-export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'luna' | 'astra' | 'grok' | 'cursor';
+export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'luna' | 'astra' | 'astra-codex' | 'grok' | 'cursor';
 export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
@@ -59,6 +59,7 @@ const ENGINE_EFFORTS: Record<Engine, string[]> = {
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   luna: ['low', 'medium', 'high', 'xhigh', 'max'],
   astra: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  'astra-codex': ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   grok: ['low', 'medium', 'high'],
   // Cursor Agent selects Grok 4.7 through per-effort model IDs (grok-4.7-<effort>).
   cursor: ['low', 'medium', 'high', 'xhigh'],
@@ -66,15 +67,17 @@ const ENGINE_EFFORTS: Record<Engine, string[]> = {
 const ENGINES = Object.keys(ENGINE_EFFORTS) as Engine[];
 export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undefined) ?? 'claude';
 // GPT-6 Sol and Luna use the default Codex account; GPT-6 Astra has its own account in a separate
-// CODEX_HOME (the `codex-1` wrapper sets the same directory).
+// CODEX_HOME (the `codex-1` wrapper sets the same directory). `astra-codex` runs Astra on the default
+// account, so Astra work can continue on whichever account still has usage.
 export const CODEX_HOME = process.env.GOAL_CODEX_HOME ?? join(homedir(), '.codex');
 export const ASTRA_HOME = process.env.GOAL_ASTRA_CODEX_HOME ?? join(homedir(), '.codex-1');
 const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
-const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, fable: FABLE_MODEL, codex: CODEX_MODEL, luna: LUNA_MODEL, astra: ASTRA_MODEL,
+const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, fable: FABLE_MODEL, codex: CODEX_MODEL, luna: LUNA_MODEL, astra: ASTRA_MODEL, 'astra-codex': ASTRA_MODEL,
   grok: GROK_MODEL, cursor: `${GROK_MODEL} (Cursor)` };
 const modelOf = (engine: Engine): string => MODELS[engine];
 const effortsOf = (engine: Engine): string[] => ENGINE_EFFORTS[engine] ?? [];
-const isCodex = (engine: Engine): boolean => engine === 'codex' || engine === 'luna' || engine === 'astra';
+const isCodex = (engine: Engine): boolean =>
+  engine === 'codex' || engine === 'luna' || engine === 'astra' || engine === 'astra-codex';
 const isClaudeCode = (engine: Engine): boolean => engine === 'claude' || engine === 'sonnet' || engine === 'fable';
 // Process name that /proc/<pid>/cmdline carries for a live worker of each engine.
 const programOf = (engine: Engine): string =>
@@ -486,7 +489,7 @@ function tail(file: string, bytes: number): string {
 
 function codexAccounts(): AccountUsage[] {
   const accounts: AccountUsage[] = [
-    { account: 'codex', home: CODEX_HOME, engines: ['codex', 'luna'] },
+    { account: 'codex', home: CODEX_HOME, engines: ['codex', 'luna', 'astra-codex'] },
     { account: 'codex-1', home: ASTRA_HOME, engines: ['astra'] },
   ];
   return accounts.map(account => {
