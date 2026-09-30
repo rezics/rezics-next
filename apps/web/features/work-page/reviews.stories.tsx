@@ -194,3 +194,18 @@ export const ChinesePhone: Story = {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
+
+export const OfAnotherResource: Story = {
+  args: { target: 'https://rezics.com/id/0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d',
+    href: '/v1/resources/0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d/reviews', subject: 'Reviews of this release',
+    viewer: { kind: 'read-only' }, api: fixture.memoryReviewApi() },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    // The heading says what was reviewed, and a target without its own rating question offers no writing or voting.
+    await expect(canvas.getByText('Reviews of this release')).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Write a review' })).toBeNull();
+    await expect(canvas.queryByRole('link', { name: /Write a review/ })).toBeNull();
+    await expect(canvas.queryAllByRole('button', { name: 'Helpful' })).toHaveLength(0);
+    await expect(canvas.getAllByRole('article')).toHaveLength(3);
+  },
+};

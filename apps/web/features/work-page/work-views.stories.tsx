@@ -195,6 +195,20 @@ export const GuideWithContents: Story = { parameters: at('overview'),
   },
 };
 
+/** A type the registry does not know, and every presentation that is not a book, gets no Read button or reader layout. */
+const notABook = (type: string, title: string): Story => ({ parameters: at('overview'),
+  render: () => <Framed work={typedWork(type, title)}><p>{title}</p></Framed>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: title })).toBeVisible();
+    await expect(canvas.queryAllByRole('link', { name: /^(read|start reading|continue reading)$/i })).toHaveLength(0);
+    await expect(canvas.queryAllByRole('button', { name: /^(read|start reading|continue reading)$/i })).toHaveLength(0);
+  } });
+export const UnknownTypeIsNotABook = notABook('https://example.com/Hologram', 'Hologram tour');
+export const GameIsNotABook = notABook('https://schema.org/VideoGame', 'Harbour Lights');
+export const FilmIsNotABook = notABook('https://schema.org/Movie', 'Harbour Lights: the film');
+export const SoftwareIsNotABook = notABook('https://schema.org/SoftwareApplication', 'Tide table app');
+
 export const Versions: Story = {
   parameters: at('versions'),
   render: () => <Framed><VersionsRegion versions={fixture.versions} workRef={fixture.workRef} query={{}}

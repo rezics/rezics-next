@@ -56,14 +56,23 @@ export const Statements: Story = {
   },
 };
 
-export const StatementsEmptyAndFailed: Story = {
+export const StatementsEmpty: Story = {
   render: () => <Page><StatementsView page={{ ok: true, data: noStatements }} names={new Map()} cursor={undefined}
-    {...common('en')} />
-    <StatementsView page={{ ok: false, failure: 'unavailable' }} names={new Map()} cursor="stale" {...common('en')} /></Page>,
+    {...common('en')} /></Page>,
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByText('No statements yet')).toBeVisible();
+  },
+};
+
+export const StatementsFailedOnAStaleCursor: Story = {
+  render: () => <Page><StatementsView page={{ ok: false, failure: 'moved' }} names={new Map()} cursor="stale"
+    {...common('en')} /></Page>,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText('No statements yet')).toBeVisible();
     await expect(canvas.getByRole('alert')).toHaveTextContent('Statements could not be loaded.');
+    // A stale cursor restarts from the first page rather than retrying the same one.
+    await expect(canvas.getByRole('link', { name: 'First page' })).toHaveAttribute('href',
+      '/e/0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d#statements');
   },
 };
 
@@ -76,7 +85,7 @@ export const Relations: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Relations' })).toBeVisible();
     // A counterpart that is a Work links to its own host.
-    await expect(canvas.getAllByRole('link').some(link => link.getAttribute('href')?.startsWith('/w/'))).toBe(true);
+    await expect(canvas.getAllByRole('link').some(link => link.getAttribute('href')?.includes('/w/'))).toBe(true);
   },
 };
 
