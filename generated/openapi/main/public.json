@@ -56074,6 +56074,11 @@
                     ],
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "type": "string"
+                  },
                   "name": {
                     "maxLength": 300,
                     "minLength": 1,
@@ -56156,6 +56161,11 @@
                     ],
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "type": "string"
+                  },
                   "name": {
                     "maxLength": 300,
                     "minLength": 1,
@@ -56236,6 +56246,11 @@
                       "public",
                       "private"
                     ],
+                    "type": "string"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
                     "type": "string"
                   },
                   "name": {
@@ -56983,6 +56998,11 @@
                     ],
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "type": "string"
+                  },
                   "name": {
                     "maxLength": 300,
                     "minLength": 1,
@@ -57022,6 +57042,11 @@
                     ],
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "type": "string"
+                  },
                   "name": {
                     "maxLength": 300,
                     "minLength": 1,
@@ -57059,6 +57084,11 @@
                       "public",
                       "private"
                     ],
+                    "type": "string"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
                     "type": "string"
                   },
                   "name": {
@@ -58401,6 +58431,11 @@
                     ],
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "type": "string"
+                  },
                   "name": {
                     "maxLength": 300,
                     "minLength": 1,
@@ -58435,6 +58470,11 @@
                     ],
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "type": "string"
+                  },
                   "name": {
                     "maxLength": 300,
                     "minLength": 1,
@@ -58467,6 +58507,11 @@
                       "public",
                       "private"
                     ],
+                    "type": "string"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
                     "type": "string"
                   },
                   "name": {
@@ -343753,20 +343798,25 @@
                               "body": {
                                 "additionalProperties": false,
                                 "properties": {
-                                  "en": {
-                                    "maxLength": 1000,
-                                    "minLength": 1,
-                                    "type": "string"
+                                  "labels": {
+                                    "patternProperties": {
+                                      "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                        "maxLength": 1000,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
                                   },
-                                  "zh-CN": {
-                                    "maxLength": 1000,
-                                    "minLength": 1,
+                                  "original": {
+                                    "maxLength": 35,
+                                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "en",
-                                  "zh-CN"
+                                  "original",
+                                  "labels"
                                 ],
                                 "type": "object"
                               },
@@ -343802,20 +343852,25 @@
                               "title": {
                                 "additionalProperties": false,
                                 "properties": {
-                                  "en": {
-                                    "maxLength": 100,
-                                    "minLength": 1,
-                                    "type": "string"
+                                  "labels": {
+                                    "patternProperties": {
+                                      "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                        "maxLength": 100,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
                                   },
-                                  "zh-CN": {
-                                    "maxLength": 100,
-                                    "minLength": 1,
+                                  "original": {
+                                    "maxLength": 35,
+                                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "en",
-                                  "zh-CN"
+                                  "original",
+                                  "labels"
                                 ],
                                 "type": "object"
                               }
@@ -344263,20 +344318,25 @@
                             "body": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 1000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             },
@@ -344312,20 +344372,25 @@
                             "title": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 100,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             }
@@ -344427,20 +344492,25 @@
                             "body": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 1000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             },
@@ -344476,20 +344546,25 @@
                             "title": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 100,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             }
@@ -344591,20 +344666,25 @@
                             "body": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 1000,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 1000,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             },
@@ -344640,20 +344720,25 @@
                             "title": {
                               "additionalProperties": false,
                               "properties": {
-                                "en": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
-                                  "type": "string"
+                                "labels": {
+                                  "patternProperties": {
+                                    "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                      "maxLength": 100,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
                                 },
-                                "zh-CN": {
-                                  "maxLength": 100,
-                                  "minLength": 1,
+                                "original": {
+                                  "maxLength": 35,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "en",
-                                "zh-CN"
+                                "original",
+                                "labels"
                               ],
                               "type": "object"
                             }
@@ -344779,20 +344864,25 @@
                               "body": {
                                 "additionalProperties": false,
                                 "properties": {
-                                  "en": {
-                                    "maxLength": 1000,
-                                    "minLength": 1,
-                                    "type": "string"
+                                  "labels": {
+                                    "patternProperties": {
+                                      "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                        "maxLength": 1000,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
                                   },
-                                  "zh-CN": {
-                                    "maxLength": 1000,
-                                    "minLength": 1,
+                                  "original": {
+                                    "maxLength": 35,
+                                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "en",
-                                  "zh-CN"
+                                  "original",
+                                  "labels"
                                 ],
                                 "type": "object"
                               },
@@ -344828,20 +344918,25 @@
                               "title": {
                                 "additionalProperties": false,
                                 "properties": {
-                                  "en": {
-                                    "maxLength": 100,
-                                    "minLength": 1,
-                                    "type": "string"
+                                  "labels": {
+                                    "patternProperties": {
+                                      "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                        "maxLength": 100,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
                                   },
-                                  "zh-CN": {
-                                    "maxLength": 100,
-                                    "minLength": 1,
+                                  "original": {
+                                    "maxLength": 35,
+                                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "en",
-                                  "zh-CN"
+                                  "original",
+                                  "labels"
                                 ],
                                 "type": "object"
                               }
@@ -344966,20 +345061,25 @@
                               "body": {
                                 "additionalProperties": false,
                                 "properties": {
-                                  "en": {
-                                    "maxLength": 1000,
-                                    "minLength": 1,
-                                    "type": "string"
+                                  "labels": {
+                                    "patternProperties": {
+                                      "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                        "maxLength": 1000,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
                                   },
-                                  "zh-CN": {
-                                    "maxLength": 1000,
-                                    "minLength": 1,
+                                  "original": {
+                                    "maxLength": 35,
+                                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "en",
-                                  "zh-CN"
+                                  "original",
+                                  "labels"
                                 ],
                                 "type": "object"
                               },
@@ -345015,20 +345115,25 @@
                               "title": {
                                 "additionalProperties": false,
                                 "properties": {
-                                  "en": {
-                                    "maxLength": 100,
-                                    "minLength": 1,
-                                    "type": "string"
+                                  "labels": {
+                                    "patternProperties": {
+                                      "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$": {
+                                        "maxLength": 100,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
                                   },
-                                  "zh-CN": {
-                                    "maxLength": 100,
-                                    "minLength": 1,
+                                  "original": {
+                                    "maxLength": 35,
+                                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "en",
-                                  "zh-CN"
+                                  "original",
+                                  "labels"
                                 ],
                                 "type": "object"
                               }
