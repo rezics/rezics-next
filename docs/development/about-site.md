@@ -39,8 +39,11 @@ the background in an agent session; stop it with `astro dev stop` in `apps/about
   drafts never carry one either. Only capabilities beyond launch say “Later”, in all eight
   locales, with their owner decision recorded in the registry. A milestone is retained
   only for the roadmap's stages and launch inventory; post-launch capabilities have their
-  own section. The maintainer chose this because the site is published at launch: marking
-  every capability with today's development status adds noise, and calling a principle
+  own section when any are advertised. The registry currently has no post-launch claims;
+  a test-only fixture covers the Later badge without inventing a product promise. Private
+  World maps, relationships and fictional chronologies ship at M7 (decision 28); the public
+  wiki expansions deferred in decision 29 are a separate scope. The maintainer chose this
+  because the site is published at launch: marking every capability with today's development status adds noise, and calling a principle
   “available” misrepresents what it is. Progress belongs on the roadmap.
 - **Copy status is marked.** `src/copy-status.ts` says whether a page's copy is final; it shows
   as `data-copy` on `<main>`. G-481 made every page's English copy final.

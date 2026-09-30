@@ -78,12 +78,8 @@ const plan = {
   'spoiler-safe-wiki': ['wikis', 'M7'],
   'wiki-builder': ['wikis', 'M7'],
   'world-bible': ['wikis', 'M7'],
-  // Decision 28 includes selected private-world tools at launch. This bundled
-  // claim also promises family trees, deferred with the expanded wiki visuals.
-  'world-visuals': [
-    'wikis',
-    { later: 'docs/contracts/information-verification.md#a-big-franchise-wiki-for-every-work' },
-  ],
+  // Decision 28: private World maps, relationships and fictional chronologies.
+  'world-visuals': ['wikis', 'M7'],
   'wiki-history': ['wikis', 'M7'],
   // Agents
   'contribution-protocol': ['agents', 'M7'],

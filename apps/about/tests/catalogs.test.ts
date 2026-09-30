@@ -109,11 +109,16 @@ test('launch capabilities and principles are distinct from sourced post-launch c
     expect(features[id].source, id).toBeUndefined();
   }
   const later = featureIds.filter((id) => features[id].status === 'later');
-  expect(later).toEqual(['world-visuals']);
+  expect(later).toEqual([]);
   expect(features['world-visuals']).toMatchObject({
-    milestone: undefined,
-    source: 'docs/contracts/information-verification.md#a-big-franchise-wiki-for-every-work',
+    status: 'launch',
+    milestone: 'M7',
   });
+  expect(catalogs.features.en['world-visuals'].title).toBe('Maps, relationships and timelines');
+  for (const locale of uiLocales)
+    expect(catalogs.features[locale]['world-visuals'].title, locale).not.toMatch(
+      /family trees|家族樹|家族树|家系図|가계도|Stammbäume|arbres|árboles/i,
+    );
   for (const id of featureIds) {
     const entry = features[id];
     if (entry.milestone) {

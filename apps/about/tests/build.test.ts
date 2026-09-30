@@ -193,12 +193,13 @@ test('the roadmap groups launch stages separately from principles and post-launc
     const columns = new Map(
       [
         ...source.matchAll(
-          /data-roadmap-column="(\w+)">([\s\S]*?)(?=<div data-roadmap-column|<div class="mt-20")/g,
+          /data-roadmap-column="(\w+)">([\s\S]*?)(?=<div data-roadmap-column|<div class="mt-20"|<\/section>)/g,
         ),
       ].map(([, key, body]) => [key, body!]),
     );
-    const afterLaunch = source.split('data-after-launch')[1]!;
-    expect(afterLaunch, locale).toBeDefined();
+    const later = featureIds.filter((id) => features[id].status === 'later');
+    const afterLaunch = source.split('data-after-launch')[1] ?? '';
+    expect(source.includes('data-after-launch'), locale).toBe(later.length > 0);
     for (const id of featureIds) {
       const entry = features[id];
       if (entry.milestone) {

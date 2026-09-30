@@ -72,10 +72,10 @@ const later = featureIds.filter(id => features[id].status === 'later');
           </div>
         ))}
       </div>
-      <div class="mt-20" data-after-launch>
+      {later.length > 0 && <div class="mt-20" data-after-launch>
         <SectionHeading id="after-launch" title={text.laterTitle} lede={text.laterLede} />
         <FeatureList locale={locale} ids={later} class="mt-6" />
-      </div>
+      </div>}
     </div>
   </section>
 

@@ -3,13 +3,13 @@ import { badgeVariants } from '@rezics/ui/badge';
 import { CircleDashed } from 'lucide-react';
 import { copy } from '../i18n/format.ts';
 import type { UiLocale } from '../i18n/locales.ts';
-import { features, type FeatureId } from '../features.ts';
+import type { Feature } from '../features.ts';
 
-interface Props { id: FeatureId; locale: UiLocale; class?: string }
-const { id, locale, class: className } = Astro.props;
+interface Props { feature: Feature; locale: UiLocale; class?: string }
+const { feature, locale, class: className } = Astro.props;
 const words = copy('site', locale).status;
 ---
-{features[id].status === 'later' && (
+{feature.status === 'later' && (
   <span class={badgeVariants({ variant: 'outline', size: 'md', className })} data-status="later" title={words.laterHelp} lang={locale}>
     <CircleDashed aria-hidden />
     {words.later}

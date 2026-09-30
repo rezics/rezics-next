@@ -1,0 +1,18 @@
+---
+import StatusBadge from '../../src/components/StatusBadge.astro';
+import { features, type Feature } from '../../src/features.ts';
+import type { UiLocale } from '../../src/i18n/locales.ts';
+
+interface Props { locale: UiLocale }
+const { locale } = Astro.props;
+// Synthetic input exercises the supported state, without adding a public product claim.
+const deferred: Feature = {
+  line: 'wikis',
+  status: 'later',
+  milestone: undefined,
+  source: 'test-fixture-only',
+};
+---
+<div data-fixture="later"><StatusBadge feature={deferred} locale={locale} /></div>
+<div data-fixture="launch"><StatusBadge feature={features['world-visuals']} locale={locale} /></div>
+<div data-fixture="principle"><StatusBadge feature={features['open-source']} locale={locale} /></div>

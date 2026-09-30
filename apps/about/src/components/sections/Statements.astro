@@ -1,7 +1,7 @@
 ---
 import { copy } from '../../i18n/format.ts';
 import type { UiLocale } from '../../i18n/locales.ts';
-import type { FeatureId } from '../../features.ts';
+import { features, type FeatureId } from '../../features.ts';
 import StatusBadge from '../StatusBadge.astro';
 
 /**
@@ -22,7 +22,7 @@ const text = copy('features', locale);
           <h3 class="type-statement statement-text"><span class="ink-reveal">{text[featureId].title}</span></h3>
           <div class="lg:pb-3">
             <p class="type-body text-lg text-muted-foreground">{text[featureId].body}</p>
-            <StatusBadge id={featureId} locale={locale} class="mt-5" />
+            <StatusBadge feature={features[featureId]} locale={locale} class="mt-5" />
           </div>
         </li>
       ))}

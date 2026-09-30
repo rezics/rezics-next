@@ -187,7 +187,7 @@ export const featureCopy = defineCopy<FeatureCopy>({
       body: 'Authors keep characters, places and lore privately next to the draft, then publish the pages they choose as the Work’s wiki.',
     },
     'world-visuals': {
-      title: 'Maps, family trees and timelines',
+      title: 'Maps, relationships and timelines',
       body: 'Pin places on your own map, draw relationships and set events on invented calendars, each with a readable list beside it.',
     },
     'wiki-history': {
@@ -498,7 +498,7 @@ export const featureCopy = defineCopy<FeatureCopy>({
       body: '作者可在草稿旁私密保存人物、地點與設定，再挑選頁面公開為作品 Wiki。',
     },
     'world-visuals': {
-      title: '地圖、家族樹與時間線',
+      title: '地圖、關係與時間線',
       body: '在自製地圖標記地點、描繪關係、用架空曆法安排事件，每種圖旁都有可閱讀的清單。',
     },
     'wiki-history': {
@@ -804,7 +804,7 @@ export const featureCopy = defineCopy<FeatureCopy>({
       body: '作者可在草稿旁私密保存人物、地点与设定，再挑选页面公开为作品 Wiki。',
     },
     'world-visuals': {
-      title: '地图、家族树与时间线',
+      title: '地图、关系与时间线',
       body: '在自制地图标记地点、描绘关系、用架空历法安排事件，每种图旁都有可阅读的清单。',
     },
     'wiki-history': {
@@ -1110,7 +1110,7 @@ export const featureCopy = defineCopy<FeatureCopy>({
       body: '人物、場所、伝承を草稿の隣に非公開で保管し、選んだページだけ作品のWikiとして公開できます。',
     },
     'world-visuals': {
-      title: '地図・家系図・年表',
+      title: '地図・関係図・年表',
       body: '自作の地図に場所を置き、関係を描き、架空の暦に出来事を配置。どの図にも読める一覧がつきます。',
     },
     'wiki-history': {
@@ -1416,7 +1416,7 @@ export const featureCopy = defineCopy<FeatureCopy>({
       body: '작가는 초고 곁에 인물, 장소, 설정을 비공개로 두고 고른 페이지만 작품 위키로 공개합니다.',
     },
     'world-visuals': {
-      title: '지도, 가계도, 연표',
+      title: '지도, 관계, 연표',
       body: '내 지도에 장소를 찍고 관계를 그리고 가상 달력에 사건을 배치합니다. 각 시각 자료 곁에 읽을 수 있는 목록도 둡니다.',
     },
     'wiki-history': {
@@ -1722,7 +1722,7 @@ export const featureCopy = defineCopy<FeatureCopy>({
       body: 'Autoren halten Figuren, Orte und Hintergründe privat am Entwurf und veröffentlichen ausgewählte Seiten als Werk-Wiki.',
     },
     'world-visuals': {
-      title: 'Karten, Stammbäume und Zeitlinien',
+      title: 'Karten, Beziehungen und Zeitlinien',
       body: 'Orte auf eigener Karte markieren, Beziehungen zeichnen, Ereignisse in erfundenen Kalendern anordnen, jeweils mit lesbarer Liste.',
     },
     'wiki-history': {
@@ -2028,7 +2028,7 @@ export const featureCopy = defineCopy<FeatureCopy>({
       body: 'Les auteurs gardent personnages, lieux et univers en privé près du brouillon, puis publient les pages choisies en wiki.',
     },
     'world-visuals': {
-      title: 'Cartes, arbres et chronologies',
+      title: 'Cartes, relations et chronologies',
       body: 'Placez des lieux sur votre carte, tracez les relations et datez les événements selon vos calendriers, avec une liste lisible à côté.',
     },
     'wiki-history': {
@@ -2334,7 +2334,7 @@ export const featureCopy = defineCopy<FeatureCopy>({
       body: 'Los autores guardan personajes, lugares y trasfondo en privado junto al borrador y publican las páginas elegidas como wiki.',
     },
     'world-visuals': {
-      title: 'Mapas, árboles y cronologías',
+      title: 'Mapas, relaciones y cronologías',
       body: 'Marca lugares en tu mapa, dibuja relaciones y sitúa eventos en calendarios inventados, cada uno con una lista legible.',
     },
     'wiki-history': {
