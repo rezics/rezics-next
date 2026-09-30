@@ -150,3 +150,23 @@ export const Phone: Story = {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
+
+/** Clearing all text still saves an exact draft; publishing stays disabled. */
+export const EmptyDraftSaves: Story = {
+  args: page(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const editor = canvas.getByRole('textbox', { name: 'Chapter text' });
+    await userEvent.clear(editor);
+    await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
+    await expect(editor).toHaveValue('');
+    await expect(canvas.getByRole('button', { name: 'Publish' })).toBeDisabled();
+    await expect(args.story!.calls).toEqual(['draft']);
+    const head = args.story!.chapterHead(args.chapter.variant)!;
+    const read = await args.main!.v1['content-revisions']({ revision: head }).get({ query: { actingSubject: agents[0]!.iri } });
+    await expect(read.data?.body.body).toBe('');
+    await expect(readChapterMemory(localStorage, chapterMemoryKey(agents[0]!.iri, args.chapter.variant)))
+      .toMatchObject({ head, length: 0 });
+    await expect(localStorage.getItem(localDraftKey(agents[0]!.iri, args.chapter.chapter.id, args.chapter.variant))).toBeNull();
+  },
+};

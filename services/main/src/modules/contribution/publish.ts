@@ -9,6 +9,7 @@ import { readExactContributionDraft } from './history.ts';
 export const PUBLICATION_PROFILE = 'https://rezics.com/definition/text-publication-v1';
 const NONE = 'urn:rezics:none';
 
+export class EmptyTextPublicationBody extends Error {}
 export class InvalidPublicationInput extends Error {}
 export class StalePublicationHead extends Error {}
 export class PublicationUnavailable extends Error {}
@@ -55,6 +56,17 @@ export function textPublicationDigest(input: PublishTextContributionInput): stri
     expectedPublicationHead: input.expectedPublicationHead,
     rightsBasis: input.rightsBasis, disclosure: input.disclosure,
     actor: input.actingSubject }));
+}
+
+/** One exact immutable draft, independent of inventory size; validates before admission writes. */
+export async function assertTextPublicationBody(env: WorkActivationEnvironment,
+  input: PublishTextContributionInput): Promise<void> {
+  const exact = await readExactContributionDraft(env, input.contribution,
+    input.expectedDraftHead, async () => true);
+  if (exact.author !== input.actingSubject) {
+    throw new PublicationUnavailable('original contributor authority is required');
+  }
+  if (!exact.body.trim()) throw new EmptyTextPublicationBody('Cannot publish an empty draft');
 }
 
 export function textPublicationReceiptIri(admissionId: string): string {
@@ -281,6 +293,7 @@ export async function publishTextContribution(
     || exact.language !== row.language!.value) {
     throw new PublicationUnavailable('draft identity differs from current Contribution');
   }
+  if (!exact.body.trim()) throw new EmptyTextPublicationBody('Cannot publish an empty draft');
   const decision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
   const validations = await validateCandidate(env, decision, exact.contribution, exact.work,

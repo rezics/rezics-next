@@ -83,9 +83,7 @@ export function ManuscriptEditor({ store, language, direction, back, context, ti
   const [theirs, setTheirs] = useState<string | null | undefined>(undefined);
   const [conflictHead, setConflictHead] = useState<string | null>(null);
   const [autosave] = useState(() => new DraftAutosave({ head: initial.head, body: initial.body, delay,
-    save: (body, head, key): Promise<SaveOutcome> => body.trim() ? store.save(body, head, key)
-      // Main keeps no empty text; the last saved text stays until there is something to save.
-      : Promise.resolve({ kind: 'failed', retryable: false }),
+    save: (body, head, key): Promise<SaveOutcome> => store.save(body, head, key),
     keep: (body, base) => { writeLocalDraft(storage, store.deviceKey(), { body, base, changedAt: new Date().toISOString() }); },
     release: () => clearLocalDraft(storage, store.deviceKey()) }));
   const snapshot = useSyncExternalStore(autosave.subscribe, () => autosave.snapshot, () => autosave.snapshot);
@@ -170,7 +168,7 @@ export function ManuscriptEditor({ store, language, direction, back, context, ti
 
   const change = (next: string) => {
     setValue(next);
-    setNotice(next.trim() ? null : t.emptyNotSaved);
+    setNotice(null);
     autosave.edit(next);
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {

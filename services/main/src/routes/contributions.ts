@@ -5,6 +5,7 @@ import { iri } from '../modules/work/activate.ts';
 import { createAdmittedTextContribution } from '../modules/contribution/create-admitted.ts';
 import { readExactContributionDraft } from '../modules/contribution/history.ts';
 import { editAdmittedTextContribution } from '../modules/contribution/edit-admitted.ts';
+import { EmptyTextPublicationBody } from '../modules/contribution/publish.ts';
 import { publishAdmittedTextContribution } from '../modules/contribution/publish-admitted.ts';
 import { StaleContributionDraftHead } from '../modules/contribution/edit.ts';
 import { readContributionHead } from '../modules/studio/contribution-head.ts';
@@ -72,14 +73,17 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
             sequence: receipt.sequence }, replayed: receipt.replayed }, {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
-      } catch (error) { return commandError(error); }
+      } catch (error) {
+        if (error instanceof EmptyTextPublicationBody) return problem(422, 'empty_body', error.message);
+        return commandError(error);
+      }
     })
     .post('/v1/contribution-edits', {
       body: t.Object({
         profile: t.Literal('text-contribution-v1'),
         contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         expectedHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-        body: t.String({ minLength: 1, maxLength: 65536 }),
+        body: t.String({ maxLength: 65536 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
       response: { 200: contributionEditWriteResult, 202: pendingOperation,
@@ -116,7 +120,7 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         language: t.String({ minLength: 2, maxLength: 35,
           pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }),
-        body: t.String({ minLength: 1, maxLength: 65536 }),
+        body: t.String({ maxLength: 65536 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
       response: { 200: contributionWriteResult, 201: contributionWriteResult,

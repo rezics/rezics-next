@@ -79,7 +79,7 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
     || !/^urn:rezics:variant:[0-9a-f-]{36}$/i.test(input.variant.id)
     || (input.expectedHead !== null
       && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(input.expectedHead))
-    || !input.body || input.body.length > 65_536
+    || typeof input.body !== 'string' || Buffer.byteLength(input.body, 'utf8') > 65_536
     || (input.publicDomain !== undefined && (input.targetProfile === 'catalog-description'
       || !/^[0-9a-f-]{36}$/i.test(input.publicDomain.assessmentId)
       || !validPublicDomainSource(input.publicDomain.source)))) {

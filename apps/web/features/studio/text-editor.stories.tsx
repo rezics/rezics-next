@@ -242,3 +242,22 @@ export const RightToLeft: Story = {
     await expect(within(canvasElement).getByRole('textbox', { name: 'Text' })).toHaveAttribute('dir', 'rtl');
   },
 };
+
+/** Clearing all text still saves an exact draft; publishing stays disabled. */
+export const EmptyDraftSaves: Story = {
+  args: page(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const editor = canvas.getByRole('textbox', { name: 'Text' });
+    await userEvent.clear(editor);
+    await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
+    await expect(editor).toHaveValue('');
+    await expect(canvas.getByRole('button', { name: 'Publish' })).toBeDisabled();
+    await expect(args.story!.calls).toEqual(['edit']);
+    const head = args.story!.head(text)!;
+    const read = await args.main!.v1.contributions({ contribution: text.slice(-36) }).drafts({ revision: head.slice(-36) })
+      .get({ query: { actingSubject: agents[0]!.iri } });
+    await expect(read.data?.body).toBe('');
+    await expect(localStorage.getItem(localDraftKey(agents[0]!.iri, header.id, text))).toBeNull();
+  },
+};

@@ -3,7 +3,7 @@ import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { AccessAdmissionRegistry, GraphTerminalProof } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { ContentPublicationConflict, contentPublicationDigest,
+import { assertContentPublicationBody, ContentPublicationConflict, contentPublicationDigest,
   publishPinnedContent, reconcilePinnedContentPublication,
   type ContentPublicationResult, type PublishPinnedContentInput } from './publish.ts';
 
@@ -19,6 +19,7 @@ export async function publishAdmittedContent(
   const digest = contentPublicationDigest(publication);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);
+  await assertContentPublicationBody(content, publication);
   const registered = await access.register({ principal, actingSubject,
     scope: `content:publish:${publication.resourceId}`, action: 'content.publish',
     idempotencyKey, requestDigest: digest });

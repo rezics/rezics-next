@@ -39,7 +39,7 @@ export function textContributionEditDigest(input: EditTextContributionInput): st
   if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.contribution)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.expectedHead)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.actingSubject)
-    || !input.body || Buffer.byteLength(input.body, 'utf8') > 65536
+    || typeof input.body !== 'string' || Buffer.byteLength(input.body, 'utf8') > 65536
     || input.body.includes('\0')) {
     throw new InvalidContributionInput('invalid text Contribution edit');
   }

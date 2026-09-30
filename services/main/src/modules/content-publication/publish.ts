@@ -11,6 +11,7 @@ const NONE = 'urn:rezics:none';
 const REVISION_IRI_PREFIX = 'urn:rezics:content:revision:';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export class EmptyContentPublicationBody extends Error {}
 export class InvalidContentPublication extends Error {}
 export class ContentPublicationConflict extends Error {}
 export class StaleContentOwnerEpoch extends Error {}
@@ -68,6 +69,21 @@ function checkedInput(input: PublishPinnedContentInput): void {
     || !/^[A-Za-z0-9:_./-]{1,200}$/.test(input.preparationId)) {
     throw new InvalidContentPublication('invalid exact Content publication input');
   }
+}
+
+/** One exact body read, bounded by Content's revision limit; no admission or pin is created. */
+export async function assertContentPublicationBody(content: Pick<ContentCore, 'readExactBatch'>,
+  input: PublishPinnedContentInput): Promise<void> {
+  const exact = (await content.readExactBatch([input.revisionId], async ids => new Set(ids)))[0];
+  if (exact?.status !== 'available') {
+    throw new ContentPublicationConflict('Content revision is unavailable');
+  }
+  if (exact.reference.resourceId !== input.resourceId || exact.reference.variantId !== input.variantId
+    || exact.reference.byteDigest !== input.expectedDigest) {
+    throw new ContentPublicationConflict('Content revision differs from publication intent');
+  }
+  if (typeof exact.body.body !== 'string') throw new InvalidContentPublication('invalid Content body');
+  if (!exact.body.body.trim()) throw new EmptyContentPublicationBody('Cannot publish an empty draft');
 }
 
 export function contentPublicationDigest(input: PublishPinnedContentInput): string {
@@ -371,6 +387,7 @@ async function candidateValidations(env: WorkActivationEnvironment, admissionId:
 export async function publishPinnedContent(env: WorkActivationEnvironment, content: ContentCore,
   admission: RegisteredAdmission, input: PublishPinnedContentInput): Promise<ContentPublicationResult> {
   const digest = checkedAdmission(admission, input);
+  await assertContentPublicationBody(content, input);
   // The existing graph writer rejects unknown current types and unvalidated
   // product writes. Do not create a pin until both reviewed shape bindings exist.
   const validations = await candidateValidations(env, admission.id, input.variantId);

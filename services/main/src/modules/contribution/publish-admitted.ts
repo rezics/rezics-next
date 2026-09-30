@@ -3,7 +3,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry } from 
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
-import { checkedTextPublicationReceipt, PublicationUnavailable,
+import { assertTextPublicationBody, checkedTextPublicationReceipt, EmptyTextPublicationBody, PublicationUnavailable,
   publishTextContribution, readTextPublicationReceipt, sealTextPublicationAdmission,
   StalePublicationHead, textPublicationDigest,
   type PublishTextContributionInput, type TextPublicationReceipt } from './publish.ts';
@@ -19,6 +19,7 @@ export async function publishAdmittedTextContribution(
   const digest = textPublicationDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);
+  await assertTextPublicationBody(env, input);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope: `contribution:publish:${input.contribution}`, action: 'contribution.publish',
     idempotencyKey: input.idempotencyKey, requestDigest: digest });
@@ -36,7 +37,7 @@ export async function publishAdmittedTextContribution(
       } else {
         try { await publishTextContribution(env, admission, input); }
         catch (error) {
-          if (error instanceof IdempotencyConflict) throw error;
+          if (error instanceof IdempotencyConflict || error instanceof EmptyTextPublicationBody) throw error;
           if (error instanceof PublicationUnavailable) {
             await sealTextPublicationAdmission(env, admission);
           }
@@ -49,7 +50,7 @@ export async function publishAdmittedTextContribution(
     const checked = checkedTextPublicationReceipt(terminal, registered, input, digest);
     return { ...checked, replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof StalePublicationHead
+    if (error instanceof IdempotencyConflict || error instanceof EmptyTextPublicationBody || error instanceof StalePublicationHead
       || error instanceof PublicationUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'contribution-publication');
   }

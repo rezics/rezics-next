@@ -6,6 +6,7 @@ import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { iri } from '../modules/work/activate.ts';
 import { ContentDraftStale, saveAdmittedContentDraft } from '../modules/content-publication/draft.ts';
 import { createAdmittedContentComment } from '../modules/content-publication/comment.ts';
+import { EmptyContentPublicationBody } from '../modules/content-publication/publish.ts';
 import { publishAdmittedContent } from '../modules/content-publication/publish-admitted.ts';
 import { selectAdmittedPublicContentSearch }
   from '../modules/content-publication/eligibility-admitted.ts';
@@ -25,7 +26,7 @@ const textDraftFields = {
     originalTag: t.String() }, { additionalProperties: false }),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]),
   expectedHead: t.Union([t.String({ pattern: '^[0-9a-f-]{36}$' }), t.Null()]),
-  body: t.String({ minLength: 1, maxLength: 65536 }),
+  body: t.String({ maxLength: 65536 }),
   embeds: t.Optional(t.Array(t.String({
     pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   }), { maxItems: 16 })),
@@ -265,7 +266,10 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         return Response.json(result, { status: result.status === 'pending' ? 202
           : result.replayed || result.status === 'rejected' ? 200 : 201,
         headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) {
+        if (error instanceof EmptyContentPublicationBody) return problem(422, 'empty_body', error.message);
+        return commandError(error);
+      }
     })
     .post('/v1/content-search-eligibility', {
       body: t.Union([
