@@ -1,5 +1,5 @@
 import type { FeedReader } from './read.ts';
-import { excludedFeedSource, visibleFeedSources } from './read.ts';
+import { contentLanguageVisible, excludedFeedSource, visibleFeedSources } from './read.ts';
 import { WorkReadInvalid, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { readWorkClassifications } from '../work/read-classifications.ts';
 import { digest } from '../recommendation/derived-generation.ts';
@@ -18,6 +18,7 @@ export async function readNewSince(session: WorkReadSession, afterSequence: stri
   const realm = scope.startsWith('realm:') ? scope.slice(6) : undefined;
   const personal = reader && homePersonal ? await homePersonal.read(reader.principal, reader.agent) : null;
   if (reader && !personal) throw new WorkReadUnavailable('Home preferences are unavailable');
+  if (personal) session.readingLanguages = personal.preferences.contentLanguages;
   const tagRules = personal?.exclusions.filter(rule => rule.kind === 'tag') ?? [];
   const cap = tagRules.length ? 8 : HEAD_COST.candidates;
   const rows = await feed.since(session.position, checkpoint.revision, afterSequence, realm, cap, afterReview);
@@ -26,13 +27,13 @@ export async function readNewSince(session: WorkReadSession, afterSequence: stri
   const tagMatches = new Map<string, string[]>();
   for (const source of sources) {
     if (personal && excludedFeedSource(source, personal.exclusions)) continue;
-    if (personal?.preferences.contentLanguages.length && (!source.language
-      || !personal.preferences.contentLanguages.some(language => language.toLowerCase() === source.language!.toLowerCase()))) continue;
+    if (!contentLanguageVisible(source.language, [undefined, personal?.preferences.contentLanguages])) continue;
     if (source.work && tagRules.length) {
       const key = JSON.stringify([source.work, source.realm]);
       if (!tagMatches.has(key)) {
         const tagSession = new WorkReadSession(session.deps, session.request,
-          { limit: 3, ...(source.realm ? { scope: 'realm', realm: source.realm } : {}) }, session.position);
+          { languages: session.displayLanguages.join(','), limit: 3,
+            ...(source.realm ? { scope: 'realm', realm: source.realm } : {}) }, session.position);
         const result = await readWorkClassifications(tagSession, source.work, tagRules.map(rule => rule.target));
         tagMatches.set(key, result.items.map(item => item.sense));
       }

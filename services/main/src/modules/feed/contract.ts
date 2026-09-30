@@ -3,6 +3,7 @@ import type { Static } from 'typebox';
 import { pageFields, pageQuery, readAvatar, readId, readLanguage, readName, readUuid } from '../work/read-contract.ts';
 import { discoveryCredit } from '../discovery/contract.ts';
 import { followKind, followTargetId } from '../follows/contract.ts';
+import { readingLanguages } from '../preferences/languages.ts';
 
 export const feedKind = t.Union([t.Literal('work'), t.Literal('added'), t.Literal('contribution'), t.Literal('adoption'),
   t.Literal('decision'), t.Literal('discussion'), t.Literal('reply'), t.Literal('collection'), t.Literal('review')]);
@@ -74,7 +75,7 @@ export const feedQuery = t.Object({ ...pageQuery,
   kinds: t.Optional(t.Array(feedKind, { minItems: 1, maxItems: 8, uniqueItems: true })),
   /** Comma-separated human kinds. The reader rejects duplicates and unknown values. */
   interests: t.Optional(t.String({ minLength: 2, maxLength: 64 })),
-  contentLanguages: t.Optional(t.Array(readLanguage, { minItems: 1, maxItems: 8, uniqueItems: true })),
+  contentLanguages: t.Optional(t.Array(readingLanguages.items, { minItems: 1, maxItems: 20, uniqueItems: true })),
   realms: t.Optional(t.Array(readId, { minItems: 1, maxItems: 8, uniqueItems: true })),
   /** Concepts a Work card must carry in its Context: a one-Condition Filter each (docs/contracts/queries.md). */
   concepts: t.Optional(t.Array(readId, { minItems: 1, maxItems: 3, uniqueItems: true })),

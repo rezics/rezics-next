@@ -33,5 +33,6 @@ test('Home applies blocks and saved content languages to post sources', () => {
     [author], new Set())).toBe(true);
   expect(contentLanguageVisible('zh-Hans', [['zh-hans'], ['zh-Hans', 'en']])).toBe(true);
   expect(contentLanguageVisible('en', [['en'], ['zh-Hans']])).toBe(false);
-  expect(contentLanguageVisible(null, [undefined, ['en']])).toBe(false);
+  expect(contentLanguageVisible(null, [undefined, ['en']])).toBe(true);
+  expect(contentLanguageVisible(null, [['en'], undefined])).toBe(false);
 });

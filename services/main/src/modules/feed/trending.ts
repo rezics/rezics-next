@@ -13,6 +13,7 @@ import { publicWork, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadSe
 import { readWorkClassifications } from '../work/read-classifications.ts';
 import { digest } from '../recommendation/derived-generation.ts';
 import type { HomeExclusion } from './personal.ts';
+import { contentLanguageVisible } from './read.ts';
 
 export const trendingQuery = t.Object({ scope: t.Optional(t.String({ maxLength: 100 })),
   kind: t.Optional(t.Union([t.Literal('work'), t.Literal('contribution'), t.Literal('adoption')])),
@@ -33,7 +34,7 @@ export interface HomeTrendingReader {
 export const TRENDING_COST = { items: 5, realmCap: 2, candidatePool: 20, realmRelations: 100,
   responseBytes: 64 * 1024 } as const;
 
-interface Placement { work: string; realm: string; actor: string; language: string; zone: string | null }
+interface Placement { work: string; realm: string; actor: string; language: string | null; zone: string | null }
 const reduced = (id: string, rule: HomeExclusion) =>
   Number.parseInt(digest([id, rule.kind, rule.target]).slice(0, 2), 16) % 4 !== 0;
 const excludes = (work: string, placement: Placement, rules: readonly HomeExclusion[]) => rules.some(rule => {
@@ -71,6 +72,7 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
     const personal = principal && agent && session.deps.homePersonal
       ? await session.deps.homePersonal.read(principal, agent) : null;
     if (principal && !personal) throw new WorkReadUnavailable('Home preferences are unavailable');
+    if (personal) session.readingLanguages = personal.preferences.contentLanguages;
     const follows = principal && agent && session.deps.follows
       ? await session.deps.follows.matches(principal, agent, []) : null;
     if (scope === 'followed' && !follows) throw new WorkReadUnavailable('Follows are unavailable');
@@ -84,7 +86,7 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
     const items: TrendingResult['items'] = [];
     if (personal?.preferences.recommendations !== false) {
       const publicSession = new WorkReadSession(session.deps, new Request(session.request.url),
-        { limit: TRENDING_COST.candidatePool }, session.position);
+        { limit: TRENDING_COST.candidatePool, languages: session.displayLanguages.join(',') }, session.position);
       let ranked: Awaited<ReturnType<typeof readRankings>>;
       try { ranked = await readRankings(publicSession, this.projection, {
         realm, metric: 'reads', interval: window, order: 'growth' }); }
@@ -112,7 +114,8 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
           ?selection a rv:PublicationSelection ; rv:component ?slot ;
             rv:context ?realm ; rv:work ?work ; rv:mainVersion ?main ;
             rv:contribution ?contribution ; rv:publicationDecision ?decision ;
-            rv:selectedDraft ?draft ; rv:language ?language .
+            rv:selectedDraft ?draft .
+          OPTIONAL { ?selection rv:language ?language }
           ?decision rv:disclosure rv:Public .
           FILTER NOT EXISTS { ?draft a rv:ErasedRevision }
         }
@@ -120,10 +123,10 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
         ${realm ? `FILTER(?realm = ${iri(realm)})` : ''}
       } ORDER BY STR(?work) STR(?realm) STR(?zone) LIMIT ${TRENDING_COST.realmRelations + 1}`,
       TRENDING_COST.realmRelations + 1) : [];
-      if (rows.some(row => !row.work || !row.realm || !row.actor || !row.language
+      if (rows.some(row => !row.work || !row.realm || !row.actor
         || !ids.includes(row.work.value))) throw new WorkReadUnavailable('Trending placement is incomplete');
       const placements = rows.map(row => ({ work: row.work!.value, realm: row.realm!.value,
-        actor: row.actor!.value, language: row.language!.value, zone: row.zone?.value ?? null }));
+        actor: row.actor!.value, language: row.language?.value ?? null, zone: row.zone?.value ?? null }));
       const followed = new Set<number>();
       if (scope === 'followed') {
         for (let offset = 0; offset < placements.length; offset += 20) {
@@ -140,12 +143,12 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
         for (const [index, placement] of placements.entries()) {
           if (placement.work !== work.id || scope === 'followed' && !followed.has(index)
             || excludes(work.id, placement, rules)
-            || personal?.preferences.contentLanguages.length
-              && !personal.preferences.contentLanguages.some(language => language.toLowerCase() === placement.language.toLowerCase())
+            || !contentLanguageVisible(placement.language, [undefined, personal?.preferences.contentLanguages])
             || (realmCounts.get(placement.realm) ?? 0) >= TRENDING_COST.realmCap) continue;
           if (tagRules.length) {
             const tagSession = new WorkReadSession(session.deps, session.request,
-              { scope: 'realm', realm: placement.realm, limit: 3 }, session.position);
+              { scope: 'realm', realm: placement.realm, languages: session.displayLanguages.join(','),
+                limit: 3 }, session.position);
             const tags = await readWorkClassifications(tagSession, work.id, tagRules.map(rule => rule.target));
             if (tagRules.some(rule => tags.items.some(tag => tag.sense === rule.target)
               && (rule.strength !== 'fewer' || reduced(work.id, rule)))) continue;

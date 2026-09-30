@@ -4,6 +4,7 @@ import { problemResult } from '../api-contract.ts';
 import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, ControlUnavailable }
   from '../modules/access/topology-control.ts';
 import { DEFAULT_PERSON_CHOICES } from '../modules/preferences/store.ts';
+import { readingLanguages } from '../modules/preferences/languages.ts';
 import { readId } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -13,8 +14,7 @@ const visibility = t.Union([t.Literal('public'), t.Literal('private')]);
 const followPolicy = t.Union([t.Literal('everyone'), t.Literal('nobody')]);
 const spoilerPolicy = t.Union([t.Literal('hide-unread'), t.Literal('show')]);
 const settings = t.Object({ profileVisibility: visibility, followPolicy, hideReadingActivity: t.Boolean(),
-  contentLanguages: t.Array(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' }),
-    { maxItems: 8, uniqueItems: true }), spoilerPolicy, adultContent: t.Boolean() },
+  contentLanguages: readingLanguages, spoilerPolicy, adultContent: t.Boolean() },
 { additionalProperties: false });
 const result = t.Object({ profile: t.Literal('person-preferences-v1'), ...settings.properties,
   version: t.Integer({ minimum: 0 }), blockedPeople: t.Array(readId, { maxItems: 500 }),

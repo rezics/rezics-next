@@ -7,12 +7,14 @@ import { controlRead, controlTransaction, ControlConflict, ControlInvalid, Contr
 import { followPrincipal } from '../follows/authority.ts';
 import { commandKey } from '../follows/store.ts';
 import { digest } from '../recommendation/derived-generation.ts';
-import { readId, readLanguage, readUuid } from '../work/read-contract.ts';
+import { readId, readUuid } from '../work/read-contract.ts';
+import { canonicalReadingLanguages, lockReadingPreferences, readingLanguages,
+  writeReadingLanguages } from '../preferences/languages.ts';
 
 export const homePreferences = t.Object({ tab: t.Union([t.Literal('following'), t.Literal('all')]),
   sort: t.Union([t.Literal('best'), t.Literal('new'), t.Literal('top')]),
   density: t.Union([t.Literal('card'), t.Literal('compact')]),
-  contentLanguages: t.Array(readLanguage, { maxItems: 8, uniqueItems: true }),
+  contentLanguages: readingLanguages,
   recommendations: t.Boolean() }, { additionalProperties: false });
 export type HomePreferences = Static<typeof homePreferences>;
 export const preferencesCommand = t.Object({ actingSubject: readId, expectedRevision: t.Nullable(readUuid),
@@ -35,7 +37,8 @@ export type WatermarkCommand = Static<typeof watermarkCommand>;
 export interface HomeExclusion { kind: ExclusionKind; target: string;
   strength: 'hide' | 'fewer' | 'mute' | 'not-interested' }
 export const HOME_COST = { exclusions: 1000, pageCandidates: 8, headCandidates: 101,
-  watermarks: 1002, responseBytes: 64 * 1024 } as const;
+  watermarks: 1002, preferenceReadStatements: 4, preferenceWriteStatements: 10,
+  responseBytes: 64 * 1024 } as const;
 export const defaultPreferences: HomePreferences = { tab: 'following', sort: 'best', density: 'card',
   contentLanguages: [], recommendations: true };
 
@@ -45,13 +48,20 @@ export class HomePersonalStore {
   async read(principal: VerifiedPrincipal, agent: string) {
     return controlRead(this.pool, async client => {
       const owner = await followPrincipal(client, principal, agent);
-      const state = (await client.query<{ revision: string; preferences: HomePreferences }>(
-        'SELECT revision, preferences FROM access.home_state WHERE principal_id = $1', [owner])).rows[0];
+      // Revision and languages must share one statement snapshot: a settings
+      // write changes both atomically, including when Home has no row yet.
+      const state = (await client.query<{ revision: string | null;
+        preferences: Omit<HomePreferences, 'contentLanguages'> | null; content_languages: string[] | null }>(
+        `SELECT h.revision, h.preferences, p.content_languages
+          FROM (SELECT $1::uuid AS principal_id, $2::text AS agent_id) reader
+          LEFT JOIN access.home_state h ON h.principal_id = reader.principal_id
+          LEFT JOIN access.person_preferences p ON p.agent_id = reader.agent_id`, [owner, agent])).rows[0];
       const rows = (await client.query<HomeExclusion>(`SELECT kind, target, strength FROM access.home_exclusion
         WHERE principal_id = $1 ORDER BY kind, target LIMIT $2`, [owner, HOME_COST.exclusions + 1])).rows;
       if (rows.length > HOME_COST.exclusions) throw new ControlInvalid('Home exclusion budget exceeded');
       return { owner, revision: state?.revision ?? null,
-        preferences: state?.preferences ?? defaultPreferences, exclusions: rows };
+        preferences: { ...(state?.preferences ?? defaultPreferences),
+          contentLanguages: state?.content_languages ?? [] }, exclusions: rows };
     });
   }
 
@@ -60,7 +70,10 @@ export class HomePersonalStore {
     if (input.preferences.tab === 'following' && input.preferences.sort === 'top') {
       throw new ControlInvalid('Top requires All');
     }
+    input = { ...input, preferences: { ...input.preferences,
+      contentLanguages: canonicalReadingLanguages(input.preferences.contentLanguages) } };
     return controlTransaction(this.pool, async client => {
+      await lockReadingPreferences(client, input.actingSubject);
       const owner = await followPrincipal(client, principal, input.actingSubject);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`home:${owner}`]);
       const intent = digest(input);
@@ -75,9 +88,11 @@ export class HomePersonalStore {
         'SELECT revision FROM access.home_state WHERE principal_id = $1 FOR UPDATE', [owner])).rows[0];
       if ((prior?.revision ?? null) !== input.expectedRevision) throw new ControlStale('Home preferences changed');
       const revision = randomUUID();
+      const { contentLanguages, ...preferences } = input.preferences;
+      await writeReadingLanguages(client, input.actingSubject, contentLanguages);
       await client.query(`INSERT INTO access.home_state (principal_id, revision, preferences) VALUES ($1,$2,$3)
         ON CONFLICT (principal_id) DO UPDATE SET revision = EXCLUDED.revision, preferences = EXCLUDED.preferences`,
-      [owner, revision, input.preferences]);
+      [owner, revision, preferences]);
       const result = { profile: 'home-preferences-v1', revision, preferences: input.preferences, replayed: false };
       await client.query(`INSERT INTO access.home_command_receipt (principal_id, idempotency_key, request_digest, result)
         VALUES ($1,$2,$3,$4)`, [owner, key, intent, result]);

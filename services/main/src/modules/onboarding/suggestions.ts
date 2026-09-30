@@ -101,11 +101,13 @@ export async function readSuggestedFollows(session: WorkReadSession,
   const concepts = [...input.concepts ?? []];
   const selectedLanguages = parseLanguages(input.languages);
   if (reader && !session.deps.homePersonal) throw new WorkReadUnavailable('Home preferences are unavailable');
-  // The preference, directory and official Zone heads are independent reads.
-  const [personal, directory, official] = await inOrder(
-    reader ? session.deps.homePersonal!.read(reader.principal, reader.agent) : null,
+  const personal = reader ? await session.deps.homePersonal!.read(reader.principal, reader.agent) : null;
+  if (personal) session.readingLanguages = personal.preferences.contentLanguages;
+  // Read the preference before names; directory and official Zone heads are independent.
+  const [directory, official] = await inOrder(
     readRealmDirectory(new WorkReadSession(session.deps, session.request,
-      { language: session.options.language, limit: SUGGESTION_COST.realms }, session.position), { sort: 'activity' }),
+      { language: session.options.language, languages: session.displayLanguages.join(','),
+        limit: SUGGESTION_COST.realms }, session.position), { sort: 'activity' }),
     listOfficialZones(session.deps.environment, { limit: SUGGESTION_COST.officialRealms }));
   const effectiveLanguages = selectedLanguages.length ? selectedLanguages : personal?.preferences.contentLanguages ?? [];
   const muted = new Set(personal?.exclusions.filter(item => item.kind === 'realm'
@@ -134,7 +136,8 @@ export async function readSuggestedFollows(session: WorkReadSession,
     if (personal?.exclusions.some(rule => rule.kind === 'realm' && rule.target === realm.id
       && rule.strength === 'fewer' && reduced([realm.id, rule.kind, rule.target]))) return null;
     const works = await readRealmWorks(new WorkReadSession(session.deps, session.request,
-      { language: session.options.language, limit: SUGGESTION_COST.workScan }, session.position), realm.id);
+      { language: session.options.language, languages: session.displayLanguages.join(','),
+        limit: SUGGESTION_COST.workScan }, session.position), realm.id);
     if (!works.items.length) return null;
     const candidates = works.items.filter(work => !personal?.exclusions.some(rule => rule.kind === 'work'
       && rule.target === work.id && (rule.strength === 'hide' || rule.strength === 'not-interested'
@@ -144,7 +147,8 @@ export async function readSuggestedFollows(session: WorkReadSession,
       inOrder(...candidates.map(async work => {
         if (!tagRules.length) return true;
         const tagSession = new WorkReadSession(session.deps, session.request,
-          { language: session.options.language, scope: 'realm', realm: realm.id, limit: 3 }, session.position);
+          { language: session.options.language, languages: session.displayLanguages.join(','),
+            scope: 'realm', realm: realm.id, limit: 3 }, session.position);
         const tags = await readWorkClassifications(tagSession, work.id, tagRules.map(rule => rule.target));
         return !tagRules.some(rule => tags.items.some(item => item.sense === rule.target)
           && (rule.strength === 'mute' || rule.strength === 'fewer' && reduced([work.id, rule.kind, rule.target])));

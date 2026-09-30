@@ -16,6 +16,7 @@ import { feedCardData, feedWorkTypes, fenceListCard } from './cards.ts';
 import { diversityAllows, FEED_RANKING, recommendationAllowed } from './ranking.ts';
 import { digest } from '../recommendation/derived-generation.ts';
 import type { HomeExclusion } from './personal.ts';
+import { direction, languageSatisfies } from '../display-language/select.ts';
 import { readWorkKindMatches } from '../onboarding-interests/read.ts';
 import { interestKinds, matchingActivityKinds } from '../work/work-kinds.ts';
 import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
@@ -173,7 +174,8 @@ function targetLink(source: FeedSource) {
 function itemTarget(source: FeedSource, target: Pick<FollowTarget, 'name' | 'icon'> | null | undefined,
   presentation: FeedWorkPresentation | undefined, body: { excerpt: string | null; language: string | null }): FeedItem['target'] {
   return { id: source.target, work: source.work,
-    title: target?.name ?? { value: source.title ?? '', language: 'en', direction: 'ltr', basis: 'fallback' },
+    title: target?.name ?? { value: source.title ?? '', language: '',
+      direction: direction('', source.title ?? ''), basis: 'fallback' },
     cover: target?.icon ?? { kind: 'fallback', policy: 'avatar-fallback-v1', key: source.target, resourceType: 'collection' },
     types: presentation?.types ?? [],
     excerpt: workEvent(source.kind) ? presentation?.excerpt ?? body.excerpt : body.excerpt,
@@ -211,7 +213,8 @@ async function readTagSets(session: WorkReadSession, language: string | undefine
   for (const source of sources) if (source.work && !keys.has(tagKey(source))) keys.set(tagKey(source), source);
   return new Map(await Promise.all([...keys].map(async ([key, source]) => {
     const tagSession = new WorkReadSession(session.deps, session.request, { language,
-      limit: 3, ...(source.realm ? { scope: 'realm', realm: source.realm } : {}) }, session.position);
+      languages: session.displayLanguages.join(','), limit: 3,
+      ...(source.realm ? { scope: 'realm', realm: source.realm } : {}) }, session.position);
     return [key, await settle(readWorkClassifications(tagSession, source.work!, senses)
       .then(tags => tags.items.map(item => item.sense)))] as const;
   })));
@@ -310,9 +313,9 @@ export function personFeedSourceVisible(source: Pick<FeedSource, 'kind' | 'actor
   return !blocked.includes(source.actor) && readingActivityVisible(source, viewer, hidden);
 }
 export function contentLanguageVisible(language: string | null,
-  filters: readonly (readonly string[] | undefined)[]): boolean {
-  return filters.every(languages => !languages?.length || !!language
-    && languages.some(item => item.toLowerCase() === language.toLowerCase()));
+  [explicit, saved]: readonly (readonly string[] | undefined)[]): boolean {
+  return (!explicit?.length || languageSatisfies(language, explicit))
+    && (!saved?.length || !language || languageSatisfies(language, saved));
 }
 
 const normalized = (query: FeedQuery) => [
@@ -340,9 +343,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     store.checkpoint(session.position.dataEpoch),
     reader && session.deps.personPreferences
       ? session.deps.personPreferences.read(reader.principal, reader.agent) : null);
-  if (!query.contentLanguages && personal?.preferences.contentLanguages.length) {
-    query = { ...query, contentLanguages: personal.preferences.contentLanguages };
-  }
+  // Saved preferences remain distinct from request filters: only the latter
+  // exclude a post whose language has not been recorded.
+  if (personal) session.readingLanguages = personal.preferences.contentLanguages;
   const scope = query.scope ?? personal?.preferences.tab ?? 'all';
   if (scope === 'following' && !reader) throw new WorkReadInvalid('Following requires authentication');
   // Following needs its inventory before validating a cursor. All gets the
@@ -519,7 +522,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       item.reason = followed ? { kind: 'followed', target: followed.target, targetKind: followed.kind }
         : { kind: 'recommended', basis: scope === 'following' ? 'thin-following' : 'all' };
       if (!contentLanguageVisible(item.post.language,
-        [query.contentLanguages, personSettings?.contentLanguages])) continue;
+        [query.contentLanguages, personal?.preferences.contentLanguages])) continue;
       if (query.concepts) {
         if (!source.work) continue;
         const senses = unwrap(acceptedTags.get(tagKey(source))!);

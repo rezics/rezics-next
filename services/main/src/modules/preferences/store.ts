@@ -5,6 +5,8 @@ import { agentPattern, controlRead, controlTransaction, ControlConflict, Control
   ControlInvalid, ControlStale, requirePrincipal } from '../access/topology-control.ts';
 import { baselineMemberProof } from '../access/baseline.ts';
 import { followPrincipal } from '../follows/authority.ts';
+import { canonicalReadingLanguages, invalidateHomePreferences, lockReadingPreferences,
+  READING_LANGUAGE_LIMIT } from './languages.ts';
 
 export interface PersonChoices {
   profileVisibility: 'public' | 'private';
@@ -20,9 +22,8 @@ export const DEFAULT_PERSON_CHOICES: PersonChoices = { profileVisibility: 'publi
   hideReadingActivity: false, contentLanguages: [], spoilerPolicy: 'hide-unread', adultContent: false };
 /** One bounded settings row and at most 500 blocks; page admission checks at most 128 actors. */
 export const PERSON_PREFERENCES_COST = { blocks: 500, actors: 128, readingActors: 256, readStatements: 4,
-  writeStatements: 9 } as const;
+  writeStatements: 11, readerLanguageStatements: 2, languages: READING_LANGUAGE_LIMIT } as const;
 const keyPattern = /^[A-Za-z0-9:_./-]{1,128}$/;
-const languagePattern = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 interface Row { profile_visibility: PersonChoices['profileVisibility']; follow_policy: PersonChoices['followPolicy'];
   hide_reading_activity: boolean; content_languages: string[]; spoiler_policy: PersonChoices['spoilerPolicy'];
   adult_content: boolean; version: number }
@@ -36,14 +37,32 @@ function valid(value: PersonChoices): boolean {
     && ['everyone', 'nobody'].includes(value.followPolicy)
     && typeof value.hideReadingActivity === 'boolean' && value.adultContent === false
     && ['hide-unread', 'show'].includes(value.spoilerPolicy)
-    && Array.isArray(value.contentLanguages) && value.contentLanguages.length <= 8
-    && new Set(value.contentLanguages).size === value.contentLanguages.length
-    && value.contentLanguages.every(item => typeof item === 'string' && languagePattern.test(item));
+    && Array.isArray(value.contentLanguages) && value.contentLanguages.length <= READING_LANGUAGE_LIMIT;
 }
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 export class PersonPreferencesStore {
   constructor(private readonly pool: Pool) {}
+
+  /** Display-language selection follows the reader's first active Person,
+   * independently of an Organization or Service acting context. Two indexed
+   * statements and one bounded language array; it grants no target authority. */
+  async languagesForReader(principal: VerifiedPrincipal): Promise<string[]> {
+    return controlRead(this.pool, async client => {
+      const owner = await requirePrincipal(client, principal);
+      if (!principal.emailVerified) return [];
+      const row = (await client.query<{ content_languages: string[] | null }>(`SELECT p.content_languages
+        FROM access.agent_provision a
+        JOIN access.authority_subject s ON s.id = a.agent_id AND s.active
+        JOIN access.representation r ON r.id = a.representation_id AND r.active
+          AND r.principal_id = a.principal_id AND r.subject_id = a.agent_id
+          AND r.action = 'agent.control' AND r.valid_until > clock_timestamp()
+        LEFT JOIN access.person_preferences p ON p.agent_id = a.agent_id
+        WHERE a.principal_id = $1 AND a.agent_kind = 'person' AND a.state = 'active'
+        ORDER BY a.created_at, a.id LIMIT 1`, [owner.id])).rows[0];
+      return row?.content_languages ?? [];
+    });
+  }
 
   async read(principal: VerifiedPrincipal, agent: string): Promise<PersonPreferences> {
     if (!agentPattern.test(agent)) throw new ControlInvalid('Invalid person Agent');
@@ -62,7 +81,9 @@ export class PersonPreferencesStore {
     key: string): Promise<PersonPreferences> {
     if (!agentPattern.test(agent) || !valid(value) || !Number.isSafeInteger(expectedVersion)
       || expectedVersion < 0 || !keyPattern.test(key)) throw new ControlInvalid('Invalid preferences command');
+    value = { ...value, contentLanguages: canonicalReadingLanguages(value.contentLanguages) };
     return controlTransaction(this.pool, async client => {
+      await lockReadingPreferences(client, agent);
       const owner = await followPrincipal(client, principal, agent);
       // A target follow takes a share lock on this row. Changing who may follow
       // and admitting a follow therefore have a single serial order.
@@ -88,6 +109,7 @@ export class PersonPreferencesStore {
           updated_at = clock_timestamp() RETURNING *`, [agent, value.profileVisibility, value.followPolicy,
           value.hideReadingActivity, value.contentLanguages, value.spoilerPolicy, value.adultContent,
           expectedVersion + 1])).rows[0]!;
+      await invalidateHomePreferences(client, owner);
       const blockedPeople = (await client.query<{ target_agent: string }>(`SELECT target_agent FROM access.person_block
         WHERE principal_id = $1 ORDER BY target_agent LIMIT $2`, [owner, PERSON_PREFERENCES_COST.blocks + 1])).rows
         .map(item => item.target_agent);

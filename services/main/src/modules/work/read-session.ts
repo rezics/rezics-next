@@ -78,8 +78,10 @@ export function decodeReadCursor(token: string | undefined, binding: unknown, po
 }
 
 export class WorkReadSession {
+  /** Snapshot of the signed-in reader's Main preference, shared by every name read. */
+  readingLanguages: readonly string[] | null = null;
   get displayLanguages(): string[] {
-    const ordered = this.request.headers.get('x-rezics-display-languages');
+    const ordered = this.readingLanguages?.join(',') ?? this.request.headers.get('x-rezics-display-languages');
     return readerLanguages([this.options.language, this.options.languages, ordered]
       .filter(Boolean).join(',') || null, this.request.headers.get('accept-language'));
   }
@@ -205,6 +207,9 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
             if (!options.actingSubject) throw new WorkReadInvalid('actingSubject is required for authenticated reads');
             session.principal = await deps.account.verify(request, ['work:read']);
             if (!await deps.access.activePrincipalId(session.principal)) throw new AccountAssertionDenied('Principal is inactive');
+            if (deps.personPreferences) {
+              session.readingLanguages = await deps.personPreferences.languagesForReader(session.principal);
+            }
           } else if (options.actingSubject) throw new AccountAssertionDenied('Authentication is required');
           const result = await operation(session);
           const after = await position(deps);
