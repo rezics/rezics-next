@@ -1,0 +1,24 @@
+# Query scaffolding. These records are not bibliographic facts and do not belong
+# in franchises.yaml. The loader posts the fan translation, the digital identifier
+# and the reading-order Collection. It does not post the wiki statements: statement
+# continuity and spoiler boundaries are not writable yet.
+fanTranslation:
+  work: sao.web
+  language: en
+  translator: Catalogue Fixture Fan Translator
+  status: unofficial
+  verification: unverified
+  source: unresolved
+digitalEntry:
+  releaseFamily: [sao.bunko, en, Yen Press]
+  provider: https://example.com/catalogue-fixture/store
+  value: g840-sao-bunko-en
+  platform: ebook
+readingOrder:
+  id: index.original.reading
+  name: Index Original reading order
+  series: index.original
+  labels: [SS1, 1..22, SS2]
+statements:
+  - [sao.web, dies in the web version, web]
+  - [sao.bunko, survives in the books, books]
