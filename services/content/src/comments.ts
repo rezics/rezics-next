@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import type { ContentCommentTarget } from '../../../packages/model/src/locator.ts';
 import { ContentConflict, ContentUnavailable, type ContentPosition } from './core.ts';
 
 export interface ContentCommentInput {
@@ -27,11 +28,7 @@ export interface ContentComment {
   revisionId: string;
   byteDigest: string;
   body: string;
-  target: {
-    type: 'SpecificResource';
-    source: string;
-    selector: { type: 'TextQuoteSelector'; exact: string; prefix: string; suffix: string };
-  };
+  target: ContentCommentTarget;
   sourcePosition: ContentPosition;
   replayed: boolean;
 }
@@ -119,9 +116,7 @@ function validate(input: ContentCommentInput): void {
   }
 }
 
-export function resolveParagraphSelector(text: string, exact: string): {
-  type: 'TextQuoteSelector'; exact: string; prefix: string; suffix: string;
-} {
+export function resolveParagraphSelector(text: string, exact: string): ContentCommentTarget['selector'] {
   if (!exact || exact.includes('\n') || !text.split('\n').includes(exact)
     || text.indexOf(exact) !== text.lastIndexOf(exact)) {
     throw new ContentCommentInvalid('selector is not one unique paragraph of the exact revision');
