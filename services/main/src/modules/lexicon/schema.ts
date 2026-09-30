@@ -35,6 +35,13 @@ export interface PresentationState {
   reviewStatus: 'draft' | 'reviewed';
 }
 
+/** Keeping reviewed status on any wording edit is a new review decision. */
+export function presentationAction(state: Pick<PresentationState, 'reviewStatus'>) {
+  return state.reviewStatus === 'reviewed'
+    ? 'lexicon.presentation.review'
+    : 'lexicon.presentation.change';
+}
+
 function invalid(message: string): never {
   throw new SemanticChangeRejected('invalid', message);
 }

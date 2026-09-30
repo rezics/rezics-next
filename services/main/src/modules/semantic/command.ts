@@ -183,10 +183,14 @@ export interface SemanticWrite {
   where: string;
   receiptFields: string;
   validations: CommandValidation[];
+  /** Owner event class; defaults to the semantic or relation change event. */
+  event?: string;
 }
 
 /** Compose and send the one guarded update; outcomes resolve from the receipt. */
 export async function sendSemanticWrite(env: WorkActivationEnvironment, write: SemanticWrite): Promise<void> {
+  const eventKind = write.event ?? (write.admission.action === 'relation.change' ? 'RelationChangedEvent' : 'SemanticChangedEvent');
+  if (!/^[A-Z][A-Za-z0-9]*Event$/.test(eventKind)) throw new Error('invalid semantic event class');
   const batch = `urn:rezics:outbox:${hash(write.receipt)}`;
   const event = `urn:rezics:event:${hash(`${write.receipt}\0semantic-write`)}`;
   const update = `PREFIX rv: <${RV}>
@@ -204,7 +208,7 @@ export async function sendSemanticWrite(env: WorkActivationEnvironment, write: S
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-        ${iri(event)} a rv:${write.admission.action === 'relation.change' ? 'RelationChangedEvent' : 'SemanticChangedEvent'} ;
+        ${iri(event)} a rv:${eventKind} ;
           rv:ordinal 0 ; rv:action ${lit(write.admission.action)} ;
           rv:receipt ${iri(write.receipt)} . }
     }

@@ -52,10 +52,12 @@ async function readModelGenerationEvent({ fuseki, batch, eventId, value, ordinal
 }
 
 /** Prove that a change event names the exact admitted terminal and retained revision. */
-export async function readChangedEvent(input: EventInput, action: 'semantic.change' | 'relation.change',
-  family: 'semantic-change' | 'relation-change',
-  revisionKinds: readonly ('SemanticRevision' | 'DefinitionRevision' | 'RelationOccurrenceRevision')[],
-  type: string) {
+export async function readChangedEvent(input: EventInput,
+  action: 'semantic.change' | 'relation.change' | 'lexicon.presentation.change' | 'lexicon.presentation.review',
+  family: 'semantic-change' | 'relation-change' | 'lexicon-presentation-change',
+  revisionKinds: readonly ('SemanticRevision' | 'DefinitionRevision' | 'RelationOccurrenceRevision' | 'PresentationRevision')[],
+  type: string, ownerProof?: (component: string, revision: string) =>
+    Promise<{ scope: string; fields: Record<string, string> }>) {
   const { fuseki, batch, eventId, value, ordinal } = input;
   const receipt = value('receipt');
   const admissionId = value('admissionId');
@@ -86,6 +88,7 @@ export async function readChangedEvent(input: EventInput, action: 'semantic.chan
   const manifest = row?.manifest?.value;
   const generation = row?.generation?.value;
   const expected = row?.expected?.value;
+  const proof = component && revision && ownerProof ? await ownerProof(component, revision) : undefined;
   const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
   if (rows.length !== 1 || !component || !revision || !manifest || !generation
     || !native.test(component) || !native.test(revision)
@@ -93,15 +96,15 @@ export async function readChangedEvent(input: EventInput, action: 'semantic.chan
     || !/^urn:rezics:model-generation:[0-9a-f]{64}$/.test(generation)
     || (expected !== undefined && !native.test(expected))
     || value('expectedHead') !== expected
-    || scope !== (expected ? `${family === 'semantic-change' ? 'semantic' : 'relation'}:edit:${component}`
-      : `${family === 'semantic-change' ? 'semantic' : 'relation'}:create:root`)) {
+    || scope !== (proof?.scope ?? (expected ? `${family === 'semantic-change' ? 'semantic' : 'relation'}:edit:${component}`
+      : `${family === 'semantic-change' ? 'semantic' : 'relation'}:create:root`))) {
     throw new Error(`${action} event revision differs from its admitted receipt`);
   }
   return { specversion: '1.0' as const, id: eventId, source: 'https://rezics.com/services/main' as const,
     type, datacontenttype: 'application/json' as const,
     data: { batchId: batch.batchId, sourcePosition: { datasetId: 'product' as const,
       dataEpoch: batch.dataEpoch, sequence: batch.sequence }, routingEpoch: batch.routingEpoch, ordinal,
-    receipt: { id: receipt, action, outcome: 'succeeded' as const, admissionId,
+    receipt: { ...proof?.fields, id: receipt, action, outcome: 'succeeded' as const, admissionId,
       requestDigest: digest, authorityEpoch, scope, component, revision, manifest, modelGeneration: generation,
       ...(expected ? { expectedHead: expected } : {}) } } };
 }

@@ -1,5 +1,6 @@
 import { relationLexiconSeed, type LexiconSeedDefinition } from './relation-lexicon-data.ts';
-import type { SeedApi } from './api.ts';
+import { mkdir, rename, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 
 export interface SeedLexiconReceipt {
   component: string;
@@ -12,23 +13,9 @@ export interface SeedLexiconClient {
   authorizeDefinition(receipt: SeedLexiconReceipt): Promise<void>;
 }
 
-/** Use the normal public-API transport, including its pending-receipt retry behavior. */
-export function loadRelationLexicon(
-  api: Pick<SeedApi, 'post'>,
-  token: () => Promise<string>,
-  actingSubject: string,
-  namespace: string,
-  authorizeDefinition: SeedLexiconClient['authorizeDefinition'],
-) {
-  return seedRelationLexicon(
-    {
-      post: async <T>(path: string, body: object, key: string) =>
-        api.post<T>(path, body, await token(), key),
-      authorizeDefinition,
-    },
-    actingSubject,
-    namespace,
-  );
+/** Per-bootstrap mapping consumed by relation migrations; namespace slashes stay inside the filename. */
+export function relationLexiconSeedMapPath(namespace: string): string {
+  return resolve('.temp/seed/relation-lexicon', `${encodeURIComponent(namespace)}.json`);
 }
 
 /** Reusable production bootstrap; replayed API receipts resume an interrupted run. */
@@ -37,6 +24,7 @@ export async function seedRelationLexicon(
   actingSubject: string,
   namespace: string,
   data: readonly LexiconSeedDefinition[] = relationLexiconSeed,
+  mappingFile = relationLexiconSeedMapPath(namespace),
 ) {
   if (!/^[A-Za-z0-9:_./-]{1,48}$/.test(namespace))
     throw new Error('lexicon seed namespace is invalid');
@@ -62,6 +50,18 @@ export async function seedRelationLexicon(
       },
       `${key}:meaning`,
     );
+    definitions.push({
+      key: definition.key,
+      component: receipt.component,
+      revision: receipt.revision,
+    });
+    // Checkpoint IDs before labels or authorization can fail; retries recover the same API receipts.
+    await mkdir(dirname(mappingFile), { recursive: true });
+    await writeFile(
+      `${mappingFile}.tmp`,
+      `${JSON.stringify({ profile: 'relation-lexicon-seed-map-v1', namespace, definitions }, null, 2)}\n`,
+    );
+    await rename(`${mappingFile}.tmp`, mappingFile);
     await client.authorizeDefinition(receipt);
     for (const [language, noun, plural, inverseNoun, inversePlural] of definition.labels) {
       for (const [index, [fromRole, toRole, label, heading]] of [
@@ -82,7 +82,14 @@ export async function seedRelationLexicon(
               language,
               noun: label,
               heading,
-              plurals: { one: label, other: heading },
+              plurals: {
+                ...(new Intl.PluralRules(language)
+                  .resolvedOptions()
+                  .pluralCategories.includes('one')
+                  ? { one: label }
+                  : {}),
+                other: heading,
+              },
               grammaticalForms: [],
               source: 'https://rezics.com/definition/relation-lexicon-seed-v1',
               licence: 'https://creativecommons.org/publicdomain/zero/1.0/',
@@ -92,7 +99,6 @@ export async function seedRelationLexicon(
           `${key}:${language}:${index}`,
         );
     }
-    definitions.push({ key: definition.key, ...receipt });
   }
   return definitions;
 }

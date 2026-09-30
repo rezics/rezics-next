@@ -49,7 +49,7 @@ interface AdmittedCall<T> {
   request: Request;
   actingSubject: string;
   idempotencyKey: string;
-  action: 'semantic.change' | 'relation.change';
+  action: 'semantic.change' | 'relation.change' | 'lexicon.presentation.change' | 'lexicon.presentation.review';
   family: string;
   scope: string;
   digest: string;
@@ -64,7 +64,7 @@ interface AdmittedCall<T> {
  * receipt resolution and Access sealing, as in the Work edit family. A private or
  * missing reference is refused before any admission with one indistinct outcome.
  */
-async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
+export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
   await assertGraphAdmissionOpen(call.env.fuseki, call.env.lineage);
   const principal = await call.account.verify(call.request, [SEMANTIC_WRITE_SCOPE]);
   const readable = referenceReader(call.access, principal, call.actingSubject);
@@ -73,7 +73,7 @@ async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
   }
   const registered = await call.access.register({ principal, actingSubject: call.actingSubject, scope: call.scope,
     action: call.action, idempotencyKey: call.idempotencyKey, requestDigest: call.digest });
-  const phase = call.action === 'semantic.change' ? 'semantic-change' : 'relation-change';
+  const phase = call.action === 'relation.change' ? 'relation-change' : 'semantic-change';
   try {
     let admission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {

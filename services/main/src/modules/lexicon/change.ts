@@ -1,5 +1,3 @@
-import { CommandRejected } from '../../infrastructure/fuseki.ts';
-import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { readExactDefinition } from '../relation/change.ts';
 import { term } from '../semantic/change.ts';
@@ -12,6 +10,7 @@ import {
   readSemanticTerminal,
   sealComponentState,
   sealSemanticRejection,
+  sendSemanticWrite,
   SemanticChangeRejected,
   SemanticTargetUnavailable,
   type SemanticAdmission,
@@ -26,7 +25,6 @@ import {
   IdempotencyConflict,
   PendingActivation,
   RV,
-  hash,
   iri,
   lit,
   type WorkActivationEnvironment,
@@ -38,6 +36,7 @@ import {
   PRESENTATION_PROFILE,
   PRESENTATION_PROFILE_IRI,
   presentationDigest,
+  presentationAction,
   type PresentationState,
 } from './schema.ts';
 
@@ -194,7 +193,7 @@ export async function changePresentation(
   const state = checkedPresentation(intent.state);
   const digest = presentationDigest(intent.target, intent.expectedHead, state);
   if (
-    intent.admission.action !== 'lexicon.presentation.change' ||
+    intent.admission.action !== presentationAction(state) ||
     intent.admission.scope !== `semantic:edit:${state.definition}`
   )
     throw new IdempotencyConflict('presentation admission differs');
@@ -271,14 +270,16 @@ export async function changePresentation(
     })),
     binding,
   );
-  const batch = `urn:rezics:outbox:${hash(receipt)}`,
-    event = `urn:rezics:event:${hash(`${receipt}\0lexicon-presentation`)}`;
-  const update = `PREFIX rv: <${RV}>
-    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
-      ${old.length ? `GRAPH ${iri(GRAPHS.current)} { ${old.map((triple) => `${iri(component)} ${triple} .`).join('\n')} }` : ''} }
-    INSERT {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.current)} { ${next.map((triple) => `${iri(component)} ${triple} .`).join('\n')} }
+  await sendSemanticWrite(env, {
+    receipt,
+    digest,
+    admission: intent.admission,
+    validations,
+    event: 'LexiconPresentationChangedEvent',
+    deletes: old.length
+      ? `GRAPH ${iri(GRAPHS.current)} { ${old.map((triple) => `${iri(component)} ${triple} .`).join('\n')} }`
+      : '',
+    inserts: `GRAPH ${iri(GRAPHS.current)} { ${next.map((triple) => `${iri(component)} ${triple} .`).join('\n')} }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:PresentationRevision, rv:RevisionAnchor ;
         rv:component ${iri(component)} ; ${current ? `rv:predecessor ${iri(current.revision)} ;` : ''}
         ${dimensions(state).join(' ; ')} ; rv:noun ${lit(state.noun)} ; rv:heading ${lit(state.heading)} ;
@@ -287,21 +288,8 @@ export async function changePresentation(
         rv:reviewStatus rv:${state.reviewStatus === 'reviewed' ? 'Reviewed' : 'Draft'} ;
         rv:operation ${iri(operation)} ; rv:manifest ${iri(manifest)} ; rv:modelGeneration ${iri(generation)} ;
         rv:modelRevision ${iri(PRESENTATION_PROFILE_IRI)} ; rv:shapeRevision ${iri(PRESENTATION_PROFILE_IRI)} ;
-        rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
-      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
-        rv:admissionId ${lit(intent.admission.id)} ; rv:authorityEpoch ${lit(intent.admission.authorityEpoch)} ;
-        rv:admittedScope ${lit(intent.admission.scope)} ; rv:outcome rv:Succeeded ; rv:component ${iri(component)} ;
-        rv:revision ${iri(revision)} ; ${current ? `rv:expectedHead ${iri(current.revision)} ;` : ''}
-        rv:operation ${iri(operation)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
-      GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-        ${iri(event)} a rv:LexiconPresentationChangedEvent ; rv:ordinal 0 ; rv:action "lexicon.presentation.change" ;
-        rv:receipt ${iri(receipt)} . } }
-    WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-      ${modelGenerationHeadGuard(generation)}
+        rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }`,
+    where: `      ${modelGenerationHeadGuard(generation)}
       GRAPH ${iri(GRAPHS.current)} { ${iri(state.definition)} rv:definitionHead ${iri(state.meaningRevision)} }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(state.meaningRevision)} rv:lifecycle rv:Active }
       ${
@@ -311,20 +299,10 @@ export async function changePresentation(
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(component)} ?anyP ?anyO } }`
       }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${tuple(state, '?duplicate')} FILTER(?duplicate != ${iri(component)}) } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-      BIND(?n + 1 AS ?next) }`;
-  try {
-    const response = await validatedCommand(
-      env,
-      { receipt, digest, update, validations, deadlineMs: 10_000 },
-      intent.admission,
-    );
-    if (response.status === 'invalid' || response.status === 'unknown-profile')
-      throw new CommandRejected(response);
-  } catch (error) {
-    if (error instanceof CommandRejected) throw error;
-  }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }`,
+    receiptFields: `rv:operation ${iri(operation)} ; rv:component ${iri(component)} ; rv:revision ${iri(revision)} ;
+      ${current ? `rv:expectedHead ${iri(current.revision)} ;` : ''}`,
+  });
   const committed = await readSemanticTerminal(env, receipt);
   if (committed) return result(committed, intent, committed.revision !== revision);
   const generationChanged = await sealSemanticRejection(

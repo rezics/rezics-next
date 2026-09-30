@@ -146,7 +146,7 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
       (await change(label('de'), randomUUID(), undefined, null, f.account.noScope)).status,
     ).toBe(401);
     expect((await change(label('de'))).status).toBe(403);
-    const grant = await f.grant(
+    let grant = await f.grant(
       `semantic:edit:${definition.component}`,
       'lexicon.presentation.change',
     );
@@ -180,6 +180,15 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
         });
     }
     const edit = { ...label('de'), noun: 'Bearbeitung', reviewStatus: 'reviewed' as const };
+    expect((await change(edit, randomUUID(), de.component, de.revision)).status).toBe(403);
+    expect((await change({ ...label('ja'), reviewStatus: 'reviewed' })).status).toBe(403);
+    await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [
+      grant,
+    ]);
+    const reviewer = await f.grant(
+      `semantic:edit:${definition.component}`,
+      'lexicon.presentation.review',
+    );
     const updated = await f.json<Write>(
       await change(edit, randomUUID(), de.component, de.revision),
       200,
@@ -211,9 +220,29 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
     );
     expect(historical.state.noun).toBe('Adaption');
 
+    await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [
+      reviewer,
+    ]);
+    grant = await f.grant(`semantic:edit:${definition.component}`, 'lexicon.presentation.change');
+    expect(
+      (
+        await change(
+          { ...edit, noun: 'Unreviewed wording' },
+          randomUUID(),
+          de.component,
+          updated.revision,
+        )
+      ).status,
+    ).toBe(403);
+    const draft = { ...edit, reviewStatus: 'draft' as const };
+    const drafted = await f.json<Write>(
+      await change(draft, randomUUID(), de.component, updated.revision),
+      200,
+    );
+
     const concurrent = await Promise.all([
-      change({ ...edit, noun: 'Fassung A' }, randomUUID(), de.component, updated.revision),
-      change({ ...edit, noun: 'Fassung B' }, randomUUID(), de.component, updated.revision),
+      change({ ...draft, noun: 'Fassung A' }, randomUUID(), de.component, drafted.revision),
+      change({ ...draft, noun: 'Fassung B' }, randomUUID(), de.component, drafted.revision),
     ]);
     expect(concurrent.map((response) => response.status).sort()).toEqual([200, 409]);
     await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [
@@ -395,45 +424,52 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
       renameSync(`${file}.held`, file);
     }
 
-    const receiptRows = await f.env.fuseki
-      .query(`PREFIX rv: <${RV}> SELECT ?admission ?epoch ?scope ?digest WHERE {
-      GRAPH ${iri(GRAPHS.receipts)} { ${iri(de.receipt)} rv:admissionId ?admission ; rv:authorityEpoch ?epoch ;
+    for (const [written, action] of [
+      [de, 'lexicon.presentation.change'],
+      [updated, 'lexicon.presentation.review'],
+    ] as const) {
+      const receiptRows = await f.env.fuseki
+        .query(`PREFIX rv: <${RV}> SELECT ?admission ?epoch ?scope ?digest WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(written.receipt)} rv:admissionId ?admission ; rv:authorityEpoch ?epoch ;
         rv:admittedScope ?scope ; rv:requestDigest ?digest } }`);
-    const receiptRow = receiptRows.results!.bindings[0]!;
-    const eventRow = (
-      await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?event ?batch WHERE {
-      GRAPH ${iri(GRAPHS.outbox)} { ?event a rv:LexiconPresentationChangedEvent ; rv:receipt ${iri(de.receipt)} .
+      const receiptRow = receiptRows.results!.bindings[0]!;
+      const eventRow = (
+        await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?event ?batch WHERE {
+      GRAPH ${iri(GRAPHS.outbox)} { ?event a rv:LexiconPresentationChangedEvent ; rv:receipt ${iri(written.receipt)} .
         ?batch rv:event ?event } }`)
-    ).results!.bindings[0]!;
-    const values: Record<string, string> = {
-      receipt: de.receipt,
-      admissionId: receiptRow.admission!.value,
-      authorityEpoch: receiptRow.epoch!.value,
-      scope: receiptRow.scope!.value,
-      digest: receiptRow.digest!.value,
-      outcome: `${RV}Succeeded`,
-      epoch: de.sourcePosition.dataEpoch,
-      sequence: de.sourcePosition.sequence,
-    };
-    const event = await outboxEventHandlers[0]!.read({
-      fuseki: f.env.fuseki,
-      eventId: eventRow.event!.value,
-      batch: {
-        batchId: eventRow.batch!.value,
-        dataEpoch: de.sourcePosition.dataEpoch,
-        sequence: de.sourcePosition.sequence,
-        routingEpoch: f.env.lineage.routingEpoch,
-        eventIds: [eventRow.event!.value],
-      },
-      ordinal: 0,
-      value: (name) => values[name],
-    });
-    expect(event.data.receipt).toMatchObject({
-      action: 'lexicon.presentation.change',
-      component: de.component,
-      revision: de.revision,
-      meaningRevision: definition.revision,
-    });
+      ).results!.bindings[0]!;
+      const values: Record<string, string> = {
+        action,
+        receipt: written.receipt,
+        ...(written.predecessor ? { expectedHead: written.predecessor } : {}),
+        admissionId: receiptRow.admission!.value,
+        authorityEpoch: receiptRow.epoch!.value,
+        scope: receiptRow.scope!.value,
+        digest: receiptRow.digest!.value,
+        outcome: `${RV}Succeeded`,
+        epoch: written.sourcePosition.dataEpoch,
+        sequence: written.sourcePosition.sequence,
+      };
+      const event = await outboxEventHandlers[0]!.read({
+        fuseki: f.env.fuseki,
+        eventId: eventRow.event!.value,
+        batch: {
+          batchId: eventRow.batch!.value,
+          dataEpoch: written.sourcePosition.dataEpoch,
+          sequence: written.sourcePosition.sequence,
+          routingEpoch: f.env.lineage.routingEpoch,
+          eventIds: [eventRow.event!.value],
+        },
+        ordinal: 0,
+        value: (name) => values[name],
+      });
+      expect(event.data.receipt).toMatchObject({
+        action,
+        component: written.component,
+        revision: written.revision,
+        meaningRevision: definition.revision,
+      });
+    }
     expect(commands.every((command) => command.focuses === 2 && command.bytes < 131_072)).toBe(
       true,
     );

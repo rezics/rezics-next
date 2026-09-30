@@ -9,7 +9,11 @@ import type { PresentationRead } from '../src/modules/lexicon/change.ts';
 import { direction } from '../src/modules/display-language/select.ts';
 import { semanticPredicateOutcome, semanticTypeOutcome } from '../src/modules/semantic/schema.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
-import { seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
+import {
+  seedRelationLexicon,
+  relationLexiconSeedMapPath,
+} from '../../../scripts/dev/seed/relation-lexicon.ts';
+import { readFile } from 'node:fs/promises';
 import { uiLocales } from '../../../apps/web/i18n/define.ts';
 
 const native = () => `https://rezics.com/id/${Bun.randomUUIDv7()}`;
@@ -176,6 +180,12 @@ test('G-832: every bootstrap definition renders both directions in all UI locale
     'g-832',
   );
   expect(seeded).toHaveLength(15);
+  const saved = JSON.parse(await readFile(relationLexiconSeedMapPath('g-832'), 'utf8'));
+  expect(saved).toEqual({
+    profile: 'relation-lexicon-seed-map-v1',
+    namespace: 'g-832',
+    definitions: seeded,
+  });
   expect(writes).toHaveLength(15 + 15 * 8 * 2);
   expect(new Set(writes.map((item) => item.key)).size).toBe(writes.length);
   for (const definition of seeded) {
@@ -186,6 +196,14 @@ test('G-832: every bootstrap definition renders both directions in all UI locale
           (item.body.state as PresentationState).definition === definition.component,
       )
       .map((item) => ({ ...row('en'), state: checkedPresentation(item.body.state) }));
+    for (const row of rows)
+      expect(
+        Object.keys(row.state.plurals).every((category) =>
+          new Intl.PluralRules(row.state.language)
+            .resolvedOptions()
+            .pluralCategories.includes(category as Intl.LDMLPluralRule),
+        ),
+      ).toBe(true);
     const data = relationLexiconSeed.find((item) => item.key === definition.key)!;
     expect(rows).toHaveLength(16);
     for (const locale of uiLocales)
@@ -199,6 +217,22 @@ test('G-832: every bootstrap definition renders both directions in all UI locale
         expect(rendering.script).toBe(languageScript(locale));
       }
   }
+});
+test('G-832: interrupted bootstrap checkpoints stable keys before a label fails', async () => {
+  const namespace = `g832-${Bun.randomUUIDv7()}`;
+  const receipt = { component: native(), revision: native() };
+  const client = {
+    post: async <T>(path: string) => {
+      if (path === '/v1/lexicon/presentations') throw new Error('label interrupted');
+      return receipt as T;
+    },
+    authorizeDefinition: async () => {},
+  };
+  await expect(
+    seedRelationLexicon(client, native(), namespace, relationLexiconSeed.slice(0, 1)),
+  ).rejects.toThrow('label interrupted');
+  const saved = JSON.parse(await readFile(relationLexiconSeedMapPath(namespace), 'utf8'));
+  expect(saved.definitions).toEqual([{ key: 'adaptation', ...receipt }]);
 });
 // G-504 owns the shared selector; keep its observed defect visible in the handoff.
 test.todo('G-504: az-Arab rendering uses RTL direction from the shared selector', () => {
