@@ -74,8 +74,8 @@ export function exportRoutes(work: MainWorkDependencies) {
         canReadWork: (principal: { issuer: string; subject: string }, actor: string, workId: string) =>
           work.access.canReadWork(principal, actor, workId),
         canReadSemantic: async (principal: { issuer: string; subject: string }, actor: string,
-          resource: string) => await work.access.canReadSemanticResource?.(principal, actor, resource)
-          || await work.access.canReadWork(principal, actor, resource),
+          resource: string, revision?: string) => await work.access.canReadSemanticResource?.(principal, actor, resource, revision)
+          || revision === undefined && await work.access.canReadWork(principal, actor, resource),
         principalIdOf: (principal: { issuer: string; subject: string }) =>
           work.access.activePrincipalId(principal),
         sourceRuns: work.sourceAcquisitions?.runs,

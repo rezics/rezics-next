@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { semanticPolicyAuthority } from './semantic-disclosure.ts';
 import {
   agentPattern, generationPattern, PolicyConflict, PolicyDenied, PolicyInvalid, PolicyNotFound,
   PolicyReferenceNotAdmitted, PolicyStale, uuidPattern,
@@ -89,11 +90,14 @@ export class AccessPolicyChanges {
         }
         scope = admission.referencing_scope_id;
       }
+      const editor = change.action === 'publish-revision'
+        ? await semanticPolicyAuthority(client, principal.id, context.issuerSubject, scope!) : null;
+      if (editor) await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
       const epoch = await lockOpenScope(client, scope!);
-      const mandate = await requireMandate(client, principal.id, context.issuerSubject,
+      const mandate = editor?.mandate ?? await requireMandate(client, principal.id, context.issuerSubject,
         change.action === 'publish-revision' ? POLICY_MANAGE : POLICY_SET_ADMISSION);
       const grant = change.action === 'publish-revision'
-        ? await requireGrant(client, context.issuerSubject, scope!, POLICY_MANAGE) : null;
+        ? editor?.grant ?? await requireGrant(client, context.issuerSubject, scope!, POLICY_MANAGE) : null;
       const prior = (await client.query<PolicyChangeReceiptRow>(`SELECT * FROM access.policy_change_receipt
         WHERE principal_id = $1 AND idempotency_key = $2`, [principal.id, context.idempotencyKey])).rows[0];
       if (prior) {
@@ -109,7 +113,7 @@ export class AccessPolicyChanges {
       let authorityEpoch: string;
       if (change.action === 'publish-revision') {
         authorityEpoch = await advanceScopeEpoch(client, scope!);
-        result = await this.publish(client, context, { principalId: principal.id, mandate, grant: grant! },
+        result = await this.publish(client, context, { principalId: principal.id, mandate, grant: grant!, semanticEditor: !!editor },
           change, authorityEpoch);
       } else if (change.action === 'admit-set') {
         if (!uuidPattern.test(change.setAdmissionId) || !MEMBERSHIP_BASES.includes(change.basis)
@@ -150,7 +154,7 @@ export class AccessPolicyChanges {
 
   private async publish(client: PoolClient, context: PolicyChangeContext,
     basis: { principalId: string; mandate: { id: string; generation: string };
-      grant: { id: string; generation: string } },
+      grant: { id: string; generation: string }; semanticEditor: boolean },
     change: Extract<PolicyChange, { action: 'publish-revision' }>, authorityEpoch: string) {
     if (!uuidPattern.test(change.policyId) || !generationPattern.test(change.expectedHeadRevision)) {
       throw new PolicyInvalid('invalid policy revision');
@@ -160,7 +164,7 @@ export class AccessPolicyChanges {
     const current = (await client.query<{ id: string; owner_subject: string; head_revision: string }>(
       'SELECT id, owner_subject, head_revision FROM access.policy WHERE scope_id = $1 FOR UPDATE',
       [change.scopeId])).rows[0];
-    if (current && current.owner_subject !== context.issuerSubject) {
+    if (current && current.owner_subject !== context.issuerSubject && !basis.semanticEditor) {
       throw new PolicyDenied('scope is governed by another owner');
     }
     if (change.expectedHeadRevision === '0' ? current !== undefined

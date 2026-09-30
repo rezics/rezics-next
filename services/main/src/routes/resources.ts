@@ -33,8 +33,12 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
   const governanceReader = work.governance?.store
     ? { restrictedTitles: (heads: readonly { work: string; revision: string }[], context: string) =>
       work.governance!.store.restrictedTitles(heads, context) } : {};
+  const anonymousReader: SummaryReader = { ...governanceReader,
+    canReadSemantics: work.mediaAccess
+      ? resources => work.mediaAccess!.canReadSemantics(null, null, resources, fuseki)
+      : undefined };
   const readerFor = async (request: Request, actingSubject: string | undefined, batch = true): Promise<SummaryReader> => {
-    if (!request.headers.get('authorization')) return governanceReader;
+    if (!request.headers.get('authorization')) return anonymousReader;
     if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
     let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
     const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
@@ -43,9 +47,9 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       ? async resources => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources) : undefined,
     canReadWork: async resource => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
     canReadSemantic: async resource => !!work.access.canReadSemanticResource
-      && work.access.canReadSemanticResource(await workPrincipal(), actingSubject, resource),
+      && work.access.canReadSemanticResource(await workPrincipal(), actingSubject, resource, undefined, fuseki),
     canReadSemantics: work.mediaAccess
-      ? async resources => work.mediaAccess!.canReadSemantics(await workPrincipal(), actingSubject, resources)
+      ? async resources => work.mediaAccess!.canReadSemantics(await workPrincipal(), actingSubject, resources, fuseki)
       : undefined,
     canReadPrivateContext: async context => !!work.contextSelections
       && work.contextSelections.canReadPrivate(await contextPrincipal(), actingSubject, context),
@@ -110,7 +114,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         // Anonymous: only public resources resolve; private and absent share one answer.
-        const batch = await readResourceSummaries(work.environment, work.media?.store, governanceReader,
+        const batch = await readResourceSummaries(work.environment, work.media?.store, anonymousReader,
           { resources: [`${ID}${params.resource}`], context: DEFAULT_MEDIA_CONTEXT,
             language: query.language ?? null,
             languages: readerLanguages([query.language, request.headers.get('x-rezics-display-languages')]

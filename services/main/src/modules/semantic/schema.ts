@@ -25,6 +25,9 @@ export const PROFILES = {
 export const MODEL_COMPONENT = 'urn:rezics:model:product';
 
 export const SEMANTIC_TERMS = {
+  /** Resource-valued property in the open semantic profile; changing it needs
+   * the Resource's semantic edit admission. Public disclosure checks the Work. */
+  semanticWork: `${RV}semanticWork`,
   semanticHead: `${RV}semanticHead`,
   semanticRevision: `${RV}SemanticRevision`,
   definition: `${RV}SemanticDefinition`,

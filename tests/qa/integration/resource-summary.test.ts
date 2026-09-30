@@ -159,12 +159,13 @@ test('VIEW07: erasing a published Content revision suppresses public metadata an
   const publication = await saved.json() as { revisionId: string; byteDigest: string;
     sourcePosition: { dataEpoch: string }; body: { items: Array<{ use: string }> } };
   await owner.grant(`content:publish:${work.work}`, 'content.publish');
+  await owner.grant(`work:read:${work.work}`, 'work.read');
   const activated = await owner.send('POST', '/v1/content-publications', {
     profile: 'content-publication-v1', preparationId: `view07-${randomUUID()}`,
     revisionId: publication.revisionId, expectedDigest: publication.byteDigest,
     expectedContentEpoch: publication.sourcePosition.dataEpoch, resourceId: work.work, variantId,
     expectedPublicationHead: null, actingSubject: owner.actor });
-  expect(activated.status).toBe(201);
+  if (activated.status !== 201) throw new Error(`content activation: ${activated.status} ${await activated.text()}`);
   await owner.grant(`media:avatar:${work.work}`, 'media.avatar');
   const selection = await selectAvatar(owner, work.work, picture.asset, null);
   const previewUrl = `/v1/public-previews/${local(work.work)}`;
@@ -474,9 +475,9 @@ test('VIEW08: Character, Context, Realm, Role and RelationDefinition summaries o
   };
   expect(await costOf(Array.from({ length: 64 }, () => character)))
     .toEqual(await costOf([character]));
-  expect(await costOf([character])).toEqual({ graphQueries: 2, mediaQueries: 1,
+  expect(await costOf([character])).toEqual({ graphQueries: 3, mediaQueries: 1,
     accessChecks: 1, accessQueries: 1 });
-  expect(await costOf([character, role, relation])).toEqual({ graphQueries: 3, mediaQueries: 1,
+  expect(await costOf([character, role, relation])).toEqual({ graphQueries: 4, mediaQueries: 1,
     accessChecks: 3, accessQueries: 1 });
   expect(await costOf([shared, hidden])).toEqual({ graphQueries: 2, mediaQueries: 1,
     accessChecks: 1, accessQueries: 1 });

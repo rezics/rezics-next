@@ -35,7 +35,7 @@ export type ExportSelection =
 export interface ExportReaderDependencies {
   env: WorkActivationEnvironment;
   canReadWork: (principal: VerifiedPrincipal, actingSubject: string, work: string) => Promise<boolean>;
-  canReadSemantic?: (principal: VerifiedPrincipal, actingSubject: string, resource: string) => Promise<boolean>;
+  canReadSemantic?: (principal: VerifiedPrincipal, actingSubject: string, resource: string, revision?: string) => Promise<boolean>;
   principalIdOf?: (principal: VerifiedPrincipal) => Promise<string | null>;
   sourceRuns?: Pick<SourceRunStore, 'read' | 'frozen'>;
   structureObjects?: ImmutableObjects;
@@ -249,7 +249,7 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
       residuals }, deps.rights);
   }
   if (selection.kind === 'semantic-revision') {
-    if (!deps.canReadSemantic || !await deps.canReadSemantic(principal, actingSubject, selection.resource)) {
+    if (!deps.canReadSemantic || !await deps.canReadSemantic(principal, actingSubject, selection.resource, selection.reference)) {
       throw new ExportSourceNotFound('semantic resource is unavailable');
     }
     const exact = await readSemanticRevision(deps.env, selection.resource, selection.reference,

@@ -122,7 +122,9 @@ export function targetSummaryReader(session: TargetReadSession): SummaryReader {
   const reader: SummaryReader = deps.governance?.store ? {
     restrictedTitles: (heads, context) => deps.governance!.store.restrictedTitles(heads, context),
   } : {};
-  if (!principal || !actingSubject) return reader;
+  if (!principal || !actingSubject) return { ...reader,
+    canReadSemantics: deps.mediaAccess ? resources => deps.mediaAccess!.canReadSemantics(
+      null, null, resources, deps.environment.fuseki) : undefined };
   const access = deps.access;
   if (!access) throw new WorkReadUnavailable('Target authority is unavailable');
   let verifiedContext: ReturnType<NonNullable<typeof deps.account>['verify']> | undefined;
@@ -138,7 +140,7 @@ export function targetSummaryReader(session: TargetReadSession): SummaryReader {
     canReadSemantic: resource => Promise.resolve(
       access.canReadSemanticResource?.(principal, actingSubject, resource) ?? false),
     canReadSemantics: deps.mediaAccess
-      ? resources => deps.mediaAccess!.canReadSemantics(principal, actingSubject, resources) : undefined,
+      ? resources => deps.mediaAccess!.canReadSemantics(principal, actingSubject, resources, deps.environment.fuseki) : undefined,
     canReadPrivateContext: deps.contextSelections
       ? async context => deps.contextSelections!.canReadPrivate(await contextPrincipal(), actingSubject, context)
       : undefined,

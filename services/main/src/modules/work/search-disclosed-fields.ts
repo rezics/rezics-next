@@ -1,5 +1,6 @@
 import type { AccessJudgments } from '../judgment/access.ts';
 import type { MediaStore } from '../media/store.ts';
+import type { SummaryReader } from '../media/summary.ts';
 import { disclosePublicSearchFields, matchPublicDisclosedPhrase,
   InvalidPublicDisclosure, type PublicDisclosureInput }
   from '../search-disclosure/public-fields.ts';
@@ -18,13 +19,13 @@ export async function queryPublicDisclosedFields(env: WorkActivationEnvironment,
   media: MediaStore | undefined, judgments: Pick<AccessJudgments, 'protectionCheck'> | undefined,
   input: PublicDisclosedFieldPhraseQuery,
   restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) =>
-    Promise<ReadonlySet<string>>) {
+    Promise<ReadonlySet<string>>, reader: SummaryReader = {}) {
   if (input.statements.length && !judgments) {
     throw new PublicQueryUnavailable('Statement disclosure owner is unavailable');
   }
   let decision;
   try {
-    decision = await disclosePublicSearchFields(env, media, judgments, input, restrictedTitles);
+    decision = await disclosePublicSearchFields(env, media, judgments, input, restrictedTitles, reader);
   } catch (error) {
     if (error instanceof InvalidPublicDisclosure) throw new InvalidPublicQuery(error.message);
     throw new PublicQueryUnavailable('public field disclosure is unavailable', { cause: error });

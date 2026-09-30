@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
-import { admittedSemanticChange, canReadSemantic, referenceReader, SEMANTIC_READ_SCOPE } from '../modules/semantic/admitted.ts';
+import { admittedSemanticChange, SEMANTIC_READ_SCOPE } from '../modules/semantic/admitted.ts';
 import { SemanticChangeRejected, SemanticTargetUnavailable, StaleSemanticHead } from '../modules/semantic/command.ts';
 import { readSemanticCurrent, readSemanticRevision, type SemanticRead } from '../modules/semantic/read.ts';
 import { InvalidSemanticValue, UnsupportedSemanticValue } from '../modules/semantic/value.ts';
@@ -14,6 +14,8 @@ import { groupUuid } from './shared.ts';
 import { STAGE_LIMITS, STAGE_PROFILE } from '../modules/semantic/stage-schema.ts';
 import { admittedSemanticBulkChange, SemanticStageConflict, SemanticStageRejected,
   SemanticStageUnavailable } from '../modules/semantic/staging.ts';
+import { readResourceSummaries } from '../modules/media/summary.ts';
+import { DEFAULT_MEDIA_CONTEXT } from '../modules/media/store.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() });
@@ -31,8 +33,6 @@ const semanticBulkWrite = t.Object({ profile: t.Literal(STAGE_PROFILE), stageId:
 export const openApiOperations = {
   '/v1/semantic/changes': { post: { bearer: true, idempotencyKey: true } },
   '/v1/semantic/changes/bulk': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/semantic/resources/{id}': { get: { bearer: true } },
-  '/v1/semantic/resources/{id}/revisions/{revision}': { get: { bearer: true } },
 } as const;
 
 /** Typed semantic outcomes; everything else uses the shared command problem map. */
@@ -64,11 +64,20 @@ export function readBody(read: SemanticRead) {
 }
 
 export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
-  const readable = async (request: Request, actingSubject: string, target: string) => {
+  const readable = async (request: Request, actingSubject: string | undefined, target: string, revision?: string) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-    const principal = await work.account.verify(request, [SEMANTIC_READ_SCOPE]);
-    const canRead = referenceReader(work.access, principal, actingSubject);
-    return { allowed: await canReadSemantic(work.access, principal, actingSubject, target), canRead };
+    if (request.headers.get('authorization') && !actingSubject) throw new SemanticChangeRejected('invalid', 'actingSubject is required for an authenticated read');
+    const principal = request.headers.get('authorization')
+      ? await work.account.verify(request, [SEMANTIC_READ_SCOPE]) : null;
+    const actor = principal ? actingSubject! : null;
+    const canRead = async (ref: string) => {
+      if (await work.access.canReadSemanticResource?.(principal, actor, ref, undefined, fuseki)) return true;
+      const batch = await readResourceSummaries(work.environment, undefined, {}, {
+        resources: [ref], context: DEFAULT_MEDIA_CONTEXT, language: null });
+      return batch.summaries[0]?.status === 'available'
+        || !!principal && await work.access.canReadWork(principal, actor!, ref);
+    };
+    return { allowed: await work.access.canReadSemanticResource?.(principal, actor, target, revision, fuseki) ?? false, canRead };
   };
   return new Elysia()
     .post('/v1/semantic/changes', {
@@ -113,7 +122,7 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     })
     .get('/v1/semantic/resources/:id', {
       params: t.Object({ id: groupUuid }),
-      query: t.Object({ actingSubject: native }, { additionalProperties: false }),
+      query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
       response: { 200: semanticRead, ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
@@ -127,12 +136,13 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     })
     .get('/v1/semantic/resources/:id/revisions/:revision', {
       params: t.Object({ id: groupUuid, revision: groupUuid }),
-      query: t.Object({ actingSubject: native }, { additionalProperties: false }),
+      query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
       response: { 200: semanticRead, ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
         const target = `https://rezics.com/id/${params.id}`;
-        const { allowed, canRead } = await readable(request, query.actingSubject, target);
+        const { allowed, canRead } = await readable(request, query.actingSubject, target,
+          `https://rezics.com/id/${params.revision}`);
         if (!allowed) return problem(404, 'revision_unavailable', 'Revision is unavailable');
         const read = await readSemanticRevision(work.environment, target,
           `https://rezics.com/id/${params.revision}`, canRead);

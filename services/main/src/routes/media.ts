@@ -104,7 +104,9 @@ async function deliver(media: MediaDependencies, basis: { objectNamespace: strin
 
 export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const readerFor = async (request: Request, actingSubject: string | undefined) => {
-    if (!request.headers.get('authorization')) return {};
+    if (!request.headers.get('authorization')) return { canReadSemantics: work.mediaAccess
+      ? (resources: readonly string[]) => work.mediaAccess!.canReadSemantics(null, null, resources, fuseki)
+      : undefined };
     if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
     let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
     const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
@@ -115,10 +117,10 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       : undefined,
     canReadWork: async (resource: string) => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
     canReadSemantic: async (resource: string) => !!work.access.canReadSemanticResource
-      && work.access.canReadSemanticResource(await workPrincipal(), actingSubject, resource),
+      && work.access.canReadSemanticResource(await workPrincipal(), actingSubject, resource, undefined, fuseki),
     canReadSemantics: work.mediaAccess
       ? async (resources: readonly string[]) => work.mediaAccess!.canReadSemantics(
-        await workPrincipal(), actingSubject, resources) : undefined,
+        await workPrincipal(), actingSubject, resources, fuseki) : undefined,
     canReadPrivateContext: async (context: string) => !!work.contextSelections
       && work.contextSelections.canReadPrivate(await work.account.verify(request, ['context:read']),
         actingSubject, context),

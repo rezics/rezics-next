@@ -21,6 +21,7 @@ import { reserveBaselineSpace, settleBaselineSpace } from './baseline-quota.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
+import { publicSemantics } from './semantic-disclosure.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -366,10 +367,11 @@ export class AccessAdmissionRegistry {
   }
 
   /** Current disclosure decision for a semantic Resource or relation occurrence. */
-  async canReadSemanticResource(principal: VerifiedPrincipal, actingSubject: string,
-    resource: string): Promise<boolean> {
-    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(resource)
-      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
+  async canReadSemanticResource(principal: VerifiedPrincipal | null, actingSubject: string | null,
+    resource: string, revision?: string, graph = this.baselineGraph): Promise<boolean> {
+    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(resource)) return false;
+    if ((await publicSemantics({ pool: this.pool, graph }, [resource], revision)).has(resource)) return true;
+    if (!principal || !actingSubject || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
     return this.canReadScopedResource(principal, actingSubject, `semantic:read:${resource}`, 'semantic.read');
   }
 

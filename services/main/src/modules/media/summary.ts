@@ -8,6 +8,7 @@ import { readPublicRealmNames } from '../space/read.ts';
 import { currentProfile } from '../realm-profile/schema.ts';
 import { checkedCollectionName } from '../collection/names.ts';
 import { publicWork } from '../work/public-patterns.ts';
+import type { SemanticDisclosure } from '../access/semantic-disclosure.ts';
 import { direction, readerLanguages, selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import type { Base } from '../target/contract.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaUnavailable,
@@ -41,9 +42,9 @@ export interface SummaryReader {
   /** Access fence checked against each exact graph head before a title is returned. */
   restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) =>
     Promise<ReadonlySet<string>>;
-  /** The exact semantic Resource must have a current Access read grant. */
+  /** Access returns public disclosure separately from current private grants. */
   canReadSemantic?: (resource: string) => Promise<boolean>;
-  canReadSemantics?: (resources: readonly string[]) => Promise<ReadonlySet<string>>;
+  canReadSemantics?: (resources: readonly string[]) => Promise<SemanticDisclosure | ReadonlySet<string>>;
   /** The Context owner checks private disclosure; public Contexts need no grant. */
   canReadPrivateContext?: (context: string) => Promise<boolean>;
   canReadPrivateContexts?: (contexts: readonly string[]) => Promise<ReadonlySet<string>>;
@@ -269,7 +270,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           IF(?type = "context" || ?type = "collection", EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
           IF(?type = "space",
           EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
-          IF(${workType}, EXISTS { ${publicWork('?work', '?pm')} }, false)))))
+          IF(${workType} && BOUND(?work), EXISTS { ${publicWork('?work', '?pm')} }, false)))))
           AS ?public)
       }
     }`);
@@ -393,9 +394,15 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     .map(([reference]) => reference);
   const semanticResources = [...new Set([...semanticRefs.keys(), ...relationRefs, ...privateCollections])];
   let admittedSemantics = new Set<string>();
+  let publicSemantics: ReadonlySet<string> = new Set();
   if (semanticResources.length && reader.canReadSemantics) {
     cost.accessChecks += semanticResources.length;
-    admittedSemantics = new Set(await reader.canReadSemantics(semanticResources));
+    const decision = await reader.canReadSemantics(semanticResources);
+    if ('public' in decision) {
+      publicSemantics = decision.public;
+      admittedSemantics = new Set([...decision.public, ...decision.granted]);
+      cost.graphQueries++;
+    } else admittedSemantics = new Set(decision);
     cost.accessQueries++;
   } else if (semanticResources.length && reader.canReadSemantic) {
     cost.accessChecks += semanticResources.length;
@@ -447,7 +454,7 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
         : row.type === 'resource' ? 'Resource' : 'Relation definition';
       row.labels.set('en', `${kind} ${reference.slice(-8)}`);
     }
-    row.public = false;
+    row.public = publicSemantics.has(reference);
     readable.set(reference, row);
   }
   for (const [reference, row] of readable) {

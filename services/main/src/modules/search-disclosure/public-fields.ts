@@ -1,7 +1,7 @@
 import { ContextNotFound, readContextRevision } from '../context/read.ts';
 import { contextSkos } from '../context/preferences.ts';
 import type { AccessJudgments } from '../judgment/access.ts';
-import { readResourceSummaries, type AvatarDescriptor, type ResourceSummary }
+import { readResourceSummaries, type AvatarDescriptor, type ResourceSummary, type SummaryReader }
   from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
 import { readStatement, resolveStatementAcceptance, StatementNotFound }
@@ -108,7 +108,7 @@ async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironmen
   media: MediaStore | undefined, judgments: Pick<AccessJudgments, 'protectionCheck'> | undefined,
   input: PublicDisclosureInput,
   restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) =>
-    Promise<ReadonlySet<string>>): Promise<PublicFieldDecision> {
+    Promise<ReadonlySet<string>>, reader: SummaryReader = {}): Promise<PublicFieldDecision> {
   validInput(input);
   const start = await graphPosition(env);
   const fields: PublicSearchField[] = [];
@@ -173,7 +173,7 @@ async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironmen
   let mediaGeneration: string | null = null;
   if (targets.length) {
     const batch = await readResourceSummaries(env, media,
-      restrictedTitles ? { restrictedTitles } : {},
+      { ...reader, ...(restrictedTitles ? { restrictedTitles } : {}) },
       { resources: targets, context: input.mediaContext, language: input.language });
     if (batch.generation.graph !== `${start.dataEpoch}:${start.sequence}`
       || batch.cost.mediaQueries > 1 || batch.cost.accessQueries > 1) {
@@ -229,9 +229,9 @@ export async function disclosePublicSearchFields(env: WorkActivationEnvironment,
   media: MediaStore | undefined, judgments: Pick<AccessJudgments, 'protectionCheck'> | undefined,
   input: PublicDisclosureInput,
   restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) =>
-    Promise<ReadonlySet<string>>): Promise<PublicFieldDecision> {
+    Promise<ReadonlySet<string>>, reader: SummaryReader = {}): Promise<PublicFieldDecision> {
   try {
-    return await disclosePublicSearchFieldsUnchecked(env, media, judgments, input, restrictedTitles);
+    return await disclosePublicSearchFieldsUnchecked(env, media, judgments, input, restrictedTitles, reader);
   } catch (cause) {
     if (cause instanceof InvalidPublicDisclosure || cause instanceof PublicDisclosureUnavailable) throw cause;
     throw new PublicDisclosureUnavailable('public search disclosure dependency is unavailable', { cause });

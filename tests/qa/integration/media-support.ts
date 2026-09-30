@@ -179,8 +179,8 @@ export async function startMediaStack(label: string, options: { contentProjectio
   };
   /** A metadata-only Work: no Main selection, so it is never public. */
   const privateWork = async (actor: string, title = `${label} private ${randomUUID()}`) => {
-    const created = await activateMetadataWork(env, { title,
-      admission: admission(actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title)) });
+    const created = await activateMetadataWork(env, { title, language: 'en',
+      admission: admission(actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, undefined, 'en')) });
     return { work: created.work, mainVersion: created.mainVersion, title };
   };
   const contribution = async (work: string, actor: string, language: string, body: string) => {
