@@ -130,7 +130,7 @@ test('parts, connections and editions read from Main for the franchise records',
   // Releases: format, identifiers, platform and territory, and an omnibus listing the volumes it covers.
   const releases = page.getByRole('region', { name: 'Releases' });
   await expect(releases.getByRole('link', { name: '9780316371247' })).toHaveAttribute('href', '/en/isbn/9780316371247');
-  await expect(releases).toContainText('Paperback');
+  await expect(releases).toContainText('paperback');
   await expect(releases).toContainText('US');
   await expect(releases.getByText('Covers 3 Works')).toBeVisible();
 
