@@ -4,7 +4,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { EditFrame, NoAuthority } from './edit-frame.tsx';
 import { RealizationEditor, ReleaseEditor } from './editions-editor.tsx';
 import * as fixture from './fixtures.ts';
-import { copyOf } from './messages.ts';
+import { copyOf, messages } from './messages.ts';
 import { PartsEditor } from './parts-editor.tsx';
 import { RelationEditor } from './relation-editor.tsx';
 import type { WriteState } from './write.ts';
@@ -24,14 +24,14 @@ function Page({ locale, allowed, section, answer }: { locale: UiLocale; allowed:
       {allowed.includes(fixture.editAction) ? <section className="grid gap-4" aria-labelledby="section">
         <h2 id="section" className="font-semibold text-xl">{t.editStructure}</h2>
         {section === 'parts' ? <PartsEditor work={fixture.work} structure={fixture.structure} head={fixture.head}
-          parts={fixture.parts} allowed={allowed} locale={locale} action={action} t={t} load={fixture.loadWorks} /> : null}
+          parts={fixture.parts} allowed={allowed} locale={locale} action={action} messages={messages[locale]} load={fixture.loadWorks} /> : null}
         {section === 'relations' ? <RelationEditor work={fixture.work} mainVersion={fixture.mainVersion}
-          head={fixture.mainRevision} kinds={fixture.kinds} allowed={allowed} locale={locale} action={action} t={t}
+          head={fixture.mainRevision} kinds={fixture.kinds} allowed={allowed} locale={locale} action={action} messages={messages[locale]}
           load={fixture.loadWorks} /> : null}
         {section === 'editions' ? <div className="grid gap-6">
           <RealizationEditor work={fixture.work} mainVersion={fixture.mainVersion} mainRevision={fixture.mainRevision}
-            existing={fixture.realizations} allowed={allowed} action={action} t={t} />
-          <ReleaseEditor work={fixture.work} own={fixture.realizations} allowed={allowed} locale={locale} action={action} t={t}
+            existing={fixture.realizations} allowed={allowed} locale={locale} action={action} messages={messages[locale]} />
+          <ReleaseEditor work={fixture.work} own={fixture.realizations} allowed={allowed} locale={locale} action={action} messages={messages[locale]}
             load={fixture.loadRealizations} loadWorks={fixture.loadWorks} /></div> : null}
       </section> : <NoAuthority workRef="new-testament" signedIn signInHref="/auth/start" t={t} />}
     </EditFrame>

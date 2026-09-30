@@ -11,7 +11,7 @@ import { idFrom, isPending, problemOf, receiptOf, valuesOf, writeKey } from '../
 import { uiLocales } from '../i18n/define.ts';
 
 // The editors keep their submit state in React hooks and refresh through the App Router.
-mock.module('next/navigation', () => ({ useRouter: () => ({ refresh() {} }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
+void mock.module('next/navigation', () => ({ useRouter: () => ({ refresh() {} }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
 const { PartsEditor } = await import('../features/work-levels-edit/parts-editor.tsx');
 const { RelationEditor } = await import('../features/work-levels-edit/relation-editor.tsx');
 const { RealizationEditor, ReleaseEditor } = await import('../features/work-levels-edit/editions-editor.tsx');
@@ -109,14 +109,14 @@ const realization = { id: `https://rezics.com/id/${id}`, revision: 'https://rezi
 const kinds = [{ key: 'sequel' as const, label: 'Sequel to', language: 'en' }, { key: 'reboot' as const, label: 'Reboot of', language: 'en' }];
 const surfaces: Record<string, (allowed: readonly string[]) => string> = {
   parts: allowed => renderToStaticMarkup(createElement(PartsEditor, { work: id, structure: 'https://rezics.com/id/s', head: 'https://rezics.com/id/h',
-    parts, allowed, locale: 'en', action, t })),
+    parts, allowed, locale: 'en', action, messages: messages.en })),
   'parts without a list': allowed => renderToStaticMarkup(createElement(PartsEditor, { work: id, structure: null, head: null, parts: [],
-    allowed, locale: 'en', action, t })),
+    allowed, locale: 'en', action, messages: messages.en })),
   relations: allowed => renderToStaticMarkup(createElement(RelationEditor, { work: id, mainVersion: 'https://rezics.com/id/m',
-    head: 'https://rezics.com/id/h', kinds, allowed, locale: 'en', action, t })),
+    head: 'https://rezics.com/id/h', kinds, allowed, locale: 'en', action, messages: messages.en })),
   realization: allowed => renderToStaticMarkup(createElement(RealizationEditor, { work: id, mainVersion: 'https://rezics.com/id/m',
-    mainRevision: 'https://rezics.com/id/h', existing: [realization], allowed, action, t })),
-  release: allowed => renderToStaticMarkup(createElement(ReleaseEditor, { work: id, own: [realization], allowed, locale: 'en', action, t })),
+    mainRevision: 'https://rezics.com/id/h', existing: [realization], allowed, locale: 'en', action, messages: messages.en })),
+  release: allowed => renderToStaticMarkup(createElement(ReleaseEditor, { work: id, own: [realization], allowed, locale: 'en', action, messages: messages.en })),
 };
 const control = /<(form|button|input|select|textarea|details)\b/;
 
@@ -146,6 +146,18 @@ describe('G-839 class guard: edit controls only for a viewer Main lets edit', ()
       .filter(file => drawing.test(readFileSync(join(directory, file), 'utf8')) && !/mayEdit\(/.test(readFileSync(join(directory, file), 'utf8')))
       .filter(file => !inside.has(file));
     expect(ungated).toEqual([]);
+  });
+});
+
+describe('G-839 server pages and client editors', () => {
+  test('a page hands an editor the raw catalog: materialized copy holds functions, which cannot cross to a client component', () => {
+    const source = readFileSync(join(import.meta.dir, '../features/work-levels-edit/edit-pages.tsx'), 'utf8');
+    const editors = [...source.matchAll(/<(PartsEditor|RelationEditor|RealizationEditor|ReleaseEditor)\b[^>]*?\/>/gs)];
+    expect(editors).toHaveLength(4);
+    for (const [markup] of editors) {
+      expect(markup).toMatch(/\bmessages=\{messages\[locale\]\}/);
+      expect(markup).not.toMatch(/\bt=\{/);
+    }
   });
 });
 

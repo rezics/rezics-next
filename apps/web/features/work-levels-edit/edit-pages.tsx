@@ -15,7 +15,7 @@ import { readAllowedActions } from './authority.ts';
 import { EditFrame, NoAuthority } from './edit-frame.tsx';
 import { RealizationEditor, ReleaseEditor, type CoverableRealization } from './editions-editor.tsx';
 import { readKindOptions } from './read.ts';
-import { copyOf } from './messages.ts';
+import { copyOf, messages } from './messages.ts';
 import { PartsEditor, type EditablePart } from './parts-editor.tsx';
 import { RelationEditor } from './relation-editor.tsx';
 import { editHref, type EditSection } from './route.ts';
@@ -56,7 +56,7 @@ export async function PartsEditPage({ workRef, id, after, locale }: { workRef: s
       <h2 id="parts-heading" className="font-semibold text-xl">{f.t.partsHeading}</h2>
       <p className="text-muted-foreground text-sm">{f.t.partsHelp}</p>
       <PartsEditor work={id} structure={page?.structure ?? null} head={page?.revision ?? null} parts={rows}
-        allowed={f.allowed} locale={locale} action={changeParts} t={f.t}
+        allowed={f.allowed} locale={locale} action={changeParts} messages={messages[locale]}
         links={{ first: after ? base : null, next: page?.next ? `${base}?after=${encodeURIComponent(page.next)}` : null }} />
     </section>
   </Shell>;
@@ -71,7 +71,7 @@ export async function RelationsEditPage({ workRef, id, locale }: { workRef: stri
     <section className="grid gap-4" aria-labelledby="relations-heading">
       <h2 id="relations-heading" className="font-semibold text-xl">{f.t.relationsHeading}</h2>
       {f.header ? <RelationEditor work={id} mainVersion={f.header.mainVersion} head={f.header.mainVersionRevision}
-        kinds={kinds.ok ? kinds.data : []} allowed={f.allowed} locale={locale} action={recordRelation} t={f.t} /> : null}
+        kinds={kinds.ok ? kinds.data : []} allowed={f.allowed} locale={locale} action={recordRelation} messages={messages[locale]} /> : null}
     </section>
     {rows.length ? <section className="grid gap-4" aria-labelledby="current-relations">
       <h2 id="current-relations" className="font-semibold text-xl">{f.t.currentRelations}</h2>
@@ -92,8 +92,8 @@ export async function EditionsEditPage({ workRef, id, locale, pageMessages }: {
     <section className="grid gap-6" aria-labelledby="editions-heading">
       <h2 id="editions-heading" className="font-semibold text-xl">{f.t.editionsHeading}</h2>
       {f.header ? <RealizationEditor work={id} mainVersion={f.header.mainVersion} mainRevision={f.header.mainVersionRevision}
-        existing={own} allowed={f.allowed} action={addRealization} t={f.t} /> : null}
-      <ReleaseEditor work={id} own={own} allowed={f.allowed} locale={locale} action={addRelease} t={f.t} />
+        existing={own} allowed={f.allowed} locale={locale} action={addRealization} messages={messages[locale]} /> : null}
+      <ReleaseEditor work={id} own={own} allowed={f.allowed} locale={locale} action={addRelease} messages={messages[locale]} />
     </section>
     <section className="grid gap-4" aria-labelledby="current-editions">
       <h2 id="current-editions" className="font-semibold text-xl">{f.t.currentEditions}</h2>

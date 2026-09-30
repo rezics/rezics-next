@@ -10,7 +10,8 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import { mayEdit } from './allowed.ts';
-import type { Copy } from './messages.ts';
+import { materializeData } from 'native-i18n';
+import type { Copy, WorkLevelsEditMessages } from './messages.ts';
 import { useWrite } from './use-write.ts';
 import { invalidField, WriteStatus } from './write-status.tsx';
 import type { WriteState } from './write.ts';
@@ -44,11 +45,12 @@ function Context({ work, structure, head, intent, children }: { work: string; st
  * and the editor reloads it without losing what they typed. Renders nothing for a viewer whose
  * allowed actions do not include editing.
  */
-export function PartsEditor({ work, structure, head, parts, allowed, locale, action, t, load, links }: {
+export function PartsEditor({ work, structure, head, parts, allowed, locale, action, messages, load, links }: {
   work: string; structure: string | null; head: string | null; parts: readonly EditablePart[];
-  allowed: readonly string[]; locale: UiLocale; action: (previous: WriteState, form: FormData) => Promise<WriteState>; t: Copy;
+  allowed: readonly string[]; locale: UiLocale; action: (previous: WriteState, form: FormData) => Promise<WriteState>; messages: WorkLevelsEditMessages;
   load?: WorkLoader; links?: { first: string | null; next: string | null };
 }) {
+  const t = materializeData(messages, { locale });
   const { state, run, pending, values, reload, formKey } = useWrite(action);
   if (!mayEdit(allowed)) return null;
   const invalid = invalidField(state);

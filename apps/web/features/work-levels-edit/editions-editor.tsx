@@ -10,7 +10,8 @@ import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { mayEdit } from './allowed.ts';
-import type { Copy } from './messages.ts';
+import { materializeData } from 'native-i18n';
+import type { Copy, WorkLevelsEditMessages } from './messages.ts';
 import { workIdFrom } from './route.ts';
 import { useWrite } from './use-write.ts';
 import { invalidField, WriteStatus } from './write-status.tsx';
@@ -35,10 +36,11 @@ const languageField = (t: Copy, name: string, value: string, invalid: boolean) =
     placeholder="ja" /><FieldHelper>{t.languageHelp}</FieldHelper></Field>;
 
 /** The form that adds a realization: one text with its language, translators, source and provenance. */
-export function RealizationEditor({ work, mainVersion, mainRevision, existing, allowed, action, t }: {
+export function RealizationEditor({ work, mainVersion, mainRevision, existing, allowed, locale, action, messages }: {
   work: string; mainVersion: string; mainRevision: string; existing: readonly CoverableRealization[];
-  allowed: readonly string[]; action: Action; t: Copy;
+  allowed: readonly string[]; locale: UiLocale; action: Action; messages: WorkLevelsEditMessages;
 }) {
+  const t = materializeData(messages, { locale });
   const { state, run, pending, values, reload, formKey } = useWrite(action);
   if (!mayEdit(allowed)) return null;
   const invalid = invalidField(state);
@@ -133,10 +135,11 @@ function CoverageLoad({ t, onLoad }: { t: Copy; onLoad: (text: string) => void }
 }
 
 /** The form that adds a release: identifiers, format, platform, territory and what it covers. */
-export function ReleaseEditor({ work, own, allowed, locale, action, t, load = browserRealizations, loadWorks }: {
-  work: string; own: readonly CoverableRealization[]; allowed: readonly string[]; locale: UiLocale; action: Action; t: Copy;
+export function ReleaseEditor({ work, own, allowed, locale, action, messages, load = browserRealizations, loadWorks }: {
+  work: string; own: readonly CoverableRealization[]; allowed: readonly string[]; locale: UiLocale; action: Action; messages: WorkLevelsEditMessages;
   load?: RealizationLoader; loadWorks?: WorkLoader;
 }) {
+  const t = materializeData(messages, { locale });
   const { state, run, pending, values, reload, formKey } = useWrite(action);
   if (!mayEdit(allowed)) return null;
   const invalid = invalidField(state);

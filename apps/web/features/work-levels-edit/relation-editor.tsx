@@ -8,7 +8,8 @@ import { LinkIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mayEdit } from './allowed.ts';
 import { type KindOption, viaOf } from './kinds.ts';
-import type { Copy } from './messages.ts';
+import { materializeData } from 'native-i18n';
+import type { WorkLevelsEditMessages } from './messages.ts';
 import { useWrite } from './use-write.ts';
 import { invalidField, WriteStatus } from './write-status.tsx';
 import type { WriteState } from './write.ts';
@@ -20,11 +21,12 @@ import { WorkPicker, type WorkLoader } from './work-picker.tsx';
  * its own. A derivation pins the Work's Main Version at the head the page showed, so Main refuses it
  * if the Work moved since. Renders nothing for a viewer whose allowed actions do not include editing.
  */
-export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale, action, t, load }: {
+export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale, action, messages, load }: {
   work: string; mainVersion: string; head: string; kinds: readonly KindOption[];
-  allowed: readonly string[]; locale: UiLocale; action: (previous: WriteState, form: FormData) => Promise<WriteState>; t: Copy;
+  allowed: readonly string[]; locale: UiLocale; action: (previous: WriteState, form: FormData) => Promise<WriteState>; messages: WorkLevelsEditMessages;
   load?: WorkLoader;
 }) {
+  const t = materializeData(messages, { locale });
   const { state, run, pending, values, reload, formKey } = useWrite(action);
   if (!mayEdit(allowed)) return null;
   const invalid = invalidField(state);
