@@ -100,7 +100,9 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   const saoSeries = await work('Sword Art Online');
   const saoVolumes = await Promise.all([1, 2, 3].map(number => work(`Sword Art Online, Vol. ${number}`)));
   await compose(saoSeries, saoVolumes.map((volume, index) => ({ work: volume, label: String(index + 1) })));
-  const english = await Promise.all(saoVolumes.map(volume => text(volume, 'en', publisher)));
+  // One write at a time: each moves the graph the next one is checked against (409 realization_basis_changed).
+  const english = [];
+  for (const volume of saoVolumes) english.push(await text(volume, 'en', publisher));
   const release = async (title: string, platform: string, coverage: { id: string; revision: string }[]) => {
     const body = { profile: 'release-v2', expectedHead: null, actingSubject: editor.actor, id: id(), kind: 'formal', status: 'official',
       title: { value: title, language: 'en' }, titleLanguage: 'en', tracklistLanguage: null, editionStatement: null,
