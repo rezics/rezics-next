@@ -65,7 +65,7 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
 
   // Parts: add "22 Reverse" after "22".
   const list = page.getByRole('list', { name: 'Parts in publication order' });
-  await expect(list.getByRole('listitem')).toHaveText([/^1\s/, /^2\s/, /^22\s/]);
+  await expect(list.locator('[data-part-label]')).toHaveText(['1', '2', '22']);
   await shoot(page, 'parts-before', info);
   const add = page.getByRole('form', { name: 'Add a part' });
   await add.getByRole('textbox', { name: 'Work' }).fill(uuid(index.reverse.work));
@@ -73,11 +73,11 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   await add.getByRole('combobox', { name: 'Place' }).selectOption({ label: 'After 22' });
   await add.getByRole('button', { name: 'Add part' }).click();
   await expect(receipt(page)).toBeVisible();
-  await expect(list.getByRole('listitem')).toHaveText([/^1\s/, /^2\s/, /^22\s/, /^22 Reverse/]);
+  await expect(list.locator('[data-part-label]')).toHaveText(['1', '2', '22', '22 Reverse']);
 
   // Move it above "22".
   await page.getByRole('button', { name: 'Move 22 Reverse up' }).click();
-  await expect(list.getByRole('listitem')).toHaveText([/^1\s/, /^2\s/, /^22 Reverse/, /^22\s/]);
+  await expect(list.locator('[data-part-label]')).toHaveText(['1', '2', '22 Reverse', '22']);
   await shoot(page, 'parts-after', info);
 
   // A second tab holds the list as it was: its edit is refused as stale, keeps what was typed, and succeeds after a reload.
@@ -86,7 +86,7 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   const otherList = other.getByRole('list', { name: 'Parts in publication order' });
   await expect(otherList.getByRole('listitem')).toHaveCount(4);
   await page.getByRole('button', { name: 'Move 22 Reverse down' }).click();
-  await expect(list.getByRole('listitem')).toHaveText([/^1\s/, /^2\s/, /^22\s/, /^22 Reverse/]);
+  await expect(list.locator('[data-part-label]')).toHaveText(['1', '2', '22', '22 Reverse']);
   await other.locator('summary[aria-label="Edit 22"]').click();
   const label = other.getByRole('textbox', { name: 'Label' }).first();
   await label.fill('22 (rev.)');
@@ -104,7 +104,8 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   // G-837's Connections page shows the change after a reload.
   await page.goto(at(index.newTestament, 'connections'));
   await expect(page.getByRole('list', { name: 'Parts in publication order' }).getByRole('listitem'))
-    .toHaveText([/^1\s/, /^2\s/, /^22 \(rev\.\)/, /^22 Reverse/]);
+    .toHaveText([/^1\s*New Testament 1/, /^2\s*New Testament 2/, /^22 \(rev\.\)\s*New Testament 22$/,
+      /^22 Reverse\s*New Testament 22 Reverse/]);
   await expect(page.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', `/en/w/${uuid(index.newTestament.work)}/edit/parts`);
 
   // Relations: Genesis Testament is a Sequel of New Testament, with evidence. Main words every label.

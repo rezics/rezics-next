@@ -61,8 +61,8 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
     {parts.length ? <ol aria-label={t.partsList} className="grid divide-y divide-border/60 border-border/60 border-y">
       {parts.map((part, index) => <li key={part.occurrence} className="grid gap-2 py-3">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="w-28 shrink-0 break-words font-semibold tabular-nums">{part.label || t.unlabelled}</span>
-          <span className="min-w-0 flex-1 break-words">{part.name}</span>
+          <span data-part-label className="w-28 shrink-0 break-words font-semibold tabular-nums">{part.label || t.unlabelled}</span>
+          <span data-part-name className="min-w-0 flex-1 break-words">{part.name}</span>
           {part.inclusion !== 'required' ? <Badge variant="outline">{part.inclusion === 'optional' ? t.inclusionOptional
             : t.inclusionExtra}</Badge> : null}
         </div>
