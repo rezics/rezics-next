@@ -153,3 +153,75 @@ G-612) become adapters over the shared Composed, Versioned and Trackable
 capabilities, never a book-only store. The SAO and Index franchises and a set of
 works whose web and published versions diverge are the acceptance fixtures.
 
+## Catalogue acceptance fixtures
+
+Research R55, 2026-09-30. The default boundary between one Work and two is
+**narrative incompatibility or a deliberate independent retelling**, never word
+count, language, ISBN or marketing:
+
+| Change | Default |
+| --- | --- |
+| Corrections, light edits, extra viewpoints or compatible chapters | Same Work; distinct revisions and releases |
+| Reordered presentation, events unchanged | Same Work; both orders kept |
+| Reordering that changes causality, or an incompatible ending | Two Works linked by Rewrite |
+| A renamed protagonist | An alias alone keeps one Work; a rewritten identity is investigated |
+| A deliberate reboot | Two Works linked by Reboot |
+| A deleted web text or a web-only continuation | Coverage and availability only; deletion creates no Work |
+
+Relations to add: Rewrite and Reboot as derivation kinds; Sequel, SpinOff,
+franchise membership and qualified event overlap as their own relations; and a
+revised publication inside one Work's history rather than a derivation. A
+franchise is a Collection with its Zone, not one giant Work.
+
+The fixture specification is [`tests/fixtures/catalogue/franchises.yaml`](../../tests/fixtures/catalogue/franchises.yaml).
+Sword Art Online: web serial 2002–2008 and Dengeki Bunko from April 2009
+([Kawahara](https://book.asahi.com/article/14487968), [Kadokawa](https://group.kadokawa.co.jp/documents/topics/20140106_soos.pdf));
+Progressive declared a reboot ([publisher](https://dengekibunko.jp/product/sao/321508000327.html));
+Alternative GGO by Keiichi Sigsawa with Kawahara credited for the original
+concept ([credits](https://dengekibunko.jp/novecomi/novel/16817330662085987651/)).
+A Certain Magical Index: Original (22 volumes from 2004-04-10), New Testament
+(labels 1–22 plus "22 Reverse", from 2011-03-10) and Genesis Testament (from
+2020-02-07) as sequel series ([Dengeki Bunko](https://dengekibunko.jp/product/index/312005300000.html)),
+with Railgun, Accelerator and Astral Buddy as spin-offs
+([Seven Seas](https://sevenseasentertainment.com/series/a-certain-scientific-railgun/)).
+Two Works are warranted where authors state the published story diverged:
+[Slime](https://www.animatetimes.com/news/details.php?id=1768438282&p=3),
+[Shield Hero](https://mypage.syosetu.com/mypageblog/view/userid/172188/blogkey/1785642/),
+[So I'm a Spider](https://mypage.syosetu.com/mypageblog/view/userid/595431/blogkey/2933037/),
+[Overlord](https://mypage.syosetu.com/mypageblog/view/userid/170524/blogkey/513110/),
+[Seirei Gensouki](https://mypage.syosetu.com/mypageblog/view/userid/388068/blogkey/2670146/),
+[The Eminence in Shadow](https://ncode.syosetu.com/n0611em/204/),
+[The Isolator](https://dengekionline.com/elem/000/000/902/902669/),
+[By the Grace of the Gods](https://ncode.syosetu.com/n5824ct/) (two web serials),
+[Herbivorous Dragon](https://ncode.syosetu.com/n9375ea/48/) and
+[Cheated Magic Swordsman](https://ncode.syosetu.com/n0447ca/). Ascendance of a
+Bookworm, Mushoku Tensei, Log Horizon, Arifureta and KonoSuba are one-Work
+controls; Re:Zero and Tanya stay undecided until their texts are compared. That
+the SAO web and bunko versions are two Works is the maintainer's decision; the
+exact extent of the rewrite remains unverified.
+
+Acceptance queries, each through the API and the UI:
+
+1. List one Main Version per series Work in a franchise, excluding releases;
+   changing the grain to volumes or seasons changes the list explicitly.
+2. Any ISBN or digital entry resolves to a release, its realization, and its
+   parent Work and Main Version.
+3. The bunko Work leads to the web Work; unavailable text stays distinct from
+   unknown identity.
+4. Progressive shows Reboot; Alternative GGO shows SpinOff with Sigsawa as author.
+5. Edition, story, translation, manga and anime reviews filter separately, and
+   every aggregate states its scope.
+6. Progress in the web Spider never completes the book Spider; suggested
+   correspondence needs explicit acceptance.
+7. Contradictory wiki facts ("dies in the web version", "survives in the
+   books") coexist with continuity scope and spoiler boundaries.
+8. Reading order and publication order differ without changing identifiers.
+9. New Testament "22" and "22 Reverse" stay distinct, Genesis Testament restarts
+   at 1, and an omnibus covers its books without duplicating Works.
+10. Translations name their source continuity and language (`zh-Hant` versus
+    `zh-Hans`); unverified web-version translations stay unverified.
+11. Anime to manga to novel source chains are traversable, with unresolved
+    links visible.
+12. Franchise and event membership never merges Works, and contributors keep one
+    identity across Zones.
+

@@ -1,0 +1,103 @@
+# Catalogue acceptance fixture specification (2026-09-30, research R55).
+# Facts only: titles, dates, volume labels, roles and relations; their sources are
+# listed in docs/contracts/work-and-release.md#catalogue-acceptance-fixtures. Model
+# assignments (Work, Main Version, Release, relation kinds) follow
+# docs/contracts/work-and-release.md#work-levels-realizations-and-versions.
+# M6 turns this specification into executable fixtures and the acceptance
+# queries listed in that contract; expand_* lists name Works still to be added.
+schema:
+  work: [id, title, mainVersion]
+  release: [id, sourceContent, language, format, publicationDate]
+  relation: [subject, predicate, object, evidence]
+  each_admitted_work: exactly_one_mainVersion
+  relation_direction: derivative_to_source
+  unresolved_source_revision: null
+
+SAO:
+  collection: sao.franchise
+  works:
+    - [sao.web, Sword Art Online, mv.sao.web]
+    - [sao.bunko, Sword Art Online, mv.sao.bunko]
+    - [sao.progressive, Sword Art Online Progressive, mv.sao.progressive]
+    - [sao.aggo, Alternative Gun Gale Online, mv.sao.aggo]
+    - [sao.clover, Clover's Regret, mv.sao.clover]
+    - [sao.labyrinth, Mystery Labyrinth, mv.sao.labyrinth]
+    - [sao.gourmet, Gourmet Seekers, mv.sao.gourmet]
+    - [sao.gamblers, Gamblers' Honor, mv.sao.gamblers]
+  facts:
+    webPublication: [2002, 2008]
+    bunkoFirstPublication: 2009-04
+    creators:
+      sao.bunko: [Reki Kawahara:author, abec:illustrator]
+      sao.aggo:
+        - Keiichi Sigsawa:author
+        - Kouhaku Kuroboshi:illustrator
+        - Reki Kawahara:concept-supervision
+  relations:
+    - [sao.bunko, Rewrite, sao.web, history-plus-maintainer-decision]
+    - [sao.progressive, Reboot, sao.bunko, publisher]
+    - [sao.aggo, SpinOff, sao.bunko, publisher]
+  expand_independent_works:
+    manga: [Aincrad, Fairy Dance, Phantom Bullet, Mother's Rosario,
+            Progressive, Girls' Ops, Ordinal Scale]
+    anime: [SAO, SAO II, Alicization, War of Underworld,
+            AGGO, Ordinal Scale, Aria, Scherzo]
+    games: [Infinity Moment, Hollow Fragment, Lost Song,
+            Hollow Realization, Fatal Bullet, Alicization Lycoris,
+            Last Recollection, Fractured Daydream]
+  release_families:
+    - [sao.bunko, en, Yen Press]
+    - [sao.bunko, zh-Hant, Taiwan Kadokawa]
+    - [sao.bunko.volume1, zh-Hans, Hunan Fine Arts]
+    - [sao.bunko.volume1, ko, Seoul Media Comics]
+
+Index:
+  collection: index.franchise
+  works:
+    - [index.original, A Certain Magical Index, mv.index.original]
+    - [index.nt, New Testament, mv.index.nt]
+    - [index.gt, Genesis Testament, mv.index.gt]
+    - [index.railgun, A Certain Scientific Railgun, mv.index.railgun]
+    - [index.accelerator, A Certain Scientific Accelerator, mv.index.accelerator]
+    - [index.astral, Astral Buddy, mv.index.astral]
+  facts:
+    firstVolumes:
+      index.original: 2004-04-10
+      index.nt: 2011-03-10
+      index.gt: 2020-02-07
+    originalPrincipalVolumes: 22
+    ntLabels: [1..22, "22 Reverse"]
+    originalAdditionalBooks: [SS1, SS2]
+    novelCreators: [Kazuma Kamachi:author, Kiyotaka Haimura:illustrator]
+    mangaArtists:
+      railgun: Motoi Fuyukawa
+      accelerator: Arata Yamaji
+      astral: Yasuhito Nogi
+  relations:
+    - [index.nt, Sequel, index.original, publisher]
+    - [index.gt, Sequel, index.nt, publisher]
+    - [index.railgun, SpinOff, index.original, publisher]
+    - [index.accelerator, SpinOff, index.original, publisher]
+    - [index.astral, SpinOff, index.railgun, publisher]
+  omnibus:
+    kind: Release
+    coverage: [original.1..22, SS1, SS2]
+  expand_anime_works: [Index I, Index II, Index III,
+                       Railgun, Railgun S, Railgun T, Accelerator, Endymion]
+
+divergentPairs:
+  # Each row expands into two Works, two MVs and a sourced Rewrite relation.
+  # evidence IDs reference the linked audit rows.
+  - [D01, Slime, web, books]
+  - [D02, Shield Hero, web, books]
+  - [D03, Spider, web, books]
+  - [D04, Overlord, web, books]
+  - [D05, Seirei Gensouki, web, books]
+  - [D06, Eminence in Shadow, web, books]
+  - [D07, The Isolator, web, books]
+  - [D08, By the Grace of the Gods, originalWeb, revisedWeb]
+  - [D09, Herbivorous Dragon of 5000 Years, web, books]
+  - [D10, Cheated Magic Swordsman, web, books]
+D08_books:
+  sourceWork: D08.revisedWeb
+  separatePublicationIdentity: true
