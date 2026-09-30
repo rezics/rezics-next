@@ -46847,6 +46847,851 @@
         ]
       }
     },
+    "/v1/catalogue/candidates": {
+      "post": {
+        "operationId": "postV1CatalogueCandidates",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "aliases": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "language": {
+                          "maxLength": 35,
+                          "minLength": 2,
+                          "type": "string"
+                        },
+                        "value": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "language"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 8,
+                    "type": "array"
+                  },
+                  "creators": {
+                    "items": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                      "type": "string"
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  "dates": {
+                    "items": {
+                      "maximum": 9999,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  "identifiers": {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "isbn13": {
+                              "pattern": "^97[89][0-9]{10}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "isbn13"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "identifier": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "pattern": "^https://[^\\s<>\"{}|\\\\^`]{1,240}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "identifier"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  "originalTitle": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "value": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "language"
+                    ],
+                    "type": "object"
+                  },
+                  "profile": {
+                    "const": "catalogue-candidates-v1",
+                    "type": "string"
+                  },
+                  "romanizations": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "language": {
+                          "maxLength": 35,
+                          "minLength": 2,
+                          "type": "string"
+                        },
+                        "value": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "language"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 8,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "originalTitle",
+                  "aliases",
+                  "romanizations",
+                  "creators",
+                  "dates",
+                  "identifiers"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "aliases": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "language": {
+                          "maxLength": 35,
+                          "minLength": 2,
+                          "type": "string"
+                        },
+                        "value": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "language"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 8,
+                    "type": "array"
+                  },
+                  "creators": {
+                    "items": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                      "type": "string"
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  "dates": {
+                    "items": {
+                      "maximum": 9999,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  "identifiers": {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "isbn13": {
+                              "pattern": "^97[89][0-9]{10}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "isbn13"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "identifier": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "pattern": "^https://[^\\s<>\"{}|\\\\^`]{1,240}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "identifier"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  "originalTitle": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "value": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "language"
+                    ],
+                    "type": "object"
+                  },
+                  "profile": {
+                    "const": "catalogue-candidates-v1",
+                    "type": "string"
+                  },
+                  "romanizations": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "language": {
+                          "maxLength": 35,
+                          "minLength": 2,
+                          "type": "string"
+                        },
+                        "value": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "language"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 8,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "originalTitle",
+                  "aliases",
+                  "romanizations",
+                  "creators",
+                  "dates",
+                  "identifiers"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "aliases": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "language": {
+                          "maxLength": 35,
+                          "minLength": 2,
+                          "type": "string"
+                        },
+                        "value": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "language"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 8,
+                    "type": "array"
+                  },
+                  "creators": {
+                    "items": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                      "type": "string"
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  "dates": {
+                    "items": {
+                      "maximum": 9999,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  "identifiers": {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "isbn13": {
+                              "pattern": "^97[89][0-9]{10}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "isbn13"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "identifier": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "pattern": "^https://[^\\s<>\"{}|\\\\^`]{1,240}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "identifier"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  "originalTitle": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "value": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "language"
+                    ],
+                    "type": "object"
+                  },
+                  "profile": {
+                    "const": "catalogue-candidates-v1",
+                    "type": "string"
+                  },
+                  "romanizations": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "language": {
+                          "maxLength": 35,
+                          "minLength": 2,
+                          "type": "string"
+                        },
+                        "value": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "language"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 8,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "originalTitle",
+                  "aliases",
+                  "romanizations",
+                  "creators",
+                  "dates",
+                  "identifiers"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidateReceipt": {
+                      "type": "string"
+                    },
+                    "candidates": {
+                      "items": {
+                        "properties": {
+                          "attributes": {
+                            "items": {
+                              "properties": {
+                                "field": {
+                                  "type": "string"
+                                },
+                                "language": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "value",
+                                "language"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "mainVersion": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "revision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "work": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "work",
+                          "mainVersion",
+                          "revision",
+                          "attributes"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 128,
+                      "type": "array"
+                    },
+                    "complete": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "profile": {
+                      "const": "catalogue-candidates-v1",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "candidateReceipt",
+                    "complete",
+                    "candidates",
+                    "sourcePosition"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 429,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 429"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/chapters/{id}": {
       "get": {
         "operationId": "getV1ChaptersById",
@@ -79444,6 +80289,13 @@
                             },
                             "maxItems": 8,
                             "type": "array"
+                          },
+                          "verification": {
+                            "enum": [
+                              "unverified",
+                              "verified"
+                            ],
+                            "type": "string"
                           },
                           "wordCount": {
                             "~elyTyp": 7,
@@ -309479,6 +310331,13 @@
                                     "maxItems": 8,
                                     "type": "array"
                                   },
+                                  "verification": {
+                                    "enum": [
+                                      "unverified",
+                                      "verified"
+                                    ],
+                                    "type": "string"
+                                  },
                                   "wordCount": {
                                     "~elyTyp": 7,
                                     "minimum": 0,
@@ -311082,6 +311941,13 @@
                                     "maxItems": 8,
                                     "type": "array"
                                   },
+                                  "verification": {
+                                    "enum": [
+                                      "unverified",
+                                      "verified"
+                                    ],
+                                    "type": "string"
+                                  },
                                   "wordCount": {
                                     "~elyTyp": 7,
                                     "minimum": 0,
@@ -312256,6 +313122,13 @@
                             },
                             "maxItems": 8,
                             "type": "array"
+                          },
+                          "verification": {
+                            "enum": [
+                              "unverified",
+                              "verified"
+                            ],
+                            "type": "string"
                           },
                           "wordCount": {
                             "~elyTyp": 7,
@@ -337934,6 +338807,13 @@
                             "maxItems": 8,
                             "type": "array"
                           },
+                          "verification": {
+                            "enum": [
+                              "unverified",
+                              "verified"
+                            ],
+                            "type": "string"
+                          },
                           "wordCount": {
                             "~elyTyp": 7,
                             "minimum": 0,
@@ -340643,6 +341523,13 @@
                                 "maxItems": 8,
                                 "type": "array"
                               },
+                              "verification": {
+                                "enum": [
+                                  "unverified",
+                                  "verified"
+                                ],
+                                "type": "string"
+                              },
                               "wordCount": {
                                 "~elyTyp": 7,
                                 "minimum": 0,
@@ -341552,6 +342439,13 @@
                             },
                             "maxItems": 8,
                             "type": "array"
+                          },
+                          "verification": {
+                            "enum": [
+                              "unverified",
+                              "verified"
+                            ],
+                            "type": "string"
                           },
                           "wordCount": {
                             "~elyTyp": 7,
@@ -343506,6 +344400,13 @@
                             "maxItems": 8,
                             "type": "array"
                           },
+                          "verification": {
+                            "enum": [
+                              "unverified",
+                              "verified"
+                            ],
+                            "type": "string"
+                          },
                           "wordCount": {
                             "~elyTyp": 7,
                             "minimum": 0,
@@ -344240,6 +345141,13 @@
                             },
                             "maxItems": 8,
                             "type": "array"
+                          },
+                          "verification": {
+                            "enum": [
+                              "unverified",
+                              "verified"
+                            ],
+                            "type": "string"
                           },
                           "wordCount": {
                             "~elyTyp": 7,
@@ -347459,6 +348367,13 @@
                             },
                             "maxItems": 8,
                             "type": "array"
+                          },
+                          "verification": {
+                            "enum": [
+                              "unverified",
+                              "verified"
+                            ],
+                            "type": "string"
                           },
                           "wordCount": {
                             "~elyTyp": 7,
@@ -359150,6 +360065,13 @@
                             },
                             "maxItems": 8,
                             "type": "array"
+                          },
+                          "verification": {
+                            "enum": [
+                              "unverified",
+                              "verified"
+                            ],
+                            "type": "string"
                           },
                           "wordCount": {
                             "~elyTyp": 7,
@@ -377322,6 +378244,42 @@
                           ],
                           "type": "string"
                         },
+                        "fieldProvenance": {
+                          "properties": {
+                            "admission": {
+                              "type": "string"
+                            },
+                            "basis": {
+                              "const": "creation",
+                              "type": "string"
+                            },
+                            "candidateReceipt": {
+                              "type": "string"
+                            },
+                            "contributor": {
+                              "type": "string"
+                            },
+                            "fields": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "revision": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "revision",
+                            "contributor",
+                            "admission",
+                            "candidateReceipt",
+                            "fields"
+                          ],
+                          "type": "object"
+                        },
                         "id": {
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
@@ -377589,6 +378547,13 @@
                           },
                           "maxItems": 8,
                           "type": "array"
+                        },
+                        "verification": {
+                          "enum": [
+                            "unverified",
+                            "verified"
+                          ],
+                          "type": "string"
                         },
                         "wordCount": {
                           "~elyTyp": 7,
@@ -449220,6 +450185,13 @@
                             "maxItems": 8,
                             "type": "array"
                           },
+                          "verification": {
+                            "enum": [
+                              "unverified",
+                              "verified"
+                            ],
+                            "type": "string"
+                          },
                           "wordCount": {
                             "~elyTyp": 7,
                             "minimum": 0,
@@ -449778,332 +450750,1091 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "authoring": {
-                    "const": "own-work",
-                    "type": "string"
-                  },
-                  "authorityPath": {
-                    "enum": [
-                      "represented-agent",
-                      "direct-principal"
-                    ],
-                    "type": "string"
-                  },
-                  "description": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "aliases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "authoring": {
+                        "const": "own-work",
+                        "type": "string"
+                      },
+                      "authorityPath": {
+                        "enum": [
+                          "represented-agent",
+                          "direct-principal"
+                        ],
+                        "type": "string"
+                      },
+                      "candidateReceipt": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "description": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 4000,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "grain": {
+                        "enum": [
+                          "new-creative-scope",
+                          "translation",
+                          "version",
+                          "translation-or-version",
+                          "publication",
+                          "collection"
+                        ],
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                         "type": "string"
                       },
-                      "value": {
-                        "maxLength": 4000,
+                      "localizedTitle": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "parentComposition": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "metadata-only-v1",
+                        "type": "string"
+                      },
+                      "romanizations": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "semanticTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/BookSeries",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe",
+                            "https://schema.org/SoftwareApplication",
+                            "https://schema.org/SoftwareSourceCode",
+                            "https://schema.org/VideoGame",
+                            "https://rezics.com/vocab/ModPackage",
+                            "https://rezics.com/vocab/SkillPackage",
+                            "https://rezics.com/vocab/PromptTemplate",
+                            "https://schema.org/Movie",
+                            "https://schema.org/TVSeries",
+                            "https://schema.org/VideoObject",
+                            "https://schema.org/AudioObject",
+                            "https://schema.org/MusicRecording",
+                            "https://schema.org/MusicAlbum"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "title": {
+                        "maxLength": 200,
                         "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "value",
-                      "language"
+                      "profile",
+                      "title",
+                      "authoring",
+                      "actingSubject"
                     ],
                     "type": "object"
                   },
-                  "language": {
-                    "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                    "type": "string"
-                  },
-                  "localizedTitle": {
+                  {
                     "additionalProperties": false,
                     "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "aliases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "authoring": {
+                        "const": "catalogue",
+                        "type": "string"
+                      },
+                      "authorityPath": {
+                        "enum": [
+                          "represented-agent",
+                          "direct-principal"
+                        ],
+                        "type": "string"
+                      },
+                      "candidateReceipt": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "description": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 4000,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "grain": {
+                        "enum": [
+                          "new-creative-scope",
+                          "translation",
+                          "version",
+                          "translation-or-version",
+                          "publication",
+                          "collection"
+                        ],
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                         "type": "string"
                       },
-                      "value": {
-                        "maxLength": 500,
+                      "localizedTitle": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "parentComposition": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "metadata-only-v1",
+                        "type": "string"
+                      },
+                      "romanizations": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "semanticTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/BookSeries",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe",
+                            "https://schema.org/SoftwareApplication",
+                            "https://schema.org/SoftwareSourceCode",
+                            "https://schema.org/VideoGame",
+                            "https://rezics.com/vocab/ModPackage",
+                            "https://rezics.com/vocab/SkillPackage",
+                            "https://rezics.com/vocab/PromptTemplate",
+                            "https://schema.org/Movie",
+                            "https://schema.org/TVSeries",
+                            "https://schema.org/VideoObject",
+                            "https://schema.org/AudioObject",
+                            "https://schema.org/MusicRecording",
+                            "https://schema.org/MusicAlbum"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "title": {
+                        "maxLength": 200,
                         "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "value",
-                      "language"
+                      "profile",
+                      "grain",
+                      "candidateReceipt",
+                      "title",
+                      "actingSubject"
                     ],
                     "type": "object"
-                  },
-                  "profile": {
-                    "const": "metadata-only-v1",
-                    "type": "string"
-                  },
-                  "semanticTypes": {
-                    "items": {
-                      "enum": [
-                        "https://schema.org/Book",
-                        "https://schema.org/BookSeries",
-                        "https://schema.org/DigitalDocument",
-                        "https://schema.org/Recipe",
-                        "https://schema.org/SoftwareApplication",
-                        "https://schema.org/SoftwareSourceCode",
-                        "https://schema.org/VideoGame",
-                        "https://rezics.com/vocab/ModPackage",
-                        "https://rezics.com/vocab/SkillPackage",
-                        "https://rezics.com/vocab/PromptTemplate",
-                        "https://schema.org/Movie",
-                        "https://schema.org/TVSeries",
-                        "https://schema.org/VideoObject",
-                        "https://schema.org/AudioObject",
-                        "https://schema.org/MusicRecording",
-                        "https://schema.org/MusicAlbum"
-                      ],
-                      "type": "string"
-                    },
-                    "maxItems": 3,
-                    "type": "array",
-                    "uniqueItems": true
-                  },
-                  "title": {
-                    "maxLength": 200,
-                    "minLength": 1,
-                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
-                    "type": "string"
                   }
-                },
-                "required": [
-                  "profile",
-                  "title",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "authoring": {
-                    "const": "own-work",
-                    "type": "string"
-                  },
-                  "authorityPath": {
-                    "enum": [
-                      "represented-agent",
-                      "direct-principal"
-                    ],
-                    "type": "string"
-                  },
-                  "description": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "aliases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "authoring": {
+                        "const": "own-work",
+                        "type": "string"
+                      },
+                      "authorityPath": {
+                        "enum": [
+                          "represented-agent",
+                          "direct-principal"
+                        ],
+                        "type": "string"
+                      },
+                      "candidateReceipt": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "description": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 4000,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "grain": {
+                        "enum": [
+                          "new-creative-scope",
+                          "translation",
+                          "version",
+                          "translation-or-version",
+                          "publication",
+                          "collection"
+                        ],
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                         "type": "string"
                       },
-                      "value": {
-                        "maxLength": 4000,
+                      "localizedTitle": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "parentComposition": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "metadata-only-v1",
+                        "type": "string"
+                      },
+                      "romanizations": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "semanticTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/BookSeries",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe",
+                            "https://schema.org/SoftwareApplication",
+                            "https://schema.org/SoftwareSourceCode",
+                            "https://schema.org/VideoGame",
+                            "https://rezics.com/vocab/ModPackage",
+                            "https://rezics.com/vocab/SkillPackage",
+                            "https://rezics.com/vocab/PromptTemplate",
+                            "https://schema.org/Movie",
+                            "https://schema.org/TVSeries",
+                            "https://schema.org/VideoObject",
+                            "https://schema.org/AudioObject",
+                            "https://schema.org/MusicRecording",
+                            "https://schema.org/MusicAlbum"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "title": {
+                        "maxLength": 200,
                         "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "value",
-                      "language"
+                      "profile",
+                      "title",
+                      "authoring",
+                      "actingSubject"
                     ],
                     "type": "object"
                   },
-                  "language": {
-                    "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                    "type": "string"
-                  },
-                  "localizedTitle": {
+                  {
                     "additionalProperties": false,
                     "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "aliases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "authoring": {
+                        "const": "catalogue",
+                        "type": "string"
+                      },
+                      "authorityPath": {
+                        "enum": [
+                          "represented-agent",
+                          "direct-principal"
+                        ],
+                        "type": "string"
+                      },
+                      "candidateReceipt": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "description": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 4000,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "grain": {
+                        "enum": [
+                          "new-creative-scope",
+                          "translation",
+                          "version",
+                          "translation-or-version",
+                          "publication",
+                          "collection"
+                        ],
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                         "type": "string"
                       },
-                      "value": {
-                        "maxLength": 500,
+                      "localizedTitle": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "parentComposition": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "metadata-only-v1",
+                        "type": "string"
+                      },
+                      "romanizations": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "semanticTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/BookSeries",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe",
+                            "https://schema.org/SoftwareApplication",
+                            "https://schema.org/SoftwareSourceCode",
+                            "https://schema.org/VideoGame",
+                            "https://rezics.com/vocab/ModPackage",
+                            "https://rezics.com/vocab/SkillPackage",
+                            "https://rezics.com/vocab/PromptTemplate",
+                            "https://schema.org/Movie",
+                            "https://schema.org/TVSeries",
+                            "https://schema.org/VideoObject",
+                            "https://schema.org/AudioObject",
+                            "https://schema.org/MusicRecording",
+                            "https://schema.org/MusicAlbum"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "title": {
+                        "maxLength": 200,
                         "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "value",
-                      "language"
+                      "profile",
+                      "grain",
+                      "candidateReceipt",
+                      "title",
+                      "actingSubject"
                     ],
                     "type": "object"
-                  },
-                  "profile": {
-                    "const": "metadata-only-v1",
-                    "type": "string"
-                  },
-                  "semanticTypes": {
-                    "items": {
-                      "enum": [
-                        "https://schema.org/Book",
-                        "https://schema.org/BookSeries",
-                        "https://schema.org/DigitalDocument",
-                        "https://schema.org/Recipe",
-                        "https://schema.org/SoftwareApplication",
-                        "https://schema.org/SoftwareSourceCode",
-                        "https://schema.org/VideoGame",
-                        "https://rezics.com/vocab/ModPackage",
-                        "https://rezics.com/vocab/SkillPackage",
-                        "https://rezics.com/vocab/PromptTemplate",
-                        "https://schema.org/Movie",
-                        "https://schema.org/TVSeries",
-                        "https://schema.org/VideoObject",
-                        "https://schema.org/AudioObject",
-                        "https://schema.org/MusicRecording",
-                        "https://schema.org/MusicAlbum"
-                      ],
-                      "type": "string"
-                    },
-                    "maxItems": 3,
-                    "type": "array",
-                    "uniqueItems": true
-                  },
-                  "title": {
-                    "maxLength": 200,
-                    "minLength": 1,
-                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
-                    "type": "string"
                   }
-                },
-                "required": [
-                  "profile",
-                  "title",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "authoring": {
-                    "const": "own-work",
-                    "type": "string"
-                  },
-                  "authorityPath": {
-                    "enum": [
-                      "represented-agent",
-                      "direct-principal"
-                    ],
-                    "type": "string"
-                  },
-                  "description": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "aliases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "authoring": {
+                        "const": "own-work",
+                        "type": "string"
+                      },
+                      "authorityPath": {
+                        "enum": [
+                          "represented-agent",
+                          "direct-principal"
+                        ],
+                        "type": "string"
+                      },
+                      "candidateReceipt": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "description": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 4000,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "grain": {
+                        "enum": [
+                          "new-creative-scope",
+                          "translation",
+                          "version",
+                          "translation-or-version",
+                          "publication",
+                          "collection"
+                        ],
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                         "type": "string"
                       },
-                      "value": {
-                        "maxLength": 4000,
+                      "localizedTitle": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "parentComposition": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "metadata-only-v1",
+                        "type": "string"
+                      },
+                      "romanizations": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "semanticTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/BookSeries",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe",
+                            "https://schema.org/SoftwareApplication",
+                            "https://schema.org/SoftwareSourceCode",
+                            "https://schema.org/VideoGame",
+                            "https://rezics.com/vocab/ModPackage",
+                            "https://rezics.com/vocab/SkillPackage",
+                            "https://rezics.com/vocab/PromptTemplate",
+                            "https://schema.org/Movie",
+                            "https://schema.org/TVSeries",
+                            "https://schema.org/VideoObject",
+                            "https://schema.org/AudioObject",
+                            "https://schema.org/MusicRecording",
+                            "https://schema.org/MusicAlbum"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "title": {
+                        "maxLength": 200,
                         "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "value",
-                      "language"
+                      "profile",
+                      "title",
+                      "authoring",
+                      "actingSubject"
                     ],
                     "type": "object"
                   },
-                  "language": {
-                    "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                    "type": "string"
-                  },
-                  "localizedTitle": {
+                  {
                     "additionalProperties": false,
                     "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "aliases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "authoring": {
+                        "const": "catalogue",
+                        "type": "string"
+                      },
+                      "authorityPath": {
+                        "enum": [
+                          "represented-agent",
+                          "direct-principal"
+                        ],
+                        "type": "string"
+                      },
+                      "candidateReceipt": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "description": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 4000,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "grain": {
+                        "enum": [
+                          "new-creative-scope",
+                          "translation",
+                          "version",
+                          "translation-or-version",
+                          "publication",
+                          "collection"
+                        ],
+                        "type": "string"
+                      },
                       "language": {
                         "maxLength": 35,
                         "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                         "type": "string"
                       },
-                      "value": {
-                        "maxLength": 500,
+                      "localizedTitle": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "parentComposition": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "metadata-only-v1",
+                        "type": "string"
+                      },
+                      "romanizations": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "semanticTypes": {
+                        "items": {
+                          "enum": [
+                            "https://schema.org/Book",
+                            "https://schema.org/BookSeries",
+                            "https://schema.org/DigitalDocument",
+                            "https://schema.org/Recipe",
+                            "https://schema.org/SoftwareApplication",
+                            "https://schema.org/SoftwareSourceCode",
+                            "https://schema.org/VideoGame",
+                            "https://rezics.com/vocab/ModPackage",
+                            "https://rezics.com/vocab/SkillPackage",
+                            "https://rezics.com/vocab/PromptTemplate",
+                            "https://schema.org/Movie",
+                            "https://schema.org/TVSeries",
+                            "https://schema.org/VideoObject",
+                            "https://schema.org/AudioObject",
+                            "https://schema.org/MusicRecording",
+                            "https://schema.org/MusicAlbum"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "title": {
+                        "maxLength": 200,
                         "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "value",
-                      "language"
+                      "profile",
+                      "grain",
+                      "candidateReceipt",
+                      "title",
+                      "actingSubject"
                     ],
                     "type": "object"
-                  },
-                  "profile": {
-                    "const": "metadata-only-v1",
-                    "type": "string"
-                  },
-                  "semanticTypes": {
-                    "items": {
-                      "enum": [
-                        "https://schema.org/Book",
-                        "https://schema.org/BookSeries",
-                        "https://schema.org/DigitalDocument",
-                        "https://schema.org/Recipe",
-                        "https://schema.org/SoftwareApplication",
-                        "https://schema.org/SoftwareSourceCode",
-                        "https://schema.org/VideoGame",
-                        "https://rezics.com/vocab/ModPackage",
-                        "https://rezics.com/vocab/SkillPackage",
-                        "https://rezics.com/vocab/PromptTemplate",
-                        "https://schema.org/Movie",
-                        "https://schema.org/TVSeries",
-                        "https://schema.org/VideoObject",
-                        "https://schema.org/AudioObject",
-                        "https://schema.org/MusicRecording",
-                        "https://schema.org/MusicAlbum"
-                      ],
-                      "type": "string"
-                    },
-                    "maxItems": 3,
-                    "type": "array",
-                    "uniqueItems": true
-                  },
-                  "title": {
-                    "maxLength": 200,
-                    "minLength": 1,
-                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
-                    "type": "string"
                   }
-                },
-                "required": [
-                  "profile",
-                  "title",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -450114,53 +451845,97 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "mainRevision": {
-                      "type": "string"
-                    },
-                    "mainVersion": {
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "sourcePosition": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "dataEpoch": {
+                        "mainRevision": {
                           "type": "string"
                         },
-                        "datasetId": {
-                          "const": "product",
+                        "mainVersion": {
                           "type": "string"
                         },
-                        "sequence": {
-                          "pattern": "^[0-9]+$",
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "work": {
+                          "type": "string"
+                        },
+                        "workRevision": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
+                        "work",
+                        "mainVersion",
+                        "workRevision",
+                        "mainRevision",
+                        "sourcePosition",
+                        "replayed"
                       ],
                       "type": "object"
                     },
-                    "work": {
-                      "type": "string"
-                    },
-                    "workRevision": {
-                      "type": "string"
+                    {
+                      "properties": {
+                        "grain": {
+                          "enum": [
+                            "new-creative-scope",
+                            "translation",
+                            "version",
+                            "translation-or-version",
+                            "publication",
+                            "collection"
+                          ],
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "const": "use-owner-api",
+                          "type": "string"
+                        },
+                        "ownerApi": {
+                          "properties": {
+                            "method": {
+                              "type": "string"
+                            },
+                            "path": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "method",
+                            "path"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "outcome",
+                        "grain",
+                        "ownerApi"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "work",
-                    "mainVersion",
-                    "workRevision",
-                    "mainRevision",
-                    "sourcePosition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -450425,6 +452200,45 @@
               }
             },
             "description": "Response for status 409"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 429,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 429"
           },
           "500": {
             "content": {
@@ -450702,6 +452516,42 @@
                       ],
                       "type": "string"
                     },
+                    "fieldProvenance": {
+                      "properties": {
+                        "admission": {
+                          "type": "string"
+                        },
+                        "basis": {
+                          "const": "creation",
+                          "type": "string"
+                        },
+                        "candidateReceipt": {
+                          "type": "string"
+                        },
+                        "contributor": {
+                          "type": "string"
+                        },
+                        "fields": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "revision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "basis",
+                        "revision",
+                        "contributor",
+                        "admission",
+                        "candidateReceipt",
+                        "fields"
+                      ],
+                      "type": "object"
+                    },
                     "id": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -450969,6 +452819,13 @@
                       },
                       "maxItems": 8,
                       "type": "array"
+                    },
+                    "verification": {
+                      "enum": [
+                        "unverified",
+                        "verified"
+                      ],
+                      "type": "string"
                     },
                     "wordCount": {
                       "~elyTyp": 7,
@@ -453721,6 +455578,13 @@
                             "maxItems": 8,
                             "type": "array"
                           },
+                          "verification": {
+                            "enum": [
+                              "unverified",
+                              "verified"
+                            ],
+                            "type": "string"
+                          },
                           "wordCount": {
                             "~elyTyp": 7,
                             "minimum": 0,
@@ -455442,6 +457306,453 @@
               }
             },
             "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/works/{id}/catalogue-verifications": {
+      "post": {
+        "operationId": "postV1WorksByIdCatalogue-verifications",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "evidence": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expectedHead",
+                  "evidence",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "evidence": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expectedHead",
+                  "evidence",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "evidence": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "expectedHead": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expectedHead",
+                  "evidence",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "receipt": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "verification": {
+                      "const": "verified",
+                      "type": "string"
+                    },
+                    "work": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "work",
+                    "verification",
+                    "receipt",
+                    "sourcePosition",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "null"
+                    },
+                    "retry": {
+                      "properties": {
+                        "afterMs": {
+                          "type": "number"
+                        },
+                        "allowed": {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "allowed",
+                        "afterMs"
+                      ],
+                      "type": "object"
+                    },
+                    "status": {
+                      "const": "reconciling",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "operationId",
+                    "status",
+                    "phase",
+                    "result",
+                    "retry"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
           },
           "500": {
             "content": {
@@ -491708,6 +494019,13 @@
                                     },
                                     "maxItems": 8,
                                     "type": "array"
+                                  },
+                                  "verification": {
+                                    "enum": [
+                                      "unverified",
+                                      "verified"
+                                    ],
+                                    "type": "string"
                                   },
                                   "wordCount": {
                                     "~elyTyp": 7,
