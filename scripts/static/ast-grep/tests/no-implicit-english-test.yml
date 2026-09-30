@@ -1,0 +1,12 @@
+id: no-implicit-english
+valid:
+  - "const language = input.language ?? 'zh-Hant';"
+  - "const row = { language: 'zh-Hant', title };"
+  - "const query = `rv:publicTitle ${lit(TEXT_INDEX_PROBE_TITLE)}@en .`;"
+  - "const query = `FILTER(LANG(?label) = ${lit(language)})`;"
+invalid:
+  - "const query = `rdfs:label ${lit(title)}@en .`;"
+  - "const language = input.language ?? 'en';"
+  - "const language = row.lang || 'en';"
+  - "const row = { language: 'en', title };"
+  - 'const query = `FILTER(LANG(?label) = "en")`;'

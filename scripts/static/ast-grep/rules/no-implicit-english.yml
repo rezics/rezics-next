@@ -1,0 +1,69 @@
+id: no-implicit-english
+language: TypeScript
+severity: error
+message: Main does not assume English. Name the language the record carries, or leave it absent.
+files:
+  - services/main/src/**/*.ts
+  - services/main/src/**/*.tsx
+ignores:
+  # Ratchet of files that still assume English. G-512, G-596 and G-513 shrink this list.
+  # The text-index probe title is excluded by the rule below, not by this list.
+  - "services/main/src/api-responses.ts"
+  - "services/main/src/modules/classification/proposition.ts"
+  - "services/main/src/modules/collection/names.ts"
+  - "services/main/src/modules/feed/read.ts"
+  - "services/main/src/modules/media/summary.ts"
+  - "services/main/src/modules/protection/reconcile-restored.ts"
+  - "services/main/src/modules/protection/work.ts"
+  - "services/main/src/modules/rating/context.ts"
+  - "services/main/src/modules/rating/contexts.ts"
+  - "services/main/src/modules/rating/global.ts"
+  - "services/main/src/modules/rating/policy.ts"
+  - "services/main/src/modules/rating/release.ts"
+  - "services/main/src/modules/realm-directory/vocabulary.ts"
+  - "services/main/src/modules/recipe/importer.ts"
+  - "services/main/src/modules/recipe/structure-profile.ts"
+  - "services/main/src/modules/space/create.ts"
+  - "services/main/src/modules/work/activate.ts"
+  - "services/main/src/modules/work/read-rating.ts"
+  - "services/main/src/modules/work/reconcile-restored.ts"
+  - "services/main/src/modules/work/title-control.ts"
+  - "services/main/src/modules/zone-modules/editor-lists.ts"
+  - "services/main/src/modules/zone/owner-create.ts"
+  - "services/main/src/routes/classification.ts"
+  - "services/main/src/routes/ratings.ts"
+  - "services/main/src/routes/work-reads.ts"
+rule:
+  any:
+    - kind: string
+      regex: '@en([^A-Za-z0-9]|$)'
+      not:
+        regex: TEXT_INDEX_PROBE_TITLE
+    - kind: template_string
+      regex: '@en([^A-Za-z0-9]|$)'
+      not:
+        regex: TEXT_INDEX_PROBE_TITLE
+    - kind: string_fragment
+      regex: '@en([^A-Za-z0-9]|$)'
+      not:
+        inside:
+          kind: template_string
+          regex: TEXT_INDEX_PROBE_TITLE
+    - pattern: $VALUE ?? 'en'
+    - pattern: $VALUE ?? "en"
+    - pattern: $VALUE || 'en'
+    - pattern: $VALUE || "en"
+    - kind: pair
+      all:
+        - has:
+            field: key
+            regex: '^language$'
+        - has:
+            stopBy: end
+            kind: string
+            regex: '^[''"]en[''"]$'
+    - any:
+        - kind: string
+        - kind: template_string
+        - kind: string_fragment
+      regex: 'LANG\s*\(\s*\?[A-Za-z_][A-Za-z0-9_]*\s*\)\s*=\s*["'']en["'']'

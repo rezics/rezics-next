@@ -1,335 +1,434 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+/** Interface locales. English is the authoring contract; every other locale must match its keys. */
+export const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
+export type Locale = (typeof locales)[number];
+const translated = locales.filter((locale): locale is Exclude<Locale, 'en'> => locale !== 'en');
 
 const root = resolve(import.meta.dir, '../..');
-const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
-type Locale = (typeof locales)[number];
-type Token = { value: string; kind: 'word' | 'string' | 'punct'; start: number; end: number };
-export type Message = { bindings: string[]; placeholders: string[]; placeholderErrors: string[] };
-type Catalog = Map<string, Message>;
-type CatalogSpec = { app: 'web' | 'accounts'; namespace: string; english: string; inline?: boolean;
-  localeFiles?: Partial<Record<Locale, string>> };
+const placeholder = /\{\{\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\}\}/g;
 
-const webFeatures = ['auth', 'author', 'catalogue', 'communities', 'concept', 'discover', 'feed', 'home', 'library', 'manage', 'onboarding', 'profile', 'realm',
-  'post-composer', 'search', 'settings', 'shell', 'studio', 'work', 'work-page', 'zones'] as const;
-const accountsFeatures = ['shell', 'auth', 'consent', 'account', 'admin'] as const;
-const specs: CatalogSpec[] = [
-  ...webFeatures.map(feature => {
-    const namespace = feature === 'work-page' ? 'workPage' : feature;
-    const base = `apps/web/features/${feature}/messages`;
-    // A feature with a messages/ directory keeps one file per locale; the rest are still inline.
-    if (existsSync(resolve(root, base))) {
-      return { app: 'web' as const, namespace, english: `${base}.ts`, localeFiles: Object.fromEntries(
-        locales.filter(locale => locale !== 'en').map(locale => [locale, `${base}/${locale}.ts`])) as
-          Partial<Record<Locale, string>> };
-    }
-    return { app: 'web' as const, namespace, english: `${base}.ts`, inline: true };
-  }),
-  ...accountsFeatures.map(feature => {
-    const namespace = feature === 'shell' ? 'common' : feature;
-    const base = `apps/accounts/features/${feature}/messages`;
-    return { app: 'accounts' as const, namespace, english: `${base}/en.ts`, localeFiles: Object.fromEntries(
-      locales.filter(locale => locale !== 'en').map(locale => [locale, `${base}/${locale}.ts`])) as
-        Partial<Record<Locale, string>> };
-  }),
-];
+type Leaf = { kind: string; text: string; names: string[]; invalid: string[]; empty: boolean };
+export type Catalog = {
+  id: string;
+  locales: Partial<Record<Locale, unknown>>;
+  /** Locale objects readers actually receive, when those differ from the raw files. */
+  resolved?: Partial<Record<Locale, unknown>>;
+  loadError?: string;
+};
 
-function tokenize(source: string): Token[] {
-  const result: Token[] = [];
-  for (let index = 0; index < source.length;) {
-    const start = index;
-    const char = source[index]!;
-    if (/\s/.test(char)) { index++; continue; }
-    if (char === '/' && source[index + 1] === '/') {
-      index = source.indexOf('\n', index + 2);
-      if (index < 0) break;
-      continue;
+function isNative(value: unknown): value is { $nativeI18n: 1; op: string; pattern?: string } {
+  return (
+    !!value && typeof value === 'object' && (value as { $nativeI18n?: unknown }).$nativeI18n === 1
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** A string, a native-i18n node, or a function such as a Zone interpolator. */
+function isMessageLeaf(value: unknown): boolean {
+  return typeof value === 'string' || typeof value === 'function' || isNative(value);
+}
+
+function localeKeys(value: Record<string, unknown>): string[] {
+  return Object.keys(value).filter((key) => (locales as readonly string[]).includes(key));
+}
+
+/** `{ title: { en: '...', 'zh-Hant': '...' } }` from `indexCatalog`. */
+function isIndexed(value: unknown): value is Record<string, Record<string, unknown>> {
+  if (!isRecord(value) || isNative(value)) return false;
+  const rows = Object.values(value);
+  if (!rows.length) return false;
+  return rows.every((row) => {
+    if (!isRecord(row) || isNative(row) || !('en' in row)) return false;
+    const keys = localeKeys(row);
+    return keys.length >= 2 && keys.every((key) => isMessageLeaf(row[key]));
+  });
+}
+
+function isCatalogBody(value: unknown): boolean {
+  if (!isRecord(value) || isNative(value)) return false;
+  const entries = Object.values(value);
+  return (
+    entries.length === 0 || entries.every((item) => isMessageLeaf(item) || isCatalogBody(item))
+  );
+}
+
+/** `{ en: { title: '...' }, 'zh-Hant': { title: '...' } }` from `defineMessages` or a Zone table. */
+export function isLocaleMap(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value) || isNative(value) || isIndexed(value)) return false;
+  if (!isRecord(value.en) || isNative(value.en)) return false;
+  return localeKeys(value).length >= 2 && isCatalogBody(value.en);
+}
+
+function collect(
+  value: unknown,
+  insideInsert: boolean,
+  names: Set<string>,
+  invalid: string[],
+): void {
+  if (typeof value === 'string' || typeof value === 'function') {
+    const text = typeof value === 'string' ? value : '';
+    if (typeof value === 'function') return;
+    const found = [...text.matchAll(placeholder)].map((match) => match[1]!);
+    const remainder = text.replace(placeholder, '');
+    if (remainder.includes('{{') || remainder.includes('}}'))
+      invalid.push('contains a malformed placeholder');
+    if (!insideInsert && (found.length > 0 || remainder.includes('{{')))
+      invalid.push('contains a placeholder outside insert()');
+    for (const name of found) names.add(name);
+    return;
+  }
+  if (!isRecord(value)) return;
+  if (isNative(value) && value.op === 'insert' && typeof value.pattern === 'string') {
+    collect(value.pattern, true, names, invalid);
+    return;
+  }
+  for (const child of Object.values(value)) collect(child, insideInsert, names, invalid);
+}
+
+function leaf(value: unknown): Leaf {
+  const names = new Set<string>();
+  const invalid: string[] = [];
+  if (typeof value === 'string') {
+    collect(value, false, names, invalid);
+    return {
+      kind: 'string',
+      text: value,
+      names: [...names].sort(),
+      invalid,
+      empty: value.trim() === '',
+    };
+  }
+  if (typeof value === 'function')
+    return { kind: 'function', text: '', names: [], invalid, empty: false };
+  if (isNative(value)) {
+    collect(value, false, names, invalid);
+    return {
+      kind: `native:${value.op}`,
+      text: JSON.stringify(value),
+      names: [...names].sort(),
+      invalid,
+      empty: false,
+    };
+  }
+  return {
+    kind: value === null || value === undefined ? 'empty' : typeof value,
+    text: '',
+    names: [],
+    invalid: ['unsupported message'],
+    empty: true,
+  };
+}
+
+/** Every message leaf as `path -> leaf`. Nested plain objects use dotted paths; native-i18n nodes stay one leaf. */
+export function flatten(
+  value: unknown,
+  prefix = '',
+  out = new Map<string, Leaf>(),
+): Map<string, Leaf> {
+  if (isRecord(value) && !isNative(value)) {
+    const entries = Object.entries(value);
+    if (entries.length === 0 && prefix) out.set(prefix, leaf(undefined));
+    for (const [key, child] of entries) flatten(child, prefix ? `${prefix}.${key}` : key, out);
+    return out;
+  }
+  if (prefix || typeof value === 'string' || isNative(value) || typeof value === 'function')
+    out.set(prefix, leaf(value));
+  return out;
+}
+
+function differs(left: Leaf, right: Leaf): boolean {
+  return left.kind !== right.kind || left.text !== right.text;
+}
+
+/**
+ * Compare one English catalog with the raw locale objects readers' files export.
+ * `resolved` is the object `defineMessages` / `indexCatalog` actually serves, when a
+ * locale file exists separately and can be dropped on the floor.
+ */
+export function catalogIssues(
+  source: Partial<Record<Locale, unknown>>,
+  resolved?: Partial<Record<Locale, unknown>>,
+  requireAll = false,
+): string[] {
+  const issues: string[] = [];
+  const english = flatten(source.en);
+  if (english.size === 0) issues.push('english catalog has no keys');
+  for (const [key, message] of english) {
+    if (message.empty) issues.push(`en empty ${key}`);
+    for (const error of message.invalid) issues.push(`en ${error} ${key}`);
+  }
+  const present = translated.filter((locale) => source[locale] !== undefined);
+  if (requireAll && english.size > 0 && present.length === 0) {
+    issues.push('english catalog is not in any other locale');
+    return issues;
+  }
+  if (requireAll) {
+    for (const locale of translated) {
+      if (source[locale] === undefined) issues.push(`${locale} catalog is missing`);
     }
-    if (char === '/' && source[index + 1] === '*') {
-      const end = source.indexOf('*/', index + 2);
-      index = end < 0 ? source.length : end + 2;
-      continue;
-    }
-    if (char === '"' || char === "'" || char === '`') {
-      const quote = char;
-      index++;
-      let value = '';
-      while (index < source.length) {
-        const current = source[index++]!;
-        if (current === '\\') {
-          const escaped = source[index++];
-          value += escaped === 'n' ? '\n' : escaped === 't' ? '\t' : escaped ?? '';
-        } else if (current === quote) break;
-        else value += current;
+  }
+  for (const locale of present) {
+    const translatedLeaves = flatten(source[locale]);
+    const resolvedLeaves = resolved?.[locale] !== undefined ? flatten(resolved[locale]) : undefined;
+    for (const [key, message] of english) {
+      const found = translatedLeaves.get(key);
+      if (!found) {
+        issues.push(`${locale} missing ${key}`);
+        continue;
       }
-      result.push({ value, kind: 'string', start, end: index });
+      if (found.empty) issues.push(`${locale} empty ${key}`);
+      if (found.kind !== message.kind) issues.push(`${locale} kind mismatch ${key}`);
+      if (found.names.join('\0') !== message.names.join('\0'))
+        issues.push(`${locale} placeholder mismatch ${key}`);
+      for (const error of found.invalid) issues.push(`${locale} ${error} ${key}`);
+      if (resolvedLeaves && differs(found, message)) {
+        const served = resolvedLeaves.get(key);
+        if (!served || !differs(served, message))
+          issues.push(`${locale} falls back to English for ${key}`);
+      }
+    }
+    for (const key of translatedLeaves.keys()) {
+      if (!english.has(key)) issues.push(`${locale} extra ${key}`);
+    }
+    for (const [key, message] of translatedLeaves) {
+      if (english.has(key)) continue;
+      for (const error of message.invalid) issues.push(`${locale} ${error} ${key}`);
+    }
+  }
+  return issues;
+}
+
+async function importModule(rel: string): Promise<Record<string, unknown>> {
+  return (await import(pathToFileURL(resolve(root, rel)).href)) as Record<string, unknown>;
+}
+
+function sliceIndexed(
+  indexed: Record<string, Record<string, unknown>>,
+  locale: Locale,
+): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(indexed).map(([key, row]) => [key, row[locale]]));
+}
+
+function fromMap(id: string, map: Record<string, unknown>): Catalog {
+  const source: Partial<Record<Locale, unknown>> = {};
+  for (const locale of locales) if (locale in map) source[locale] = map[locale];
+  return { id, locales: source };
+}
+
+function readLocaleFiles(directory: string): Partial<Record<Locale, string>> {
+  if (!existsSync(resolve(root, directory))) return {};
+  const found: Partial<Record<Locale, string>> = {};
+  for (const name of readdirSync(resolve(root, directory))) {
+    const locale = translated.find((item) => name === `${item}.ts`);
+    if (locale) found[locale] = `${directory}/${name}`;
+  }
+  return found;
+}
+
+async function catalogsFromModule(
+  id: string,
+  mod: Record<string, unknown>,
+  files: Partial<Record<Locale, string>>,
+  seen: Set<unknown>,
+): Promise<Catalog[]> {
+  const maps = Object.values(mod).filter(isLocaleMap);
+  const indexed = Object.values(mod).filter(isIndexed);
+  for (const map of maps) seen.add(map);
+  const localeMap = maps[0];
+  const english =
+    mod.englishMessages ??
+    mod.default ??
+    localeMap?.en ??
+    (isCatalogBody(mod.messages) ? mod.messages : undefined);
+  const hasFiles = Object.keys(files).length > 0;
+  if (!hasFiles && localeMap) return [fromMap(id, localeMap)];
+  if (english === undefined) return [];
+  const source: Partial<Record<Locale, unknown>> = { en: english };
+  for (const [locale, rel] of Object.entries(files) as [Locale, string][]) {
+    const loaded = await importModule(rel);
+    source[locale] = loaded.default ?? loaded.messages;
+  }
+  let resolved: Partial<Record<Locale, unknown>> | undefined;
+  if (hasFiles && localeMap) {
+    resolved = {};
+    for (const locale of translated) resolved[locale] = localeMap[locale];
+  } else if (hasFiles && indexed[0]) {
+    resolved = {};
+    for (const locale of translated) resolved[locale] = sliceIndexed(indexed[0], locale);
+  }
+  return [{ id, locales: source, resolved }];
+}
+
+function walk(directory: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(resolve(root, directory), { withFileTypes: true })) {
+    const rel = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) walk(rel, out);
+    else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) out.push(rel);
+  }
+  return out;
+}
+
+/** Feature barrels, inline `defineMessages` modules, official Zone tables and the UI copy table. */
+export async function discoverCatalogs(): Promise<Catalog[]> {
+  const catalogs: Catalog[] = [];
+  const seen = new Set<unknown>();
+  const loaded = new Set<string>();
+
+  for (const app of ['web', 'accounts'] as const) {
+    const base = `apps/${app}/features`;
+    for (const entry of readdirSync(resolve(root, base), { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const feature = entry.name;
+      const barrel = `${base}/${feature}/messages.ts`;
+      const enFile = `${base}/${feature}/messages/en.ts`;
+      const hasBarrel = existsSync(resolve(root, barrel));
+      const hasEn = existsSync(resolve(root, enFile));
+      if (!hasBarrel && !hasEn) continue;
+      const id = `${app}/${feature}`;
+      try {
+        const mod = await importModule(hasEn ? enFile : barrel);
+        const barrelMod = hasBarrel && hasEn ? await importModule(barrel) : mod;
+        if (hasBarrel) loaded.add(barrel);
+        const files = readLocaleFiles(`${base}/${feature}/messages`);
+        catalogs.push(
+          ...(await catalogsFromModule(
+            id,
+            {
+              ...mod,
+              ...barrelMod,
+              englishMessages: barrelMod.englishMessages ?? mod.englishMessages,
+              default: hasEn ? mod.default : barrelMod.default,
+            },
+            files,
+            seen,
+          )),
+        );
+        if (existsSync(resolve(root, `${base}/${feature}/messages`))) {
+          for (const name of readdirSync(resolve(root, `${base}/${feature}/messages`))) {
+            if (
+              !name.endsWith('.ts') ||
+              name.endsWith('.test.ts') ||
+              translated.some((locale) => name === `${locale}.ts`) ||
+              name === 'en.ts'
+            )
+              continue;
+            const rel = `${base}/${feature}/messages/${name}`;
+            const extra = await importModule(rel);
+            loaded.add(rel);
+            for (const map of Object.values(extra).filter(isLocaleMap)) {
+              if (seen.has(map)) continue;
+              seen.add(map);
+              catalogs.push(fromMap(`${id}/${name.replace(/\.ts$/, '')}`, map));
+            }
+          }
+        }
+      } catch (error) {
+        catalogs.push({
+          id,
+          locales: {},
+          loadError: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  for (const rel of [...walk('apps/web/features'), ...walk('apps/accounts/features')]) {
+    if (loaded.has(rel) || !readFileSync(resolve(root, rel), 'utf8').includes('defineMessages('))
+      continue;
+    try {
+      const mod = await importModule(rel);
+      for (const map of Object.values(mod).filter(isLocaleMap)) {
+        if (seen.has(map)) continue;
+        seen.add(map);
+        const id = rel
+          .replace(/^apps\/(web|accounts)\/features\//, '$1/')
+          .replace(/\/messages\//, '/')
+          .replace(/\.ts$/, '');
+        catalogs.push(fromMap(id, map));
+      }
+    } catch (error) {
+      catalogs.push({
+        id: rel,
+        locales: {},
+        loadError: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const zones = resolve(root, 'apps/web/zones/official');
+  for (const entry of readdirSync(zones, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const rel = `apps/web/zones/official/${entry.name}/strings.ts`;
+    if (!existsSync(resolve(root, rel))) continue;
+    try {
+      const mod = await importModule(rel);
+      const map = isLocaleMap(mod.localeStrings)
+        ? mod.localeStrings
+        : Object.values(mod).find(isLocaleMap);
+      if (!map)
+        catalogs.push({
+          id: `zone/${entry.name}`,
+          locales: {},
+          loadError: 'no per-locale string table',
+        });
+      else catalogs.push(fromMap(`zone/${entry.name}`, map));
+    } catch (error) {
+      catalogs.push({
+        id: `zone/${entry.name}`,
+        locales: {},
+        loadError: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  try {
+    const ui = await importModule('packages/ui/src/i18n/copy.ts');
+    const map = isLocaleMap(ui.copy) ? ui.copy : Object.values(ui).find(isLocaleMap);
+    if (!map) catalogs.push({ id: 'ui/copy', locales: {}, loadError: 'no per-locale copy table' });
+    else catalogs.push(fromMap('ui/copy', map));
+  } catch (error) {
+    catalogs.push({
+      id: 'ui/copy',
+      locales: {},
+      loadError: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return catalogs;
+}
+
+export async function auditCatalogs(): Promise<string[]> {
+  const issues: string[] = [];
+  for (const catalog of await discoverCatalogs()) {
+    if (catalog.loadError) {
+      issues.push(`${catalog.id}: ${catalog.loadError}`);
       continue;
     }
-    if (/[A-Za-z_$]/.test(char)) {
-      index++;
-      while (index < source.length && /[A-Za-z0-9_$]/.test(source[index]!)) index++;
-      result.push({ value: source.slice(start, index), kind: 'word', start, end: index });
-      continue;
-    }
-    if (/[0-9]/.test(char)) {
-      index++;
-      while (index < source.length && /[0-9.]/.test(source[index]!)) index++;
-      result.push({ value: source.slice(start, index), kind: 'word', start, end: index });
-      continue;
-    }
-    result.push({ value: char, kind: 'punct', start, end: ++index });
+    for (const issue of catalogIssues(catalog.locales, catalog.resolved, true))
+      issues.push(`${catalog.id}: ${issue}`);
   }
-  return result;
+  return issues;
 }
 
-function matching(tokens: Token[], open: number): number | undefined {
-  const closeFor: Record<string, string> = { '{': '}', '(': ')', '[': ']' };
-  const firstClose = closeFor[tokens[open]?.value ?? ''];
-  if (!firstClose) return undefined;
-  const stack = [firstClose];
-  for (let index = open + 1; index < tokens.length; index++) {
-    const value = tokens[index]!.value;
-    if (closeFor[value]) stack.push(closeFor[value]!);
-    else if (value === stack.at(-1)) {
-      stack.pop();
-      if (!stack.length) return index;
-    }
+if (import.meta.main) {
+  const issues = await auditCatalogs();
+  const ids = new Map<string, string[]>();
+  for (const issue of issues) {
+    const id = issue.slice(0, issue.indexOf(':'));
+    const list = ids.get(id) ?? [];
+    list.push(issue.slice(id.length + 2));
+    ids.set(id, list);
   }
-  return undefined;
-}
-
-type Property = { key: string; start: number; end: number };
-function properties(tokens: Token[], open: number): Property[] {
-  const close = matching(tokens, open);
-  if (close === undefined) return [];
-  const result: Property[] = [];
-  let index = open + 1;
-  while (index < close) {
-    if (tokens[index]!.value === ',' || tokens[index]!.value === ';') { index++; continue; }
-    const keyToken = tokens[index]!;
-    if (keyToken.value === '...') { index++; continue; }
-    if (keyToken.kind !== 'word' && keyToken.kind !== 'string') { index++; continue; }
-    const key = keyToken.value;
-    index++;
-    if (tokens[index]?.value !== ':') {
-      result.push({ key, start: index - 1, end: index });
-      while (index < close && tokens[index]!.value !== ',') index++;
-      continue;
-    }
-    const start = ++index;
-    const stack: string[] = [];
-    const closing: Record<string, string> = { '{': '}', '(': ')', '[': ']' };
-    while (index < close) {
-      const value = tokens[index]!.value;
-      if (closing[value]) stack.push(closing[value]!);
-      else if (value === stack.at(-1)) stack.pop();
-      else if (value === ',' && !stack.length) break;
-      index++;
-    }
-    result.push({ key, start, end: index });
+  if (ids.size === 0) console.log('Catalogs match.');
+  for (const [id, list] of ids) {
+    console.error(`${id}: ${list.length} issue(s)`);
+    for (const issue of list) console.error(`- ${issue}`);
   }
-  return result;
+  if (issues.length) process.exitCode = 1;
 }
-
-function variableObject(tokens: Token[], name: string): number | undefined {
-  for (let index = 0; index < tokens.length - 2; index++) {
-    if (tokens[index]!.value !== 'const' || tokens[index + 1]!.value !== name) continue;
-    let equals = index + 2;
-    while (equals < tokens.length && tokens[equals]!.value !== '=' && tokens[equals]!.value !== ';') equals++;
-    if (tokens[equals]?.value !== '=') continue;
-    for (let value = equals + 1; value < tokens.length && tokens[value]!.value !== ';'; value++) {
-      if (tokens[value]!.value === '{') return value;
-    }
-  }
-  return undefined;
-}
-
-function defaultObject(tokens: Token[]): number | undefined {
-  for (let index = 0; index < tokens.length - 1; index++) {
-    if (tokens[index]!.value === 'export' && tokens[index + 1]!.value === 'default') {
-      for (let value = index + 2; value < tokens.length; value++) if (tokens[value]!.value === '{') return value;
-    }
-  }
-  return undefined;
-}
-
-function inlineObject(tokens: Token[]): number | undefined {
-  for (let index = 0; index < tokens.length - 1; index++) {
-    if (tokens[index]!.value !== 'const' || tokens[index + 1]!.value !== 'messages') continue;
-    let cursor = index + 2;
-    while (cursor < tokens.length && tokens[cursor]!.value !== '=') cursor++;
-    while (cursor < tokens.length && tokens[cursor]!.value !== 'defineMessages') cursor++;
-    if (tokens[cursor]?.value !== 'defineMessages') continue;
-    while (cursor < tokens.length && tokens[cursor]!.value !== '{') cursor++;
-    if (tokens[cursor]?.value === '{') return cursor;
-  }
-  return undefined;
-}
-
-type Range = { start: number; end: number };
-
-function argumentsOf(tokens: Token[], open: number): Range[] {
-  const close = matching(tokens, open);
-  if (close === undefined) return [];
-  const result: Range[] = [];
-  const closing: Record<string, string> = { '{': '}', '(': ')', '[': ']' };
-  const stack: string[] = [];
-  let start = open + 1;
-  for (let index = start; index < close; index++) {
-    const value = tokens[index]!.value;
-    if (closing[value]) stack.push(closing[value]!);
-    else if (value === stack.at(-1)) stack.pop();
-    else if (value === ',' && !stack.length) {
-      result.push({ start, end: index });
-      start = index + 1;
-    }
-  }
-  if (start < close) result.push({ start, end: close });
-  return result;
-}
-
-function analyzePlaceholders(tokens: Token[], start: number, end: number): Message {
-  const inserts: Range[] = [];
-  const plurals: Range[] = [];
-  const bindings = new Set<string>();
-  for (let index = start; index < end - 1; index++) {
-    const name = tokens[index]!.value;
-    if ((name !== 'insert' && name !== 'plural') || tokens[index + 1]?.value !== '(') continue;
-    const args = argumentsOf(tokens, index + 1);
-    if (name === 'insert' && args[0]) inserts.push(args[0]);
-    if (name === 'plural' && args[0]) plurals.push(args[0]);
-    const variables = args[1];
-    if (variables && tokens[variables.start]?.value === '{') {
-      for (const property of properties(tokens, variables.start)) bindings.add(property.key);
-    }
-  }
-
-  const placeholders = new Set<string>();
-  const placeholderErrors: string[] = [];
-  for (let index = start; index < end; index++) {
-    const token = tokens[index]!;
-    if (token.kind !== 'string' || (!token.value.includes('{{') && !token.value.includes('}}'))) continue;
-    const pattern = /\{\{\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\}\}/g;
-    const matches = [...token.value.matchAll(pattern)];
-    const remainder = token.value.replace(pattern, '');
-    if (remainder.includes('{{') || remainder.includes('}}')) {
-      placeholderErrors.push('contains a malformed or literal placeholder');
-    }
-    for (const match of matches) placeholders.add(match[1]!);
-    const inInsert = inserts.some(range => index >= range.start && index < range.end);
-    if (!inInsert) placeholderErrors.push('contains a placeholder outside insert()');
-  }
-
-  const undeclared = [...placeholders].filter(name => !bindings.has(name)
-    && !(name === 'value' && plurals.length > 0)).sort();
-  if (undeclared.length) placeholderErrors.push(`uses undeclared placeholder${undeclared.length === 1 ? '' : 's'}: ${undeclared.join(', ')}`);
-  return { bindings: [...bindings].sort(), placeholders: [...placeholders].sort(),
-    placeholderErrors: [...new Set(placeholderErrors)] };
-}
-
-/** Inspect one message expression; exported so the checker contract has focused regression tests. */
-export function inspectMessagePlaceholders(source: string): Message {
-  const tokens = tokenize(source);
-  return analyzePlaceholders(tokens, 0, tokens.length);
-}
-
-export function unlistedWebFeatures(features: readonly string[], checked: readonly string[]): string[] {
-  return features.filter(feature => !checked.includes(feature)).sort();
-}
-
-export function hasPlaceholderMismatch(english: Message, translated: Message): boolean {
-  return english.placeholders.join('\0') !== translated.placeholders.join('\0');
-}
-
-function flatten(tokens: Token[], open: number, prefix = '', aliases = new Map<string, number>(), result: Catalog = new Map()): Catalog {
-  for (const property of properties(tokens, open)) {
-    const value = tokens[property.start];
-    if (!value) continue;
-    if (value.value === '{' && matching(tokens, property.start) === property.end - 1) {
-      flatten(tokens, property.start, prefix ? `${prefix}.${property.key}` : property.key, aliases, result);
-      continue;
-    }
-    if (property.end - property.start === 1 && value.kind === 'word' && aliases.has(value.value)) {
-      flatten(tokens, aliases.get(value.value)!, prefix ? `${prefix}.${property.key}` : property.key, aliases, result);
-      continue;
-    }
-    const key = prefix ? `${prefix}.${property.key}` : property.key;
-    result.set(key, analyzePlaceholders(tokens, property.start, property.end));
-  }
-  return result;
-}
-
-function readFile(path: string): Token[] | undefined {
-  try { return tokenize(readFileSync(resolve(root, path), 'utf8')); }
-  catch { return undefined; }
-}
-
-function readCatalog(spec: CatalogSpec, locale: Locale): Catalog {
-  if (spec.inline) {
-    const tokens = readFile(spec.english);
-    if (!tokens) return new Map();
-    const open = inlineObject(tokens);
-    if (open === undefined) return new Map();
-    const aliases = new Map<string, number>();
-    for (const name of ['en', 'zhCN']) {
-      const object = variableObject(tokens, name);
-      if (object !== undefined) aliases.set(name, object);
-    }
-    const name = locale === 'zh-Hans' ? 'zh-Hans' : locale;
-    const property = properties(tokens, open).find(entry => entry.key === name)
-      ?? (locale === 'zh-Hans' ? properties(tokens, open).find(entry => entry.key === 'zh-CN') : undefined);
-    if (!property) return new Map();
-    const value = tokens[property.start]!;
-    const object = value.kind === 'word' && aliases.has(value.value) ? aliases.get(value.value) : property.start;
-    return object === undefined ? new Map() : flatten(tokens, object, '', aliases);
-  }
-
-  const path = locale === 'en' ? spec.english : spec.localeFiles?.[locale];
-  const tokens = path ? readFile(path) : undefined;
-  if (!tokens) return new Map();
-  const open = locale === 'en' && spec.app === 'web'
-    ? variableObject(tokens, 'en') ?? variableObject(tokens, 'messages') : defaultObject(tokens);
-  return open === undefined ? new Map() : flatten(tokens, open);
-}
-
-function runCheck(): void {
-  const failures: string[] = [];
-  const featureRoot = resolve(root, 'apps/web/features');
-  const discoveredFeatures = readdirSync(featureRoot, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && existsSync(resolve(featureRoot, entry.name, 'messages.ts')))
-    .map(entry => entry.name);
-  const unlisted = unlistedWebFeatures(discoveredFeatures, webFeatures);
-  if (unlisted.length) failures.push(`web features missing from the checker list: ${unlisted.join(', ')}`);
-
-  for (const spec of specs) {
-    const english = readCatalog(spec, 'en');
-    const expectedKeys = new Set(english.keys());
-    for (const locale of locales) {
-      const translated = locale === 'en' ? english : readCatalog(spec, locale);
-      const actualKeys = new Set(translated.keys());
-      const missing = [...expectedKeys].filter(key => !actualKeys.has(key)).sort();
-      const extra = [...actualKeys].filter(key => !expectedKeys.has(key)).sort();
-      const placeholders = [...actualKeys].filter(key => expectedKeys.has(key)
-        && hasPlaceholderMismatch(english.get(key)!, translated.get(key)!)).sort();
-      const invalidPlaceholders = [...translated].flatMap(([key, message]) => message.placeholderErrors.map(error => `${key} (${error})`));
-      const status = `missing=${missing.length}${missing.length ? ` [${missing.join(', ')}]` : ''}; `
-        + `extra=${extra.length}${extra.length ? ` [${extra.join(', ')}]` : ''}; `
-        + `placeholder mismatches=${placeholders.length}${placeholders.length ? ` [${placeholders.join(', ')}]` : ''}; `
-        + `invalid placeholders=${invalidPlaceholders.length}${invalidPlaceholders.length ? ` [${invalidPlaceholders.join(', ')}]` : ''}`;
-      console.log(`${spec.app}/${locale}/${spec.namespace}: ${status}`);
-      if (extra.length) failures.push(`${spec.app}/${locale}/${spec.namespace} extra keys: ${extra.join(', ')}`);
-      if (placeholders.length) failures.push(
-        `${spec.app}/${locale}/${spec.namespace} placeholder mismatches: ${placeholders.join(', ')}`);
-      if (invalidPlaceholders.length) failures.push(
-        `${spec.app}/${locale}/${spec.namespace} invalid placeholders: ${invalidPlaceholders.join(', ')}`);
-    }
-  }
-
-  if (failures.length) {
-    console.error('\nCatalog errors:');
-    for (const failure of failures) console.error(`- ${failure}`);
-    process.exitCode = 1;
-  }
-}
-
-if (import.meta.main) runCheck();

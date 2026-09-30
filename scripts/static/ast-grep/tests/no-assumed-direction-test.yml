@@ -1,0 +1,21 @@
+id: no-assumed-direction
+valid:
+  - "interface Label { direction: 'ltr' | 'rtl'; lang: string }"
+  - "const text = { value: title, lang: language.tag, dir: language.direction };"
+  - "const text = { value: title, direction: 'rtl' as const };"
+invalid:
+  - "const text = { value: 'Hello', lang: 'en', dir: 'ltr' };"
+  - "const name = { value: 'Hello', language: 'en', direction: 'ltr' };"
+  - "const text = { value: 'Hello', lang: 'en', dir: 'ltr' as const };"
+  - "const text = { value: 'Hello', lang: '' };"
+---
+id: no-assumed-direction-tsx
+valid:
+  - "interface Label { direction: 'ltr' | 'rtl'; lang: string }"
+  - "const text = { value: title, lang: language.tag, dir: language.direction };"
+  - "const text = { value: title, direction: 'rtl' as const };"
+invalid:
+  - "const text = { value: 'Hello', lang: 'en', dir: 'ltr' };"
+  - "const name = { value: 'Hello', language: 'en', direction: 'ltr' };"
+  - "const text = { value: 'Hello', lang: 'en', dir: 'ltr' as const };"
+  - "const text = { value: 'Hello', lang: '' };"

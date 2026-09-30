@@ -1,6 +1,11 @@
 import { defineMessages, withEnglish } from '../../i18n/define.ts';
+import de from './messages/de.ts';
+import es from './messages/es.ts';
+import fr from './messages/fr.ts';
+import ja from './messages/ja.ts';
+import ko from './messages/ko.ts';
 import zhHans from './messages/zh-Hans.ts';
-
+import zhHant from './messages/zh-Hant.ts';
 
 const en = {
   title: 'Profile settings',
@@ -118,13 +123,13 @@ export const englishMessages = en;
 
 export const messages = defineMessages({
   en,
-  'zh-Hant': withEnglish(en, undefined),
+  'zh-Hant': withEnglish(en, zhHant),
   'zh-Hans': withEnglish(en, zhHans),
-  ja: withEnglish(en, undefined),
-  ko: withEnglish(en, undefined),
-  de: withEnglish(en, undefined),
-  fr: withEnglish(en, undefined),
-  es: withEnglish(en, undefined),
+  ja: withEnglish(en, ja),
+  ko: withEnglish(en, ko),
+  de: withEnglish(en, de),
+  fr: withEnglish(en, fr),
+  es: withEnglish(en, es),
 });
 
 export type SettingsMessages = typeof en;

@@ -1,0 +1,133 @@
+id: one-language-parser
+language: TypeScript
+severity: error
+message: Language tags are parsed by the display-language module, not a local regex or Intl.getCanonicalLocales.
+files:
+  - apps/**/*.js
+  - apps/**/*.jsx
+  - apps/**/*.ts
+  - apps/**/*.tsx
+  - services/**/*.js
+  - services/**/*.jsx
+  - services/**/*.ts
+  - services/**/*.tsx
+  - packages/**/*.js
+  - packages/**/*.jsx
+  - packages/**/*.ts
+  - packages/**/*.tsx
+ignores:
+  # The one parser G-504 owns. This exemption stays when the ratchet below is emptied.
+  - services/main/src/modules/display-language/**
+  # Persisted-profile patterns emitted from model definitions.
+  - packages/model/src/generated/**
+  # Ratchet of ad-hoc parsers. G-595 empties this list.
+  - "apps/web/features/communities/name-fields.ts"
+  - "apps/web/features/onboarding/languages.ts"
+  - "apps/web/features/search/state.ts"
+  - "apps/web/features/studio/actions.ts"
+  - "apps/web/features/studio/details-api.ts"
+  - "apps/web/features/studio/types.ts"
+  - "apps/web/features/work-page/route.ts"
+  - "services/content/src/core.ts"
+  - "services/main/src/api-contract.ts"
+  - "services/main/src/modules/agent/profile.ts"
+  - "services/main/src/modules/classification/vocabulary.ts"
+  - "services/main/src/modules/collection/dynamic.ts"
+  - "services/main/src/modules/content-publication/projection-recipes.ts"
+  - "services/main/src/modules/content-publication/search-private-projection.ts"
+  - "services/main/src/modules/content-publication/search.ts"
+  - "services/main/src/modules/content-publication/title-projection.ts"
+  - "services/main/src/modules/context/preferences.ts"
+  - "services/main/src/modules/context/summary-read.ts"
+  - "services/main/src/modules/contribution/draft.ts"
+  - "services/main/src/modules/export/planner.ts"
+  - "services/main/src/modules/graph-query/schema.ts"
+  - "services/main/src/modules/library-import/batch.ts"
+  - "services/main/src/modules/library/status.ts"
+  - "services/main/src/modules/media/summary.ts"
+  - "services/main/src/modules/preferences/store.ts"
+  - "services/main/src/modules/profiles/read.ts"
+  - "services/main/src/modules/realm-profile/schema.ts"
+  - "services/main/src/modules/realm-reply/thread-contract.ts"
+  - "services/main/src/modules/recipe/importer.ts"
+  - "services/main/src/modules/review/store.ts"
+  - "services/main/src/modules/saved-filter/contract.ts"
+  - "services/main/src/modules/search-disclosure/public-fields.ts"
+  - "services/main/src/modules/semantic/concept-search.ts"
+  - "services/main/src/modules/semantic/value.ts"
+  - "services/main/src/modules/source/native-work-adoption.ts"
+  - "services/main/src/modules/statement/schema.ts"
+  - "services/main/src/modules/structure/change.ts"
+  - "services/main/src/modules/structure/format.ts"
+  - "services/main/src/modules/vote/graph.ts"
+  - "services/main/src/modules/work/activate.ts"
+  - "services/main/src/modules/work/history.ts"
+  - "services/main/src/modules/work/metadata-schema.ts"
+  - "services/main/src/modules/work/native-variants.ts"
+  - "services/main/src/modules/work/read-contract.ts"
+  - "services/main/src/modules/work/reconcile-restored.ts"
+  - "services/main/src/modules/work/search-joined.ts"
+  - "services/main/src/modules/work/search-multifield.ts"
+  - "services/main/src/modules/work/search-public.ts"
+  - "services/main/src/modules/work/select-main.ts"
+  - "services/main/src/modules/work/select-realm.ts"
+  - "services/main/src/modules/work/selection-heads.ts"
+  - "services/main/src/modules/work/translation-links.ts"
+  - "services/main/src/routes/agents.ts"
+  - "services/main/src/routes/catalog.ts"
+  - "services/main/src/routes/contexts.ts"
+  - "services/main/src/routes/contributions.ts"
+  - "services/main/src/routes/graph-queries.ts"
+  - "services/main/src/routes/preferences.ts"
+  - "services/main/src/routes/pro-sites.ts"
+  - "services/main/src/routes/publication.ts"
+  - "services/main/src/routes/recipes.ts"
+  - "services/main/src/routes/resources.ts"
+  - "services/main/src/routes/reviews.ts"
+  - "services/main/src/routes/search.ts"
+  - "services/main/src/routes/sources.ts"
+  - "services/main/src/routes/studio.ts"
+  - "services/main/src/routes/works.ts"
+rule:
+  any:
+    - pattern: Intl.getCanonicalLocales($$$ARGS)
+    - kind: regex
+      regex: '\[(?:a-z|A-Za-z|a-zA-Z)\]\{2,[0-9]+\}'
+    - kind: string
+      regex: '\[(?:a-z|A-Za-z|a-zA-Z)\]\{2,[0-9]+\}'
+    - kind: string_fragment
+      regex: '\[(?:a-z|A-Za-z|a-zA-Z)\]\{2,[0-9]+\}'
+---
+id: one-language-parser-tsx
+language: Tsx
+severity: error
+message: Language tags are parsed by the display-language module, not a local regex or Intl.getCanonicalLocales.
+files:
+  - apps/**/*.js
+  - apps/**/*.jsx
+  - apps/**/*.ts
+  - apps/**/*.tsx
+  - services/**/*.js
+  - services/**/*.jsx
+  - services/**/*.ts
+  - services/**/*.tsx
+  - packages/**/*.js
+  - packages/**/*.jsx
+  - packages/**/*.ts
+  - packages/**/*.tsx
+ignores:
+  # The one parser G-504 owns. This exemption stays when the ratchet below is emptied.
+  - services/main/src/modules/display-language/**
+  # Persisted-profile patterns emitted from model definitions.
+  - packages/model/src/generated/**
+  # Ratchet of ad-hoc parsers. G-595 empties this list.
+  - "apps/web/app/\\[locale\\]/studio/\\[agent\\]/works/\\[work\\]/write/page.tsx"
+rule:
+  any:
+    - pattern: Intl.getCanonicalLocales($$$ARGS)
+    - kind: regex
+      regex: '\[(?:a-z|A-Za-z|a-zA-Z)\]\{2,[0-9]+\}'
+    - kind: string
+      regex: '\[(?:a-z|A-Za-z|a-zA-Z)\]\{2,[0-9]+\}'
+    - kind: string_fragment
+      regex: '\[(?:a-z|A-Za-z|a-zA-Z)\]\{2,[0-9]+\}'

@@ -264,12 +264,12 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task about:e2e` | Build the about site, serve it with its Worker and a local D1 on 127.0.0.1:4322, and run the Playwright smoke and axe tests. |
 | `task ui:typecheck` | Type-check Rezics UI. |
 | `task goal` | Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to 5 when it is unset. |
-| `task check` | Run every static gate (types, generated contracts, docs, lint, format, code shape, unused files, imports). |
+| `task check` | Run every static gate (types, generated contracts, docs, lint, format, code shape, catalogs, unused files, imports). |
 | `task check:backend` | Run the static gates without UI and web sources. |
 | `task check:unused` | Report unused files, dependencies and exports with Knip. |
 | `task ast-grep` | Run the pinned ast-grep binary (scan or test) with sgconfig.yml. |
 | `task docs:check` | Check documentation links, fragments and navigation. |
-| `task i18n:check` | Report locale catalog gaps and fail on extra keys or insert placeholder mismatches. |
+| `task i18n:check` | Fail when a web, Accounts, official Zone or UI catalog has a missing, extra, empty or placeholder-mismatched key. |
 | `task test` | Run explicit test files or the affected plan (-- --affected [<base>] [--list]). |
 | `task qa` | Run the QA harness tiers (-- --backend, --tier, --record, ...). |
 | `task qa:replay` | Replay one property or model test with a logged seed. |

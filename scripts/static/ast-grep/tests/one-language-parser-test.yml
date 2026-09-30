@@ -1,0 +1,19 @@
+id: one-language-parser
+valid:
+  - "import { parseLanguage } from '@rezics/main/language'; const tag = parseLanguage(input);"
+  - "const id = /^[0-9a-f-]{36}$/;"
+  - "const uuid = '^[0-9a-f]{8}-[0-9a-f]{4}$';"
+invalid:
+  - "const languageTag = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;"
+  - "const languageTag = t.String({ pattern: '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$' });"
+  - "const tag = Intl.getCanonicalLocales(value)[0];"
+---
+id: one-language-parser-tsx
+valid:
+  - "import { parseLanguage } from '@rezics/main/language'; const tag = parseLanguage(input);"
+  - "const id = /^[0-9a-f-]{36}$/;"
+  - "const uuid = '^[0-9a-f]{8}-[0-9a-f]{4}$';"
+invalid:
+  - "const languageTag = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;"
+  - "const languageTag = t.String({ pattern: '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$' });"
+  - "const tag = Intl.getCanonicalLocales(value)[0];"

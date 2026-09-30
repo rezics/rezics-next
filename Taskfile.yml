@@ -266,7 +266,7 @@ tasks:
   # Checks and tests
 
   check:
-    desc: Run every static gate (types, generated contracts, docs, lint, format, code shape, unused files, imports).
+    desc: Run every static gate (types, generated contracts, docs, lint, format, code shape, catalogs, unused files, imports).
     cmds:
       - bun scripts/research/storage_architecture/check.ts {{.CLI_ARGS}}
 
@@ -291,7 +291,7 @@ tasks:
       - bun scripts/research/storage_architecture/docs-check.ts {{.CLI_ARGS}}
 
   i18n:check:
-    desc: Report locale catalog gaps and fail on extra keys or insert placeholder mismatches.
+    desc: Fail when a web, Accounts, official Zone or UI catalog has a missing, extra, empty or placeholder-mismatched key.
     cmds:
       - bun scripts/i18n/check.ts
 

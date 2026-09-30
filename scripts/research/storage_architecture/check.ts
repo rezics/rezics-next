@@ -84,6 +84,7 @@ const commands: string[][] = [
     'scripts/research/storage_architecture/check.ts',
     'tests/qa/unit/static-gates.test.ts',
   ],
+  ...(!backend ? [['bun', 'scripts/i18n/check.ts']] : []),
 ];
 
 for (const command of commands) {

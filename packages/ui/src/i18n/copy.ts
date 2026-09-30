@@ -32,7 +32,7 @@ const en = {
     resize: 'Resize',
 };
 
-const copy = {
+export const copy = {
   en,
   'zh-Hant': {
     close: '關閉',
