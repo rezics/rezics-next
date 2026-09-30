@@ -109587,6 +109587,25 @@
                                   "additionalProperties": false,
                                   "properties": {
                                     "kind": {
+                                      "const": "units",
+                                      "type": "string"
+                                    },
+                                    "unit": {
+                                      "maxLength": 2048,
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "unit"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "kind": {
                                       "const": "credit",
                                       "type": "string"
                                     },
@@ -295554,210 +295573,6 @@
                                   "maxItems": 60,
                                   "type": "array"
                                 },
-                                "modEnvironment": {
-                                  "items": {
-                                    "properties": {
-                                      "count": {
-                                        "minimum": 0,
-                                        "type": "integer"
-                                      },
-                                      "name": {
-                                        "properties": {
-                                          "basis": {
-                                            "enum": [
-                                              "requested",
-                                              "fallback"
-                                            ],
-                                            "type": "string"
-                                          },
-                                          "direction": {
-                                            "enum": [
-                                              "ltr",
-                                              "rtl"
-                                            ],
-                                            "type": "string"
-                                          },
-                                          "language": {
-                                            "type": "string"
-                                          },
-                                          "value": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "value",
-                                          "language",
-                                          "direction",
-                                          "basis"
-                                        ],
-                                        "type": "object"
-                                      },
-                                      "value": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "value",
-                                      "count"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  "maxItems": 60,
-                                  "type": "array"
-                                },
-                                "modGameVersion": {
-                                  "items": {
-                                    "properties": {
-                                      "count": {
-                                        "minimum": 0,
-                                        "type": "integer"
-                                      },
-                                      "name": {
-                                        "properties": {
-                                          "basis": {
-                                            "enum": [
-                                              "requested",
-                                              "fallback"
-                                            ],
-                                            "type": "string"
-                                          },
-                                          "direction": {
-                                            "enum": [
-                                              "ltr",
-                                              "rtl"
-                                            ],
-                                            "type": "string"
-                                          },
-                                          "language": {
-                                            "type": "string"
-                                          },
-                                          "value": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "value",
-                                          "language",
-                                          "direction",
-                                          "basis"
-                                        ],
-                                        "type": "object"
-                                      },
-                                      "value": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "value",
-                                      "count"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  "maxItems": 60,
-                                  "type": "array"
-                                },
-                                "modLoader": {
-                                  "items": {
-                                    "properties": {
-                                      "count": {
-                                        "minimum": 0,
-                                        "type": "integer"
-                                      },
-                                      "name": {
-                                        "properties": {
-                                          "basis": {
-                                            "enum": [
-                                              "requested",
-                                              "fallback"
-                                            ],
-                                            "type": "string"
-                                          },
-                                          "direction": {
-                                            "enum": [
-                                              "ltr",
-                                              "rtl"
-                                            ],
-                                            "type": "string"
-                                          },
-                                          "language": {
-                                            "type": "string"
-                                          },
-                                          "value": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "value",
-                                          "language",
-                                          "direction",
-                                          "basis"
-                                        ],
-                                        "type": "object"
-                                      },
-                                      "value": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "value",
-                                      "count"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  "maxItems": 60,
-                                  "type": "array"
-                                },
-                                "modRequiredDependency": {
-                                  "items": {
-                                    "properties": {
-                                      "count": {
-                                        "minimum": 0,
-                                        "type": "integer"
-                                      },
-                                      "name": {
-                                        "properties": {
-                                          "basis": {
-                                            "enum": [
-                                              "requested",
-                                              "fallback"
-                                            ],
-                                            "type": "string"
-                                          },
-                                          "direction": {
-                                            "enum": [
-                                              "ltr",
-                                              "rtl"
-                                            ],
-                                            "type": "string"
-                                          },
-                                          "language": {
-                                            "type": "string"
-                                          },
-                                          "value": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "value",
-                                          "language",
-                                          "direction",
-                                          "basis"
-                                        ],
-                                        "type": "object"
-                                      },
-                                      "value": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "value",
-                                      "count"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  "maxItems": 60,
-                                  "type": "array"
-                                },
                                 "status": {
                                   "items": {
                                     "properties": {
@@ -295865,11 +295680,7 @@
                                 "type",
                                 "concept",
                                 "status",
-                                "length",
-                                "modLoader",
-                                "modGameVersion",
-                                "modEnvironment",
-                                "modRequiredDependency"
+                                "length"
                               ],
                               "type": "object"
                             },
@@ -296057,225 +295868,6 @@
                                   "mainVersion": {
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
-                                  },
-                                  "mod": {
-                                    "~elyTyp": 7,
-                                    "nullable": true,
-                                    "properties": {
-                                      "environment": {
-                                        "~elyTyp": 7,
-                                        "enum": [
-                                          "client",
-                                          "server",
-                                          "client-and-server"
-                                        ],
-                                        "nullable": true,
-                                        "type": [
-                                          "string",
-                                          "null"
-                                        ]
-                                      },
-                                      "game": {
-                                        "const": "Minecraft",
-                                        "type": "string"
-                                      },
-                                      "gameVersions": {
-                                        "items": {
-                                          "maxLength": 32,
-                                          "type": "string"
-                                        },
-                                        "maxItems": 16,
-                                        "type": "array"
-                                      },
-                                      "latestRelease": {
-                                        "~elyTyp": 7,
-                                        "maxLength": 64,
-                                        "nullable": true,
-                                        "type": [
-                                          "string",
-                                          "null"
-                                        ]
-                                      },
-                                      "loaders": {
-                                        "items": {
-                                          "enum": [
-                                            "Fabric",
-                                            "Forge",
-                                            "NeoForge"
-                                          ],
-                                          "type": "string"
-                                        },
-                                        "maxItems": 3,
-                                        "type": "array"
-                                      },
-                                      "profile": {
-                                        "const": "mod-work-card-v2",
-                                        "type": "string"
-                                      },
-                                      "selected": {
-                                        "~elyTyp": 7,
-                                        "nullable": true,
-                                        "properties": {
-                                          "channel": {
-                                            "~elyTyp": 7,
-                                            "enum": [
-                                              "release",
-                                              "beta",
-                                              "alpha"
-                                            ],
-                                            "nullable": true,
-                                            "type": [
-                                              "string",
-                                              "null"
-                                            ]
-                                          },
-                                          "dependencies": {
-                                            "~elyTyp": 7,
-                                            "items": {
-                                              "properties": {
-                                                "id": {
-                                                  "maxLength": 160,
-                                                  "type": "string"
-                                                },
-                                                "range": {
-                                                  "~elyTyp": 7,
-                                                  "maxLength": 128,
-                                                  "nullable": true,
-                                                  "type": [
-                                                    "string",
-                                                    "null"
-                                                  ]
-                                                },
-                                                "requirement": {
-                                                  "enum": [
-                                                    "required",
-                                                    "optional",
-                                                    "incompatible",
-                                                    "embedded"
-                                                  ],
-                                                  "type": "string"
-                                                },
-                                                "side": {
-                                                  "~elyTyp": 7,
-                                                  "enum": [
-                                                    "client",
-                                                    "server"
-                                                  ],
-                                                  "nullable": true,
-                                                  "type": [
-                                                    "string",
-                                                    "null"
-                                                  ]
-                                                }
-                                              },
-                                              "required": [
-                                                "id",
-                                                "requirement",
-                                                "range",
-                                                "side"
-                                              ],
-                                              "type": "object"
-                                            },
-                                            "maxItems": 32,
-                                            "nullable": true,
-                                            "type": [
-                                              "array",
-                                              "null"
-                                            ]
-                                          },
-                                          "environment": {
-                                            "~elyTyp": 7,
-                                            "enum": [
-                                              "client",
-                                              "server",
-                                              "client-and-server"
-                                            ],
-                                            "nullable": true,
-                                            "type": [
-                                              "string",
-                                              "null"
-                                            ]
-                                          },
-                                          "gameVersions": {
-                                            "items": {
-                                              "maxLength": 32,
-                                              "type": "string"
-                                            },
-                                            "maxItems": 16,
-                                            "type": "array"
-                                          },
-                                          "loaders": {
-                                            "items": {
-                                              "enum": [
-                                                "Fabric",
-                                                "Forge",
-                                                "NeoForge"
-                                              ],
-                                              "type": "string"
-                                            },
-                                            "maxItems": 3,
-                                            "type": "array"
-                                          },
-                                          "publishedAt": {
-                                            "type": "string"
-                                          },
-                                          "side": {
-                                            "enum": [
-                                              "client",
-                                              "server"
-                                            ],
-                                            "type": "string"
-                                          },
-                                          "state": {
-                                            "enum": [
-                                              "compatible",
-                                              "stale"
-                                            ],
-                                            "type": "string"
-                                          },
-                                          "version": {
-                                            "~elyTyp": 7,
-                                            "maxLength": 64,
-                                            "nullable": true,
-                                            "type": [
-                                              "string",
-                                              "null"
-                                            ]
-                                          }
-                                        },
-                                        "required": [
-                                          "version",
-                                          "gameVersions",
-                                          "loaders",
-                                          "environment",
-                                          "side",
-                                          "publishedAt",
-                                          "channel",
-                                          "dependencies",
-                                          "state"
-                                        ],
-                                        "type": [
-                                          "object",
-                                          "null"
-                                        ]
-                                      },
-                                      "updatedAt": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "profile",
-                                      "game",
-                                      "gameVersions",
-                                      "loaders",
-                                      "environment",
-                                      "latestRelease",
-                                      "updatedAt"
-                                    ],
-                                    "type": [
-                                      "object",
-                                      "null"
-                                    ]
                                   },
                                   "primaryCredits": {
                                     "items": {
@@ -296551,7 +296143,6 @@
                                   "evidence",
                                   "dataEpoch",
                                   "sequence",
-                                  "mod",
                                   "hub"
                                 ],
                                 "type": "object"
@@ -296606,17 +296197,14 @@
                                                 },
                                                 "maxItems": 8,
                                                 "minItems": 1,
-                                                "type": "array"
+                                                "type": "array",
+                                                "uniqueItems": true
                                               },
                                               "facet": {
                                                 "enum": [
                                                   "type",
                                                   "concept",
-                                                  "status",
-                                                  "modLoader",
-                                                  "modGameVersion",
-                                                  "modEnvironment",
-                                                  "modRequiredDependency"
+                                                  "status"
                                                 ],
                                                 "type": "string"
                                               }
@@ -296630,7 +296218,10 @@
                                           {
                                             "properties": {
                                               "facet": {
-                                                "const": "concept",
+                                                "enum": [
+                                                  "concept",
+                                                  "status"
+                                                ],
                                                 "type": "string"
                                               },
                                               "none": {
@@ -296639,7 +296230,8 @@
                                                 },
                                                 "maxItems": 8,
                                                 "minItems": 1,
-                                                "type": "array"
+                                                "type": "array",
+                                                "uniqueItems": true
                                               }
                                             },
                                             "required": [
@@ -296663,9 +296255,7 @@
                                                     "type": "string"
                                                   }
                                                 },
-                                                "required": [
-                                                  "min"
-                                                ],
+                                                "required": [],
                                                 "type": "object"
                                               }
                                             },
@@ -296677,7 +296267,7 @@
                                           }
                                         ]
                                       },
-                                      "maxItems": 9,
+                                      "maxItems": 6,
                                       "type": "array"
                                     }
                                   },
@@ -323959,11 +323549,6 @@
             "required": false,
             "schema": {
               "items": {
-                "enum": [
-                  "ongoing",
-                  "completed",
-                  "hiatus"
-                ],
                 "type": "string"
               },
               "maxItems": 8,
@@ -323977,75 +323562,8 @@
             "name": "length",
             "required": false,
             "schema": {
-              "pattern": "^(0|[1-9][0-9]{0,9})-([1-9][0-9]{0,9})?$",
+              "pattern": "^(0|[1-9][0-9]{0,15})?-([1-9][0-9]{0,15}|0)?$",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "loader",
-            "required": false,
-            "schema": {
-              "items": {
-                "enum": [
-                  "Fabric",
-                  "Forge",
-                  "NeoForge"
-                ],
-                "type": "string"
-              },
-              "maxItems": 8,
-              "minItems": 1,
-              "type": "array",
-              "uniqueItems": true
-            }
-          },
-          {
-            "in": "query",
-            "name": "gameVersion",
-            "required": false,
-            "schema": {
-              "items": {
-                "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$",
-                "type": "string"
-              },
-              "maxItems": 8,
-              "minItems": 1,
-              "type": "array",
-              "uniqueItems": true
-            }
-          },
-          {
-            "in": "query",
-            "name": "environment",
-            "required": false,
-            "schema": {
-              "items": {
-                "enum": [
-                  "client",
-                  "server"
-                ],
-                "type": "string"
-              },
-              "maxItems": 8,
-              "minItems": 1,
-              "type": "array",
-              "uniqueItems": true
-            }
-          },
-          {
-            "in": "query",
-            "name": "requiredDependency",
-            "required": false,
-            "schema": {
-              "items": {
-                "pattern": "^[a-z0-9][a-z0-9_.-]{0,159}$",
-                "type": "string"
-              },
-              "maxItems": 8,
-              "minItems": 1,
-              "type": "array",
-              "uniqueItems": true
             }
           }
         ],
@@ -324130,210 +323648,6 @@
                           "type": "array"
                         },
                         "length": {
-                          "items": {
-                            "properties": {
-                              "count": {
-                                "minimum": 0,
-                                "type": "integer"
-                              },
-                              "name": {
-                                "properties": {
-                                  "basis": {
-                                    "enum": [
-                                      "requested",
-                                      "fallback"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "direction": {
-                                    "enum": [
-                                      "ltr",
-                                      "rtl"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "language": {
-                                    "type": "string"
-                                  },
-                                  "value": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "value",
-                                  "language",
-                                  "direction",
-                                  "basis"
-                                ],
-                                "type": "object"
-                              },
-                              "value": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "value",
-                              "count"
-                            ],
-                            "type": "object"
-                          },
-                          "maxItems": 60,
-                          "type": "array"
-                        },
-                        "modEnvironment": {
-                          "items": {
-                            "properties": {
-                              "count": {
-                                "minimum": 0,
-                                "type": "integer"
-                              },
-                              "name": {
-                                "properties": {
-                                  "basis": {
-                                    "enum": [
-                                      "requested",
-                                      "fallback"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "direction": {
-                                    "enum": [
-                                      "ltr",
-                                      "rtl"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "language": {
-                                    "type": "string"
-                                  },
-                                  "value": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "value",
-                                  "language",
-                                  "direction",
-                                  "basis"
-                                ],
-                                "type": "object"
-                              },
-                              "value": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "value",
-                              "count"
-                            ],
-                            "type": "object"
-                          },
-                          "maxItems": 60,
-                          "type": "array"
-                        },
-                        "modGameVersion": {
-                          "items": {
-                            "properties": {
-                              "count": {
-                                "minimum": 0,
-                                "type": "integer"
-                              },
-                              "name": {
-                                "properties": {
-                                  "basis": {
-                                    "enum": [
-                                      "requested",
-                                      "fallback"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "direction": {
-                                    "enum": [
-                                      "ltr",
-                                      "rtl"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "language": {
-                                    "type": "string"
-                                  },
-                                  "value": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "value",
-                                  "language",
-                                  "direction",
-                                  "basis"
-                                ],
-                                "type": "object"
-                              },
-                              "value": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "value",
-                              "count"
-                            ],
-                            "type": "object"
-                          },
-                          "maxItems": 60,
-                          "type": "array"
-                        },
-                        "modLoader": {
-                          "items": {
-                            "properties": {
-                              "count": {
-                                "minimum": 0,
-                                "type": "integer"
-                              },
-                              "name": {
-                                "properties": {
-                                  "basis": {
-                                    "enum": [
-                                      "requested",
-                                      "fallback"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "direction": {
-                                    "enum": [
-                                      "ltr",
-                                      "rtl"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "language": {
-                                    "type": "string"
-                                  },
-                                  "value": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "value",
-                                  "language",
-                                  "direction",
-                                  "basis"
-                                ],
-                                "type": "object"
-                              },
-                              "value": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "value",
-                              "count"
-                            ],
-                            "type": "object"
-                          },
-                          "maxItems": 60,
-                          "type": "array"
-                        },
-                        "modRequiredDependency": {
                           "items": {
                             "properties": {
                               "count": {
@@ -324491,11 +323805,7 @@
                         "type",
                         "concept",
                         "status",
-                        "length",
-                        "modLoader",
-                        "modGameVersion",
-                        "modEnvironment",
-                        "modRequiredDependency"
+                        "length"
                       ],
                       "type": "object"
                     },
@@ -324683,225 +323993,6 @@
                           "mainVersion": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
-                          },
-                          "mod": {
-                            "~elyTyp": 7,
-                            "nullable": true,
-                            "properties": {
-                              "environment": {
-                                "~elyTyp": 7,
-                                "enum": [
-                                  "client",
-                                  "server",
-                                  "client-and-server"
-                                ],
-                                "nullable": true,
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
-                              },
-                              "game": {
-                                "const": "Minecraft",
-                                "type": "string"
-                              },
-                              "gameVersions": {
-                                "items": {
-                                  "maxLength": 32,
-                                  "type": "string"
-                                },
-                                "maxItems": 16,
-                                "type": "array"
-                              },
-                              "latestRelease": {
-                                "~elyTyp": 7,
-                                "maxLength": 64,
-                                "nullable": true,
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
-                              },
-                              "loaders": {
-                                "items": {
-                                  "enum": [
-                                    "Fabric",
-                                    "Forge",
-                                    "NeoForge"
-                                  ],
-                                  "type": "string"
-                                },
-                                "maxItems": 3,
-                                "type": "array"
-                              },
-                              "profile": {
-                                "const": "mod-work-card-v2",
-                                "type": "string"
-                              },
-                              "selected": {
-                                "~elyTyp": 7,
-                                "nullable": true,
-                                "properties": {
-                                  "channel": {
-                                    "~elyTyp": 7,
-                                    "enum": [
-                                      "release",
-                                      "beta",
-                                      "alpha"
-                                    ],
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  },
-                                  "dependencies": {
-                                    "~elyTyp": 7,
-                                    "items": {
-                                      "properties": {
-                                        "id": {
-                                          "maxLength": 160,
-                                          "type": "string"
-                                        },
-                                        "range": {
-                                          "~elyTyp": 7,
-                                          "maxLength": 128,
-                                          "nullable": true,
-                                          "type": [
-                                            "string",
-                                            "null"
-                                          ]
-                                        },
-                                        "requirement": {
-                                          "enum": [
-                                            "required",
-                                            "optional",
-                                            "incompatible",
-                                            "embedded"
-                                          ],
-                                          "type": "string"
-                                        },
-                                        "side": {
-                                          "~elyTyp": 7,
-                                          "enum": [
-                                            "client",
-                                            "server"
-                                          ],
-                                          "nullable": true,
-                                          "type": [
-                                            "string",
-                                            "null"
-                                          ]
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "requirement",
-                                        "range",
-                                        "side"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    "maxItems": 32,
-                                    "nullable": true,
-                                    "type": [
-                                      "array",
-                                      "null"
-                                    ]
-                                  },
-                                  "environment": {
-                                    "~elyTyp": 7,
-                                    "enum": [
-                                      "client",
-                                      "server",
-                                      "client-and-server"
-                                    ],
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  },
-                                  "gameVersions": {
-                                    "items": {
-                                      "maxLength": 32,
-                                      "type": "string"
-                                    },
-                                    "maxItems": 16,
-                                    "type": "array"
-                                  },
-                                  "loaders": {
-                                    "items": {
-                                      "enum": [
-                                        "Fabric",
-                                        "Forge",
-                                        "NeoForge"
-                                      ],
-                                      "type": "string"
-                                    },
-                                    "maxItems": 3,
-                                    "type": "array"
-                                  },
-                                  "publishedAt": {
-                                    "type": "string"
-                                  },
-                                  "side": {
-                                    "enum": [
-                                      "client",
-                                      "server"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "state": {
-                                    "enum": [
-                                      "compatible",
-                                      "stale"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "version": {
-                                    "~elyTyp": 7,
-                                    "maxLength": 64,
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "version",
-                                  "gameVersions",
-                                  "loaders",
-                                  "environment",
-                                  "side",
-                                  "publishedAt",
-                                  "channel",
-                                  "dependencies",
-                                  "state"
-                                ],
-                                "type": [
-                                  "object",
-                                  "null"
-                                ]
-                              },
-                              "updatedAt": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "profile",
-                              "game",
-                              "gameVersions",
-                              "loaders",
-                              "environment",
-                              "latestRelease",
-                              "updatedAt"
-                            ],
-                            "type": [
-                              "object",
-                              "null"
-                            ]
                           },
                           "primaryCredits": {
                             "items": {
@@ -325177,7 +324268,6 @@
                           "evidence",
                           "dataEpoch",
                           "sequence",
-                          "mod",
                           "hub"
                         ],
                         "type": "object"
@@ -325232,17 +324322,14 @@
                                         },
                                         "maxItems": 8,
                                         "minItems": 1,
-                                        "type": "array"
+                                        "type": "array",
+                                        "uniqueItems": true
                                       },
                                       "facet": {
                                         "enum": [
                                           "type",
                                           "concept",
-                                          "status",
-                                          "modLoader",
-                                          "modGameVersion",
-                                          "modEnvironment",
-                                          "modRequiredDependency"
+                                          "status"
                                         ],
                                         "type": "string"
                                       }
@@ -325256,7 +324343,10 @@
                                   {
                                     "properties": {
                                       "facet": {
-                                        "const": "concept",
+                                        "enum": [
+                                          "concept",
+                                          "status"
+                                        ],
                                         "type": "string"
                                       },
                                       "none": {
@@ -325265,7 +324355,8 @@
                                         },
                                         "maxItems": 8,
                                         "minItems": 1,
-                                        "type": "array"
+                                        "type": "array",
+                                        "uniqueItems": true
                                       }
                                     },
                                     "required": [
@@ -325289,9 +324380,7 @@
                                             "type": "string"
                                           }
                                         },
-                                        "required": [
-                                          "min"
-                                        ],
+                                        "required": [],
                                         "type": "object"
                                       }
                                     },
@@ -325303,7 +324392,7 @@
                                   }
                                 ]
                               },
-                              "maxItems": 9,
+                              "maxItems": 6,
                               "type": "array"
                             }
                           },
@@ -328515,225 +327604,6 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
-                          "mod": {
-                            "~elyTyp": 7,
-                            "nullable": true,
-                            "properties": {
-                              "environment": {
-                                "~elyTyp": 7,
-                                "enum": [
-                                  "client",
-                                  "server",
-                                  "client-and-server"
-                                ],
-                                "nullable": true,
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
-                              },
-                              "game": {
-                                "const": "Minecraft",
-                                "type": "string"
-                              },
-                              "gameVersions": {
-                                "items": {
-                                  "maxLength": 32,
-                                  "type": "string"
-                                },
-                                "maxItems": 16,
-                                "type": "array"
-                              },
-                              "latestRelease": {
-                                "~elyTyp": 7,
-                                "maxLength": 64,
-                                "nullable": true,
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
-                              },
-                              "loaders": {
-                                "items": {
-                                  "enum": [
-                                    "Fabric",
-                                    "Forge",
-                                    "NeoForge"
-                                  ],
-                                  "type": "string"
-                                },
-                                "maxItems": 3,
-                                "type": "array"
-                              },
-                              "profile": {
-                                "const": "mod-work-card-v2",
-                                "type": "string"
-                              },
-                              "selected": {
-                                "~elyTyp": 7,
-                                "nullable": true,
-                                "properties": {
-                                  "channel": {
-                                    "~elyTyp": 7,
-                                    "enum": [
-                                      "release",
-                                      "beta",
-                                      "alpha"
-                                    ],
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  },
-                                  "dependencies": {
-                                    "~elyTyp": 7,
-                                    "items": {
-                                      "properties": {
-                                        "id": {
-                                          "maxLength": 160,
-                                          "type": "string"
-                                        },
-                                        "range": {
-                                          "~elyTyp": 7,
-                                          "maxLength": 128,
-                                          "nullable": true,
-                                          "type": [
-                                            "string",
-                                            "null"
-                                          ]
-                                        },
-                                        "requirement": {
-                                          "enum": [
-                                            "required",
-                                            "optional",
-                                            "incompatible",
-                                            "embedded"
-                                          ],
-                                          "type": "string"
-                                        },
-                                        "side": {
-                                          "~elyTyp": 7,
-                                          "enum": [
-                                            "client",
-                                            "server"
-                                          ],
-                                          "nullable": true,
-                                          "type": [
-                                            "string",
-                                            "null"
-                                          ]
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "requirement",
-                                        "range",
-                                        "side"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    "maxItems": 32,
-                                    "nullable": true,
-                                    "type": [
-                                      "array",
-                                      "null"
-                                    ]
-                                  },
-                                  "environment": {
-                                    "~elyTyp": 7,
-                                    "enum": [
-                                      "client",
-                                      "server",
-                                      "client-and-server"
-                                    ],
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  },
-                                  "gameVersions": {
-                                    "items": {
-                                      "maxLength": 32,
-                                      "type": "string"
-                                    },
-                                    "maxItems": 16,
-                                    "type": "array"
-                                  },
-                                  "loaders": {
-                                    "items": {
-                                      "enum": [
-                                        "Fabric",
-                                        "Forge",
-                                        "NeoForge"
-                                      ],
-                                      "type": "string"
-                                    },
-                                    "maxItems": 3,
-                                    "type": "array"
-                                  },
-                                  "publishedAt": {
-                                    "type": "string"
-                                  },
-                                  "side": {
-                                    "enum": [
-                                      "client",
-                                      "server"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "state": {
-                                    "enum": [
-                                      "compatible",
-                                      "stale"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "version": {
-                                    "~elyTyp": 7,
-                                    "maxLength": 64,
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "version",
-                                  "gameVersions",
-                                  "loaders",
-                                  "environment",
-                                  "side",
-                                  "publishedAt",
-                                  "channel",
-                                  "dependencies",
-                                  "state"
-                                ],
-                                "type": [
-                                  "object",
-                                  "null"
-                                ]
-                              },
-                              "updatedAt": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "profile",
-                              "game",
-                              "gameVersions",
-                              "loaders",
-                              "environment",
-                              "latestRelease",
-                              "updatedAt"
-                            ],
-                            "type": [
-                              "object",
-                              "null"
-                            ]
-                          },
                           "primaryCredits": {
                             "items": {
                               "anyOf": [
@@ -329008,7 +327878,6 @@
                           "evidence",
                           "dataEpoch",
                           "sequence",
-                          "mod",
                           "hub"
                         ],
                         "type": "object"
@@ -330685,225 +329554,6 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
-                          "mod": {
-                            "~elyTyp": 7,
-                            "nullable": true,
-                            "properties": {
-                              "environment": {
-                                "~elyTyp": 7,
-                                "enum": [
-                                  "client",
-                                  "server",
-                                  "client-and-server"
-                                ],
-                                "nullable": true,
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
-                              },
-                              "game": {
-                                "const": "Minecraft",
-                                "type": "string"
-                              },
-                              "gameVersions": {
-                                "items": {
-                                  "maxLength": 32,
-                                  "type": "string"
-                                },
-                                "maxItems": 16,
-                                "type": "array"
-                              },
-                              "latestRelease": {
-                                "~elyTyp": 7,
-                                "maxLength": 64,
-                                "nullable": true,
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
-                              },
-                              "loaders": {
-                                "items": {
-                                  "enum": [
-                                    "Fabric",
-                                    "Forge",
-                                    "NeoForge"
-                                  ],
-                                  "type": "string"
-                                },
-                                "maxItems": 3,
-                                "type": "array"
-                              },
-                              "profile": {
-                                "const": "mod-work-card-v2",
-                                "type": "string"
-                              },
-                              "selected": {
-                                "~elyTyp": 7,
-                                "nullable": true,
-                                "properties": {
-                                  "channel": {
-                                    "~elyTyp": 7,
-                                    "enum": [
-                                      "release",
-                                      "beta",
-                                      "alpha"
-                                    ],
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  },
-                                  "dependencies": {
-                                    "~elyTyp": 7,
-                                    "items": {
-                                      "properties": {
-                                        "id": {
-                                          "maxLength": 160,
-                                          "type": "string"
-                                        },
-                                        "range": {
-                                          "~elyTyp": 7,
-                                          "maxLength": 128,
-                                          "nullable": true,
-                                          "type": [
-                                            "string",
-                                            "null"
-                                          ]
-                                        },
-                                        "requirement": {
-                                          "enum": [
-                                            "required",
-                                            "optional",
-                                            "incompatible",
-                                            "embedded"
-                                          ],
-                                          "type": "string"
-                                        },
-                                        "side": {
-                                          "~elyTyp": 7,
-                                          "enum": [
-                                            "client",
-                                            "server"
-                                          ],
-                                          "nullable": true,
-                                          "type": [
-                                            "string",
-                                            "null"
-                                          ]
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "requirement",
-                                        "range",
-                                        "side"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    "maxItems": 32,
-                                    "nullable": true,
-                                    "type": [
-                                      "array",
-                                      "null"
-                                    ]
-                                  },
-                                  "environment": {
-                                    "~elyTyp": 7,
-                                    "enum": [
-                                      "client",
-                                      "server",
-                                      "client-and-server"
-                                    ],
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  },
-                                  "gameVersions": {
-                                    "items": {
-                                      "maxLength": 32,
-                                      "type": "string"
-                                    },
-                                    "maxItems": 16,
-                                    "type": "array"
-                                  },
-                                  "loaders": {
-                                    "items": {
-                                      "enum": [
-                                        "Fabric",
-                                        "Forge",
-                                        "NeoForge"
-                                      ],
-                                      "type": "string"
-                                    },
-                                    "maxItems": 3,
-                                    "type": "array"
-                                  },
-                                  "publishedAt": {
-                                    "type": "string"
-                                  },
-                                  "side": {
-                                    "enum": [
-                                      "client",
-                                      "server"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "state": {
-                                    "enum": [
-                                      "compatible",
-                                      "stale"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "version": {
-                                    "~elyTyp": 7,
-                                    "maxLength": 64,
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "version",
-                                  "gameVersions",
-                                  "loaders",
-                                  "environment",
-                                  "side",
-                                  "publishedAt",
-                                  "channel",
-                                  "dependencies",
-                                  "state"
-                                ],
-                                "type": [
-                                  "object",
-                                  "null"
-                                ]
-                              },
-                              "updatedAt": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "profile",
-                              "game",
-                              "gameVersions",
-                              "loaders",
-                              "environment",
-                              "latestRelease",
-                              "updatedAt"
-                            ],
-                            "type": [
-                              "object",
-                              "null"
-                            ]
-                          },
                           "primaryCredits": {
                             "items": {
                               "anyOf": [
@@ -331178,7 +329828,6 @@
                           "evidence",
                           "dataEpoch",
                           "sequence",
-                          "mod",
                           "hub"
                         ],
                         "type": "object"

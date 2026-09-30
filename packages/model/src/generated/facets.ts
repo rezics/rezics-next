@@ -212,6 +212,50 @@ export const facetRegistry = {
     "digest": "6fccc1a9beb900132c2a247a691b5fbef7df2572fc62e3000a87d6722f83a9f5",
     "current": true
   },
+  "https://rezics.com/definition/facet-length-v1": {
+    "id": "https://rezics.com/definition/facet-length-v1",
+    "name": "length",
+    "version": 1,
+    "appliesTo": "resource",
+    "subject": "https://schema.org/CreativeWork",
+    "path": [
+      {
+        "kind": "units",
+        "unit": "https://rezics.com/vocab/Word"
+      }
+    ],
+    "values": [
+      {
+        "kind": "datatype",
+        "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+        "min": "0",
+        "max": "9007199254740991"
+      }
+    ],
+    "operators": [
+      "range"
+    ],
+    "source": "global",
+    "parameters": [],
+    "qualifiers": [],
+    "occurrence": false,
+    "labels": {
+      "en": "Length",
+      "zh-Hant": "篇幅",
+      "zh-Hans": "篇幅",
+      "ja": "長さ",
+      "ko": "분량",
+      "de": "Länge",
+      "fr": "Longueur",
+      "es": "Extensión"
+    },
+    "cost": {
+      "maxValues": 2,
+      "graphReads": 0
+    },
+    "digest": "e9e5794ed99df79c9599e318717da495e6ebcc14422137a67f88433a14055208",
+    "current": true
+  },
   "https://rezics.com/definition/facet-rating-v1": {
     "id": "https://rezics.com/definition/facet-rating-v1",
     "name": "rating",
@@ -486,6 +530,50 @@ export const facetRegistry = {
     "digest": "834feca0b51901b385dad5fd3e6a78195c048e391ad4ece66c87b64850ec2986",
     "current": true
   },
+  "https://rezics.com/definition/facet-status-v1": {
+    "id": "https://rezics.com/definition/facet-status-v1",
+    "name": "status",
+    "version": 1,
+    "appliesTo": "resource",
+    "subject": "https://schema.org/CreativeWork",
+    "path": [
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/completionStatus"
+      }
+    ],
+    "values": [
+      {
+        "kind": "datatype",
+        "datatype": "http://www.w3.org/2001/XMLSchema#string",
+        "pattern": "^(ongoing|completed|hiatus)$"
+      }
+    ],
+    "operators": [
+      "any",
+      "none"
+    ],
+    "source": "global",
+    "parameters": [],
+    "qualifiers": [],
+    "occurrence": false,
+    "labels": {
+      "en": "Status",
+      "zh-Hant": "狀態",
+      "zh-Hans": "状态",
+      "ja": "状態",
+      "ko": "상태",
+      "de": "Status",
+      "fr": "Statut",
+      "es": "Estado"
+    },
+    "cost": {
+      "maxValues": 3,
+      "graphReads": 1
+    },
+    "digest": "51275e8dc39d61531d594b5806b7e620d3bc8111bd366a85bb0759b188b12375",
+    "current": true
+  },
   "https://rezics.com/definition/facet-type-v1": {
     "id": "https://rezics.com/definition/facet-type-v1",
     "name": "type",
@@ -533,4 +621,4 @@ export const facetRegistry = {
 } as const;
 export type FacetRef = keyof typeof facetRegistry;
 /** Changes whenever any admitted Facet does. */
-export const facetRegistryDigest = "af2e02109a4b5a04c9a8eeb21fd58e6f51097426a4fe40c359731e89601522b4";
+export const facetRegistryDigest = "881223de55315b7dca85cc92e38730f4b92c66b82c735e0e2de1f0690c8e8bcf";
