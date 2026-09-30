@@ -11,6 +11,8 @@ import { problem } from './problems.ts';
 import { semanticError } from './semantic.ts';
 import { admittedWorkRelationChange } from '../modules/relation/work-authority.ts';
 import { groupUuid } from './shared.ts';
+import { readingPositionRead } from '../modules/reading-position/read.ts';
+import { readingPositionQuery } from './reading-positions.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() });
@@ -36,6 +38,7 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
     const principal = await work.account.verify(request, [SEMANTIC_READ_SCOPE]);
     if (!await canReadSemantic(work.access, principal, actingSubject, occurrence)) return null;
+    return readingPositionRead(work, request, principal, actingSubject, async boundary => {
     const head = revision ?? (await readCurrentOccurrence(work.environment, occurrence))?.head;
     if (!head) return null;
     const read = await readExactOccurrence(work.environment, occurrence, head);
@@ -43,6 +46,8 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     // The occurrence pins its exact DefinitionRef; a later retirement never retargets it.
     const definition = await readExactDefinition(work.environment, read.state.definition);
     if (!definition) throw new RevisionCorrupt('occurrence definition revision is unavailable');
+    const disclosed = await boundary.visible([occurrence, definition.definition, ...read.state.applicability]);
+    if (!disclosed.has(occurrence) || !disclosed.has(definition.definition)) return null;
     const canRead = referenceReader(work.access, principal, actingSubject);
     return { profile: 'relation-change-v1' as const, occurrence, revision: read.revision,
       predecessor: read.predecessor, lifecycle: read.state.lifecycle,
@@ -50,12 +55,13 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         roles: definition.roles.map(role => ({ ...role, key: definition.roleKeys[role.role] })) },
       participations: await Promise.all(read.state.participations.map(async item => {
         const availability = item.participant.kind === 'external' ? 'external'
-          : await canRead(item.participant.ref) ? 'available' : 'unavailable';
+          : await canRead(item.participant.ref) && (await boundary.visible([item.participant.ref])).has(item.participant.ref) ? 'available' : 'unavailable';
         return { participation: item.iri, role: definition.roleKeys[item.role] ?? item.role,
           participant: availability === 'unavailable' ? { kind: 'unavailable-reference' } : item.participant,
           ...(item.position === undefined ? {} : { position: item.position }), availability };
       })),
-      applicability: read.state.applicability, sourcePosition: read.sourcePosition };
+      applicability: read.state.applicability.filter(ref => disclosed.has(ref)), sourcePosition: read.sourcePosition };
+    });
   };
   return new Elysia()
     .post('/v1/relations/changes', {
@@ -91,7 +97,7 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     })
     .get('/v1/relations/:id', {
       params: t.Object({ id: groupUuid }),
-      query: t.Object({ actingSubject: native }, { additionalProperties: false }),
+      query: t.Object({ actingSubject: native, position: readingPositionQuery }, { additionalProperties: false }),
       response: { 200: relationRead, ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
@@ -102,7 +108,7 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     })
     .get('/v1/relations/:id/revisions/:revision', {
       params: t.Object({ id: groupUuid, revision: groupUuid }),
-      query: t.Object({ actingSubject: native }, { additionalProperties: false }),
+      query: t.Object({ actingSubject: native, position: readingPositionQuery }, { additionalProperties: false }),
       response: { 200: relationRead, ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {

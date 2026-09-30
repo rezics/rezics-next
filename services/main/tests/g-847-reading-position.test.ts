@@ -17,18 +17,21 @@ const composition: ReadingComposition = { work, structures: [id(), id(), id()], 
 const row = (record = id(), occurrence = chapter2): Revelation => ({ record, occurrence,
   recordKind: 'entity', continuityWork: work, receipt: 'publication-receipt' });
 function fixture(selection: string, principal = false) {
-  const rows = new Map<string, Revelation>(), lookedUp: number[] = [];
+  const rows = new Map<string, Revelation[]>(), lookedUp: number[] = [];
   let version = '1', own = true;
+  let privateReads = 0;
   const store = { lookup: async (records: readonly string[]) => {
     lookedUp.push(records.length); return new Map(records.flatMap(record => rows.has(record) ? [[record, rows.get(record)!]] : []));
-  }, generation: async () => version, completed: async () => new Set([chapter3]), finishedWorks: async () => new Set() };
+  }, generation: async () => version, privateSnapshot: async () => { privateReads++; return version; },
+    completed: async () => new Set([chapter3]), finishedWorks: async () => new Set() };
   const deps = { readingPositions: store, access: { canReadAsBaselineMember: async () => own } } as unknown as MainWorkDependencies;
   const session = new WorkReadSession(deps, new Request(`http://main.local/v1/fixture?position=${encodeURIComponent(selection)}`),
     principal ? { actingSubject: id() } : {}, { dataEpoch: 'epoch', sequence: '1' });
   if (principal) session.principal = { issuer: 'https://qa.test', subject: 'reader', emailVerified: true };
   const boundary = new ReadingBoundary(session);
   boundary.composition = async () => composition;
-  return { rows, boundary, lookedUp, move: () => { version = '2'; }, deny: () => { own = false; } };
+  return { rows, boundary, lookedUp, privateReads: () => privateReads,
+    move: () => { version = '2'; }, deny: () => { own = false; } };
 }
 
 test('G847: prefix uses composed occurrence order, includes the boundary and leaves untagged catalogue records alone', async () => {
@@ -43,20 +46,36 @@ test('G847: prefix uses composed occurrence order, includes the boundary and lea
     ['all', false, [early.record, late.record, untagged]],
   ] as const) {
     const f = fixture(selection, principal);
-    f.rows.set(early.record, early); f.rows.set(late.record, late);
+    f.rows.set(early.record, [early]); f.rows.set(late.record, [late]);
     expect([...(await f.boundary.visible([early.record, late.record, untagged]))]).toEqual([...expected]);
   }
 });
 
-test('G847: disclosure denies invalid, foreign, revoked and changed private positions; progress is never written', async () => {
+test('G847 R2 R3: unrelated positions and ineligible readers withhold only tagged records, without reading another Agent history', async () => {
   expect(() => fixture('50%')).toThrow(WorkReadInvalid);
-  const foreign = fixture(id()); foreign.rows.set('record', row('record'));
-  await expect(foreign.boundary.visible(['record'])).rejects.toBeInstanceOf(WorkReadInvalid);
-  const revoked = fixture('mine', true); revoked.rows.set('record', row('record')); revoked.deny();
-  await expect(revoked.boundary.visible(['record'])).rejects.toBeInstanceOf(WorkReadMissing);
-  const moved = fixture('mine', true); moved.rows.set('record', row('record'));
+  const foreign = fixture(id()); foreign.rows.set('record', [row('record')]);
+  expect([...(await foreign.boundary.visible(['record', 'untagged']))]).toEqual(['untagged']);
+  const revoked = fixture('mine', true); revoked.rows.set('record', [row('record')]); revoked.deny();
+  expect([...(await revoked.boundary.visible(['record', 'untagged']))]).toEqual(['untagged']);
+  expect(revoked.privateReads()).toBe(0);
+  const unverified = fixture('mine', true); unverified.boundary.session.principal!.emailVerified = false;
+  unverified.rows.set('record', [row('record')]);
+  expect([...(await unverified.boundary.visible(['record', 'untagged']))]).toEqual(['untagged']);
+  expect(unverified.privateReads()).toBe(0);
+  const moved = fixture('mine', true); moved.rows.set('record', [row('record')]);
   await moved.boundary.visible(['record']); moved.move();
   await expect(moved.boundary.visible(['record'])).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('G847 D1 R2: a record can belong to two continuities; one unreadable continuity does not suppress its readable publication or other records', async () => {
+  const f = fixture(chapter3), secret = id(), early = row(), late = row(id(), chapter4);
+  f.rows.set(early.record, [{ ...early, continuityWork: secret }, early]);
+  f.rows.set(late.record, [{ ...late, continuityWork: secret }]);
+  f.boundary.composition = async resource => {
+    if (resource === secret) throw new WorkReadMissing('Work is unavailable');
+    return composition;
+  };
+  expect([...(await f.boundary.visible([early.record, late.record, 'untagged']))]).toEqual([early.record, 'untagged']);
 });
 
 test('G847: lookups split and memoize at 50 records and preserve independent later aliases', async () => {
@@ -81,7 +100,10 @@ test('G847: current mounted owner inventories exactly match the executable revel
   const paths = app.routes.filter(route => route.method === 'GET' && (
     /^\/v1\/resources\/:resource\/(?:page|statements|relations)(?:\/.*)?$/.test(route.path)
     || /^\/v1\/collections\/:id(?:\/revisions\/:revision)?$/.test(route.path)
-    || route.path.startsWith('/v1/zones/:id/routes'))).map(route => route.path).sort();
+    || route.path.startsWith('/v1/zones/:id/routes')
+    || /^\/v1\/semantic\/resources\/:id(?:\/revisions\/:revision)?$/.test(route.path)
+    || route.path === '/v1/statements/:id'
+    || /^\/v1\/relations\/:id(?:\/revisions\/:revision)?$/.test(route.path))).map(route => route.path).sort();
   expect(paths).toEqual(revelationReads.map(read => read.path).sort());
   expect(new Set(revelationReads.map(read => read.id)).size).toBe(revelationReads.length);
 });

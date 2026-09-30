@@ -5,6 +5,7 @@ import { checkedStoredState, readCurrentComponent, type ComponentState, type Def
 import { readComponent } from './command.ts';
 import { PROFILES } from './schema.ts';
 import { semanticValueExport, type ReferenceAvailability, type SemanticValue } from './value.ts';
+import { propertyRevelationRecord } from '../reading-position/store.ts';
 
 /** Read-side availability of a referenced native Resource (MODEL10). */
 export type ReferenceCheck = (ref: string) => Promise<boolean>;
@@ -42,7 +43,7 @@ function exportOf(component: string, state: PublicState): Record<string, unknown
  * the current head. References disclose only available/unavailable per viewer.
  */
 export async function readSemanticRevision(env: WorkActivationEnvironment, component: string, revision: string,
-  canRead: ReferenceCheck): Promise<SemanticRead | null> {
+  canRead: ReferenceCheck, visibleRecords?: (records: readonly string[]) => Promise<ReadonlySet<string>>): Promise<SemanticRead | null> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?type ?manifest ?predecessor ?generation ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a ?type ; rv:component ${iri(component)} ; rv:manifest ?manifest ;
       rv:modelGeneration ?generation ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
@@ -57,8 +58,20 @@ export async function readSemanticRevision(env: WorkActivationEnvironment, compo
     definition ? PROFILES.definition : PROFILES.resource));
   if ((state.component === 'definition') !== definition) throw new RevisionCorrupt('revision names another component');
   const availability = await references(state, canRead);
+  const disclosed = visibleRecords ? await visibleRecords([component,
+    ...Object.keys(availability).filter(ref => availability[ref]?.state === 'available'),
+    ...(state.component === 'resource' ? state.properties.map(property =>
+      propertyRevelationRecord(component, property.predicate, property.value)) : [])]) : null;
+  if (disclosed && !disclosed.has(component)) return null;
+  const properties = state.component === 'resource' ? state.properties.filter(property => !disclosed
+    || disclosed.has(propertyRevelationRecord(component, property.predicate, property.value))
+      && (property.value.kind !== 'resource' || availability[property.value.ref]?.state !== 'available'
+        || disclosed.has(property.value.ref))) : [];
+  const deliveredReferences = new Set(state.component === 'resource' ? properties.flatMap(property =>
+    property.value.kind === 'resource' ? [property.value.ref] : []) : state.successor ? [state.successor] : []);
+  for (const ref of Object.keys(availability)) if (!deliveredReferences.has(ref) || disclosed && !disclosed.has(ref)) delete availability[ref];
   const visible: PublicState = state.component === 'resource'
-    ? { ...state, properties: state.properties.map(property => property.value.kind === 'resource'
+    ? { ...state, properties: properties.map(property => property.value.kind === 'resource'
       && availability[property.value.ref]?.state !== 'available'
       ? { ...property, value: { kind: 'unavailable-reference' as const } } : property) }
     : state.successor && availability[state.successor]?.state !== 'available'
@@ -71,7 +84,7 @@ export async function readSemanticRevision(env: WorkActivationEnvironment, compo
 
 /** Current state: the exact head revision after the projection matched its manifest. */
 export async function readSemanticCurrent(env: WorkActivationEnvironment, component: string,
-  canRead: ReferenceCheck): Promise<SemanticRead | null> {
+  canRead: ReferenceCheck, visibleRecords?: (records: readonly string[]) => Promise<ReadonlySet<string>>): Promise<SemanticRead | null> {
   const kind = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?p WHERE { GRAPH ${iri(GRAPHS.current)} {
     ${iri(component)} ?p ?head . FILTER(?p IN (rv:semanticHead, rv:definitionHead)) } } LIMIT 2`);
   const rows = kind.results?.bindings ?? [];
@@ -79,7 +92,7 @@ export async function readSemanticCurrent(env: WorkActivationEnvironment, compon
   const current = await readCurrentComponent(env, component,
     rows[0]!.p!.value === `${RV}semanticHead` ? 'resource' : 'definition');
   if (!current) return null;
-  return readSemanticRevision(env, component, current.head, canRead);
+  return readSemanticRevision(env, component, current.head, canRead, visibleRecords);
 }
 
 async function references(state: ComponentState, canRead: ReferenceCheck): Promise<Record<string, ReferenceAvailability>> {

@@ -10,6 +10,7 @@ import { GraphLayouts } from '../../../services/main/src/modules/graph-layout/st
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { collectionRoutes } from '../../../services/main/src/routes/collections.ts';
 import { hash } from '../../../services/main/src/modules/work/activate.ts';
+import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 
 test('WIKI03/WIKI06/CTX08: a Collection keeps repeated occurrence history and hides private members', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -23,11 +24,13 @@ test('WIKI03/WIKI06/CTX08: a Collection keeps repeated occurrence history and hi
   await objects.initialize();
   (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
   try {
+    await createAgentGraph(f.env, { id: randomUUID(), agent: f.actor, kind: 'person',
+      displayName: 'Collection author', digest: hash(f.actor) });
     const visibleWork = await f.json<{ work: string }>(await f.call('POST', '/v1/works', { language: 'en',
-      profile: 'metadata-only-v1', title: 'Visible member', actingSubject: f.actor,
+      profile: 'metadata-only-v1', authoring: 'own-work', title: 'Visible member', actingSubject: f.actor,
     }), 201);
     const privateWork = await f.json<{ work: string }>(await f.call('POST', '/v1/works', { language: 'en',
-      profile: 'metadata-only-v1', title: 'Private member', actingSubject: f.actor,
+      profile: 'metadata-only-v1', authoring: 'own-work', title: 'Private member', actingSubject: f.actor,
     }), 201);
     await f.grant(`work:read:${visibleWork.work}`, 'work.read');
     const privateGrant = await f.grant(`work:read:${privateWork.work}`, 'work.read');
@@ -158,5 +161,10 @@ test('WIKI03/WIKI06/CTX08: a Collection keeps repeated occurrence history and hi
       `${path}?${query}`), 200)).occurrences).toHaveLength(2);
     expect((await f.call('GET', `${path}?${query}`, undefined, randomUUID(), f.account.tokenB)).status)
       .toBe(404);
+    // Position selection never bypasses the Collection owner's public gates.
+    expect((await f.call('GET', `${path}?${query}&position=all`, undefined, randomUUID(), f.account.tokenB)).status)
+      .toBe(404);
+    expect((await f.call('GET', `${path}/revisions/${shortId(inserted.revision)}?${query}&position=all`,
+      undefined, randomUUID(), f.account.tokenB)).status).toBe(404);
   } finally { await f.close(); }
 }, 180_000);

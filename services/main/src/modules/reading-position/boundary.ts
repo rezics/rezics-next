@@ -132,10 +132,12 @@ export function prefixVisible(composition: ReadingComposition, position: string 
 }
 
 export class ReadingBoundary {
-  private readonly records = new Map<string, Revelation | null>();
+  private readonly records = new Map<string, Revelation[]>();
   private readonly compositions = new Map<string, Promise<ReadingComposition>>();
   private readonly positions = new Map<string, Promise<string | null>>();
   private generation: Promise<string> | null = null;
+  private reader: Promise<boolean> | null = null;
+  private snapshot: Promise<string | null> | null = null;
   readonly selection: string;
   constructor(readonly session: WorkReadSession, selection?: string) {
     this.selection = selection ?? new URL(session.request.url).searchParams.get('position') ?? 'mine';
@@ -153,17 +155,15 @@ export class ReadingBoundary {
   }
   private async resolve(work: string) {
     if (this.selection === 'start') return null;
+    if (this.selection === 'mine' && !await this.ownReader()) return null;
     const composition = await this.composition(work);
     if (this.selection !== 'mine' && this.selection !== 'all') {
-      if (!composition.occurrences.some(item => item.occurrence === this.selection)) throw new WorkReadInvalid('Position is outside this continuity');
-      return this.selection;
+      return composition.occurrences.some(item => item.occurrence === this.selection) ? this.selection : null;
     }
     if (this.selection === 'all') return composition.occurrences.at(-1)?.occurrence ?? null;
     const { principal, deps, options } = this.session;
     if (!principal) return null;
-    if (!options.actingSubject || !await deps.access.canReadAsBaselineMember?.(principal, options.actingSubject)) {
-      throw new WorkReadMissing('Reader progress is unavailable');
-    }
+    if (!principal || !options.actingSubject) return null;
     const completed = await deps.readingPositions?.completed(principal, composition.structures) ?? new Set<string>();
     const finishWork = (resource: string) => {
       const descendants = new Set([resource]);
@@ -224,11 +224,25 @@ export class ReadingBoundary {
   async binding() {
     const store = this.session.deps.readingPositions;
     this.generation ??= store ? this.currentGeneration() : Promise.resolve('unconfigured');
-    return [this.selection, await this.generation];
+    this.snapshot ??= this.privateSnapshot();
+    return [this.selection, await this.generation, await this.snapshot];
   }
   private currentGeneration() {
-    return this.session.deps.readingPositions!.generation(this.selection === 'mine' ? this.session.principal : null,
-      this.selection === 'mine' ? this.session.options.actingSubject : undefined);
+    return this.session.deps.readingPositions!.generation();
+  }
+  private currentReader() {
+    const { principal, options, deps } = this.session;
+    return principal?.emailVerified && options.actingSubject
+      ? Promise.resolve(deps.access.canReadAsBaselineMember?.(principal, options.actingSubject) ?? false)
+      : Promise.resolve(false);
+  }
+  private ownReader() {
+    this.reader ??= this.currentReader();
+    return this.reader;
+  }
+  private async privateSnapshot() {
+    if (this.selection !== 'mine' || !this.session.deps.readingPositions || !await this.ownReader()) return null;
+    return this.session.deps.readingPositions.privateSnapshot(this.session.principal!, this.session.options.actingSubject!);
   }
   async visible(records: readonly string[]): Promise<Set<string>> {
     const store = this.session.deps.readingPositions;
@@ -236,30 +250,41 @@ export class ReadingBoundary {
     const missing = [...new Set(records)].filter(record => !this.records.has(record));
     for (let at = 0; at < missing.length; at += REVELATION_COST.batch) {
       const batch = missing.slice(at, at + REVELATION_COST.batch);
-      const found = await store?.lookup(batch) ?? new Map<string, Revelation>();
-      for (const record of batch) this.records.set(record, found.get(record) ?? null);
+      const found = await store?.lookup(batch) ?? new Map<string, Revelation[]>();
+      for (const record of batch) this.records.set(record, found.get(record) ?? []);
     }
     const visible = new Set<string>();
     for (const record of records) {
-      const row = this.records.get(record);
-      if (!row || this.selection === 'all') { visible.add(record); continue; }
+      const rows = this.records.get(record)!;
+      if (!rows.length || this.selection === 'all') { visible.add(record); continue; }
       if (this.selection === 'start' || this.selection === 'mine' && !this.session.principal) continue;
-      if (prefixVisible(await this.composition(row.continuityWork), await this.position(row.continuityWork), row)) visible.add(record);
+      for (const row of rows) {
+        try {
+          const position = await this.position(row.continuityWork);
+          if (position && prefixVisible(await this.composition(row.continuityWork), position, row)) {
+            visible.add(record); break;
+          }
+        } catch (error) {
+          // A record with an unreadable, foreign or unavailable continuity is
+          // withheld alone. It cannot make an otherwise readable page fail.
+          if (!(error instanceof WorkReadMissing || error instanceof WorkReadInvalid || error instanceof WorkReadUnavailable)) throw error;
+        }
+      }
     }
-    await this.fence();
+    await this.fence(false);
     return visible;
   }
   async require(resource: string) {
     if (!(await this.visible([resource])).has(resource)) throw new WorkReadMissing('Resource is unavailable');
   }
-  async fence() {
+  async fence(privateState = true) {
     if (this.session.deps.readingPositions && this.generation
       && await this.currentGeneration() !== await this.generation) {
       throw new WorkReadMoved('Wiki revelations changed during the read');
     }
-    if (this.positions.size && this.selection === 'mine' && this.session.principal
-      && !await this.session.deps.access.canReadAsBaselineMember?.(this.session.principal, this.session.options.actingSubject!)) {
-      throw new WorkReadMissing('Reader progress is unavailable');
+    if (privateState && this.snapshot && await this.snapshot !== null
+      && (!await this.currentReader() || await this.privateSnapshot() !== await this.snapshot)) {
+      throw new WorkReadMoved('Reader position changed during the read');
     }
   }
   async chooser(work: string, limit: number, after?: string) {

@@ -41,6 +41,7 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     const library = new ReaderLibraryStatusStore(stack.contentPool);
     const store = new ReadingPositionStore(stack.contentPool);
     const objects = stack.objects('semantic/structure/'); await objects.initialize();
+    let verifiedEmail = true;
     const deps: MainWorkDependencies = { environment: stack.env, access: stack.access,
       media: stack.media, mediaAccess: stack.mediaAccess, readingPositions: store, structureObjects: objects,
       progress: new StructureProgressStore(stack.contentPool), libraryStatus: library,
@@ -50,7 +51,7 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
         const token = request.headers.get('authorization')?.replace(/^Bearer /, '');
         const member = [editor, outsider].find(member => member.token === token);
         if (!member) throw new AccountAssertionDenied('Unknown bearer');
-        return { ...member.principal, emailVerified: true };
+        return { ...member.principal, emailVerified: verifiedEmail };
       } } };
     const app = createMainApp(stack.fuseki, deps);
     const call = (method: string, path: string, body?: object, token = editor.token) => app.handle(new Request(`http://main.local${path}`, {
@@ -58,6 +59,8 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
         ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }));
     const person = (await json<{ agent: string }>(await call('POST', '/v1/agents',
       { profile: 'agent-provision-v1', kind: 'person', displayName: 'Wiki reader' }), 201)).agent;
+    const organization = (await json<{ agent: string }>(await call('POST', '/v1/agents',
+      { profile: 'agent-provision-v1', kind: 'organization', displayName: 'Wiki organization' }), 201)).agent;
     const grant = async (scope: string, action: string) => {
       await stack.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
       await stack.accessPool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
@@ -135,6 +138,7 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
       participations: [{ role: 'work', participant: { kind: 'resource', ref: series.work } },
         { role: 'character', participant: { kind: 'resource', ref: early.component } }], evidence: 'https://example.org/evidence' }), 201);
     const earlyRelation = await relation(), lateRelation = await relation();
+    for (const relation of [earlyRelation, lateRelation]) await grant(`semantic:read:${relation.occurrence}`, 'semantic.read');
     const collection = native(); await grant(`collection:edit:${collection}`, 'collection.edit');
     await grant(`semantic:read:${collection}`, 'semantic.read');
     let members = await json<Composition>(await call('POST', '/v1/collections', {
@@ -153,11 +157,12 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     await json(await editor.send('POST', `/v1/zones/${short(zone)}/mounts`, { expectedHead: zoned.revision,
       collection, routeSegment: 'characters', disclosure: 'public', position: 'last', actingSubject: editor.actor }));
 
-    const reveal = async (record: string, recordKind: Revelation['recordKind'], occurrence: string, receipt = 'reviewed-publication') => {
+    const reveal = async (record: string, recordKind: Revelation['recordKind'], occurrence: string,
+      receipt = 'reviewed-publication', continuityWork = series.work) => {
       const client = await stack.contentPool.connect();
       try {
         await client.query('BEGIN');
-        await store.write(client, { record, recordKind, continuityWork: series.work, occurrence, receipt }, null);
+        await store.write(client, { record, recordKind, continuityWork, occurrence, receipt }, null);
         await client.query('COMMIT');
       } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
     };
@@ -166,6 +171,11 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     await reveal(earlyRelation.occurrence, 'relation', earlyPosition); await reveal(lateRelation.occurrence, 'relation', latePosition);
     await reveal(propertyRevelationRecord(early.component, alias.predicate, alias.value), 'alias', latePosition);
     await reveal(propertyRevelationRecord(early.component, lateName.predicate, lateName.value), 'name', latePosition);
+    await reveal(early.component, 'entity', latePosition, 'alternate-continuity', volume2.work);
+    expect((await store.lookup([early.component])).get(early.component)).toHaveLength(2);
+    const privateContinuity = await activateMetadataWork(stack.env, { title: 'Private continuity', semanticTypes: ['https://schema.org/Book'],
+      admission: stack.admission(person, 'work:create:root', 'work.create', metadataWorkRequestDigest('Private continuity', ['https://schema.org/Book'])) });
+    await reveal(lateFact.statement, 'statement', earlyPosition, 'private-continuity', privateContinuity.work);
     const progress = (completed: boolean, version: number) => call('PUT',
       `/v1/compositions/${short(firstBook.structure)}/occurrences/${short(readerPosition)}/progress`,
       { actingSubject: person, expectedVersion: version, completed, position: null });
@@ -182,15 +192,25 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     for (const [signed, position, expected] of [[false, undefined, [unchanged.component]],
       [true, undefined, [early.component, unchanged.component]], [false, readerPosition, [early.component, unchanged.component]],
       [false, 'all', [early.component, unchanged.component, late.component]], [true, 'all', [early.component, unchanged.component, late.component]]] as const) {
-      const page = await json<{ occurrences: { target: string }[]; next: string | null }>(await read(memberPath, position, signed));
-      expect(page.occurrences.map(item => item.target)).toEqual([...expected]); expect(page.next).toBeNull(); exercised.add('members');
-      const retained = await json<typeof page>(await read(`${memberPath}/revisions/${short(members.revision)}`, position, signed));
-      expect(retained.occurrences.map(item => item.target)).toEqual([...expected]); expect(retained.next).toBeNull(); exercised.add('retained-members');
+      // G-829 owns anonymous Collection/relation transport gates. This filter
+      // changes only disclosure after those existing gates have admitted a read.
+      if (signed) {
+        const page = await json<{ occurrences: { target: string }[]; next: string | null }>(await read(memberPath, position, signed));
+        expect(page.occurrences.map(item => item.target)).toEqual([...expected]); expect(page.next).toBeNull(); exercised.add('members');
+        const retained = await json<typeof page>(await read(`${memberPath}/revisions/${short(members.revision)}`, position, signed));
+        expect(retained.occurrences.map(item => item.target)).toEqual([...expected]); expect(retained.next).toBeNull(); exercised.add('retained-members');
+      }
       const index = await json<{ items: { id: string }[]; nextCursor: string | null }>(await read(zonePath, position, signed));
       expect(index.items.map(item => item.id)).toEqual([...expected]); expect(index.nextCursor).toBeNull(); exercised.add('zone');
       for (const item of [early, unchanged, late]) {
         const available = expected.includes(item.component);
         expect((await read(entityPath(item.component), position, signed)).status).toBe(available ? 200 : 404); exercised.add('entity');
+        for (const [id, path] of [['semantic', `/v1/semantic/resources/${short(item.component)}`],
+          ['retained-semantic', `/v1/semantic/resources/${short(item.component)}/revisions/${short(item.revision)}`]] as const) {
+          const response = await read(path, position, signed);
+          expect(response.status).toBe(available ? 200 : 404); exercised.add(id);
+          if (available) expect(JSON.stringify(await response.json()).includes(alias.value.lexical)).toBe(item === early && position === 'all');
+        }
         const detail = `/v1/zones/${short(zone)}/routes?path=${encodeURIComponent(`/characters/${short(item.component)}`)}`;
         expect((await read(detail, position, signed)).status).toBe(available ? 200 : 404);
       }
@@ -202,12 +222,26 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
           ? [earlyFact.statement, lateFact.statement].sort() : [earlyFact.statement]);
         expect(items.some(item => item.value.lexical === alias.value.lexical)).toBe(position === 'all');
         expect(statements.count.value).toBe(items.length); expect(statements.nextCursor).toBeNull(); exercised.add('statements');
+        for (const fact of [earlyFact, lateFact]) {
+          expect((await read(`/v1/statements/${short(fact.statement)}`, position, signed)).status)
+            .toBe(fact === earlyFact || position === 'all' ? 200 : 404); exercised.add('statement');
+        }
       }
       if (signed) {
         const relations = await json<{ items: { relation: string }[]; next: string | null }>(await read(relationPath, position));
         expect(relations.items.map(item => item.relation)).toEqual(position === 'all'
           ? [earlyRelation.occurrence, lateRelation.occurrence].sort() : [earlyRelation.occurrence]);
         expect(relations.next).toBeNull(); exercised.add('relations');
+        for (const relation of [earlyRelation, lateRelation]) {
+          const path = `/v1/relations/${short(relation.occurrence)}`;
+          const response = await read(path, position);
+          expect(response.status).toBe(relation === earlyRelation || position === 'all' ? 200 : 404); exercised.add('relation');
+          // The admitted write pins an exact retained occurrence revision.
+          const current = await read(path, 'all');
+          const revision = (await json<{ revision: string }>(current)).revision;
+          expect((await read(`${path}/revisions/${short(revision)}`, position)).status)
+            .toBe(relation === earlyRelation || position === 'all' ? 200 : 404); exercised.add('retained-relation');
+        }
       }
     }
     expect([...exercised].sort()).toEqual(revelationReads.map(item => item.id).sort());
@@ -248,9 +282,10 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     expect([...relationsFirst.items, ...relationsTail.items].map(item => item.relation)).toEqual([earlyRelation.occurrence, lateRelation.occurrence].sort());
     expect(relationsTail.next).toBeNull();
     expect((await read(`${relationPath}?after=${encodeURIComponent(relationsFirst.next!)}`, 'all', false)).status).toBe(400);
+    expect((await read(memberPath, undefined, false)).status).toBe(400);
     const chooser = await json<{ resolved: string; items: { occurrence: string }[]; next: string | null }>(await read(`/v1/reading-positions/${short(series.work)}?limit=2`));
     expect(chooser.resolved).toBe(readerPosition); expect(chooser.items).toHaveLength(2); expect(chooser.next).toBeString();
-    expect((await read(`/v1/reading-positions/${short(series.work)}`, native())).status).toBe(400);
+    expect((await json<{ resolved: string }>(await read(`/v1/reading-positions/${short(series.work)}`, native()))).resolved).toBe('start');
     expect((await read(entityPath(early.component), 'bogus')).status).toBe(400);
     // The summary owner hook is exercised here; G-542 owns its HTTP transports.
     await workRead(deps, new Request('http://main.local/v1/fixture'), {}, async session => {
@@ -272,6 +307,9 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
       expect(JSON.stringify(await json(await read(memberPath)))).toContain(late.component);
       expect(JSON.stringify(await json(await read(`${memberPath}/revisions/${short(members.revision)}`)))).toContain(late.component);
       expect(JSON.stringify(await json(await read(zonePath)))).toContain(late.component);
+      expect(JSON.stringify(await json(await read(`/v1/semantic/resources/${short(early.component)}`)))).toContain(alias.value.lexical);
+      expect((await read(`/v1/statements/${short(lateFact.statement)}`)).status).toBe(200);
+      expect((await read(`/v1/relations/${short(lateRelation.occurrence)}`)).status).toBe(200);
     } finally { store.lookup = actualLookup; }
 
     // Concurrent publications have one winner; exact replay is safe.
@@ -284,9 +322,9 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
       expect(attempts.filter(attempt => attempt.status === 'fulfilled')).toHaveLength(1);
       const rejected = attempts.find(attempt => attempt.status === 'rejected');
       expect(rejected?.status === 'rejected' && rejected.reason).toBeInstanceOf(RevelationConflict);
-      const winner = (await store.lookup([contested.record])).get(contested.record)!;
+      const winner = (await store.lookup([contested.record])).get(contested.record)![0]!;
       await store.write(writers[0]!, winner, null);
-      expect((await store.lookup([contested.record])).get(contested.record)).toEqual(winner);
+      expect((await store.lookup([contested.record])).get(contested.record)).toEqual([winner]);
     } finally { writers.forEach(writer => writer.release()); }
 
     // Correction CAS, atomic rollback and generation fencing.
@@ -303,7 +341,8 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
       await expect(store.write(client, correction, 'wrong-receipt')).rejects.toBeInstanceOf(RevelationConflict);
       await client.query('ROLLBACK');
       await client.query('BEGIN'); await store.write(client, correction, 'reviewed-publication'); await client.query('ROLLBACK');
-      expect((await store.lookup([early.component])).get(early.component)?.occurrence).toBe(earlyPosition);
+      expect((await store.lookup([early.component])).get(early.component)?.find(row => row.continuityWork === series.work)?.occurrence).toBe(earlyPosition);
+      expect((await store.lookup([early.component])).get(early.component)?.find(row => row.continuityWork === volume2.work)?.receipt).toBe('alternate-continuity');
       await client.query('BEGIN'); await store.write(client, correction, 'reviewed-publication'); await client.query('COMMIT');
       expect((await read(entityPath(early.component))).status).toBe(404);
       expect((await read(`${memberPath}?after=${encodeURIComponent(narrowed.next!)}`)).status).toBe(400);
@@ -315,14 +354,40 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     const boundary = new ReadingBoundary(session, 'start'); await boundary.visible([early.component]);
     await stack.contentPool.query('UPDATE reading_position.generation SET version = version + 1 WHERE singleton');
     await expect(boundary.fence()).rejects.toBeInstanceOf(WorkReadMoved);
-    // An occurrence Session projects its library slot but never finishes its whole volume.
+    // D2: G-835 treats Library "read" as finished, including Session projections.
     await json(await progress(false, 1));
     await json(await call('POST', '/v1/me/sessions', { actingSubject: person, target: firstBook.occurrences[0], expectedVersion: 0, state: 'finished' }), 201);
-    expect((await read(entityPath(early.component))).status).toBe(404);
+    expect((await read(entityPath(early.component))).status).toBe(200);
     await json(await progress(true, 2));
     expect((await read(entityPath(early.component))).status).toBe(200);
     expect((await read(`${memberPath}?after=${encodeURIComponent(narrowed.next!)}`)).status).toBe(400);
-    expect((await call('GET', `${memberPath}?actingSubject=${encodeURIComponent(person)}`, undefined, outsider.token)).status).toBe(404);
+    const otherReader = await json<{ items: { id: string }[] }>(await call('GET', `${zonePath}&actingSubject=${encodeURIComponent(person)}`, undefined, outsider.token));
+    expect(otherReader.items.map(item => item.id)).toEqual([unchanged.component]);
+    const privateSnapshot = store.privateSnapshot.bind(store);
+    let privateReads = 0;
+    store.privateSnapshot = async (...args) => { privateReads++; return privateSnapshot(...args); };
+    try {
+      const organizationPage = await json<typeof otherReader>(await call('GET', `${zonePath}&actingSubject=${encodeURIComponent(organization)}`));
+      expect(organizationPage.items.map(item => item.id)).toEqual([unchanged.component]);
+      verifiedEmail = false;
+      const unverifiedPage = await json<typeof otherReader>(await read(zonePath));
+      expect(unverifiedPage.items.map(item => item.id)).toEqual([unchanged.component]);
+      expect(privateReads).toBe(0);
+    } finally { verifiedEmail = true; store.privateSnapshot = privateSnapshot; }
+    // R3: pagination reads owner state without creating or advancing counters.
+    const poolQuery = stack.contentPool.query.bind(stack.contentPool);
+    const statements: string[] = [];
+    stack.contentPool.query = ((...args: unknown[]) => {
+      const query = args[0]; if (typeof query === 'string') statements.push(query);
+      return (poolQuery as (...args: unknown[]) => unknown)(...args);
+    }) as typeof stack.contentPool.query;
+    try {
+      expect((await read(`${memberPath}?limit=1`)).status).toBe(200);
+      expect(statements.some(sql => /\b(?:INSERT|UPDATE|DELETE)\b/i.test(sql))).toBe(false);
+    } finally { stack.contentPool.query = poolQuery; }
+    const schema = await stack.contentPool.query<{ name: string }>(`SELECT tablename AS name FROM pg_tables
+      WHERE schemaname = 'reading_position' ORDER BY tablename`);
+    expect(schema.rows.map(row => row.name)).toEqual(['generation', 'revelation']);
 
     let baselineQueries = 0;
     await workRead(deps, new Request('http://main.local/v1/fixture'), {}, async session => {

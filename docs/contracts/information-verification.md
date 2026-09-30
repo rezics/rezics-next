@@ -146,6 +146,13 @@ the wiki+ positioning. The rules it relies on:
   read at each reader's spoiler position. Its infoboxes and lists are the same
   records that filters, lists and other Zones read, so a correction in one wiki
   improves every view of that fact.
+- **Readers choose how far to see.** Anonymous readers start before the first
+  revelation. Signed-in readers default to their own furthest completed
+  occurrence; a Library status of `read` counts as finishing that Work. Anyone
+  may choose an occurrence or show everything with `position=all`. A position
+  applies only within its continuity; unrelated or unreadable continuities
+  withhold their affected records without suppressing the rest of the page.
+  Records without a revelation position keep their existing disclosure rules.
 - **The Work page stays the hub.** It shows the wiki's summary beside ratings,
   reviews, library status, discussion, relations and lists; the wiki Zone is its
   deep end, not a replacement.

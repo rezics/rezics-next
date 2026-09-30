@@ -3,7 +3,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { NATIVE_ID, derivedId } from '../structure/graph.ts';
 import { WorkReadInvalid, WorkReadUnavailable } from '../work/read-session.ts';
 
-export const REVELATION_COST = { batch: 50, lookupSql: 1, writeSql: 1, progressSql: 1 } as const;
+export const REVELATION_COST = { batch: 50, lookupSql: 1, writeSql: 1, progressSql: 1, snapshotSql: 1 } as const;
 export interface Revelation {
   record: string;
   recordKind: 'entity' | 'name' | 'alias' | 'statement' | 'relation';
@@ -23,22 +23,34 @@ export function propertyRevelationRecord(resource: string, predicate: string, va
 
 export class ReadingPositionStore {
   constructor(private readonly pool: Pool) {}
-  async generation(principal?: VerifiedPrincipal | null, agent?: string): Promise<string> {
-    const result = await this.pool.query<{ version: string }>(`SELECT concat_ws(':', version::text,
-      COALESCE((SELECT version::text FROM reading_position.principal_generation
-        WHERE principal_issuer = $1 AND principal_subject = $2), '0'),
-      COALESCE((SELECT version::text FROM reading_position.agent_generation WHERE agent = $3), '0')) AS version
-      FROM reading_position.generation WHERE singleton`, [principal?.issuer ?? null, principal?.subject ?? null, agent ?? null]);
+  async generation(): Promise<string> {
+    const result = await this.pool.query<{ version: string }>(`SELECT version::text AS version
+      FROM reading_position.generation WHERE singleton`);
     if (result.rows.length !== 1) throw new WorkReadUnavailable('Revelation generation is unavailable');
     return result.rows[0]!.version;
   }
-  async lookup(records: readonly string[]): Promise<Map<string, Revelation>> {
+  /** One read of this reader's existing owner state; no counter table or writes.
+   * Call only after Access proves this principal owns the Person, never for an
+   * arbitrary acting Agent. Cost is linear in that reader's indexed history. */
+  async privateSnapshot(principal: VerifiedPrincipal, agent: string): Promise<string> {
+    const result = await this.pool.query<{ snapshot: string }>(`SELECT md5(concat_ws('|',
+      (SELECT string_agg(concat_ws(':', structure, occurrence, selection_key, version, completed), '|' ORDER BY structure, occurrence, selection_key)
+        FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2),
+      (SELECT string_agg(concat_ws(':', id, version), '|' ORDER BY id)
+        FROM reader.consumption_session WHERE principal_issuer = $1 AND principal_subject = $2 AND agent = $3),
+      (SELECT string_agg(concat_ws(':', work, version, status), '|' ORDER BY work)
+        FROM reader.library_status WHERE agent = $3))) AS snapshot`, [principal.issuer, principal.subject, agent]);
+    return result.rows[0]!.snapshot;
+  }
+  async lookup(records: readonly string[]): Promise<Map<string, Revelation[]>> {
     if (records.length > REVELATION_COST.batch) throw new WorkReadInvalid('Revelation batch exceeds 50 records');
     if (!records.length) return new Map();
     const result = await this.pool.query<Revelation>(`SELECT record, record_kind AS "recordKind",
       continuity_work AS "continuityWork", occurrence, receipt
       FROM reading_position.revelation WHERE record = ANY($1::text[])`, [records]);
-    return new Map(result.rows.map(row => [row.record, row]));
+    const found = new Map<string, Revelation[]>();
+    for (const row of result.rows) found.set(row.record, [...found.get(row.record) ?? [], row]);
+    return found;
   }
   /** Only the reviewed publication/correction owner calls this in its transaction.
    * Readers never write. Corrections update an existing row under its prior
@@ -51,15 +63,15 @@ export class ReadingPositionStore {
     const values = [row.record, row.recordKind, row.continuityWork, row.occurrence, row.receipt];
     const result = expectedReceipt === null ? await client.query(`INSERT INTO reading_position.revelation
       (record, record_kind, continuity_work, occurrence, receipt) VALUES ($1,$2,$3,$4,$5)
-      ON CONFLICT (record) DO UPDATE SET record_kind = EXCLUDED.record_kind,
-        continuity_work = EXCLUDED.continuity_work, occurrence = EXCLUDED.occurrence, receipt = EXCLUDED.receipt
+      ON CONFLICT (record, continuity_work) DO UPDATE SET record_kind = EXCLUDED.record_kind,
+        occurrence = EXCLUDED.occurrence, receipt = EXCLUDED.receipt
       WHERE (reading_position.revelation.receipt = EXCLUDED.receipt
           AND reading_position.revelation.record_kind = EXCLUDED.record_kind
           AND reading_position.revelation.continuity_work = EXCLUDED.continuity_work
           AND reading_position.revelation.occurrence = EXCLUDED.occurrence)
       RETURNING record`, values) : await client.query(`UPDATE reading_position.revelation
         SET record_kind = $2, continuity_work = $3, occurrence = $4, receipt = $5
-        WHERE record = $1 AND (receipt = $6 OR
+        WHERE record = $1 AND continuity_work = $3 AND (receipt = $6 OR
           (receipt = $5 AND record_kind = $2 AND continuity_work = $3 AND occurrence = $4))
         RETURNING record`, [...values, expectedReceipt]);
     if (result.rowCount !== 1) throw new RevelationConflict('Revelation receipt changed');
@@ -74,9 +86,7 @@ export class ReadingPositionStore {
   async finishedWorks(agent: string, works: readonly string[]): Promise<Set<string>> {
     if (works.length > REVELATION_COST.batch) throw new WorkReadInvalid('Finished Work batch exceeds 50 records');
     const result = await this.pool.query<{ work: string }>(`SELECT work FROM reader.library_status
-      WHERE agent = $1 AND work = ANY($2::text[]) AND status = 'read' AND session_projection IS NULL`, [agent, works]);
-    // A Session finishing a chapter can project "read" onto its Work's library
-    // slot. That projection is not an independent whole-Work finish.
+      WHERE agent = $1 AND work = ANY($2::text[]) AND status = 'read'`, [agent, works]);
     return new Set(result.rows.map(row => row.work));
   }
 }

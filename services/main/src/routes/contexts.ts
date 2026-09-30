@@ -35,6 +35,10 @@ import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { readingPositionRead } from '../modules/reading-position/read.ts';
+import { readingPositionQuery } from './reading-positions.ts';
+import { workReadError } from './work-reads.ts';
+import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../modules/work/read-session.ts';
 
 export const openApiOperations = {
   '/v1/contexts': { post: { bearer: true, idempotencyKey: true } },
@@ -282,6 +286,8 @@ function contextError(error: unknown): Response {
 }
 
 function readError(error: unknown): Response {
+  if (error instanceof WorkReadInvalid || error instanceof WorkReadMissing || error instanceof WorkReadMoved
+    || error instanceof WorkReadUnavailable) return workReadError(error);
   if (error instanceof ContextCommandUnavailable) {
     return problem(503, 'context_unavailable', 'Required state is unavailable');
   }
@@ -733,12 +739,22 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     })
     .get('/v1/statements/:id', {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      query: t.Object({ actingSubject: t.Optional(native) }),
+      query: t.Object({ actingSubject: t.Optional(native), position: readingPositionQuery }),
       response: { 200: statementReadResponse, ...graphReadResponses },
     }, async ({ request, params, query }) => {
       try {
-        return Response.json(await readStatement(env, `https://rezics.com/id/${params.id}`,
-          await reader(request, query.actingSubject)), { headers: noStore });
+        const principal = request.headers.get('authorization') && query.actingSubject
+          ? await work.account.verify(request, ['context:read']) : null;
+        const read = await readingPositionRead(work, request, principal, query.actingSubject, async boundary => {
+          const statement = await readStatement(env, `https://rezics.com/id/${params.id}`,
+            privateReader(principal, query.actingSubject ?? null));
+          const records = [statement.statement, statement.subject, ...statement.applicability,
+            ...(statement.value.kind === 'resource' ? [statement.value.iri] : [])];
+          const visible = await boundary.visible(records);
+          if (records.some(record => !visible.has(record))) throw new StatementNotFound('Statement is unavailable');
+          return statement;
+        });
+        return Response.json(read, { headers: noStore });
       } catch (error) { return readError(error); }
     })
     .post('/v1/statements/:id/withdrawals', {

@@ -16,6 +16,10 @@ import { admittedSemanticBulkChange, SemanticStageConflict, SemanticStageRejecte
   SemanticStageUnavailable } from '../modules/semantic/staging.ts';
 import { readResourceSummaries } from '../modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../modules/media/store.ts';
+import { readingPositionRead } from '../modules/reading-position/read.ts';
+import { readingPositionQuery } from './reading-positions.ts';
+import { workReadError } from './work-reads.ts';
+import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../modules/work/read-session.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() });
@@ -37,6 +41,8 @@ export const openApiOperations = {
 
 /** Typed semantic outcomes; everything else uses the shared command problem map. */
 export function semanticError(error: unknown): Response {
+  if (error instanceof WorkReadInvalid || error instanceof WorkReadMissing || error instanceof WorkReadMoved
+    || error instanceof WorkReadUnavailable) return workReadError(error);
   if (error instanceof SemanticChangeRejected) {
     if (error.code === 'invalid' || error.code === 'unsupported') {
       return problem(400, `${error.code}_semantic_change`, 'Semantic change does not match its profile');
@@ -77,7 +83,7 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       return batch.summaries[0]?.status === 'available'
         || !!principal && await work.access.canReadWork(principal, actor!, ref);
     };
-    return { allowed: await work.access.canReadSemanticResource?.(principal, actor, target, revision, fuseki) ?? false, canRead };
+    return { allowed: await work.access.canReadSemanticResource?.(principal, actor, target, revision, fuseki) ?? false, canRead, principal };
   };
   return new Elysia()
     .post('/v1/semantic/changes', {
@@ -122,30 +128,32 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     })
     .get('/v1/semantic/resources/:id', {
       params: t.Object({ id: groupUuid }),
-      query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
+      query: t.Object({ actingSubject: t.Optional(native), position: readingPositionQuery }, { additionalProperties: false }),
       response: { 200: semanticRead, ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
         const target = `https://rezics.com/id/${params.id}`;
-        const { allowed, canRead } = await readable(request, query.actingSubject, target);
+        const { allowed, canRead, principal } = await readable(request, query.actingSubject, target);
         if (!allowed) return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
-        const read = await readSemanticCurrent(work.environment, target, canRead);
+        const read = await readingPositionRead(work, request, principal, query.actingSubject,
+          boundary => readSemanticCurrent(work.environment, target, canRead, records => boundary.visible(records)));
         if (!read) return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
         return Response.json(readBody(read), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return semanticError(error); }
     })
     .get('/v1/semantic/resources/:id/revisions/:revision', {
       params: t.Object({ id: groupUuid, revision: groupUuid }),
-      query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
+      query: t.Object({ actingSubject: t.Optional(native), position: readingPositionQuery }, { additionalProperties: false }),
       response: { 200: semanticRead, ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
         const target = `https://rezics.com/id/${params.id}`;
-        const { allowed, canRead } = await readable(request, query.actingSubject, target,
+        const { allowed, canRead, principal } = await readable(request, query.actingSubject, target,
           `https://rezics.com/id/${params.revision}`);
         if (!allowed) return problem(404, 'revision_unavailable', 'Revision is unavailable');
-        const read = await readSemanticRevision(work.environment, target,
-          `https://rezics.com/id/${params.revision}`, canRead);
+        const read = await readingPositionRead(work, request, principal, query.actingSubject,
+          boundary => readSemanticRevision(work.environment, target,
+            `https://rezics.com/id/${params.revision}`, canRead, records => boundary.visible(records)));
         if (!read) return problem(404, 'revision_unavailable', 'Revision is unavailable');
         return Response.json(readBody(read), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return semanticError(error); }

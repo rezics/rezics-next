@@ -7,4 +7,9 @@ export const revelationReads = [
   { id: 'zone', method: 'GET', path: '/v1/zones/:id/routes' },
   { id: 'members', method: 'GET', path: '/v1/collections/:id' },
   { id: 'retained-members', method: 'GET', path: '/v1/collections/:id/revisions/:revision' },
+  { id: 'semantic', method: 'GET', path: '/v1/semantic/resources/:id' },
+  { id: 'retained-semantic', method: 'GET', path: '/v1/semantic/resources/:id/revisions/:revision' },
+  { id: 'statement', method: 'GET', path: '/v1/statements/:id' },
+  { id: 'relation', method: 'GET', path: '/v1/relations/:id' },
+  { id: 'retained-relation', method: 'GET', path: '/v1/relations/:id/revisions/:revision' },
 ] as const;
