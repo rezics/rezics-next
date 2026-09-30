@@ -81,25 +81,17 @@ export function agoText(at: string, locale: UiLocale, now = Date.now()): string 
 }
 
 /**
- * What a reader checks before opening a Work, as its field's sites list it: a
- * mod's environment, loaders and game versions (Modrinth), a serial's status,
- * chapters and length (novel sites), and when it last changed. Each fact is
- * Main's; a Work without one shows nothing for it.
+ * What a reader checks before opening a Work: its status, chapters and length,
+ * and when it last changed. Each fact is Main's; a Work without one shows
+ * nothing for it.
  */
 export function WorkFacts({ work, locale, messages, className }: {
   work: ZoneWork; locale: UiLocale; messages: ZoneMessages; className?: string;
 }) {
   const t = materializeData(messages, { locale });
-  const { mod } = work;
-  const exact = mod?.selected;
-  const at = exact?.publishedAt ?? mod?.updatedAt ?? work.latestChapter?.at ?? work.updatedAt;
+  const at = work.latestChapter?.at ?? work.updatedAt;
   const ago = at ? agoText(at, locale) : null;
-  const versions = exact?.gameVersions ?? [];
   const facts = [
-    exact?.side ? { key: 'env', text: exact.side === 'client' ? messages.envClient : messages.envServer } : null,
-    ...(exact?.loaders ?? []).map(loader => ({ key: loader, text: loader, code: true })),
-    ...versions.slice(0, 3).map(version => ({ key: version, text: version, code: true })),
-    versions.length > 3 ? { key: 'more', text: `+${versions.length - 3}` } : null,
     work.status ? { key: 'status', text: { ongoing: messages.statusOngoing, completed: messages.statusCompleted,
       hiatus: messages.statusHiatus }[work.status] } : null,
     work.chapters ? { key: 'chapters', text: t.chapters(work.chapters) } : null,
@@ -156,9 +148,6 @@ export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, heading
   const Heading = `h${headingLevel}` as const;
   const title = workTitle(work, messages);
   const card = catalogueWork(work);
-  const exact = work.mod?.selected;
-  const required = exact?.dependencies?.filter(item => item.requirement === 'required'
-    && (!item.side || item.side === exact.side)) ?? [];
   // A chart's position leads the row in its own column, clear of the cover.
   return <article className={cn('group/tile relative grid items-start gap-x-3', rank
     ? compact ? 'grid-cols-[auto_4.5rem_minmax(0,1fr)_auto]' : 'grid-cols-[auto_5rem_minmax(0,1fr)_auto]'
@@ -177,17 +166,6 @@ export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, heading
       {work.tagline ? <p lang={work.tagline.lang} dir={work.tagline.dir} className={cn('text-pretty',
         'text-muted-foreground text-sm/snug', compact ? 'line-clamp-1' : 'line-clamp-2')}>{work.tagline.value}</p>
         : null}
-      {work.mod ? exact ? <div data-release-state={exact.state}
-        className="grid gap-0.5 text-muted-foreground text-xs">
-        <p>{exact.state === 'stale' ? messages.modOlderCompatible : `${messages.modCompatibility}:`}
-          {' '}<strong translate="no">{exact.version ?? '—'}</strong>
-          {' · '}{exact.channel === 'beta' ? messages.modChannelBeta
-            : exact.channel === 'alpha' ? messages.modChannelAlpha
-              : exact.channel === 'release' ? messages.modChannelRelease : messages.modChannelUnknown}</p>
-        <p>{exact.dependencies === null ? messages.modDependenciesUnknown
-          : required.length ? `${messages.modRequired}: ${required.map(item => item.id).join(', ')}`
-            : messages.modNoDependencies}</p>
-      </div> : <p className="text-muted-foreground text-xs">{messages.modChooseForDetails}</p> : null}
       {work.latestChapter?.title ? <p lang={work.latestChapter.title.lang} className="line-clamp-1 text-primary text-sm">
         <LocalizedLink href={work.latestChapter.href} className="rounded-sm outline-none hover:underline
           focus-visible:ring-2 focus-visible:ring-ring">{t.newChapter({ chapter: work.latestChapter.title.value })}

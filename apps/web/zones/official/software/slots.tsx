@@ -1,21 +1,9 @@
 import { WorkCover } from '@rezics/ui/work-cover';
 import { type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps,
-  type ZoneSoftwareFacts, type ZoneWork } from '@rezics/zone-sdk';
-import { ArrowUpRightIcon, CodeXmlIcon } from 'lucide-react';
+  type ZoneWork } from '@rezics/zone-sdk';
 import { strings } from './strings.ts';
 
-function AppFacts({ software, locale }: { software: ZoneSoftwareFacts | null | undefined; locale: string }) {
-  const t = strings(locale);
-  if (!software) return <p className="sz-unknown">{t.versionUnknown}</p>;
-  const platforms = [...new Set(software.releases.map(release => release.platform))];
-  const versions = [...new Set(software.releases.map(release => release.version).filter(Boolean))];
-  return <div className="sz-facts">
-    {platforms.length ? <p>{t.platforms}: {platforms.join(' · ')}</p> : null}
-    <p>{software.license ?? t.licenseUnknown} · {versions.length === 1 ? versions[0] : t.versionUnknown}</p>
-  </div>;
-}
-
-/** Compact app card: enough provenance to decide whether to inspect it. */
+/** A cover, its title and its hook. */
 export function SoftwareCard({ zone, work, layout, rank, Link }: WorkCardSlotProps) {
   const t = strings(zone.locale);
   return <article className="sz-card" data-layout={layout}>
@@ -26,13 +14,6 @@ export function SoftwareCard({ zone, work, layout, rank, Link }: WorkCardSlotPro
         {rank ? `${rank}. ` : null}{work.title?.value ?? t.untitled}</Link></h3>
       {layout !== 'rail' && work.tagline ? <p className="sz-pitch" lang={work.tagline.lang} dir={work.tagline.dir}>
         {work.tagline.value}</p> : null}
-      {layout !== 'rail' ? <AppFacts software={work.software} locale={zone.locale} /> : null}
-      {layout !== 'rail' && work.software ? <div className="sz-links">
-        <a href={work.software.project} target="_blank" rel="noopener noreferrer">
-          {t.project}<ArrowUpRightIcon aria-hidden="true" /></a>
-        <a href={work.software.source} target="_blank" rel="noopener noreferrer">
-          <CodeXmlIcon aria-hidden="true" />{t.source}</a>
-      </div> : null}
     </div>
   </article>;
 }
@@ -48,12 +29,7 @@ function Lead({ work, locale, Link, whyHere }: {
       <h3 lang={work.title?.lang} dir={work.title?.dir}><Link href={work.href}>
         {work.title?.value ?? t.untitled}</Link></h3>
       {work.tagline ? <p lang={work.tagline.lang} dir={work.tagline.dir}>{work.tagline.value}</p> : null}
-      <AppFacts software={work.software} locale={locale} />
-      <div className="sz-lead-actions">
-        {work.software ? <a href={work.software.project} target="_blank" rel="noopener noreferrer"
-          className="sz-project">{t.project}<ArrowUpRightIcon aria-hidden="true" /></a> : null}
-        {whyHere(work)}
-      </div>
+      <div className="sz-lead-actions">{whyHere(work)}</div>
     </div>
   </div>;
 }

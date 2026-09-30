@@ -8,18 +8,12 @@ import software from '../../zones/official/software/index.tsx';
 
 const text = (value: string) => ({ value, lang: 'en', dir: 'ltr' as const });
 const titles = ['Firefox', 'GIMP', 'Blender', 'Krita'];
-const licenses = ['MPL-2.0', 'GPL-3.0-or-later', 'GPL-3.0-or-later', 'GPL-3.0-or-later'];
 const works: ZoneWork[] = titles.map((title, index) => {
   const id = `00000000-0000-7000-8001-${String(index + 1).padStart(12, '0')}`;
-  const url = `https://example.org/${title.toLowerCase()}`;
   return { id: `https://rezics.com/id/${id}`, href: `/w/${id}`, title: text(title), cover: null,
     kind: 'package', author: null, tagline: text(['Browse the web.', 'Edit raster images.',
       'Create 3D scenes.', 'Paint and illustrate.'][index]!), status: null, chapters: null, words: null,
-    updatedAt: null, decision: `/r/software/decisions#decision-${index}`,
-    software: { maintainer: `${title} contributors`, license: licenses[index]!, project: url,
-      source: `${url}/source`, screenshots: [], releases: ['Linux', 'Windows'].map(platform => ({
-        platform, architecture: null, version: null, changes: null, destination: url })),
-      alternatives: [] } };
+    updatedAt: null, decision: `/r/software/decisions#decision-${index}` };
 });
 
 function Page({ locale = 'en' }: { locale?: 'en' | 'zh-Hans' }) {
@@ -50,11 +44,12 @@ type Story = StoryObj<typeof meta>;
 export const Desktop: Story = { async play({ canvasElement }) {
   const canvas = within(canvasElement);
   await expect(canvas.getByRole('heading', { name: 'Featured apps', level: 2 })).toBeVisible();
-  await expect(canvas.getAllByText(/Version not tracked/)[0]).toBeVisible();
-  await expect(canvas.getAllByRole('link', { name: 'Project website' })[0]).toBeVisible();
+  await expect(canvas.getAllByText('Browse the web.')[0]).toBeVisible();
+  await expect(canvas.queryByText(/Version not tracked/)).toBeNull();
+  await expect(canvas.queryByRole('link', { name: 'Project website' })).toBeNull();
   await expect(canvas.getAllByRole('link', { name: 'Why Firefox is here' })[0]).toBeVisible();
 } };
 export const Chinese: Story = { args: { locale: 'zh-Hans' }, async play({ canvasElement }) {
   await expect(within(canvasElement).getByRole('heading', { name: '精选应用', level: 2 })).toBeVisible();
-  await expect(within(canvasElement).getAllByText(/暂无版本记录/)[0]).toBeVisible();
+  await expect(within(canvasElement).queryByText(/暂无版本记录/)).toBeNull();
 } };

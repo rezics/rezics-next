@@ -1,35 +1,9 @@
 import { WorkCover } from '@rezics/ui/work-cover';
-import { type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps,
-  type ZoneGameFacts, type ZoneLinkProps, type ZoneWork } from '@rezics/zone-sdk';
-import { ArrowUpRightIcon } from 'lucide-react';
-import type { ComponentType } from 'react';
+import { type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps }
+  from '@rezics/zone-sdk';
 import { strings } from './strings.ts';
 
-function Review({ game, locale }: { game: ZoneGameFacts | null | undefined; locale: string }) {
-  const t = strings(locale);
-  if (!game?.review) return <span className="gz-unknown">{t.reviewsUnknown}</span>;
-  return <span className="gz-review">{game.review.label} · {new Intl.NumberFormat(locale).format(game.review.count)}
-    {' '}{t.reviews} ({game.review.period})</span>;
-}
-
-function Details({ work, locale, Link, officialLink = true }: { work: ZoneWork; locale: string;
-  Link: ComponentType<ZoneLinkProps>; officialLink?: boolean }) {
-  const game = work.game;
-  if (!game) return <p className="gz-meta"><Review game={null} locale={locale} /></p>;
-  const t = strings(locale);
-  return <div className="gz-details">
-    <p className="gz-meta"><span>{t[game.status]}</span><Review game={game} locale={locale} /></p>
-    {game.tags.length ? <ul className="gz-tags" aria-label={t.tags}>
-      {game.tags.slice(0, 3).map(tag => <li key={tag}>{tag}</li>)}</ul> : null}
-    {game.platforms.length ? <p className="gz-platforms">{t.platforms}: {game.platforms.join(', ')}</p> : null}
-    {game.languages.length ? <p className="gz-platforms">{t.languages}: {game.languages.join(', ')}</p> : null}
-    {officialLink ? <Link href={game.source} target="_blank" rel="noopener noreferrer" className="gz-official">
-      {t.officialPage}<ArrowUpRightIcon aria-hidden="true" /></Link> : null}
-    {game.modsZone ? <Link href="/r/mods" className="gz-mods">{t.mods}</Link> : null}
-  </div>;
-}
-
-/** Covers lead; review population appears only when Main supplied it. */
+/** A cover, its title and its hook. */
 export function GamesCard({ zone, work, layout, rank, Link }: WorkCardSlotProps) {
   const t = strings(zone.locale);
   return <article className="gz-card" data-layout={layout}>
@@ -41,7 +15,6 @@ export function GamesCard({ zone, work, layout, rank, Link }: WorkCardSlotProps)
         {work.title?.value ?? t.untitled}</Link></h3>
       {layout !== 'rail' && work.tagline ? <p className="gz-pitch" lang={work.tagline.lang} dir={work.tagline.dir}>
         {work.tagline.value}</p> : null}
-      {layout !== 'rail' ? <Details work={work} locale={zone.locale} Link={Link} /> : null}
     </div>
   </article>;
 }
@@ -62,10 +35,7 @@ export function GamesHero({ zone, banners, card, whyHere, Link, fallback }: Hero
           <h3 lang={lead.title?.lang} dir={lead.title?.dir}>
             <Link href={lead.href}>{lead.title?.value ?? t.untitled}</Link></h3>
           {lead.tagline ? <p lang={lead.tagline.lang} dir={lead.tagline.dir}>{lead.tagline.value}</p> : null}
-          <Details work={lead} locale={zone.locale} Link={Link} officialLink={false} />
           <div className="gz-featured-actions">
-            {lead.game ? <Link href={lead.game.source} target="_blank" rel="noopener noreferrer" className="gz-action">
-              {t.officialPage}<ArrowUpRightIcon aria-hidden="true" /></Link> : null}
             <Link href={lead.href}>{t.details}</Link>{whyHere(lead)}</div>
         </div>
       </div>

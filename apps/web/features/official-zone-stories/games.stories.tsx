@@ -15,12 +15,7 @@ const works: ZoneWork[] = titles.map((title, index) => {
       'Build a farm and settle into a small town.', 'Take on the Titan of Time as Melinoë.',
       'Study magic in a seaside town.', 'Investigate a solar system caught in a time loop.'][index]!),
     status: null, chapters: null, words: null, updatedAt: null,
-    decision: `/r/games/decisions#decision-${index}`,
-    game: { source: `https://example.org/${title.toLowerCase().replaceAll(' ', '-')}`,
-      status: index === 2 ? 'upcoming' : 'released', releaseDate: null,
-      platforms: ['Windows'], languages: ['English'], tags: index === 0 ? ['Farming', 'Life sim'] : ['Exploration'],
-      screenshots: [], review: index === 0 ? { label: 'Very positive', count: 128, period: 'overall' } : null,
-      modsZone: index === 0 } };
+    decision: `/r/games/decisions#decision-${index}` };
 });
 
 function Page({ locale = 'en' }: { locale?: 'en' | 'zh-Hans' }) {
@@ -51,13 +46,13 @@ type Story = StoryObj<typeof meta>;
 export const Desktop: Story = { async play({ canvasElement }) {
   const canvas = within(canvasElement);
   await expect(canvas.getByRole('heading', { name: 'Featured games', level: 2 })).toBeVisible();
-  await expect(canvas.getAllByText(/Very positive · 128 reviews/)[0]).toBeVisible();
-  await expect(canvas.getAllByRole('link', { name: 'Browse mods' })[0]).toBeVisible();
-  await expect(canvas.getAllByRole('link', { name: 'Official page' })[0])
-    .toHaveAttribute('href', 'https://example.org/stardew-valley');
+  await expect(canvas.getAllByText('Build a farm and settle into a small town.')[0]).toBeVisible();
+  await expect(canvas.queryByText(/Very positive/)).toBeNull();
+  await expect(canvas.queryByRole('link', { name: 'Browse mods' })).toBeNull();
+  await expect(canvas.queryByRole('link', { name: 'Official page' })).toBeNull();
   await expect(canvas.getAllByRole('link', { name: 'Why Stardew Valley is here' })[0]).toBeVisible();
 } };
 export const Chinese: Story = { args: { locale: 'zh-Hans' }, async play({ canvasElement }) {
   await expect(within(canvasElement).getByRole('heading', { name: '精选游戏', level: 2 })).toBeVisible();
-  await expect(within(canvasElement).getAllByRole('link', { name: '浏览模组' })[0]).toBeVisible();
+  await expect(within(canvasElement).queryByRole('link', { name: '浏览模组' })).toBeNull();
 } };

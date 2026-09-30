@@ -1,7 +1,6 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { LibraryBigIcon } from 'lucide-react';
 import type { Metadata } from 'next';
-import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { isUiLocale, type UiLocale } from '../../i18n/define.ts';
@@ -10,8 +9,7 @@ import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { ZoneBrowse } from '../zones/browse.tsx';
-import { MOD_ENV_COOKIE, type BrowseFacet, browseFacets, mainBrowseQuery, parseBrowseState,
-  readModPreference, withModPreference } from '../zones/browse-state.ts';
+import { type BrowseFacet, browseFacets, mainBrowseQuery, parseBrowseState } from '../zones/browse-state.ts';
 import { browseEntry, browseModel, type FacetCounts } from '../zones/browse-view.ts';
 import { cardRenderer, ZoneHome } from '../zones/zone-home.tsx';
 import { zoneDecision, zoneText, zoneWork } from './adapt.ts';
@@ -95,10 +93,8 @@ export function RealmHomeRoute(props: RealmRouteProps) {
     // The home leads with search and the values a browse page filters by; its counts come from one browse read.
     const [modules, window] = await Promise.all([loadModules(view.presentation, view.context, view.bannerMedia),
       readZoneBrowse(realm, locale, { limit: 1 })]);
-    const remembered = view.context.ref === 'mods'
-      ? readModPreference((await cookies()).get(MOD_ENV_COOKIE)?.value) : {};
     const browse = browseEntry({ base: view.zone.links.browse, zoneName: view.zone.name.value,
-      counts: window.ok ? facetCounts(window.data) : null, locale, messages: view.zoneMessages, remembered });
+      counts: window.ok ? facetCounts(window.data) : null, locale, messages: view.zoneMessages });
     return <div className="grid gap-6">
       {view.reader.actingSubject ? <CommunitySetupChecklist realm={view.realm.realm}
         actor={view.reader.actingSubject} path={`/r/${view.context.ref}`} locale={view.context.locale}
@@ -119,10 +115,7 @@ export function RealmHomeRoute(props: RealmRouteProps) {
  */
 export function RealmBrowseRoute(props: RealmRouteProps) {
   return realmRoute(props, 'browse', async (view, locale, search) => {
-    const parsed = parseBrowseState(search);
-    const state = view.context.ref === 'mods'
-      ? withModPreference(parsed, readModPreference((await cookies()).get(MOD_ENV_COOKIE)?.value),
-        ['version', 'loader', 'env'].some(key => search[key] !== undefined)) : parsed;
+    const state = parseBrowseState(search);
     const [page, facets] = await Promise.all([readZoneBrowse(view.context.realm, locale, mainBrowseQuery(state)),
       readFacets()]);
     if (!page.ok) return failure(view, 'browse', page.failure);

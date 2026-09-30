@@ -9,11 +9,11 @@ import type { ModuleState, PlacedModule } from './zone-home.tsx';
 
 // Story data for the official Books, Mods and AI Workshop Zones. `rich` is the
 // catalogue each Zone is designed for: authors, hooks, serial states, update
-// times, genre chips, charts, people, mod releases and tested models. `seeded`
-// is what the local demo's Main serves today (scripts/dev/seed/official-plan.ts):
-// picks, the latest shelf, one editors' list and decisions, with no credited
-// authors, some Works still without a hook, mods bound to one verified release
-// and prompts without tested models, so each package is also seen at its thinnest.
+// times, genre chips, charts, people and tested models. `seeded` is what the
+// local demo's Main serves today (scripts/dev/seed/official-plan.ts): picks,
+// the latest shelf, one editors' list and decisions, with no credited authors,
+// some Works still without a hook and prompts without tested models, so each
+// package is also seen at its thinnest.
 
 export type OfficialSlug = 'books' | 'mods' | 'ai-workshop';
 export type Catalogue = 'rich' | 'seeded';
@@ -27,9 +27,6 @@ const text = (value: string, lang: string): ZoneText => ({ value, lang, dir: 'lt
 interface Seed {
   key: string; title: string; lang: string; author?: string; tagline?: string; taglineLang?: string;
   kind?: ZoneWork['kind']; status?: ZoneWork['status']; updated?: number; chapters?: number;
-  /** A bound mod release; `released` is days ago, and the game defaults to Minecraft 1.21.1. */
-  mod?: { loader: string; version: string | null; released: number; game?: string; gameVersions?: string[];
-    environment?: 'client' | 'server' | 'client-and-server' };
   /** A published prompt or Skill; `tested` models show in the rich catalogue only, as the demo records none. */
   hub?: { kind: 'prompt' | 'skill'; text: string; description?: string; tested?: string[] };
 }
@@ -65,11 +62,6 @@ function worksOf(slug: OfficialSlug, seeds: readonly Seed[], locale: UiLocale, c
       words: null,
       updatedAt: rich && seed.updated !== undefined ? daysAgo(seed.updated) : null,
       decision: decisionHref(slug, locale, seed.key),
-      mod: seed.mod ? { game: seed.mod.game ?? 'Minecraft', gameVersions: seed.mod.gameVersions ?? ['1.21.1'],
-        // The demo binds every release when it seeds.
-        loaders: [seed.mod.loader], environment: seed.mod.environment ?? null, version: seed.mod.version,
-        updatedAt: daysAgo(rich ? seed.mod.released : 0) }
-        : null,
       // Main names no language for a Hub card's text.
       hub: seed.hub ? { kind: seed.hub.kind, preview: text(excerpt(seed.hub), ''), copyText: seed.hub.text,
         testedModels: rich ? seed.hub.tested ?? [] : [] } : null };
@@ -117,17 +109,13 @@ const books: readonly (Seed & { seeded?: boolean })[] = [
 
 const mods: readonly (Seed & { seeded?: boolean })[] = [
   { key: 'lumen-fabric', seeded: true, title: 'Lumen Lanterns', lang: 'en', author: 'jun', kind: 'package',
-    tagline: 'Warm lantern light for Minecraft 1.21.1 on Fabric.', status: 'ongoing', updated: 1,
-    mod: { loader: 'Fabric', version: '1.3.0', released: 1, gameVersions: ['1.21.1', '1.20.1'], environment: 'client' } },
+    tagline: 'Warm lantern light for Minecraft 1.21.1 on Fabric.', status: 'ongoing', updated: 1 },
   { key: 'weaver-forge', seeded: true, title: 'Chunk Weaver', lang: 'en', author: 'lattice', kind: 'package',
-    tagline: 'Prepare nearby Minecraft chunks before you explore on Forge.', status: 'ongoing', updated: 3,
-    mod: { loader: 'Forge', version: '1.4.2', released: 3, environment: 'client-and-server' } },
+    tagline: 'Prepare nearby Minecraft chunks before you explore on Forge.', status: 'ongoing', updated: 3 },
   { key: 'tidy-fabric', seeded: true, title: 'Tidy Inventory', lang: 'en', author: 'boxwright', kind: 'package',
-    tagline: 'Sort chests with one key on Minecraft 1.21.1 with Fabric.', status: 'ongoing', updated: 9,
-    mod: { loader: 'Fabric', version: '2.0.1', released: 9, environment: 'client-and-server' } },
+    tagline: 'Sort chests with one key on Minecraft 1.21.1 with Fabric.', status: 'ongoing', updated: 9 },
   { key: 'quiet-forge', seeded: true, title: 'Quiet Villagers', lang: 'en', author: '木桶', kind: 'package',
-    tagline: 'Quieter trading sounds for Minecraft 1.21.1 with Forge.', status: 'hiatus', updated: 200,
-    mod: { loader: 'Forge', version: '1.0.2', released: 200, environment: 'client' } },
+    tagline: 'Quieter trading sounds for Minecraft 1.21.1 with Forge.', status: 'hiatus', updated: 200 },
   { key: 'shader-guide', seeded: true, title: 'Minecraft shaders: a gentle first setup', lang: 'en', author: 'jun',
     tagline: 'Pick one shader pack, tune three settings, keep your frame rate.', status: 'ongoing', updated: 2 },
   { key: 'stardew-farm', seeded: true, title: '星露谷物语 · 春季农场整合包', lang: 'zh-Hans', author: '阿俊',
@@ -135,11 +123,9 @@ const mods: readonly (Seed & { seeded?: boolean })[] = [
   { key: 'mod-guide', seeded: true, title: 'Mod setup checklist', lang: 'en', author: 'Mei', status: 'completed',
     updated: 40 },
   { key: 'harvest-ledger', title: 'Harvest Ledger', lang: 'en', author: 'pelican-town', kind: 'package',
-    status: 'completed', updated: 90, tagline: 'Every crop, gift and birthday in one quiet overlay.',
-    mod: { game: 'Stardew Valley', gameVersions: ['1.6'], loader: 'SMAPI', version: '2.2.0', released: 90 } },
+    status: 'completed', updated: 90, tagline: 'Every crop, gift and birthday in one quiet overlay.' },
   { key: 'lantern-roads', title: 'Lantern Roads', lang: 'en', author: 'nightwatch', kind: 'package', status: 'ongoing',
-    updated: 12, tagline: 'Lanterns along every road, so night travel feels safe.',
-    mod: { loader: 'NeoForge', gameVersions: ['1.21'], version: null, released: 12 } },
+    updated: 12, tagline: 'Lanterns along every road, so night travel feels safe.' },
   { key: 'crash-doctor', title: '崩溃日志五问', lang: 'zh-Hans', author: '阿俊', status: 'completed', updated: 20,
     tagline: '五个问题，读懂一份崩溃日志。' },
 ];
@@ -319,7 +305,6 @@ function bookPeople(locale: UiLocale): ZonePerson[] {
 
 const typeOf = { book: 'https://schema.org/Book', document: 'https://schema.org/DigitalDocument',
   recipe: 'https://schema.org/Recipe', package: 'https://rezics.com/vocab/ModPackage' } as const;
-const mainLoaders = ['Fabric', 'Forge', 'NeoForge'];
 
 /** What Main's browse read would match for each Facet value among `works`, most common first. */
 export function browseCounts(works: readonly ZoneWork[]): FacetCounts {
@@ -329,15 +314,7 @@ export function browseCounts(works: readonly ZoneWork[]): FacetCounts {
     return [...found].map(([value, count]) => ({ value, count }))
       .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
   };
-  // Main lists Minecraft releases only (`mod-work-card-v2`).
-  const minecraft = (work: ZoneWork) => work.mod?.game === 'Minecraft' ? work.mod : null;
-  return { modLoader: tally(work => minecraft(work)?.loaders.filter(loader => mainLoaders.includes(loader)) ?? []),
-    modGameVersion: tally(work => minecraft(work)?.gameVersions ?? []),
-    modEnvironment: tally(work => { const environment = minecraft(work)?.environment;
-      return !environment ? [] : environment === 'client-and-server' ? ['client', 'server'] : [environment]; }),
-    modRequiredDependency: tally(work => minecraft(work)?.selected?.dependencies?.filter(item =>
-      item.requirement === 'required').map(item => item.id) ?? []),
-    concept: [], status: tally(work => work.status ? [work.status] : []), length: [],
+  return { concept: [], status: tally(work => work.status ? [work.status] : []), length: [],
     type: tally(work => [typeOf[work.kind]]) };
 }
 
@@ -354,11 +331,8 @@ export function officialBrowseModel(slug: OfficialSlug, locale: UiLocale, params
   const works = officialWorks(slug, locale, catalogue);
   const holds = (work: ZoneWork, except?: string) => Object.entries(state.filter).every(([facet, values]) =>
     facet === except || values.some(value => ({
-      modLoader: () => work.mod?.loaders.includes(value), modGameVersion: () => work.mod?.gameVersions.includes(value),
-      modEnvironment: () => work.mod?.environment === value || work.mod?.environment === 'client-and-server',
-      modRequiredDependency: () => work.mod?.selected?.dependencies?.some(item =>
-        item.requirement === 'required' && item.id === value),
       status: () => work.status === value, type: () => typeOf[work.kind] === value,
+      concept: () => false, length: () => false,
     } as Record<string, () => boolean | undefined>)[facet]?.() ?? false));
   const found = works.filter(work => holds(work) && (!state.text
     || work.title?.value.toLowerCase().includes(state.text.toLowerCase())));

@@ -1,17 +1,15 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@rezics/ui/tabs';
 import { WorkCover } from '@rezics/ui/work-cover';
 import { type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps, type ZoneLinkProps,
-  type ZoneModRelease, type ZoneWork } from '@rezics/zone-sdk';
+  type ZoneWork } from '@rezics/zone-sdk';
 import { HistoryIcon } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { strings } from './strings.ts';
 
-// Slots of the official Mods Zone, laid out as Modrinth lists projects: a
-// row per mod with its icon, name and author, one-line summary and what it
-// runs on (environment, loaders, game versions), and when it last changed at
-// the end. The Zone keeps REZICS's colours and type; only the layout is its
-// own. REZICS counts no downloads, so no row shows one. The platform keeps
-// each card's "Why here?" stamp in its top corner, which these rows leave free.
+// Slots of the official Mods Zone: a row per Work with its icon, name and
+// author, one-line summary, and when it last changed at the end. The Zone
+// keeps REZICS's colours and type; only the layout is its own. The platform
+// keeps each card's "Why here?" stamp in its top corner, which these rows leave free.
 
 type Strings = ReturnType<typeof strings>;
 const DAY = 86_400_000;
@@ -26,21 +24,6 @@ function ago(at: string, locale: string, now = Date.now()): string | null {
     : days < 365 ? format.format(-Math.floor(days / 30), 'month') : format.format(-Math.floor(days / 365), 'year');
 }
 
-/** The chosen release's date takes precedence on a compatibility-filtered result. */
-const lastUpdate = (work: ZoneWork) => work.mod?.selected?.publishedAt ?? work.mod?.updatedAt ?? work.updatedAt;
-
-/** What a player checks before installing: where it runs, its loaders and its game versions. */
-function Compatibility({ mod, t, limit = 3 }: { mod: Pick<ZoneModRelease,
-  'gameVersions' | 'loaders' | 'environment'>; t: Strings; limit?: number }) {
-  const versions = mod.gameVersions;
-  return <ul className="mh-tags" aria-label={t.compatibility}>
-    {mod.environment ? <li>{t.environments[mod.environment]}</li> : null}
-    {mod.loaders.map(loader => <li key={loader} translate="no">{loader}</li>)}
-    {versions.slice(0, limit).map(version => <li key={version} translate="no">{version}</li>)}
-    {versions.length > limit ? <li>+{versions.length - limit}</li> : null}
-  </ul>;
-}
-
 function Byline({ work, t, Link }: { work: ZoneWork; t: Strings; Link: ComponentType<ZoneLinkProps> }) {
   if (!work.author) return null;
   const [before, after] = t.by('⁣').split('⁣');
@@ -48,18 +31,13 @@ function Byline({ work, t, Link }: { work: ZoneWork; t: Strings; Link: Component
     {work.authorHref ? <Link href={work.authorHref}>{work.author.value}</Link> : work.author.value}{after}</span>;
 }
 
-/** A Modrinth-style result row; covers and rails keep the platform's own card. */
+/** A result row; covers and rails keep the platform's own card. */
 export function ModsCard({ zone, work, layout, rank, Link, fallback }: WorkCardSlotProps) {
   if (layout === 'cover') return fallback;
   const t = strings(zone.locale);
   const title = work.title?.value ?? t.untitled;
-  const at = lastUpdate(work);
+  const at = work.updatedAt;
   const when = at ? ago(at, zone.locale) : null;
-  const selected = work.mod?.selected;
-  const required = selected?.dependencies?.filter(item => item.requirement === 'required'
-    && (!item.side || item.side === selected.side)) ?? [];
-  const date = selected && !Number.isNaN(Date.parse(selected.publishedAt))
-    ? new Intl.DateTimeFormat(zone.locale, { dateStyle: 'medium' }).format(new Date(selected.publishedAt)) : null;
   return <article className="mh-row" data-layout={layout}>
     {rank ? <span className="mh-rank"><span className="sr-only">{t.rank(rank)}</span>
       <span aria-hidden="true">{rank}</span></span> : null}
@@ -72,16 +50,6 @@ export function ModsCard({ zone, work, layout, rank, Link, fallback }: WorkCardS
       </div>
       {work.tagline && layout === 'row' ? <p lang={work.tagline.lang} dir={work.tagline.dir} className="mh-summary">
         {work.tagline.value}</p> : null}
-      {selected ? <div data-release-state={selected.state} className="mh-release">
-        <p className="mh-release-name">{selected.state === 'stale' ? t.olderRelease : t.exactRelease}:
-          {' '}<strong translate="no">{selected.version ?? t.versionUnknown}</strong>
-          {' · '}{selected.channel ? t[selected.channel] : t.channelUnknown}
-          {date ? <> · <time dateTime={selected.publishedAt}>{date}</time></> : null}</p>
-        <Compatibility mod={selected} t={t} limit={layout === 'rail' ? 1 : 3} />
-        <p className="mh-required">{selected.dependencies === null ? t.dependenciesUnknown
-          : required.length ? `${t.required}: ${required.map(item => item.id).join(', ')}` : t.noRequired}</p>
-        <Link href={`${work.href}#mod-versions`} className="mh-inspect">{t.inspect}</Link>
-      </div> : work.mod ? <p className="mh-release-unknown">{t.chooseEnvironment}</p> : null}
     </div>
     {when && layout === 'row' ? <p className="mh-updated"><HistoryIcon aria-hidden="true" />
       <time dateTime={at ?? undefined}>{t.updated(when)}</time></p> : null}

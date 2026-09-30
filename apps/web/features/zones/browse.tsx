@@ -11,8 +11,6 @@ import { slotRatio } from '../catalogue/work.ts';
 import type { BrowseFacetGroup, BrowseModel } from './browse-view.ts';
 import type { ZoneMessages } from './messages.ts';
 import type { CardRenderer } from './modules.tsx';
-import { ModPreferenceMemory } from './mod-preference.tsx';
-import { modPreference } from './browse-state.ts';
 
 // A Zone's browse page, laid out as search-first catalogues are (Modrinth's
 // search, a novel site's library): search and sort above the results, the
@@ -49,21 +47,17 @@ const chip = cn('inline-flex h-8 items-center gap-1.5 rounded-full border border
 
 /**
  * What a Zone home leads with: its search, then the values Main measures as
- * one-filter links (loaders and game versions for mods, status and length for
- * serials), each with how many picks it opens.
+ * one-filter links (status and length), each with how many picks it opens.
  */
 export function ZoneBrowseBar({ browse, messages }: { browse: ZoneBrowseEntry; messages: ZoneMessages }) {
-  const content = <section aria-label={browse.searchLabel} data-zone-browse-bar="" className="grid grid-cols-1 gap-3">
-    {browse.href.includes('/r/mods/browse') ? <p className="text-muted-foreground text-sm">
-      {messages.facetGame}: <strong translate="no" className="text-foreground">Minecraft</strong>
-      {' · '}{messages.modChooseEnvironment}</p> : null}
+  return <section aria-label={browse.searchLabel} data-zone-browse-bar="" className="grid grid-cols-1 gap-3">
     {browse.groups.length ? <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
       {browse.groups.map(group => <div key={group.facet} className="flex flex-wrap items-center gap-1.5">
         <span className="me-0.5 text-muted-foreground text-xs">{group.label}</span>
         <ul className="contents">
           {group.chips.map(item => <li key={item.value}>
             <LocalizedLink href={item.href} lang={item.label.lang || undefined} className={chip}>
-              <span translate={group.facet.startsWith('mod') ? 'no' : undefined}>{item.label.value}</span>
+              <span>{item.label.value}</span>
               <span className="text-muted-foreground text-xs tabular-nums">{item.count}</span>
             </LocalizedLink></li>)}
         </ul>
@@ -74,7 +68,6 @@ export function ZoneBrowseBar({ browse, messages }: { browse: ZoneBrowseEntry; m
     <BrowseSearch action={browse.href} label={browse.searchLabel} placeholder={browse.placeholder}
       submit={messages.search} kept={browse.kept} />
   </section>;
-  return browse.href.includes('/r/mods/browse') ? <ModPreferenceMemory>{content}</ModPreferenceMemory> : content;
 }
 
 const MANY = 6;
@@ -88,7 +81,7 @@ function FacetValues({ group, messages }: { group: BrowseFacetGroup; messages: Z
         group-aria-[current=true]/value:border-primary group-aria-[current=true]/value:bg-primary
         group-aria-[current=true]/value:text-primary-foreground">
         {value.chosen ? <CheckIcon className="size-3" /> : null}</span>
-      <span className="min-w-0 flex-1 truncate" translate={group.facet.startsWith('mod') ? 'no' : undefined}>
+      <span className="min-w-0 flex-1 truncate">
         {value.label.value}{value.chosen ? <span className="sr-only"> ({messages.chosen})</span> : null}</span>
       <span className="text-muted-foreground text-xs tabular-nums">{value.count}</span>
     </LocalizedLink>
@@ -139,10 +132,6 @@ export function ZoneBrowse({ model, card, messages }: {
   model: BrowseModel; card: CardRenderer; messages: ZoneMessages;
 }) {
   const chosen = model.chosen.length;
-  const isMods = model.action.includes('/r/mods/browse');
-  const isEnvironment = (facet: string) => ['modGameVersion', 'modLoader', 'modEnvironment'].includes(facet);
-  const environmentGroups = isMods ? model.groups.filter(group => isEnvironment(group.facet)) : [];
-  const otherGroups = isMods ? model.groups.filter(group => !isEnvironment(group.facet)) : model.groups;
   const slot = slotRatio(model.items);
   const list = (items: readonly ZoneWork[]) => model.state.view === 'grid'
     ? <ul className="grid grid-cols-2 gap-x-(--zone-shelf-gap) gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
@@ -150,18 +139,10 @@ export function ZoneBrowse({ model, card, messages }: {
     : <ul className="grid grid-cols-1 divide-y divide-border/60 rounded-(--zone-radius-card) border border-border/60
       bg-card">
       {items.map(work => <li key={work.id} className="min-w-0 p-3 sm:p-4">{card(work, { layout: 'row' })}</li>)}</ul>;
-  const content = <PageContainer className="grid grid-cols-1 gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
-    {isMods ? <section aria-label={messages.modChooseEnvironment}
-      className="grid gap-4 rounded-xl border border-border/80 bg-card p-4 lg:col-span-2">
-      <h2 className="font-medium text-sm">{messages.modChooseEnvironment}</h2>
-      <p className="text-muted-foreground text-sm">{messages.facetGame}: <strong translate="no"
-        className="text-foreground">Minecraft</strong></p>
-      <Facets groups={environmentGroups} messages={messages} idPrefix="environment"
-        className="sm:grid-cols-3" />
-    </section> : null}
+  return <PageContainer className="grid grid-cols-1 gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
     <aside aria-labelledby="browse-filters" className="hidden lg:sticky lg:top-32 lg:block">
       <h2 id="browse-filters" className="sr-only">{messages.filters}</h2>
-      <Facets groups={otherGroups} messages={messages} idPrefix="facet" />
+      <Facets groups={model.groups} messages={messages} idPrefix="facet" />
     </aside>
     <section aria-labelledby="browse-title" className="grid min-w-0 grid-cols-1 gap-4">
       <h2 id="browse-title" className="sr-only">{model.title}</h2>
@@ -177,12 +158,12 @@ export function ZoneBrowse({ model, card, messages }: {
               : <LayoutGridIcon aria-hidden="true" className="size-4" />}
             <span className="sr-only">{item.label}</span></> }))} />
       </div>
-      {otherGroups.length ? <details className="rounded-xl border border-border/80 bg-card lg:hidden">
+      {model.groups.length ? <details className="rounded-xl border border-border/80 bg-card lg:hidden">
         <summary className="flex h-11 cursor-pointer items-center gap-2 px-4 font-medium text-sm outline-none
           focus-visible:ring-2 focus-visible:ring-ring">
           <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
           {model.filtersLabel}</summary>
-        <div className="border-border/60 border-t p-2"><Facets groups={otherGroups} messages={messages}
+        <div className="border-border/60 border-t p-2"><Facets groups={model.groups} messages={messages}
           idPrefix="facet-phone" /></div>
       </details> : null}
       {chosen ? <ul aria-label={messages.filters} className="flex flex-wrap items-center gap-1.5">
@@ -208,6 +189,4 @@ export function ZoneBrowse({ model, card, messages }: {
       </nav> : null}
     </section>
   </PageContainer>;
-  return isMods ? <ModPreferenceMemory current={modPreference(model.state.filter)}>{content}</ModPreferenceMemory>
-    : content;
 }

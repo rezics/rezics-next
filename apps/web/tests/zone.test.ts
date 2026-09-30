@@ -2,11 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { packageDigest, workCoverProps, ZONE_PACKAGE_BUDGET, zonePresets, type ZoneTokens } from '@rezics/zone-sdk';
+import { packageDigest, workCoverProps, ZONE_PACKAGE_BUDGET, zonePresets, type ZoneTokens, type ZoneWork }
+  from '@rezics/zone-sdk';
 import type { ReactNode } from 'react';
 import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { coverProps } from '../features/catalogue/work.ts';
-import { zoneWorkCards } from '../features/zones/adapt-cards.ts';
+import { isoMoment, zoneWorkCards } from '../features/zones/adapt-cards.ts';
 import { catalogueWork } from '../features/zones/card.tsx';
 import { contrast, inkOn, mix, parseHex, readableOn, toHex } from '../features/zones/color.ts';
 import { isZonePage, zoneCsp, zoneNonce } from '../features/zones/csp.ts';
@@ -152,18 +153,25 @@ describe('Zone presentation', () => {
   });
 });
 
+const zoneWorkKeys = ['id', 'href', 'title', 'cover', 'kind', 'author', 'authorHref', 'tagline', 'status',
+  'chapters', 'words', 'updatedAt', 'latestChapter', 'decision', 'hub'] as const;
+type ExactZoneWorkKeys<Keys extends readonly (keyof ZoneWork)[]> =
+  [Exclude<keyof ZoneWork, Keys[number]>, Exclude<Keys[number], keyof ZoneWork>] extends [never, never] ? true : never;
+
 describe('Zone Work cards from Main', () => {
-  test('a mod keeps what its releases run on and its newest release; that release\u2019s time is its last update', () => {
-    expect(zoneWorkCards({ mod: { profile: 'mod-work-card-v2', game: 'Minecraft', gameVersions: ['1.21.1', '1.20.1'],
-      loaders: ['Fabric'], environment: 'client', latestRelease: '1.3.0', updatedAt: '2026-09-28T04:03:27.915Z' },
-    hub: null })).toEqual({ mod: { game: 'Minecraft', gameVersions: ['1.21.1', '1.20.1'], loaders: ['Fabric'],
-      environment: 'client', version: '1.3.0', updatedAt: '2026-09-28T04:03:27.915Z' }, hub: null });
+  test('ZoneWork’s keys are the generic card', () => {
+    const exact: ExactZoneWorkKeys<typeof zoneWorkKeys> = true;
+    expect(exact).toBe(true);
+    const work = { id: 'https://rezics.com/id/w', href: '/w/w', title: null, cover: null, kind: 'book',
+      author: null, authorHref: null, tagline: null, status: null, chapters: null, words: null, updatedAt: null,
+      latestChapter: null, decision: null, hub: null } satisfies ZoneWork;
+    expect(Object.keys(work).sort()).toEqual([...zoneWorkKeys].sort());
   });
 
   test('a published prompt or Skill copies exactly its published text and shows only its disclosed excerpt', () => {
     const skill = { profile: 'hub-work-card-v1' as const, kind: 'skill-package' as const, declaredModels: ['model-a'],
       testedModels: [], preview: 'Groups reading notes by theme.', copyText: '---\nname: reading-notes\n---\n' };
-    expect(zoneWorkCards({ mod: null, hub: skill })).toEqual({ mod: null, hub: { kind: 'skill',
+    expect(zoneWorkCards({ hub: skill })).toEqual({ hub: { kind: 'skill',
       preview: { value: 'Groups reading notes by theme.', lang: '', dir: 'ltr' },
       copyText: '---\nname: reading-notes\n---\n', testedModels: [] } });
     // Declared models are the author's intent, not a test; the card shows tested models only.
@@ -171,21 +179,13 @@ describe('Zone Work cards from Main', () => {
       .toMatchObject({ kind: 'prompt', testedModels: ['model-b'] });
   });
 
-  test('a release time Eden revived as a Date crosses to the page as the ISO string the SDK promises', () => {
-    const updatedAt = new Date('2026-09-28T04:27:33.000Z') as unknown as string;
-    const card = { profile: 'mod-work-card-v2' as const, game: 'Minecraft' as const, gameVersions: [],
-      loaders: ['Forge' as const], environment: null, latestRelease: null, updatedAt };
-    expect(zoneWorkCards({ mod: card }).mod?.updatedAt).toBe('2026-09-28T04:27:33.000Z');
-    expect(zoneWorkCards({ mod: { ...card, updatedAt: 'soon' } }).mod?.updatedAt).toBeNull();
-    expect(zoneWorkCards({ mod: { ...card, selected: { version: '1.2.0', gameVersions: ['1.20.1'],
-      loaders: ['Forge'], environment: 'client-and-server', side: 'server', state: 'stale', channel: 'release',
-      dependencies: [{ id: 'forge-config-api', requirement: 'required', range: null, side: null }],
-      publishedAt: updatedAt } } }).mod?.selected).toMatchObject({ version: '1.2.0', state: 'stale',
-      publishedAt: '2026-09-28T04:27:33.000Z', dependencies: [{ id: 'forge-config-api' }] });
+  test('a moment Eden revived as a Date crosses to the page as the ISO string the SDK promises', () => {
+    expect(isoMoment(new Date('2026-09-28T04:27:33.000Z'))).toBe('2026-09-28T04:27:33.000Z');
+    expect(isoMoment('soon')).toBeNull();
   });
 
-  test('reads without the cards, and Works without them, carry none', () => {
-    expect(zoneWorkCards({})).toEqual({ mod: null, hub: null });
+  test('reads without a Hub card carry none', () => {
+    expect(zoneWorkCards({})).toEqual({ hub: null });
   });
 });
 

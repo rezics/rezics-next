@@ -170,11 +170,7 @@ export const BooksFallbackPhoneDark: Story = {
 
 const modsRoute = { route: { pathname: '/en/r/mods' } };
 
-/**
- * Mods as Modrinth lists them: search and filters first, then every pick as a
- * result row with a link to check its exact release. Before an environment is
- * chosen, rows disclose neither aggregate compatibility nor a download.
- */
+/** Mods as result rows: search and status first, then each pick's title, hook and last change. */
 export const Mods: Story = {
   args: { slug: 'mods' },
   parameters: modsRoute,
@@ -187,23 +183,21 @@ export const Mods: Story = {
     // The home leads with search and one-filter links into Browse, each with its count.
     const search = canvas.getByRole('search', { name: 'Search Mods' });
     await expect(search).toHaveAttribute('action', '/en/r/mods/browse');
-    await expect(canvas.getByRole('link', { name: 'Fabric 2' })).toHaveAttribute('href', '/en/r/mods/browse?loader=fabric');
-    await expect(canvas.getByRole('link', { name: 'Client 4' })).toHaveAttribute('href', '/en/r/mods/browse?env=client');
+    await expect(canvas.getByRole('link', { name: 'Ongoing 6' })).toHaveAttribute('href',
+      '/en/r/mods/browse?status=ongoing');
+    await expect(canvas.queryByRole('link', { name: /Fabric \d/ })).toBeNull();
     const featured = canvas.getByRole('region', { name: 'Featured' });
     const lumen = within(featured).getByRole('heading', { level: 3, name: /Lumen Lanterns/ }).closest('article')!;
-    for (const fact of ['Choose a game version, loader and side to check a release', 'Updated yesterday']) {
-      await expect(within(lumen).getByText(fact)).toBeVisible();
-    }
+    await expect(within(lumen).getByText('Updated yesterday')).toBeVisible();
+    await expect(within(lumen).getByText(/Warm lantern light/)).toBeVisible();
     await expect(lumen.querySelector('[data-release-state]')).toBeNull();
-    await expect(within(lumen).queryByRole('list', { name: 'Runs on' })).toBeNull();
+    await expect(within(lumen).queryByText('Fabric')).toBeNull();
     await expect(canvas.queryByRole('link', { name: /^Get / })).toBeNull();
     await expect(within(canvas.getByRole('navigation', { name: 'Games and loaders' })).getAllByRole('link'))
       .toHaveLength(7);
     const trending = canvas.getByRole('region', { name: 'Trending' });
     await expect(within(trending).getByRole('tab', { name: 'Today' })).toHaveAttribute('aria-selected', 'true');
     await expect(within(trending).getByRole('heading', { level: 3, name: 'Lumen Lanterns' })).toBeVisible();
-    await expect(within(trending).getAllByText('Choose a game version, loader and side to check a release').length)
-      .toBeGreaterThan(0);
     await userEvent.click(within(trending).getByRole('tab', { name: 'This month' }));
     await expect(within(trending).getByRole('tab', { name: 'This month' })).toHaveAttribute('aria-selected', 'true');
     const collection = canvas.getByRole('region', { name: 'Editors’ picks' });
@@ -224,10 +218,9 @@ export const ModsChinese: Story = {
     await expect(canvas.getByRole('heading', { level: 1, name: '模组' })).toBeVisible();
     await expect(canvas.getByRole('search', { name: '搜索模组' })).toBeVisible();
     const featured = canvas.getByRole('region', { name: '精选' });
-    await expect(within(featured).getAllByText('选择游戏版本、加载器和运行端，查看兼容版本').length)
-      .toBeGreaterThan(0);
+    await expect(within(featured).queryByText('选择游戏版本、加载器和运行端，查看兼容版本')).toBeNull();
     await expect(featured.querySelector('[data-release-state]')).toBeNull();
-    await expect(within(canvas.getByRole('region', { name: '精选' })).getByText('昨天更新')).toBeVisible();
+    await expect(within(featured).getByText('昨天更新')).toBeVisible();
     await expect(canvas.getByRole('tab', { name: '今日' })).toHaveAttribute('aria-selected', 'true');
     await holds('mods')(context);
   },
@@ -240,19 +233,16 @@ export const ModsPhoneChineseDark: Story = {
   parameters: { route: { pathname: '/zh-Hans/r/mods' } }, play: holds('mods'),
 };
 
-/**
- * The demo: four mods, each with one verified release, beside guides without
- * authors, states or update times. Mod rows wait for the reader's environment
- * before naming a compatible release.
- */
+/** The demo: package rows beside guides, with titles and hooks and no compatibility chips. */
 export const ModsAsSeeded: Story = {
   args: { slug: 'mods', catalogue: 'seeded' },
   parameters: modsRoute,
   async play(context) {
     const latest = within(within(context.canvasElement).getByRole('region', { name: 'Latest' }));
-    await expect(latest.getAllByText('Choose a game version, loader and side to check a release')).toHaveLength(4);
+    await expect(latest.queryByText('Choose a game version, loader and side to check a release')).toBeNull();
     await expect(latest.queryByText('Forge')).toBeNull();
     await expect(latest.queryByText('Fabric')).toBeNull();
+    await expect(latest.getByRole('link', { name: 'Lumen Lanterns' })).toBeVisible();
     await expect(latest.getByRole('link', { name: 'Minecraft shaders: a gentle first setup' })).toBeVisible();
     await holds('mods')(context);
   },
@@ -263,8 +253,11 @@ export const ModsFallback: Story = {
   parameters: modsRoute,
   async play(context) {
     await fallbackRuns(context.canvasElement, 'mods');
-    // The platform's rows carry the same facts: where a mod runs, its loaders and versions.
-    await expect(within(context.canvasElement).getAllByText('Fabric').length).toBeGreaterThan(0);
+    const lumens = within(context.canvasElement).getAllByRole('heading', { level: 3, name: 'Lumen Lanterns' })
+      .map(heading => heading.closest('article')!);
+    const withStatus = lumens.filter(article => within(article).queryByText('Ongoing'));
+    await expect(withStatus.length).toBeGreaterThan(0);
+    for (const article of lumens) await expect(within(article).queryByText('Fabric')).toBeNull();
     await holds('mods')(context);
   },
 };

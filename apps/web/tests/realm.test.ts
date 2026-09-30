@@ -88,7 +88,7 @@ describe('Main reads as Zone data', () => {
       authorHref: null,
       tagline: { value: 'A delta that redraws itself.', lang: 'en', dir: 'ltr' }, status: 'ongoing', chapters: 41,
       words: null, updatedAt: '2026-09-27T12:00:00.000Z',
-      decision: `/en/r/fiction/decisions?decision=${decision}#decision-${decision}`, mod: null, hub: null });
+      decision: `/en/r/fiction/decisions?decision=${decision}#decision-${decision}`, hub: null });
     expect(zoneWork(card({ tagline: null }), context, null)).toMatchObject({ tagline: null, decision: null });
   });
 
@@ -101,15 +101,13 @@ describe('Main reads as Zone data', () => {
       authorHref: '/authors/open-library/OL21594A' });
   });
 
-  test('a Work card carries Main’s mod release to the package, with ISO times', () => {
-    const mod = { profile: 'mod-work-card-v2' as const, game: 'Minecraft' as const, gameVersions: ['1.21.1'],
-      loaders: ['Fabric' as const], environment: 'client' as const, latestRelease: '1.3.0',
-      updatedAt: '2026-09-28T04:03:27.915Z' };
-    const adapted = zoneWork({ ...card({ lastUpdatedAt: new Date('2026-09-27T12:00:00.000Z') as unknown as string }),
-      mod }, context, null);
-    expect(adapted.updatedAt).toBe('2026-09-27T12:00:00.000Z');
-    expect(adapted.mod).toMatchObject({ game: 'Minecraft', version: '1.3.0', updatedAt: '2026-09-28T04:03:27.915Z' });
-    expect(withRealmCard(zoneWork(card(), context, null), adapted).mod).toEqual(adapted.mod);
+  test('a thinner card keeps the Realm card’s Hub item and does not carry a mod bag', () => {
+    const hub = { profile: 'hub-work-card-v1' as const, kind: 'prompt' as const, declaredModels: [],
+      testedModels: ['model-a'], preview: 'Opening', copyText: 'Full text' };
+    const adapted = zoneWork({ ...card(), hub }, context, null);
+    expect(adapted.hub).toMatchObject({ kind: 'prompt', copyText: 'Full text' });
+    expect(adapted).not.toHaveProperty('mod');
+    expect(withRealmCard(zoneWork(card(), context, null), adapted).hub).toEqual(adapted.hub);
   });
 
   test('a people module names each credited author once, with their Works here, and links where to find more', () => {

@@ -79,61 +79,8 @@ export interface ZoneWork {
   latestChapter?: { title: ZoneText | null; href: string; at: string | null } | null;
   /** The public Decision that placed the Work in this Zone ("Why here?"). */
   decision: string | null;
-  /** What a game mod runs on, when its author bound a verified release to the Work. */
-  mod?: ZoneModRelease | null;
-  /** Curator-supplied game facts when Main has fetched an admitted public record. */
-  game?: ZoneGameFacts | null;
-  /** Curator-supplied app facts when Main has fetched an admitted public record. */
-  software?: ZoneSoftwareFacts | null;
   /** A published prompt or Skill's card, when the Work is one. */
   hub?: ZoneHubItem | null;
-}
-
-/** What a mod runs on across its verified releases: what a player checks before installing it. */
-export interface ZoneModRelease {
-  /** `Minecraft`. */
-  game: string;
-  /** Game versions its releases were checked against, newest first (`1.21.1`). */
-  gameVersions: string[];
-  /** Mod loaders it runs on (`Fabric`, `Forge`, `NeoForge`). */
-  loaders: string[];
-  /** Where its newest release runs, as its manifest declares; null when it does not say. */
-  environment: 'client' | 'server' | 'client-and-server' | null;
-  /** The newest release's own version, when its manifest declares one (`1.3.0`). */
-  version: string | null;
-  /** ISO date-time the newest release was published: the mod's last update. */
-  updatedAt: string | null;
-  /** An exact release chosen from the same game version, loader and side; absent outside browse. */
-  selected?: { version: string | null; gameVersions: string[]; loaders: string[];
-    environment: 'client' | 'server' | 'client-and-server' | null; side: 'client' | 'server';
-    publishedAt: string; channel: 'release' | 'beta' | 'alpha' | null;
-    dependencies: { id: string; requirement: 'required' | 'optional' | 'incompatible' | 'embedded';
-      range: string | null; side: 'client' | 'server' | null }[] | null;
-    state: 'compatible' | 'stale' } | null;
-}
-
-export interface ZoneGameFacts {
-  /** Publisher or store listing supplied by the facts record; an external handoff. */
-  source: string;
-  status: 'released' | 'upcoming';
-  releaseDate: string | null;
-  platforms: string[];
-  languages: string[];
-  tags: string[];
-  screenshots: ZoneImage[];
-  review: { label: string; count: number; period: string } | null;
-  modsZone: boolean;
-}
-
-export interface ZoneSoftwareFacts {
-  maintainer: string;
-  license: string | null;
-  screenshots: ZoneImage[];
-  releases: { platform: string; architecture: string | null; version: string | null;
-    changes: string | null; destination: string }[];
-  alternatives: { work: string; reason: string; attributedTo: string }[];
-  project: string;
-  source: string;
 }
 
 /** A published prompt or Skill, as its author disclosed it. */
@@ -223,7 +170,7 @@ export interface ZoneContext {
 
 /** A value the Zone can be filtered by, as a link into its browse page with that one Condition. */
 export interface ZoneFilterChip {
-  /** The Facet it filters by (`modLoader`, `status`). */
+  /** The Facet it filters by (`concept`, `status`). */
   facet: string;
   value: string;
   label: ZoneText;
@@ -239,7 +186,7 @@ export interface ZoneBrowseEntry {
   /** The search field's accessible name and placeholder, in the reader's language. */
   searchLabel: string;
   placeholder: string;
-  /** Remembered compatibility Conditions retained by the home search form. */
+  /** Conditions the home search form keeps while the text changes. */
   kept?: { name: string; value: string }[];
   groups: { facet: string; label: string; chips: ZoneFilterChip[] }[];
 }

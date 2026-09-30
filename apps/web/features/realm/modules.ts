@@ -55,7 +55,7 @@ export function withRealmCard(work: ZoneWork, known: ZoneWork | undefined): Zone
     tagline: work.tagline ?? known.tagline,
     status: work.status ?? known.status, chapters: work.chapters ?? known.chapters,
     cover: work.cover ?? known.cover, decision: work.decision ?? known.decision,
-    mod: work.mod ?? known.mod ?? null, hub: work.hub ?? known.hub ?? null };
+    hub: work.hub ?? known.hub ?? null };
 }
 
 /** A feed's Works, each with the Decision behind it. */
