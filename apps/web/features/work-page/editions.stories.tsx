@@ -8,7 +8,7 @@ const hant: ShownRelease = { id: 'https://rezics.com/id/01944100-0000-7000-8000-
   revision: 'https://rezics.com/id/01944100-0000-7000-8000-0000000000c1', kind: 'formal', status: 'official',
   contentLanguages: ['zh-Hant'], isTranslation: false, originalLanguages: [], titleLanguage: 'zh-Hant',
   tracklistLanguage: null, title: { value: '紅樓夢 程甲本', language: 'zh-Hant' }, publisher: '萃文書屋',
-  publicationYear: 1791, originalUrl: null, fixedRelease: null, coverage: null, snapshots: [] };
+  publicationYear: 1791, originalUrl: null, fixedRelease: null, coverage: [], snapshots: [] };
 const english: ShownRelease = { ...hant, id: 'https://rezics.com/id/01944100-0000-7000-8000-0000000000a3',
   contentLanguages: ['en'], isTranslation: true, originalLanguages: ['zh'], titleLanguage: 'en',
   title: { value: 'The Story of the Stone', language: 'en' }, publisher: 'Penguin', publicationYear: 1973 };

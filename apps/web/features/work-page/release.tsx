@@ -23,7 +23,13 @@ export interface ShownRelease {
   titleLanguage: string | null; tracklistLanguage: string | null;
   title: { value: string; language: string }; publisher: string | null; publicationYear: number | null;
   originalUrl: string | null; fixedRelease: string | null;
-  coverage: { scope: string; complete: boolean } | null; snapshots: ShownSnapshot[];
+  /** One entry per covered Work: an omnibus covers several. */
+  coverage: ShownCoverage[]; snapshots: ShownSnapshot[];
+}
+
+export interface ShownCoverage {
+  work: string; realization: string | null; language: string | null;
+  completeness: 'complete' | 'partial' | 'trial' | 'unknown'; portion?: string;
 }
 
 const kindLabel = { formal: 'kindFormal', web: 'kindWeb', fixed: 'kindFixed', virtual: 'kindVirtual' } as const;
@@ -75,10 +81,14 @@ export function ReleaseCard({ release, locale, messages: t }: {
         <dd className="min-w-0 text-sm"><a className="break-all text-primary underline-offset-4 hover:underline"
           href={release.originalUrl}>{release.originalUrl}</a></dd>
       </div> : null}
-      {release.coverage ? <div className="grid gap-0.5 sm:col-span-2">
-        <dt className="text-muted-foreground text-xs">{t.coverage}</dt>
-        <dd className="text-sm">{release.coverage.scope}</dd>
-      </div> : null}
+      {release.coverage.some(entry => entry.portion || entry.completeness !== 'unknown')
+        ? <div className="grid gap-0.5 sm:col-span-2">
+          <dt className="text-muted-foreground text-xs">{t.coverage}</dt>
+          {release.coverage.map(entry => <dd key={`${entry.work} ${entry.realization ?? ''}`} className="text-sm">
+            {entry.completeness === 'complete' ? t.coverageComplete : t.coveragePartial}
+            {entry.portion ? <> · {entry.portion}</> : null}
+          </dd>)}
+        </div> : null}
     </dl>
     {release.kind === 'virtual' ? <p className="text-muted-foreground text-sm">{t.virtualNotice}</p> : null}
     {release.status === 'unofficial' ? <p className="text-muted-foreground text-sm">{t.unofficialNotice}</p> : null}
