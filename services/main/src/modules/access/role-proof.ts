@@ -1,7 +1,19 @@
 import type { PoolClient } from 'pg';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { iri } from '../work/activate.ts';
+import { publicWork } from '../work/public-patterns.ts';
 import { RoleUnavailable } from './roles.ts';
 
 const MAX_BINDINGS_PER_AGENT = 16;
+
+/** Catalogue edit roles cover only current publicly readable Works. One exact
+ * 1 KiB ASK shares the public-read predicate; drafts and old selections fail. */
+export async function publicCatalogueWork(graph: Pick<FusekiClient, 'query'> | undefined,
+  work: string): Promise<boolean> {
+  if (!graph || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)) return false;
+  return (await graph.query(`PREFIX rv: <https://rezics.com/vocab/>
+    PREFIX schema: <https://schema.org/> ASK { ${publicWork(iri(work), '?catalogueMain')} }`, 1024)).boolean === true;
+}
 
 export interface RoleWorkProof {
   bindingId: string;

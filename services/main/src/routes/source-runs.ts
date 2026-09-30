@@ -9,7 +9,7 @@ import { OPEN_LIBRARY_WORKS_RUN, SourceRunBusy, SourceRunConflict, SourceRunInva
   SourceRunUnavailable } from '../modules/source/acquisition-run.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
-import { AdmissionDenied } from '../modules/access/admission.ts';
+import { AdmissionDenied, AdmissionUnavailable } from '../modules/access/admission.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
 
@@ -100,26 +100,27 @@ function runError(error: unknown): Response {
   return commandError(error);
 }
 
+/** All Source import entry points require catalogue creation authority before
+ * any provider fetch or owner write. Discovery's contributor baseline is excluded. */
+export async function requireSourceImportAuthority(work: MainWorkDependencies, caller: VerifiedPrincipal) {
+  if (!work.actingContexts || !work.access.hasNonBaselineWorkCreateAuthority) {
+    throw new AdmissionUnavailable('Access discovery is unavailable');
+  }
+  const discovered = await work.actingContexts.discover(caller);
+  for (const context of discovered.contexts) {
+    if (await work.access.hasNonBaselineWorkCreateAuthority(caller, context.actingSubject)) return;
+  }
+  for (const context of discovered.directContexts) {
+    if (await work.access.hasNonBaselineWorkCreateAuthority(caller, context.actingSubject, 'direct-principal')) return;
+  }
+  throw new AdmissionDenied('Source imports require catalogue creation authority');
+}
+
 /** General source acquisition runs, their field drift and dump/change feeds. */
 export function sourceRunRoutes(work: MainWorkDependencies) {
-  const importAuthority = async (caller: VerifiedPrincipal) => {
-    if (!work.actingContexts || !work.access.hasNonBaselineWorkCreateAuthority) {
-      throw new SourceRunUnavailable('Access discovery is unavailable');
-    }
-    const discovered = await work.actingContexts.discover(caller);
-    // Discovery includes contributor baseline contexts. Evaluate the ordinary
-    // non-baseline authority path before any provider fetch or Source write.
-    for (const context of discovered.contexts) {
-      if (await work.access.hasNonBaselineWorkCreateAuthority(caller, context.actingSubject)) return;
-    }
-    for (const context of discovered.directContexts) {
-      if (await work.access.hasNonBaselineWorkCreateAuthority(caller, context.actingSubject, 'direct-principal')) return;
-    }
-    throw new AdmissionDenied('Source imports require catalogue creation authority');
-  };
   const principal = async (request: Request, scope: 'source:acquire' | 'source:read') => {
     const caller = await work.account.verify(request, [scope]);
-    if (scope === 'source:acquire') await importAuthority(caller);
+    if (scope === 'source:acquire') await requireSourceImportAuthority(work, caller);
     return work.access.activePrincipalId(caller);
   };
   const unavailable = () => problem(503, 'source_run_unavailable', 'Source acquisition owner is unavailable');
@@ -138,13 +139,13 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
         const caller = await work.account.verify(request, ['source:acquire']);
         const principalId = await work.access.activePrincipalId(caller);
         if (!principalId) return inactive();
-        await importAuthority(caller);
+        await requireSourceImportAuthority(work, caller);
         const result = body.profile === OPEN_LIBRARY_WORKS_RUN
           ? await services.runs.runOpenLibraryWorks(principalId, key, body)
           : await runGoProxyLive(services.runs, principalId, key, body,
             goProxyResponseLoader(GO_PROXY_ORIGIN, services.runs.fetcher, GO_PROXY_CAPTURE_BYTES));
         if (await work.access.activePrincipalId(caller) !== principalId) return inactive();
-        await importAuthority(caller);
+        await requireSourceImportAuthority(work, caller);
         return Response.json(result, { status: result.replayed ? 200 : 201, headers: noStore });
       } catch (error) { return runError(error); }
     })

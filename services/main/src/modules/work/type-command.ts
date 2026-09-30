@@ -23,7 +23,7 @@ export async function stateWorkType(env: WorkActivationEnvironment,
   const principal = await account.verify(request, ['work:edit']);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope: `work:edit:${input.work}`, action: 'work.edit',
-    idempotencyKey: input.idempotencyKey, requestDigest: digest });
+    idempotencyKey: input.idempotencyKey, requestDigest: digest, workSemanticTypes: types });
   try {
     let admission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {

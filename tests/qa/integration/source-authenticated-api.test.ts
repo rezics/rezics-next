@@ -10,6 +10,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { OpenLibraryConversionStore }
   from '../../../services/main/src/modules/source/open-library-conversion.ts';
@@ -178,6 +179,15 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
       introspectUrl: `${base}/api/auth/oauth2/introspect`,
       clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! });
     const mainAccess = new AccessAdmissionRegistry(accessPool);
+    // Import authority is separate from the adoption actor tested below.
+    const importAdministrator = `https://rezics.com/id/${randomUUID()}`;
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [importAdministrator]);
+    await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT DO NOTHING");
+    await accessPool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`, [randomUUID(), principalId, importAdministrator]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,'work:create:root','work.create',now() + interval '1 hour')`, [randomUUID(), importAdministrator]);
     let beforeAttachmentAuthority: (() => Promise<void>) | undefined;
     const attachmentAccess: Pick<AccessAdmissionRegistry, 'withWorkEditAuthority'> = {
       withWorkEditAuthority: async (principal, actingSubject, work, commit) => {
@@ -240,7 +250,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
     const app = createMainApp(fuseki, {
       environment: nativeEnvironment,
       account: mainAccount,
-      access: mainAccess, sourceIntake,
+      access: mainAccess, sourceIntake, actingContexts: new AccessActingContexts(accessPool),
       sourceConversions, sourceGraph,
       sourceCorrespondences: new SourceChildCorrespondenceStore(contentPool,
         sourceConversions),

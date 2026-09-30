@@ -12,6 +12,7 @@ import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid, sourceRightsEvidence } from './shared.ts';
+import { requireSourceImportAuthority } from './source-runs.ts';
 
 export const openApiOperations = {
   '/v1/sources/open-library/authors/{author}/name': {
@@ -233,6 +234,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
         const principal = await work.account.verify(request, ['source:acquire']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        await requireSourceImportAuthority(work, principal);
         return Response.json(await work.sourceAuthorNames.command(principalId, key, `/authors/${params.author}`, body),
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
@@ -596,6 +598,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
         const principal = await work.account.verify(request, ['source:acquire']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        await requireSourceImportAuthority(work, principal);
         const prior = await work.sourceIntake.replay(principalId, key);
         if (prior) {
           if (prior.capture?.profile !== 'open-library-work-acquisition-v1'
@@ -627,6 +630,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
         const principal = await work.account.verify(request, ['source:intake']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source intake principal is inactive');
+        await requireSourceImportAuthority(work, principal);
         const result = await work.sourceIntake.submit(principalId, key, {
           provider: body.provider, namespace: body.namespace, externalId: body.externalId,
           sourceRevision: body.sourceRevision, mediaType: body.mediaType,

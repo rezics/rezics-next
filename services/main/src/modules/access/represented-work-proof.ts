@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { selectedGroupWorkProof } from './groups.ts';
-import { selectedRoleWorkProof } from './role-proof.ts';
+import { publicCatalogueWork, selectedRoleWorkProof } from './role-proof.ts';
 
 export interface RepresentedWorkProof {
   representationId: string;
@@ -68,7 +69,7 @@ export async function representedWorkProof(client: PoolClient, principalId: stri
  * a new registration, but cannot revive this admission. */
 export async function selectedRepresentedWorkProof(client: PoolClient,
   saved: SavedRepresentedWorkProof, principalEpoch: string,
-  groupGeneration: string): Promise<boolean> {
+  groupGeneration: string, graph?: Pick<FusekiClient, 'query'>): Promise<boolean> {
   const edit = saved.action === 'work.edit' && saved.scope_id.startsWith('work:edit:');
   if (!(saved.action === 'work.create' && saved.scope_id === 'work:create:root' || edit)
     || !saved.represented_representation_id
@@ -103,6 +104,7 @@ export async function selectedRepresentedWorkProof(client: PoolClient,
     if (saved.group_grant_id || saved.represented_grant_generation !== null
       || saved.role_binding_generation === null
       || saved.role_family_id === null || saved.role_revision === null) return false;
+    if (edit && !await publicCatalogueWork(graph, saved.scope_id.slice('work:edit:'.length))) return false;
     return selectedRoleWorkProof(client, saved.acting_subject, {
       bindingId: saved.role_binding_id,
       bindingGeneration: saved.role_binding_generation,

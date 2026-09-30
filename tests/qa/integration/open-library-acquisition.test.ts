@@ -5,6 +5,7 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 
@@ -44,7 +45,7 @@ test('LIVE01/LIVE02/LIVE09/LIVE11: bounded Open Library Work capture stages one 
     environment: { fuseki,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
       objectDirectory: '.temp/open-library-unused' },
-    account, access: new AccessAdmissionRegistry(accessPool),
+    account, access: new AccessAdmissionRegistry(accessPool), actingContexts: new AccessActingContexts(accessPool),
     sourceIntake: new SourceIntakeStore(contentPool), openLibraryFetch,
   });
   const route = '/v1/sources/acquisitions/open-library/works';
@@ -61,6 +62,14 @@ test('LIVE01/LIVE02/LIVE09/LIVE11: bounded Open Library Work capture stages one 
     await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1, $2, $3), ($4, $2, $5)`,
     [ownerId, issuer, owner.subject, otherId, other.subject]);
+    const administrator = `https://rezics.com/id/${randomUUID()}`;
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [administrator]);
+    await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT DO NOTHING");
+    await accessPool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`, [randomUUID(), ownerId, administrator]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,'work:create:root','work.create',now() + interval '1 hour')`, [randomUUID(), administrator]);
     const key = `open-library-${randomUUID()}`;
     expect((await post('denied', 'OL45804W', key)).status).toBe(401);
     expect(fetches).toBe(0);

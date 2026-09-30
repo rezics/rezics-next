@@ -1,21 +1,27 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
+import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccessRoles } from '../../../services/main/src/modules/access/roles.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { createAdmittedTextContribution } from '../../../services/main/src/modules/contribution/create-admitted.ts';
+import { publishAdmittedTextContribution } from '../../../services/main/src/modules/contribution/publish-admitted.ts';
 import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
+import { SourceAuthorNameStore } from '../../../services/main/src/modules/source/author-name.ts';
+import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import { workScalarEditDigest } from '../../../services/main/src/modules/work/edit.ts';
+import { selectAdmittedMainDefault } from '../../../services/main/src/modules/work/select-main-admitted.ts';
 import { workKinds } from '../../../services/main/src/modules/work/work-kinds.ts';
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
 
-const scopes = ['agent:create', 'work:create', 'work:edit', 'work:read', 'source:acquire', 'access:role'];
+const scopes = ['agent:create', 'work:create', 'work:edit', 'work:read', 'source:acquire', 'source:intake', 'access:role'];
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 
-test('G508: Person, administrator, appointed editor and author obey the five-action role matrix', async () => {
+test('G508: role matrix gates kinds, retyping, every import entry point and public catalogue editing', async () => {
   const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID!);
   const original = { account: Bun.env.ACCOUNT_DATABASE_URL, access: Bun.env.ACCESS_DATABASE_URL };
   let h: Awaited<ReturnType<typeof agentProvisionHarness>>;
@@ -30,19 +36,27 @@ test('G508: Person, administrator, appointed editor and author obey the five-act
   }
   const content = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
   try {
+    await migrateContent(content);
     const access = new AccessAdmissionRegistry(h.accessPool);
     access.configureBaseline(h.fuseki);
     const contexts = new AccessActingContexts(h.accessPool, h.env);
     let fetches = 0;
+    const fetcher = (async (url: string | URL | Request) => {
+      fetches++;
+      if (String(url) === 'https://openlibrary.org/authors/OL991508A.json') {
+        return Response.json({ key: '/authors/OL991508A', type: { key: '/type/author' }, revision: 1, name: 'Imported author' });
+      }
+      expect(String(url)).toBe('https://openlibrary.org/works/OL1W.json');
+      return Response.json({ key: '/works/OL1W', type: { key: '/type/work' }, title: 'Imported Work' });
+    }) as typeof fetch;
+    const intake = new SourceIntakeStore(content);
+    intake.reserveOpenLibrarySlot = async () => {};
     const main = createMainApp(h.fuseki, { environment: h.env, account: h.verifier, access,
       actingContexts: contexts, roles: new AccessRoles(h.accessPool),
       agentProvisioning: new AgentProvisioning(h.accessPool, h.env),
-      sourceAcquisitions: sourceAcquisitionServices(content, { reserve: async () => {},
-        fetcher: (async (url: string | URL | Request) => {
-          fetches++;
-          expect(String(url)).toBe('https://openlibrary.org/works/OL1W.json');
-          return Response.json({ key: '/works/OL1W', type: { key: '/type/work' }, title: 'Imported Work' });
-        }) as typeof fetch }),
+      sourceAcquisitions: sourceAcquisitionServices(content, { reserve: async () => {}, fetcher }),
+      sourceIntake: intake, openLibraryFetch: fetcher,
+      sourceAuthorNames: new SourceAuthorNameStore(content, intake, fetcher),
     });
     const request = (token: string, method: string, path: string, body?: object, key = randomUUID()) =>
       main.handle(new Request(`http://main.local${path}`, { method,
@@ -131,8 +145,29 @@ test('G508: Person, administrator, appointed editor and author obey the five-act
     const create = (person: typeof administrator, types: string[], key = randomUUID()) =>
       request(person.token, 'POST', '/v1/works', { profile: 'metadata-only-v1', title: 'Role matrix Book',
         language: 'en', semanticTypes: types, actingSubject: person.subject }, key);
-    const target = await json<{ work: string; workRevision: string }>(await create(author, ['https://schema.org/Book']), 201);
+    type CreatedWork = { work: string; workRevision: string; mainVersion: string };
+    const target = await json<CreatedWork>(await create(author, ['https://schema.org/Book']), 201);
     const other = await json<{ work: string; workRevision: string }>(await create(ordinary, ['https://schema.org/Book']), 201);
+    const bearer = new Request('http://main.local', { headers: { authorization: `Bearer ${author.token}` } });
+    const publish = async (work: CreatedWork) => {
+      const contribution = await createAdmittedTextContribution(h.env, h.verifier, access, bearer, {
+        work: work.work, language: 'en', body: 'Catalogue text.', actingSubject: author.subject, idempotencyKey: randomUUID() });
+      const publication = await publishAdmittedTextContribution(h.env, h.verifier, access, bearer, {
+        contribution: contribution.contribution!, expectedDraftHead: contribution.draftRevision!,
+        expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public',
+        actingSubject: author.subject, idempotencyKey: randomUUID() });
+      return { contribution: contribution.contribution!, publicationDecision: publication.publicationDecision! };
+    };
+    const published = await publish(target);
+    const selected = await selectAdmittedMainDefault(h.env, h.verifier, access, bearer, {
+      ...published, work: target.work, context: { kind: 'main-version-default', id: target.mainVersion },
+      expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: author.subject, idempotencyKey: randomUUID() });
+    expect(selected.outcome).toBe('succeeded');
+    await json(await request(ordinary.token, 'GET',
+      `/v1/works/${target.work.slice(-36)}?actingSubject=${encodeURIComponent(ordinary.subject)}`), 200);
+    const privateWork = await json<CreatedWork>(await create(author, ['https://schema.org/Book']), 201);
+    const draftWork = await json<CreatedWork>(await create(author, ['https://schema.org/Book']), 201);
+    await publish(draftWork); // A public contribution without Main selection is still a draft Work.
     let head = target.workRevision;
     let editorRevision = '';
     for (const person of people) {
@@ -148,6 +183,23 @@ test('G508: Person, administrator, appointed editor and author obey the five-act
       const runBody = await json<{ code?: string; run?: { state: string } }>(run, admin ? 201 : 403);
       if (admin) expect(runBody.run?.state).toBe('completed');
       else { expect(runBody.code).toBe('authority_denied'); expect(fetches).toBe(before); }
+      for (const [path, body, status] of [
+        ['/v1/sources/acquisitions/open-library/works', { profile: 'open-library-work-acquisition-v1', workId: 'OL1W' }, 201],
+        ['/v1/sources/intakes', { profile: 'source-manual-intake-v1', provider: 'fixture', namespace: 'work',
+          externalId: randomUUID(), sourceRevision: null, mediaType: 'application/json', retention: 'not-retained',
+          coverage: { scope: 'record', complete: false, omittedFields: ['raw'] },
+          rightsEvidence: { basis: 'unknown', note: 'Unverified source.' } }, 201],
+        ['/v1/sources/open-library/authors/OL991508A/name', { action: 'refresh', expectedRevision: null }, 200],
+      ] as const) {
+        const beforeFetch = fetches;
+        const key = randomUUID();
+        const result = await json<{ code?: string }>(await request(person.token, 'POST', path, body, key), admin ? status : 403);
+        if (!admin) {
+          expect(result.code).toBe('authority_denied');
+          expect(fetches).toBe(beforeFetch);
+          expect((await content.query('SELECT 1 FROM source.intake_receipt WHERE idempotency_key = $1', [key])).rowCount).toBe(0);
+        }
+      }
       const work = person === author ? other.work : target.work;
       const edited = await json<{ revision: string; code?: string }>(await request(person.token, 'POST',
         `/v1/works/${work.slice(-36)}/scalar-value`, { profile: 'work-scalar-state-v1',
@@ -160,12 +212,17 @@ test('G508: Person, administrator, appointed editor and author obey the five-act
       if (!admin) expect(appointment.code).toBe('role_denied');
     }
     // The author still edits their own Work; catalogue roles never replace it.
-    await json(await request(author.token, 'POST', `/v1/works/${target.work.slice(-36)}/scalar-value`, {
+    const ownEdit = await json<{ revision: string }>(await request(author.token, 'POST', `/v1/works/${target.work.slice(-36)}/scalar-value`, {
       profile: 'work-scalar-state-v1', expectedHead: head, scalarValue: { kind: 'no-value' }, actingSubject: author.subject }), 200);
+    head = ownEdit.revision;
     const history = await json<{ items: { id: string; actor?: string }[] }>(await request(author.token, 'GET',
       `/v1/works/${target.work.slice(-36)}/history?actingSubject=${encodeURIComponent(author.subject)}`), 200);
     expect(history.items.find(item => item.id === editorRevision)?.actor).toBe(editor.subject);
     expect(history.items.find(item => item.id === editorRevision)?.actor).not.toBe(author.subject);
+    const retype = (person: typeof administrator) => request(person.token, 'PUT', `/v1/works/${target.work.slice(-36)}/type`, {
+      profile: 'work-type-v2', expectedHead: head, types: ['https://rezics.com/vocab/ModPackage'], actingSubject: person.subject });
+    expect((await json<{ code: string }>(await retype(author), 403)).code).toBe('authority_denied');
+    head = (await json<{ revision: string }>(await retype(administrator), 200)).revision;
     // Every administrator-configured kind is checked, including mixed types.
     const restricted = Object.entries(workKinds).filter(([, kind]) => kind.creation === 'administrator').map(([type]) => type);
     expect(restricted.sort()).toEqual(['https://rezics.com/vocab/ModPackage',
@@ -178,12 +235,33 @@ test('G508: Person, administrator, appointed editor and author obey the five-act
     // A pinned edit role survives a family head change, but not its revocation.
     const principal = await h.verifier.verify(new Request('http://main.local',
       { headers: { authorization: `Bearer ${editor.token}` } }), ['work:edit']);
+    for (const hidden of [privateWork, draftWork]) {
+      await json(await request(ordinary.token, 'GET',
+        `/v1/works/${hidden.work.slice(-36)}?actingSubject=${encodeURIComponent(ordinary.subject)}`), 404);
+      const denied = await json<{ code: string }>(await request(editor.token, 'POST',
+        `/v1/works/${hidden.work.slice(-36)}/scalar-value`, { profile: 'work-scalar-state-v1',
+          expectedHead: hidden.workRevision, scalarValue: { kind: 'unknown' }, actingSubject: editor.subject }), 403);
+      expect(denied.code).toBe('authority_denied');
+      let committed = false;
+      await expect(access.withWorkEditAuthority(principal, editor.subject, hidden.work,
+        async () => { committed = true; })).rejects.toBeInstanceOf(AdmissionDenied);
+      expect(committed).toBe(false);
+    }
     const pending = await access.register({ principal, actingSubject: editor.subject, action: 'work.edit',
       scope: `work:edit:${target.work}`, idempotencyKey: randomUUID(),
       requestDigest: workScalarEditDigest(target.work, head, { kind: 'unknown' }) });
     const sourceProof = await access.withWorkEditAuthority(principal, editor.subject, target.work, async proof => proof);
     expect(sourceProof.role?.bindingId).toBe(editorBinding);
     expect(sourceProof.grantId).toBeNull();
+    const selectionLink = `<${target.mainVersion}> <https://rezics.com/vocab/selectionHead> <${selected.selection}>`;
+    await h.fuseki.update(`DELETE DATA { GRAPH <urn:rezics:graph:current> { ${selectionLink} } }`);
+    await expect(access.claim(pending.id, pending.requestDigest, principal)).rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await access.register({ principal, actingSubject: editor.subject, action: 'work.edit',
+      scope: `work:edit:${target.work}`, idempotencyKey: pending.idempotencyKey,
+      requestDigest: pending.requestDigest })).dispatchEligible).toBe(false);
+    await expect(access.withWorkEditAuthority(principal, editor.subject, target.work, async proof => proof))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    await h.fuseki.update(`INSERT DATA { GRAPH <urn:rezics:graph:current> { ${selectionLink} } }`);
     await json(await request(administrator.token, 'POST', '/v1/access/role-revisions', {
       profile: 'work-create-role-revision-v1', familyId: editorFamily, issuerSubject: administrator.subject,
       expectedAuthorityEpoch: await epoch(), expectedHeadRevision: '1', permissions: [] }), 200);

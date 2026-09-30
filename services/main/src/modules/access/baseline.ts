@@ -210,16 +210,16 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   return await authorWorkGeneration(client, graph, principalId, actingSubject, target.id) !== null;
 }
 
-/** Creation type policy is supplied by the owner adapter and bound in its digest. */
-export function baselineWorkCreationAllowed(request: Pick<AdmissionRequest, 'action' | 'workSemanticTypes'>): boolean {
-  return request.action !== 'work.create' || !request.workSemanticTypes?.some(type =>
+/** Type policy applies to creation and retyping; the owner binds it in its digest. */
+export function baselineWorkTypesAllowed(request: Pick<AdmissionRequest, 'workSemanticTypes'>): boolean {
+  return !request.workSemanticTypes?.some(type =>
     Object.hasOwn(workKinds, type) && workKinds[type as keyof typeof workKinds].creation === 'administrator');
 }
 
 export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
   request: AdmissionRequest, principalId: string): Promise<BaselineProof | null> {
   if (request.principal.emailVerified !== true || request.authorityPath === 'direct-principal') return null;
-  if (!baselineWorkCreationAllowed(request)) return null;
+  if (!baselineWorkTypesAllowed(request)) return null;
   const target = baselineTarget(request.action, request.scope);
   if (!target) return null;
   const needsWork = target.kind === 'rating' || request.action === 'translation.link';

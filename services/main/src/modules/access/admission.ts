@@ -9,12 +9,12 @@ import { recordRatingAggregateHead, readRatingAggregateInventory,
 import { directWorkCreateProof, selectedDirectWorkProof } from './direct-principal.ts';
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof } from './represented-work-proof.ts';
-import { roleWorkCreateProof, roleWorkProof } from './role-proof.ts';
+import { publicCatalogueWork, roleWorkCreateProof, roleWorkProof } from './role-proof.ts';
 import { withWorkEditAuthority, type WorkEditAuthorityProof } from './work-edit-authority.ts';
 import { issueTitleAdmission } from './title-admission.ts';
 import type { CommandEnvelope } from '../../infrastructure/fuseki.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed, baselineWorkCreationAllowed,
+import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed, baselineWorkTypesAllowed,
   newBaselineProof, saveBaselineProof, savedBaselineProof } from './baseline.ts';
 import { reserveBaselineSpace, settleBaselineSpace } from './baseline-quota.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
@@ -835,7 +835,7 @@ export class AccessAdmissionRegistry {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
         const dispatchEligible = request.principal.emailVerified === true
-          && baselineWorkCreationAllowed(request)
+          && baselineWorkTypesAllowed(request)
           && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
           && await baselineProofCurrent(client, this.baselineGraph, savedBaseline, existing);
@@ -863,7 +863,7 @@ export class AccessAdmissionRegistry {
           && gate.open && gate.dispatch_open
           && existing.authority_epoch === gate.authority_epoch
           && await selectedRepresentedWorkProof(client, existing,
-            principal.enforcement_epoch, gate.group_generation);
+            principal.enforcement_epoch, gate.group_generation, this.baselineGraph);
         await client.query('COMMIT');
         return {
           id: existing.id, principalId: existing.principal_id,
@@ -977,6 +977,10 @@ export class AccessAdmissionRegistry {
             if (!group) {
               const role = await roleWorkProof(client, request.actingSubject,
                 request.action as 'work.create' | 'work.edit');
+              if (role && request.action === 'work.edit'
+                && !await publicCatalogueWork(this.baselineGraph, request.scope.slice('work:edit:'.length))) {
+                throw new AdmissionDenied('Catalogue edit roles require a publicly readable Work');
+              }
               roleBindingId = role?.bindingId ?? null;
               roleBindingGeneration = role?.bindingGeneration ?? null;
               roleFamilyId = role?.familyId ?? null;
@@ -1188,7 +1192,7 @@ export class AccessAdmissionRegistry {
         && (row.action === 'work.create' && row.scope_id === 'work:create:root'
           || row.action === 'work.edit' && row.represented_representation_id)
         && !await selectedRepresentedWorkProof(client, row,
-          principal.rows[0]!.enforcement_epoch, gateResult.rows[0]!.group_generation)) {
+          principal.rows[0]!.enforcement_epoch, gateResult.rows[0]!.group_generation, this.baselineGraph)) {
         throw new AdmissionDenied('represented authority changed before claim');
       }
       if (row.request_digest !== requestDigest) throw new AdmissionConflict('claim digest differs');

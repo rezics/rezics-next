@@ -4,7 +4,7 @@ import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionUnavailable, type VerifiedPrincipal } from './admission.ts';
 import { newBaselineProof } from './baseline.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
-import { roleWorkProof, type RoleWorkProof } from './role-proof.ts';
+import { publicCatalogueWork, roleWorkProof, type RoleWorkProof } from './role-proof.ts';
 import { representedWorkProof } from './represented-work-proof.ts';
 
 export interface WorkEditAuthorityProof {
@@ -21,7 +21,8 @@ export interface WorkEditAuthorityProof {
 /** No graph admission: the callback may only commit a short owner SQL transaction.
  * Access and Source use different databases, so this is a live lock envelope,
  * not a distributed transaction or a coordinated backup frontier. Cost: indexed
- * principal/controller/grant reads and at most 16 pinned catalogue bindings. */
+ * principal/controller/grant reads, at most 16 pinned catalogue bindings and
+ * one exact public-Work ASK for a catalogue role. */
 export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPrincipal,
   actingSubject: string, work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>,
   graph?: Pick<FusekiClient, 'query'>): Promise<T> {
@@ -87,6 +88,9 @@ export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPr
     const represented = await representedWorkProof(client, identity.id, actingSubject, 'work.edit', scope);
     if (!represented) throw new AdmissionDenied('Work edit mandate is unavailable');
     const role = !represented.grantId ? await roleWorkProof(client, actingSubject, 'work.edit') : null;
+    if (role && !await publicCatalogueWork(graph, work)) {
+      throw new AdmissionDenied('Catalogue edit roles require a publicly readable Work');
+    }
     if (!represented.grantId && !role) throw new AdmissionDenied('Work edit permission is unavailable');
     // Recheck after every lock has been acquired, not at transaction start. Leave
     // more validity than the bounded five-second Source transaction can consume.
