@@ -17,7 +17,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
   private running: Promise<unknown> | undefined;
   private ready = false;
   private after = '0';
-  private afterEvent = '\uffff';
+  private afterEvent: string | null = null;
   private observed = '0';
   constructor(private readonly access: Pool, private readonly relay: Pool,
     private readonly env: WorkActivationEnvironment) {}
@@ -131,7 +131,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     // including insertions behind the backfill's key. Only recovery fences it.
     await this.graphCut();
     this.after = head;
-    this.afterEvent = '\uffff';
+    this.afterEvent = null;
     this.observed = cut;
     this.ready = true;
   }
@@ -153,10 +153,10 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
       FROM relay.delivered_batch WHERE data_epoch = $1`, [this.env.lineage.dataEpoch])).rows[0]!.head;
     const rows = (await this.relay.query<{ sequence: string; event_id: string; envelope: {
       type: string; data?: { receipt?: { outcome?: string; realm?: string; work?: string } } } }>(`
-      SELECT sequence::text, event_id, envelope FROM relay.delivered_event
+      SELECT sequence::text, event_id, envelope FROM relay.delivered_event AS event
       WHERE source = 'https://rezics.com/services/main' AND data_epoch = $1
-        AND (sequence, event_id) > ($2::numeric, $3::text) AND sequence <= $4::numeric
-        ORDER BY sequence, event_id LIMIT $5`,
+        AND (sequence > $2::numeric OR (sequence = $2::numeric AND $3::text IS NOT NULL AND event_id > $3::text))
+        AND sequence <= $4::numeric ORDER BY event.sequence, event_id LIMIT $5`,
     [this.env.lineage.dataEpoch, this.after, this.afterEvent, head, ZONE_BROWSE_PROJECTION_COST.relayEvents])).rows;
     const epochs = rows.length ? await this.epochs() : '';
     for (const row of rows) {
@@ -179,7 +179,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
       : head;
     if (rows.length < ZONE_BROWSE_PROJECTION_COST.relayEvents) {
       this.after = head;
-      this.afterEvent = '\uffff';
+      this.afterEvent = null;
     }
     if (BigInt(completed) > BigInt(this.observed)) this.observed = completed;
     return rows.length;

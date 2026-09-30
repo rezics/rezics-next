@@ -144,5 +144,17 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
     expect(await projection.tick()).toBe(0);
     expect((await stack.accessPool.query('SELECT 1 FROM access.zone_browse_entry WHERE realm = $1 AND work = $2',
       [realm, target.work])).rowCount).toBe(0);
+    await relay.query(`INSERT INTO relay.delivered_event (source,event_id,data_epoch,sequence,envelope)
+      SELECT 'https://rezics.com/services/main', 'urn:g828:' || $1 || ':' || n, $2, 1002,
+        '{"type":"com.rezics.work.edited.v1"}'::jsonb FROM generate_series(1,80) AS n`,
+    [randomUUID(), stack.env.lineage.dataEpoch]);
+    await relay.query(`INSERT INTO relay.delivered_batch (data_epoch,sequence,batch_id,routing_epoch,event_count)
+      VALUES ($1,1002,$2,$3,80)`, [stack.env.lineage.dataEpoch, id(), stack.env.lineage.routingEpoch]);
+    expect(await projection.tick()).toBe(64);
+    await expect(projection.batch(realm, 'newest', null, { dataEpoch: stack.env.lineage.dataEpoch, sequence: '1002' }))
+      .rejects.toBeInstanceOf(WorkReadUnavailable);
+    expect(await projection.tick()).toBe(16);
+    expect(await projection.tick()).toBe(0);
+    await projection.batch(realm, 'newest', null, { dataEpoch: stack.env.lineage.dataEpoch, sequence: '1002' });
   } finally { await relay.end(); await stack.stop(); }
 }, 600_000);
