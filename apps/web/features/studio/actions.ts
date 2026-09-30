@@ -53,6 +53,8 @@ export async function createWork(previous: NewWorkState, form: FormData): Promis
     return { status: 'error', message: denied ? t.createDenied : t.createUnavailable, key: crypto.randomUUID(), values };
   }
   if (!response.data || 'operationId' in response.data) return { status: 'pending', message: t.createPending, key, values };
+  // An author's own Work is always created here; a catalogue-grain redirect means the form sent the wrong grain.
+  if ('outcome' in response.data) return { status: 'error', message: t.createUnavailable, key: crypto.randomUUID(), values };
   // A book is written chapter by chapter; anything else starts on its text.
   redirect(localizedPath(offered.presentation === 'book' ? workHref(agent, response.data.work, 'chapters')
     : `${studioHref(agent, `/works/${idOf(response.data.work)}/write`)}?language=${encodeURIComponent(writing)}`, locale));

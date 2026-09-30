@@ -199,6 +199,8 @@ main: MainClient = browserMainApi()): Promise<ChapterCommand & { chapter?: strin
     language: input.language, authoring: 'own-work', actingSubject: input.actingSubject }, headers('work')));
   if (work.error) return { outcome: commandOf(work.error), structure };
   if (!work.data || 'operationId' in work.data) return { outcome: 'pending', structure };
+  // A chapter is the author's own Work, so it is always created; any other answer is unavailable.
+  if ('outcome' in work.data) return { outcome: 'failed', structure };
   const chapter = work.data.work;
   const placed = await settled(() => main.v1.compositions({ id: idOf(structure) }).changes.post({
     profile: 'book-composition', expectedHead: composition.head, actingSubject: input.actingSubject,
