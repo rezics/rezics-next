@@ -88,7 +88,6 @@ import { CargoResolutionStore } from './modules/package/cargo-resolution.ts';
 import { NpmResolutionStore } from './modules/package/npm-resolution.ts';
 import { NixResolutionStore } from './modules/package/nix-resolution.ts';
 import { ModResolutionStore } from './modules/package/mod-resolution.ts';
-import { RevisionedFactsStore } from './modules/game-facts/store.ts';
 import { PackageArtifactStore } from './modules/package/lock-artifacts.ts';
 import { PackageLockStore } from './modules/package/lock.ts';
 import { PackageInstallationStore } from './modules/package/install.ts';
@@ -422,9 +421,7 @@ const app = createMainApp(fuseki, {
   packageNpmResolutions: new NpmResolutionStore(contentPool),
   packageNixResolutions: new NixResolutionStore(contentPool),
   packageModResolutions: new ModResolutionStore(contentPool, pool),
-  gameFacts: new RevisionedFactsStore(pool, 'game'),
   webSnapshotRetention: (origin: string) => rightsStore.rawRetentionPermitted('web-location', origin),
-  softwareFacts: new RevisionedFactsStore(pool, 'software'),
   packageLocks,
   packageInstallations,
   hub,

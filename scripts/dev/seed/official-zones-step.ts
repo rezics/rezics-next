@@ -323,43 +323,19 @@ async function lighterTexts(o: Official) {
   }
 }
 
-/** The publisher/project source is a snapshot basis, not a live release or review feed. */
-async function verticalFacts(o: Official) {
-  const observedAt = '2026-09-28T00:00:00.000Z';
-  for (const game of gamesCatalogue) {
+/** Each seeded game and app carries its catalogue pitch as its English tagline. */
+async function gameAndAppTaglines(o: Official) {
+  const items = [
+    ...gamesCatalogue.map(game => ({ id: game.id, pitch: game.pitch, owner: 'mira' })),
+    ...softwareCatalogue.map(app => ({ id: app.id, pitch: app.pitch, owner: 'daniel' })),
+  ];
+  for (const item of items) {
     await refreshSeedTokens(o.state);
-    await o.state.optional(`Game facts ${game.id}`, () => afterCatchUp(async () => {
-      const placed = o.works.get(game.id);
-      if (!placed?.published) throw new Error(`Game ${game.id} is not public`);
-      const as = o.person('mira');
-      await granted(() => o.api.put(`/v1/game-facts/${short(placed.work.work)}`, {
-        expectedRevision: null, actingSubject: as.actingSubject,
-        facts: { profile: 'game-facts-v1', pitch: game.pitch, source: game.source, observedAt,
-          status: game.status, releaseDate: null, platforms: game.platforms, languages: game.languages,
-          tags: game.tags, screenshots: [], modsZone: game.mods, review: null } },
-      as.token, seedKey('game-facts', game.id)), () => grantHomeSeedAuthority(o.input(as, as.actingSubject),
-      [{ action: 'work.edit', scope: `work:edit:${placed.work.work}` }]));
-    }));
-  }
-  for (const app of softwareCatalogue) {
-    await refreshSeedTokens(o.state);
-    await o.state.optional(`Software facts ${app.id}`, () => afterCatchUp(async () => {
-      const placed = o.works.get(app.id);
-      if (!placed?.published) throw new Error(`App ${app.id} is not public`);
-      const as = o.person('daniel');
-      await granted(() => o.api.put(`/v1/software-facts/${short(placed.work.work)}`, {
-        expectedRevision: null, actingSubject: as.actingSubject,
-        facts: { profile: 'software-facts-v1', pitch: app.pitch, project: app.project, source: app.source,
-          maintainer: app.maintainer, license: app.license, observedAt, screenshots: [],
-          releases: app.platforms.map(platform => ({ platform, architecture: null, version: null,
-            changes: null, destination: app.project, source: app.project, observedAt })),
-          alternatives: app.alternatives.map(alternative => {
-            const target = o.works.get(alternative.id);
-            if (!target?.published) throw new Error(`Alternative ${alternative.id} is not public`);
-            return { work: target.work.work, reason: alternative.reason, attributedTo: as.actingSubject };
-          }) } }, as.token, seedKey('software-facts', app.id)),
-      () => grantHomeSeedAuthority(o.input(as, as.actingSubject),
-        [{ action: 'work.edit', scope: `work:edit:${placed.work.work}` }]));
+    await o.state.optional(`Tagline ${item.id}`, () => afterCatchUp(async () => {
+      const placed = o.works.get(item.id);
+      if (!placed?.published) throw new Error(`Work ${item.id} is not public`);
+      const as = o.person(item.owner);
+      await describeWork(o, item.id, placed.work, as.actingSubject, as, 'en', item.pitch, null);
     }));
   }
 }
@@ -820,7 +796,7 @@ export async function seedOfficialZones(state: SeedState) {
   await state.optional('Official Zones: pen names', () => penNameAgents(o));
   await fictionSerials(o);
   await lighterTexts(o);
-  await verticalFacts(o);
+  await gameAndAppTaglines(o);
   await mods(o);
   await hubItems(o);
   await refreshSeedTokens(state);
