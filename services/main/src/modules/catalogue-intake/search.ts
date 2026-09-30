@@ -1,10 +1,11 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
-import { queryPublicMainPhrase } from '../work/search-public.ts';
+import { assertPublicTextReady, assertSameTextInstance } from '../work/search-readiness.ts';
+import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
+import { catalogueTitleKey } from './title-keys.ts';
 import { publicWork, workRead, type WorkReadSession } from '../work/read-session.ts';
 import { readReleasesByIdentifier, readWorkReleases } from '../release/read.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
-import type { FieldMatch } from '../search/fields.ts';
 import { parsedMetadataState } from '../work/metadata-read.ts';
 import { publicAgent } from '../profiles/read.ts';
 import { CATALOGUE_COST, CatalogueUnavailable, type CandidateInput } from './schema.ts';
@@ -14,111 +15,103 @@ export interface CatalogueCandidate {
   attributes: { field: string; value: string; language: string | null }[];
 }
 
-/** The existing lexical index supplies published candidates; the live public
- * metadata join also covers aliases and newly provisioned catalogue stubs.
- * Identifier evidence remains a Release/realization match, never Work identity. */
+/** Top-N evidence, never a uniqueness proof. Jena's bounded text:query
+ * returns indexed hits in score order; literal-key probes find catalogue stubs:
+ * https://jena.apache.org/documentation/query/text-query.html#query-with-sparql
+ * Dates and creators refine the retrieved Works rather than scan a population. */
 export async function searchCatalogue(deps: MainWorkDependencies, input: CandidateInput) {
-  const terms = [...new Set([input.originalTitle, ...input.aliases, ...input.romanizations]
-    .map(title => title.value).concat(input.creators))];
-  // Candidate intake retrieves only public facts. The authenticated contributor
-  // is bound to the receipt separately; private Work access never expands it.
+  const titles = [input.originalTitle, ...input.aliases, ...input.romanizations];
+  const terms = [...new Set(titles.map(title => title.value))];
   const request = new Request('http://main.local/internal/catalogue-public-read');
   return workRead(deps, request, {}, async session => {
-    const ids = new Set<string>();
-    const matchedAttributes = new Map<string, CatalogueCandidate['attributes']>();
-    for (const phrase of terms) {
-      if (phrase.trim().length < 2) continue; // Single-character titles use the live title relation.
-      const found = await queryPublicMainPhrase(deps.environment, { phrase: phrase.slice(0, 80), language: null,
-        publicFields: { names: deps.sourceAuthorNames,
-          restrictedTitles: deps.governance?.store
-            ? (heads, context) => deps.governance!.store.restrictedTitles(heads, context) : undefined } });
-      for (const row of found.results) {
-        ids.add(row.work);
-        const match = row as Partial<FieldMatch>;
-        if (typeof match.matchedText === 'string' && match.matchedField) {
-          const attributes = matchedAttributes.get(row.work) ?? [];
-          attributes.push({ field: match.matchedField, value: match.matchedText, language: match.matchedLanguage ?? null });
-          matchedAttributes.set(row.work, attributes);
-        }
-      }
-    }
-    const titleFilters = [...new Set(terms.flatMap(term => [term.normalize('NFC'), term.normalize('NFD')]))]
-      .map(term => `CONTAINS(LCASE(STR(?value)), ${lit(term.toLowerCase())})`);
-    const dateFilters = input.dates.map(year => `REGEX(STR(?value), ${lit(`"publicationYear":${year}[,}]`)})`);
-    const rows = await session.query(`SELECT DISTINCT ?work ?metadataState WHERE {
+    const ranks = new Map<string, { priority: number; score: number }>();
+    const evidence = new Map<string, CatalogueCandidate['attributes']>();
+    const add = (work: string, priority: number, score = 0) => {
+      const prior = ranks.get(work);
+      ranks.set(work, { priority: Math.min(priority, prior?.priority ?? priority),
+        score: Math.max(score, prior?.score ?? score) });
+    };
+    const keys = [...new Set(terms.map(catalogueTitleKey))];
+    const literals = [...new Set(titles.flatMap(title => [title.value.normalize('NFC'), title.value.normalize('NFD')]
+      .map(value => `${lit(value)}@${title.language}`)))];
+    const exact = await session.query(`SELECT DISTINCT ?work WHERE {
+      { VALUES ?key { ${keys.map(lit).join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?work ?predicate ?key .
+          VALUES ?predicate { rv:catalogueTitleKey rv:catalogueMetadataTitleKey } } }
+      UNION { VALUES ?value { ${literals.join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?work ?predicate ?value .
+          VALUES ?predicate { rdfs:label schema:alternateName } } }
       ${publicWork('?work', '?main')}
-      { GRAPH ${iri(GRAPHS.current)} { ?work ?predicate ?value .
-          VALUES ?predicate { rdfs:label schema:alternateName } }
-        FILTER(${titleFilters.join(' || ')}) }
-      UNION { GRAPH ${iri(GRAPHS.current)} { ?work rv:descriptiveMetadataHead ?metadata }
-        GRAPH ${iri(GRAPHS.revisions)} { ?metadata rv:metadataState ?metadataState }
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?metadata a rv:ErasedRevision } }
-        BIND(?metadataState AS ?value)
-        FILTER(${titleFilters.join(' || ')}) }
-      UNION { GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:work ?work ;
-          rv:creditRevision ?creditHead ; rv:agent ?agent ; schema:roleName "author" }
-        GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ; rv:component ?credit .
-          FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }
-        ${publicAgent('?agent')} BIND(?displayName AS ?value)
-        FILTER(${titleFilters.join(' || ')}) }
-    } ORDER BY STR(?work) LIMIT ${CATALOGUE_COST.candidates + 1}`, CATALOGUE_COST.candidates);
-    for (const row of rows) {
-      if (!row.work) throw new CatalogueUnavailable('Candidate identity is incomplete');
-      if (row.metadataState) {
-        const metadata = parsedMetadataState(row.metadataState.value);
-        if (metadata.kind !== 'header') throw new CatalogueUnavailable('Work title metadata is incomplete');
-        const titles = [metadata.originalTitle?.value, ...metadata.localized.map(locale => locale.title)]
-          .filter((value): value is string => typeof value === 'string');
-        // JSON also carries descriptions. Only the title fields can qualify
-        // this branch; serialized prose is not an alternate title match.
-        if (!titles.some(value => terms.some(term => value.normalize('NFC').toLowerCase()
-          .includes(term.normalize('NFC').toLowerCase())))) continue;
-      }
-      ids.add(row.work.value);
-    }
-    const releaseEvidence = matchedAttributes;
-    if (input.dates.length) {
-      const dated = await session.query(`SELECT DISTINCT ?work WHERE {
-        ${publicWork('?work', '?main')}
-        GRAPH ${iri(GRAPHS.current)} { ?release a rv:Release ; rv:work ?work ; rv:releaseHead ?head }
-        GRAPH ${iri(GRAPHS.revisions)} { ?head rv:releaseState ?value }
-        FILTER(${dateFilters.join(' || ')}) } LIMIT 129`, 128);
-      for (const row of dated) {
-        // The Release owner fences every covered Work of an omnibus. A raw
-        // date projection cannot qualify a release with an undisclosed member.
-        const page = await readWorkReleases(session, row.work!.value);
-        if (page.nextCursor) throw new CatalogueUnavailable('Publication dates exceed the complete search bound');
-        for (const release of page.items) {
-          if (!release.publicationYear || !input.dates.includes(release.publicationYear)) continue;
-          ids.add(row.work!.value);
-          const attributes = releaseEvidence.get(row.work!.value) ?? [];
-          attributes.push({ field: 'publication-year', value: String(release.publicationYear), language: null },
-            { field: 'release', value: release.id, language: null });
-          releaseEvidence.set(row.work!.value, attributes);
-        }
+    } ORDER BY STR(?work) LIMIT ${CATALOGUE_COST.candidates}`, CATALOGUE_COST.candidates);
+    for (const row of exact) if (row.work) add(row.work.value, 0);
+    const index = await assertPublicTextReady(deps.environment.fuseki, deps.environment.lineage);
+    for (const term of terms) {
+      // Literal phrases cannot inject Lucene operators. The index limit applies
+      // before joins and stays bounded even for "It", "Origin" and one CJK character.
+      const phrase = term.slice(0, 80).replace(/[\\"]/g, '\\$&');
+      const rows = await session.query(`PREFIX text: <http://jena.apache.org/text#>
+        SELECT DISTINCT ?work ?score WHERE {
+          GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+            # The named-graph adapter admits one field per query.
+            { (?unit ?score) text:query (rv:publicTitle ${lit(`"${phrase}"`)} ${CATALOGUE_COST.candidates}) }
+            UNION { (?unit ?score) text:query (rv:searchBody ${lit(`"${phrase}"`)} ${CATALOGUE_COST.candidates}) }
+            ?unit a rv:MatchUnit ; rv:disclosure rv:Public ; rv:work ?indexedWork ;
+              rv:mainVersion ?indexedMain ; rv:context ?indexedMain ; rv:selection ?selection .
+            OPTIONAL { ?unit rv:searchResultWork ?resultWork }
+          }
+          GRAPH ${iri(GRAPHS.current)} { ?indexedMain rv:selectionHead ?selection }
+          BIND(COALESCE(?resultWork, ?indexedWork) AS ?work)
+          ${publicWork('?work', '?main')}
+        } ORDER BY DESC(?score) STR(?work) LIMIT ${CATALOGUE_COST.candidates}`, CATALOGUE_COST.candidates);
+      for (const row of rows) {
+        const score = Number(row.score?.value);
+        if (!row.work || !Number.isFinite(score)) throw new CatalogueUnavailable('Index candidate is incomplete');
+        add(row.work.value, 2, score);
       }
     }
+    await assertSameTextInstance(deps.environment.fuseki, index);
     for (const identifier of input.identifiers) {
-      const found = await readReleasesByIdentifier(session, identifier);
-      if (found.nextCursor) throw new CatalogueUnavailable('Identifier candidates exceed the complete search bound');
-      for (const release of found.items) {
-        const works = release.coverage.map(item => item.work);
-        for (const work of works) {
-          ids.add(work);
-          const attributes = releaseEvidence.get(work) ?? [];
+      const page = await readReleasesByIdentifier(session, identifier);
+      for (const release of page.items) {
+        for (const { work } of release.coverage) {
+          add(work, 1);
+          const attributes = evidence.get(work) ?? [];
           attributes.push({ field: 'release', value: release.id, language: null },
             { field: 'identifier', value: JSON.stringify(identifier), language: null });
           if (release.publicationYear) attributes.push({ field: 'publication-year', value: String(release.publicationYear), language: null });
-          releaseEvidence.set(work, attributes);
+          evidence.set(work, attributes);
         }
       }
     }
-    if (ids.size > CATALOGUE_COST.candidates) throw new CatalogueUnavailable('Candidates exceed the complete search bound');
-    const candidates = await hydrateCandidates(session, [...ids].sort(), releaseEvidence);
-    return { candidates, sourcePosition: session.position };
+    const ordered = [...ranks].sort(([a, x], [b, y]) => x.priority - y.priority || y.score - x.score || compare(a, b));
+    const works = ordered.slice(0, CATALOGUE_COST.candidates).map(([work]) => work);
+    if (input.dates.length) {
+      // At most eight release-owner pages, each fencing every omnibus member.
+      // A frequent publication year never expands the candidate population.
+      for (const work of works.slice(0, CATALOGUE_COST.dateProbes)) {
+        const page = await readWorkReleases(session, work);
+        for (const release of page.items) {
+          if (!release.publicationYear || !input.dates.includes(release.publicationYear)) continue;
+          const attributes = evidence.get(work) ?? [];
+          attributes.push({ field: 'publication-year', value: String(release.publicationYear), language: null },
+            { field: 'release', value: release.id, language: null });
+          evidence.set(work, attributes);
+        }
+      }
+    }
+    const candidates = await hydrateCandidates(session, works, evidence);
+    const refinements = (candidate: CatalogueCandidate) => candidate.attributes.reduce((score, attribute) =>
+      score + (attribute.field === 'publication-year' && input.dates.includes(Number(attribute.value)) ? 1 : 0)
+        + (attribute.field === 'creator' && input.creators.some(name => catalogueTitleKey(attribute.value)
+          .includes(catalogueTitleKey(name))) ? 1 : 0), 0);
+    candidates.sort((a, b) => {
+      const x = ranks.get(a.work)!, y = ranks.get(b.work)!;
+      return x.priority - y.priority || refinements(b) - refinements(a) || y.score - x.score || compare(a.work, b.work);
+    });
+    return { complete: false as const, candidates, sourcePosition: session.position };
   });
 }
-
+const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 async function hydrateCandidates(session: WorkReadSession, works: string[], releaseEvidence: Map<string, CatalogueCandidate['attributes']>) {
   if (!works.length) return [];
   const rows = await session.query(`SELECT DISTINCT ?work ?main ?head ?title ?metadataState ?provisional ?grain WHERE {
@@ -135,13 +128,13 @@ async function hydrateCandidates(session: WorkReadSession, works: string[], rele
   const heads = rows.map(row => ({ work: row.work!.value, revision: row.head!.value }));
   const restricted = await session.deps.governance?.store.restrictedTitles(heads, DEFAULT_MEDIA_CONTEXT) ?? new Set<string>();
   const aliases = await session.query(`SELECT ?work ?alias WHERE { VALUES ?work { ${works.map(iri).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} { ?work schema:alternateName ?alias } } LIMIT 2049`, 2048);
+    GRAPH ${iri(GRAPHS.current)} { ?work schema:alternateName ?alias } } LIMIT 2048`, 2048);
   const creators = await session.query(`SELECT DISTINCT ?work ?displayName WHERE { VALUES ?work { ${works.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:work ?work ; rv:creditRevision ?creditHead ;
       rv:agent ?agent ; schema:roleName "author" }
     GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ; rv:component ?credit .
       FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }
-    ${publicAgent('?agent')} } LIMIT 513`, 512);
+    ${publicAgent('?agent')} } LIMIT 512`, 512);
   const output: CatalogueCandidate[] = [];
   for (const row of rows) {
     if (!row.work || !row.main || !row.head || !row.title) throw new CatalogueUnavailable('Candidate attributes are incomplete');
@@ -168,5 +161,5 @@ async function hydrateCandidates(session: WorkReadSession, works: string[], rele
       attributes: [...new Map(attributes.map(value => [JSON.stringify(value), value])).entries()]
         .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, value]) => value) });
   }
-  return output.sort((a, b) => a.work < b.work ? -1 : a.work > b.work ? 1 : 0);
+  return output;
 }

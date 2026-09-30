@@ -126,6 +126,7 @@ export const RESERVED_OWNER_PREDICATES: ReadonlySet<string> = new Set([
   `${RV}fromRole`, `${RV}toRole`, `${RV}presentationLanguage`,
   `${RV}catalogueVisible`, `${RV}provisional`, `${RV}declaredGrain`, `${RV}candidateSearch`,
   `${RV}fieldProvenance`, `${RV}declaredParentComposition`, `${RV}catalogueVerification`,
+  `${RV}catalogueTitleKey`, `${RV}catalogueMetadataTitleKey`,
 ]);
 
 const OWL = 'http://www.w3.org/2002/07/owl#';

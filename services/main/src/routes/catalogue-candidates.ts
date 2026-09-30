@@ -28,7 +28,7 @@ export function catalogueCandidateRoutes(deps: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/catalogue/candidates', { body: candidateInput,
       response: { 200: t.Object({ profile: t.Literal('catalogue-candidates-v1'), candidateReceipt: t.String(),
-        complete: t.Literal(true), candidates: t.Array(candidate, { maxItems: 128 }), sourcePosition: readPosition }),
+        complete: t.Literal(false), candidates: t.Array(candidate, { maxItems: 128 }), sourcePosition: readPosition }),
       ...writeProblems, 429: problemResult(429) },
     }, async ({ request, body }) => {
       if (!deps.catalogueIntake) return problem(503, 'catalogue_unavailable', 'Catalogue intake is unavailable');
@@ -39,7 +39,7 @@ export function catalogueCandidateRoutes(deps: MainWorkDependencies) {
         if (!principalId) return problem(403, 'contributor_inactive', 'Contributor is inactive');
         const found = await searchCatalogue(deps, input);
         const candidateReceipt = await deps.catalogueIntake.recordSearch(principalId, input, found.candidates, found.sourcePosition);
-        return Response.json({ profile: 'catalogue-candidates-v1', candidateReceipt, complete: true,
+        return Response.json({ profile: 'catalogue-candidates-v1', candidateReceipt,
           ...found }, { headers });
       } catch (error) { return catalogueError(error); }
     })

@@ -232,7 +232,7 @@ describe('Main typed route contracts', () => {
       actingSubject: id, expectedAuthorityEpoch: '0', authorityPath: 'pooled',
     });
     expect(invalidPath.status).toBe(400);
-    const missingKey = await send('/v1/works', { profile: 'metadata-only-v1',
+    const missingKey = await send('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work',
       title: 'Work', language: 'en', actingSubject: id });
     expect(missingKey.status).toBe(400);
     expect((await missingKey.json() as { code: string }).code).toBe('invalid_idempotency_key');

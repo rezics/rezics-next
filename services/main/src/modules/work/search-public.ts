@@ -17,7 +17,7 @@ import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE, decisionSlotIri,
 import { exactDecisionSupports, readSearchDecisionSupports } from './search-supports.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 import { querySearchFields, rankedSearchMatches, type SearchFieldOwners } from '../search/fields.ts';
-import { publicWork } from './public-patterns.ts';
+import { publicWork, publishedWork } from './public-patterns.ts';
 import { visibleContentSearchRights } from '../content-publication/search.ts';
 import type { RightsStore } from '../rights/store.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
@@ -126,6 +126,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
             FILTER NOT EXISTS { ?contentRevision a rv:ErasedRevision }
           }
           ${publicWork('?resultWork', '?resultMain')}
+          ${publishedWork('?resultWork', '?resultMain')}
           GRAPH ${iri(GRAPHS.revisions)} { ?publicSelection rv:language ?language . }
           ${input.author ? `GRAPH ${iri(GRAPHS.current)} {
             ?publicContribution rv:author ${iri(input.author)} . }` : ''}

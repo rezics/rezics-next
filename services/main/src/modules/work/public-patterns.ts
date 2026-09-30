@@ -8,10 +8,8 @@ export const unerased = (work: string) => `FILTER NOT EXISTS { GRAPH ${iri(GRAPH
     GRAPH ${iri(GRAPHS.revisions)} { ?erasedWorkHead a rv:ErasedRevision } }
   FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${work} rv:protectionHead ?protection } }`;
 
-/** Shared by public reads and baseline write authorization. Current reviewed
- * publication or explicit catalogue visibility; a private draft and a retired
- * publication do not qualify. Provisional visibility grants no trust. */
-export const publicWork = (work: string, main: string) => `{ { GRAPH ${iri(GRAPHS.current)} {
+/** Binds the current reviewed publication for consumers that need selected text. */
+export const publishedWork = (work: string, main: string) => `GRAPH ${iri(GRAPHS.current)} {
   ${work} a schema:CreativeWork ; rv:mainVersion ${main} .
   ${main} a rv:MainVersion ; rv:work ${work} ; rv:selectionHead ?publicSelection .
   ?publicContribution rv:work ${work} ; rv:publicationHead ?publicDecision . }
@@ -21,7 +19,14 @@ export const publicWork = (work: string, main: string) => `{ { GRAPH ${iri(GRAPH
     ?publicDecision a rv:PublicationDecision ; rv:component ?publicContribution ; rv:work ${work} ;
       rv:contribution ?publicContribution ; rv:disclosure rv:Public ; rv:selectedDraft ?publicDraft .
     ?publicDraft a rv:RevisionAnchor ; rv:component ?publicContribution .
-    FILTER NOT EXISTS { ?publicDraft a rv:ErasedRevision } } }
-  UNION { GRAPH ${iri(GRAPHS.current)} { ${work} a schema:CreativeWork ;
-    rv:mainVersion ${main} ; rv:catalogueVisible true . ${main} a rv:MainVersion ; rv:work ${work} } }
-  } ${unerased(work)}`;
+    FILTER NOT EXISTS { ?publicDraft a rv:ErasedRevision } }`;
+
+/** A visibility predicate: being both published and catalogue-visible must
+ * still yield exactly one Work/main binding. Publication variables are local
+ * to EXISTS; consumers needing a selected text use publishedWork explicitly. */
+export const publicWork = (work: string, main: string) => `GRAPH ${iri(GRAPHS.current)} {
+  ${work} a schema:CreativeWork ; rv:mainVersion ${main} .
+  ${main} a rv:MainVersion ; rv:work ${work} . }
+  FILTER(EXISTS { ${publishedWork(work, main)} }
+    || EXISTS { GRAPH ${iri(GRAPHS.current)} { ${work} rv:catalogueVisible true } })
+  ${unerased(work)}`;

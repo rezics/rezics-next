@@ -11,7 +11,10 @@ import { createMainApp, type MainWorkDependencies } from '../../../services/main
 import { CatalogueIntakeStore, unverifiedWorks } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { readExportPlan, ExportSourceNotFound } from '../../../services/main/src/modules/export/readers.ts';
-import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { DATASET, GRAPHS, RV, iri, lit, hash, CONTINUITY } from '../../../services/main/src/modules/work/activate.ts';
+import { publicWork } from '../../../services/main/src/modules/work/public-patterns.ts';
+import { profileValidations } from '../../../services/main/src/infrastructure/profile.ts';
+import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { readCatalogueVerification } from '../../../services/main/src/modules/catalogue-intake/verification.ts';
 import { ownerOutboxEventHandler } from '../../../services/main/src/modules/outbox/event-handlers.ts';
 
@@ -20,7 +23,7 @@ async function json<T>(response: Response, expected = 200): Promise<T> {
   if (response.status !== expected) throw new Error(`Expected ${expected}, got ${response.status}: ${text}`);
   return JSON.parse(text) as T;
 }
-type Candidates = { candidateReceipt: string; candidates: { work: string; attributes: { field: string; value: string; language: string | null }[] }[] };
+type Candidates = { candidateReceipt: string; complete: false; candidates: { work: string; attributes: { field: string; value: string; language: string | null }[] }[] };
 type Created = { work: string; workRevision: string; mainVersion: string; replayed: boolean };
 
 test('G842: multilingual candidate receipts, grain guard, quota races, replay and reviewed trust through HTTP', async () => {
@@ -70,6 +73,7 @@ test('G842: multilingual candidate receipts, grain guard, quota races, replay an
       aliases: [{ value: 'Sword Art Online', language: 'en' }],
       romanizations: [{ value: 'Sōdo Āto Onrain', language: 'ja-Latn' }] };
     const created = await json<Created>(await send('POST', '/v1/works', body, key), 201);
+    expect(before.complete).toBe(false);
     expect(await json<Created>(await send('POST', '/v1/works', body, key))).toMatchObject({ work: created.work, replayed: true });
     for (const term of ['Sword Art Online', 'Sōdo Āto Onrain']) {
       const found = await search(term);
@@ -151,7 +155,7 @@ test('G842: multilingual candidate receipts, grain guard, quota races, replay an
     for (const criterion of [{ dates: [2014] }, { identifiers: [{ isbn13: '9780316371247' }] },
       { identifiers: [{ provider: 'https://publisher.example', identifier: 'g842-original' }] }]) {
       const found = await json<Candidates>(await send('POST', '/v1/catalogue/candidates', {
-        ...candidateBody('Unrelated catalogue title'), ...criterion }));
+        ...candidateBody('dates' in criterion ? title : 'Unrelated catalogue title', 'ja'), ...criterion }));
       expect(found.candidates.map(candidate => candidate.work)).toContain(created.work);
       expect(found.candidates.find(candidate => candidate.work === created.work)!.attributes)
         .toContainEqual({ field: 'release', value: publication, language: null });
@@ -164,6 +168,9 @@ test('G842: multilingual candidate receipts, grain guard, quota races, replay an
     const selected = await selectMainDefault(stack.env, stack.admission(editor.actor,
       `publication:select:${created.mainVersion}`, 'publication.select', mainSelectionDigest(select)), select);
     expect(selected.outcome).toBe('succeeded');
+    const visible = (await stack.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      SELECT ?work ?main WHERE { VALUES ?work { ${iri(created.work)} } ${publicWork('?work', '?main')} }`)).results!.bindings;
+    expect(visible).toHaveLength(1);
     await editor.grant(`release:seal:${created.mainVersion}`, 'release.seal');
     const release = await json<{ release: string; sourcePosition: { dataEpoch: string; sequence: string } }>(
       await send('POST', '/v1/fixed-releases', { profile: 'fixed-native-text-release-v1', work: created.work,
@@ -220,6 +227,61 @@ test('G842: multilingual candidate receipts, grain guard, quota races, replay an
       editor.principal, editor.actor, { kind: 'semantic-revision', resource: pending,
         reference: created.workRevision, expectedPosition: { dataEpoch: stack.env.lineage.dataEpoch, sequence: '0' } }, 'full'))
       .rejects.toBeInstanceOf(ExportSourceNotFound);
+
+    // Own-work drafting is publication-gated, carries a native author credit,
+    // and consumes neither catalogue evidence nor the contributor's three slots.
+    await createAgentGraph(stack.env, { id: randomUUID(), agent: editor.actor, kind: 'person',
+      displayName: 'G842 author', digest: hash(editor.actor) });
+    for (let n = 0; n < 4; n++) {
+      const own = await json<Created>(await send('POST', '/v1/works', { profile: 'metadata-only-v1',
+        authoring: 'own-work', title: `Draft chapter ${n}`, language: 'en', actingSubject: editor.actor }), 201);
+      expect((await send('GET', `/v1/works/${own.work.slice(-36)}`, undefined, randomUUID(), '')).status).toBe(404);
+      expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(own.work)} rv:catalogueVisible true } }`)).boolean).toBe(false);
+    }
+    expect((await stack.accessPool.query('SELECT slot FROM quota.catalogue_pending WHERE principal_id = $1', [editor.principalId])).rows).toHaveLength(3);
+
+    // One native fixture command builds >128 exact candidates per short title.
+    // Payload and validation work stay bounded; no historical JSON is scanned.
+    const fixtures = ['It', 'Origin', '本'].flatMap(title => Array.from({ length: 140 }, () => ({
+      title, work: `https://rezics.com/id/${randomUUID()}`, main: `https://rezics.com/id/${randomUUID()}`,
+      head: `https://rezics.com/id/${randomUUID()}` })));
+    for (let offset = 0; offset < fixtures.length; offset += 24) {
+      const batch = fixtures.slice(offset, offset + 24);
+      const receipt = `urn:rezics:receipt:g842-breadth-${randomUUID()}`;
+      const validations = await profileValidations(stack.fuseki, 'work-metadata-v1', [
+        { shape: 'https://rezics.com/definition/work-metadata-v1/work-shape', focus: batch.map(row => row.work), graphs: [GRAPHS.current] },
+        { shape: 'https://rezics.com/definition/work-metadata-v1/main-version-shape', focus: batch.map(row => row.main), graphs: [GRAPHS.current] },
+      ]);
+      const outcome = await stack.fuseki.commandWithReceipt({ receipt, digest: hash(receipt), validations, deadlineMs: 10_000,
+        update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+          DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
+          INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+            GRAPH ${iri(GRAPHS.current)} { ${batch.map(row => `${iri(row.work)} a schema:CreativeWork ;
+              rv:mainVersion ${iri(row.main)} ; rv:head ${iri(row.head)} ; rv:continuityProfile ${iri(CONTINUITY)} ;
+              rv:catalogueVisible true ; rv:catalogueTitleKey ${lit(row.title.toLowerCase())} ; rdfs:label ${lit(row.title)}@en .
+              ${iri(row.main)} a rv:MainVersion ; rv:work ${iri(row.work)} ; rv:hostingPolicy rv:MetadataOnly .`).join('\n')} }
+            GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ; rv:requestDigest ${lit(hash(receipt))} ;
+              rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence ?next }
+            GRAPH ${iri(GRAPHS.outbox)} { ${iri(`${receipt}:batch`)} a rv:OutboxBatch ;
+              rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(`${receipt}:event`)} .
+              ${iri(`${receipt}:event`)} a rv:WorkCreatedEvent ; rv:ordinal 0 ; rv:receipt ${iri(receipt)} }
+          }
+          WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ;
+            rv:routingEpoch ${lit(stack.env.lineage.routingEpoch)} ; rv:sequence ?n }
+            BIND(?n + 1 AS ?next) }` });
+      if (outcome.status !== 'committed') throw new Error(`G842 breadth fixture: ${JSON.stringify(outcome)}`);
+    }
+    await reviewer.grant('work:create:root', 'work.create');
+    for (const title of ['It', 'Origin', '本']) {
+      const input = candidateBody(title);
+      const found = await json<Candidates>(await send('POST', '/v1/catalogue/candidates', input, randomUUID(), reviewer.token));
+      expect(found.complete).toBe(false);
+      expect(found.candidates).toHaveLength(128);
+      expect(found.candidates.every(candidate => candidate.attributes.some(attribute => attribute.field === 'title' && attribute.value === title))).toBe(true);
+      expect((await json<Candidates>(await send('POST', '/v1/catalogue/candidates', input, randomUUID(), reviewer.token))).candidates).toEqual(found.candidates);
+      expect((await send('POST', '/v1/works', { ...creation(title, found.candidateReceipt), actingSubject: reviewer.actor }, randomUUID(), reviewer.token)).status).toBe(201);
+    }
   } finally {
     await relay?.end();
     await relayOwner?.close();

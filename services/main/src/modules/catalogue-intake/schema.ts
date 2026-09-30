@@ -29,12 +29,10 @@ export class CatalogueUnavailable extends Error {}
 export class CataloguePendingLimit extends Error {}
 export class CatalogueStale extends Error {}
 
-/** At most 21 lexical index queries, 4 identifier pages and 128 unique Works.
- * Live supplementary matching is O(visible Works x current metadata), capped at
- * 129 rows / 1 MiB and fails explicitly on overflow; no truncated success receipt. */
-export const CATALOGUE_COST = { candidates: 128, graphBytes: 1024 * 1024,
-  graphCalls: 160, totalGraphBytes: 4 * 1024 * 1024, deadlineMs: 10_000,
-  receiptLifetimeMs: 30 * 60 * 1000, pending: 3 } as const;
+/** At most 17 bounded index probes, four identifier pages, eight date probes
+ * and 128 hydrated Works. WorkRead enforces its call/byte/wall envelope.
+ * Retrieval is sampled; a receipt proves search, never catalogue uniqueness. */
+export const CATALOGUE_COST = { candidates: 128, dateProbes: 8, graphBytes: 1024 * 1024 } as const;
 
 export function checkedCandidates(input: unknown): CandidateInput {
   if (!Value.Check(candidateInput, input)) throw new CatalogueInvalid('Candidate search input is invalid');

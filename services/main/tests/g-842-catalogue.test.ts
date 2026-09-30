@@ -26,7 +26,7 @@ test('G842: candidate titles retain spelling and canonical language; grain names
 
 test('G842: generic semantic editing cannot impersonate catalogue visibility, verification or provenance', () => {
   for (const field of ['catalogueVisible', 'provisional', 'declaredGrain', 'candidateSearch',
-    'fieldProvenance', 'declaredParentComposition', 'catalogueVerification']) {
+    'fieldProvenance', 'declaredParentComposition', 'catalogueVerification', 'catalogueTitleKey', 'catalogueMetadataTitleKey']) {
     expect(semanticPredicateOutcome(`https://rezics.com/vocab/${field}`)).toBe('reserved-owner');
   }
   expect(semanticTypeOutcome('https://rezics.com/vocab/CatalogueVerification')).toBe('reserved-owner');
@@ -41,7 +41,7 @@ test('G842: creation receipt, grain, parent and aliases belong to the immutable 
     romanizations: [{ value: 'Taitoru', language: 'ja-Latn' }] } }));
 });
 
-test('G842: every POST Work client declares grain and search evidence; referrals never register an admission', async () => {
+test('G842: catalogue creation declares grain and search evidence; referrals never register an admission', async () => {
   let registered = 0;
   const deps = { account: { verify: async () => ({ issuer: 'https://qa.test', subject: 'editor' }) },
     access: { register: async () => { registered++; throw new Error('Unexpected write'); } } } as unknown as MainWorkDependencies;

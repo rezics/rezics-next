@@ -69,29 +69,35 @@ function publicFixedRelease(exact: FixedRelease) {
 }
 
 export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
+  const createBody = t.Object({
+    profile: t.Literal('metadata-only-v1'),
+    grain: t.Optional(declaredGrain),
+    candidateReceipt: t.Optional(t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' })),
+    aliases: t.Optional(t.Array(candidateText, { maxItems: 8 })),
+    romanizations: t.Optional(t.Array(candidateText, { maxItems: 8 })),
+    parentComposition: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+    authorityPath: t.Optional(t.Union([
+      t.Literal('represented-agent'), t.Literal('direct-principal')])),
+    title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
+    language: t.Optional(t.String({ minLength: 2, maxLength: 35,
+      pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' })),
+    localizedTitle: t.Optional(t.Object({ value: t.String({ minLength: 1, maxLength: 500 }),
+      language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false })),
+    description: t.Optional(t.Object({ value: t.String({ minLength: 1, maxLength: 4000 }),
+      language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false })),
+    authoring: t.Optional(t.Literal('own-work')),
+    semanticTypes: t.Optional(t.Array(t.String({ enum: workSemanticTypes }),
+      { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true })),
+    actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+  }, { additionalProperties: false });
   return new Elysia()
     .post('/v1/works', {
-      body: t.Object({
-        profile: t.Literal('metadata-only-v1'),
-        grain: declaredGrain,
-        candidateReceipt: t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }),
-        aliases: t.Optional(t.Array(candidateText, { maxItems: 8 })),
-        romanizations: t.Optional(t.Array(candidateText, { maxItems: 8 })),
-        parentComposition: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
-        authorityPath: t.Optional(t.Union([
-          t.Literal('represented-agent'), t.Literal('direct-principal')])),
-        title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
-        language: t.Optional(t.String({ minLength: 2, maxLength: 35,
-          pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' })),
-        localizedTitle: t.Optional(t.Object({ value: t.String({ minLength: 1, maxLength: 500 }),
-          language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false })),
-        description: t.Optional(t.Object({ value: t.String({ minLength: 1, maxLength: 4000 }),
-          language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false })),
-        authoring: t.Optional(t.Literal('own-work')),
-        semanticTypes: t.Optional(t.Array(t.String({ enum: workSemanticTypes }),
-          { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true })),
-        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }),
+      body: t.Union([
+        t.Object({ ...createBody.properties, authoring: t.Literal('own-work') }, { additionalProperties: false }),
+        t.Object({ ...createBody.properties, authoring: t.Optional(t.Literal('catalogue')),
+          grain: declaredGrain, candidateReceipt: t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }) },
+        { additionalProperties: false }),
+      ]),
       response: { 200: t.Union([workResult, t.Object({ outcome: t.Literal('use-owner-api'),
         grain: declaredGrain, ownerApi: t.Object({ method: t.String(), path: t.String() }) })]),
         201: workResult, 202: pendingOperation,
@@ -105,13 +111,17 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
-        const ownerApi = grainOwner(body.grain);
+        const ownWork = body.authoring === 'own-work';
+        if (ownWork && body.grain && body.grain !== 'new-creative-scope') {
+          return problem(400, 'invalid_authoring_grain', 'Own-work authoring creates a new creative scope');
+        }
+        const ownerApi = grainOwner(body.grain ?? 'new-creative-scope');
         if (ownerApi) {
           await work.account.verify(request, ['work:create']);
           return Response.json({ outcome: 'use-owner-api', grain: body.grain, ownerApi },
             { headers: { 'cache-control': 'no-store' } });
         }
-        if (!work.catalogueIntake) return problem(503, 'catalogue_unavailable', 'Catalogue intake is unavailable');
+        if (!ownWork && !work.catalogueIntake) return problem(503, 'catalogue_unavailable', 'Catalogue intake is unavailable');
         const receipt = await createAdmittedMetadataWork(work.environment, work.account, work.access,
           request, { title: body.title, language: body.language ?? 'und',
             localizedTitle: body.localizedTitle, description: body.description,
@@ -119,7 +129,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             actingSubject: body.actingSubject,
             authorAgent: body.authoring === 'own-work' ? body.actingSubject : undefined,
             authorityPath: body.authorityPath, idempotencyKey,
-            catalogue: { candidateReceipt: body.candidateReceipt, grain: 'new-creative-scope',
+            catalogue: ownWork ? undefined : { candidateReceipt: body.candidateReceipt!, grain: 'new-creative-scope',
               aliases: body.aliases, romanizations: body.romanizations,
               ...(body.parentComposition ? { parentComposition: body.parentComposition } : {}) } }, work.catalogueIntake);
         return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,

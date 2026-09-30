@@ -42,10 +42,11 @@ test(`Studio ${basis} chapter Content resolves to its public Book on the Main ph
       obligations: [], expectedAssessment, idempotencyKey: randomUUID() });
     await stack.contentCursor.initialize(stack.contentConsumer);
     const title = `雨夜书店 ${randomUUID().slice(0, 8)}`;
-    const created = await activateMetadataWork(stack.env, { title,
+    const catalogue = { grain: 'new-creative-scope' as const, candidateReceipt: randomUUID() };
+    const created = await activateMetadataWork(stack.env, { title, catalogue,
       semanticTypes: ['https://schema.org/Book'],
       admission: stack.admission(actor.actor, 'work:create:root', 'work.create',
-        metadataWorkRequestDigest(title, ['https://schema.org/Book'])) });
+        metadataWorkRequestDigest(title, ['https://schema.org/Book'], 'und', { catalogue })) });
     const opening = await stack.contribution(created.work, actor.actor, 'zh-Hans', '书店开门了');
     const selection = { context: { kind: 'main-version-default' as const, id: created.mainVersion },
       work: created.work, contribution: opening.contribution, publicationDecision: opening.decision,

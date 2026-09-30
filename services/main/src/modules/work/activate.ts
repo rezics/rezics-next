@@ -13,6 +13,7 @@ import { discardUnpublishedWorkObjects, stagedWorkObjectCandidates,
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 import { workKinds, workSemanticTypes } from './work-kinds.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
+import { catalogueTitleKey } from '../catalogue-intake/title-keys.ts';
 
 export const RV = 'https://rezics.com/vocab/';
 export const ID = 'https://rezics.com/id/';
@@ -288,6 +289,9 @@ function updateText(env: WorkActivationEnvironment, args: {
           ...(args.localizedTitle ? ['localizedTitle'] : []),
           ...(args.description ? ['description'] : []), ...(args.semanticTypes.length ? ['semanticTypes'] : []),
           ...(args.catalogue.aliases?.length ? ['aliases'] : []), ...(args.catalogue.romanizations?.length ? ['romanizations'] : [])] }))} .\n`
+      + [...new Set([args.title, ...(args.localizedTitle ? [args.localizedTitle.value] : []),
+        ...(args.catalogue.aliases ?? []).map(text => text.value), ...(args.catalogue.romanizations ?? []).map(text => text.value)]
+        .map(catalogueTitleKey))].map(key => `  ${iri(args.work)} rv:catalogueTitleKey ${lit(key)} .\n`).join('')
       + [...(args.catalogue.aliases ?? []), ...(args.catalogue.romanizations ?? [])]
         .map(title => `  ${iri(args.work)} schema:alternateName ${lit(title.value)}@${canonicalLanguage(title.language)} .\n`).join('')
       + (args.catalogue.parentComposition ? `  ${iri(args.work)} rv:declaredParentComposition ${iri(args.catalogue.parentComposition)} .\n` : '') : '') +

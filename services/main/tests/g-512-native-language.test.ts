@@ -541,7 +541,7 @@ for (const language of ['ja', 'zh-Hant', undefined]) {
       const post = (path: string, body: unknown) => app.handle(new Request(`http://localhost${path}`, {
         method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': 'g-512' }, body: JSON.stringify(body),
       }));
-      const created = await post('/v1/works', { profile: 'metadata-only-v1', title: '作品', actingSubject: actor,
+      const created = await post('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work', title: '作品', actingSubject: actor,
         ...(language ? { language } : {}) });
       expect(created.status).toBe(201);
       expect(f.fuseki.commands.at(-1)!.update).toContain(`rdfs:label "作品"@${language ?? 'und'}`);
@@ -556,7 +556,7 @@ for (const language of ['ja', 'zh-Hant', undefined]) {
       expect(replayed.status).toBe(200);
       expect(await replayed.json()).toMatchObject({ replayed: true });
       expect(f.fuseki.commands).toHaveLength(count);
-      const invalid = await post('/v1/works', { profile: 'metadata-only-v1', title: '作品', actingSubject: actor, language: 'ja-12' });
+      const invalid = await post('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work', title: '作品', actingSubject: actor, language: 'ja-12' });
       expect(invalid.status).toBe(400);
       expect(f.fuseki.commands).toHaveLength(count);
     } finally { f.cleanup(); }
