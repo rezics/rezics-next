@@ -11,8 +11,8 @@ import { InvalidContentLanguages, recordedLanguageTag } from '../modules/release
 import { SessionDenied } from '../modules/session/contract.ts';
 import { editionChoice, editionPreference, InvalidEditionPreference, StaleEditionPreference,
   EditionPreferenceConflict } from '../modules/session/preference-contract.ts';
-import { readSeriesProgress } from '../modules/session/series-read.ts';
-import { seriesSummary } from '../modules/session/series-contract.ts';
+import { readProgressSummary } from '../modules/progress-summary/read.ts';
+import { progressSummary } from '../modules/progress-summary/contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { problem } from './problems.ts';
@@ -51,11 +51,11 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
       query: t.Object({ actingSubject: readId, language: t.Optional(readLanguage), parent: t.Optional(readId),
         after: t.Optional(t.String({ maxLength: 2048 })), sessionCursor: t.Optional(t.String({ maxLength: 2048 })),
         releaseCursor: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
-      response: { 200: seriesSummary, ...workReadProblems } }, async ({ request, params, query }) => {
+      response: { 200: progressSummary, ...workReadProblems } }, async ({ request, params, query }) => {
       try {
         const owner = await own(request, query.actingSubject);
         const result = await workRead(work, request, query,
-          session => readSeriesProgress(session, owner, `https://rezics.com/id/${params.resource}`, query));
+          session => readProgressSummary(session, owner, `https://rezics.com/id/${params.resource}`, query));
         await own(request, query.actingSubject);
         return Response.json(result, { headers });
       } catch (error) { return failure(error); }
