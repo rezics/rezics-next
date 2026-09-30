@@ -59,7 +59,6 @@ async function device(browser: Browser, info: TestInfo, viewport: { width: numbe
 /** The status button's menu → Details, whatever shelf the Work is on. */
 async function openDetails(page: Page): Promise<Locator> {
   // A press before hydration opens nothing; try again until the menu is there.
-  await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
   const details = page.getByRole('menuitem', { name: 'Details' });
   await expect(async () => {
     const more = page.getByRole('button', { name: 'More shelves' });
