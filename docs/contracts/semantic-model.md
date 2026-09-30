@@ -142,7 +142,11 @@ gender from a name. Selection and fallback follow
 Narrative role (protagonist), prominence (main, supporting), credit role
 (author, voice actor) and participant slot (character) stay distinct concepts:
 a prominent antagonist is main without being the protagonist, and a source's
-"main" maps only after review. Today the
-[definition change operation](../../services/main/src/modules/semantic/change.ts)
-rejects label and grammar fields and graph queries return no localized
-presentation; both remain to be built.
+"main" maps only after review. Presentations are written through
+`POST /v1/lexicon/presentations` independently of the
+[definition change operation](../../services/main/src/modules/semantic/change.ts).
+Main renders their structured labels, grammatical forms and fallback provenance;
+`GET /v1/lexicon/presentations` batches up to 64 definitions. Draft writes require
+`lexicon.presentation.change`; submitting or retaining reviewed status requires
+the separate `lexicon.presentation.review` authority. MessageFormat 2 templates
+and embedding the rendering contract in relation reads (G-831) remain to be built.
