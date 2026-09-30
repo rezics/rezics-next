@@ -77,11 +77,12 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   await expect(page.getByRole('heading', { name: 'Discussion' })).toBeVisible();
   await page.getByRole('link', { name: 'Discuss this list item' }).first().click();
   await expect(page).toHaveURL(new RegExp(`/en/submit\\?target=${uuid(seeded.occurrence)}$`));
-  await expect(page.getByRole('heading', { name: 'Work' })).toBeVisible();
-  // The target is fixed by the page that asked; it cannot be searched away.
-  await expect(page.getByRole('button', { name: 'Change Work' })).toHaveCount(0);
   await page.getByRole('searchbox', { name: 'Find a community' }).fill('Aincrad');
   await page.getByRole('button', { name: 'Aincrad readers' }).click();
+  // The target is fixed by the page that asked; it cannot be searched away.
+  await expect(page.getByRole('heading', { name: 'Work' })).toBeVisible();
+  await expect(page.getByText('Sword Art Online (web)')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Change Work' })).toHaveCount(0);
   await page.locator('#post-title').fill('Who is Asuna in chapter one?');
   await page.getByRole('textbox', { name: 'Your post' }).fill('Does anyone else think chapter one is slow on purpose?');
   await page.getByRole('button', { name: 'Post', exact: true }).click();
