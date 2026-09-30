@@ -94,6 +94,13 @@ try {
     name: 'Aincrad readers', capabilities: ['realm'], actingSubject: editor.actor }), 201);
   // A new community reviews every post; this one takes them directly, as the composer needs. The realm's review mode
   // lives in the graph (what its page reads) and in Access (what admits a placement).
+  // The space outbox writes the review mode after the community is created; change it once it has.
+  const hasMode = async () => ((await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?mode WHERE { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(realm.realm)} rv:reviewMode ?mode } }`)).results?.bindings.length ?? 0) > 0;
+  for (const deadline = Date.now() + 90_000; !await hasMode() && Date.now() < deadline;) {
+    await new Promise(done => setTimeout(done, 1000));
+  }
+  if (!await hasMode()) throw new Error('The community’s review mode never reached the graph');
   await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
     ${iri(realm.realm)} rv:reviewMode ?mode } } INSERT { GRAPH ${iri(GRAPHS.current)} {
     ${iri(realm.realm)} rv:reviewMode "open" } } WHERE { OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
