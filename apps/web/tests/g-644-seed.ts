@@ -5,7 +5,8 @@
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
-import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV } from '../../../services/main/src/modules/work/activate.ts';
+import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
+import { deliverRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 
 if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '')) {
@@ -93,18 +94,9 @@ try {
   const realm = await json<{ realm: string }>(await editor.send('POST', '/v1/spaces', { profile: 'space-realm-v1',
     name: 'Aincrad readers', capabilities: ['realm'], actingSubject: editor.actor }), 201);
   // A new community reviews every post; this one takes them directly, as the composer needs. The realm's review mode
-  // lives in the graph (what its page reads) and in Access (what admits a placement).
-  // The space outbox writes the review mode after the community is created; change it once it has.
-  const hasMode = async () => ((await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?mode WHERE { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(realm.realm)} rv:reviewMode ?mode } }`)).results?.bindings.length ?? 0) > 0;
-  for (const deadline = Date.now() + 90_000; !await hasMode() && Date.now() < deadline;) {
-    await new Promise(done => setTimeout(done, 1000));
-  }
-  if (!await hasMode()) throw new Error('The community’s review mode never reached the graph');
-  await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(realm.realm)} rv:reviewMode ?mode } } INSERT { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(realm.realm)} rv:reviewMode "open" } } WHERE { OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(realm.realm)} rv:reviewMode ?mode } } }`);
+  // lives in the graph (what its page reads, published by the policy delivery) and in Access (what admits a placement).
+  await deliverRealmPolicy(stack.env, { realm: realm.realm, receipt_id: randomUUID(), generation: '1',
+    visibility: 'public', review_mode: 'open' });
   await stack.accessPool.query('INSERT INTO access.realm_admin_revision (realm) VALUES ($1) ON CONFLICT DO NOTHING', [realm.realm]);
   await stack.accessPool.query(`INSERT INTO access.realm_admin_settings (realm, who_may_submit, visibility, review_mode, self_join)
     VALUES ($1, 'granted', 'public', 'open', false) ON CONFLICT (realm) DO UPDATE SET review_mode = 'open'`, [realm.realm]);
