@@ -69,4 +69,13 @@ export default {
   popularTitle: 'REZICS 인기 작품',
   unsupportedTitle: '검색에서는 이 조건을 함께 사용할 수 없습니다',
   unsupportedHelp: '조건을 하나 삭제하거나 값의 일치 방식을 바꿔 주세요.',
-} satisfies Partial<SearchMessages>;
+  conditionHeading: '조건', conditionFacet: '태그', conditionMatch: '일치',
+  conditionAll: '모두', conditionAny: '하나 이상', conditionSearch: '태그 검색',
+  conditionSearching: '검색 중…', conditionEmpty: '태그를 찾을 수 없습니다', conditionFailed: '태그를 검색하지 못했습니다',
+  conditionClear: '조건 지우기', conditionRemove: insert('{{name}} 삭제', { name: String }),
+  conditionFixed: insert('{{name}}, 이 페이지의 태그', { name: String }),
+  conditionFull: insert('여기에서 태그를 최대 {{count}}개 선택할 수 있습니다.', { count: String }),
+  conditionAlsoOn: '다음 작품에도 있음',
+  conditionIncludeName: insert('{{name}} 포함', { name: String }),
+  conditionExcludeName: insert('{{name}} 제외', { name: String }),
+} satisfies SearchMessages;

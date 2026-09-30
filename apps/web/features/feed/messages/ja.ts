@@ -136,4 +136,5 @@ export default {
   showAllTime: '期間を指定せず表示', discussionsFailed: 'ディスカッションを読み込めませんでした',
   aboutCommunity: 'このコミュニティについて', communityRules: 'コミュニティのルール',
   moreAboutCommunity: 'コミュニティの詳細', votesClosed: 'まだ投票できません',
-} satisfies Partial<FeedMessages>;
+  blockedUser: 'ブロックしたユーザー', write: '書く', preview: 'プレビュー',
+} satisfies FeedMessages;

@@ -65,4 +65,9 @@ export default {
   readerDescription: insert('{{name}}が REZICS で読んでいる本、読んだ本、読みたい本。', { name: String }),
   organizationDescription: insert('REZICS にある{{name}}の作品。', { name: String }),
   profileDescription: insert('REZICS の{{name}}。', { name: String }),
-} satisfies Partial<ProfileMessages>;
+  activityTabs: 'プロフィールのアクティビティ', overview: '概要', posts: '投稿', comments: 'コメント',
+  post: '投稿', comment: 'コメント', noPosts: '公開された投稿はまだありません', noComments: '公開コメントはまだありません',
+  contributionsLoading: 'アクティビティを読み込み中…',
+  contributionsFailed: 'アクティビティを読み込めませんでした。もう一度お試しください。',
+  showSpoiler: 'ネタバレを表示',
+} satisfies ProfileMessages;

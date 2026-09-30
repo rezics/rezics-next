@@ -62,4 +62,9 @@ export default {
   readerDescription: insert('{{name}} 님이 REZICS에서 읽는 중인 책, 읽은 책, 읽고 싶은 책.', { name: String }),
   organizationDescription: insert('REZICS에 있는 {{name}}의 작품.', { name: String }),
   profileDescription: insert('REZICS의 {{name}}.', { name: String }),
-} satisfies Partial<ProfileMessages>;
+  activityTabs: '프로필 활동', overview: '개요', posts: '게시글', comments: '댓글',
+  post: '게시글', comment: '댓글', noPosts: '아직 공개 게시글이 없습니다', noComments: '아직 공개 댓글이 없습니다',
+  contributionsLoading: '활동을 불러오는 중…',
+  contributionsFailed: '활동을 불러오지 못했습니다. 다시 시도해 주세요.',
+  showSpoiler: '스포일러 표시',
+} satisfies ProfileMessages;

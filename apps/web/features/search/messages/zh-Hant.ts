@@ -71,4 +71,13 @@ export default {
   popularTitle: 'REZICS 熱門',
   unsupportedTitle: '搜尋不支援搭配這些條件',
   unsupportedHelp: '請移除一項條件，或變更條件值的比對方式。',
-} satisfies Partial<SearchMessages>;
+  conditionHeading: '條件', conditionFacet: '標籤', conditionMatch: '符合條件',
+  conditionAll: '全部', conditionAny: '任一', conditionSearch: '搜尋標籤',
+  conditionSearching: '正在搜尋…', conditionEmpty: '找不到標籤', conditionFailed: '無法搜尋標籤',
+  conditionClear: '清除條件', conditionRemove: insert('移除{{name}}', { name: String }),
+  conditionFixed: insert('{{name}}，此頁標籤', { name: String }),
+  conditionFull: insert('可在此選取最多 {{count}} 個標籤。', { count: String }),
+  conditionAlsoOn: '也出現在這些作品中',
+  conditionIncludeName: insert('包含{{name}}', { name: String }),
+  conditionExcludeName: insert('排除{{name}}', { name: String }),
+} satisfies SearchMessages;

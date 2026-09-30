@@ -136,4 +136,5 @@ export default {
   showAllTime: '查看不限期間', discussionsFailed: '無法載入討論',
   aboutCommunity: '關於此社群', communityRules: '社群規則', moreAboutCommunity: '更多社群資訊',
   votesClosed: '目前尚未開放投票',
-} satisfies Partial<FeedMessages>;
+  blockedUser: '已封鎖的使用者', write: '撰寫', preview: '預覽',
+} satisfies FeedMessages;

@@ -65,4 +65,8 @@ export default {
   readerDescription: insert('{{name}}在 REZICS 上正在讀、已讀和想讀的作品。', { name: String }),
   organizationDescription: insert('{{name}}在 REZICS 上的作品。', { name: String }),
   profileDescription: insert('{{name}}在 REZICS。', { name: String }),
-} satisfies Partial<ProfileMessages>;
+  activityTabs: '個人檔案動態', overview: '概覽', posts: '貼文', comments: '留言',
+  post: '貼文', comment: '留言', noPosts: '尚無公開貼文', noComments: '尚無公開留言',
+  contributionsLoading: '正在載入動態…', contributionsFailed: '無法載入動態，請重試。',
+  showSpoiler: '顯示劇透',
+} satisfies ProfileMessages;

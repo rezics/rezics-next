@@ -248,4 +248,9 @@ export default {
   moreFromRealms: '이 작품을 선정한 커뮤니티의 다른 작품',
   previousPage: '이전 페이지', pageOf: insert('{{pages}}페이지 중 {{page}}페이지', { page: String, pages: String }),
   viewInThread: '토론에서 보기',
-} satisfies Partial<WorkPageMessages>;
+  allGroupChapters: insert('{{group}}의 모든 장', { group: String }),
+  extras: '외전',
+  groupChapters: plural({ one: insert('{{count}}개 장'), other: insert('{{count}}개 장') }, { count: asValue(number()) }),
+  groupChaptersFailed: '이 장들을 불러오지 못했습니다.', loadingGroup: '장을 불러오는 중…', noGroupChapters: '아직 장이 없습니다',
+  unknownLanguage: '알 수 없는 언어', volumeNumber: insert('{{number}}권', { number: String }),
+} satisfies WorkPageMessages;

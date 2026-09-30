@@ -248,4 +248,9 @@ export default {
   moreFromRealms: 'この作品を取り上げているコミュニティの作品',
   previousPage: '前のページ', pageOf: insert('{{pages}}ページ中{{page}}ページ目', { page: String, pages: String }),
   viewInThread: 'スレッドで見る',
-} satisfies Partial<WorkPageMessages>;
+  allGroupChapters: insert('{{group}}の全章', { group: String }),
+  extras: '番外',
+  groupChapters: plural({ one: insert('{{count}}章'), other: insert('{{count}}章') }, { count: asValue(number()) }),
+  groupChaptersFailed: 'これらの章を読み込めませんでした。', loadingGroup: '章を読み込み中…', noGroupChapters: '章はまだありません',
+  unknownLanguage: '不明な言語', volumeNumber: insert('第{{number}}巻', { number: String }),
+} satisfies WorkPageMessages;

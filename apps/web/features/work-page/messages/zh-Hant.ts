@@ -244,4 +244,9 @@ export default {
   moreFromRealms: '更多收錄這部作品的社群作品',
   previousPage: '上一頁', pageOf: insert('第 {{page}} 頁，共 {{pages}} 頁', { page: String, pages: String }),
   viewInThread: '在討論串中查看',
-} satisfies Partial<WorkPageMessages>;
+  allGroupChapters: insert('{{group}}的所有章節', { group: String }),
+  extras: '番外',
+  groupChapters: plural({ one: insert('{{count}} 章'), other: insert('{{count}} 章') }, { count: asValue(number()) }),
+  groupChaptersFailed: '無法載入這些章節。', loadingGroup: '正在載入章節…', noGroupChapters: '尚無章節',
+  unknownLanguage: '未知語言', volumeNumber: insert('第 {{number}} 卷', { number: String }),
+} satisfies WorkPageMessages;

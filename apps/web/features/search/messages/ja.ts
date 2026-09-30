@@ -71,4 +71,13 @@ export default {
   popularTitle: 'REZICS で人気',
   unsupportedTitle: '検索ではこの条件を組み合わせられません',
   unsupportedHelp: '条件を1つ削除するか、値の一致方法を変更してください。',
-} satisfies Partial<SearchMessages>;
+  conditionHeading: '条件', conditionFacet: 'タグ', conditionMatch: '一致',
+  conditionAll: 'すべて', conditionAny: 'いずれか', conditionSearch: 'タグを検索',
+  conditionSearching: '検索中…', conditionEmpty: 'タグが見つかりません', conditionFailed: 'タグを検索できませんでした',
+  conditionClear: '条件をクリア', conditionRemove: insert('{{name}}を削除', { name: String }),
+  conditionFixed: insert('{{name}}（このページのタグ）', { name: String }),
+  conditionFull: insert('ここではタグを最大{{count}}個選べます。', { count: String }),
+  conditionAlsoOn: 'これらの作品にも',
+  conditionIncludeName: insert('{{name}}を含める', { name: String }),
+  conditionExcludeName: insert('{{name}}を除外', { name: String }),
+} satisfies SearchMessages;

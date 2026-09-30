@@ -1,3 +1,32 @@
 import type { CommunityMessages } from '../messages.ts';
 
-export default {} satisfies Partial<CommunityMessages>;
+export default {
+  title: '社群', intro: '尋找和你一樣喜歡閱讀與討論作品的人。', search: '搜尋社群', searchAction: '搜尋',
+  topics: '主題', topicSearch: '尋找主題', topicApply: '套用主題', topicRemove: '移除主題',
+  topicUnavailable: '無法載入主題，請嘗試其他搜尋。', topicNone: '找不到符合條件的主題',
+  sort: '社群排序', active: '活躍', popular: '熱門', growing: '本週成長中', new: '最新',
+  create: '建立社群', empty: '找不到社群', emptyBody: '請嘗試其他搜尋，或建立社群。',
+  unavailable: '無法載入社群', unavailableBody: '請稍後再試。', members: '位成員', review: '貼文會經過審核',
+  next: '下一頁', first: '第一頁', createTitle: '建立社群',
+  createIntro: '為你的社群建立一個據點。之後可以在「管理」中修改詳細資料。',
+  name: '社群名稱', nameLanguage: '名稱語言', languageHelp: '使用 en、zh-Hans 或 ja 等語言標籤。',
+  translation: '翻譯', translationLanguage: '翻譯語言', translationName: '翻譯後的名稱',
+  translationDescription: '翻譯後的說明（選填）', addTranslation: '新增翻譯', removeTranslation: '移除翻譯',
+  translationError: '請使用不同且有效的語言標籤，並填寫各語言的翻譯名稱。',
+  handle: '社群代稱', handleHelp: '使用 3–30 個小寫字母、數字或連字號。代稱建立後無法變更。',
+  description: '說明', visibility: '誰可以參與？', public: '公開',
+  publicHelp: '任何人都可以閱讀、加入和發文。', restricted: '受限',
+  restrictedHelp: '任何人都可以閱讀；由你決定誰可以加入和發文。',
+  rules: '社群規則', ruleTitle: '規則標題', ruleBody: '這條規則代表什麼？', addRule: '新增規則', removeRule: '移除規則',
+  icon: '社群圖示', banner: '橫幅圖片', imageHelp: '選填，支援最大 4 MB 的 JPEG、PNG 或 WebP 圖片。',
+  imageDrop: '將圖片拖放到這裡', imageChoose: '或從你的裝置選取圖片',
+  iconCrop: '使用正方形圖片效果最好；圖片中央會裁成圓形。',
+  bannerCrop: '使用寬幅圖片效果最好；手機上可能會裁掉圖片邊緣。',
+  submitCreate: '建立社群', creating: '正在建立社群…',
+  createFailed: '無法建立此社群。請檢查資料並再試一次。', handleTaken: '這個代稱已有人使用，請換一個。',
+  configureFailed: '社群已建立，但無法儲存詳細資料。請再試一次，或稍後前往「管理」完成設定。',
+  setupTitle: '設定你的社群',
+  setupHelp: '完成幾個步驟，讓大家更容易融入。想稍後再做的項目都可以略過。',
+  firstPost: '撰寫第一篇貼文', invite: '分享邀請連結', copyInvite: '複製連結', setupGo: '開啟', setupSkip: '略過',
+  manage: '開啟管理', signIn: '登入後即可建立社群', agentNeeded: '請先選擇個人檔案，再建立社群。',
+} satisfies CommunityMessages;

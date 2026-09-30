@@ -144,4 +144,5 @@ export default {
   showAllTime: '전체 기간 보기', discussionsFailed: '토론을 불러오지 못했어요',
   aboutCommunity: '커뮤니티 소개', communityRules: '커뮤니티 규칙',
   moreAboutCommunity: '커뮤니티 자세히 보기', votesClosed: '아직 투표할 수 없어요',
-} satisfies Partial<FeedMessages>;
+  blockedUser: '차단한 사용자', write: '작성', preview: '미리보기',
+} satisfies FeedMessages;
