@@ -5,16 +5,12 @@ import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { admittedPresentationChange } from '../modules/lexicon/admitted.ts';
 import { readPresentationCurrent, readPresentationRevision } from '../modules/lexicon/change.ts';
 import { renderRelation, type RelationRendering } from '../modules/lexicon/render.ts';
-import { LEXICON_LIMITS, PRESENTATION_PROFILE } from '../modules/lexicon/schema.ts';
+import { LEXICON_LIMITS, PRESENTATION_PROFILE, type PresentationState } from '../modules/lexicon/schema.ts';
 import { readerLanguages } from '../modules/display-language/select.ts';
 import { readDefinitionByKey, readExactDefinition } from '../modules/relation/change.ts';
 import { readCurrentComponent } from '../modules/semantic/change.ts';
-import {
-  canReadSemantic,
-  referenceReader,
-  SEMANTIC_READ_SCOPE,
-} from '../modules/semantic/admitted.ts';
-import { SemanticTargetUnavailable } from '../modules/semantic/command.ts';
+import { SEMANTIC_READ_SCOPE } from '../modules/semantic/admitted.ts';
+import { SemanticChangeRejected, SemanticTargetUnavailable } from '../modules/semantic/command.ts';
 import { checkedNativeIri } from '../modules/semantic/schema.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
@@ -154,54 +150,72 @@ export const relationRenderingSchema = t.Object({
 });
 
 export const openApiOperations = {
-  '/v1/lexicon/definitions/{key}': { get: { bearer: true } },
+  '/v1/lexicon/definitions/{key}': { get: { bearer: false } },
   '/v1/lexicon/presentations': {
-    get: { bearer: true },
+    get: { bearer: false },
     post: { bearer: true, idempotencyKey: true },
   },
-  '/v1/lexicon/presentations/{id}': { get: { bearer: true } },
-  '/v1/lexicon/presentations/{id}/revisions/{revision}': { get: { bearer: true } },
+  '/v1/lexicon/presentations/{id}': { get: { bearer: false } },
+  '/v1/lexicon/presentations/{id}/revisions/{revision}': { get: { bearer: false } },
 } as const;
 
 export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
-  const authenticate = async (request: Request) => {
+  const authenticate = async (request: Request, actingSubject?: string) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+    if (!request.headers.has('authorization')) return null;
+    if (!actingSubject) throw new SemanticChangeRejected('invalid', 'actingSubject is required for authenticated reads');
     return work.account.verify(request, [SEMANTIC_READ_SCOPE]);
   };
-  // Check authority using the graph anchor before resolving any private or corrupt object bytes.
+  const readable = (principal: VerifiedPrincipal | null, actor: string | undefined,
+    definition: string, revision?: string) => work.access.canReadSemanticResource?.(
+      principal, principal ? actor! : null, definition, revision, fuseki) ?? Promise.resolve(false);
+  // Drafts retain explicit authority; a public vocabulary decision alone cannot disclose them.
+  const draftReadable = async (principal: VerifiedPrincipal | null, actor: string | undefined,
+    definition: string) => {
+    if (!principal || !actor || !work.mediaAccess) return false;
+    const disclosure = await work.mediaAccess.canReadSemantics(principal, actor, [definition], fuseki);
+    return 'granted' in disclosure && disclosure.granted.has(definition);
+  };
+  const readableState = (principal: VerifiedPrincipal | null, actor: string | undefined, state: PresentationState) =>
+    state.reviewStatus === 'reviewed'
+      ? readable(principal, actor, state.definition, state.meaningRevision)
+      : draftReadable(principal, actor, state.definition);
+  // Check committed graph anchors before resolving any private or corrupt object bytes.
   const allowedPresentation = async (
-    principal: VerifiedPrincipal,
-    actingSubject: string,
+    principal: VerifiedPrincipal | null,
+    actingSubject: string | undefined,
     component: string,
     revision?: string,
   ) => {
-    const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?definition WHERE {
-      ${
-        revision
-          ? `GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:PresentationRevision ;
-        rv:component ${iri(component)} ; rv:presentationDefinition ?definition }`
-          : `GRAPH ${iri(GRAPHS.current)} { ${iri(component)} a rv:DefinitionPresentation ; rv:presentationDefinition ?definition }`
-      }
+    const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?definition ?meaning ?review WHERE {
+      ${revision ? `BIND(${iri(revision)} AS ?head)` :
+        `GRAPH ${iri(GRAPHS.current)} { ${iri(component)} a rv:DefinitionPresentation ; rv:presentationHead ?head }`}
+      GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:PresentationRevision, rv:RevisionAnchor ;
+        rv:component ${iri(component)} ; rv:presentationDefinition ?definition ;
+        rv:meaningRevision ?meaning ; rv:reviewStatus ?review ; rv:sequence ?sequence .
+        FILTER NOT EXISTS { ?head a rv:ErasedRevision } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(component)} rv:protectionHead ?protection } }
     } LIMIT 2`);
     const rows = result.results?.bindings ?? [];
-    return (
-      rows.length === 1 &&
-      (await canReadSemantic(work.access, principal, actingSubject, rows[0]!.definition!.value))
-    );
+    if (rows.length !== 1) return false;
+    const row = rows[0]!;
+    return row.review!.value === `${RV}Reviewed`
+      ? readable(principal, actingSubject, row.definition!.value, row.meaning!.value)
+      : draftReadable(principal, actingSubject, row.definition!.value);
   };
   return new Elysia()
     .get('/v1/lexicon/definitions/:key', {
       params: t.Object({ key: t.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }) }),
-      query: t.Object({ actingSubject: native }, { additionalProperties: false }),
+      query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
       response: { 200: t.Object({ profile: t.Literal('relation-definition-key-v1'), key: t.String(),
         definition: native, revision: native, lifecycle: t.String(), roles: t.Array(t.Unknown()),
         workSubjectRole: t.Nullable(t.String()) }), ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
-        const principal = await authenticate(request);
+        const principal = await authenticate(request, query.actingSubject);
         const meaning = await readDefinitionByKey(work.environment, params.key,
-          definition => canReadSemantic(work.access, principal, query.actingSubject, definition));
-        if (!meaning || !await canReadSemantic(work.access, principal, query.actingSubject, meaning.definition)) {
+          definition => readable(principal, query.actingSubject, definition));
+        if (!meaning || !await readable(principal, query.actingSubject, meaning.definition, meaning.revision)) {
           return problem(404, 'definition_unavailable', 'Definition is unavailable');
         }
         return Response.json({ profile: 'relation-definition-key-v1', key: params.key,
@@ -275,7 +289,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       {
         query: t.Object(
           {
-            actingSubject: native,
+            actingSubject: t.Optional(native),
             definitions: t.String({ maxLength: 8192 }),
             revisions: t.Optional(t.String({ maxLength: 8192 })),
             viewingRole: t.Optional(t.String({ maxLength: 32 })),
@@ -322,8 +336,8 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           );
         }
         try {
-          const principal = await authenticate(request);
-          const canRead = referenceReader(work.access, principal, query.actingSubject);
+          const principal = await authenticate(request, query.actingSubject);
+          const canRead = (ref: string) => readable(principal, query.actingSubject, ref);
           const languages = readerLanguages(
             query.languages,
             request.headers.get('accept-language'),
@@ -334,20 +348,25 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
             renderings: RelationRendering[];
           }[] = [];
           for (const [index, definition] of definitions.entries()) {
-            if (!(await canReadSemantic(work.access, principal, query.actingSubject, definition))) {
+            if (!(await readable(principal, query.actingSubject, definition))) {
               items.push({ definition, status: 'unavailable', renderings: [] });
               continue;
             }
             const revision =
               revisions?.[index] ??
               (await readCurrentComponent(work.environment, definition, 'definition'))?.head;
-            const meaning = revision ? await readExactDefinition(work.environment, revision) : null;
+            if (!revision || !await readable(principal, query.actingSubject, definition, revision)) {
+              items.push({ definition, status: 'unavailable', renderings: [] });
+              continue;
+            }
+            const meaning = await readExactDefinition(work.environment, revision);
             if (!meaning || meaning.definition !== definition) {
               items.push({ definition, status: 'unavailable', renderings: [] });
               continue;
             }
             const roles = query.viewingRole ? [query.viewingRole] : Object.values(meaning.roleKeys);
             const renderings: RelationRendering[] = [];
+            const includeDrafts = await draftReadable(principal, query.actingSubject, definition);
             for (const viewingRole of roles)
               renderings.push(
                 await renderRelation(
@@ -356,6 +375,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
                   viewingRole,
                   languages,
                   canRead,
+                  includeDrafts,
                 ),
               );
             items.push({ definition, status: 'available', renderings });
@@ -373,18 +393,19 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       '/v1/lexicon/presentations/:id',
       {
         params: t.Object({ id: groupUuid }),
-        query: t.Object({ actingSubject: native }, { additionalProperties: false }),
+        query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
         response: { 200: read, ...authorizedReadProblems },
       },
       async ({ request, params, query }) => {
         try {
-          const principal = await authenticate(request);
+          const principal = await authenticate(request, query.actingSubject);
           const component = `https://rezics.com/id/${params.id}`;
           if (!(await allowedPresentation(principal, query.actingSubject, component))) {
             throw new SemanticTargetUnavailable('presentation is unavailable');
           }
           const result = await readPresentationCurrent(work.environment, component);
-          if (!result) throw new SemanticTargetUnavailable('presentation is unavailable');
+          if (!result || !await readableState(principal, query.actingSubject, result.state))
+            throw new SemanticTargetUnavailable('presentation is unavailable');
           return Response.json(
             { profile: PRESENTATION_PROFILE, ...result },
             { headers: { 'cache-control': 'no-store' } },
@@ -398,19 +419,20 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       '/v1/lexicon/presentations/:id/revisions/:revision',
       {
         params: t.Object({ id: groupUuid, revision: groupUuid }),
-        query: t.Object({ actingSubject: native }, { additionalProperties: false }),
+        query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
         response: { 200: read, ...authorizedReadProblems },
       },
       async ({ request, params, query }) => {
         try {
-          const principal = await authenticate(request);
+          const principal = await authenticate(request, query.actingSubject);
           const component = `https://rezics.com/id/${params.id}`,
             revision = `https://rezics.com/id/${params.revision}`;
           if (!(await allowedPresentation(principal, query.actingSubject, component, revision))) {
             throw new SemanticTargetUnavailable('presentation is unavailable');
           }
           const result = await readPresentationRevision(work.environment, component, revision);
-          if (!result) throw new SemanticTargetUnavailable('presentation is unavailable');
+          if (!result || !await readableState(principal, query.actingSubject, result.state))
+            throw new SemanticTargetUnavailable('presentation is unavailable');
           return Response.json(
             { profile: PRESENTATION_PROFILE, ...result },
             { headers: { 'cache-control': 'no-store' } },

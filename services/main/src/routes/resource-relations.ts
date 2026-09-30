@@ -105,7 +105,12 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
           resource: `https://rezics.com/id/${params.resource}`, languages, limit: query.limit ?? 20, after: query.after,
           canRead: async ref => await canReadSemantic(ref)
             || (await summarize([ref]))[0]?.status === 'available',
-          canReadOccurrence: canReadSemantic, summarize,
+          canReadOccurrence: canReadSemantic,
+          canReadDraftPresentations: async definition => {
+            if (!principal || !actor || !work.mediaAccess) return false;
+            const disclosure = await work.mediaAccess.canReadSemantics(principal, actor, [definition], fuseki);
+            return 'granted' in disclosure && disclosure.granted.has(definition);
+          }, summarize,
         }));
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {

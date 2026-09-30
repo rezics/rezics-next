@@ -9,25 +9,30 @@ import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/
 import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
-import { hash } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, RV, iri, hash } from '../../../services/main/src/modules/work/activate.ts';
+import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
+import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
+import { publicSemantics } from '../../../services/main/src/modules/access/semantic-disclosure.ts';
+import type { RelationPageEntry } from '../../../services/main/src/modules/relation/traversal.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 
-interface Work { work: string; mainVersion: string }
+interface Work { work: string; mainVersion: string; mainRevision: string }
+interface Changed { component: string; revision: string }
 interface Composition { structure: string; revision: string; occurrences: string[] }
 interface Page { parts?: Array<{ work: string }>; wholes?: Array<{ work: string }>;
-  occurrences?: Array<{ target: string }>; items?: Array<{ relation: string }>; next: string | null }
+  occurrences?: Array<{ target: string }>; items?: RelationPageEntry[]; next: string | null }
 
 test('G-829: every public resource/composition/Collection GET admits anonymous and ordinary readers; private inventories remain absent', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', `g-829-${randomUUID()}`),
-    'openid work:create work:edit work:read collection:edit semantic:read rating:configure');
+    'openid work:create work:edit work:read collection:edit semantic:read rating:configure access:manage');
   const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!, bucket: Bun.env.MAIN_S3_BUCKET!,
     region: Bun.env.MAIN_S3_REGION!, accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
     prefix: 'semantic/structure/' });
   const content = new ContentCore(f.pool);
   f.access.configureBaseline(f.env.fuseki);
   const app = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier, access: f.access,
-    structureObjects: objects, content, realmReplies: new RealmReplyStore(new RealmReplyContentStore(f.pool), content, f.access, f.env),
+    structureObjects: objects, accessPolicy: new AccessPolicyOwner(f.accessPool), mediaAccess: new MediaAccessBatchReader(f.accessPool, f.env.fuseki), content, realmReplies: new RealmReplyStore(new RealmReplyContentStore(f.pool), content, f.access, f.env),
     reviews: new ReaderReviews(f.accessPool) });
   const call = (method: string, path: string, body?: object, token?: string) => app.handle(new Request(`http://main.local${path}`, {
     method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}),
@@ -104,6 +109,64 @@ test('G-829: every public resource/composition/Collection GET admits anonymous a
     await f.grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
     const context = await write<{ context: string }>('/v1/global-rating-contexts', {
       profile: 'global-rating-standing-context-v1', question: 'Public fixture rating' }, 201);
+    // Unlinked relation definitions are public vocabulary, but their drafts are not.
+    await f.grant('semantic:create:root', 'semantic.change');
+    const key = `g829-${randomUUID()}`;
+    const definitionState = { component: 'definition', kind: 'relation', notation: key,
+      workSubjectRole: 'target', roles: ['source', 'target'].map(role => ({ key: role,
+        minParticipants: 1, maxParticipants: 1, ordered: false })) };
+    const definition = await write<Changed>('/v1/semantic/changes', {
+      profile: 'semantic-change-v1', expectedHead: null, state: definitionState }, 201);
+    await f.grant(`semantic:read:${definition.component}`, 'semantic.read');
+    await f.grant(`semantic:edit:${definition.component}`, 'semantic.change');
+    await f.grant(`semantic:edit:${definition.component}`, 'lexicon.presentation.change');
+    await f.grant(`semantic:edit:${definition.component}`, 'lexicon.presentation.review');
+    const labels: Changed[] = [];
+    let draft!: Changed;
+    for (const [fromRole, toRole, language, noun, reviewStatus] of [
+      ['source', 'target', 'en', 'Derived works', 'reviewed'],
+      ['target', 'source', 'en', 'Derived from', 'reviewed'],
+      ['source', 'target', 'fr', 'Secret draft label', 'draft'],
+    ] as const) {
+      const presentation = await write<Changed>('/v1/lexicon/presentations', {
+        profile: 'definition-presentation-v1', expectedHead: null,
+        state: { definition: definition.component, meaningRevision: definition.revision,
+          fromRole, toRole, language, noun, heading: noun, plurals: { one: noun, other: noun },
+          grammaticalForms: [], source: 'https://example.com/public-vocabulary',
+          licence: 'https://creativecommons.org/publicdomain/zero/1.0/', reviewStatus } }, 201);
+      if (reviewStatus === 'draft') draft = presentation;
+      else labels.push(presentation);
+    }
+    const occurrence = async (source: Work, target: Work) => write<{ occurrence: string }>('/v1/relations/changes', {
+      profile: 'relation-change-v1', expectedHead: null, definition: definition.revision,
+      participations: [{ role: 'source', participant: { kind: 'resource', ref: source.work } },
+        { role: 'target', participant: { kind: 'resource', ref: target.work } }],
+      evidence: 'https://example.com/occurrence' }, 201);
+    const publicOccurrence = await occurrence(part, later);
+    const privateOccurrence = await occurrence(part, privateWork);
+    const derive = async (source: Work, target: Work) => {
+      const head = (await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(target.mainVersion)} rv:head ?head } }`)).results!.bindings[0]!.head!.value;
+      return write<{ derivation: string }>(`/v1/resources/${shortId(target.work)}/derivations`, {
+        profile: 'work-derivation-v2', targetMainVersion: target.mainVersion, expectedTargetHead: head,
+        sourceWork: source.work, sourceMainVersion: null, sourceMainRevision: null,
+        kind: definition.revision, evidence: 'https://example.com/derivation' }, 201);
+    };
+    const publicDerivation = await derive(part, later);
+    const privateDerivation = await derive(part, privateWork);
+    const disclosure = (refs: string[], revision?: string) => publicSemantics({
+      pool: f.accessPool, graph: f.env.fuseki }, refs, revision);
+    expect(await disclosure([definition.component], definition.revision)).toEqual(new Set([definition.component]));
+    expect(await disclosure([definition.component], nativeId())).toEqual(new Set());
+    const nonRelation = await write<Changed>('/v1/semantic/changes', {
+      profile: 'semantic-change-v1', expectedHead: null,
+      state: { component: 'definition', kind: 'property', notation: `g829-${randomUUID()}` } }, 201);
+    const unlinkedResources: Changed[] = [];
+    for (const type of ['Character', 'Place']) unlinkedResources.push(await write<Changed>('/v1/semantic/changes', {
+      profile: 'semantic-change-v1', expectedHead: null, state: { component: 'resource',
+        types: [`${RV}${type}`], properties: [] } }, 201));
+    expect(await disclosure([nonRelation.component, ...unlinkedResources.map(item => item.component), series.work]))
+      .toEqual(new Set());
     // Remove private grants after composing; public reads must not require any Work grant.
     await f.accessPool.query('DELETE FROM access.permission_grant WHERE recipient_subject=$1 AND action=$2', [f.actor, 'work.read']);
     const base = `/v1/resources/${shortId(series.work)}`;
@@ -162,7 +225,41 @@ test('G-829: every public resource/composition/Collection GET admits anonymous a
       expect(wholes.next).toBeNull();
       const relations = await json<Page>(await get(`/v1/resources/${shortId(part.work)}/relations?limit=1`));
       expect(relations.items?.map(item => item.relation)).toEqual([collection]);
-      expect(relations.next).toBeNull();
+      const relationPages = [relations];
+      while (relationPages.at(-1)!.next) relationPages.push(await json<Page>(await get(
+        `/v1/resources/${shortId(part.work)}/relations?limit=1&after=${encodeURIComponent(relationPages.at(-1)!.next!)}`)));
+      const allRelations = relationPages.flatMap(page => page.items ?? []);
+      expect(allRelations.map(item => item.relation).sort()).toEqual([
+        collection, publicOccurrence.occurrence, publicDerivation.derivation].sort());
+      expect(relationPages.at(-1)!.next).toBeNull();
+      for (const [work, viewingRole, noun] of [[part, 'source', 'Derived works'], [later, 'target', 'Derived from']] as const) {
+        const page = await json<Page>(await get(`/v1/resources/${shortId(work.work)}/relations?languages=fr,en`));
+        const visible = page.items!.filter(item => item.kind !== 'collection');
+        expect(visible.map(item => item.relation).sort()).toEqual([publicOccurrence.occurrence, publicDerivation.derivation].sort());
+        for (const item of visible) {
+          expect(item.rendering?.viewingRole).toBe(viewingRole);
+          expect(item.rendering?.projections[0]).toMatchObject({ reviewStatus: 'reviewed', language: 'en', labels: { noun } });
+          expect(item.counterparts.map(other => other.reference)).toEqual([work === part ? later.work : part.work]);
+        }
+        expect(JSON.stringify(page)).not.toContain(privateOccurrence.occurrence);
+        expect(JSON.stringify(page)).not.toContain(privateDerivation.derivation);
+        expect(JSON.stringify(page)).not.toContain('Secret draft label');
+      }
+      const lexicon = `/v1/lexicon/presentations?definitions=${encodeURIComponent(definition.component)}&languages=fr,en`;
+      const batch = await json<{ items: Array<{ status: string; renderings: object[] }> }>(await get(lexicon));
+      expect(batch.items[0]!.status).toBe('available');
+      expect(JSON.stringify(batch)).not.toContain('Secret draft label');
+      expect((await get(`/v1/lexicon/definitions/${key}`)).status).toBe(200);
+      for (const presentation of labels) {
+        expect((await get(`/v1/lexicon/presentations/${shortId(presentation.component)}`)).status).toBe(200);
+        expect((await get(`/v1/lexicon/presentations/${shortId(presentation.component)}/revisions/${shortId(presentation.revision)}`)).status).toBe(200);
+      }
+      for (const suffix of ['', `/revisions/${shortId(draft.revision)}`]) {
+        const hidden = await get(`/v1/lexicon/presentations/${shortId(draft.component)}${suffix}`);
+        const absent = await get(`/v1/lexicon/presentations/${shortId(nativeId())}${suffix}`);
+        expect(hidden.status).toBe(404);
+        expect(await hidden.json()).toEqual(await absent.json());
+      }
       for (const suffix of ['parts', 'wholes', 'relations']) {
         const hidden = await get(`/v1/resources/${shortId(privateWork.work)}/${suffix}`);
         const absent = await get(`/v1/resources/${shortId(nativeId())}/${suffix}`);
@@ -176,7 +273,7 @@ test('G-829: every public resource/composition/Collection GET admits anonymous a
       expect(await hiddenComposition.json()).toEqual(await absentComposition.json());
       expect((await get(`/v1/collections/${shortId(privateCollection)}`)).status).toBe(404);
       expect((await get(`${structure}/occurrences/${shortId(changed.occurrences[0]!)}`)).status).toBe(404);
-      for (const page of [first, last, members, lastMember, wholes, relations]) {
+      for (const page of [first, last, members, lastMember, wholes, ...relationPages]) {
         expect(page).not.toHaveProperty('count');
         expect(page).not.toHaveProperty('placementCount');
         expect(page).not.toHaveProperty('cost');
@@ -185,7 +282,72 @@ test('G-829: every public resource/composition/Collection GET admits anonymous a
         expect(JSON.stringify(page)).not.toContain(changed.occurrences[3]!);
       }
     }
-    for (const path of [`${base}/parts`, `${base}/wholes`, `${base}/relations`, structure, collectionPath]) {
+    // Explicit definition grants preserve draft editing without widening public disclosure.
+    const ownerDraft = `/v1/lexicon/presentations/${shortId(draft.component)}?actingSubject=${encodeURIComponent(f.actor)}`;
+    expect((await call('GET', ownerDraft, undefined, f.account.tokenA)).status).toBe(200);
+    const ownerBatch = await json<object>(await call('GET', `/v1/lexicon/presentations?definitions=${encodeURIComponent(definition.component)}&languages=fr&actingSubject=${encodeURIComponent(f.actor)}`,
+      undefined, f.account.tokenA));
+    expect(JSON.stringify(ownerBatch)).toContain('Secret draft label');
+    for (const [graph, triple] of [
+      [GRAPHS.current, `${iri(labels[0]!.component)} rv:protectionHead ${iri(nativeId())}`],
+      [GRAPHS.revisions, `${iri(labels[0]!.revision)} a rv:ErasedRevision`],
+    ]) {
+      await f.env.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(graph!)} { ${triple} } }`);
+      expect((await call('GET', `/v1/lexicon/presentations/${shortId(labels[0]!.component)}`)).status).toBe(404);
+      const page = await json<Page>(await call('GET', `/v1/resources/${shortId(part.work)}/relations`));
+      expect(JSON.stringify(page)).not.toContain(labels[0]!.component);
+      expect(JSON.stringify(page)).not.toContain('Secret draft label');
+      await f.env.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(graph!)} { ${triple} } }`);
+    }
+    // A definition with no committed current anchor remains private even with relation type metadata.
+    const uncommitted = nativeId();
+    await f.env.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(uncommitted)} a rv:SemanticDefinition ;
+        rv:definitionKind rv:RelationDefinition ; rv:definitionHead ${iri(nativeId())} } }`);
+    expect(await disclosure([uncommitted])).toEqual(new Set());
+    // Exact heads, retirement, protection, erasure and live Access restrictions all still gate vocabulary.
+    const retired = await write<Changed>('/v1/semantic/changes', { profile: 'semantic-change-v1',
+      target: definition.component, expectedHead: definition.revision,
+      state: { ...definitionState, lifecycle: 'retired' } });
+    expect(await disclosure([definition.component])).toEqual(new Set());
+    expect(await disclosure([definition.component], definition.revision)).toEqual(new Set());
+    const active = await write<Changed>('/v1/semantic/changes', { profile: 'semantic-change-v1',
+      target: definition.component, expectedHead: retired.revision, state: definitionState });
+    expect(await disclosure([definition.component], active.revision)).toEqual(new Set([definition.component]));
+    expect(await disclosure([definition.component], definition.revision)).toEqual(new Set());
+    for (const [graph, triple] of [
+      [GRAPHS.current, `${iri(definition.component)} rv:protectionHead ${iri(nativeId())}`],
+      [GRAPHS.revisions, `${iri(active.revision)} a rv:ErasedRevision`],
+      [GRAPHS.current, `${iri(definition.component)} a <https://schema.org/CreativeWork>`],
+    ]) {
+      await f.env.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(graph!)} { ${triple} } }`);
+      expect(await disclosure([definition.component])).toEqual(new Set());
+      await f.env.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(graph!)} { ${triple} } }`);
+    }
+    const policyId = randomUUID();
+    const policy = await json(await call('POST', '/v1/access/policy-changes', { profile: 'access-policy-change-v1',
+      action: 'publish-revision', scopeId: `semantic:read:${definition.component}`,
+      expectedAuthorityEpoch: '0', policyId, expectedHeadRevision: '0',
+      issuerSubject: f.actor, mandatory: [], ordered: [] }, f.account.tokenA));
+    expect(policy).toMatchObject({ revision: '1' });
+    expect(await disclosure([definition.component])).toEqual(new Set());
+    for (const token of [undefined, f.account.tokenB]) {
+      const path = `/v1/resources/${shortId(part.work)}/relations?limit=1`;
+      const page = await json<Page>(await call('GET', token ? authenticatedPath(path) : path, undefined, token));
+      expect(page.items?.map(item => item.relation)).toEqual([collection]);
+      expect(page.next).toBeNull();
+    }
+    await json(await call('POST', '/v1/access/policy-changes', { profile: 'access-policy-change-v1',
+      action: 'end-policy', policyId, scopeId: `semantic:read:${definition.component}`,
+      expectedHeadRevision: '1', expectedAuthorityEpoch: '1', issuerSubject: f.actor }, f.account.tokenA));
+    expect(await disclosure([definition.component])).toEqual(new Set([definition.component]));
+    const gateEpoch = (await f.accessPool.query<{ authority_epoch: string }>('SELECT authority_epoch FROM access.scope_gate WHERE id=$1',
+      [`semantic:read:${definition.component}`])).rows[0]!.authority_epoch;
+    await f.access.strongCloseScope(`semantic:read:${definition.component}`, gateEpoch);
+    expect(await disclosure([definition.component])).toEqual(new Set());
+    for (const path of [`${base}/parts`, `${base}/wholes`, `${base}/relations`, structure, collectionPath,
+      `/v1/lexicon/definitions/${key}`, `/v1/lexicon/presentations/${shortId(labels[0]!.component)}`,
+      `/v1/lexicon/presentations?definitions=${encodeURIComponent(definition.component)}`]) {
       expect((await call('GET', authenticatedPath(path), undefined, f.account.noScope)).status).toBe(401);
       expect((await call('GET', path, undefined, f.account.tokenB)).status).toBe(400);
       expect((await call('GET', authenticatedPath(path), undefined, 'invalid-token')).status).toBe(401);

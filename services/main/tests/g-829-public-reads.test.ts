@@ -5,6 +5,7 @@ import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { WorkReadSession } from '../src/modules/work/read-session.ts';
 import { canReadCompositionWork } from '../src/modules/composition/disclosure-read.ts';
 import { readWorkWholes } from '../src/modules/composition/read.ts';
+import { openApiOperations as lexiconOperations } from '../src/routes/lexicon.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -82,4 +83,16 @@ test('G-829 class guard: every resource/composition/Collection GET has an explic
     '/v1/compositions/:id/stages/:stage',
     '/v1/compositions/:id/occurrences/:occurrence/progress',
   ].sort());
+});
+
+
+test('G-829 class guard: the complete lexicon GET inventory permits optional bearer access', () => {
+  const graph = new FusekiClient('http://graph.invalid');
+  const app = createMainApp(graph, { environment: { fuseki: graph, objectDirectory: '.temp/g-829',
+    lineage: { dataEpoch: 'one', routingEpoch: 'one' } }, account: {} as never, access: {} as never });
+  const gets = app.routes.filter(route => route.method === 'GET' && route.path.startsWith('/v1/lexicon/'))
+    .map(route => route.path.replace(/:([a-z]+)/g, '{$1}')).sort();
+  expect(gets).toEqual(Object.keys(lexiconOperations).sort());
+  for (const operation of Object.values(lexiconOperations)) expect(operation.get.bearer).toBe(false);
+  expect(lexiconOperations['/v1/lexicon/presentations'].post).toEqual({ bearer: true, idempotencyKey: true });
 });

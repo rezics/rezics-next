@@ -326,7 +326,9 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
           200,
         )
       ).items[0],
-    ).toMatchObject({ status: 'unavailable', renderings: [] });
+    ).toMatchObject({ status: 'available', renderings: [
+      { projections: [{ labels: null }] }, { projections: [{ labels: null }] },
+    ] });
 
     // An occurrence keeps one fact with both roles; redaction happens before typed rendering arguments.
     await f.grant('relation:create:root', 'relation.change');
@@ -390,6 +392,7 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
       'source',
       ['de'],
       async (ref) => ref === occurrence.occurrence,
+      true, // This pinned editor read has explicit draft authority.
     );
     expect(pinned.meaning.revision).toBe(definition.revision);
     expect(pinned.projections[0]!.labels?.noun).toMatch(/^Fassung [AB]$/);

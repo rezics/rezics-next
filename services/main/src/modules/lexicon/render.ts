@@ -164,12 +164,18 @@ interface PresentationIndex {
 async function presentations(
   env: WorkActivationEnvironment,
   meaning: ExactDefinition,
+  includeDrafts: boolean,
 ): Promise<PresentationIndex[]> {
   const result = await env.fuseki
     .query(`PREFIX rv: <${RV}> SELECT ?presentation ?head ?language ?from ?to WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?presentation a rv:DefinitionPresentation ;
       rv:presentationDefinition ${iri(meaning.definition)} ; rv:meaningRevision ${iri(meaning.revision)} ;
-      rv:presentationHead ?head ; rv:presentationLanguage ?language ; rv:fromRole ?from ; rv:toRole ?to } }`);
+      rv:presentationHead ?head ; rv:presentationLanguage ?language ; rv:fromRole ?from ; rv:toRole ?to .
+      FILTER NOT EXISTS { ?presentation rv:protectionHead ?protection } }
+    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:PresentationRevision, rv:RevisionAnchor ;
+      rv:component ?presentation ; rv:reviewStatus ?review ; rv:sequence ?sequence .
+      ${includeDrafts ? "" : "FILTER(?review = rv:Reviewed)"}
+      FILTER NOT EXISTS { ?head a rv:ErasedRevision } } }`);
   // Read the immutable objects only for selected languages, independently for each direction.
   const rows = result.results?.bindings ?? [];
   const tuples = new Set<string>();
@@ -200,6 +206,7 @@ export async function renderRelation(
   viewingRole: string,
   languages: readonly string[],
   canRead: ReferenceCheck,
+  includeDrafts = false,
 ): Promise<RelationRendering> {
   let meaning: ExactDefinition | null;
   let bindings: RelationBinding[] = [];
@@ -241,7 +248,7 @@ export async function renderRelation(
   if (!meaning) throw new SemanticTargetUnavailable('relation meaning is unavailable');
   if (!Object.values(meaning.roleKeys).includes(viewingRole))
     throw new SemanticChangeRejected('invalid', 'viewing role is unknown');
-  const rows = await presentations(env, meaning);
+  const rows = await presentations(env, meaning, includeDrafts);
   const projections: RelationProjection[] = [];
   for (const toRole of Object.values(meaning.roleKeys).filter((key) => key !== viewingRole)) {
     const candidates = rows
@@ -261,7 +268,8 @@ export async function renderRelation(
         selected.state.definition !== meaning.definition ||
         selected.state.fromRole !== viewingRole ||
         selected.state.toRole !== toRole ||
-        selected.state.language !== index.language
+        selected.state.language !== index.language ||
+        (!includeDrafts && selected.state.reviewStatus !== 'reviewed')
       ) {
         throw new RevisionCorrupt('selected presentation changed or differs from its dimensions');
       }

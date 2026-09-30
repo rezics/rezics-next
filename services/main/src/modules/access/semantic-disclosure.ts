@@ -66,18 +66,27 @@ async function publicInTransaction(access: PoolClient, graph: Pick<FusekiClient,
   const rows = (await graph.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?resource WHERE {
       VALUES ?resource { ${refs.map(iri).join(' ')} }
-      GRAPH ${iri(GRAPHS.current)} { ?resource rv:semanticHead ?head . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:SemanticRevision, rv:RevisionAnchor ;
+      {
+        GRAPH ${iri(GRAPHS.current)} { ?resource rv:semanticHead ?head . }
+        GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:SemanticRevision . }
+        FILTER EXISTS {
+          GRAPH ${iri(GRAPHS.current)} { ?resource <${SEMANTIC_TERMS.semanticWork}> ?work . }
+          ${publicWork('?work', '?main')}
+        }
+      } UNION {
+        # Relation definitions are public vocabulary; other resources still need a public Work.
+        GRAPH ${iri(GRAPHS.current)} { ?resource a rv:SemanticDefinition ;
+          rv:definitionKind rv:RelationDefinition ; rv:definitionHead ?head . }
+        GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:DefinitionRevision ;
+          rv:definitionKind rv:RelationDefinition . }
+      }
+      GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ;
         rv:component ?resource ; rv:lifecycle rv:Active ; rv:sequence ?sequence . }
       ${revision ? `FILTER(?head = ${iri(revision)})` : ''}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:ErasedRevision } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?resource rv:protectionHead ?protection } }
       # A Work's own description never discloses the Work: Work disclosure has its own owner.
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?resource a schema:CreativeWork } }
-      FILTER EXISTS {
-        GRAPH ${iri(GRAPHS.current)} { ?resource <${SEMANTIC_TERMS.semanticWork}> ?work . }
-        ${publicWork('?work', '?main')}
-      }
     } LIMIT ${refs.length + 1}`, 32_768)).results?.bindings ?? [];
   const candidates = rows.map(row => row.resource?.value);
   if (candidates.length > refs.length || candidates.some(ref => !ref || !refs.includes(ref))
@@ -94,7 +103,8 @@ async function publicInTransaction(access: PoolClient, graph: Pick<FusekiClient,
 
 /** Public and explicit-grant outcomes stay separate so summaries cannot label a
  * granted restriction public. The private path uses one indexed batch query;
- * no container, Context or semantic type supplies read authority. */
+ * relation vocabulary is the sole type exception to the public Work link;
+ * containers, Contexts and other semantic types supply no read authority. */
 export async function readSemanticDisclosure(client: SemanticDisclosureClient,
   principal: VerifiedPrincipal | null, actor: string | null, refs: readonly string[]): Promise<SemanticDisclosure> {
   const unique = checkedRefs(refs);

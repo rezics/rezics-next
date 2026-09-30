@@ -154,6 +154,7 @@ async function resolveCandidate(env: WorkActivationEnvironment, candidate: Candi
 export async function readResourceRelations(env: WorkActivationEnvironment, input: {
   resource: string; languages: readonly string[]; limit: number; after?: string;
   canRead: ReferenceCheck; canReadOccurrence: ReferenceCheck;
+  canReadDraftPresentations?: ReferenceCheck;
   summarize: (references: string[]) => Promise<ResourceSummary[]>;
 }) {
   checkedNativeIri(input.resource);
@@ -214,7 +215,8 @@ export async function readResourceRelations(env: WorkActivationEnvironment, inpu
     if (resolved.meaning && resolved.viewingRole && resolved.bindings) {
       const key = `${resolved.meaning.revision}:${resolved.viewingRole}`;
       if (!renderings.has(key)) renderings.set(key, await renderRelation(env,
-        { meaning: resolved.meaning, bindings: [] }, resolved.viewingRole, input.languages, input.canRead));
+        { meaning: resolved.meaning, bindings: [] }, resolved.viewingRole, input.languages, input.canRead,
+        await input.canReadDraftPresentations?.(resolved.meaning.definition) ?? false));
       const template = renderings.get(key)!;
       // Select labels once per exact meaning/direction; attach each occurrence's own arguments afterwards.
       const projections: RelationProjection[] = template.projections.map(projection => ({ ...projection,
