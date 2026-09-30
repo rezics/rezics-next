@@ -387,6 +387,22 @@
       }
     },
     {
+      "id": "realization-v1",
+      "sha256": "34b07501a3152ca77550605d2839ced63cc8ffbdfaa5671ee1900d796047ca21",
+      "file": "shapes/realization-v1.ttl",
+      "binding": {
+        "required": [
+          "realization",
+          "revision"
+        ],
+        "optional": [],
+        "roles": [
+          "realization",
+          "revision"
+        ]
+      }
+    },
+    {
       "id": "realm-daily-rating-context-v1",
       "sha256": "a1819809844d44a1766a4dd20713e8c639eed5b71d158c4458f861de0842e149",
       "file": "shapes/realm-daily-rating-context-v1.ttl",
@@ -648,6 +664,11 @@
       "id": "release-v1",
       "sha256": "e0018a2144113c2c3cc6bfcdc3951f1ce282c919859950c0811aa018c4a1c92c",
       "file": "shapes/release-v1.ttl"
+    },
+    {
+      "id": "release-v2",
+      "sha256": "2f582286d19af2061cc01e2c80cc53813a9437a6b2a855ef578435e5261162f5",
+      "file": "shapes/release-v2.ttl"
     },
     {
       "id": "rights-offering-v1",
@@ -2395,6 +2416,26 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/Realization",
+      "routes": [
+        {
+          "profile": "realization-v1",
+          "shape": "https://rezics.com/definition/realization-v1/realization-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/RealizationRevision",
+      "routes": [
+        {
+          "profile": "realization-v1",
+          "shape": "https://rezics.com/definition/realization-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/RealmModeratorChoiceRevision",
       "routes": [
         {
@@ -2528,6 +2569,16 @@
       "type": "https://rezics.com/vocab/Release",
       "routes": [
         {
+          "profile": "release-v2",
+          "shape": "https://rezics.com/definition/release-v2/release-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/release-v2"
+            }
+          ]
+        },
+        {
           "profile": "release-v1",
           "shape": "https://rezics.com/definition/release-v1/release-shape",
           "when": []
@@ -2567,6 +2618,16 @@
     {
       "type": "https://rezics.com/vocab/ReleaseRevision",
       "routes": [
+        {
+          "profile": "release-v2",
+          "shape": "https://rezics.com/definition/release-v2/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/release-v2"
+            }
+          ]
+        },
         {
           "profile": "release-v1",
           "shape": "https://rezics.com/definition/release-v1/revision-shape",
@@ -3053,6 +3114,10 @@
       "profile": "definition-presentation-v1"
     },
     {
+      "type": "https://rezics.com/vocab/RealizationRevision",
+      "profile": "realization-v1"
+    },
+    {
       "type": "https://rezics.com/vocab/RealmReplyPlacement",
       "profile": "realm-reply-placement-v1"
     },
@@ -3119,6 +3184,7 @@
     "contexts/proposal-v1.jsonld": "9b15fd249376b05db294eafb5296b6209d8f51451801b07c111f5acc4e57bc23",
     "contexts/protection-revision-v1.jsonld": "a34ff68ba13da88dbdfb1e08ba33757dda7cfebefc0390972bf72861173b27b2",
     "contexts/rating-aggregate-default-policy-v1.jsonld": "a2e6e731c50a827471cefd97aaeca10ba0b6e8a87a1ddf912258c5e7fe759d38",
+    "contexts/realization-v1.jsonld": "ad402caa9be6ae9baaf9288b9ef3e15c750211895a2e8d2de51c337cfe68e8c1",
     "contexts/realm-daily-rating-context-v1.jsonld": "b4d79423893c066890f16fdb5cebe11704379e52161390afed5963ac45bce57c",
     "contexts/realm-daily-rating-observation-v1.jsonld": "c2e924c91bc13a87cd94baf3db8aa9b9871bd525b5b475f7598ab27b52a59850",
     "contexts/realm-experience-rating-context-v1.jsonld": "5252754cbd314ccba53c4daa132914c7bc8d56713bc42bcf244cc2d4cb8edf32",
@@ -3137,6 +3203,7 @@
     "contexts/recipe-structure-v1.jsonld": "9cd287b924b91e207ef04c036dfe21a6dfd48cd77d9110e3a929dc0486c2e852",
     "contexts/relation-occurrence-v1.jsonld": "ef11293038d3809b756e9a3f472b5cd58ba1d673794fc7f44b009b6faaa57bce",
     "contexts/release-v1.jsonld": "24702f3442ddbdc2b1e4792693af3c8e2bf53de038b6699ed7376a06d028e3b2",
+    "contexts/release-v2.jsonld": "0581bb487e7e60af286ee266c2cf0abcd78cb4870b25f46bf04c3fe29fae2050",
     "contexts/rights-offering-v1.jsonld": "849a6bbeffacb662605a26dc09e0ce069dcbda4f32164173300fb9d7f3206293",
     "contexts/semantic-annotation-v1.jsonld": "15e08572d951513ddac7b9e3c1d1f2315d520a0b03c67d418271872d98b85f7d",
     "contexts/semantic-definition-v1.jsonld": "a455850c8e286d4953be2778e82b5d208e30ece15bf8fc33ee107eb9eb2ae77b",
@@ -3227,6 +3294,7 @@
     "shapes/proposal-v1.ttl": "5fa5082efb1b4215773347902cf82a11dc925ed9bdb4396cc2461006fe8291ce",
     "shapes/protection-revision-v1.ttl": "92a6e82e55849a2c3ab4bae1076cb8d17f18a4516870d3d46bbd7f050bcdb396",
     "shapes/rating-aggregate-default-policy-v1.ttl": "0d9a0acbe78f4043628960ed5942b64bc7a90d915e5e1fe0cb40938bda5f6fe4",
+    "shapes/realization-v1.ttl": "34b07501a3152ca77550605d2839ced63cc8ffbdfaa5671ee1900d796047ca21",
     "shapes/realm-daily-rating-context-v1.ttl": "a1819809844d44a1766a4dd20713e8c639eed5b71d158c4458f861de0842e149",
     "shapes/realm-daily-rating-observation-v1.ttl": "6f5ddc3f11cc7a0c31a859e7352d65ef7c9983161ae8d5ffde93eaa922a8e658",
     "shapes/realm-experience-rating-context-v1.ttl": "161452da6d838da538d753061cda75b09fa0a97bccfbb1cc79f8f4bb847a2c8f",
@@ -3245,6 +3313,7 @@
     "shapes/recipe-structure-v1.ttl": "b950e8eb396bc5261a976cf9c8378e42655b0aa2bdf9531701c7aaa51958dd72",
     "shapes/relation-occurrence-v1.ttl": "085eb7668d18baad0c135943856d0f428d31d5a5429216155f967a8001b75222",
     "shapes/release-v1.ttl": "e0018a2144113c2c3cc6bfcdc3951f1ce282c919859950c0811aa018c4a1c92c",
+    "shapes/release-v2.ttl": "2f582286d19af2061cc01e2c80cc53813a9437a6b2a855ef578435e5261162f5",
     "shapes/rights-offering-v1.ttl": "dd10150cfac446923dbb9ac8501f47a0a24bb292dd0eb4ddbad9449ed1746f85",
     "shapes/semantic-annotation-v1.ttl": "d195472baf5db656b7086c576e95e0f17f057c95ebd766e3789bdecf033835a8",
     "shapes/semantic-definition-v1.ttl": "c4755adab864370f58a4b27067ecd9aa6e4d4923ef97249364b4b34a76147e3e",
@@ -3290,9 +3359,9 @@
     "shapes/work-type-v2.ttl": "94ef660d31ca8af44f51d5ecc6ad767ea97c6c39d1dcbf7db4321b1152632b2f",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "7d0e35ec6aaec601ffca5c746d859a27d5f1adb435b7c063ee2fabc64ad053db",
-    "packages/model/src/generated/profiles.ts": "42b7b450fc8a767e3bcfe21d1c621c0735f6fae3f3b126920891900b65e0563e",
-    "packages/model/src/generated/schemas.ts": "0e506ae32ec05cbc6e06385f5645459933fe45058a5bfec198a0b34157c0bade",
-    "packages/model/src/generated/vocabulary.ts": "868387a5535e91f12d21a3f0c30d7564a711b515fcda8665138685a9a8197e0b"
+    "packages/model/src/generated/arbitraries.ts": "c7d3581f32957ab6885cc61dcf4dc05723492d6ea8daf2ba3a67df9ece9138ef",
+    "packages/model/src/generated/profiles.ts": "d4d5e0e2f96d622681d64f69b578aa358507b2d33332ec56c0645feaef086782",
+    "packages/model/src/generated/schemas.ts": "e3ae7d4aec9340bd689be7cdbc203db2035662c116051efab5b83e968ffdbae8",
+    "packages/model/src/generated/vocabulary.ts": "5bc2a01bc5391a28b4482d2634a70e3f7f8d47d115a535c84f8d72181e52dc3f"
   }
 }

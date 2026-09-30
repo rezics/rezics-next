@@ -1,0 +1,47 @@
+# One release is a formal edition, a web publication, a REZICS fixed release, or a virtual release.
+# An unofficial release is its own record. Closed kinds are corrected with evidence, not extended.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <https://schema.org/> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/release-v2/release-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:Release ] ;
+    sh:property [ sh:path rv:work ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:coverageWork ; sh:minCount 1 ; sh:maxCount 64 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:releaseKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "formal" "web" "fixed" "virtual" ) ] ;
+    sh:property [ sh:path rv:releaseStatus ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "official" "unofficial" "virtual" "withdrawn" "cancelled" ) ] ;
+    sh:property [ sh:path rv:releaseHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ReleaseRevision ] ;
+    sh:property [ sh:path rv:definitionProfile ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/release-v2> ] ;
+    sh:property [ sh:path rv:coverageRealization ; sh:minCount 1 ; sh:maxCount 64 ; sh:class rv:Realization ] ;
+    sh:property [ sh:path rv:coverageRevision ; sh:minCount 1 ; sh:maxCount 64 ; sh:class rv:RealizationRevision ] ;
+    sh:property [ sh:path rv:contentLanguage ; sh:minCount 1 ; sh:maxCount 64 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:platform ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 120 ] ;
+    sh:property [ sh:path rv:territory ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^(?:[A-Z]{2}|[0-9]{3})$" ] ;
+    sh:property [ sh:path rv:completeness ; sh:minCount 1 ; sh:maxCount 4 ; sh:in ( "complete" "partial" "trial" "unknown" ) ] ;
+    sh:property [ sh:path rv:isbn13 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^97[89][0-9]{10}$" ] ;
+    sh:property [ sh:path rv:identifier ; sh:maxCount 16 ; sh:datatype xsd:string ; sh:maxLength 500 ] ;
+    sh:property [ sh:path rv:contentLanguages ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 2304 ] ;
+    sh:property [ sh:path rv:titleLanguage ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:tracklistLanguage ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:originalLanguages ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 200 ] ;
+    sh:property [ sh:path rv:isTranslation ; sh:maxCount 1 ; sh:in ( "true" ) ] ;
+    sh:property [ sh:path rv:originalUrl ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 512 ] ;
+    sh:property [ sh:path rv:fixedRelease ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:coverageScope ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 120 ] ;
+    sh:property [ sh:path rv:coverageComplete ; sh:maxCount 1 ; sh:in ( "true" "false" ) ] .
+
+<https://rezics.com/definition/release-v2/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ReleaseRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Release ] ;
+    sh:property [ sh:path rv:releaseState ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 49152 ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:ReleaseRevision ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:correctionEvidence ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/release-v2> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/release-v2> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .
