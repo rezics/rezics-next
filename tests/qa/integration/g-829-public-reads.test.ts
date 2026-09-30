@@ -187,6 +187,7 @@ test('G-829: every public resource/composition/Collection GET admits anonymous a
       '/v1/compositions/:id/occurrences/:occurrence': `${structure}/occurrences/${shortId(changed.occurrences[1]!)}`,
       '/v1/compositions/:id/seals/:seal': `${structure}/seals/${shortId(sealed.seal)}`,
       '/v1/collections/:id': collectionPath,
+      '/v1/collections/:id/works': `${collectionPath}/works?grain=series`,
       '/v1/collections/:id/name': `${collectionPath}/name`,
       '/v1/collections/:id/revisions/:revision': `${collectionPath}/revisions/${shortId(publicCollection.revision)}`,
     };

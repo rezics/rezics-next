@@ -159,12 +159,15 @@ test('WIKI03/WIKI06/CTX08: a Collection keeps repeated occurrence history and hi
     expect(concurrent.map(result => result.status).sort()).toEqual([200, 409]);
     expect((await f.json<{ occurrences: Array<{ occurrence: string }> }>(await f.call('GET',
       `${path}?${query}`), 200)).occurrences).toHaveLength(2);
-    expect((await f.call('GET', `${path}?${query}`, undefined, randomUUID(), f.account.tokenB)).status)
-      .toBe(404);
-    // Position selection never bypasses the Collection owner's public gates.
-    expect((await f.call('GET', `${path}?${query}&position=all`, undefined, randomUUID(), f.account.tokenB)).status)
-      .toBe(404);
-    expect((await f.call('GET', `${path}/revisions/${shortId(inserted.revision)}?${query}&position=all`,
-      undefined, randomUUID(), f.account.tokenB)).status).toBe(404);
+    // G-829 admits readers of public Collections. These metadata-only Works
+    // remain private; selecting all positions cannot disclose their members.
+    for (const readPath of [`${path}?${query}`, `${path}?${query}&position=all`,
+      `${path}/revisions/${shortId(inserted.revision)}?${query}&position=all`]) {
+      const publicPage = await f.json<{ occurrences: unknown[]; next: string | null }>(
+        await f.call('GET', readPath, undefined, randomUUID(), f.account.tokenB), 200);
+      expect(publicPage.occurrences).toEqual([]); expect(publicPage.next).toBeNull();
+      expect(JSON.stringify(publicPage)).not.toContain(visibleWork.work);
+      expect(JSON.stringify(publicPage)).not.toContain(privateWork.work);
+    }
   } finally { await f.close(); }
 }, 180_000);

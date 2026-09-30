@@ -13,6 +13,8 @@ import type { LocalizedText } from '../modules/display-language/select.ts';
 import { structureProfileFor } from '../modules/structure/profiles.ts';
 import { canReadCompositionResource, compositionTargetReader } from '../modules/composition/disclosure-read.ts';
 import { workRead } from '../modules/work/read-session.ts';
+import { readingBoundary } from '../modules/reading-position/boundary.ts';
+import { readingPositionQuery } from './reading-positions.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable }
   from '../modules/structure/tree.ts';
 import { createAdmittedOwner } from '../modules/zone/owner-create.ts';
@@ -143,6 +145,8 @@ async function page(fuseki: FusekiClient, work: MainWorkDependencies, request: R
     if (!await canReadCompositionResource(session, collection)) {
       throw new CompositionUnavailable('Collection is unavailable');
     }
+    const boundary = readingBoundary(session);
+    await boundary.require(collection);
     const structure = await ownerStructure(fuseki, collection);
     if (!structure) throw new CompositionUnavailable('Collection is unavailable');
     const header = await readCompositionHeader(work.environment, structure);
@@ -153,6 +157,7 @@ async function page(fuseki: FusekiClient, work: MainWorkDependencies, request: R
       ...(input.revision ? { revision: input.revision } : {}),
       ...(input.parent ? { parent: input.parent } : {}), ...(input.after ? { after: input.after } : {}),
       limit: input.limit ?? 50, visible: item => item.role !== 'member' || !!item.target,
+      readingBoundary: boundary,
       canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)) });
     // The shared page retains hidden uses for exact owner history. This projection
     // returns only disclosed members and has no hidden count or timing counters.
@@ -399,8 +404,8 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
       } catch (error) { return routeError(error); }
     })
     .get('/v1/collections/:id', { params: t.Object({ id: groupUuid }),
-      query: t.Object({ actingSubject: t.Optional(ref), parent: t.Optional(ref),
-        after: t.Optional(t.String({ maxLength: 512 })),
+      query: t.Object({ actingSubject: t.Optional(ref), position: readingPositionQuery, parent: t.Optional(ref),
+        after: t.Optional(t.String({ maxLength: 2048 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
       { additionalProperties: false }), response: { 200: read, ...authorizedReadProblems, ...workReadProblems } },
     async ({ request, params, query }) => {
@@ -410,8 +415,8 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
     })
     .get('/v1/collections/:id/revisions/:revision', {
       params: t.Object({ id: groupUuid, revision: groupUuid }),
-      query: t.Object({ actingSubject: t.Optional(ref), parent: t.Optional(ref),
-        after: t.Optional(t.String({ maxLength: 512 })),
+      query: t.Object({ actingSubject: t.Optional(ref), position: readingPositionQuery, parent: t.Optional(ref),
+        after: t.Optional(t.String({ maxLength: 2048 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
       { additionalProperties: false }), response: { 200: read, ...authorizedReadProblems, ...workReadProblems } },
     async ({ request, params, query }) => {

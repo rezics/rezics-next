@@ -19,6 +19,8 @@ import { problem } from './problems.ts';
 import { semanticError } from './semantic.ts';
 import { relationRenderingSchema } from './lexicon.ts';
 import { resourceSummary } from '../modules/media/summary-contract.ts';
+import { readingPositionQuery } from './reading-positions.ts';
+import { readingPositionRead } from '../modules/reading-position/read.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() });
@@ -73,7 +75,7 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
     })
     .get('/v1/resources/:resource/relations', {
       params: t.Object({ resource: groupUuid }),
-      query: t.Object({ actingSubject: t.Optional(native), languages: t.Optional(t.String({ maxLength: 8192 })),
+      query: t.Object({ actingSubject: t.Optional(native), position: readingPositionQuery, languages: t.Optional(t.String({ maxLength: 8192 })),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: RELATION_PAGE_COST.pageLimit })),
         after: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
       response: { 200: t.Object({ profile: t.Literal('resource-relations-v1'), resource: native,
@@ -88,30 +90,37 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
         const principal = request.headers.has('authorization')
           ? await work.account.verify(request, ['work:read']) : null;
         const actor = principal ? query.actingSubject! : null;
-        const canReadSemantic = (ref: string) => work.access.canReadSemanticResource?.(
-          principal, actor, ref, undefined, fuseki) ?? Promise.resolve(false);
-        const reader = {
-          canReadWork: principal && actor ? (ref: string) => work.access.canReadWork(principal, actor, ref) : undefined,
-          canReadSemantic,
-          ...(work.governance?.store ? { restrictedTitles: work.governance.store.restrictedTitles.bind(work.governance.store) } : {}),
-        };
-        const languages = readerLanguages(query.languages, request.headers.get('accept-language'));
-        const summarize = async (resources: string[]) => (await readResourceSummaries(work.environment,
-          work.media?.store, reader, { resources, context: DEFAULT_MEDIA_CONTEXT,
-            language: null, languages, includeCollections: true })).summaries;
-        const page = await fusekiReadBudget.run({ signal: AbortSignal.any([request.signal,
-          AbortSignal.timeout(RELATION_PAGE_COST.deadlineMs)]), callsLeft: RELATION_PAGE_COST.graphCalls,
-          bytesLeft: RELATION_PAGE_COST.graphBytes }, () => readResourceRelations(work.environment, {
-          resource: `https://rezics.com/id/${params.resource}`, languages, limit: query.limit ?? 20, after: query.after,
-          canRead: async ref => await canReadSemantic(ref)
-            || (await summarize([ref]))[0]?.status === 'available',
-          canReadOccurrence: canReadSemantic,
-          canReadDraftPresentations: async definition => {
-            if (!principal || !actor || !work.mediaAccess) return false;
-            const disclosure = await work.mediaAccess.canReadSemantics(principal, actor, [definition], fuseki);
-            return 'granted' in disclosure && disclosure.granted.has(definition);
-          }, summarize,
-        }));
+        const page = await readingPositionRead(work, request, principal, actor ?? undefined, async boundary => {
+          const visibility = (refs: readonly string[]) => boundary.visible(refs);
+          const canReadSemantic = (ref: string) => work.access.canReadSemanticResource?.(
+            principal, actor, ref, undefined, fuseki) ?? Promise.resolve(false);
+          const reader = {
+            visibleRecords: visibility,
+            canReadWork: principal && actor ? (ref: string) => work.access.canReadWork(principal, actor, ref) : undefined,
+            canReadSemantic,
+            ...(work.governance?.store ? { restrictedTitles: work.governance.store.restrictedTitles.bind(work.governance.store) } : {}),
+          };
+          const languages = readerLanguages(query.languages, request.headers.get('accept-language'));
+          const summarize = async (resources: string[]) => (await readResourceSummaries(work.environment,
+            work.media?.store, reader, { resources, context: DEFAULT_MEDIA_CONTEXT,
+              language: null, languages, includeCollections: true })).summaries;
+          const result = await fusekiReadBudget.run({ signal: AbortSignal.any([request.signal,
+            AbortSignal.timeout(RELATION_PAGE_COST.deadlineMs)]), callsLeft: RELATION_PAGE_COST.graphCalls,
+            bytesLeft: RELATION_PAGE_COST.graphBytes }, async () => readResourceRelations(work.environment, {
+            resource: `https://rezics.com/id/${params.resource}`, languages, limit: query.limit ?? 20, after: query.after,
+            canRead: async ref => (await canReadSemantic(ref)
+              || (await summarize([ref]))[0]?.status === 'available') && (await visibility([ref])).has(ref),
+            canReadOccurrence: canReadSemantic,
+            canReadDraftPresentations: async definition => {
+              if (!principal || !actor || !work.mediaAccess) return false;
+              const disclosure = await work.mediaAccess.canReadSemantics(principal, actor, [definition], fuseki);
+              return 'granted' in disclosure && disclosure.granted.has(definition);
+            }, summarize,
+            visibleRecords: visibility,
+            readingPosition: JSON.stringify([principal, actor, await boundary.binding()]),
+          }));
+          return result;
+        });
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
         if (error instanceof SemanticChangeRejected || error instanceof SemanticTargetUnavailable

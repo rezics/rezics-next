@@ -192,14 +192,10 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     for (const [signed, position, expected] of [[false, undefined, [unchanged.component]],
       [true, undefined, [early.component, unchanged.component]], [false, readerPosition, [early.component, unchanged.component]],
       [false, 'all', [early.component, unchanged.component, late.component]], [true, 'all', [early.component, unchanged.component, late.component]]] as const) {
-      // G-829 owns anonymous Collection/relation transport gates. This filter
-      // changes only disclosure after those existing gates have admitted a read.
-      if (signed) {
-        const page = await json<{ occurrences: { target: string }[]; next: string | null }>(await read(memberPath, position, signed));
-        expect(page.occurrences.map(item => item.target)).toEqual([...expected]); expect(page.next).toBeNull(); exercised.add('members');
-        const retained = await json<typeof page>(await read(`${memberPath}/revisions/${short(members.revision)}`, position, signed));
-        expect(retained.occurrences.map(item => item.target)).toEqual([...expected]); expect(retained.next).toBeNull(); exercised.add('retained-members');
-      }
+      const page = await json<{ occurrences: { target: string }[]; next: string | null }>(await read(memberPath, position, signed));
+      expect(page.occurrences.map(item => item.target)).toEqual([...expected]); expect(page.next).toBeNull(); exercised.add('members');
+      const retained = await json<typeof page>(await read(`${memberPath}/revisions/${short(members.revision)}`, position, signed));
+      expect(retained.occurrences.map(item => item.target)).toEqual([...expected]); expect(retained.next).toBeNull(); exercised.add('retained-members');
       const index = await json<{ items: { id: string }[]; nextCursor: string | null }>(await read(zonePath, position, signed));
       expect(index.items.map(item => item.id)).toEqual([...expected]); expect(index.nextCursor).toBeNull(); exercised.add('zone');
       for (const item of [early, unchanged, late]) {
@@ -227,11 +223,11 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
             .toBe(fact === earlyFact || position === 'all' ? 200 : 404); exercised.add('statement');
         }
       }
+      const relations = await json<{ items: { relation: string }[]; next: string | null }>(await read(relationPath, position, signed));
+      expect(relations.items.map(item => item.relation)).toEqual(position === 'all'
+        ? [earlyRelation.occurrence, lateRelation.occurrence].sort() : expected.includes(early.component) ? [earlyRelation.occurrence] : []);
+      expect(relations.next).toBeNull(); exercised.add('relations');
       if (signed) {
-        const relations = await json<{ items: { relation: string }[]; next: string | null }>(await read(relationPath, position));
-        expect(relations.items.map(item => item.relation)).toEqual(position === 'all'
-          ? [earlyRelation.occurrence, lateRelation.occurrence].sort() : [earlyRelation.occurrence]);
-        expect(relations.next).toBeNull(); exercised.add('relations');
         for (const relation of [earlyRelation, lateRelation]) {
           const path = `/v1/relations/${short(relation.occurrence)}`;
           const response = await read(path, position);
@@ -282,7 +278,12 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     expect([...relationsFirst.items, ...relationsTail.items].map(item => item.relation)).toEqual([earlyRelation.occurrence, lateRelation.occurrence].sort());
     expect(relationsTail.next).toBeNull();
     expect((await read(`${relationPath}?after=${encodeURIComponent(relationsFirst.next!)}`, 'all', false)).status).toBe(400);
-    expect((await read(memberPath, undefined, false)).status).toBe(400);
+    const outsideContinuity = native();
+    for (const path of [memberPath, `${memberPath}/revisions/${short(members.revision)}`]) {
+      const outside = await json<{ occurrences: { target: string }[]; next: string | null }>(await read(path, outsideContinuity, false));
+      expect(outside.occurrences.map(item => item.target)).toEqual([unchanged.component]); expect(outside.next).toBeNull();
+    }
+    expect((await json<{ items: unknown[] }>(await read(relationPath, outsideContinuity, false))).items).toEqual([]);
     const chooser = await json<{ resolved: string; items: { occurrence: string }[]; next: string | null }>(await read(`/v1/reading-positions/${short(series.work)}?limit=2`));
     expect(chooser.resolved).toBe(readerPosition); expect(chooser.items).toHaveLength(2); expect(chooser.next).toBeString();
     expect((await json<{ resolved: string }>(await read(`/v1/reading-positions/${short(series.work)}`, native()))).resolved).toBe('start');
