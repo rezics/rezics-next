@@ -9,6 +9,8 @@ import { signInAtAccounts } from './account-sign-in.ts';
 // and a right-to-left content language, and starts a discussion from the chapter.
 interface Seeded { work: string; occurrence: string; release: string; character: string; hologram: string; realm: string }
 let seeded: Seeded;
+const started = Date.now();
+const lap = (step: string) => console.log(`[g-644] ${step} at ${Math.round((Date.now() - started) / 1000)}s`);
 test.beforeAll(async () => {
   test.setTimeout(300_000);
   const result = spawnSync('bun', ['apps/web/tests/g-644-seed.ts'], { cwd: process.cwd(), env: process.env,
@@ -17,6 +19,7 @@ test.beforeAll(async () => {
     throw new Error(`G-644 seed failed: ${result.stderr || result.error?.message || result.status}`);
   }
   seeded = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as Seeded;
+  lap('seeded');
   // Main keeps processing the seed's events for a while, moving the graph under every read (409).
   const main = `http://127.0.0.1:${process.env.MAIN_PORT}/v1/works/${uuid(seeded.work)}`;
   let last = '';
@@ -29,6 +32,7 @@ test.beforeAll(async () => {
     await new Promise(done => setTimeout(done, 500));
   }
   if (still < 4) throw new Error('Main’s graph kept moving for 90 seconds after the seed');
+  lap('graph still');
 });
 
 const uuid = (iri: string) => iri.slice(-36);
@@ -71,7 +75,9 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   } else {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Nothing here');
   }
+  lap('signed-out page');
   await signInAtAccounts(page, at(seeded.occurrence), member);
+  lap('signed in');
 
   // Start a discussion on the chapter occurrence, reload, and come back to it.
   await expect(page.getByRole('heading', { name: 'Discussion' })).toBeVisible();
@@ -87,6 +93,7 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   await page.getByRole('textbox', { name: 'Your post' }).fill('Does anyone else think chapter one is slow on purpose?');
   await page.getByRole('button', { name: 'Post', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/en/r/${uuid(seeded.realm)}/discussions/`), { timeout: 60_000 });
+  lap('posted');
   await page.goto(at(seeded.occurrence));
   const reply = page.getByRole('article').filter({ hasText: 'chapter one is slow on purpose' });
   await expect(reply).toBeVisible();
@@ -96,6 +103,7 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   // Signed in, relations are Main's to answer and the section no longer asks for sign-in.
   await expect(page.getByText('Sign in to see what this is related to.')).toHaveCount(0);
 
+  lap('discussion reloaded');
   // A release, a character and a resource of an unregistered type: each a page with no book controls.
   await page.goto(at(seeded.release));
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Sword Art Online 1: Aincrad');
@@ -127,9 +135,11 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   await expect(page.getByRole('heading', { name: '討論' })).toBeVisible();
   await expect(page.getByRole('link', { name: '討論此角色' }).first()).toBeVisible();
 
+  lap('pages read');
   await shoot(page, at(seeded.occurrence), 'occurrence', info);
   await shoot(page, at(seeded.release), 'release', info);
   await shoot(page, at(seeded.character), 'character', info);
   await shoot(page, at(seeded.hologram), 'hologram-rtl', info);
   await shoot(page, at(seeded.occurrence, 'zh-Hant'), 'occurrence-zh-Hant', info);
 });
+

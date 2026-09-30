@@ -92,6 +92,16 @@ try {
   await editor.grant('space:create:root', 'space.create');
   const realm = await json<{ realm: string }>(await editor.send('POST', '/v1/spaces', { profile: 'space-realm-v1',
     name: 'Aincrad readers', capabilities: ['realm'], actingSubject: editor.actor }), 201);
+  // A new community reviews every post; this one takes them directly, as the composer needs.
+  for (const action of ['realm.settings.manage', 'governance.rule.publish']) {
+    await editor.grant(`governance:realm:${realm.realm}`, action);
+  }
+  const settingsRoot = `/v1/realms/${short(realm.realm)}/settings`;
+  const settings = await json<{ generation: string; ruleBasis: { revision: string | null } }>(
+    await editor.send('GET', `${settingsRoot}?actingSubject=${encodeURIComponent(editor.actor)}`));
+  await json(await editor.send('PUT', settingsRoot, { actingSubject: editor.actor, expectedGeneration: settings.generation,
+    expectedRulesRevision: settings.ruleBasis.revision, reason: 'Allow direct public posts', settings: {
+      visibility: 'public', reviewRequired: false, reviewMode: 'open', whoMaySubmit: 'granted', rules: [] } }));
   await grantReader(`reply:place:${realm.realm}`, 'reply.place');
   for (const root of [occurrence, release, character, created.work]) await grantReader(`reply:create:${root}`, 'reply.create');
 
