@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { GRAPHS, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { StructureProgressStore, StaleStructureProgress } from '../../../services/main/src/modules/progress/store.ts';
-import { prepareLibraryShelves } from '../../../services/main/src/modules/library/backfill.ts';
+import { prepareLibraryShelves, readShelfMetadata, SHELF_METADATA_COST } from '../../../services/main/src/modules/library/backfill.ts';
 import { ReaderLibraryStatusStore, STATUS_SHELF_COST, type ReadingStatus, type ShelfOrder, type ShelfSort }
   from '../../../services/main/src/modules/library/status.ts';
 import { meterStatements, startHomeStack } from './feed-read-support.ts';
@@ -171,6 +171,14 @@ test('G-824: frozen chapter rows backfill once; missing cards never truncate the
     const result = await home.json(await home.call('PUT', `/v1/works/${parent.work.slice(-36)}/reader-status`,
       { actingSubject: agent, status: 'read', expectedVersion: state[0]!.version }, home.reader.token));
     expect(result).toMatchObject({ status: 'read' });
+    const meter = meterStatements();
+    try {
+      const graphCalls = home.stack.fuseki.queries, sqlReads = meter.count();
+      expect(await readShelfMetadata(home.stack.contentPool, home.stack.accessPool,
+        home.stack.fuseki, agent, parent.work)).toMatchObject({ titleKey: 'backfill parent' });
+      expect(home.stack.fuseki.queries - graphCalls).toBeLessThanOrEqual(SHELF_METADATA_COST.graphCalls);
+      expect(meter.count() - sqlReads).toBeLessThanOrEqual(SHELF_METADATA_COST.sqlReads);
+    } finally { meter.restore(); }
     const progress = new StructureProgressStore(home.stack.contentPool);
     const statusFence = await home.deps.libraryStatus.fence(agent);
     const progressFence = await home.deps.libraryStatus.fence(agent, 'last-read');

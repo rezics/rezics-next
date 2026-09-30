@@ -21,8 +21,8 @@ export async function readShelfMetadata(content: Pool | PoolClient, access: Pool
         rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?generation .
         ?generation rv:generationState rv:Active }
     }
-  } LIMIT 49`, 64 * 1024)).results?.bindings ?? [];
-  if (rows.length === 49) throw new WorkReadUnavailable('Shelf metadata exceeds batch budget');
+  } LIMIT ${SHELF_METADATA_COST.graphRows}`, 64 * 1024)).results?.bindings ?? [];
+  if (rows.length === SHELF_METADATA_COST.graphRows) throw new WorkReadUnavailable('Shelf metadata exceeds batch budget');
   const mains = new Set(rows.flatMap(row => row.main ? [row.main.value] : []));
   const structures = [...new Set(rows.flatMap(row => row.structure ? [row.structure.value] : []))];
   if (mains.size > 1 || structures.length > 1) throw new WorkReadUnavailable('Shelf metadata is ambiguous');
