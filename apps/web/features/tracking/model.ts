@@ -1,4 +1,4 @@
-import type { EditionChoice, Editions, Locator, LocatorUnit, Selection, SelectionInput, Session, SessionChanges,
+import type { Editions, Locator, LocatorUnit, Selection, SelectionInput, Session, SessionChanges,
   SessionState } from './types.ts';
 
 // What tracking needs to know that is not a read of Main: which moves the status control offers, how a
@@ -42,7 +42,7 @@ export function validDate(value: string): boolean {
   const [year, month, day] = [Number(match[1]), match[2] ? Number(match[2]) : null, match[3] ? Number(match[3]) : null];
   if (month !== null && (month < 1 || month > 12)) return false;
   if (day !== null) {
-    const last = new Date(Date.UTC(2000, month!, 0));
+    const last = new Date(0);
     last.setUTCFullYear(year, month!, 0);
     if (day < 1 || day > last.getUTCDate()) return false;
   }
@@ -151,5 +151,3 @@ export const withoutVersion = (submitted: SessionChanges & { expectedVersion?: n
   const { expectedVersion: _ignored, ...changes } = submitted;
   return changes;
 };
-
-export type { EditionChoice };

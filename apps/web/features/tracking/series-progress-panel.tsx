@@ -4,7 +4,6 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
-import { Skeleton } from '@rezics/ui/skeleton';
 import { useEffect, useState } from 'react';
 import { type UiLocale, uiLocales } from '../../i18n/define.ts';
 import { useReaderActions } from '../catalogue/reader-actions.tsx';
@@ -121,31 +120,21 @@ function PreferenceForm({ work, preference, language, editions, api, locale, t, 
   </form>;
 }
 
-/** Counterparts to offer, as read from Main: the reader's own action, never a silent completion. */
-function Correspondences({ work, counterparts, api, t }: { work: string; counterparts: Counterpart[]; api: TrackingApi; t: Copy }) {
-  const actions = useReaderActions();
-  const [marked, setMarked] = useState<ReadonlySet<string>>(new Set());
-  const [failed, setFailed] = useState<string | null>(null);
-  const ready = actions.kind === 'ready' ? actions : null;
-  // Offered once this Work is read and the counterpart, by Main's own status, is not.
-  const finished = ready?.stateOf(work).status === 'read';
-  const offers = finished ? counterparts.filter(item => !marked.has(item.work) && ready?.stateOf(item.work).status !== 'read') : [];
+/** Counterparts to offer: the reader's own action, never a silent completion. */
+function Correspondences({ offers, marked, counterparts, failed, onMark, t }: {
+  offers: Counterpart[]; marked: ReadonlySet<string>; counterparts: Counterpart[]; failed: string | null;
+  onMark: (counterpart: Counterpart) => void; t: Copy;
+}) {
   if (!offers.length && !marked.size) return null;
-  async function mark(counterpart: Counterpart) {
-    setFailed(null);
-    const written = await api.start(counterpart.work, { state: 'finished' });
-    if (written.ok) setMarked(current => new Set([...current, counterpart.work]));
-    else setFailed(counterpart.work);
-  }
-  return <section className="grid gap-2" aria-label={t.correspondences}>
+  return <div className="grid gap-2" role="group" aria-label={t.correspondences}>
     {offers.map(item => <div key={item.work} className="grid gap-1.5 rounded-xl bg-muted/40 p-3">
       <p className="text-sm">{t.alsoMarkNote({ title: item.title })}</p>
-      <div><Button size="sm" variant="outline" onClick={() => void mark(item)}>{t.alsoMark({ title: item.title })}</Button></div>
+      <div><Button size="sm" variant="outline" onClick={() => onMark(item)}>{t.alsoMark({ title: item.title })}</Button></div>
       {failed === item.work ? <p role="status" className="text-destructive-foreground text-xs">{t.saveFailed}</p> : null}
     </div>)}
     {counterparts.filter(item => marked.has(item.work)).map(item =>
       <p key={item.work} role="status" className="text-sm">{t.marked({ title: item.title })}</p>)}
-  </section>;
+  </div>;
 }
 
 /** What the panel reads once, before it asks for progress: the choice that names the language, editions, correspondences. */
@@ -182,6 +171,8 @@ export function SeriesProgressPanel({ work, locale, className }: { work: string;
   }, [api, work]);
 
   const preference = setup?.preference ?? null;
+  const [marked, setMarked] = useState<ReadonlySet<string>>(new Set());
+  const [markFailed, setMarkFailed] = useState<string | null>(null);
   useEffect(() => {
     if (!api || !setup) return;
     let current = true;
@@ -192,13 +183,23 @@ export function SeriesProgressPanel({ work, locale, className }: { work: string;
   }, [api, work, language, setup]);
 
   if (!api || !setup || !progress) return null;
+  const ready = actions.kind === 'ready' ? actions : null;
   const value = 'value' in progress && progress.language === language ? progress.value : null;
   const failure = 'failure' in progress ? progress.failure : null;
   const counterparts = setup.counterparts;
   const hasParts = Boolean(value && (value.counts.required || value.counts.completed || value.next));
+  // Offered once this Work is read and the counterpart, by Main's own status, is not.
+  const finished = ready?.stateOf(work).status === 'read';
+  const offers = finished ? counterparts.filter(item => !marked.has(item.work) && ready?.stateOf(item.work).status !== 'read') : [];
   // A Work with no composition has no series to report; a failed read says so unless Main simply has nothing (404) or no sign-in.
   const silent = failure === 'missing' || failure === 'sign-in';
-  if (!hasParts && !counterparts.length && (!failure || silent)) return null;
+  if (!hasParts && !offers.length && !marked.size && (!failure || silent)) return null;
+  async function mark(counterpart: Counterpart) {
+    setMarkFailed(null);
+    const written = await api!.start(counterpart.work, { state: 'finished' });
+    if (written.ok) setMarked(current => new Set([...current, counterpart.work]));
+    else setMarkFailed(counterpart.work);
+  }
 
   return <section aria-labelledby="series-progress" data-series-progress className={className ?? 'grid gap-4 rounded-2xl border border-border/60 p-4 sm:p-5'}>
     <h2 id="series-progress" className="font-semibold text-xl tracking-tight">{t.seriesProgress}</h2>
@@ -222,13 +223,13 @@ export function SeriesProgressPanel({ work, locale, className }: { work: string;
             ? <span className="text-muted-foreground text-sm"> · {locatorParts(value.furthestCompleted.locator, t).furthest}</span> : null}</p>
       </div> : null}
     </> : null}
-    <div className="grid gap-2 border-border/60 border-t pt-3">
+    {hasParts ? <div className="grid gap-2 border-border/60 border-t pt-3">
       <h3 className="font-medium text-sm">{t.preference}</h3>
       <p className="text-muted-foreground text-xs">{t.preferenceNote}</p>
       <PreferenceForm key={`${preference?.version ?? 0}`} work={work} preference={preference} language={language}
         editions={setup.editions} api={api} locale={locale} t={t}
         onSaved={saved => setSetup({ ...setup, preference: saved })} onLanguage={setLanguage} />
-    </div>
-    <Correspondences work={work} counterparts={counterparts} api={api} t={t} />
+    </div> : null}
+    <Correspondences offers={offers} marked={marked} counterparts={counterparts} failed={markFailed} onMark={item => void mark(item)} t={t} />
   </section>;
 }

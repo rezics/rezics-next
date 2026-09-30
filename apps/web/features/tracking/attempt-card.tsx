@@ -75,7 +75,7 @@ export function AttemptCard({ session, title, work, editions, api, locale, t, on
         onSave={next => apply({ finishedOn: next })} />
     </div>
 
-    <section aria-label={t.editions} className="grid gap-3">
+    <div className="grid gap-3">
       <h4 className="font-medium text-sm">{t.editions}</h4>
       <ul className="grid gap-3">
         {session.selections.map(selection => {
@@ -97,6 +97,6 @@ export function AttemptCard({ session, title, work, editions, api, locale, t, on
         <p className="text-muted-foreground text-xs">{t.editionsNote}</p>
       </> : editions ? <p className="text-muted-foreground text-xs">{t.noEditionsLeft}</p> : null}
       {failed ? <p role="status" className="text-destructive-foreground text-xs">{t.saveFailed}</p> : null}
-    </section>
+    </div>
   </article>;
 }
