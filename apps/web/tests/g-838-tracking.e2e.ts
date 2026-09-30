@@ -105,6 +105,7 @@ test('attempts on two devices, series progress and the offered correspondence', 
   const position = first.locator('[data-selection="release"]').filter({ hasText: 'paperback' });
   await position.getByLabel('Value').fill('200');
   await position.getByRole('button', { name: 'Save position' }).click();
+  await expect(position).toContainText('Furthest page 200');
   await position.getByLabel('Value').fill('50');
   await position.getByRole('button', { name: 'Save position' }).click();
   await expect(position).toContainText('Now page 50');
