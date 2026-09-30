@@ -119,10 +119,12 @@ Work linked by a reboot relation. Both rewrite versions stay indexed, and the
 choice is a compromise that mitigates rather than removes the problem. Reviews
 name their target (story, translation, narration or production, and which
 version), progress pins language, version and part, and wiki facts pin their
-continuity (and, where needed, cut, chapter or episode). Nothing carries across
-versions without reviewed correspondence. Derivation kinds today are only
-adaptation, new recording and software fork (`model/definitions/work-derivation-v1.ts`);
-revision and reboot must be added.
+continuity (and, where needed, cut, chapter or episode). Correspondence alone
+transfers no progress or facts. Derivation kinds in `work-derivation-v2` pin exact
+lexicon definition revisions; Rewrite and Reboot are seeded definitions, and new
+kinds can be added as data. Legacy `work-derivation-v1` keeps its three fixed kinds
+(adaptation, new recording and software fork), mapped to lexicon definitions in
+the combined relations read.
 
 Worked example, Sword Art Online: the web version is one Work whose Structure
 holds its arcs and chapters; the Dengeki Bunko series is a Work whose volumes
@@ -247,4 +249,3 @@ Acceptance queries, each through the API and the UI:
     links visible.
 12. Franchise and event membership never merges Works, and contributors keep one
     identity across Zones.
-

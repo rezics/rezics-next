@@ -163,10 +163,8 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(managedRealmRoutes(work))
     .use(studioRoutes(work));
     .use(studioRoutes(work))
-    .use(realmAdminRoutes(work));
-    .use(realmAdminRoutes(work))
     .use(resourceRelationRoutes(fuseki, work))
-    .use(memberReplyRoutes(work));
+    .use(realmAdminRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

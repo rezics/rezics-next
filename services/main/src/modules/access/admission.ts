@@ -971,7 +971,8 @@ export class AccessAdmissionRegistry {
           || ['relation.change', 'work.derive'].includes(request.action) && request.scope.startsWith('work:edit:')
           ? 'work.edit' : request.action;
         if (request.action === 'work.create' && request.scope === 'work:create:root'
-          || authorityAction === 'work.edit' && /^work:edit:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(request.scope)) {
+          || ['work.edit', 'work.derive', 'relation.change'].includes(request.action)
+            && /^work:edit:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(request.scope)) {
           if (subject.rows[0]?.kind !== 'agent') throw new AdmissionDenied('acting subject is not an Agent');
           const proof = await representedWorkProof(client, principalId, request.actingSubject,
             authorityAction as 'work.create' | 'work.edit', request.scope);

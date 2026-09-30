@@ -8,8 +8,50 @@ import { derivationTriples, validateWorkDerivation, workDerivationDigest, type W
 import { seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { definitionKeyIri, definitionKeyTriples } from '../src/modules/lexicon/definition-key.ts';
+import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { readMainOutboxEnvelope, type MainOutboxBatch } from '../src/modules/outbox/relay.ts';
+import { GRAPHS, RV, hash } from '../src/modules/work/activate.ts';
 
 const native = () => `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+
+test('G-831: occurrence envelopes prove scoped Work participation and preserve legacy relation scopes', async () => {
+  const component = native(), revision = native(), work = native(), expectedHead = native();
+  const admissionId = Bun.randomUUIDv7();
+  const receipt = `urn:rezics:receipt:${hash(`${admissionId}\0relation-change`)}`;
+  const eventId = `urn:rezics:event:${hash(`${receipt}\0semantic-write`)}`;
+  const batch: MainOutboxBatch = { batchId: `urn:rezics:outbox:${hash(receipt)}`,
+    dataEpoch: 'epoch-1', sequence: '5', routingEpoch: 'routing-1', eventIds: [eventId] };
+  const fixture = (scope: string, participant = true, expected?: string) => {
+    const queries: string[] = [];
+    const binding = (values: Record<string, string>) => Object.fromEntries(Object.entries(values)
+      .map(([key, value]) => [key, { type: 'literal', value }]));
+    const fuseki = { query: async (query: string) => {
+      queries.push(query);
+      if (query.includes('ASK')) return { boolean: participant };
+      return { results: { bindings: [binding(queries.length === 1
+        ? { kind: `${RV}RelationChangedEvent`, ordinal: '0', action: 'relation.change', receipt,
+          outcome: `${RV}Succeeded`, admissionId, digest: 'a'.repeat(64), authorityEpoch: '1', scope,
+          epoch: batch.dataEpoch, sequence: batch.sequence, ...(expected ? { expectedHead: expected } : {}) }
+        : { component, revision, manifest: `urn:rezics:sha256:${'b'.repeat(64)}`,
+          generation: `urn:rezics:model-generation:${'c'.repeat(64)}`, ...(expected ? { expected } : {}) })] } };
+    } } as unknown as FusekiClient;
+    return { read: () => readMainOutboxEnvelope(fuseki, batch, eventId), queries };
+  };
+  for (const expected of [undefined, expectedHead]) {
+    const f = fixture(`work:edit:${work}`, true, expected);
+    expect((await f.read()).data.receipt).toMatchObject({ scope: `work:edit:${work}`, work, component, revision });
+    expect(f.queries[2]).toContain(`<${GRAPHS.revisions}>`);
+    expect(f.queries[2]).toContain(`<${revision}>`);
+    expect(f.queries[2]).toContain(`rv:participant <${work}>`);
+    expect(f.queries[2]).not.toContain(`<${GRAPHS.current}>`);
+  }
+  await expect(fixture(`work:edit:${work}`, false).read()).rejects.toThrow('not a retained participant');
+  await expect(fixture('work:edit:https://example.com/work').read()).rejects.toThrow('invalid Work scope');
+  await expect(fixture(`work:read:${work}`).read()).rejects.toThrow('differs from its admitted receipt');
+  expect((await fixture('relation:create:root').read()).data.receipt).toMatchObject({ scope: 'relation:create:root' });
+  expect((await fixture(`relation:edit:${component}`, true, expectedHead).read()).data.receipt)
+    .toMatchObject({ scope: `relation:edit:${component}`, expectedHead });
+});
 
 test('G-831: unreadable definition anchors do not load or disclose retained bytes', async () => {
   const definition = native(), revision = native();

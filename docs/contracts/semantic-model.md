@@ -148,5 +148,7 @@ a prominent antagonist is main without being the protagonist, and a source's
 Main renders their structured labels, grammatical forms and fallback provenance;
 `GET /v1/lexicon/presentations` batches up to 64 definitions. Draft writes require
 `lexicon.presentation.change`; submitting or retaining reviewed status requires
-the separate `lexicon.presentation.review` authority. MessageFormat 2 templates
-and embedding the rendering contract in relation reads (G-831) remain to be built.
+the separate `lexicon.presentation.review` authority. The combined
+`GET /v1/resources/{id}/relations` read includes bindings and the selected labels,
+grammatical forms and fallback provenance for each viewing direction and
+requested language. MessageFormat 2 templates remain to be built.

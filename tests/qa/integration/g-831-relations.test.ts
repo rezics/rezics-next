@@ -9,6 +9,7 @@ import { relationLexiconSeedMapPath, seedRelationLexicon } from '../../../script
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
 import { readNextMainOutboxBatch, readMainOutboxEnvelope, type MainCloudEvent } from '../../../services/main/src/modules/outbox/relay.ts';
+import type { OwnerCloudEvent } from '../../../services/main/src/modules/outbox/event-handlers.ts';
 import { parseRetainedWorkDerivation } from '../../../services/main/src/modules/work/reconcile-derivation.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import type { RelationPageEntry } from '../../../services/main/src/modules/relation/traversal.ts';
@@ -21,7 +22,7 @@ import { ReaderLibraryRatings } from '../../../services/main/src/modules/library
 
 type Changed = { component: string; revision: string; replayed: boolean };
 type Work = { work: string; mainVersion: string; mainRevision: string };
-type Relation = { occurrence: string; revision: string; replayed: boolean };
+type Relation = { occurrence: string; revision: string; receipt: string; replayed: boolean; sourcePosition: { sequence: string } };
 type Derivation = { derivation: string; receipt: string; replayed: boolean; sourcePosition: { sequence: string } };
 type Page = { items: RelationPageEntry[]; next: string | null };
 
@@ -101,13 +102,24 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
       profile: 'relation-change-v1', expectedHead: null, definition: definitions.get(key)!.revision,
       participations: Object.entries(bindings).map(([role, ref]) => ({ role, participant: { kind: 'resource', ref } })),
       evidence, actingSubject: f.actor, ...extras }, idempotencyKey);
+    const assertedOccurrence = async (key: string, bindings: Record<string, string>, subject: string, idempotencyKey = randomUUID()) => {
+      const result = await f.json<Relation>(await occurrence(key, bindings, undefined, idempotencyKey), 201);
+      const batch = await readNextMainOutboxBatch(f.env.fuseki, f.env.lineage.dataEpoch,
+        String(BigInt(result.sourcePosition.sequence) - 1n));
+      expect(batch?.sequence).toBe(result.sourcePosition.sequence);
+      const envelope = await readMainOutboxEnvelope(f.env.fuseki, batch!, batch!.eventIds[0]!) as OwnerCloudEvent;
+      expect(envelope.type).toBe('com.rezics.relation.changed.v1');
+      expect(envelope.data.receipt).toMatchObject({ id: result.receipt, action: 'relation.change',
+        scope: `work:edit:${subject}`, work: subject, component: result.occurrence, revision: result.revision });
+      return result;
+    };
     expect((await occurrence('spin-off', { source: bunko.work, 'spin-off': aggo.work })).status).toBe(403);
     const aggoEdit = await f.grant(`work:edit:${aggo.work}`, 'work.edit');
     await f.grant(`work:edit:${sequel.work}`, 'work.edit');
     await f.grant(`work:edit:${railgunManga.work}`, 'work.edit');
     await f.grant(`work:edit:${spiderBook.work}`, 'work.edit');
     const spinKey = randomUUID();
-    const spin = await f.json<Relation>(await occurrence('spin-off', { source: bunko.work, 'spin-off': aggo.work }, undefined, spinKey), 201);
+    const spin = await assertedOccurrence('spin-off', { source: bunko.work, 'spin-off': aggo.work }, aggo.work, spinKey);
     expect(await f.json<Relation>(await occurrence('spin-off', { source: bunko.work, 'spin-off': aggo.work }, undefined, spinKey), 201))
       .toMatchObject({ occurrence: spin.occurrence, replayed: true });
     const staleOccurrence = await occurrence('spin-off', { source: bunko.work, 'spin-off': aggo.work }, undefined, randomUUID(),
@@ -125,8 +137,8 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     const moved = await occurrence('spin-off', { source: bunko.work, 'spin-off': bunko.work }, undefined, randomUUID(),
       { occurrence: spin.occurrence, expectedHead: spin.revision });
     expect(moved.status).toBe(422);
-    await f.json(await occurrence('sequel', { predecessor: original.work, sequel: sequel.work }), 201);
-    await f.json(await occurrence('spin-off', { source: original.work, 'spin-off': railgunManga.work }), 201);
+    await assertedOccurrence('sequel', { predecessor: original.work, sequel: sequel.work }, sequel.work);
+    await assertedOccurrence('spin-off', { source: original.work, 'spin-off': railgunManga.work }, railgunManga.work);
     const person = async (name: string) => {
       const result = await f.json<Changed>(await f.call('POST', '/v1/semantic/changes', { profile: 'semantic-change-v1',
         actingSubject: f.actor, expectedHead: null, state: { component: 'resource', types: ['https://schema.org/Person'],
@@ -136,7 +148,7 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     };
     await f.json(await f.call('POST', `/v1/works/${shortId(aggo.work)}/source-author-credits`,
       f.input(aggoProposal, aggo, 0, '/authors/OL8310001A')), 201);
-    await f.json(await occurrence('credit-concept-supervision', { work: aggo.work, contributor: await person('Reki Kawahara') }), 201);
+    await assertedOccurrence('credit-concept-supervision', { work: aggo.work, contributor: await person('Reki Kawahara') }, aggo.work);
     const statuses = new ReaderLibraryStatusStore(f.pool);
     const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
     try { await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [f.account.a.id]); }
@@ -168,11 +180,17 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     const before = await statuses.batch(reader.agent, [spiderWeb.work, spiderBook.work]);
     const statesBefore = [await readerState(spiderWeb.work), await readerState(spiderBook.work)];
     for (const kind of ['equivalent', 'partial', 'revised']) {
-      await f.json(await occurrence(`correspondence-${kind}`, { source: spiderWeb.work, [kind === 'revised' ? 'revision' : 'target']: spiderBook.work }), 201);
+      await assertedOccurrence(`correspondence-${kind}`, { source: spiderWeb.work, [kind === 'revised' ? 'revision' : 'target']: spiderBook.work }, spiderBook.work);
     }
     expect(await statuses.batch(reader.agent, [spiderWeb.work, spiderBook.work])).toEqual(before);
     expect([await readerState(spiderWeb.work), await readerState(spiderBook.work)]).toEqual(statesBefore);
     expect((await page(spiderWeb.work)).items.filter(item => item.kind === 'occurrence')).toHaveLength(3);
+    await f.json(await readerCall('PUT', `/v1/works/${shortId(spiderWeb.work)}/reader-status`,
+      { actingSubject: reader.agent, status: 'read', expectedVersion: 1 }), 200);
+    expect(await statuses.batch(reader.agent, [spiderWeb.work])).toMatchObject([{ status: 'read', version: 2 }]);
+    expect(await statuses.batch(reader.agent, [spiderBook.work])).toEqual(before.filter(state => state.work === spiderBook.work));
+    expect(await readerState(spiderWeb.work)).toMatchObject({ status: { status: 'read', version: 2 } });
+    expect(await readerState(spiderBook.work)).toEqual(statesBefore[1]);
     for (const language of ['ja', 'zh-Hant', 'en']) {
       const outgoing = await page(bunko.work, language), incoming = await page(web.work, language);
       const row = outgoing.items.find(item => item.relation === rewrite.derivation)!;
