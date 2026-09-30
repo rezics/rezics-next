@@ -9,7 +9,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { type ActionRequest, controlsFor, type Control } from './actions.ts';
-import { type Fields, fieldsOf, type Source } from './candidate.ts';
+import { type Fields, fieldsOf, headerOf, rebaseFields, type Source } from './candidate.ts';
 import { bffProposalApi, type ProposalApi, newKey, type Outcome } from './commands.ts';
 import { CorrectionEditor } from './correction-editor.tsx';
 import { leaves } from './diff.ts';
@@ -17,28 +17,25 @@ import { ActionDialog, type DialogAction } from './action-dialog.tsx';
 import { failureKey, kindLabel } from './labels.ts';
 import type { ProposalMessages } from './messages.ts';
 import { type Agents, agentName, BlockerList, blockerText, ChangeList, EvidenceList, StateBadge, Timeline } from './parts.tsx';
-import type { BaseHead, HeaderState, Loaded, ProposalRead, TargetName } from './types.ts';
+import type { BaseHead, HeaderState, ProposalRead, TargetName } from './types.ts';
 import { uuidOf } from './types.ts';
 
 /** What a revise dialog starts from, read from the candidate of a header correction; null for other candidates. */
 export function reviseSeed(view: ProposalRead): { state: HeaderState; language: string; fields: Fields;
   sources: Source[] } | null {
-  const candidate = view.revision.candidate;
-  if (typeof candidate !== 'object' || candidate === null || !('command' in candidate) || candidate.command !== 'work-metadata'
-    || !('state' in candidate)) return null;
-  const state = candidate.state as HeaderState;
-  if (state?.kind !== 'header' || !Array.isArray(state.localized)) return null;
+  const state = headerOf(view.revision.candidate);
+  if (!state) return null;
   const language = leaves(view.preview).find(leaf => leaf.language)?.language ?? state.localized[0]?.language ?? 'en';
   return { state, language, fields: fieldsOf(state, language),
     sources: view.revision.evidence.length ? view.revision.evidence.map(item => ({ source: item.resource,
       locator: item.locator ?? '' })) : [{ source: '', locator: '' }] };
 }
 
-/** The heads a revision is written against: what Main says the fact is now when it has moved, else the ones it had. */
-export function reviseHeads(view: ProposalRead): { baseHeads: BaseHead[]; rebased: boolean } {
-  const stale = view.blockers.find(blocker => blocker.code === 'stale_base');
-  return stale ? { baseHeads: stale.actualHeads, rebased: true } : { baseHeads: view.revision.baseHeads, rebased: false };
-}
+/** A revision the owner refused as stale, carried onto the header as it is now. */
+interface Rebase { state: HeaderState; baseHeads: BaseHead[]; language: string; fields: Fields; sources: Source[];
+  count: number }
+/** A dialog, pinned to the revision it opened on. */
+interface Open { action: DialogAction | 'revise'; revision: number }
 
 const label = (action: Control['action'], t: ReturnType<typeof materializeData<ProposalMessages>>) => ({
   'approve-and-apply': t.actionApprove, apply: t.actionApply, review: t.actionReview, revise: t.actionRevise,
@@ -62,10 +59,13 @@ export function ProposalPage({ initial, target, agents, actingSubject, now, loca
   const api = useMemo(() => givenApi ?? bffProposalApi(initial.proposal.id, actingSubject),
     [givenApi, initial.proposal.id, actingSubject]);
   const [view, setView] = useState(initial);
-  const [dialog, setDialog] = useState<DialogAction | 'revise' | null>(null);
+  const [dialog, setDialog] = useState<Open | null>(null);
+  const [rebase, setRebase] = useState<Rebase | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // The dialog as the async steps below see it; what shows is `dialog`.
+  const opened = useRef<Open | null>(null);
   // One key per intent: sending the same request again after a lost answer replays its receipt.
   const keys = useRef(new Map<string, string>());
   const proposal = view.proposal;
@@ -73,43 +73,81 @@ export function ProposalPage({ initial, target, agents, actingSubject, now, loca
   const work = proposal.target.work;
   // A revise control needs an editor for the candidate; only header corrections have one so far.
   const controls = controlsFor(view.allowedActions).filter(control => control.action !== 'revise' || seed);
+  const show = (next: Open | null) => { opened.current = next; setDialog(next); };
 
-  const reread = async (): Promise<boolean> => {
-    const next: Loaded<ProposalRead> = await api.read(proposal.id);
-    if (next.ok) setView(next.data);
-    return next.ok;
+  /** Main's state again. A dialog opened on an earlier revision closes: nothing is sent for a revision nobody saw. */
+  const reread = async (): Promise<ProposalRead | null> => {
+    const next = await api.read(proposal.id);
+    if (!next.ok) return null;
+    setView(next.data);
+    if (opened.current && opened.current.revision !== next.data.revision.n) {
+      show(null); setRebase(null);
+      setNotice({ tone: 'error', text: t.changedMeanwhile });
+    }
+    return next.data;
   };
-  const fail = async (outcome: Extract<Outcome<unknown>, { ok: false }>) => {
-    // A stale or pending answer means the proposal moved: show Main's state with the reason.
-    if (outcome.failure === 'stale' || outcome.failure === 'pending') await reread();
+  /** The words for a refused command, after reading again where the refusal means the page was out of date or out of authority. */
+  const fail = async (outcome: Extract<Outcome<unknown>, { ok: false }>, from: Open | null) => {
     const text = String(t[failureKey[outcome.failure]]);
-    return outcome.blocker ? `${text} ${blockerText(outcome.blocker, t)}` : text;
+    const full = outcome.blocker ? `${text} ${blockerText(outcome.blocker, t)}` : text;
+    if (!['stale', 'pending', 'denied', 'missing', 'conflict'].includes(outcome.failure)) return full;
+    const next = await reread();
+    // The controls Main now allows are the only ones shown; a dialog for one that is gone closes with the reason.
+    if (next && from && opened.current && !next.allowedActions.includes(from.action)) {
+      show(null); setRebase(null);
+      setNotice({ tone: 'error', text: full });
+    }
+    return full;
   };
   const perform = async (request: ActionRequest) => {
     const signature = JSON.stringify(request);
     const key = keys.current.get(signature) ?? newKey();
     keys.current.set(signature, key);
+    const from = opened.current;
     setPending(true); setError(null); setNotice(null);
     const outcome = await api.act(request, key);
     setPending(false);
     if (!outcome.ok) {
-      const text = await fail(outcome);
-      if (dialog) setError(text); else setNotice({ tone: 'error', text });
+      const text = await fail(outcome, from);
+      if (opened.current) setError(text); else setNotice(current => current ?? { tone: 'error', text });
       return;
     }
     keys.current.delete(signature);
-    setDialog(null);
+    show(null);
     await reread();
     const created = request.kind === 'revert' && typeof outcome.data === 'object' && outcome.data !== null
       && 'proposal' in outcome.data && typeof outcome.data.proposal === 'string' ? outcome.data.proposal : null;
     setNotice(created ? { tone: 'success', text: t.revertedTo, href: `/proposals/${created}` }
       : { tone: 'success', text: t.sent });
   };
-  const revise = async (candidate: unknown, evidence: ProposalRead['revision']['evidence'], key: string) => {
-    const { baseHeads } = reviseHeads(view);
-    const outcome = await api.revise(view.revision.n, { candidate, baseHeads, evidence }, key);
-    if (outcome.ok) { setDialog(null); await reread(); setNotice({ tone: 'success', text: t.sent }); }
-    else if (outcome.failure === 'stale') await reread();
+  /**
+   * A revision. When the owner refuses it as stale (the only place staleness shows), the header is read
+   * again and only the fields this person changed are carried onto it: other languages and other
+   * people's changes stay. The form then asks to submit once more, against the heads Main named.
+   */
+  const revise = async (candidate: unknown, evidence: ProposalRead['revision']['evidence'], key: string,
+    edit: { language: string; fields: Fields; sources: Source[] }) => {
+    const from = opened.current;
+    const outcome = await api.revise(from?.revision ?? view.revision.n, { candidate,
+      baseHeads: rebase?.baseHeads ?? view.revision.baseHeads, evidence }, key);
+    if (outcome.ok) {
+      show(null); setRebase(null);
+      await reread();
+      setNotice({ tone: 'success', text: t.sent });
+      return outcome;
+    }
+    const before = rebase?.state ?? headerOf(view.revision.before);
+    if (outcome.blocker?.code === 'stale_base' && before && work) {
+      const current = await api.current(work);
+      if (current.ok) {
+        setRebase({ state: current.data.state, baseHeads: outcome.blocker.actualHeads, language: edit.language,
+          fields: rebaseFields(current.data.state, before, edit.language, edit.fields), sources: edit.sources,
+          count: (rebase?.count ?? 0) + 1 });
+        return outcome;
+      }
+    }
+    const text = await fail(outcome, from);
+    if (opened.current) setError(text);
     return outcome;
   };
   const more = async () => {
@@ -117,12 +155,12 @@ export function ProposalPage({ initial, target, agents, actingSubject, now, loca
     const next = await api.more(view.nextCursor);
     if (next.ok) setView({ ...view, timeline: [...view.timeline, ...next.data.timeline], nextCursor: next.data.nextCursor });
   };
-  const revisionHref = (n: number) => `?revision=${n}`;
   const open = (control: Control) => {
     setError(null);
     if (control.action === 'recover') void perform({ kind: 'recover' });
-    else setDialog(control.action as DialogAction | 'revise');
+    else show({ action: control.action as DialogAction | 'revise', revision: view.revision.n });
   };
+  const revisionHref = (n: number) => `?revision=${n}`;
   const latest = view.revision.n;
   const reverts = proposal.reverts;
 
@@ -184,16 +222,18 @@ export function ProposalPage({ initial, target, agents, actingSubject, now, loca
       </aside>
     </div>
 
-    {dialog && dialog !== 'revise' ? <ActionDialog key={dialog} action={dialog} revision={latest} pending={pending}
-      error={error} onSend={request => void perform(request)} onClose={() => setDialog(null)} locale={locale}
-      messages={messages} /> : null}
-    {dialog === 'revise' && seed ? <Dialog open onOpenChange={details => { if (!details.open) setDialog(null); }}>
+    {dialog && dialog.action !== 'revise' ? <ActionDialog key={dialog.action} action={dialog.action}
+      revision={dialog.revision} pending={pending} error={error} onSend={request => void perform(request)}
+      onClose={() => show(null)} locale={locale} messages={messages} /> : null}
+    {dialog?.action === 'revise' && seed ? <Dialog open onOpenChange={details => { if (!details.open) show(null); }}>
       <DialogContent size="lg">
         <DialogHeader title={t.reviseTitle} description={t.reviseDescription} />
         <DialogBody>
-          <CorrectionEditor state={seed.state} language={seed.language} initial={{ fields: seed.fields, sources: seed.sources }}
-            rebased={reviseHeads(view).rebased} submitLabel={t.submitRevision} locale={locale} messages={messages}
-            onCancel={() => setDialog(null)} onSubmit={revise} />
+          <CorrectionEditor key={rebase?.count ?? 0} state={rebase?.state ?? seed.state}
+            language={rebase?.language ?? seed.language}
+            initial={{ fields: rebase?.fields ?? seed.fields, sources: rebase?.sources ?? seed.sources }}
+            rebased={rebase !== null} submitLabel={t.submitRevision} locale={locale} messages={messages}
+            onCancel={() => show(null)} onSubmit={revise} />
         </DialogBody>
       </DialogContent>
     </Dialog> : null}

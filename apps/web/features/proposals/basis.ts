@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { settle } from '../feed/types.ts';
-import { type CorrectionBasis, GLOBAL_CONTEXT, type HeaderState, type Loaded, type MainClient } from './types.ts';
+import { readHeaderState } from './read.ts';
+import { type CorrectionBasis, GLOBAL_CONTEXT, type Loaded, type MainClient } from './types.ts';
 
 /**
  * The component a Work's header lives in. Main derives it from the Work's IRI
@@ -20,16 +21,11 @@ export async function readCorrectionBasis(main: MainClient, work: string, acting
   Promise<Loaded<CorrectionBasis>> {
   const query = { ...actingSubject ? { actingSubject } : {} };
   const [header, metadata] = await Promise.all([settle(() => main.v1.works({ id: work }).get({ query })),
-    settle(() => main.v1.works({ id: work }).metadata.get({ query }))]);
+    readHeaderState(main, work, actingSubject)]);
   if (!header.ok) return header;
   if (!metadata.ok) return metadata;
   const resource = header.data.id;
-  const state: HeaderState = { kind: 'header', originalTitle: metadata.data.originalTitle
-    ? { value: metadata.data.originalTitle.value, language: metadata.data.originalTitle.language } : null,
-  completionStatus: metadata.data.completionStatus ?? null,
-  localized: metadata.data.localized.map(row => ({ language: row.language, title: row.title,
-    description: row.description, mainVersionLabel: row.mainVersionLabel, tagline: row.tagline ?? null })) };
   return { ok: true, data: { target: { resource, revision: header.data.revision, context: GLOBAL_CONTEXT },
-    baseHeads: [{ component: headerComponent(resource), head: metadata.data.revision }], state,
+    baseHeads: [{ component: headerComponent(resource), head: metadata.data.head }], state: metadata.data.state,
     name: { value: header.data.title.value, language: header.data.title.language } } };
 }

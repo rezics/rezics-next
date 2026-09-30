@@ -91,8 +91,7 @@ export function blockerText(blocker: Blocker, t: T): string {
   const key = blockerKey[blocker.code];
   switch (blocker.code) {
     case 'stale_revision': return t.blockerStaleRevision({ latest: String(blocker.latestRevision) });
-    case 'required_approvals': return t.blockerRequiredApprovals({ required: String(blocker.required),
-      received: String(blocker.received) });
+    case 'required_approvals': return `${t.blockerRequiredApprovals(blocker.required)} ${t.approvalsSoFar(blocker.received)}`;
     case 'terminal_decision': return t.blockerTerminal({ outcome: t[stateKey[blocker.outcome]] });
     default: return String(t[key as Exclude<typeof key, 'blockerStaleRevision' | 'blockerRequiredApprovals'
       | 'blockerTerminal'>]);
@@ -108,7 +107,7 @@ export function BlockerList({ blockers, stale, staleComplete, t }: { blockers: r
     <AlertDescription>
       <ul className="grid gap-1 text-foreground">
         {blockers.map(blocker => <li key={blocker.code}>{blockerText(blocker, t)}</li>)}
-        {stale ? <li>{t.staleApprovals({ count: staleComplete ? String(stale) : `${stale}+` })}</li> : null}
+        {stale ? <li>{staleComplete ? t.staleApprovals(stale) : t.staleApprovalsAtLeast(stale)}</li> : null}
       </ul>
     </AlertDescription>
   </Alert>;

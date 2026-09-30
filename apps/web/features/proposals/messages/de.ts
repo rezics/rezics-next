@@ -1,4 +1,4 @@
-import { insert } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { ProposalMessages } from '../messages.ts';
 
 export default {
@@ -21,7 +21,7 @@ export default {
   missingTitle: 'Diese Korrektur ist nicht verfügbar',
   missingHelp: 'Sie existiert vielleicht nicht, oder du darfst nicht sehen, was sie ändert.',
   unavailableTitle: 'Das konnte nicht geladen werden',
-  unavailableHelp: 'Main hat nicht geantwortet. Ein erneuter Versuch hilft meistens.',
+  unavailableHelp: 'REZICS hat nicht geantwortet. Ein erneuter Versuch hilft meistens.',
 
   kindComponentCorrection: 'Korrektur',
   stateOpen: 'Offen', stateChangesRequested: 'Änderungen angefordert', stateApproved: 'Genehmigt',
@@ -57,14 +57,14 @@ export default {
   blockerStaleBase: 'Die Angabe hat sich geändert, nachdem dies geschrieben wurde. Überarbeite die Korrektur anhand des aktuellen Stands.',
   blockerSelfReview: 'Du hast dies vorgeschlagen, daher muss jemand anderes es prüfen.',
   blockerReviewAuthority: 'Nur Prüfende dieses Werks können eine Korrektur prüfen oder übernehmen.',
-  blockerRequiredApprovals: insert('Diese Fassung braucht {{required}} Genehmigungen; es liegen {{received}} vor.',
-    { required: String, received: String }),
+  blockerRequiredApprovals: plural({ one: insert('Diese Fassung braucht {{count}} Genehmigung.'), other: insert('Diese Fassung braucht {{count}} Genehmigungen.') }, { count: asValue(number()) }),
+  approvalsSoFar: plural({ one: insert('Bisher liegen {{count}} vor.'), other: insert('Bisher liegen {{count}} vor.') }, { count: asValue(number()) }),
   blockerTerminal: insert('Über diese Korrektur ist bereits entschieden: {{outcome}}.', { outcome: String }),
   blockerOwnerUnavailable: 'Der Datensatz des Werks ist gerade nicht erreichbar. Versuch es gleich noch einmal.',
   blockerRevisionRequired: 'Überarbeite zuerst die Korrektur.',
-  blockerApplyPending: 'Main wendet dies noch an. Sieh später nach oder prüfe den Status.',
-  staleApprovals: insert('{{count}} frühere Genehmigungen zählen nicht mehr, weil die Korrektur überarbeitet wurde.',
-    { count: String }),
+  blockerApplyPending: 'REZICS wendet dies noch an. Sieh später nach oder prüfe den Status.',
+  staleApprovals: plural({ one: insert('{{count}} frühere Genehmigung zählt nicht mehr, weil die Korrektur überarbeitet wurde.'), other: insert('{{count}} frühere Genehmigungen zählen nicht mehr, weil die Korrektur überarbeitet wurde.') }, { count: asValue(number()) }),
+  staleApprovalsAtLeast: plural({ one: insert('Mindestens {{count}} frühere Genehmigung zählt nicht mehr, weil die Korrektur überarbeitet wurde.'), other: insert('Mindestens {{count}} frühere Genehmigungen zählen nicht mehr, weil die Korrektur überarbeitet wurde.') }, { count: asValue(number()) }),
 
   actionsHeading: 'Was du tun kannst',
   actionsNone: 'Von dir ist nichts weiter nötig.',
@@ -98,14 +98,15 @@ export default {
   openReverting: 'Öffnen',
 
   failDenied: 'Das geht hier nicht. Deine Berechtigungen haben sich vielleicht geändert.',
-  failInvalid: 'Main konnte das nicht annehmen. Prüfe den Text und versuch es noch einmal.',
+  failInvalid: 'REZICS konnte das nicht annehmen. Prüfe den Text und versuch es noch einmal.',
   failStale: 'Diese Korrektur hat sich geändert, während du sie gelesen hast. Sie wurde neu geladen.',
   failSignIn: 'Deine Sitzung ist abgelaufen. Melde dich erneut an, um fortzufahren.',
-  failPending: 'Main arbeitet noch daran. Sieh gleich nach dem Status.',
+  failPending: 'REZICS arbeitet noch daran. Sieh gleich nach dem Status.',
   failBudget: 'Das ist zu groß zum Senden. Kürze den Text.',
   failConflict: 'Diese Anfrage wurde schon mit anderem Inhalt gesendet. Lade neu und versuch es noch einmal.',
   failMissing: 'Diese Korrektur ist nicht mehr verfügbar.',
-  failUnavailable: 'Main hat nicht geantwortet. Nichts ging verloren; versuch es noch einmal.',
+  changedMeanwhile: 'Diese Korrektur wurde überarbeitet, während du sie angesehen hast. Lies die neue Fassung, bevor du etwas tust.',
+  failUnavailable: 'REZICS hat nicht geantwortet. Nichts ging verloren; versuch es noch einmal.',
 
   timelineHeading: 'Verlauf',
   timelineMore: 'Frühere und spätere Schritte zeigen',
@@ -116,7 +117,7 @@ export default {
   eventApplied: insert('{{agent}} hat es übernommen', { agent: String }),
   eventRejected: insert('{{agent}} hat es abgelehnt', { agent: String }),
   eventWithdrawn: insert('{{agent}} hat es zurückgezogen', { agent: String }),
-  eventPending: insert('{{agent}} hat Main gebeten, es zu übernehmen', { agent: String }),
+  eventPending: insert('{{agent}} hat REZICS gebeten, es zu übernehmen', { agent: String }),
   eventStale: 'Beim Übernehmen zeigte sich, dass sich die Angabe geändert hatte',
   eventCancelled: 'Das Übernehmen wurde abgebrochen',
   eventOther: insert('{{agent}} hat damit gearbeitet', { agent: String }),

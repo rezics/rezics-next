@@ -64,3 +64,27 @@ export function evidenceOf(sources: readonly Source[], today: string): Evidence[
 
 /** A reference shown as a link only when it is a web address. */
 export const webHref = (resource: string): string | null => /^https?:\/\/\S+$/.test(resource) ? resource : null;
+
+/** A header from a proposal's candidate or retained prestate (`{ command: 'work-metadata', state }`), else null. */
+export function headerOf(value: unknown): HeaderState | null {
+  if (typeof value !== 'object' || value === null || !('command' in value) || value.command !== 'work-metadata'
+    || !('state' in value)) return null;
+  const state = value.state as HeaderState | undefined;
+  return state?.kind === 'header' && Array.isArray(state.localized) ? state : null;
+}
+
+/**
+ * The proposer's edit carried onto the header as it is now: only the fields
+ * they changed from the header they wrote against (`before`) replace the
+ * current ones, so other languages, other fields and other people's changes
+ * stay as they are.
+ */
+export function rebaseFields(current: HeaderState, before: HeaderState, language: string, fields: Fields): Fields {
+  const was = fieldsOf(before, language);
+  const now = fieldsOf(current, language);
+  const next = { ...now };
+  for (const key of Object.keys(fields) as (keyof Fields)[]) {
+    if ((cleaned(fields[key]) ?? '') !== was[key]) next[key] = fields[key];
+  }
+  return next;
+}

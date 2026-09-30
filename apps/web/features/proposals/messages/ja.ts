@@ -1,4 +1,4 @@
-import { insert } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { ProposalMessages } from '../messages.ts';
 
 export default {
@@ -21,7 +21,7 @@ export default {
   missingTitle: 'この修正は利用できません',
   missingHelp: '存在しないか、変更内容を見る権限がない可能性があります。',
   unavailableTitle: '読み込めませんでした',
-  unavailableHelp: 'Main から応答がありませんでした。もう一度試すと解決することが多いです。',
+  unavailableHelp: 'REZICS から応答がありませんでした。もう一度試すと解決することが多いです。',
 
   kindComponentCorrection: '修正',
   stateOpen: '受付中', stateChangesRequested: '修正依頼あり', stateApproved: '承認済み',
@@ -57,13 +57,14 @@ export default {
   blockerStaleBase: 'この修正を書いたあとに情報が変わりました。現在の内容に合わせて修正を改訂してください。',
   blockerSelfReview: 'これはあなたが提案した修正なので、ほかの人がレビューする必要があります。',
   blockerReviewAuthority: 'この作品のレビュアーだけが修正をレビューまたは適用できます。',
-  blockerRequiredApprovals: insert('この版には {{required}} 件の承認が必要で、現在は {{received}} 件です。',
-    { required: String, received: String }),
+  blockerRequiredApprovals: plural({ one: insert('この版には承認が {{count}} 件必要です。'), other: insert('この版には承認が {{count}} 件必要です。') }, { count: asValue(number()) }),
+  approvalsSoFar: plural({ one: insert('現在は {{count}} 件です。'), other: insert('現在は {{count}} 件です。') }, { count: asValue(number()) }),
   blockerTerminal: insert('この修正はすでに判断されています：{{outcome}}。', { outcome: String }),
   blockerOwnerUnavailable: '作品の記録に今は接続できません。しばらくしてからもう一度お試しください。',
   blockerRevisionRequired: 'まずこの修正を改訂してください。',
-  blockerApplyPending: 'Main がまだ適用中です。あとで確認するか、状態を確認してください。',
-  staleApprovals: insert('修正が改訂されたため、以前の承認 {{count}} 件は無効になりました。', { count: String }),
+  blockerApplyPending: 'REZICS がまだ適用中です。あとで確認するか、状態を確認してください。',
+  staleApprovals: plural({ one: insert('修正が改訂されたため、以前の承認 {{count}} 件は無効になりました。'), other: insert('修正が改訂されたため、以前の承認 {{count}} 件は無効になりました。') }, { count: asValue(number()) }),
+  staleApprovalsAtLeast: plural({ one: insert('修正が改訂されたため、以前の承認少なくとも {{count}} 件は無効になりました。'), other: insert('修正が改訂されたため、以前の承認少なくとも {{count}} 件は無効になりました。') }, { count: asValue(number()) }),
 
   actionsHeading: 'できること',
   actionsNone: 'あなたがこれ以上することはありません。',
@@ -97,14 +98,15 @@ export default {
   openReverting: '開く',
 
   failDenied: 'ここではその操作はできません。権限が変わった可能性があります。',
-  failInvalid: 'Main がこの内容を受け付けませんでした。文章を確認してもう一度お試しください。',
+  failInvalid: 'REZICS がこの内容を受け付けませんでした。文章を確認してもう一度お試しください。',
   failStale: '読んでいる間にこの修正が変更されたため、読み込み直しました。',
   failSignIn: 'セッションが終了しました。もう一度サインインしてください。',
-  failPending: 'Main がまだ処理中です。少し待ってから状態を確認してください。',
+  failPending: 'REZICS がまだ処理中です。少し待ってから状態を確認してください。',
   failBudget: '大きすぎて送信できません。文章を短くしてください。',
   failConflict: '同じリクエストが別の内容で送信済みです。読み込み直してからもう一度お試しください。',
   failMissing: 'この修正はもう利用できません。',
-  failUnavailable: 'Main から応答がありませんでした。内容は失われていません。もう一度お試しください。',
+  changedMeanwhile: '見ている間にこの修正が改訂されました。新しい版を確認してから操作してください。',
+  failUnavailable: 'REZICS から応答がありませんでした。内容は失われていません。もう一度お試しください。',
 
   timelineHeading: '履歴',
   timelineMore: '前後のステップを表示',
@@ -115,7 +117,7 @@ export default {
   eventApplied: insert('{{agent}} が適用しました', { agent: String }),
   eventRejected: insert('{{agent}} が却下しました', { agent: String }),
   eventWithdrawn: insert('{{agent}} が取り下げました', { agent: String }),
-  eventPending: insert('{{agent}} が Main に適用を依頼しました', { agent: String }),
+  eventPending: insert('{{agent}} が REZICS に適用を依頼しました', { agent: String }),
   eventStale: '適用しようとしたところ、情報が変わっていました',
   eventCancelled: '適用は取り消されました',
   eventOther: insert('{{agent}} が操作しました', { agent: String }),

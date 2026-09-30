@@ -1,4 +1,4 @@
-import { insert } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 
 export const messages = {
   // Pages
@@ -22,7 +22,7 @@ export const messages = {
   missingTitle: 'This correction isn’t available',
   missingHelp: 'It may not exist, or you may not be able to see what it changes.',
   unavailableTitle: 'Couldn’t load this',
-  unavailableHelp: 'Main didn’t answer. Trying again usually helps.',
+  unavailableHelp: 'REZICS didn’t answer. Trying again usually helps.',
 
   // Kinds and states
   kindComponentCorrection: 'Correction',
@@ -63,14 +63,14 @@ export const messages = {
   blockerStaleBase: 'The fact changed after this was written. Revise the correction against what is there now.',
   blockerSelfReview: 'You proposed this, so someone else has to review it.',
   blockerReviewAuthority: 'Only reviewers of this Work can review or apply a correction.',
-  blockerRequiredApprovals: insert('Needs {{required}} approvals of this revision; it has {{received}}.',
-    { required: String, received: String }),
+  blockerRequiredApprovals: plural({ one: insert('This revision needs {{count}} approval.'), other: insert('This revision needs {{count}} approvals.') }, { count: asValue(number()) }),
+  approvalsSoFar: plural({ one: insert('It has {{count}} so far.'), other: insert('It has {{count}} so far.') }, { count: asValue(number()) }),
   blockerTerminal: insert('This correction was already decided: {{outcome}}.', { outcome: String }),
   blockerOwnerUnavailable: 'The Work’s record can’t be reached right now. Try again shortly.',
   blockerRevisionRequired: 'Revise the correction first.',
-  blockerApplyPending: 'Main is still applying this. Check again, or recover it.',
-  staleApprovals: insert('{{count}} earlier approvals no longer count because the correction was revised.',
-    { count: String }),
+  blockerApplyPending: 'REZICS is still applying this. Check again, or recover it.',
+  staleApprovals: plural({ one: insert('{{count}} earlier approval no longer counts because the correction was revised.'), other: insert('{{count}} earlier approvals no longer count because the correction was revised.') }, { count: asValue(number()) }),
+  staleApprovalsAtLeast: plural({ one: insert('At least {{count}} earlier approval no longer counts because the correction was revised.'), other: insert('At least {{count}} earlier approvals no longer count because the correction was revised.') }, { count: asValue(number()) }),
 
   // Actions
   actionsHeading: 'What you can do',
@@ -106,14 +106,15 @@ export const messages = {
 
   // Command failures
   failDenied: 'You can’t do that here. Your permissions may have changed.',
-  failInvalid: 'Main couldn’t accept this. Check the text and try again.',
+  failInvalid: 'REZICS couldn’t accept this. Check the text and try again.',
   failStale: 'This correction changed while you were reading it. It has been reloaded.',
   failSignIn: 'Your session ended. Sign in again to continue.',
-  failPending: 'Main is still working on it. Check the status in a moment.',
+  failPending: 'REZICS is still working on it. Check the status in a moment.',
   failBudget: 'That is too large to send. Shorten the text.',
   failConflict: 'That request was already sent with different content. Reload and try again.',
   failMissing: 'This correction is no longer available.',
-  failUnavailable: 'Main didn’t answer. Nothing was lost; try again.',
+  changedMeanwhile: 'This correction was revised while you were looking. Read the new revision before acting on it.',
+  failUnavailable: 'REZICS didn’t answer. Nothing was lost; try again.',
 
   // Timeline
   timelineHeading: 'History',
@@ -125,7 +126,7 @@ export const messages = {
   eventApplied: insert('{{agent}} applied it', { agent: String }),
   eventRejected: insert('{{agent}} rejected it', { agent: String }),
   eventWithdrawn: insert('{{agent}} withdrew it', { agent: String }),
-  eventPending: insert('{{agent}} asked Main to apply it', { agent: String }),
+  eventPending: insert('{{agent}} asked REZICS to apply it', { agent: String }),
   eventStale: 'Applying it found the fact had changed',
   eventCancelled: 'Applying it was cancelled',
   eventOther: insert('{{agent}} acted on it', { agent: String }),

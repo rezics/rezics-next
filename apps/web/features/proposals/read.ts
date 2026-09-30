@@ -1,5 +1,5 @@
 import { settle } from '../feed/types.ts';
-import type { Loaded, MainClient, ProposalFilter, ProposalPage, ProposalRead, TargetName } from './types.ts';
+import type { HeaderState, Loaded, MainClient, ProposalFilter, ProposalPage, ProposalRead, TargetName } from './types.ts';
 
 /** One proposal as the viewer sees it, with its allowed actions. */
 export function readProposal(main: MainClient, proposal: string, actingSubject: string | undefined):
@@ -26,4 +26,18 @@ export async function readTargetNames(main: MainClient, actingSubject: string | 
   return Object.fromEntries(batch.data.summaries.flatMap(summary => summary.status === 'available'
     ? [[summary.reference, { value: summary.name.value, language: summary.name.language,
       ...summary.name.direction ? { direction: summary.name.direction } : {} }]] : []));
+}
+
+/** The Work's header as its owner reads it now, with the head a correction of it is written against. */
+export async function readHeaderState(main: MainClient, work: string, actingSubject: string | undefined):
+  Promise<Loaded<{ state: HeaderState; head: string | null }>> {
+  const read = await settle(() => main.v1.works({ id: work }).metadata.get({
+    query: { ...actingSubject ? { actingSubject } : {} } }));
+  if (!read.ok) return read;
+  const { data } = read;
+  return { ok: true, data: { head: data.revision, state: { kind: 'header',
+    originalTitle: data.originalTitle ? { value: data.originalTitle.value, language: data.originalTitle.language } : null,
+    completionStatus: data.completionStatus ?? null,
+    localized: data.localized.map(row => ({ language: row.language, title: row.title, description: row.description,
+      mainVersionLabel: row.mainVersionLabel, tagline: row.tagline ?? null })) } } };
 }

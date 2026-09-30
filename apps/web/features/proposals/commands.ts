@@ -4,8 +4,8 @@ import { problemCode } from '../manage/types.ts';
 import { settle } from '../feed/types.ts';
 import { type ActionRequest, operationOf } from './actions.ts';
 import { blockerOf } from './blockers.ts';
-import { readProposals, readTargetNames } from './read.ts';
-import type { BaseHead, Blocker, CommandResult, Evidence, Loaded, MainClient, ProposalFilter, ProposalPage, ProposalRead,
+import { readHeaderState, readProposals, readTargetNames } from './read.ts';
+import type { BaseHead, Blocker, CommandResult, Evidence, HeaderState, Loaded, MainClient, ProposalFilter, ProposalPage, ProposalRead,
   TargetName } from './types.ts';
 
 // Commands from the browser through the BFF. Each intent carries one
@@ -75,6 +75,8 @@ export interface ProposalApi {
   act(request: ActionRequest, key: string): Promise<Outcome<unknown>>;
   revise(revision: number, correction: Pick<Correction, 'candidate' | 'baseHeads' | 'evidence'>, key: string):
     Promise<Outcome<CommandResult>>;
+  /** The Work's header as its owner reads it now, for rebasing a revision the owner refused as stale. */
+  current(work: string): Promise<Loaded<{ state: HeaderState; head: string | null }>>;
   /** The next page of the timeline. */
   more(cursor: string): Promise<Loaded<ProposalRead>>;
 }
@@ -93,6 +95,7 @@ export function bffProposalApi(proposal: string, actingSubject: string | undefin
   return {
     read: () => read(),
     more: cursor => read(cursor),
+    current: work => readHeaderState(browserMainApi(), work, actingSubject),
     // Without an Agent nothing is allowed, so nothing is sent.
     act: (request, key) => actingSubject ? act(browserMainApi(), proposal, request, actingSubject, key)
       : Promise.resolve({ ok: false, failure: 'sign-in' }),

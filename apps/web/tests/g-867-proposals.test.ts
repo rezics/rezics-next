@@ -3,14 +3,17 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { type ActionRequest, controlsFor, decisionOf } from '../features/proposals/actions.ts';
 import { blockerKey, blockerOf } from '../features/proposals/blockers.ts';
-import { changed, evidenceOf, fieldsOf, headerCandidate, startLanguage, webHref } from '../features/proposals/candidate.ts';
+import { changed, evidenceOf, fieldsOf, headerCandidate, rebaseFields, startLanguage, webHref } from '../features/proposals/candidate.ts';
 import { act, type Correction, createProposal, reviseProposal, send } from '../features/proposals/commands.ts';
 import { leaves } from '../features/proposals/diff.ts';
-import { agents, basis, headerAfter, headerBefore, ids, now, proposalApi, target, views } from '../features/proposals/fixtures.ts';
+import { agents, basis, headerAfter, headerBefore, headerNow, ids, now, proposalApi, target, views } from '../features/proposals/fixtures.ts';
 import { headerComponent } from '../features/proposals/basis.ts';
 import { kindLabel, stateKey } from '../features/proposals/labels.ts';
 import { messages } from '../features/proposals/messages.ts';
-import { ProposalPage, reviseHeads, reviseSeed } from '../features/proposals/proposal-page.tsx';
+import { ProposalPage, reviseSeed } from '../features/proposals/proposal-page.tsx';
+import { blockerText } from '../features/proposals/parts.tsx';
+import { metadataComponent, checkedMetadataState } from '../../../services/main/src/modules/work/metadata-schema.ts';
+import { materializeData } from 'native-i18n';
 import type { AllowedAction, MainClient } from '../features/proposals/types.ts';
 
 const allActions: AllowedAction[] = ['revise', 'review', 'apply', 'approve-and-apply', 'reject', 'withdraw', 'revert',
@@ -168,8 +171,13 @@ describe('the correction form', () => {
     expect(webHref('https://rezics.com/id/x y')).toBeNull();
   });
 
-  test('the header component is derived as Main derives it', () => {
-    expect(headerComponent(ids.work)).toMatch(/^urn:rezics:work-metadata:[0-9a-f]{64}$/);
+  test('the header component is the one Main names for the Work’s header', () => {
+    const header = checkedMetadataState({ kind: 'header', originalTitle: null, localized: [] });
+    expect(headerComponent(ids.work)).toBe(metadataComponent(ids.work, header));
+    // Header content never changes which component it is.
+    const edited = checkedMetadataState({ kind: 'header', originalTitle: { value: 'X', language: 'en' },
+      localized: [{ language: 'en', title: 'T', description: null, mainVersionLabel: null }] });
+    expect(headerComponent(ids.work)).toBe(metadataComponent(ids.work, edited));
     expect(headerComponent(ids.work)).not.toBe(headerComponent(ids.workRevision));
   });
 });
@@ -184,12 +192,20 @@ describe('revising', () => {
     expect(reviseSeed(other)).toBeNull();
   });
 
-  test('a moved fact rebases onto the heads Main reports', () => {
-    expect(reviseHeads(views.proposer)).toEqual({ baseHeads: views.proposer.revision.baseHeads, rebased: false });
-    const rebased = reviseHeads(views.staleBase);
-    expect(rebased.rebased).toBe(true);
-    expect(rebased.baseHeads).toEqual([{ component: views.staleBase.revision.baseHeads[0]!.component,
-      head: 'https://rezics.com/id/00000000-0000-4000-8000-000000000402' }]);
+  test('a refused revision rebases only the fields the proposer changed onto the current header', () => {
+    const written = fieldsOf(headerAfter, 'zh-Hant');
+    const rebased = rebaseFields(headerNow, headerBefore, 'zh-Hant', written);
+    // Their synopsis stands; the title someone else changed is kept.
+    expect(rebased.description).toBe(written.description);
+    expect(rebased.title).toBe('雨夜書店（修訂版）');
+    const { state } = headerCandidate(headerNow, 'zh-Hant', rebased);
+    // Other languages are the current ones, not the proposer's older copy.
+    expect(state.localized.find(row => row.language === 'en')!.description).toBe('A bookshop that opens only on rainy nights.');
+  });
+
+  test('an edit that changes nothing leaves the current header as it is', () => {
+    const rebased = rebaseFields(headerNow, headerBefore, 'zh-Hant', fieldsOf(headerBefore, 'zh-Hant'));
+    expect(rebased).toEqual(fieldsOf(headerNow, 'zh-Hant'));
   });
 });
 
@@ -197,5 +213,24 @@ describe('labels', () => {
   test('an unknown kind reads as its own words', () => {
     expect(kindLabel('component-correction', messages)).toBe('Correction');
     expect(kindLabel('wiki-bundle', messages)).toBe('Wiki bundle');
+  });
+});
+
+describe('counts read as plurals', () => {
+  const t = materializeData(messages, { locale: 'en' });
+  test('approvals and stale approvals use the singular for one', () => {
+    expect(t.staleApprovals(1)).toBe('1 earlier approval no longer counts because the correction was revised.');
+    expect(t.staleApprovals(3)).toContain('3 earlier approvals no longer count');
+    expect(t.staleApprovalsAtLeast(50)).toContain('At least 50 earlier approvals');
+    expect(blockerText({ code: 'required_approvals', required: 1, received: 0 }, t)).toBe('This revision needs 1 approval. It has 0 so far.');
+    expect(blockerText({ code: 'required_approvals', required: 2, received: 1 }, t)).toBe('This revision needs 2 approvals. It has 1 so far.');
+  });
+
+  test('no user-facing string names the internal service, in any locale', async () => {
+    for (const locale of ['zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es']) {
+      const { default: catalog } = await import(`../features/proposals/messages/${locale}.ts`);
+      expect({ locale, found: /\bMain\b/.test(JSON.stringify(catalog)) }).toEqual({ locale, found: false });
+    }
+    expect(JSON.stringify(messages)).not.toMatch(/\bMain\b/);
   });
 });

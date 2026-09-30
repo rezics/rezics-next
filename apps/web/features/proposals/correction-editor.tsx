@@ -20,8 +20,8 @@ import { SourcesField } from './sources-field.tsx';
 const OTHER = '__other';
 
 /** What a submit sends: the candidate, its evidence and the key that makes a retry replay. */
-export type Submit = (candidate: ReturnType<typeof headerCandidate>, evidence: Evidence[], key: string) =>
-  Promise<Outcome<unknown>>;
+export type Submit = (candidate: ReturnType<typeof headerCandidate>, evidence: Evidence[], key: string,
+  edit: { language: string; fields: Fields; sources: Source[] }) => Promise<Outcome<unknown>>;
 
 /**
  * Writes a Work's header correction: pick a language, change the title,
@@ -57,7 +57,7 @@ export function CorrectionEditor({ state, language: start, languages, initial, r
     if (!language || !changed(state, language, fields)) { setError({ text: t.nothingChanged }); return; }
     setPending(true);
     const outcome = await onSubmit(headerCandidate(state, language, fields),
-      evidenceOf(sources, new Date().toISOString().slice(0, 10)), key.current);
+      evidenceOf(sources, new Date().toISOString().slice(0, 10)), key.current, { language, fields, sources });
     setPending(false);
     if (!outcome.ok) setError({ text: String(t[failureKey[outcome.failure]]), ...outcome.blocker ? { blocker: outcome.blocker } : {} });
   };

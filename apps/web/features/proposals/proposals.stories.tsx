@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { agents, ids, now, proposalApi, target, views } from './fixtures.ts';
+import { agents, headerNow, ids, now, proposalApi, staleBase, target, views } from './fixtures.ts';
 import { messages } from './messages.ts';
 import zhHant from './messages/zh-Hant.ts';
 import { ProposalPage } from './proposal-page.tsx';
@@ -52,6 +52,8 @@ export const ChangesRequested: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Changes requested')).toBeVisible();
+    // The API tells a proposer they cannot review their own correction; the page only shows it.
+    await expect(canvas.getByText('You proposed this, so someone else has to review it.')).toBeVisible();
     await expect(canvas.getAllByRole('button').map(button => button.getAttribute('data-action')))
       .toEqual(['revise', 'withdraw']);
     await userEvent.click(canvas.getByRole('button', { name: 'Revise' }));
@@ -60,11 +62,80 @@ export const ChangesRequested: Story = {
   },
 };
 
-/** The fact moved after the proposal was written: Main names it and the proposer rebases. */
-export const StaleBase: Story = {
-  args: { initial: views.staleBase, actingSubject: ids.member, api: proposalApi(views.staleBase) },
+/** After an apply found the fact moved, a read says a revision is required; `stale_base` never appears on a read. */
+export const RevisionRequired: Story = {
+  args: { initial: views.revisionRequired, actingSubject: ids.member, api: proposalApi(views.revisionRequired) },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByText(/The fact changed after this was written/)).toBeVisible();
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Revise the correction first.')).toBeVisible();
+    await expect(canvas.getByText(/Applying it found the fact had changed/)).toBeVisible();
+    await expect(canvas.getByText('You proposed this, so someone else has to review it.')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Revise' })).toBeVisible();
+  },
+};
+
+/**
+ * The owner refuses a revision written against a header that has moved. The page reads the header again and
+ * carries only what this person changed onto it: the other language and the title someone else changed stay.
+ */
+export const RebasesOnRefusal: Story = {
+  args: { initial: views.proposer, actingSubject: ids.member,
+    api: proposalApi(views.proposer, { revise: [staleBase, { ok: true, data: { profile: 'editorial-command-v1',
+      proposal: ids.proposal, revision: 3, outcome: 'revised', replayed: false } }],
+    header: { state: headerNow, head: 'https://rezics.com/id/00000000-0000-4000-8000-000000000402' }, next: views.revised }) },
+  async play({ canvasElement, args }) {
+    const api = args.api as ReturnType<typeof proposalApi>;
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Revise' }));
+    const dialog = within(document.body);
+    const synopsis = await dialog.findByRole('textbox', { name: 'Synopsis' });
+    await userEvent.clear(synopsis);
+    await userEvent.type(synopsis, '一間只在雨夜開門的書店。');
+    await expect(synopsis).toHaveValue('一間只在雨夜開門的書店。');
+    await userEvent.click(dialog.getByRole('button', { name: 'Submit revision' }));
+    await expect(await dialog.findByText(/The fact changed since you started/)).toBeInTheDocument();
+    // The title someone else changed is kept; this person's synopsis stands.
+    await waitFor(() => expect(dialog.getByRole('textbox', { name: 'Title' })).toHaveValue('雨夜書店（修訂版）'));
+    await expect(dialog.getByRole('textbox', { name: 'Synopsis' })).toHaveValue('一間只在雨夜開門的書店。');
+    await userEvent.click(dialog.getByRole('button', { name: 'Submit revision' }));
+    await waitFor(() => expect(api.revised).toHaveLength(2));
+    const [first, second] = api.revised;
+    await expect(first!.baseHeads[0]!.head).toBe('https://rezics.com/id/00000000-0000-4000-8000-000000000401');
+    await expect(second!.baseHeads[0]!.head).toBe('https://rezics.com/id/00000000-0000-4000-8000-000000000402');
+    const sent = JSON.stringify(second!.candidate);
+    await expect(sent).toContain('A bookshop that opens only on rainy nights.');
+    await expect(sent).not.toContain('A bookshop opens only when it rains.');
+    await expect(sent).toContain('雨夜書店（修訂版）');
+    await expect(sent).toContain('一間只在雨夜開門的書店。');
+  },
+};
+
+/** The proposal is revised while a reviewer has the dialog open: nothing is sent for the revision they did not see. */
+export const RevisedWhileOpen: Story = {
+  args: { api: proposalApi(views.open, { reply: { ok: false, failure: 'stale', blocker: { code: 'stale_revision',
+    latestRevision: 3 } }, afterRefusal: views.revised }) },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Review' }));
+    await userEvent.click(await within(document.body).findByRole('button', { name: 'Send' }));
+    await expect(await canvas.findByText(/This correction was revised while you were looking/)).toBeInTheDocument();
+    await expect(canvas.getByText('Revision 3, the latest')).toBeVisible();
+    await waitFor(() => expect(within(document.body).queryByRole('button', { name: 'Send' })).toBeNull());
+    await expect((args.api as ReturnType<typeof proposalApi>).sent.map(request => 'revision' in request && request.revision))
+      .toEqual([2]);
+  },
+};
+
+/** A refusal for lost authority reads the proposal again: the revoked controls disappear and the dialog closes. */
+export const AuthorityRevoked: Story = {
+  args: { api: proposalApi(views.open, { reply: { ok: false, failure: 'denied' }, afterRefusal: views.forbidden }) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Reject' }));
+    await userEvent.click(await within(document.body).findByRole('button', { name: 'Reject' }));
+    await expect(await canvas.findByText(/You can’t do that here/)).toBeInTheDocument();
+    await waitFor(() => expect(canvasElement.querySelectorAll('[data-action]')).toHaveLength(0));
+    await expect(canvas.getByText(/Only reviewers of this Work can review/)).toBeVisible();
   },
 };
 
@@ -73,14 +144,14 @@ export const StaleApproval: Story = {
   args: { initial: views.staleApproval, api: proposalApi(views.staleApproval) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText(/1 earlier approvals no longer count/)).toBeVisible();
-    await expect(canvas.getByText(/Needs 1 approvals of this revision; it has 0/)).toBeVisible();
+    await expect(canvas.getByText('1 earlier approval no longer counts because the correction was revised.')).toBeVisible();
+    await expect(canvas.getByText('This revision needs 1 approval. It has 0 so far.')).toBeVisible();
   },
 };
 
 /** After it is applied anyone with authority can revert, which opens a compensating proposal. */
 export const Applied: Story = {
-  args: { initial: views.applied, api: proposalApi(views.applied, views.applied) },
+  args: { initial: views.applied, api: proposalApi(views.applied, { next: views.applied }) },
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Applied', { selector: '[data-slot="badge"]' })).toBeVisible();

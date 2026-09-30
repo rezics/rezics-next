@@ -1,4 +1,4 @@
-import { insert } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { ProposalMessages } from '../messages.ts';
 
 export default {
@@ -21,7 +21,7 @@ export default {
   missingTitle: '找不到這項更正',
   missingHelp: '它可能不存在，或你無法查看它所修改的內容。',
   unavailableTitle: '無法載入',
-  unavailableHelp: 'Main 沒有回應，再試一次通常就會成功。',
+  unavailableHelp: 'REZICS 沒有回應，再試一次通常就會成功。',
 
   kindComponentCorrection: '更正',
   stateOpen: '進行中', stateChangesRequested: '需要修改', stateApproved: '已核准',
@@ -57,13 +57,14 @@ export default {
   blockerStaleBase: '這項更正撰寫後，資料已經變動。請依目前的內容修訂更正。',
   blockerSelfReview: '這是你提出的更正，必須由其他人審核。',
   blockerReviewAuthority: '只有這部作品的審核者才能審核或套用更正。',
-  blockerRequiredApprovals: insert('這一版需要 {{required}} 個核准，目前有 {{received}} 個。',
-    { required: String, received: String }),
+  blockerRequiredApprovals: plural({ one: insert('這一版需要 {{count}} 個核准。'), other: insert('這一版需要 {{count}} 個核准。') }, { count: asValue(number()) }),
+  approvalsSoFar: plural({ one: insert('目前有 {{count}} 個。'), other: insert('目前有 {{count}} 個。') }, { count: asValue(number()) }),
   blockerTerminal: insert('這項更正已經有結果：{{outcome}}。', { outcome: String }),
   blockerOwnerUnavailable: '目前無法連到作品的紀錄，請稍後再試。',
   blockerRevisionRequired: '請先修訂這項更正。',
-  blockerApplyPending: 'Main 仍在套用這項更正。請稍後再查看，或執行復原檢查。',
-  staleApprovals: insert('有 {{count}} 個先前的核准因更正已修訂而失效。', { count: String }),
+  blockerApplyPending: 'REZICS 仍在套用這項更正。請稍後再查看，或執行復原檢查。',
+  staleApprovals: plural({ one: insert('有 {{count}} 個先前的核准因更正已修訂而失效。'), other: insert('有 {{count}} 個先前的核准因更正已修訂而失效。') }, { count: asValue(number()) }),
+  staleApprovalsAtLeast: plural({ one: insert('至少有 {{count}} 個先前的核准因更正已修訂而失效。'), other: insert('至少有 {{count}} 個先前的核准因更正已修訂而失效。') }, { count: asValue(number()) }),
 
   actionsHeading: '可以做的事',
   actionsNone: '你不需要再做什麼。',
@@ -97,14 +98,15 @@ export default {
   openReverting: '前往查看',
 
   failDenied: '你無法在這裡執行這個動作，你的權限可能已經改變。',
-  failInvalid: 'Main 無法接受這些內容，請檢查文字後再試一次。',
+  failInvalid: 'REZICS 無法接受這些內容，請檢查文字後再試一次。',
   failStale: '你閱讀期間這項更正已有變動，已重新載入。',
   failSignIn: '你的登入已過期，請重新登入後繼續。',
-  failPending: 'Main 仍在處理中，請稍後再查看狀態。',
+  failPending: 'REZICS 仍在處理中，請稍後再查看狀態。',
   failBudget: '內容太大，無法送出，請縮短文字。',
   failConflict: '同一個請求已用不同內容送出過，請重新載入後再試。',
   failMissing: '這項更正已不存在。',
-  failUnavailable: 'Main 沒有回應，內容沒有遺失，請再試一次。',
+  changedMeanwhile: '你查看期間這項更正已被修訂，請先閱讀新的一版再操作。',
+  failUnavailable: 'REZICS 沒有回應，內容沒有遺失，請再試一次。',
 
   timelineHeading: '歷程',
   timelineMore: '顯示更早與更晚的步驟',
@@ -115,7 +117,7 @@ export default {
   eventApplied: insert('{{agent}} 套用了這項更正', { agent: String }),
   eventRejected: insert('{{agent}} 駁回了這項更正', { agent: String }),
   eventWithdrawn: insert('{{agent}} 撤回了這項更正', { agent: String }),
-  eventPending: insert('{{agent}} 請 Main 套用這項更正', { agent: String }),
+  eventPending: insert('{{agent}} 請 REZICS 套用這項更正', { agent: String }),
   eventStale: '套用時發現資料已經變動',
   eventCancelled: '套用已被取消',
   eventOther: insert('{{agent}} 對這項更正進行了操作', { agent: String }),

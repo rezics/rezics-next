@@ -1,4 +1,4 @@
-import { insert } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { ProposalMessages } from '../messages.ts';
 
 export default {
@@ -21,7 +21,7 @@ export default {
   missingTitle: 'Cette correction n’est pas disponible',
   missingHelp: 'Elle n’existe peut-être pas, ou vous ne pouvez pas voir ce qu’elle modifie.',
   unavailableTitle: 'Impossible de charger',
-  unavailableHelp: 'Main n’a pas répondu. Réessayer suffit généralement.',
+  unavailableHelp: 'REZICS n’a pas répondu. Réessayer suffit généralement.',
 
   kindComponentCorrection: 'Correction',
   stateOpen: 'Ouverte', stateChangesRequested: 'Modifications demandées', stateApproved: 'Approuvée',
@@ -57,14 +57,14 @@ export default {
   blockerStaleBase: 'L’information a changé après la rédaction. Révisez la correction d’après l’état actuel.',
   blockerSelfReview: 'C’est vous qui l’avez proposée ; quelqu’un d’autre doit la relire.',
   blockerReviewAuthority: 'Seuls les relecteurs de cette œuvre peuvent relire ou appliquer une correction.',
-  blockerRequiredApprovals: insert('Cette version demande {{required}} approbations ; elle en a {{received}}.',
-    { required: String, received: String }),
+  blockerRequiredApprovals: plural({ one: insert('Cette version demande {{count}} approbation.'), other: insert('Cette version demande {{count}} approbations.') }, { count: asValue(number()) }),
+  approvalsSoFar: plural({ one: insert('Elle en a {{count}} pour l’instant.'), other: insert('Elle en a {{count}} pour l’instant.') }, { count: asValue(number()) }),
   blockerTerminal: insert('Cette correction est déjà tranchée : {{outcome}}.', { outcome: String }),
   blockerOwnerUnavailable: 'La fiche de l’œuvre est inaccessible pour le moment. Réessayez dans un instant.',
   blockerRevisionRequired: 'Révisez d’abord la correction.',
-  blockerApplyPending: 'Main est encore en train de l’appliquer. Revenez plus tard ou vérifiez l’état.',
-  staleApprovals: insert('{{count}} approbations antérieures ne comptent plus car la correction a été révisée.',
-    { count: String }),
+  blockerApplyPending: 'REZICS est encore en train de l’appliquer. Revenez plus tard ou vérifiez l’état.',
+  staleApprovals: plural({ one: insert('{{count}} approbation antérieure ne compte plus car la correction a été révisée.'), other: insert('{{count}} approbations antérieures ne comptent plus car la correction a été révisée.') }, { count: asValue(number()) }),
+  staleApprovalsAtLeast: plural({ one: insert('Au moins {{count}} approbation antérieure ne compte plus car la correction a été révisée.'), other: insert('Au moins {{count}} approbations antérieures ne comptent plus car la correction a été révisée.') }, { count: asValue(number()) }),
 
   actionsHeading: 'Ce que vous pouvez faire',
   actionsNone: 'Rien d’autre n’est attendu de vous.',
@@ -98,14 +98,15 @@ export default {
   openReverting: 'L’ouvrir',
 
   failDenied: 'Vous ne pouvez pas faire cela ici. Vos droits ont peut-être changé.',
-  failInvalid: 'Main n’a pas pu l’accepter. Vérifiez le texte et réessayez.',
+  failInvalid: 'REZICS n’a pas pu l’accepter. Vérifiez le texte et réessayez.',
   failStale: 'Cette correction a changé pendant votre lecture. Elle a été rechargée.',
   failSignIn: 'Votre session a pris fin. Reconnectez-vous pour continuer.',
-  failPending: 'Main y travaille encore. Vérifiez l’état dans un instant.',
+  failPending: 'REZICS y travaille encore. Vérifiez l’état dans un instant.',
   failBudget: 'C’est trop volumineux pour être envoyé. Raccourcissez le texte.',
   failConflict: 'Cette demande a déjà été envoyée avec un contenu différent. Rechargez et réessayez.',
   failMissing: 'Cette correction n’est plus disponible.',
-  failUnavailable: 'Main n’a pas répondu. Rien n’est perdu ; réessayez.',
+  changedMeanwhile: 'Cette correction a été révisée pendant que vous la consultiez. Lisez la nouvelle version avant d’agir.',
+  failUnavailable: 'REZICS n’a pas répondu. Rien n’est perdu ; réessayez.',
 
   timelineHeading: 'Historique',
   timelineMore: 'Afficher les étapes antérieures et postérieures',
@@ -116,7 +117,7 @@ export default {
   eventApplied: insert('{{agent}} l’a appliquée', { agent: String }),
   eventRejected: insert('{{agent}} l’a refusée', { agent: String }),
   eventWithdrawn: insert('{{agent}} l’a retirée', { agent: String }),
-  eventPending: insert('{{agent}} a demandé à Main de l’appliquer', { agent: String }),
+  eventPending: insert('{{agent}} a demandé à REZICS de l’appliquer', { agent: String }),
   eventStale: 'L’application a montré que l’information avait changé',
   eventCancelled: 'L’application a été annulée',
   eventOther: insert('{{agent}} est intervenu', { agent: String }),
