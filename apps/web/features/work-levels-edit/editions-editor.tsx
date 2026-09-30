@@ -41,14 +41,14 @@ export function RealizationEditor({ work, mainVersion, mainRevision, existing, a
   allowed: readonly string[]; locale: UiLocale; action: Action; messages: WorkLevelsEditMessages;
 }) {
   const t = materializeData(messages, { locale });
-  const { state, run, pending, values, reload, formKey } = useWrite(action);
+  const { state, run, pending, values, reload, reloading, formKey } = useWrite(action);
   if (!mayEdit(allowed)) return null;
   const invalid = invalidField(state);
   return <form key={formKey} action={run} aria-label={t.addRealization}
     className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4">
     <h3 className="font-semibold text-base">{t.addRealization}</h3>
     <p className="text-muted-foreground text-sm">{t.realizationHelp}</p>
-    <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} /></div>
+    <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} reloading={reloading} /></div>
     <input type="hidden" name="work" value={work} />
     <input type="hidden" name="mainVersion" value={mainVersion} /><input type="hidden" name="mainRevision" value={mainRevision} />
     <div className="grid gap-4 sm:grid-cols-2">
@@ -140,7 +140,7 @@ export function ReleaseEditor({ work, own, allowed, locale, action, messages, lo
   load?: RealizationLoader; loadWorks?: WorkLoader;
 }) {
   const t = materializeData(messages, { locale });
-  const { state, run, pending, values, reload, formKey } = useWrite(action);
+  const { state, run, pending, values, reload, reloading, formKey } = useWrite(action);
   if (!mayEdit(allowed)) return null;
   const invalid = invalidField(state);
   const chosen = new Set((values.coverage ?? '').split('\n').filter(Boolean));
@@ -148,7 +148,7 @@ export function ReleaseEditor({ work, own, allowed, locale, action, messages, lo
     className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4">
     <h3 className="font-semibold text-base">{t.addRelease}</h3>
     <p className="text-muted-foreground text-sm">{t.releaseHelp}</p>
-    <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} /></div>
+    <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} reloading={reloading} /></div>
     <input type="hidden" name="work" value={work} />
     <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,10rem)]">
       <Field invalid={invalid === 'title'}><FieldLabel>{t.releaseTitle}</FieldLabel>

@@ -27,7 +27,7 @@ export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale
   load?: WorkLoader;
 }) {
   const t = materializeData(messages, { locale });
-  const { state, run, pending, values, reload, formKey } = useWrite(action);
+  const { state, run, pending, values, reload, reloading, formKey } = useWrite(action);
   if (!mayEdit(allowed)) return null;
   const invalid = invalidField(state);
   if (!kinds.length) return <p role="status" className="text-muted-foreground text-sm">{t.noKindsBody}</p>;
@@ -36,7 +36,7 @@ export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale
     className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4">
     <h3 className="font-semibold text-base">{t.recordRelation}</h3>
     <p className="text-muted-foreground text-sm">{t.relationsHelp}</p>
-    <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} /></div>
+    <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} reloading={reloading} /></div>
     <input type="hidden" name="work" value={work} />
     <input type="hidden" name="mainVersion" value={mainVersion} /><input type="hidden" name="head" value={head} />
     <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-start">

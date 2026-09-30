@@ -97,6 +97,9 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   await expect(other.getByRole('textbox', { name: 'Label' }).first()).toHaveValue('22 (rev.)');
   await shoot(other, 'parts-conflict', info);
   await conflict.getByRole('button', { name: 'Reload latest' }).click();
+  // The refusal clears once the page has read Main again; what was typed stays for the next submit.
+  await expect(other.getByRole('alert')).toHaveCount(0);
+  await expect(other.getByRole('textbox', { name: 'Label' }).first()).toHaveValue('22 (rev.)');
   await other.getByRole('button', { name: 'Save' }).click();
   await expect(receipt(other)).toBeVisible();
   await other.close();

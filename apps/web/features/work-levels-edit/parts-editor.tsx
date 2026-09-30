@@ -51,13 +51,13 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
   load?: WorkLoader; links?: { first: string | null; next: string | null };
 }) {
   const t = materializeData(messages, { locale });
-  const { state, run, pending, values, reload, formKey } = useWrite(action);
+  const { state, run, pending, values, reload, reloading, formKey } = useWrite(action);
   if (!mayEdit(allowed)) return null;
   const invalid = invalidField(state);
   /** What was typed into this row's own form when its last submit was refused, so a refusal never loses it. */
   const typed = (part: EditablePart) => values.intent === 'update' && values.occurrence === part.occurrence ? values : null;
   return <div className="grid gap-6">
-    <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} /></div>
+    <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} reloading={reloading} /></div>
     {parts.length ? <ol aria-label={t.partsList} className="grid divide-y divide-border/60 border-border/60 border-y">
       {parts.map((part, index) => <li key={part.occurrence} className="grid gap-2 py-3">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">

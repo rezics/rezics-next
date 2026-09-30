@@ -21,7 +21,9 @@ export const invalidField = (state: WriteState) => state.status === 'error' ? st
  * What the last submit came to: Main's receipt, a write still being applied, or Main's refusal with
  * its own reason. A head that moved offers "Reload latest"; the form keeps what was typed.
  */
-export function WriteStatus({ state, t, onReload }: { state: WriteState; t: Copy; onReload: () => void }) {
+export function WriteStatus({ state, t, onReload, reloading = false }: {
+  state: WriteState; t: Copy; onReload: () => void; reloading?: boolean;
+}) {
   if (state.status === 'idle') return null;
   if (state.status === 'done') {
     return <Alert variant="success" role="status"><CircleCheckIcon aria-hidden="true" />
@@ -42,6 +44,6 @@ export function WriteStatus({ state, t, onReload }: { state: WriteState; t: Copy
       {state.problem === 'unavailable' ? <span>{t.unavailableBody}</span> : null}
       {state.detail ? <span><span className="font-medium">{t.mainSays}:</span> {state.detail}</span> : null}
       {state.problem === 'stale' ? <Button type="button" variant="outline" size="sm" className="w-fit"
-        onClick={onReload}><RefreshCwIcon aria-hidden="true" />{t.reload}</Button> : null}
+        onClick={onReload} isLoading={reloading} disabled={reloading}><RefreshCwIcon aria-hidden="true" />{t.reload}</Button> : null}
     </AlertDescription></Alert>;
 }
