@@ -217,6 +217,27 @@
       "file": "shapes/correction-proposal-v1.ttl"
     },
     {
+      "id": "definition-presentation-v1",
+      "sha256": "e4aa036bbed4bb52762f8c0ec858120e86586d3d795cfd44fd21c6bd8fe6e3a7",
+      "file": "shapes/definition-presentation-v1.ttl",
+      "binding": {
+        "required": [
+          "presentation",
+          "revision",
+          "definition",
+          "meaningRevision",
+          "fromRole",
+          "toRole",
+          "language"
+        ],
+        "optional": [],
+        "roles": [
+          "presentation",
+          "revision"
+        ]
+      }
+    },
+    {
       "id": "erasure-graph-v1",
       "sha256": "4f9da33919733b1cc31907564ad8dc4c77835db6c74edab99a9b175b20db8505",
       "file": "shapes/erasure-graph-v1.ttl"
@@ -1889,6 +1910,16 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/DefinitionPresentation",
+      "routes": [
+        {
+          "profile": "definition-presentation-v1",
+          "shape": "https://rezics.com/definition/definition-presentation-v1/presentation-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/DefinitionRevision",
       "routes": [
         {
@@ -2274,6 +2305,16 @@
         {
           "profile": "poll-resolution-v1",
           "shape": "https://rezics.com/definition/poll-resolution-v1/resolution-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/PresentationRevision",
+      "routes": [
+        {
+          "profile": "definition-presentation-v1",
+          "shape": "https://rezics.com/definition/definition-presentation-v1/revision-shape",
           "when": []
         }
       ]
@@ -2947,6 +2988,10 @@
       "profile": "classification-proposition-v1"
     },
     {
+      "type": "https://rezics.com/vocab/DefinitionPresentation",
+      "profile": "definition-presentation-v1"
+    },
+    {
       "type": "https://rezics.com/vocab/GlobalRatingContext",
       "profile": "global-rating-standing-context-v1"
     },
@@ -2957,6 +3002,10 @@
     {
       "type": "https://rezics.com/vocab/GlobalRatingObservationRevision",
       "profile": "global-rating-standing-observation-v1"
+    },
+    {
+      "type": "https://rezics.com/vocab/PresentationRevision",
+      "profile": "definition-presentation-v1"
     },
     {
       "type": "https://rezics.com/vocab/RealmReplyPlacement",
@@ -3008,6 +3057,7 @@
     "contexts/context-v1.jsonld": "fc678d962472cabede23f741290fab3ccea2505d391b0410faa09f5cd37646fc",
     "contexts/correction-decision-v1.jsonld": "05243f25d6dea3a2b573c69719b623d6474401c671cd131b720e37a5b0918641",
     "contexts/correction-proposal-v1.jsonld": "1dc725d99ee0de234f02b1d4e2b258c20267ff0f829ca7986a9fdee7615a3fb6",
+    "contexts/definition-presentation-v1.jsonld": "6e88015353890aaf14994a198f0761ef7276161b6ad4800000971a688849e840",
     "contexts/erasure-graph-v1.jsonld": "9b3f3247bab24f7f76527a5df2f43336549a46c38859346981baa7e92f621f94",
     "contexts/event-time-v1.jsonld": "6fc7d578a30ddb4763910fd5b59279de579c8fe094bcdbb7f8d4db3d19c46dfe",
     "contexts/first-party-bundle-v1.jsonld": "3af86ce39c84bb8a940a071ec62fd05df66cf1e015507255762b0a7042de7b2d",
@@ -3114,6 +3164,7 @@
     "shapes/context-v1.ttl": "d97d910f9feedbe38a7c95b62c52fd34af77683a5b6419ff6aee8f4c561da736",
     "shapes/correction-decision-v1.ttl": "7bd209b0f518409342d5e0ed62ffb4afd17b10dec40ce06caf54bdd3432b358b",
     "shapes/correction-proposal-v1.ttl": "9339a7d90b95ee5e93f40031bbd1564b60aff045081c590d579ff89f8e347fc5",
+    "shapes/definition-presentation-v1.ttl": "e4aa036bbed4bb52762f8c0ec858120e86586d3d795cfd44fd21c6bd8fe6e3a7",
     "shapes/erasure-graph-v1.ttl": "4f9da33919733b1cc31907564ad8dc4c77835db6c74edab99a9b175b20db8505",
     "shapes/event-time-v1.ttl": "99a65a3caed9f50d636b3112150a957172c87974b253248d212001449ae8a0ae",
     "shapes/first-party-bundle-v1.ttl": "a41754111c9fd3150ef4f1666b9fce2221f5e58b7aa463022d85e87b6e7bf00e",
@@ -3192,9 +3243,9 @@
     "shapes/work-type-v2.ttl": "94ef660d31ca8af44f51d5ecc6ad767ea97c6c39d1dcbf7db4321b1152632b2f",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "01cbbfc671d0824e4b029bff414f55e74f3c08e5cb4e587f537a9dc95f8408e8",
-    "packages/model/src/generated/profiles.ts": "cb1948ffaa37354ea54e08f6bcf2c3ebcfeb5c0a0ba8fe484ef11263d0291cdb",
-    "packages/model/src/generated/schemas.ts": "6d3ed05a54d4965831a8692b4a6fde9e8b84f90024c53c1b67e6faf6c782aecd",
-    "packages/model/src/generated/vocabulary.ts": "b07cb7614d1aa77745e0bcdf13e5579f9edf778c4c925fca066013a5e5b1951d"
+    "packages/model/src/generated/arbitraries.ts": "ef6cb6ecbee9e85df74cf0ef4006b83929c75cc180e122de1cbf2e9549ef3977",
+    "packages/model/src/generated/profiles.ts": "c788919b763cd202143187dabde507e411df6053c339ed7bfd7d6e15ad4bb520",
+    "packages/model/src/generated/schemas.ts": "9d3f2e35d87ed0e1c16756d667534427235854dc24e68224528662911ddb66c5",
+    "packages/model/src/generated/vocabulary.ts": "b81d8aec80d91863e7a8174ee83de13934d3968c614357d0f5d8c295fd6a7022"
   }
 }

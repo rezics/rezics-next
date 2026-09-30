@@ -1,0 +1,45 @@
+# An independently versioned, language-specific viewing direction of an exact relation meaning.
+# Wording revisions never advance definitionHead. One current presentation per exact meaning/direction/language.
+# Plural and grammatical forms are structured data; no executable sentence template is admitted.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/definition-presentation-v1/presentation-shape>
+    a sh:NodeShape ;
+    sh:closed true ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:DefinitionPresentation ] ;
+    sh:property [ sh:path rv:presentationHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PresentationRevision ] ;
+    sh:property [ sh:path rv:presentationDefinition ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SemanticDefinition ] ;
+    sh:property [ sh:path rv:meaningRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DefinitionRevision ] ;
+    sh:property [ sh:path rv:fromRole ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:toRole ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:presentationLanguage ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 255 ] .
+
+<https://rezics.com/definition/definition-presentation-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:closed true ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:PresentationRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DefinitionPresentation ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:PresentationRevision ] ;
+    sh:property [ sh:path rv:presentationDefinition ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SemanticDefinition ] ;
+    sh:property [ sh:path rv:meaningRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DefinitionRevision ] ;
+    sh:property [ sh:path rv:fromRole ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:toRole ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:presentationLanguage ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 255 ] ;
+    sh:property [ sh:path rv:noun ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 512 ] ;
+    sh:property [ sh:path rv:heading ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 512 ] ;
+    sh:property [ sh:path rv:pluralForms ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 8192 ] ;
+    sh:property [ sh:path rv:grammaticalForms ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 32768 ] ;
+    sh:property [ sh:path rv:source ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:licence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:reviewStatus ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Draft rv:Reviewed ) ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelGeneration ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ModelGeneration ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/definition-presentation-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/definition-presentation-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .

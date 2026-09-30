@@ -366,6 +366,18 @@ export const profileRegistry = {
       "proposal"
     ]
   },
+  "definition-presentation-v1": {
+    "sha256": "e4aa036bbed4bb52762f8c0ec858120e86586d3d795cfd44fd21c6bd8fe6e3a7",
+    "file": "shapes/definition-presentation-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/definition-presentation-v1/presentation-shape",
+      "https://rezics.com/definition/definition-presentation-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "presentation",
+      "revision"
+    ]
+  },
   "erasure-graph-v1": {
     "sha256": "4f9da33919733b1cc31907564ad8dc4c77835db6c74edab99a9b175b20db8505",
     "file": "shapes/erasure-graph-v1.ttl",

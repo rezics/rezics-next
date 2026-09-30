@@ -1,0 +1,106 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:component": {
+      "@id": "https://rezics.com/vocab/component",
+      "@type": "@id"
+    },
+    "rv:dataEpoch": {
+      "@id": "https://rezics.com/vocab/dataEpoch"
+    },
+    "rv:datasetId": {
+      "@id": "https://rezics.com/vocab/datasetId",
+      "@type": "@id"
+    },
+    "rv:fromRole": {
+      "@id": "https://rezics.com/vocab/fromRole"
+    },
+    "rv:grammaticalForms": {
+      "@id": "https://rezics.com/vocab/grammaticalForms"
+    },
+    "rv:heading": {
+      "@id": "https://rezics.com/vocab/heading"
+    },
+    "rv:licence": {
+      "@id": "https://rezics.com/vocab/licence"
+    },
+    "rv:manifest": {
+      "@id": "https://rezics.com/vocab/manifest",
+      "@type": "@id"
+    },
+    "rv:meaningRevision": {
+      "@id": "https://rezics.com/vocab/meaningRevision",
+      "@type": "@id"
+    },
+    "rv:modelGeneration": {
+      "@id": "https://rezics.com/vocab/modelGeneration",
+      "@type": "@id"
+    },
+    "rv:modelRevision": {
+      "@id": "https://rezics.com/vocab/modelRevision",
+      "@type": "@id"
+    },
+    "rv:noun": {
+      "@id": "https://rezics.com/vocab/noun"
+    },
+    "rv:operation": {
+      "@id": "https://rezics.com/vocab/operation",
+      "@type": "@id"
+    },
+    "rv:pluralForms": {
+      "@id": "https://rezics.com/vocab/pluralForms"
+    },
+    "rv:predecessor": {
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
+    },
+    "rv:presentationDefinition": {
+      "@id": "https://rezics.com/vocab/presentationDefinition",
+      "@type": "@id"
+    },
+    "rv:presentationHead": {
+      "@id": "https://rezics.com/vocab/presentationHead",
+      "@type": "@id"
+    },
+    "rv:presentationLanguage": {
+      "@id": "https://rezics.com/vocab/presentationLanguage"
+    },
+    "rv:reviewStatus": {
+      "@id": "https://rezics.com/vocab/reviewStatus",
+      "@type": "@id"
+    },
+    "rv:sequence": {
+      "@id": "https://rezics.com/vocab/sequence",
+      "@type": "xsd:integer"
+    },
+    "rv:shapeRevision": {
+      "@id": "https://rezics.com/vocab/shapeRevision",
+      "@type": "@id"
+    },
+    "rv:source": {
+      "@id": "https://rezics.com/vocab/source"
+    },
+    "rv:toRole": {
+      "@id": "https://rezics.com/vocab/toRole"
+    }
+  }
+}
