@@ -135,22 +135,43 @@ Magical Index, the overall sequence holds the Original, New Testament and
 Genesis Testament subseries, each keeping its own volume numbering beside a
 separate order key.
 
-Series progress follows a versioned policy over an exact composition: required
-parts, optional extras, chosen order and available translations, counting each
-covered unit once so that an omnibus and its volumes never double-count. It
-reports "caught up with available material", "finished the published parts",
-"series concluded" and "correspondence unresolved" separately. A series' own
-ratings stay separate from its volumes' ratings; a derived statistic, if shown,
-states its formula and denominator.
+Series progress uses `composition-progress-v2` over an exact composition
+revision and its disclosed parts. Required uses define the published-parts
+denominator; optional parts and extras do not block a finish. Each Work counts
+once, including when the reader finishes both an omnibus with complete coverage
+and one of its volumes. Finished sessions in any realization language and
+Library `read` statements, including imported completions, complete that Work.
+Ownership, a 100% locator, partial release coverage and completion of a different
+Work do not. Translations realize the same Work: reading volumes 1–10 in
+Japanese finishes them even after choosing zh-Hant for future reading.
+
+The chosen language determines availability and the next edition action, with
+language tags compared through the shared canonical language contract. The
+private per-Work edition preference pins an exact realization or release
+revision and uses expected-version writes. The summary reports "caught up with
+available material", "finished the published parts", "series concluded" and
+"correspondence unresolved" separately. It returns the next available required
+part, otherwise the first required part awaiting that language, then an
+available optional part or extra. A bounded or nested composition, session or
+release window reports continuation and partial results: aggregate finish and
+caught-up states are unknown, and the next part and primary action are null.
+Unreadable parts are withheld from identifiers, labels and counts.
+
+The summary names its composition revision, session versions, Library status
+versions, immutable coverage pins and graph position. Its furthest completed
+part can carry a locator from one exact target or an occurrence ordered inside
+one exact Structure revision; an omnibus locator cannot identify a position
+inside its last volume. A series' own ratings stay separate from its volumes'
+ratings; a derived statistic, if shown, states its formula and denominator.
 
 Work-level membership and publication order now use the `work-composition`
 Structure profile, with local labels, inclusion and evidenced completion.
 The resource `parts` and `wholes` APIs traverse these levels while withholding
 unreadable uses. Membership does not write `schema:isPartOf`, so composed
 volumes remain discoverable in search, author listings and Zone browse.
-Missing today: series pages, release coverage beyond one Work, fragment
-correspondence and progress outside book composition
-(`services/main/src/routes/progress.ts`). The M6 series briefs (G-602, G-608, G-609, G-611,
+The private progress-summary API reads Work composition and pinned multi-Work
+release coverage (`services/main/src/routes/progress-summaries.ts`). Series pages
+and fragment correspondence remain separate work. The M6 series briefs (G-602, G-608, G-609, G-611,
 G-612) become adapters over the shared Composed, Versioned and Trackable
 capabilities, never a book-only store. The SAO and Index franchises and a set of
 works whose web and published versions diverge are the acceptance fixtures.
