@@ -1,10 +1,12 @@
 import { Elysia, t } from 'elysia';
+import { readerLanguages } from '../modules/display-language/select.ts';
 import { actingContextCheck, actingContextDiscovery, actingContextPreference,
   authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 export const openApiOperations = {
+  '/v1/me/agents': { get: { bearer: true } },
   '/v1/me/acting-contexts': { get: { bearer: true } },
   '/v1/me/acting-context-checks': { post: { bearer: true } },
   '/v1/me/acting-context-preferences/work.create': { put: { bearer: true } },
@@ -13,6 +15,14 @@ export const openApiOperations = {
   '/v1/me/main-agent-preference': { get: { bearer: true },
     put: { bearer: true, idempotencyKey: true } },
 } as const;
+
+const agentDiscovery = t.Object({ profile: t.Literal('agent-discovery-v1'),
+  items: t.Array(t.Object({ actingSubject: t.String(),
+    kind: t.Nullable(t.Union([t.Literal('person'), t.Literal('pen-name'),
+      t.Literal('organization'), t.Literal('service')])), handle: t.Nullable(t.String()),
+    displayName: t.Nullable(t.Object({ value: t.String({ maxLength: 200 }),
+      language: t.String(), direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]) })),
+  }), { maxItems: 50 }), complete: t.Literal(true) });
 
 const agentChoice = t.Object({ actingSubject: t.Nullable(t.String()),
   eligible: t.Boolean(), revision: t.Nullable(t.String()) });
@@ -41,6 +51,20 @@ const choiceWriteHeaders = t.Object({
 
 export function actingContextRoutes(work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/me/agents', {
+      query: t.Object({ languages: t.Optional(t.String({ maxLength: 400 })) },
+        { additionalProperties: false }),
+      response: { 200: agentDiscovery, ...authorizedReadProblems },
+    }, async ({ request, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['openid']);
+        const contexts = work.actingContextDiscovery ?? work.actingContexts;
+        if (!contexts) return problem(503, 'acting_context_unavailable', 'Agents are unavailable');
+        const result = await contexts.discoverAgents(principal,
+          readerLanguages(query.languages, request.headers.get('accept-language')));
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
     .get('/v1/me/acting-contexts', {
       query: t.Object({ task: t.Literal('work.create') },
         { additionalProperties: false }),
@@ -110,7 +134,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
       response: { 200: sessionAgentRead, ...authorizedReadProblems },
     }, async ({ request }) => {
       try {
-        const principal = await work.account.verify(request, ['work:create']);
+        const principal = await work.account.verify(request, ['openid']);
         if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Session Agent is unavailable');
         const result = await work.sessionAgents.readSession(principal,
           request.headers.get('x-session-key') ?? '');
@@ -123,7 +147,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
       response: { 200: choiceWrite, ...writeProblems },
     }, async ({ request, body }) => {
       try {
-        const principal = await work.account.verify(request, ['work:create']);
+        const principal = await work.account.verify(request, ['openid']);
         if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Session Agent is unavailable');
         const result = await work.sessionAgents.setSession(principal,
           request.headers.get('x-session-key') ?? '', {
@@ -136,7 +160,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
       response: { 200: mainAgentRead, ...authorizedReadProblems },
     }, async ({ request }) => {
       try {
-        const principal = await work.account.verify(request, ['work:create']);
+        const principal = await work.account.verify(request, ['openid']);
         if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Main Agent is unavailable');
         const result = await work.sessionAgents.readMain(principal);
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
@@ -148,7 +172,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
       response: { 200: choiceWrite, ...writeProblems },
     }, async ({ request, body }) => {
       try {
-        const principal = await work.account.verify(request, ['work:create']);
+        const principal = await work.account.verify(request, ['openid']);
         if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Main Agent is unavailable');
         const result = await work.sessionAgents.setMain(principal, {
           actingSubject: body.actingSubject, expectedRevision: body.expectedRevision,

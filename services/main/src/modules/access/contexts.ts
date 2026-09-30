@@ -12,6 +12,10 @@ import { RoleUnavailable } from './roles.ts';
 import { roleWorkCreateProof, roleWorkCreateSubjects } from './role-proof.ts';
 import { baselineMemberProof, newBaselineProof } from './baseline.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
+import { AccessTopology } from './topology.ts';
+import { ControlUnavailable } from './topology-control.ts';
+import { agentLocalizedName } from '../agent/localized-name.ts';
+import { selectDisplayName, type DisplayName } from '../display-language/select.ts';
 
 export class ActingContextDenied extends Error {}
 export class ActingContextInvalid extends Error {}
@@ -43,6 +47,16 @@ export interface ActingContextOption {
   displayName: string | null;
   handle: string | null;
   kind: 'person' | 'pen-name' | 'organization' | 'service' | null;
+}
+
+export interface AgentDiscoveryOption extends Omit<ActingContextOption, 'displayName'> {
+  displayName: Pick<DisplayName, 'value' | 'language' | 'direction'> | null;
+}
+
+export interface AgentDiscovery {
+  profile: 'agent-discovery-v1';
+  items: AgentDiscoveryOption[];
+  complete: true;
 }
 
 export interface ActingContextPreference {
@@ -99,11 +113,12 @@ export async function transaction<T>(pool: Pool, work: (client: PoolClient) => P
     return result;
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve original failure */ }
-    if (error instanceof GroupUnavailable || error instanceof RoleUnavailable) {
+    if (error instanceof GroupUnavailable || error instanceof RoleUnavailable
+      || error instanceof ControlUnavailable) {
       throw new ActingContextUnavailable(error.message);
     }
     if (error && typeof error === 'object' && 'code' in error
-      && ['40001', '55P03', '57014'].includes(String(error.code))) {
+      && ['40001', '40P01', '55P03', '57014'].includes(String(error.code))) {
       throw new ActingContextUnavailable('authority snapshot changed or timed out');
     }
     throw error;
@@ -113,11 +128,7 @@ export async function transaction<T>(pool: Pool, work: (client: PoolClient) => P
 export async function currentGate(client: PoolClient): Promise<{
   authority_epoch: string; open: boolean; dispatch_open: boolean;
 }> {
-  const recovery = await client.query<{ open: boolean }>(
-    'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-  if (recovery.rows[0]?.open !== true) {
-    throw new ActingContextUnavailable('Access is held for recovery');
-  }
+  await identityReadFence(client);
   const gate = await client.query<{
     authority_epoch: string; open: boolean; dispatch_open: boolean;
   }>(
@@ -125,6 +136,50 @@ export async function currentGate(client: PoolClient): Promise<{
     [WORK_CREATE_CONTEXT.scope]);
   if (gate.rowCount !== 1) throw new ActingContextUnavailable('Work creation scope is unavailable');
   return gate.rows[0]!;
+}
+
+export async function identityReadFence(client: PoolClient): Promise<void> {
+  const recovery = await client.query<{ open: boolean }>(
+    'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+  if (recovery.rows[0]?.open !== true) {
+    throw new ActingContextUnavailable('Access is held for recovery');
+  }
+}
+
+/** The one task-independent predicate used by discovery and saved identity
+ * choices. Two bounded candidate reads plus the topology owner's bounded path
+ * evaluation. Distinct Agents share one output bound across all sources. */
+export async function actableSubjects(client: PoolClient, principalId: string): Promise<string[]> {
+  const row = (await client.query<ProfileRow>(ACTIVE_ACCESS_BOUNDS_SQL)).rows[0];
+  if (!row) throw new ActingContextUnavailable('operational bounds profile is not activated');
+  const bounds = accessBoundsFromRow(row);
+  const represented = await AccessTopology.representedAgents(client, principalId);
+  const other = await client.query<{ subject: string }>(`SELECT DISTINCT candidates.subject FROM (
+    SELECT agent_id AS subject FROM access.agent_provision WHERE principal_id = $1 AND state = 'active'
+    UNION
+    SELECT agent_subject FROM access.principal_agent_attribution WHERE principal_id = $1 AND active
+      AND valid_until > clock_timestamp()
+    ) candidates JOIN access.authority_subject s ON s.id = candidates.subject
+      AND s.kind = 'agent' AND s.active ORDER BY candidates.subject LIMIT $2`,
+  [principalId, bounds.actingContexts + 1]);
+  const subjects = [...new Set([...represented, ...other.rows.map(value => value.subject)])].sort();
+  if (subjects.length > bounds.actingContexts) {
+    throw new ActingContextUnavailable('Agent discovery exceeds supported limit');
+  }
+  // Share locks prevent a revoked attribution/provision or inactive Agent
+  // from racing a saved choice's commit. Recheck after acquiring the locks.
+  const provisions = await client.query<{ agent_id: string }>(`SELECT agent_id FROM access.agent_provision
+    WHERE principal_id = $1 AND state = 'active' AND agent_id = ANY($2::text[]) FOR SHARE`,
+  [principalId, subjects]);
+  const attributions = await client.query<{ agent_subject: string }>(`SELECT agent_subject
+    FROM access.principal_agent_attribution WHERE principal_id = $1 AND active
+      AND valid_until > clock_timestamp() AND agent_subject = ANY($2::text[]) FOR SHARE`,
+  [principalId, subjects]);
+  const live = new Set([...represented, ...provisions.rows.map(value => value.agent_id),
+    ...attributions.rows.map(value => value.agent_subject)]);
+  const agents = await client.query<{ id: string }>(`SELECT id FROM access.authority_subject
+    WHERE id = ANY($1::text[]) AND kind = 'agent' AND active ORDER BY id FOR SHARE`, [[...live]]);
+  return agents.rows.map(value => value.id);
 }
 
 async function activePrincipal(client: PoolClient, principal: VerifiedPrincipal): Promise<string | null> {
@@ -162,6 +217,72 @@ export async function eligibleSubject(client: PoolClient, principalId: string,
  * and every later command must still run ordinary Access admission. */
 export class AccessActingContexts {
   constructor(private readonly pool: Pool, private readonly environment?: WorkActivationEnvironment) {}
+
+  async discoverAgents(principal: VerifiedPrincipal, languages: readonly string[] = []): Promise<AgentDiscovery> {
+    const subjects = await transaction(this.pool, async client => {
+      await identityReadFence(client);
+      const principalId = await activePrincipal(client, principal);
+      return principalId ? actableSubjects(client, principalId) : [];
+    });
+    const labels = await this.agentLabels(subjects, languages);
+    return { profile: 'agent-discovery-v1', complete: true,
+      items: subjects.map(actingSubject => ({ actingSubject, kind: null, handle: null,
+        displayName: null, ...labels.get(actingSubject) })) };
+  }
+
+  /** One graph batch of at most 20 localized labels per Agent (50 Agents),
+   * one current-handle batch, 1 MiB graph budget; malformed or excess labels
+   * fail closed. Missing descriptions remain nullable for older Agents. */
+  private async agentLabels(subjects: readonly string[], languages: readonly string[]):
+    Promise<Map<string, Omit<AgentDiscoveryOption, 'actingSubject'>>> {
+    const labels = new Map<string, Omit<AgentDiscoveryOption, 'actingSubject'>>();
+    if (!subjects.length || !this.environment) return labels;
+    try {
+      await assertGraphAdmissionOpen(this.environment.fuseki, this.environment.lineage);
+      const rows = (await this.environment.fuseki.query(`PREFIX rv: <${RV}>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT ?agent ?label ?kind ?nativeHandle ?legacyHandle ?localizedName ?originalNameLanguage WHERE {
+          VALUES ?agent { ${subjects.map(iri).join(' ')} }
+          GRAPH ${iri(GRAPHS.current)} {
+            ?agent a rv:Agent ; rv:agentKind ?kind ; rdfs:label ?label .
+            OPTIONAL { ?agent rv:profileHandle ?nativeHandle }
+            OPTIONAL { ?agent rv:handle ?legacyHandle }
+            OPTIONAL { ?agent rv:localizedName ?localizedName }
+            OPTIONAL { ?agent rv:originalNameLanguage ?originalNameLanguage }
+          }
+        } LIMIT ${subjects.length * 20 + 1}`, 1_048_576)).results?.bindings ?? [];
+      if (rows.length > subjects.length * 20 || rows.some(row => !subjects.includes(row.agent?.value ?? ''))) {
+        throw new Error('Agent label batch overflow or unexpected subject');
+      }
+      const claims = await this.pool.query<{ agent_id: string; handle: string }>(`SELECT agent_id, handle
+        FROM access.agent_handle WHERE agent_id = ANY($1::text[]) AND state = 'current'`, [subjects]);
+      const handles = new Map(claims.rows.map(row => [row.agent_id, row.handle]));
+      const kinds: Record<string, AgentDiscoveryOption['kind']> = {
+        [`${RV}PersonAgent`]: 'person', [`${RV}PenNameAgent`]: 'pen-name',
+        [`${RV}OrganizationAgent`]: 'organization', [`${RV}ServiceAgent`]: 'service',
+      };
+      for (const subject of subjects) {
+        const matched = rows.filter(row => row.agent?.value === subject);
+        const first = matched[0];
+        if (!first) continue;
+        const name = first.label?.value;
+        const kind = kinds[first.kind?.value ?? ''];
+        const handle = handles.get(subject) ?? first.nativeHandle?.value ?? first.legacyHandle?.value ?? null;
+        if (matched.length > 20 || !name || name.length > 200 || /[\u0000-\u001f\u007f]/.test(name)
+          || !kind || matched.some(row => row.label?.value !== name || row.kind?.value !== first.kind?.value
+            || row.nativeHandle?.value !== first.nativeHandle?.value || row.legacyHandle?.value !== first.legacyHandle?.value)
+          || (handle !== null && (!handle || handle.length > 128 || /[\u0000-\u001f\u007f]/.test(handle)))) {
+          throw new Error('Agent description is ambiguous');
+        }
+        const localized = agentLocalizedName(matched, name);
+        const selected = selectDisplayName(localized ?? new Map([[first.label?.['xml:lang'] || 'und', name]]), languages);
+        if (!selected) throw new Error('Agent label has no language');
+        labels.set(subject, { kind, handle, displayName: { value: selected.value,
+          language: selected.language, direction: selected.direction } });
+      }
+      return labels;
+    } catch { throw new ActingContextUnavailable('Agent descriptions are unavailable'); }
+  }
 
   /** One public graph read and one bounded current-handle batch for at most 50
    * eligible Agents. Missing public descriptions remain null. */

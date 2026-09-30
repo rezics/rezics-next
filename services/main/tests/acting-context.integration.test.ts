@@ -551,8 +551,8 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     expect((await check(firstToken, representedOnly, closed.authorityEpoch,
       'direct-principal')).status).toBe(403);
     expect((await prefer(firstToken, agentA, clearedBody.revision)).status).toBe(403);
-    expect((await sessionPut(firstToken, sessionKeyB, agentA, null)).status).toBe(403);
-    expect((await mainPut(firstToken, agentA, clearedMainBody.revision)).status).toBe(403);
+    expect((await sessionPut(firstToken, sessionKeyB, agentA, null)).status).toBe(200);
+    expect((await mainPut(firstToken, agentA, clearedMainBody.revision)).status).toBe(200);
     expect((await prefer(firstToken, null, clearedBody.revision)).status).toBe(200);
     const afterClose = await discover(firstToken);
     expect(afterClose.status).toBe(200);

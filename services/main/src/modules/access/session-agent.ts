@@ -2,8 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { ActingContextDenied, ActingContextInvalid, ActingContextStale,
-  type AccessActingContexts, currentGate, eligibleSubject, transaction } from './contexts.ts';
-import { directWorkCreateProof } from './direct-principal.ts';
+  type AccessActingContexts, identityReadFence, actableSubjects, transaction } from './contexts.ts';
 
 const agentId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -43,7 +42,7 @@ export interface SetAgentChoice {
 interface SavedChoice { acting_subject: string | null; revision: string }
 
 /** Each read is discovery plus one indexed private lookup. Each write locks one
- * principal and one preference row, checks at most one Agent proof, and writes
+ * principal and one preference row, checks the bounded actable inventory, and writes
  * one head and one receipt. Cost is independent of other sessions and accounts. */
 export class AccessSessionAgents {
   constructor(private readonly pool: Pool, private readonly contexts: AccessActingContexts) {}
@@ -55,7 +54,7 @@ export class AccessSessionAgents {
 
   async readSession(principal: VerifiedPrincipal, sessionKey: string): Promise<SessionAgentRead> {
     this.sessionKey(sessionKey);
-    const discovery = await this.contexts.discover(principal);
+    const discovery = await this.contexts.discoverAgents(principal);
     const result = await this.pool.query<SavedChoice & {
       session_subject: string | null; session_revision: string | null;
       main_subject: string | null; main_revision: string | null;
@@ -68,13 +67,13 @@ export class AccessSessionAgents {
     [principal.issuer, principal.subject, sessionKey]);
     const row = result.rows[0];
     const eligible = (subject: string | null) => Boolean(subject &&
-      [...discovery.contexts, ...discovery.directContexts]
+      discovery.items
         .some(option => option.actingSubject === subject));
     const sessionAgent = { actingSubject: row?.session_subject ?? null,
       revision: row?.session_revision ?? null, eligible: eligible(row?.session_subject ?? null) };
     const mainAgent = { actingSubject: row?.main_subject ?? null,
       revision: row?.main_revision ?? null, eligible: eligible(row?.main_subject ?? null) };
-    const choices = [...new Set([...discovery.contexts, ...discovery.directContexts]
+    const choices = [...new Set(discovery.items
       .map(option => option.actingSubject))];
     return { profile: 'session-agent-v1', sessionAgent, mainAgent,
       initialActingSubject: sessionAgent.revision ? null
@@ -83,7 +82,7 @@ export class AccessSessionAgents {
   }
 
   async readMain(principal: VerifiedPrincipal): Promise<MainAgentRead> {
-    const discovery = await this.contexts.discover(principal);
+    const discovery = await this.contexts.discoverAgents(principal);
     const row = (await this.pool.query<SavedChoice>(`SELECT m.acting_subject, m.revision
       FROM access.principal p JOIN access.main_agent_preference m ON m.principal_id = p.id
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active`,
@@ -91,7 +90,7 @@ export class AccessSessionAgents {
     return { profile: 'main-agent-preference-v1', mainAgent: {
       actingSubject: row?.acting_subject ?? null, revision: row?.revision ?? null,
       eligible: Boolean(row?.acting_subject &&
-        [...discovery.contexts, ...discovery.directContexts]
+        discovery.items
           .some(option => option.actingSubject === row.acting_subject)) } };
   }
 
@@ -114,7 +113,7 @@ export class AccessSessionAgents {
     const digest = createHash('sha256').update(JSON.stringify({ scope, sessionKey,
       actingSubject: input.actingSubject, expectedRevision: input.expectedRevision })).digest('hex');
     return transaction(this.pool, async client => {
-      const gate = await currentGate(client);
+      await identityReadFence(client);
       const principalId = (await client.query<{ id: string }>(`SELECT id FROM access.principal
         WHERE account_issuer = $1 AND account_subject = $2 AND active FOR UPDATE`,
       [principal.issuer, principal.subject])).rows[0]?.id;
@@ -142,10 +141,9 @@ export class AccessSessionAgents {
       if ((prior?.revision ?? null) !== input.expectedRevision) {
         throw new ActingContextStale('Agent choice revision changed');
       }
-      if (input.actingSubject !== null && (!gate.open || !gate.dispatch_open
-        || !(await eligibleSubject(client, principalId, input.actingSubject, principal.emailVerified === true)
-          || await directWorkCreateProof(client, principalId, input.actingSubject)))) {
-        throw new ActingContextDenied('selected Agent is not eligible');
+      if (input.actingSubject !== null
+        && !(await actableSubjects(client, principalId)).includes(input.actingSubject)) {
+        throw new ActingContextDenied('selected Agent is unavailable');
       }
       const revision = randomUUID();
       const rowParams = scope === 'session'

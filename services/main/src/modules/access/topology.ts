@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
-import { ControlDenied, ControlInvalid, ControlStale, type ControlReceipt, WORK_SCOPE,
+import { ControlDenied, ControlInvalid, ControlStale, ControlUnavailable, type ControlReceipt, WORK_SCOPE,
   agentPattern, controlTransaction, generationPattern, idPattern, lockGate, receipted,
   requireAgent, requireCeiling, requireMandate, requirePrincipal, requireReceipt }
   from './topology-control.ts';
-import { MAX_PATH_EDGES, TOPOLOGY_SCOPE } from './topology-schema.ts';
+import { MAX_PATH_EDGES, MAX_TOPOLOGY_WALK, TOPOLOGY_SCOPE } from './topology-schema.ts';
 
 const MANAGE = 'access.representation.manage';
 const actionPattern = /^[a-z][a-z0-9.-]{0,127}$/;
@@ -50,6 +50,62 @@ interface SelectedPath {
  * only under the topology gate CAS; a use pins one complete path per obligation. */
 export class AccessTopology {
   constructor(private readonly pool: Pool) {}
+
+  /** Enumerate complete, action-preserving paths in the topology owner, then
+   * use admission's selected-path evaluator for composed paths. No target
+   * grant or task gate participates in identity discovery. Cost: two batch reads, including one bounded
+   * walk (at most 256 paths, eight edges), plus two indexed reads per composed
+   * path; overflow is unavailable rather than a partial identity inventory. */
+  static async representedAgents(client: PoolClient, principalId: string): Promise<string[]> {
+    const paths = await client.query<{ subject: string; action: string;
+      representation_id: string; edge_ids: string[] }>(`WITH RECURSIVE path AS (
+      SELECT r.subject_id AS subject, r.action, r.id AS representation_id,
+        r.max_path_edges AS ceiling, ARRAY[]::uuid[] AS edge_ids,
+        ARRAY[r.subject_id]::text[] AS visited
+      FROM access.representation r JOIN access.authority_subject s ON s.id = r.subject_id
+      WHERE r.principal_id = $1 AND r.active AND r.valid_until > clock_timestamp()
+        AND s.kind = 'agent' AND s.active
+      UNION ALL
+      SELECT e.represented_subject, p.action, p.representation_id,
+        LEAST(p.ceiling, e.max_path_edges), p.edge_ids || e.id,
+        p.visited || e.represented_subject
+      FROM path p JOIN access.representation_edge e ON e.representative_subject = p.subject
+        AND e.action = p.action
+      JOIN access.authority_subject s ON s.id = e.represented_subject
+      JOIN access.permission_grant c ON c.id = e.ceiling_grant_id
+      WHERE e.active AND e.valid_until > clock_timestamp() AND s.kind = 'agent' AND s.active
+        AND c.active AND c.generation = e.ceiling_grant_generation
+        AND c.valid_until > clock_timestamp()
+        AND cardinality(p.edge_ids) < LEAST(p.ceiling, e.max_path_edges, $2)
+        AND NOT e.represented_subject = ANY(p.visited)
+    ) SELECT subject, action, representation_id, edge_ids FROM path LIMIT $3`,
+    [principalId, MAX_PATH_EDGES, MAX_TOPOLOGY_WALK + 1]);
+    if (paths.rows.length > MAX_TOPOLOGY_WALK) {
+      throw new ControlUnavailable('identity representation walk exceeds supported limit');
+    }
+    const locked = await client.query<{ id: string }>(`SELECT r.id FROM access.representation r
+      JOIN access.authority_subject s ON s.id = r.subject_id
+      WHERE r.id = ANY($1::uuid[]) AND r.active AND r.valid_until > clock_timestamp() AND s.active
+      FOR SHARE OF r, s`, [[...new Set(paths.rows.map(path => path.representation_id))]]);
+    const live = new Set(locked.rows.map(row => row.id));
+    const subjects = new Set<string>();
+    for (const path of paths.rows) {
+      if (!live.has(path.representation_id)) continue;
+      // Root mandates are already checked by the walk. Lock their exact live
+      // rows in one batch above, avoiding a round trip per direct identity.
+      if (path.edge_ids.length) {
+        try {
+          await AccessTopology.selectPath(client, principalId, path.subject, path.action,
+            path.representation_id, path.edge_ids);
+        } catch (error) {
+          if (error instanceof ControlDenied) continue;
+          throw error;
+        }
+      }
+      subjects.add(path.subject);
+    }
+    return [...subjects].sort();
+  }
 
   async changeEdge(principal: VerifiedPrincipal, receipt: ControlReceipt,
     change: EdgeChange): Promise<EdgeChangeResult & { replayed: boolean }> {
@@ -138,7 +194,7 @@ export class AccessTopology {
   }
 
   /** The complete path from the caller's own mandate to the acting subject. */
-  private async selectPath(client: PoolClient, principalId: string, actingSubject: string,
+  private static async selectPath(client: PoolClient, principalId: string, actingSubject: string,
     action: string, representationId: string, edgeIds: string[]): Promise<SelectedPath> {
     const mandate = await client.query<{ generation: string; subject_id: string;
       valid_until: Date; max_path_edges: number }>(`SELECT r.generation, r.subject_id,
@@ -237,7 +293,7 @@ export class AccessTopology {
           const selected = [];
           let expiresAt = new Date(Date.now() + ADMISSION_LIFETIME_MS);
           for (const item of input.obligations) {
-            const path = await this.selectPath(client, actor.id, input.actingSubject,
+            const path = await AccessTopology.selectPath(client, actor.id, input.actingSubject,
               item.obligation, item.representationId, item.edgeIds);
             const grant = await this.obligationGrant(client, input.actingSubject,
               item.obligation, item.grantId, path);
