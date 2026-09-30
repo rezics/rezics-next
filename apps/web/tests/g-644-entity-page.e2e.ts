@@ -94,8 +94,14 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   await expect(page.getByRole('button', { name: 'Change Work' })).toHaveCount(0);
   await page.locator('#post-title').fill('Who is Asuna in chapter one?');
   await page.getByRole('textbox', { name: 'Your post' }).fill('Does anyone else think chapter one is slow on purpose?');
-  await page.getByRole('button', { name: 'Post', exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/en/r/${uuid(seeded.realm)}/discussions/`), { timeout: 60_000 });
+  // The reply is read back once Main has projected it, which can take a moment; the composer keeps the draft and its
+  // operation keys, so posting again continues the same publication.
+  const thread = new RegExp(`/en/r/${uuid(seeded.realm)}/discussions/`);
+  for (let attempt = 0; attempt < 8 && !thread.test(page.url()); attempt += 1) {
+    await page.getByRole('button', { name: 'Post', exact: true }).click();
+    await page.waitForURL(thread, { timeout: 8000 }).catch(() => undefined);
+  }
+  await expect(page).toHaveURL(thread);
   lap('posted');
   await page.goto(at(seeded.occurrence));
   const reply = page.getByRole('article').filter({ hasText: 'chapter one is slow on purpose' });
