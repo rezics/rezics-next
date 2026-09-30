@@ -15,7 +15,7 @@ export function fieldsOf(state: HeaderState, language: string): Fields {
  * with line breaks becomes one line; blank means the fact is unset.
  */
 const cleaned = (text: string): string | null => {
-  const line = text.replace(/\s*[\r\n  ]+\s*/g, ' ').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  const line = text.replace(/\s*[\r\n\u2028\u2029]+\s*/g, ' ').replace(/[\u0000-\u001f\u007f]/g, '').trim();
   return line ? line : null;
 };
 

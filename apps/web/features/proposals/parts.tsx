@@ -54,9 +54,9 @@ export function ChangeList({ changes, locale, t }: { changes: readonly Change[];
   if (!rows.length) return <p className="text-muted-foreground text-sm">{t.changesEmpty}</p>;
   return <ul className="grid gap-4">
     {rows.map(leaf => <li key={leaf.key} className="grid gap-2">
-      <h4 className="font-medium text-sm">{factLabel(leaf, t)}{leaf.language
+      <h3 className="font-medium text-sm">{factLabel(leaf, t)}{leaf.language
         ? <span className="font-normal text-muted-foreground"> · {t.inLanguage({ language: languageName(leaf.language, locale) })}</span>
-        : null}</h4>
+        : null}</h3>
       <div className="grid gap-2 sm:grid-cols-2">
         <Value text={leaf.before} language={leaf.language} label={t.before} unset={t.unset} tone="before" />
         <Value text={leaf.after} language={leaf.language} label={t.after} unset={t.unset} tone="after" />
@@ -128,7 +128,7 @@ export function Timeline({ timeline, agents, now, locale, t, href }: { timeline:
     {timeline.map(entry => <li key={entry.sequence} className="relative grid gap-1 text-sm">
       <span aria-hidden="true" className="-start-[1.3125rem] absolute top-1.5 size-2.5 rounded-full bg-primary" />
       <p>{stepText(entry, agents, t)}
-        {' '}<a href={href(entry.revision)} className="text-muted-foreground hover:underline">
+        {' '}<a href={href(entry.revision)} className="text-muted-foreground underline underline-offset-2">
           {t.atRevision({ n: String(entry.revision) })}</a>
         {' · '}<time dateTime={isoTime(entry.occurredAt)} title={dateTime(entry.occurredAt, locale)}
           suppressHydrationWarning className="text-muted-foreground">{relativeTime(entry.occurredAt, now, locale)}</time></p>

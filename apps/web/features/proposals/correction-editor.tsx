@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { Textarea } from '@rezics/ui/textarea';
 import { materializeData } from 'native-i18n';
 import { useRef, useState } from 'react';
@@ -73,10 +73,9 @@ export function CorrectionEditor({ state, language: start, languages, initial, r
     </Alert> : null}
     <Field>
       <FieldLabel>{t.languageLabel}</FieldLabel>
-      <NativeSelect value={selected} onChange={event => choose(event.currentTarget.value)} className="w-full sm:w-64">
-        {tags.map(tag => <NativeSelectOption key={tag} value={tag}>{languageLabel(tag, locale)}</NativeSelectOption>)}
-        <NativeSelectOption value={OTHER}>{t.languageOther}</NativeSelectOption>
-      </NativeSelect>
+      <ChoiceSelect portalled={false} value={selected} onValueChange={choose} className="w-full sm:w-64"
+        options={[...tags.map(tag => ({ value: tag, label: languageLabel(tag, locale) })),
+          { value: OTHER, label: t.languageOther }]} />
     </Field>
     {selected === OTHER ? <Field>
       <FieldLabel>{t.languageCustomLabel}</FieldLabel>
