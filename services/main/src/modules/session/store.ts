@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { advanceContentSequence } from '../content-sequence.ts';
 import { ReaderLibraryStatusStore } from '../library/status.ts';
 import { decodeReadCursor, encodeReadCursor } from '../work/read-session.ts';
 import { readId } from '../work/read-contract.ts';
@@ -160,12 +161,11 @@ export class ConsumptionSessionStore {
           WHERE agent=$1 AND work=$2`, [input.agent, result.target.work, result.changedAt]);
       }
       const operation = `session:${hash([...identity.slice(0, 2), input.idempotencyKey])}`;
-      const control = await client.query<{ data_epoch: string; sequence: string }>(
-        'UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton RETURNING data_epoch, sequence::text');
-      if (!control.rows[0]) throw new Error('Content owner position unavailable');
-      await client.query(`INSERT INTO content.receipt
-        (operation_id, request_digest, action, outcome, data_epoch, sequence) VALUES ($1,$2,$3,'succeeded',$4,$5)`,
-      [operation, digest, create ? 'session.create' : 'session.update', control.rows[0].data_epoch, control.rows[0].sequence]);
+      await advanceContentSequence(client, {
+        operationId: operation, requestDigest: digest, action: create ? 'session.create' : 'session.update',
+        outcome: 'succeeded', eventType: create ? 'session.created' : 'session.updated',
+        recipe: 'consumption-session-v1', payload: {},
+      });
       await client.query(`INSERT INTO reader.consumption_session_command
         (principal_issuer, principal_subject, idempotency_key, request_digest, session, result, content_operation)
         VALUES ($1,$2,$3,$4,$5,$6,$7)`, [...identity.slice(0, 2), input.idempotencyKey, digest,

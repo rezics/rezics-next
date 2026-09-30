@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import type { GraphTerminalProof } from '../access/admission.ts';
+import { advanceContentSequence, ContentSequenceUnavailable } from '../content-sequence.ts';
 import { canonicalExport, type ExportPlan } from './planner.ts';
 
 export class ExportConflict extends Error {}
@@ -101,13 +102,11 @@ export class ExportStore {
         await client.query('COMMIT');
         return { ...saved, replayed: true };
       }
-      const owner = (await client.query<{ data_epoch: string; sequence: string }>(
-        `UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton
-         RETURNING data_epoch, sequence::text`)).rows[0];
-      if (!owner) throw new ExportUnavailable('Content owner position is unavailable');
-      await client.query(`INSERT INTO content.receipt (operation_id, request_digest, action, outcome,
-        data_epoch, sequence) VALUES ($1, $2, 'export.create', 'succeeded', $3, $4::bigint)`,
-      [operation(admission.id), admission.requestDigest, owner.data_epoch, owner.sequence]);
+      const owner = await advanceContentSequence(client, {
+        operationId: operation(admission.id), requestDigest: admission.requestDigest,
+        action: 'export.create', outcome: 'succeeded', eventType: 'export.manifest.sealed',
+        recipe: 'export-v1', payload: {},
+      });
       const id = randomUUID();
       await client.query(`INSERT INTO export.manifest (id, principal_id, idempotency_key,
         request_digest, admission_id, authority_epoch, target_profile, use_scope, state,
@@ -116,7 +115,7 @@ export class ExportStore {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'staged',$9,$10,$11,0,0,$12,$13,$14,$15,NULL)`,
       [id, admission.principalId, admission.idempotencyKey, admission.requestDigest, admission.id,
         admission.authorityEpoch, plan.targetProfile, plan.useScope, plan.completeness,
-        plan.licenseScope, plan.licenseExpression, manifestDigest, owner.data_epoch,
+        plan.licenseScope, plan.licenseExpression, manifestDigest, owner.dataEpoch,
         owner.sequence, JSON.stringify(core)]);
       for (const item of plan.members) {
         await client.query(`INSERT INTO export.member (manifest_id, ordinal, source_owner, source_namespace,
@@ -150,6 +149,7 @@ export class ExportStore {
       return saved;
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
+      if (error instanceof ContentSequenceUnavailable) throw new ExportUnavailable(error.message);
       const code = (error as { code?: string }).code;
       if (code === '23505') {
         const prior = (await client.query<{ id: string; request_digest: string; admission_id: string;
@@ -183,18 +183,16 @@ export class ExportStore {
         return exportTerminal(admission, { dataEpoch: existing.data_epoch, sequence: existing.sequence },
           existing.outcome === 'succeeded' ? 'succeeded' : 'cancelled');
       }
-      const owner = (await client.query<{ data_epoch: string; sequence: string }>(
-        `UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton
-         RETURNING data_epoch, sequence::text`)).rows[0];
-      if (!owner) throw new ExportUnavailable('Content owner position is unavailable');
-      await client.query(`INSERT INTO content.receipt (operation_id, request_digest, action, outcome,
-        data_epoch, sequence, reason) VALUES ($1,$2,'export.create','rejected',$3,$4::bigint,$5)`,
-      [operation(admission.id), admission.requestDigest, owner.data_epoch, owner.sequence,
-        'export input or authority did not permit sealing']);
+      const owner = await advanceContentSequence(client, {
+        operationId: operation(admission.id), requestDigest: admission.requestDigest,
+        action: 'export.create', outcome: 'rejected', eventType: 'export.create.cancelled',
+        reason: 'export input or authority did not permit sealing', recipe: 'export-v1', payload: {},
+      });
       await client.query('COMMIT');
-      return exportTerminal(admission, { dataEpoch: owner.data_epoch, sequence: owner.sequence }, 'cancelled');
+      return exportTerminal(admission, owner, 'cancelled');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
+      if (error instanceof ContentSequenceUnavailable) throw new ExportUnavailable(error.message);
       if ((error as { code?: string }).code === '23505') {
         const existing = (await client.query<{ request_digest: string; outcome: string;
           data_epoch: string; sequence: string }>(`SELECT request_digest, outcome, data_epoch,
