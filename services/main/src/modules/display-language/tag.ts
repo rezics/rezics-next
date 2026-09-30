@@ -10,9 +10,14 @@ const unspecified = new Set(['und', 'zxx', 'mul']);
 // RTL field in https://github.com/unicode-org/cldr/blob/main/common/properties/scriptMetadata.txt
 const rtlScripts = new Set(['Adlm', 'Arab', 'Armi', 'Avst', 'Chrs', 'Cprt', 'Elym', 'Gara',
   'Hatr', 'Hebr', 'Hung', 'Khar', 'Lydi', 'Mand', 'Mani', 'Mend', 'Merc', 'Mero', 'Narb',
-  'Nbat', 'Nkoo', 'Ougr', 'Palm', 'Phli', 'Phlp', 'Phnx', 'Prti', 'Rohg', 'Samr', 'Sarb',
+  'Nbat', 'Nkoo', 'Orkh', 'Ougr', 'Palm', 'Phli', 'Phlp', 'Phnx', 'Prti', 'Rohg', 'Samr', 'Sarb',
   'Sogd', 'Sogo', 'Syrc', 'Thaa', 'Yezi']);
-const rtlLetter = new RegExp([...rtlScripts].map(script => `\\p{Script=${script}}`).join('|'), 'u');
+// Engines ship different Unicode versions; an unsupported script must not break module loading.
+const rtlLetterPatterns = [...rtlScripts].flatMap(script => {
+  try { return [new RegExp(`\\p{Script=${script}}`, 'u').source]; }
+  catch { return []; }
+});
+const rtlLetter = new RegExp(rtlLetterPatterns.join('|') || '(?!)', 'u');
 
 /** Intl's structural validation and aliases, plus RFC 5646 §2.2.7 private-only tags.
  * This does not validate subtags against a pinned IANA registry. Empty is not recorded. */

@@ -35,14 +35,14 @@ export async function readMetadataHeader(session: WorkReadSession, work: string,
     completionStatus: state.completionStatus ?? null, localized: state.localized };
 }
 export const recordedDisplayText = (value: { value: string; language: string }) =>
-  ({ ...value, direction: direction(value.language) });
+  ({ ...value, direction: direction(value.language, value.value) });
 export function selectedMetadata(header: { revision?: string | null; originalTitle?: MetadataHeaderState['originalTitle'];
   completionStatus?: MetadataHeaderState['completionStatus']; localized: MetadataHeaderState['localized'] }, requested?: string) {
   const language = requested?.toLowerCase();
   const locale = header.localized.find(row => row.language === language)
     ?? header.localized.find(row => row.language === 'en') ?? header.localized[0];
   const name = (value: string | null | undefined) => value == null || !locale ? null
-    : { value, language: locale.language, direction: direction(locale.language),
+    : { value, language: locale.language, direction: direction(locale.language, value),
       basis: language === locale.language ? 'requested' as const : 'fallback' as const };
   return { title: name(locale?.title), description: name(locale?.description),
     tagline: name(locale?.tagline),

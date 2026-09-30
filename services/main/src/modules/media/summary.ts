@@ -6,16 +6,17 @@ import { PROFILES } from '../semantic/schema.ts';
 import { readWorkComponentState } from '../work/history.ts';
 import { readPublicRealmNames } from '../space/read.ts';
 import { currentProfile } from '../realm-profile/schema.ts';
-import { readerLanguages, selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
+import { direction, readerLanguages, selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import type { Base } from '../target/contract.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaUnavailable,
   type AvatarRow, type MediaStore } from './store.ts';
+
+export { direction } from '../display-language/select.ts';
 
 export const MAX_SUMMARY_BATCH = 64;
 export const FALLBACK_POLICY = 'avatar-fallback-v1';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const languageTag = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
-const RTL = new Set(['ar', 'arc', 'ckb', 'dv', 'fa', 'he', 'ks', 'ku', 'ps', 'sd', 'ug', 'ur', 'yi']);
 
 export type ResourceType = 'work' | 'main-version' | 'space' | 'realm' | 'concept'
   | 'character' | 'context' | 'role' | 'relation-definition'
@@ -163,10 +164,6 @@ const typePriority: readonly ResourceType[] = [
   'space', 'realm', 'concept', 'context', 'character', 'role', 'relation-definition', 'resource',
 ];
 
-export function direction(language: string): 'ltr' | 'rtl' {
-  return RTL.has(language.split('-')[0]!.toLowerCase()) ? 'rtl' : 'ltr';
-}
-
 /** Requested exact tag, then its primary subtag, then English, then the lowest tag. */
 export function selectName(labels: Map<string, string>, language: string | null) {
   const tags = [...labels.keys()].sort();
@@ -174,7 +171,7 @@ export function selectName(labels: Map<string, string>, language: string | null)
     : tags.find(tag => tag.split('-')[0] === language.split('-')[0]));
   const chosen = requested || (labels.has('en') ? 'en' : tags[0]);
   if (!chosen) return null;
-  return { value: labels.get(chosen)!, language: chosen, direction: direction(chosen),
+  return { value: labels.get(chosen)!, language: chosen, direction: direction(chosen, labels.get(chosen)!),
     basis: requested && language ? 'requested' as const : 'fallback' as const };
 }
 

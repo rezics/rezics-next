@@ -6,6 +6,8 @@ import { canonicalLanguage, direction, languageSatisfies, parseLanguage, readerL
 import { languageTag } from '../src/modules/display-language/schema.ts';
 import { readName } from '../src/modules/work/read-contract.ts';
 import { resourceSummary } from '../src/modules/media/summary-contract.ts';
+import { direction as mediaDirection, selectName } from '../src/modules/media/summary.ts';
+import { recordedDisplayText, selectedMetadata } from '../src/modules/work/metadata-read.ts';
 import { contentLanguages, InvalidContentLanguages, originalLanguages, recordedLanguageTag,
   textLanguage } from '../src/modules/release/languages.ts';
 
@@ -22,6 +24,7 @@ const languages = [
   ['und', 'und', null, 'ltr'], ['zxx', 'zxx', null, 'ltr'], ['mul', 'mul', null, 'ltr'],
   ['und-Arab', 'und-Arab', 'Arab', 'rtl'], ['ff-Adlm', 'ff-Adlm', 'Adlm', 'rtl'],
   ['rhg-Rohg', 'rhg-Rohg', 'Rohg', 'rtl'], ['dv', 'dv', 'Thaa', 'rtl'],
+  ['otk-Orkh', 'otk-Orkh', 'Orkh', 'rtl'],
 ] as const;
 
 // RFC 5646 §2.1/§2.2.7 and ECMA-402 IsWellFormedLanguageTag have different private-only syntax.
@@ -47,6 +50,7 @@ test.each([
   ['ar', 'Latin text', 'rtl'], ['pa-Guru', 'پنجابی', 'ltr'], ['und-Arab', 'Latin text', 'rtl'],
   ['und', '١٢٣ … العربية', 'rtl'], ['und', '123 … עברית', 'rtl'],
   ['und', '… 𞤀𞤁', 'rtl'], ['und', '… Latin العربية', 'ltr'], ['und', '… العربية Latin', 'rtl'],
+  ['und', '… 𐰀', 'rtl'],
   ['und', '日本語 العربية', 'ltr'], ['und', '123 🎉', 'ltr'], ['und', '', 'ltr'],
   ['', '… العربية', 'rtl'],
 ] as const)('G-504 shared direction honors script and uses undetermined text letters', (language, text, expected) => {
@@ -54,6 +58,47 @@ test.each([
   for (const requested of [[], [language]]) {
     expect(selectDisplayName(new Map([[language, text || '123']]), requested)?.direction).toBe(expected);
   }
+});
+
+test.each(['Script=Gara', 'Script='])('G-504 language entry imports when the engine rejects %s', async unsupported => {
+  // A fresh process exercises module initialization without altering other tests' RegExp.
+  const entry = new URL('../src/modules/display-language/select.ts', import.meta.url).href;
+  const child = Bun.spawn([process.execPath, '-e', `
+    const NativeRegExp = globalThis.RegExp;
+    let rejected = 0;
+    globalThis.RegExp = class extends NativeRegExp {
+      constructor(pattern, flags) {
+        if (typeof pattern === 'string' && pattern.includes(${JSON.stringify(unsupported)})) {
+          rejected++;
+          throw new SyntaxError('Simulated unsupported Unicode script');
+        }
+        super(pattern, flags);
+      }
+    };
+    const { direction } = await import(${JSON.stringify(entry)});
+    console.log(JSON.stringify({ rejected, directions: [direction('az-Arab'), direction('ku-Latn'),
+      direction('und', 'العربية'), direction('und', 'Latin')] }));
+  `], { stdout: 'pipe', stderr: 'pipe' });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
+  ]);
+  expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: '' });
+  const result = JSON.parse(stdout);
+  expect(result.rejected).toBeGreaterThan(0);
+  expect(result.directions).toEqual(['rtl', 'ltr', unsupported === 'Script=' ? 'ltr' : 'rtl', 'ltr']);
+});
+
+test.each([
+  ['az-Arab', 'آذری', 'rtl'], ['ku-Latn', 'Kurdî', 'ltr'], ['ku', 'Kurdî', 'ltr'],
+  ['und', '١٢٣ … العربية', 'rtl'], ['und', 'Latin العربية', 'ltr'],
+] as const)('G-504 media and Work metadata share direction for %s titles', (language, value, expected) => {
+  expect(mediaDirection).toBe(direction);
+  const name = { value, language, direction: expected };
+  expect(selectName(new Map([[language, value]]), language)).toMatchObject(name);
+  expect(recordedDisplayText({ language, value })).toEqual(name);
+  const metadata = selectedMetadata({ localized: [{ language, title: value, description: value,
+    tagline: value, mainVersionLabel: value }] }, language);
+  for (const selected of Object.values(metadata)) expect(selected).toMatchObject(name);
 });
 
 test('G-504 an undetermined RTL label keeps its language on exact and original fallback paths', () => {
