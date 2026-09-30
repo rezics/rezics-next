@@ -39,6 +39,7 @@ import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
 import { StudioAccess } from './modules/studio/access.ts';
 import { ReaderLibraryStatusStore } from './modules/library/status.ts';
+import { ConsumptionSessionStore } from './modules/session/store.ts';
 import { ReaderLibraryImportStore } from './modules/library-import/reader-import.ts';
 import { ReaderLibraryRatings } from './modules/library/ratings.ts';
 import { ProtectionAdmissionSigner } from './modules/access/protection-admission.ts';
@@ -337,6 +338,7 @@ const app = createMainApp(fuseki, {
   agentHandles: new AgentVanityHandles(pool),
   agentProfiles: new AgentPublicProfiles(pool, environment, media.store),
   libraryStatus: new ReaderLibraryStatusStore(contentPool),
+  sessions: new ConsumptionSessionStore(contentPool, new ReaderLibraryStatusStore(contentPool)),
   libraryImport,
   authorReaders: new AuthorReaders(contentPool, pool),
   workStats: new WorkReaderStats(contentPool, pool),

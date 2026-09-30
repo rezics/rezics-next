@@ -18,13 +18,14 @@ export const resolvedTarget = t.Object({ resource: targetRef, base: targetBase,
 export type ResolvedTarget = Static<typeof resolvedTarget>;
 
 export type Capability = 'review' | 'rating' | 'discussion' | 'collection-member'
-  | 'library-status' | 'progress' | 'continuity' | 'spoiler-boundary' | 'suitability';
+  | 'library-status' | 'progress' | 'continuity' | 'spoiler-boundary' | 'suitability' | 'session';
 const allBases = ['work', 'realization', 'release', 'occurrence', 'resource'] as const;
 export const capabilityBases = {
   review: ['work', 'release'], rating: ['work', 'release'], discussion: allBases,
   'collection-member': allBases, 'library-status': ['work'], progress: ['occurrence'],
   continuity: ['work', 'realization', 'occurrence'], 'spoiler-boundary': ['occurrence'],
   suitability: allBases,
+  session: ['work', 'realization', 'release', 'occurrence'],
 } as const satisfies Record<Capability, readonly Base[]>;
 
 export function capabilityPath(resource: string, capability: Capability): string {

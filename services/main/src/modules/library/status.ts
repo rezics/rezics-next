@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { WorkReadLimit } from '../work/read-session.ts';
 
@@ -10,7 +10,9 @@ export interface StatusState { work: string; status: ReadingStatus | null;
   startedOn: string | null; finishedOn: string | null; version: number; changedAt: string | null }
 export interface StatusCommand { agent: string; work: string; status: ReadingStatus | null;
   /** Omitted dates keep their saved value; null clears only the named field. */
-  startedOn?: string | null; finishedOn?: string | null; expectedVersion: number; idempotencyKey: string }
+  startedOn?: string | null; finishedOn?: string | null; expectedVersion: number; idempotencyKey: string;
+  /** Internal session owner only, within the same Content transaction. */
+  sessionProjection?: string }
 export interface WorkProgress { structure: string; occurrence: string; selectedRevision: string | null;
   completed: boolean; position: string | null; version: number; changedAt: string }
 export class InvalidLibraryStatus extends Error {}
@@ -26,9 +28,9 @@ export interface PrivateImportReview { work: string; text: string; language: str
   spoiler: boolean; version: number; changedAt: string; replayed?: boolean }
 
 const columns = `work, status, started_on::text AS started_on, finished_on::text AS finished_on,
-  version::text AS version, changed_at::text AS changed_at`;
+  version::text AS version, changed_at::text AS changed_at, session_projection`;
 interface Row { work: string; status: ReadingStatus | null; started_on: string | null;
-  finished_on: string | null; version: string; changed_at: string }
+  finished_on: string | null; version: string; changed_at: string; session_projection: string | null }
 const state = (work: string, row?: Row): StatusState => ({ work, status: row?.status ?? null,
   startedOn: row?.started_on ?? null, finishedOn: row?.finished_on ?? null,
   version: Number(row?.version ?? 0), changedAt: row?.changed_at ?? null });
@@ -233,11 +235,11 @@ export class ReaderLibraryStatusStore {
     } finally { client.release(); }
   }
 
-  async batch(agent: string, works: string[]): Promise<StatusState[]> {
+  async batch(agent: string, works: string[], transaction?: PoolClient): Promise<StatusState[]> {
     if (!ID.test(agent) || works.length > 24 || new Set(works).size !== works.length
       || works.some(work => !ID.test(work))) throw new InvalidLibraryStatus('invalid status batch');
     if (!works.length) return [];
-    const rows = await this.pool.query<Row>(`SELECT ${columns} FROM reader.library_status
+    const rows = await (transaction ?? this.pool).query<Row>(`SELECT ${columns} FROM reader.library_status
       WHERE agent = $1 AND work = ANY($2::text[])`, [agent, works]);
     const found = new Map(rows.rows.map(row => [row.work, row]));
     return works.map(work => state(work, found.get(work)));
@@ -317,22 +319,27 @@ export class ReaderLibraryStatusStore {
     return rows.rows.map(row => state(row.work, row));
   }
 
-  async write(input: StatusCommand): Promise<StatusState & { replayed: boolean }> {
+  /** An owner composing this command may supply its Content transaction. It
+   * owns commit/rollback; status validation, CAS and receipts remain here. */
+  async write(input: StatusCommand, transaction?: PoolClient): Promise<StatusState & { replayed: boolean }> {
     if (!ID.test(input.agent) || !ID.test(input.work) || !KEY.test(input.idempotencyKey)
       || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0
       || ![null, 'want-to-read', 'reading', 'read'].includes(input.status)
       || input.startedOn !== undefined && !validDate(input.startedOn)
-      || input.finishedOn !== undefined && !validDate(input.finishedOn)) {
+      || input.finishedOn !== undefined && !validDate(input.finishedOn)
+      || input.sessionProjection !== undefined && (!transaction || !ID.test(input.sessionProjection))) {
       throw new InvalidLibraryStatus('invalid status command');
     }
     // Full-form requests retain the historical bytes so old receipts replay.
     // A keep marker cannot collide with a date or an explicit null (clear).
-    const digest = createHash('sha256').update(JSON.stringify([input.work, input.status,
+    const intent = [input.work, input.status,
       input.startedOn === undefined ? ['keep'] : input.startedOn,
-      input.finishedOn === undefined ? ['keep'] : input.finishedOn, input.expectedVersion])).digest('hex');
-    const client = await this.pool.connect();
+      input.finishedOn === undefined ? ['keep'] : input.finishedOn, input.expectedVersion];
+    if (input.sessionProjection) intent.push(['session', input.sessionProjection]);
+    const digest = createHash('sha256').update(JSON.stringify(intent)).digest('hex');
+    const client = transaction ?? await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      if (!transaction) await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
@@ -346,11 +353,16 @@ export class ReaderLibraryStatusStore {
         if (prior.rows[0].request_digest !== digest || prior.rows[0].result.work !== input.work) {
           throw new LibraryStatusConflict('idempotency key has another status intent');
         }
-        await client.query('COMMIT');
+        if (!transaction) await client.query('COMMIT');
         return { ...prior.rows[0].result, replayed: true };
       }
       const current = await client.query<Row>(`SELECT ${columns} FROM reader.library_status
         WHERE agent = $1 AND work = $2 FOR UPDATE`, [input.agent, input.work]);
+      // Once real attempts exist, this slot is their projection. Historical
+      // standalone statuses keep their original command path and receipts.
+      if (current.rows[0]?.session_projection && !input.sessionProjection) {
+        throw new LibraryStatusConflict('Library status is projected from the latest consumption attempt');
+      }
       const version = Number(current.rows[0]?.version ?? 0);
       if (version !== input.expectedVersion) throw new StaleLibraryStatus('status changed');
       const startedOn = input.startedOn === undefined ? current.rows[0]?.started_on ?? null : input.startedOn;
@@ -360,25 +372,25 @@ export class ReaderLibraryStatusStore {
         throw new InvalidLibraryStatus('invalid reading dates');
       }
       const written = await client.query<Row>(`INSERT INTO reader.library_status
-        (agent, work, status, started_on, finished_on, version)
-        VALUES ($1,$2,$3,$4,$5,$6)
+        (agent, work, status, started_on, finished_on, version, session_projection)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
         ON CONFLICT (agent, work) DO UPDATE SET status = EXCLUDED.status,
           started_on = EXCLUDED.started_on, finished_on = EXCLUDED.finished_on,
-          version = EXCLUDED.version, changed_at = clock_timestamp()
+          version = EXCLUDED.version, session_projection = EXCLUDED.session_projection, changed_at = clock_timestamp()
         RETURNING ${columns}`, [input.agent, input.work, input.status, startedOn,
-        finishedOn, version + 1]);
+        finishedOn, version + 1, input.sessionProjection ?? null]);
       const result = state(input.work, written.rows[0]);
       await client.query(`INSERT INTO reader.library_status_command
         (agent, idempotency_key, request_digest, result) VALUES ($1,$2,$3,$4)`,
       [input.agent, input.idempotencyKey, digest, JSON.stringify(result)]);
-      await client.query('COMMIT');
+      if (!transaction) await client.query('COMMIT');
       return { ...result, replayed: false };
     } catch (error) {
-      await client.query('ROLLBACK');
+      if (!transaction) await client.query('ROLLBACK');
       if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
         throw new StaleLibraryStatus('status changed concurrently');
       }
       throw error;
-    } finally { client.release(); }
+    } finally { if (!transaction) client.release(); }
   }
 }

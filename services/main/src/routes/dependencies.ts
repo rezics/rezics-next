@@ -92,9 +92,11 @@ import type { PrivateContextSelections } from '../modules/context/private-select
 import type { ProfilesAccess } from '../modules/profiles/access.ts';
 import type { ReaderLibraryStatusStore } from '../modules/library/status.ts';
 import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
+import type { ConsumptionSessionStore } from '../modules/session/store.ts';
 
 export interface MainWorkDependencies {
   suitability?: import('../modules/suitability/store.ts').SuitabilityStore;
+  sessions?: ConsumptionSessionStore;
   onboardingPersons?: import('../modules/onboarding/persons.ts').OnboardingPersons;
   alsoEnjoyed?: import('../modules/also-enjoyed/store.ts').AlsoEnjoyedStore;
   serialStats?: import('../modules/work/serial-projection.ts').SerialStatisticsProjection;

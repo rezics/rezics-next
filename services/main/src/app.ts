@@ -21,6 +21,7 @@ import { compositionReadRoutes } from './routes/composition-reads.ts';
 import { collectionRoutes } from './routes/collections.ts';
 import { zoneRoutes } from './routes/zones.ts';
 import { progressRoutes } from './routes/progress.ts';
+import { sessionsRoutes } from './routes/sessions.ts';
 import { contentRoutes } from './routes/content.ts';
 import { contextRoutes } from './routes/contexts.ts';
 import { contributionRoutes } from './routes/contributions.ts';
@@ -149,6 +150,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(suitabilityRoutes(work))
+    .use(sessionsRoutes(work))
     .use(queryRoutes(fuseki, work))
     .use(savedFilterRoutes(work))
     .use(reviewRoutes(work))
