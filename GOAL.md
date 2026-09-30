@@ -105,6 +105,8 @@ Settled by the maintainer after research round R40–R50; the
 44. <a id="decision-44"></a>[Zones are routed sites](docs/product/platform-thesis.md#zones-are-routed-sites).
 45. <a id="decision-45"></a>[Relations in every language](docs/product/platform-thesis.md#relations-in-every-language).
 46. <a id="decision-46"></a>[Success measures and kill criteria](docs/product/goal.md#how-success-is-judged).
+47. <a id="decision-47"></a>[Competitor coverage validates the model](docs/product/platform-thesis.md#competitor-coverage) and orders the next reusable capabilities.
+48. <a id="decision-48"></a>[A thin, neutral wiki toolkit](docs/contracts/information-verification.md#a-big-franchise-wiki-for-every-work); publication policy lives in the API.
 
 Settled research, also adopted on 2026-09-29:
 

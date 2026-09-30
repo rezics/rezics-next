@@ -240,6 +240,47 @@ source snapshot, configure a withheld domain. It passes only if:
 Configuration does not make stewardship, source rights or a new parser free,
 and this test remains unvalidated until it passes.
 
+## Competitor coverage
+
+Maintainer, 2026-09-30: the model is validated by its ability to take on
+competitors' capabilities. The first audit (C1–C6) mapped 723 features of about
+70 products onto this model:
+
+| Cluster | Configuration | New reusable capability | Out of scope |
+| --- | --- | --- | --- |
+| Anime, manga, light novels, visual novels | 90% | 4% | 5% |
+| Wikis, communities and trackers | 79% | 19% | 2% |
+| Reading and serial fiction | 78% | 15% | 7% |
+| Games, mods and software | 76% | 10% | 14% |
+| AI prompts, images and models | 63% | 18% | 19% |
+| Creators, commerce and events | 57% | 17% | 26% |
+| **All** | **74%** | **14%** | **12%** |
+
+Features count equally, so these shares measure expressibility, not demand,
+revenue or effort. "Configuration" means the target model; today almost none of
+it is configuration-only, because the gaps in the build order above (closed
+types, Work-only capabilities, Zones without routes, no geography) still stand.
+
+The 102 missing features reduce to about ten reusable capabilities, which is
+the evidence for one backend. They join the catalogue in this order:
+**derived statistics** (aggregates, cohorts, year-in-review, audience
+analytics; needed in all six clusters), **transparent ranking with integrity**
+(activity rankings and manipulation resistance before any personalization) and
+**bounded automation** (event-condition-action rules for onboarding and
+moderation) first; then **challenges and competitions**, **activity
+ingestion** (imports and scrobbling with consent), **invitations and RSVP**,
+**namespace ownership verification** and, after commerce qualifies, **paid
+access and checkout rules**. Content identification (image similarity,
+fingerprints, file recognition) runs in clients or external tools; the server
+keeps confidence and abstention, never automatic merges.
+
+Out of scope are hosted generation and inference, live voice and streaming,
+memberships and tips, open marketplaces, physical goods, ticket settlement,
+adult-content operations and artifact CDNs. These prevent full replacement of
+products such as Patreon, Discogs, DLsite or OpenArt, but not the goal. The
+exception is distribution, which is in scope: metadata and outbound links do not
+complete it.
+
 ## First manifests and proof
 
 Settled research adoption, 2026-09-29, extended 2026-09-30. These are engine

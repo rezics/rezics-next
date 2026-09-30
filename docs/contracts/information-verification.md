@@ -89,24 +89,47 @@ Maintainer, 2026-09-30: building the wiki is one action, and the wiki is the
 flagship; the [goal](../product/goal.md#wiki-the-flagship) describes the flow and
 the wiki+ positioning. The rules it relies on:
 
-- **Holder-provided compute.** An independent toolkit in its own repository,
-  licensed Apache-2.0 (REZICS itself stays AGPL-3.0-only), runs on the holder's
-  machine as a CLI, an MCP server and agent skills, and submits through the
-  [open contribution protocol](skills-and-prompts.md#open-agent-contribution-protocol).
-  REZICS supplies protocol, evidence and review; the holder's agent extracts.
+- **A thin, neutral toolkit; the platform does the work.** Maintainer,
+  2026-09-30. Three layers, heaviest first: REZICS's API and remote MCP server
+  (evidence, candidate lookup, proposal bundles, publication, status, and every
+  platform rule such as schema, quotation limits and idempotency); an agent
+  skill following the [Agent Skills](https://agentskills.io/specification)
+  specification that teaches any agent to segment, extract atomic evidenced
+  claims, check for duplicates and submit deltas; and a small package for what
+  models do unreliably, namely exact locators and plain-text conversion through
+  existing libraries. Other formats come from existing projects or community
+  modules. The package is published from this repository as an independent
+  Apache-2.0 package that imports no AGPL code; the protocol schemas it uses are
+  published under Apache-2.0 too. It works with any compatible server, needs
+  no REZICS account, sends no telemetry and fetches nothing on its own.
+- **No judgement, no circumvention.** The toolkit does not investigate where
+  input came from or whether it was once encrypted; it contains no decryption,
+  key recovery, licence or disc-check bypass or protected-player hooks, and it
+  never falls back to such tools, so protected input simply fails to parse. Its
+  releases and documentation never ship, curate or recommend circumvention
+  plugins or bypass recipes, and examples use public-domain, own or licensed
+  works. This follows the anti-trafficking rules of
+  [17 USC §1201](https://www.copyright.gov/title17/92chap12.html#1201), Japan's
+  Copyright Act Article 120-2 and InfoSoc Article 6, and the inducement line in
+  [Grokster](https://www.law.cornell.edu/supremecourt/text/04-480) and
+  [Cox v. Sony (2026)](https://www.supremecourt.gov/opinions/25pdf/24-171_bq7d.pdf).
+  Neutrality is a separation of responsibilities, not a copyright guarantee,
+  and REZICS never presents it as deliberate ignorance. The first version reads
+  TXT, EPUB 2/3 and literal Ren'Py scripts and never executes embedded script
+  code.
 - **REZICS never receives the full text.** A cloud agent sends what it reads to
-  its model provider, which is the holder's choice; a strict mode runs a local
-  model (for example through llama.cpp) with a network-less corpus worker and a
-  separate uploader that sends only approved records. A proposal carries
+  its model provider, which is the holder's choice; a local model keeps it on
+  the machine. REZICS-operated agents never receive holders' corpora, retrieval
+  access or full-text embeddings, only approved records. A proposal carries
   characters, aliases, relationships, events and places, each with a locator
-  and a short quotation under a per-source budget, so that quotations cannot
-  rebuild the text.
-- **No DRM circumvention.** The toolkit reads text files, EPUB and authorized or
-  unprotected script formats, and stops on unknown protection, key recovery or
-  licence checks. The first version reads TXT, EPUB 2/3 and literal Ren'Py
-  scripts; KiriKiri/TyranoScript and NScripter text follow, and compiled formats
-  only with demonstrated demand and authorized fixtures. It never executes
-  embedded script code.
+  and a short quotation.
+- **Publication policy lives in the API.** Fictional details are not presumed
+  free facts ([Castle Rock](https://law.justia.com/cases/federal/appellate-courts/F3/150/132/571410/),
+  [Warner Bros. v. RDR Books](https://www.copyright.gov/fair-use/summaries/warnerbros-rdrbooks-sdny2008.pdf)),
+  so Main enforces versioned per-passage and cumulative per-source quotation
+  budgets across accounts, translations and Zones, and review watches close
+  paraphrase and cumulative story coverage. Rights and removal decisions follow
+  records into every Zone, search result, history and export.
 - **Verifiable locators.** TXT uses a representation hash and original byte
   range; EPUB uses a range [EPUB CFI](https://idpf.org/epub/linking/cfi/) with a
   quote fallback; visual-novel scripts use script hash, label and utterance

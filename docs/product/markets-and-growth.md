@@ -41,6 +41,20 @@ product boundaries, and every launch reuses the same identities and
 capabilities. Open light novels and visual novels as two views over the same
 catalogue and library, with their franchise wikis, after the shared engine and
 complete journeys qualify.
+
+The [competitor audit](platform-thesis.md#competitor-coverage) names whom to
+recruit first, as hypotheses: NovelUpdates and MangaUpdates readers tracking
+translated editions; VNDB users who need continuity beyond VNs; Backloggd users
+who also track VNs and books; former TV Time users holding exports; small
+franchise wikis leaving Fandom and editors starting new rights-cleared wikis;
+small Royal Road and itch.io VN creator communities; and AnimeCons users for the
+first non-Work proof. Strong incumbents (Hugging Face, Arena, VNDB, Bangumi,
+MyAnimeList, AniList) are benchmarks and sources, not targets, and their data
+terms decide what can be imported: AniList restricts competitors, Moegirlpedia
+and Anitabi are non-commercial, and VNDB's API is non-commercial while its dump
+is ODbL. REZICS's difference is not links between adaptations, which Bangumi
+already has, but one identity, editions, personal state, community
+interpretation, many languages and agent access through the API.
 Then consider science-fiction/fantasy bibliography and interactive fiction.
 A narrowly curated skills/MCP workflow pilot is fifth and conditional on
 maintainers committing to updates; general AI-directory acquisition stays deferred.

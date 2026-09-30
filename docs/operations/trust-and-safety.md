@@ -65,6 +65,15 @@ carries evidence and effects; these are operating responsibilities:
   renew the designation; the [Copyright Office](https://www.copyright.gov/dmca-directory/faq.html)
   lists a $6 fee and three-year renewal. Registration alone does not establish
   [Section 512](https://www.copyright.gov/512/) eligibility.
+- Copyright notices reach the platform, not the neutral wiki toolkit: publish
+  the designated agent, restrict expeditiously, handle counter-notices and a
+  repeat-infringer policy, and enforce decisions across graph reads, history,
+  search, caches, exports and every Zone. The report route must accept notices
+  without an account; today it requires authentication. EU notice-and-action
+  under the DSA applies from the first EU user, and DSM Article 17's
+  new-service regime still requires authorization efforts and notice-based
+  removal. Credits naming real people (staff, voice actors) need a privacy
+  notice, correction and removal route under GDPR, APPI, PIPA and PDPA.
 - Give reasons for enforcement and accessible appeals, retain case
   correspondence and record reversals. Adapt
   [GitHub's CC0 policies](https://github.com/github/site-policy) to actual
