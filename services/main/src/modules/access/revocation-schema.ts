@@ -3,13 +3,14 @@
 
 export const REVOCATION_AFFECTED_WORK_LIMIT = 256;
 
-export type RevocationTargetKind = 'representation' | 'permission_grant'
+export type RevocationTargetKind = 'representation' | 'representation_edge' | 'permission_grant'
   | 'principal_permission_grant' | 'group_permission_grant' | 'role_binding'
   | 'private_role_binding';
 
 export type RevocationRow = {
   id: string; principal_id: string; issuer_subject: string; mode: 'ordinary' | 'strong';
   target_kind: RevocationTargetKind; representation_id: string | null;
+  representation_edge_id: string | null;
   permission_grant_id: string | null; principal_permission_grant_id: string | null;
   group_permission_grant_id: string | null; role_binding_id: string | null;
   private_role_binding_id: string | null; target_generation: string; scope_id: string;

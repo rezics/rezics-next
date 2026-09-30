@@ -1,7 +1,9 @@
 // Shared Access transaction steps for the policy, interaction and revocation owners.
 import type { Pool, PoolClient } from 'pg';
+import { randomUUID } from 'node:crypto';
 import type { VerifiedPrincipal } from './admission.ts';
 import { normalizePolicyError, PolicyDenied, PolicyUnavailable } from './policy-errors.ts';
+import { REVOCATION_AFFECTED_WORK_LIMIT } from './revocation-schema.ts';
 
 export type Isolation = 'read committed' | 'repeatable read';
 
@@ -48,13 +50,21 @@ export async function requireActivePrincipal(client: PoolClient,
 }
 
 /** The authenticated principal's current mandate to act as `subject` for `action`. */
-export async function requireMandate(client: PoolClient, principalId: string, subject: string,
-  action: string): Promise<{ id: string; generation: string }> {
-  const mandate = await client.query<{ id: string; generation: string }>(`SELECT r.id, r.generation
+export async function requireMandate(
+  client: PoolClient,
+  principalId: string,
+  subject: string,
+  action: string,
+): Promise<{ id: string; generation: string }> {
+  const mandate = await client.query<{ id: string; generation: string }>(
+    `SELECT r.id, r.generation
     FROM access.representation r JOIN access.authority_subject s ON s.id = r.subject_id
-    WHERE r.principal_id = $1 AND r.subject_id = $2 AND r.action = $3 AND r.active
+    WHERE r.principal_id = $1 AND r.subject_id = $2
+      AND (r.action = $3 OR $3 = 'access.revoke' AND r.action = 'agent.control') AND r.active
       AND r.valid_until > clock_timestamp() AND s.active
-    ORDER BY r.id LIMIT 1 FOR SHARE OF r, s`, [principalId, subject, action]);
+    ORDER BY r.id LIMIT 1 FOR SHARE OF r, s`,
+    [principalId, subject, action],
+  );
   if (!mandate.rows[0]) throw new PolicyDenied('representation is missing');
   return mandate.rows[0];
 }
@@ -82,4 +92,116 @@ export async function advanceScopeEpoch(client: PoolClient, scope: string): Prom
   return (await client.query<{ authority_epoch: string }>(`UPDATE access.scope_gate
     SET authority_epoch = authority_epoch + 1 WHERE id = $1 RETURNING authority_epoch`,
   [scope])).rows[0]!.authority_epoch;
+}
+
+/** Reuse the strong-revocation drain after a controller/invitation owner has
+ * revoked its source in this transaction. Cost: three indexed source probes,
+ * at most 256 work rows, one immutable drain. Never acknowledge a truncated set. */
+export async function drainRevokedAuthority(
+  client: PoolClient,
+  principalId: string,
+  issuer: string,
+  kind: 'representation' | 'representation_edge' | 'permission_grant',
+  id: string,
+  generation: string,
+  scope: string,
+): Promise<string> {
+  const admissionColumn =
+    kind === 'representation' ? 'represented_representation_id' : 'represented_grant_id';
+  const leaseColumn = kind === 'representation' ? 'representation_id' : 'grant_id';
+  const work: {
+    admission_id: string | null;
+    search_read_lease_id: string | null;
+    download_read_lease_id: string | null;
+  }[] = [];
+  if (kind === 'representation_edge') {
+    const admissions = (
+      await client.query<{ id: string }>(
+        `SELECT DISTINCT a.id FROM access.representation_path_step s
+      JOIN access.admission_obligation o ON o.path_id = s.path_id JOIN access.admission a ON a.id = o.admission_id
+      WHERE s.edge_id = $1 AND a.state <> 'sealed' ORDER BY a.id LIMIT $2`,
+        [id, REVOCATION_AFFECTED_WORK_LIMIT + 1],
+      )
+    ).rows;
+    for (const admission of admissions)
+      work.push({
+        admission_id: admission.id,
+        search_read_lease_id: null,
+        download_read_lease_id: null,
+      });
+    if (work.length > REVOCATION_AFFECTED_WORK_LIMIT)
+      throw new PolicyUnavailable('strong revocation exceeds its drain budget');
+  }
+  for (const [table, column, field, state] of [
+    ['admission', admissionColumn, 'admission_id', "state <> 'sealed'"],
+    [
+      'search_read_lease',
+      leaseColumn,
+      'search_read_lease_id',
+      "state IN ('admitted','delivering')",
+    ],
+    [
+      'download_read_lease',
+      leaseColumn,
+      'download_read_lease_id',
+      "state IN ('admitted','delivering')",
+    ],
+  ] as const) {
+    if (kind === 'representation_edge') continue;
+    const rows = (
+      await client.query<{ id: string }>(
+        `SELECT id FROM access.${table}
+      WHERE ${column} = $1 AND ${state} ORDER BY id LIMIT $2`,
+        [id, REVOCATION_AFFECTED_WORK_LIMIT + 1],
+      )
+    ).rows;
+    for (const row of rows)
+      work.push({
+        admission_id: null,
+        search_read_lease_id: null,
+        download_read_lease_id: null,
+        [field]: row.id,
+      });
+    if (work.length > REVOCATION_AFFECTED_WORK_LIMIT)
+      throw new PolicyUnavailable('strong revocation exceeds its drain budget');
+  }
+  const revocationId = randomUUID();
+  await client.query(
+    `INSERT INTO access.revocation (id,principal_id,issuer_subject,mode,
+    target_kind,${kind}_id,target_generation,scope_id,fence_authority_epoch,recovery_generation,
+    affected_work,state,completed_at)
+    SELECT $1,$2,$3,'strong',$4,$5,$6,$7,g.authority_epoch,f.generation,$8,$9,
+      CASE WHEN $9 = 'completed' THEN clock_timestamp() END
+    FROM access.scope_gate g CROSS JOIN access.recovery_fence f WHERE g.id = $7 AND f.id`,
+    [
+      revocationId,
+      principalId,
+      issuer,
+      kind,
+      id,
+      generation,
+      scope,
+      work.length,
+      work.length ? 'draining' : 'completed',
+    ],
+  );
+  if (work.length)
+    await client.query(
+      `INSERT INTO access.revocation_affected_work
+    (revocation_id,ordinal,admission_id,search_read_lease_id,download_read_lease_id)
+    SELECT $1,w.ordinal,w.admission_id,w.search_read_lease_id,w.download_read_lease_id
+    FROM jsonb_to_recordset($2::jsonb) AS w(ordinal smallint,admission_id uuid,
+      search_read_lease_id uuid,download_read_lease_id uuid)`,
+      [revocationId, JSON.stringify(work.map((row, index) => ({ ordinal: index + 1, ...row })))],
+    );
+  for (const [table, field] of [
+    ['search_read_lease', 'search_read_lease_id'],
+    ['download_read_lease', 'download_read_lease_id'],
+  ] as const)
+    await client.query(
+      `UPDATE access.${table}
+      SET state = 'aborted',finished_at = clock_timestamp() WHERE id = ANY($1::uuid[]) AND state = 'admitted'`,
+      [work.flatMap((row) => (row[field] ? [row[field]] : []))],
+    );
+  return revocationId;
 }

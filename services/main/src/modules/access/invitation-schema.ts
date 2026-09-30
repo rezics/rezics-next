@@ -5,6 +5,15 @@ import { declareTable, type RowOf } from './topology-schema.ts';
  * mandate for that Agent can accept, and the grant goes to the Agent. */
 export const ACCEPT_ACTION = 'access.invitation.accept';
 export type InvitationIssuerLifetime = 'institutional' | 'operator-dependent';
+export type InvitationOffer = 'control' | 'represent' | 'manage';
+/** Bounded writes and keyset reads; each offered action creates one existing
+ * edge or grant. Controller invitations create one direct mandate. */
+export const AGENT_ACCESS_COST = {
+  page: 50,
+  actions: 16,
+  statementTimeoutMs: 5000,
+  lockTimeoutMs: 2000,
+} as const;
 
 export const agentInvitationTable = declareTable('agent_invitation', {
   id: ['uuid', 'not null'],
@@ -12,14 +21,16 @@ export const agentInvitationTable = declareTable('agent_invitation', {
   recipient_subject: ['text', 'not null'],
   scope_id: ['text', 'not null'],
   action: ['text', 'not null'],
+  offer: ['text', 'not null'],
+  actions: ['_text', 'not null'],
   grant_valid_until: ['timestamptz', 'not null'],
   issuer_lifetime: ['text', 'not null'],
   issued_by_principal: ['uuid', 'not null'],
   issuer_representation_id: ['uuid', 'not null'],
   issuer_representation_generation: ['int8', 'not null'],
   issuer_representation_action: ['text', 'not null'],
-  ceiling_grant_id: ['uuid', 'not null'],
-  ceiling_grant_generation: ['int8', 'not null'],
+  ceiling_grant_id: ['uuid', 'null'],
+  ceiling_grant_generation: ['int8', 'null'],
   ceiling_scope_id: ['text', 'not null'],
   ceiling_action: ['text', 'not null'],
   expires_at: ['timestamptz', 'not null'],
@@ -38,7 +49,9 @@ export const agentInvitationAcceptanceTable = declareTable('agent_invitation_acc
   acceptor_representation_generation: ['int8', 'not null'],
   acceptor_representation_action: ['text', 'not null'],
   recipient_generation: ['int8', 'not null'],
-  grant_id: ['uuid', 'not null'],
+  grant_id: ['uuid', 'null'],
+  edge_id: ['uuid', 'null'],
+  controller_representation_id: ['uuid', 'null'],
   accepted_at: ['timestamptz', 'not null'],
 });
 export type AgentInvitationAcceptanceRow = RowOf<typeof agentInvitationAcceptanceTable>;

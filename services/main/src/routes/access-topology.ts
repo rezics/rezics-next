@@ -3,6 +3,10 @@ import { AccountAssertionDenied } from '../modules/account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import type { AuthorityControl } from '../modules/access/grants.ts';
 import { groupChangeIntentDigest } from '../modules/access/group-intent.ts';
+import { InvitationExpired } from '../modules/access/invitation.ts';
+import { PolicyUnavailable } from '../modules/access/policy-errors.ts';
+import { AGENT_ACCESS_COST } from '../modules/access/invitation-schema.ts';
+import { problemResult } from '../api-contract.ts';
 import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, ControlUnavailable,
   type ControlReceipt } from '../modules/access/topology-control.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -22,6 +26,13 @@ const noStore = { headers: { 'cache-control': 'no-store' } };
 export const openApiOperations = {
   '/v1/access/delegated-grant-changes': { post: { bearer: true, idempotencyKey: true } },
   '/v1/me/authority-admissions/{admissionId}/consumption': { get: { bearer: true } },
+  '/v1/agents/{id}/access': { get: { bearer: true } },
+  '/v1/me/agent-invitations': { get: { bearer: true } },
+  '/v1/agents/invitations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/agents/invitations/{invitationId}': { get: { bearer: true } },
+  '/v1/agents/invitation-acceptances': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/agents/invitation-revocations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/agents/controller-changes': { post: { bearer: true, idempotencyKey: true } },
 };
 
 const edgeChangeBody = t.Union([
@@ -56,6 +67,14 @@ const protectBody = t.Object({ profile: t.Literal('access-protected-set-v1'),
   issuerSubject: groupAgent, approvalSubject: groupAgent,
   requiredApprovals: t.Integer({ minimum: 1, maximum: 8 }) }, { additionalProperties: false });
 const proposalChange = t.Union([
+  t.Object(
+    {
+      kind: t.Literal('agent-controller'),
+      recipientSubject: groupAgent,
+      representationId: groupUuid,
+    },
+    { additionalProperties: false },
+  ),
   t.Object({ kind: t.Literal('group-member'), groupId: groupUuid, memberId: groupUuid,
     agentSubject: groupAgent }, { additionalProperties: false }),
   t.Object({ kind: t.Literal('group-parent'), groupId: groupUuid, parentId: t.Nullable(groupUuid),
@@ -102,30 +121,66 @@ const controlBody = t.Object({ profile: t.Literal('access-agent-control-v1'),
   recoveryDelaySeconds: t.Integer({ minimum: 0, maximum: 2_592_000 }),
   minControllers: t.Integer({ minimum: 1, maximum: 16 }),
   maxControllers: t.Integer({ minimum: 1, maximum: 16 }) }, { additionalProperties: false });
-const controllerBody = t.Object({ profile: t.Literal('access-agent-controller-change-v1'),
-  action: t.Literal('remove'), subjectId: groupAgent, representationId: groupUuid,
-  expectedGeneration: groupGeneration }, { additionalProperties: false });
+const controllerBody = t.Object(
+  {
+    profile: t.Literal('access-agent-controller-change-v1'),
+    action: t.Literal('remove'),
+    subjectId: groupAgent,
+    representationId: groupUuid,
+    expectedGeneration: groupGeneration,
+    expectedAuthorityEpoch: t.Optional(groupGeneration),
+  },
+  { additionalProperties: false },
+);
 const recoveryBody = t.Object({ profile: t.Literal('access-agent-recovery-v1'),
   recoveryId: groupUuid, subjectId: groupAgent,
   reason: t.Union([t.Literal('last-controller-lost'), t.Literal('controller-compromised')]),
   expectedControlGeneration: groupGeneration }, { additionalProperties: false });
-const invitationBody = t.Object({ profile: t.Literal('access-agent-invitation-v1'),
-  invitationId: groupUuid, issuerSubject: groupAgent, recipientSubject: groupAgent,
-  grantValidUntil: instant,
-  issuerLifetime: t.Union([t.Literal('institutional'), t.Literal('operator-dependent')]),
-  expectedAuthorityEpoch: groupGeneration }, { additionalProperties: false });
-const acceptanceBody = t.Object({ profile: t.Literal('access-agent-invitation-acceptance-v1'),
-  invitationId: groupUuid, grantId: groupUuid }, { additionalProperties: false });
-const invitationRevocationBody = t.Object({
-  profile: t.Literal('access-agent-invitation-revocation-v1'), invitationId: groupUuid },
-{ additionalProperties: false });
+const invitationBody = t.Object(
+  {
+    profile: t.Literal('access-agent-invitation-v1'),
+    invitationId: groupUuid,
+    issuerSubject: groupAgent,
+    recipientSubject: groupAgent,
+    grantValidUntil: t.Optional(instant),
+    offer: t.Optional(t.Union([t.Literal('control'), t.Literal('represent'), t.Literal('manage')])),
+    actions: t.Optional(
+      t.Array(action, { minItems: 1, maxItems: AGENT_ACCESS_COST.actions, uniqueItems: true }),
+    ),
+    scopeId: t.Optional(t.String({ minLength: 1, maxLength: 256 })),
+    expiresAt: t.Optional(instant),
+    issuerLifetime: t.Union([t.Literal('institutional'), t.Literal('operator-dependent')]),
+    expectedAuthorityEpoch: groupGeneration,
+  },
+  { additionalProperties: false },
+);
+const acceptanceBody = t.Object(
+  {
+    profile: t.Literal('access-agent-invitation-acceptance-v1'),
+    invitationId: groupUuid,
+    grantId: t.Optional(groupUuid),
+    edgeId: t.Optional(groupUuid),
+    representationId: t.Optional(groupUuid),
+    expectedAuthorityEpoch: t.Optional(groupGeneration),
+  },
+  { additionalProperties: false },
+);
+const invitationRevocationBody = t.Object(
+  {
+    profile: t.Literal('access-agent-invitation-revocation-v1'),
+    invitationId: groupUuid,
+    expectedAuthorityEpoch: t.Optional(groupGeneration),
+  },
+  { additionalProperties: false },
+);
 
 function controlError(error: unknown): Response {
+  if (error instanceof InvitationExpired) return problem(410, 'invitation_expired', error.message);
   if (error instanceof ControlInvalid) return problem(400, 'invalid_request', error.message);
   if (error instanceof ControlDenied) return problem(403, 'authority_denied', error.message);
   if (error instanceof ControlStale) return problem(409, 'authority_stale', error.message);
   if (error instanceof ControlConflict) return problem(409, 'authority_conflict', error.message);
-  if (error instanceof ControlUnavailable) {
+  if (error instanceof ControlUnavailable || error instanceof PolicyUnavailable) {
     return problem(503, 'authority_unavailable', error.message, { 'retry-after': '1' });
   }
   return commandError(error);
@@ -289,22 +344,80 @@ export function accessTopologyRoutes(work: MainWorkDependencies) {
       body: recoveryBody, response: { 200: result, ...writeProblems },
     }, write(recoveryBody, 'access:represent', (principal, receipt, body) =>
       owner().agentControl.requestRecovery(principal, receipt, body)))
-    .post('/v1/agents/invitations', {
-      body: invitationBody, response: { 200: result, ...writeProblems },
-    }, write(invitationBody, 'access:grant', (principal, receipt, body) =>
-      owner().invitations.issue(principal, receipt,
-        { ...body, grantValidUntil: new Date(body.grantValidUntil) })))
-    .get('/v1/agents/invitations/:invitationId', {
-      params: t.Object({ invitationId: groupUuid }),
-      response: { 200: result, ...authorizedReadProblems },
-    }, async ({ request, params }) => read(verifyAny(request, ['access:grant', 'access:represent'])
-      .then(principal => owner().invitations.read(principal, params.invitationId))))
-    .post('/v1/agents/invitation-acceptances', {
-      body: acceptanceBody, response: { 200: result, ...writeProblems },
-    }, write(acceptanceBody, 'access:represent', (principal, receipt, body) =>
-      owner().invitations.accept(principal, receipt, body)))
-    .post('/v1/agents/invitation-revocations', {
-      body: invitationRevocationBody, response: { 200: result, ...writeProblems },
-    }, write(invitationRevocationBody, 'access:grant', (principal, receipt, body) =>
-      owner().invitations.revoke(principal, receipt, body.invitationId)));
+    .post(
+      '/v1/agents/invitations',
+      {
+        body: invitationBody,
+        response: { 200: result, ...writeProblems },
+      },
+      write(invitationBody, 'access:grant', (principal, receipt, body) =>
+      owner().invitations.issue(principal, receipt, {
+          ...body,
+          grantValidUntil: body.grantValidUntil ? new Date(body.grantValidUntil) : undefined,
+          expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+        }),
+      ),
+    )
+    .get(
+      '/v1/agents/invitations/:invitationId',
+      {
+        params: t.Object({ invitationId: groupUuid }),
+        response: { 200: result, ...authorizedReadProblems },
+      },
+      async ({ request, params }) => read(verifyAny(request, ['access:grant', 'access:represent'])
+      .then(principal => owner().invitations.read(principal, params.invitationId))),
+    )
+    .post(
+      '/v1/agents/invitation-acceptances',
+      {
+        body: acceptanceBody,
+        response: { 200: result, ...writeProblems, 410: problemResult(410) },
+      }, write(acceptanceBody, 'access:represent', (principal, receipt, body) =>
+      owner().invitations.accept(principal, receipt, body)),
+    )
+    .post(
+      '/v1/agents/invitation-revocations',
+      {
+        body: invitationRevocationBody,
+        response: { 200: result, ...writeProblems },
+      },
+      write(invitationRevocationBody, 'access:grant', (principal, receipt, body) =>
+      owner().invitations.revoke(
+          principal,
+          receipt,
+          body.invitationId,
+          body.expectedAuthorityEpoch,
+        ),
+      ),
+    )
+    .get(
+      '/v1/agents/:id/access',
+      {
+        params: t.Object({ id: groupUuid }),
+        query: t.Object({ after: t.Optional(groupUuid) }),
+        response: { 200: result, ...authorizedReadProblems },
+      },
+      async ({ request, params, query }) =>
+        read(work.account.verify(request, ['access:manage'])
+            .then((principal) =>
+      owner().invitations.access(
+                principal,
+                `https://rezics.com/id/${params.id}`,
+                query.after,
+              ),
+            ),
+        ),
+    )
+    .get(
+      '/v1/me/agent-invitations',
+      {
+        query: t.Object({ after: t.Optional(groupUuid) }),
+        response: { 200: result, ...authorizedReadProblems },
+      },
+      async ({ request, query }) =>
+        read(work.account.verify(request, ['access:represent'])
+            .then((principal) =>
+      owner().invitations.addressed(principal, query.after)),
+        ),
+    );
 }

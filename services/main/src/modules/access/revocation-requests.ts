@@ -48,7 +48,7 @@ async function pendingWork(client: PoolClient, revocationId: string): Promise<nu
 }
 
 function view(row: RevocationRow, pending: number): RevocationView {
-  const id = row.permission_grant_id ?? row.representation_id ?? '';
+  const id = row.permission_grant_id ?? row.representation_id ?? row.representation_edge_id ?? '';
   return { revocationId: row.id, mode: row.mode, state: row.state, scopeId: row.scope_id,
     target: { kind: row.target_kind, id, generation: row.target_generation },
     fenceAuthorityEpoch: row.fence_authority_epoch, affectedWork: row.affected_work, pending };
@@ -155,17 +155,24 @@ export class AccessRevocations {
   }
 
   /** Completion is acknowledged only when the fixed drain list is terminal. */
-  async read(principal: VerifiedPrincipal, issuerSubject: string, revocationId: string): Promise<RevocationView> {
+  async read(
+    principal: VerifiedPrincipal,
+    issuerSubject: string,
+    revocationId: string,
+  ): Promise<RevocationView> {
     if (!agentPattern.test(issuerSubject) || !uuidPattern.test(revocationId)) {
       throw new PolicyInvalid('invalid revocation read');
     }
-    return inAccessTransaction(this.pool, 'read committed', async client => {
+    return inAccessTransaction(this.pool, 'read committed', async (client) => {
       await requireRecoveryOpen(client, true);
       const identity = await requireActivePrincipal(client, principal);
-      await requireMandate(client, identity.id, issuerSubject, REVOKE_ACTION);
       let row = (await client.query<RevocationRow>(`SELECT * FROM access.revocation
         WHERE id = $1 AND issuer_subject = $2 FOR UPDATE`, [revocationId, issuerSubject])).rows[0];
       if (!row) throw new PolicyDenied('revocation is unavailable to issuer');
+      // A person who just left can still observe their own fixed drain. Other
+      // callers need this exact Agent's current revocation/controller mandate.
+      if (row.principal_id !== identity.id)
+        await requireMandate(client, identity.id, issuerSubject, REVOKE_ACTION);
       const pending = await pendingWork(client, row.id);
       if (row.state === 'draining' && pending === 0) {
         row = (await client.query<RevocationRow>(`UPDATE access.revocation SET state = 'completed',

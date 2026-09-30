@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { groupChangeIntentDigest } from './group-intent.ts';
-import { applyAgentRecovery } from './agent-control.ts';
+import { applyAgentController, applyAgentRecovery } from './agent-control.ts';
 import { type ProtectedChangeKind, MAX_PROTECTED_APPROVALS } from './protected-set-schema.ts';
 import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, type ControlReceipt,
   WORK_SCOPE, agentPattern, bumpEpoch, controlTransaction, generationPattern,
@@ -22,6 +22,7 @@ const PROPOSAL_LIFETIME_MS = 24 * 60 * 60_000;
 const MAX_REBINDS = 256;
 
 export type ProposalInput =
+  | { kind: 'agent-controller'; recipientSubject: string; representationId: string }
   | { kind: 'group-member'; groupId: string; memberId: string; agentSubject: string }
   | { kind: 'group-parent'; groupId: string; parentId: string | null;
     expectedObjectGeneration: string }
@@ -135,9 +136,43 @@ export class AccessProtectedChanges {
   }
 
   /** Validates the requester's authority and resulting ceiling for one change. */
-  private async stage(client: PoolClient, principalId: string, issuer: string,
-    input: ProposalInput): Promise<Staged> {
+  private async stage(
+    client: PoolClient,
+    principalId: string,
+    issuer: string,
+    input: ProposalInput,
+  ): Promise<Staged> {
     switch (input.kind) {
+      case 'agent-controller': {
+        if (
+          !agentPattern.test(input.recipientSubject) ||
+          !idPattern.test(input.representationId) ||
+          input.recipientSubject === issuer
+        )
+          throw new ControlInvalid('invalid controller proposal');
+        await requireMandate(client, principalId, issuer, 'agent.control');
+        const recipient = await client.query(
+          `SELECT 1 FROM access.agent_provision
+        WHERE agent_id = $1 AND agent_kind = 'person' AND state = 'active'`,
+          [input.recipientSubject],
+        );
+        if (!recipient.rowCount)
+          throw new ControlDenied('controller acceptance needs a Person Agent');
+        return {
+          kind: input.kind,
+          targetObject: null,
+          scoped: true,
+          objectGeneration: await requireAgent(client, issuer),
+          ceiling: ['agent.control'],
+          approvalSubject: input.recipientSubject,
+          required: 1,
+          ceilingUntil: null,
+          change: {
+            recipientSubject: input.recipientSubject,
+            representationId: input.representationId,
+          },
+        };
+      }
     case 'group-member': {
       await requireMandate(client, principalId, issuer, GROUP_MANAGE);
       await requireCeiling(client, issuer, GROUP_MANAGE);
@@ -344,11 +379,18 @@ export class AccessProtectedChanges {
   /** Readable by the requester or a representative of the approval subject. */
   async read(principal: VerifiedPrincipal, proposalId: string): Promise<ProposalView> {
     if (!idPattern.test(proposalId)) throw new ControlInvalid('invalid proposal read');
-    return controlTransaction(this.pool, async client => {
+    return controlTransaction(this.pool, async (client) => {
       const actor = await requirePrincipal(client, principal);
       const row = await this.proposal(client, proposalId);
-      if (row.requested_by !== actor.id
-        && !await mandateFor(client, actor.id, row.approval_subject, APPROVE)) {
+      if (
+        row.requested_by !== actor.id &&
+        !(await mandateFor(
+          client,
+          actor.id,
+          row.approval_subject,
+          row.kind === 'agent-controller' ? 'agent.control' : APPROVE,
+        ))
+      ) {
         throw new ControlDenied('proposal is unavailable');
       }
       return this.view(client, proposalId);
@@ -357,8 +399,13 @@ export class AccessProtectedChanges {
 
   /** The approval subject's own approval grant, plus the assignment ceiling
    * for any work.create authority the change confers. */
-  private async approverAuthority(client: PoolClient, row: ProposalRow,
-    approverId: string): Promise<{ id: string; generation: string }> {
+  private async approverAuthority(
+    client: PoolClient,
+    row: ProposalRow,
+    approverId: string,
+  ): Promise<{ id: string; generation: string }> {
+    if (row.kind === 'agent-controller')
+      return requireMandate(client, approverId, row.approval_subject, 'agent.control');
     const mandate = await requireMandate(client, approverId, row.approval_subject, APPROVE);
     await requireCeiling(client, row.approval_subject, APPROVE);
     const until = row.staged_change.ceilingUntil;
@@ -375,19 +422,32 @@ export class AccessProtectedChanges {
     return mandate;
   }
 
-  async approve(principal: VerifiedPrincipal, receipt: ControlReceipt, input: {
-    proposalId: string; approverSubject: string; changeDigest: string }):
-    Promise<ProposalView & { replayed: boolean }> {
+  async approve(
+    principal: VerifiedPrincipal,
+    receipt: ControlReceipt,
+    input: {
+      proposalId: string;
+      approverSubject: string;
+      changeDigest: string;
+    },
+  ): Promise<ProposalView & { replayed: boolean }> {
     requireReceipt(receipt);
     if (!idPattern.test(input.proposalId) || !agentPattern.test(input.approverSubject)
       || !/^[0-9a-f]{64}$/.test(input.changeDigest)) {
       throw new ControlInvalid('invalid protected change approval');
     }
-    return controlTransaction(this.pool, async client => {
+    return controlTransaction(this.pool, async (client) => {
       await lockGate(client, WORK_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
-      return receipted<ProposalView>(client, actor.id, receipt, 'protected-change', 'approve',
-        input.approverSubject, input.proposalId, async () => {
+      return receipted<ProposalView>(
+        client,
+        actor.id,
+        receipt,
+        'protected-change',
+        'approve',
+        input.approverSubject,
+        input.proposalId,
+        async () => {
           const row = await this.proposal(client, input.proposalId, true);
           if (row.approval_subject !== input.approverSubject) {
             throw new ControlDenied('approver does not represent the approval subject');
@@ -397,14 +457,25 @@ export class AccessProtectedChanges {
           }
           if (row.requested_by === actor.id) throw new ControlDenied('self-approval is not independent');
           const mandate = await this.approverAuthority(client, row, actor.id);
-          await client.query(`INSERT INTO access.protected_change_approval (proposal_id,
+          await client.query(
+            `INSERT INTO access.protected_change_approval (proposal_id,
             approver_principal, approver_subject, approver_representation_id,
             approver_representation_generation, approver_representation_action, change_digest)
-            VALUES ($1,$2,$3,$4,$5,$6,$7)`, [input.proposalId, actor.id, row.approval_subject,
-            mandate.id, mandate.generation, APPROVE, row.change_digest]);
+            VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [
+              input.proposalId,
+              actor.id,
+              row.approval_subject,
+              mandate.id,
+              mandate.generation,
+              row.kind === 'agent-controller' ? 'agent.control' : APPROVE,
+              row.change_digest,
+            ],
+          );
           const epoch = await lockGate(client, WORK_SCOPE, false);
           return { epoch, result: await this.view(client, input.proposalId) };
-        });
+        },
+      );
     });
   }
 
@@ -456,11 +527,20 @@ export class AccessProtectedChanges {
     });
   }
 
-  private async recheckRequester(client: PoolClient, row: ProposalRow,
-    principalId: string): Promise<void> {
+  private async recheckRequester(
+    client: PoolClient,
+    row: ProposalRow,
+    principalId: string,
+  ): Promise<void> {
     const change = row.staged_change;
     const until = typeof change.ceilingUntil === 'string' ? new Date(change.ceilingUntil) : null;
     switch (row.kind) {
+    case 'agent-controller':
+        await requireMandate(client, principalId, row.target_subject, 'agent.control');
+        if ((await requireAgent(client, row.target_subject)) !== row.expected_object_generation) {
+          throw new ControlStale('Agent changed while controller acceptance was pending');
+        }
+      return;
     case 'group-member': case 'group-parent':
       await requireMandate(client, principalId, row.target_subject, GROUP_MANAGE);
       if (until) await requireCeiling(client, row.target_subject, GROUP_ASSIGN, until);
@@ -503,6 +583,9 @@ export class AccessProtectedChanges {
   private async apply(client: PoolClient, row: ProposalRow, principalId: string): Promise<void> {
     const change = row.staged_change;
     switch (row.kind) {
+    case 'agent-controller':
+        await applyAgentController(client, row.id, principalId);
+      return;
     case 'group-member':
       await client.query(`INSERT INTO access.group_member (id, group_id, agent_subject,
         protected_change_id) VALUES ($1,$2,$3,$4)`,

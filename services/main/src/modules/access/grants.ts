@@ -71,7 +71,7 @@ export interface GrantLineageView {
   invitationId: string | null;
 }
 interface GrantIssuer {
-  principalId: string; mandateId: string; mandateGeneration: string;
+  principalId: string; mandateId: string; mandateGeneration: string; mandateAction: string;
   ceilingId: string; ceilingGeneration: string;
 }
 export interface GrantPage {
@@ -115,21 +115,24 @@ export class AccessGrants {
   private async authorize(client: PoolClient, principal: VerifiedPrincipal,
     issuerSubject: string, validUntil?: Date, needsCeiling = true): Promise<GrantIssuer> {
     const actor = await client.query<{ id: string; mandate_id: string;
-      mandate_generation: string }>(`SELECT p.id, r.id AS mandate_id,
-      r.generation AS mandate_generation
+      mandate_generation: string; mandate_action: string }>(`SELECT p.id, r.id AS mandate_id,
+      r.generation AS mandate_generation, r.action AS mandate_action
       FROM access.principal p
       JOIN access.representation r ON r.principal_id = p.id
       JOIN access.authority_subject s ON s.id = r.subject_id
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
-        AND r.subject_id = $3 AND r.action = $4 AND r.active
+        AND r.subject_id = $3 AND r.action IN ($4,'agent.control') AND r.active
         AND r.valid_until > clock_timestamp()
         AND s.kind = 'agent' AND s.active
       LIMIT 1 FOR SHARE OF p, r, s`,
     [principal.issuer, principal.subject, issuerSubject, ASSIGN]);
     if (!actor.rows[0]) throw new GrantDenied('issuer representation is missing');
     const issuer = { principalId: actor.rows[0].id, mandateId: actor.rows[0].mandate_id,
-      mandateGeneration: actor.rows[0].mandate_generation, ceilingId: '', ceilingGeneration: '' };
+      mandateGeneration: actor.rows[0].mandate_generation, mandateAction: actor.rows[0].mandate_action,
+      ceilingId: '', ceilingGeneration: '' };
     if (!needsCeiling) return issuer;
+    // Control is limited to this Agent. Assigning catalogue-wide Work rights
+    // still requires its separately held assignment ceiling.
     const ceiling = await client.query<{ id: string; generation: string }>(`SELECT id, generation
       FROM access.permission_grant
       WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
@@ -455,7 +458,7 @@ export class AccessGrants {
         representative_policy_id)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$4,$13,$14,$15,$16,$17,$18,$19)`,
       [grantId, context.issuerSubject, recipientSubject, SCOPE, ACTION, lineage.lifetime,
-        issuer.principalId, issuer.mandateId, issuer.mandateGeneration, ASSIGN, ceiling.id,
+        issuer.principalId, issuer.mandateId, issuer.mandateGeneration, issuer.mandateAction, ceiling.id,
         ceiling.generation, ceiling.action, dependent ? ceiling.id : null,
         dependent ? ceiling.generation : null, ceiling.root, ceiling.depth,
         lineage.redelegationDepth, lineage.representativePolicyId ?? null]);
