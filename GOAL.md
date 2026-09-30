@@ -1,12 +1,12 @@
 # REZICS Goal
 
-Status: direction settled on 2026-09-29, awaiting the maintainer's confirmation;
-not started. The previous frontend-centred Goal paused after M3 at `59a85a96`;
-stopped tasks G-432, G-433 and G-435 and draft briefs need re-briefing before
-dispatch. Backend phase 1 finished on 2026-09-27: recorded run
-`20260927t101230-1616d8`, local tag `goal/backend-phase1`, history on
-`archive/goals`. The maintainer asked not to advance the main site before
-confirmation; the public about site (G-480 to G-482) presents the direction meanwhile.
+Status: started on 2026-09-30, when the maintainer asked to push it as far
+toward completion as the current usage cycle allows (Claude resets 2026-10-05,
+the Codex accounts 2026-10-06 and 2026-10-07). GPT-6.1 Sol continues the stopped
+G-432, G-433 and G-435 and runs G-486; M4 starts with G-536. The previous
+frontend-centred Goal paused after M3 at `59a85a96`. Backend phase 1 finished on
+2026-09-27: recorded run `20260927t101230-1616d8`, local tag
+`goal/backend-phase1`, history on `archive/goals`.
 
 ## Outcome
 
