@@ -93,6 +93,19 @@ private-world tools also retain separate rollout gates. Untrusted execution requ
 an admitted executor and authority profile. The reason is to qualify recurring
 reader/creator tasks before taking on another operating model.
 
+**First-launch cut lines** (product manager, 2026-09-30, for the 25-hour
+production-readiness push). The first launch is light novels and visual novels
+as two views over one catalogue and library, each with franchise wikis, in the
+eight UI locales, on phone and desktop. These stay closed, and truthfully
+labelled, until after that launch: the LLM index and Measured beyond what
+exists; events and geography (PostGIS); distribution, commerce and Stripe;
+points and credit; worldbuilding; developer extras; Agent mode; the split
+workbench and batch merge queues; serial scheduling beyond what exists; the
+science-fiction and interactive-fiction manifests; the withheld-domain
+expansion acceptance run; adult (R18) opt-in; classification suggestions,
+saved views, Simple/Advanced density, in-app telemetry and recognition, which
+ships only if cheap after the production gates pass.
+
 Package solving stays an optional capability even after its rollout: no
 catalogue read, Zone route or other domain may depend on it, because it is the
 largest domain-specific mass in the backend
