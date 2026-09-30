@@ -31,7 +31,7 @@ export const readableText = '[text-autospace:normal] [&:is(:lang(zh),:lang(ja),:
  */
 export const postRhythm = {
   row: 'px-4 py-3',
-  /** The meta line: one 20 px line; Join and the menu overhang it rather than grow it. */
+  /** The meta line: one 20 px line; Follow and the menu overhang it rather than grow it. */
   meta: 'h-5 text-sm',
   /** Meta to title. */
   afterMeta: 'mt-2',

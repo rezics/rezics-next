@@ -38,8 +38,8 @@ export default {
   suggested: 'Sugerencia', suggestedAll: 'Popular en REZICS',
   suggestedThin: 'Sugerencias mientras tus comunidades tienen poca actividad',
   trending: insert('Tendencias en {{realm}}', { realm: String }), editorial: 'Selección editorial',
-  join: 'Unirse', joined: 'Miembro', joinRealm: insert('Unirse a {{realm}}', { realm: String }),
-  joinFailed: 'No se pudo unir a la comunidad. Inténtalo de nuevo.',
+  follow: 'Seguir', followed: 'Siguiendo', followRealm: insert('Seguir {{realm}}', { realm: String }),
+  followFailed: 'No se pudo seguir la comunidad. Inténtalo de nuevo.',
   spoilerTitle: 'Oculto hasta que llegues a esta parte',
   spoilerBody: 'Aún no has llegado a este capítulo, así que el texto permanece oculto.',
   words: plural({ one: insert('{{count}} palabra'), other: insert('{{count}} palabras') }, { count: asValue(number()) }),
@@ -72,7 +72,7 @@ export default {
   mutedName: insert('{{name}} está en silencio. Sus publicaciones no aparecerán en tu lista.', { name: String }),
   notInterestedDone: 'Gracias. Verás menos publicaciones como esta.',
   undo: 'Deshacer', feedbackFailed: 'No se pudo guardar. Inténtalo de nuevo.',
-  signInToTakePart: 'Inicia sesión para votar, unirte a comunidades y guardar obras',
+  signInToTakePart: 'Inicia sesión para votar, seguir comunidades y guardar obras',
 
   // The list
   posts: 'Publicaciones', loadMore: 'Mostrar más publicaciones', loadingMore: 'Cargando más publicaciones…',

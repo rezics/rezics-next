@@ -134,8 +134,9 @@ export const ReturningReader: Story = {
 
 /**
  * Follow state is one fact wherever it shows: a Realm followed through its
- * Zone offers no Join on its posts, and following from the rail takes Join
- * off that Realm's posts at once, without a reload.
+ * Zone offers no Follow on its posts. Following from a post says Following
+ * there and on Home; following from Home says Following and takes Follow off
+ * that Realm's posts at once, without a reload.
  */
 export const FollowStateEverywhere: Story = {
   args: props({ state: state({ tab: 'all' }),
@@ -144,17 +145,25 @@ export const FollowStateEverywhere: Story = {
     page: { ok: true, data: page([
       post(40, { realm: realms.kitchen, reason: { kind: 'recommended', basis: 'all' }, target: { title: name('Ginger lemon tea') } }),
       post(41, { realm: realms.mods, reason: { kind: 'recommended', basis: 'all' }, target: { title: name('Fence planner') } }),
+      post(42, { realm: realms.classics, reason: { kind: 'recommended', basis: 'all' },
+        target: { title: name('Sense and Sensibility') } }),
     ], { scope: 'all' }) } }),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const tea = canvas.getByRole('article', { name: 'Ginger lemon tea' });
     const fences = canvas.getByRole('article', { name: 'Fence planner' });
-    await expect(within(tea).queryByRole('button', { name: /^Join/ })).toBeNull();
-    await expect(within(fences).getByRole('button', { name: 'Join Stardew Mods' })).toBeVisible();
+    const austen = canvas.getByRole('article', { name: 'Sense and Sensibility' });
+    await expect(within(tea).queryByRole('button', { name: /^Follow/ })).toBeNull();
+    await expect(within(fences).getByRole('button', { name: 'Follow Stardew Mods' })).toBeVisible();
+    await expect(within(austen).getByRole('button', { name: 'Follow Classic Literature' })).toBeVisible();
+    await userEvent.click(within(fences).getByRole('button', { name: 'Follow Stardew Mods' }));
+    await waitFor(() => expect(within(fences).getByText('Following')).toBeVisible());
+    await expect(fences).not.toHaveTextContent('Joined');
     const rail = canvas.getByRole('region', { name: 'Realms to follow' });
-    await userEvent.click(within(rail).getByRole('button', { name: 'Follow Stardew Mods' }));
-    await waitFor(() => expect(within(fences).queryByRole('button', { name: /^Join/ })).toBeNull());
-    await expect(within(rail).getAllByText('Following')).toHaveLength(1);
+    await expect(within(rail).getByText('Following')).toBeVisible();
+    await userEvent.click(within(rail).getByRole('button', { name: 'Follow Classic Literature' }));
+    await waitFor(() => expect(within(austen).queryByRole('button', { name: /^Follow/ })).toBeNull());
+    await expect(within(rail).getAllByText('Following')).toHaveLength(2);
   },
 };
 

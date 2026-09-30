@@ -38,8 +38,8 @@ export default {
   suggested: '추천', suggestedAll: 'REZICS 전체 인기',
   suggestedThin: '커뮤니티 활동이 뜸할 때 추천',
   trending: insert('{{realm}} 인기', { realm: String }), editorial: '편집자 추천',
-  join: '가입', joined: '가입함', joinRealm: insert('{{realm}}에 가입', { realm: String }),
-  joinFailed: '가입하지 못했어요. 다시 시도해 보세요.',
+  follow: '팔로우', followed: '팔로잉', followRealm: insert('{{realm}} 팔로우', { realm: String }),
+  followFailed: '팔로우하지 못했어요. 다시 시도해 보세요.',
   spoilerTitle: '읽은 곳까지 따라잡을 때까지 숨김',
   spoilerBody: '아직 이 챕터까지 읽지 않았으므로 내용을 숨겼어요.',
   words: plural({ one: insert('{{count}}단어'), other: insert('{{count}}단어') }, { count: asValue(number()) }),
@@ -72,7 +72,7 @@ export default {
   mutedName: insert('{{name}}님을 숨겼어요. 이 사람의 게시물은 피드에 표시되지 않습니다.', { name: String }),
   notInterestedDone: '알려 주셔서 감사해요. 비슷한 게시물을 덜 보여 드릴게요.',
   undo: '실행 취소', feedbackFailed: '저장하지 못했어요. 다시 시도해 보세요.',
-  signInToTakePart: '투표하고, 가입하고, 저장하려면 로그인하세요',
+  signInToTakePart: '투표하고, 팔로우하고, 저장하려면 로그인하세요',
 
   // The list
   posts: '게시물', loadMore: '게시물 더 보기', loadingMore: '게시물을 더 불러오는 중…',

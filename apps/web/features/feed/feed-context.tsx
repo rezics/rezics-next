@@ -22,7 +22,7 @@ interface FeedEnvironment {
   tab: FeedTab;
   /**
    * The Realms the reader follows, when the whole list is known; null when it
-   * is not (signed out, or more follows than one read returns), so no Join
+   * is not (signed out, or more follows than one read returns), so no Follow
    * button can claim a Realm is not followed when it may be.
    */
   followedRealms: readonly string[] | null;
@@ -37,9 +37,9 @@ interface FeedValue extends Omit<FeedEnvironment, 'messages' | 'api' | 'followed
   api: () => FeedApi;
   /** A Realm's page, by its Zone's segment when it has one. */
   realmPath: (realm: string) => string;
-  /** 'joined', 'join', or 'unknown' when the follow list is incomplete. */
-  realmState: (realm: string) => 'joined' | 'join' | 'unknown';
-  markJoined: (realm: string, joined: boolean) => void;
+  /** 'following', 'follow', or 'unknown' when the follow list is incomplete. */
+  realmState: (realm: string) => 'following' | 'follow' | 'unknown';
+  markFollowed: (realm: string, following: boolean) => void;
 }
 
 const FeedContext = createContext<FeedValue | null>(null);
@@ -56,7 +56,7 @@ export function FeedProvider({ children, messages, api, followedRealms, realmSeg
   const client = useRef<FeedApi | null>(api ?? null);
   const getApi = useCallback(() => client.current ??= mainFeedApi(), []);
   const known = useMemo(() => followedRealms ? new Set(followedRealms) : null, [followedRealms]);
-  // Joins and leaves made on this page, over what the server read.
+  // Follows and unfollows made on this page, over what the server read.
   const [changed, setChanged] = useState<ReadonlyMap<string, boolean>>(new Map());
   const t = useMemo(() => materializeData(messages, { locale: environment.locale }), [messages, environment.locale]);
   const value: FeedValue = {
@@ -65,16 +65,16 @@ export function FeedProvider({ children, messages, api, followedRealms, realmSeg
     realmPath: realm => `/r/${realmSegments[realm] ?? realm.slice(-36)}`,
     realmState(realm) {
       const now = changed.get(realm);
-      if (now !== undefined) return now ? 'joined' : 'join';
+      if (now !== undefined) return now ? 'following' : 'follow';
       if (!known) return 'unknown';
-      return known.has(realm) ? 'joined' : 'join';
+      return known.has(realm) ? 'following' : 'follow';
     },
-    markJoined: (realm, joined) => setChanged(current => new Map(current).set(realm, joined)),
+    markFollowed: (realm, following) => setChanged(current => new Map(current).set(realm, following)),
   };
   return <FeedContext value={value}>{children}</FeedContext>;
 }
 
-/** Posts from another view than the page's, such as All shown when Main refused the personal feed. Joins stay
+/** Posts from another view than the page's, such as All shown when Main refused the personal feed. Follows stay
  * shared with the rest of the page. */
 export function FeedView({ tab, children }: { tab: FeedTab; children: ReactNode }) {
   const value = useFeed();

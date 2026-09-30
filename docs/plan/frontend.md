@@ -63,7 +63,7 @@ next chapter, then to keep up with communities, then to discover.
   row clickable and tinted on hover (X uses about 3% ink). REZICS posts have
   titles, belong to a Realm and are about a Work, so they keep Reddit's order
   rather than X's avatar column: one meta line (Realm · person · time · what
-  happened, with Join and the overflow menu), the post's own title, at most
+  happened, with Follow and the overflow menu), the post's own title, at most
   three lines of preview, the Work as an attachment (cover thumbnail and one
   line of title and author), and a bare icon action bar with counts and one
   kind-specific action. The title is the post's subject: a discussion's title,
@@ -90,7 +90,7 @@ next chapter, then to keep up with communities, then to discover.
      identity, for every reader (a manually granted flag at first, later a
      follower threshold computed offline; Main has no such flag yet);
   3. the person, when the post has no Realm;
-  4. otherwise the Realm: a stranger's name says nothing yet, and Join sits on
+  4. otherwise the Realm: a stranger's name says nothing yet, and Follow sits on
      the same line.
 
   A Realm's own acts (picks and decisions) lead with the Realm, and a pick

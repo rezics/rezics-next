@@ -5,7 +5,7 @@ import { cn } from '@rezics/ui/utils';
 import { EyeIcon, EyeOffIcon, MessageCircleIcon, ReplyIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { JoinButton, ShareButton, type VoteTarget, VoteControl } from './actions.tsx';
+import { FollowRealmButton, ShareButton, type VoteTarget, VoteControl } from './actions.tsx';
 import { announcesSpoilers } from './discussion.ts';
 import { useFeed } from './feed-context.tsx';
 import type { MetaLead } from './lead.ts';
@@ -80,7 +80,7 @@ export function DiscussionCard({ post, menu, position, total }: { post: Discussi
       ...identity.parts, { keep: true, node: <PostTime time={post.time} /> },
       post.kind === 'reply' ? { node: t.replied } : null,
       spoiler ? { keep: true, node: <SpoilerTag /> } : null,
-    ]} end={<>{post.realm ? <JoinButton realm={post.realm} /> : null}{menu}</>} />}
+    ]} end={<>{post.realm ? <FollowRealmButton realm={post.realm} /> : null}{menu}</>} />}
     title={post.kind === 'discussion' ? title || t.untitled : null} titleLang={post.language ?? undefined}
     label={t.replyIn}
     preview={words ? spoiler && !post.showSpoilers ? <SpoilerVeil>{words}</SpoilerVeil> : words : null}

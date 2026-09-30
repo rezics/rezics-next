@@ -38,8 +38,8 @@ export default {
   suggested: 'Vorgeschlagen', suggestedAll: 'Beliebt auf ganz REZICS',
   suggestedThin: 'Vorschläge bei wenig Aktivität in deinen Communities',
   trending: insert('Im Trend in {{realm}}', { realm: String }), editorial: 'Empfehlung der Redaktion',
-  join: 'Beitreten', joined: 'Beigetreten', joinRealm: insert('{{realm}} beitreten', { realm: String }),
-  joinFailed: 'Der Beitritt ist fehlgeschlagen. Versuch es noch einmal.',
+  follow: 'Folgen', followed: 'Gefolgt', followRealm: insert('{{realm}} folgen', { realm: String }),
+  followFailed: 'Das Folgen ist fehlgeschlagen. Versuch es noch einmal.',
   spoilerTitle: 'Verborgen, bis du aufgeholt hast',
   spoilerBody: 'Du hast dieses Kapitel noch nicht erreicht. Deshalb bleibt sein Text verborgen.',
   words: plural({ one: insert('{{count}} Wort'), other: insert('{{count}} Wörter') }, { count: asValue(number()) }),
@@ -72,7 +72,7 @@ export default {
   mutedName: insert('{{name}} ist stummgeschaltet. Beiträge dieser Person erscheinen nicht in deinem Feed.', { name: String }),
   notInterestedDone: 'Danke. Du siehst künftig weniger ähnliche Beiträge.',
   undo: 'Rückgängig', feedbackFailed: 'Das konnte nicht gespeichert werden. Versuch es noch einmal.',
-  signInToTakePart: 'Melde dich an, um abzustimmen, beizutreten und Werke zu speichern',
+  signInToTakePart: 'Melde dich an, um abzustimmen, zu folgen und Werke zu speichern',
 
   // The list
   posts: 'Beiträge', loadMore: 'Mehr Beiträge anzeigen', loadingMore: 'Weitere Beiträge werden geladen…',

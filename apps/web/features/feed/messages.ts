@@ -45,8 +45,8 @@ export const messages = {
   suggestedThin: 'Suggested while your communities are quiet',
   trending: insert('Trending in {{realm}}', { realm: String }), editorial: 'Editors’ pick',
   becauseYouFollow: insert('Because you follow {{name}}', { name: String }),
-  join: 'Join', joined: 'Joined', joinRealm: insert('Join {{realm}}', { realm: String }),
-  joinFailed: 'Couldn’t join. Try again.',
+  follow: 'Follow', followed: 'Following', followRealm: insert('Follow {{realm}}', { realm: String }),
+  followFailed: 'Couldn’t follow. Try again.',
   spoilerTitle: 'Hidden until you catch up',
   spoilerBody: 'You haven’t reached this chapter yet, so its text stays hidden.',
   words: plural({ one: insert('{{count}} word'), other: insert('{{count}} words') }, { count: asValue(number()) }),
@@ -120,7 +120,7 @@ export const messages = {
   mutedName: insert('{{name}} is muted. Their posts won’t appear in your feed.', { name: String }),
   notInterestedDone: 'Thanks. You’ll see fewer posts like this.',
   undo: 'Undo', feedbackFailed: 'Couldn’t save that. Try again.',
-  signInToTakePart: 'Sign in to vote, join and save',
+  signInToTakePart: 'Sign in to vote, follow and save',
 
   // The list
   posts: 'Posts', loadMore: 'Show more posts', loadingMore: 'Loading more posts…',

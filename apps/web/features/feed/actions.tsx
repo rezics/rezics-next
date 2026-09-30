@@ -203,34 +203,34 @@ export function DismissedPost({ dismissal, onUndo }: { dismissal: Dismissal; onU
   </div>;
 }
 
-/** Join a Realm from one of its posts. Shown only where the reader is known not to follow it. */
-export function JoinButton({ realm }: { realm: NonNullable<FeedItem['realm']> }) {
-  const { t, api, signedIn, actingSubject, signInHref, realmState, markJoined } = useFeed();
+/** Follow a Realm from one of its posts. Shown only where the reader is known not to follow it. */
+export function FollowRealmButton({ realm }: { realm: NonNullable<FeedItem['realm']> }) {
+  const { t, api, signedIn, actingSubject, signInHref, realmState, markFollowed } = useFeed();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [joinedHere, setJoinedHere] = useState(false);
-  const label = t.joinRealm({ realm: realm.name.value });
-  const joinClass = cn(buttonVariants({ size: 'xs', variant: 'soft' }), 'relative z-10 h-7 shrink-0 rounded-full px-3');
+  const [followedHere, setFollowedHere] = useState(false);
+  const label = t.followRealm({ realm: realm.name.value });
+  const followClass = cn(buttonVariants({ size: 'xs', variant: 'soft' }), 'relative z-10 h-7 shrink-0 rounded-full px-3');
   if (!signedIn) {
-    return <a href={signInHref} aria-label={`${label} — ${t.signInToTakePart}`} className={joinClass}>{t.join}</a>;
+    return <a href={signInHref} aria-label={`${label} — ${t.signInToTakePart}`} className={followClass}>{t.follow}</a>;
   }
-  if (joinedHere) {
+  if (followedHere) {
     return <span className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2 font-medium
-      text-muted-foreground text-xs"><CheckIcon aria-hidden="true" className="size-3.5" />{t.joined}</span>;
+      text-muted-foreground text-xs"><CheckIcon aria-hidden="true" className="size-3.5" />{t.followed}</span>;
   }
-  if (!actingSubject || realmState(realm.id) !== 'join') return null;
-  async function join() {
+  if (!actingSubject || realmState(realm.id) !== 'follow') return null;
+  async function follow() {
     setBusy(true);
     setFailed(false);
     const result = await api().follow(realm.id, 'realm', true, actingSubject!, commandKey());
     setBusy(false);
     if (!result.ok) { setFailed(true); return; }
-    markJoined(realm.id, result.data.following);
-    setJoinedHere(result.data.following);
+    markFollowed(realm.id, result.data.following);
+    setFollowedHere(result.data.following);
   }
   return <>
-    {failed ? <span role="status" className="text-destructive-foreground text-xs">{t.joinFailed}</span> : null}
-    <Button size="xs" variant="soft" aria-label={label} isLoading={busy} onClick={() => void join()}
-      className="relative z-10 h-7 shrink-0 rounded-full px-3">{t.join}</Button>
+    {failed ? <span role="status" className="text-destructive-foreground text-xs">{t.followFailed}</span> : null}
+    <Button size="xs" variant="soft" aria-label={label} isLoading={busy} onClick={() => void follow()}
+      className="relative z-10 h-7 shrink-0 rounded-full px-3">{t.follow}</Button>
   </>;
 }

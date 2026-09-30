@@ -8,16 +8,16 @@ import { useFeed } from '../feed/feed-context.tsx';
 
 /**
  * Follow one suggested Realm or Zone. Following a Zone follows its Realm too,
- * so the posts' Join buttons change with it, and a Realm joined from a post
+ * so the posts' Follow buttons change with it, and a Realm followed from a post
  * shows here as followed. Signed out, it leads to sign-in.
  */
 export function FollowButton({ target, kind, realm, label, followLabel, followedLabel, failedLabel }: {
   target: string; kind: 'realm' | 'zone'; realm: string; label: string; followLabel: string; followedLabel: string;
   failedLabel: string;
 }) {
-  const { api, signedIn, actingSubject, signInHref, markJoined, realmState } = useFeed();
+  const { api, signedIn, actingSubject, signInHref, markFollowed, realmState } = useFeed();
   const [followed, setState] = useState<'idle' | 'busy' | 'following' | 'failed'>('idle');
-  const state = followed === 'idle' && realmState(realm) === 'joined' ? 'following' : followed;
+  const state = followed === 'idle' && realmState(realm) === 'following' ? 'following' : followed;
   if (!signedIn) {
     return <a href={signInHref} aria-label={label} className="inline-flex h-8 shrink-0 items-center rounded-full
       bg-primary/10 px-3 font-medium text-primary text-sm outline-none hover:bg-primary/20 focus-visible:ring-2
@@ -31,7 +31,7 @@ export function FollowButton({ target, kind, realm, label, followLabel, followed
   async function follow() {
     setState('busy');
     const result = await api().follow(target, kind, true, actingSubject!, commandKey());
-    if (result.ok) markJoined(realm, true);
+    if (result.ok) markFollowed(realm, true);
     setState(result.ok ? 'following' : 'failed');
   }
   return <span className="grid shrink-0 justify-items-end gap-1">

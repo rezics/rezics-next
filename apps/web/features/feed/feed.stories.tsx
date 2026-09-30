@@ -249,8 +249,8 @@ export const HideAndUndo: Story = {
   },
 };
 
-/** In All, a Realm the reader does not follow offers Join; joined, it says so. */
-export const JoinFromAll: Story = {
+/** In All, a Realm the reader does not follow offers Follow; afterwards it says Following. */
+export const FollowFromAll: Story = {
   args: { tab: 'all', followedRealms: [], api: memoryFeed(), query: { scope: 'all', sort: 'best' },
     initial: { ok: true, data: page([post(30, { realm: realms.kitchen, reason: { kind: 'recommended', basis: 'all' },
       target: { title: { value: 'Ginger lemon tea', language: 'en', direction: 'ltr', basis: 'requested' } } })],
@@ -259,8 +259,10 @@ export const JoinFromAll: Story = {
     const post = article(within(canvasElement), 'Ginger lemon tea');
     // In All every post is REZICS-wide, so no "Suggested" label repeats on each.
     await expect(post).not.toHaveTextContent('Suggested');
-    await userEvent.click(within(post).getByRole('button', { name: 'Join Home Cooking · 家常菜' }));
-    await waitFor(() => expect(post).toHaveTextContent('Joined'));
+    await expect(post).not.toHaveTextContent('Join');
+    await userEvent.click(within(post).getByRole('button', { name: 'Follow Home Cooking · 家常菜' }));
+    await waitFor(() => expect(post).toHaveTextContent('Following'));
+    await expect(post).not.toHaveTextContent('Joined');
     await expect(args.api!.calls.filter(call => !call.startsWith('watermark'))).toEqual([`follow:${realms.kitchen.id.slice(-4)}:true`]);
   },
 };
@@ -364,9 +366,9 @@ export const SignedOut: Story = {
   args: { signedIn: false, tab: 'all', followedRealms: null },
   async play({ canvasElement }) {
     const post = article(within(canvasElement), 'Chapters 212–214');
-    await expect(within(post).getByRole('link', { name: 'Upvote — Sign in to vote, join and save' }))
+    await expect(within(post).getByRole('link', { name: 'Upvote — Sign in to vote, follow and save' }))
       .toHaveAttribute('href', signInHref);
-    await expect(within(post).getByRole('link', { name: /^Join .+ — Sign in/ })).toHaveAttribute('href', signInHref);
+    await expect(within(post).getByRole('link', { name: /^Follow .+ — Sign in/ })).toHaveAttribute('href', signInHref);
     await expect(within(post).queryByRole('button', { name: 'More options' })).toBeNull();
   },
 };

@@ -10,7 +10,7 @@ import { CatalogueCover } from '../catalogue/cover.tsx';
 import { authorSeparator, type CoverWork, coverKindOf } from '../catalogue/work.ts';
 import { authorHref } from '../author/route.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { type Dismissal, DismissedPost, JoinButton, MoreMenu, PrimaryAction, ShareButton, VoteControl } from './actions.tsx';
+import { type Dismissal, DismissedPost, FollowRealmButton, MoreMenu, PrimaryAction, ShareButton, VoteControl } from './actions.tsx';
 import { DiscussionCard, type DiscussionPost } from './discussion-card.tsx';
 import { threadPath } from './discussion.ts';
 import { useFeed } from './feed-context.tsx';
@@ -175,7 +175,7 @@ function followedAuthor(item: FeedItem): string | null {
 
 /**
  * The one meta line: who and where, in the order `metaLead` picks, then time
- * and what happened, then Join and the post's menu. A pick is the Realm's act,
+ * and what happened, then Follow and the post's menu. A pick is the Realm's act,
  * so its curator is not named as if they wrote the Work; reasons show only
  * where they are exceptions, which is only ever inside Following.
  */
@@ -342,7 +342,7 @@ function FeedPost({ item, position, total }: { item: FeedItem; position?: number
   const plainTitle = card.kind === 'review' ? workTitle : typeof title === 'string' ? title : workTitle;
   return <PostRow kind={item.kind} href={href} position={position} total={total}
     meta={<FeedMeta item={item} end={<>
-      {item.realm ? <JoinButton realm={item.realm} /> : null}
+      {item.realm ? <FollowRealmButton realm={item.realm} /> : null}
       <MoreMenu item={item} share={href ? { href, title: plainTitle } : null} onDismiss={setDismissed} />
     </>} />}
     title={title} titleLang={titleLang} titleDir={item.target.title.direction} titleClass={titleClass}
