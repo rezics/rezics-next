@@ -1,7 +1,7 @@
 /** The only Main import boundary into the independently Apache-licensed protocol. */
 import Type from 'typebox';
-export * from '../../../../../packages/wiki-toolkit/protocol/wiki-extraction.ts';
-export { checkLocator, type Locator } from '../../../../../packages/wiki-toolkit/protocol/locator.ts';
+export * from '@rezics/wiki-toolkit/protocol';
+export { checkLocator, type Locator } from '@rezics/wiki-toolkit/protocol';
 
 /** Main resolves native resources; the published protocol permits other hosts. */
 export const WikiNativeResourceSchema = Type.String({ maxLength: 128,

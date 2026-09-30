@@ -1,0 +1,21 @@
+SPDX-License-Identifier: Apache-2.0
+Fixture provenance
+
+pride.txt: Jane Austen, Pride and Prejudice (1813), admitted Project Gutenberg
+entry 1342, https://www.gutenberg.org/cache/epub/1342/pg1342.txt.
+Reused from tests/fixtures/gutenberg/6f7ec2a018dd7b7ddaed1e6117e299c25945faa082880fe63fb0b51a722b7ccb.json.
+Original source SHA-256: 3f6bb9d6f78e0293b56acd4714dd68cb7d6d1d293402031ce9d5a216bcaf9d75.
+The admitted fixture removes the Gutenberg header, footer and trademark wrapper.
+The novel is public domain in the United States; no worldwide clearance is claimed.
+
+pride-shift-jis.txt and pride-shift-jis.utf8.txt: a Japanese translation of the
+opening sentence authored by REZICS contributors in 2026 for this test, licensed
+Apache-2.0. Encodings are Shift_JIS and UTF-8 respectively; CRLF is preserved.
+No modern published translation is reproduced.
+
+pride.rpy: a test script authored by REZICS contributors (Apache-2.0) using short
+passages from the same Jane Austen novel. Branch labels and expressions are test
+scaffolding, not executable input for the toolkit.
+
+The EPUB 2/3 and non-BMP fixtures are generated inside the tests from the admitted
+text and original test markup (Apache-2.0); no third-party EPUB package is shipped.

@@ -3814,6 +3814,7 @@ __metadata:
     "@elysia/eden": "npm:2.0.0-beta.5"
     "@elysia/openapi": "npm:2.0.0-beta.4"
     "@js-temporal/polyfill": "npm:0.5.1"
+    "@rezics/wiki-toolkit": "workspace:*"
     "@scalar/types": "npm:0.18.3"
     "@tensorflow/tfjs": "npm:4.22.0"
     "@types/bun": "npm:1.4.2"
@@ -3838,6 +3839,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@rezics/model@workspace:packages/model"
   dependencies:
+    "@rezics/wiki-toolkit": "workspace:*"
     "@types/bun": "npm:1.4.2"
     fast-check: "npm:4.10.2"
     typebox: "npm:1.3.34"
@@ -3910,6 +3912,22 @@ __metadata:
     vitest: "npm:5.0.2"
     webpack: "npm:5.110.3"
     wrangler: "npm:4.137.0"
+  languageName: unknown
+  linkType: soft
+
+"@rezics/wiki-toolkit@workspace:*, @rezics/wiki-toolkit@workspace:packages/wiki-toolkit":
+  version: 0.0.0-use.local
+  resolution: "@rezics/wiki-toolkit@workspace:packages/wiki-toolkit"
+  dependencies:
+    "@types/node": "npm:26.6.2"
+    "@xmldom/xmldom": "npm:0.9.12"
+    fflate: "npm:0.8.3"
+    iconv-lite: "npm:0.7.3"
+    typebox: "npm:1.3.34"
+    typescript: "npm:7.0.2"
+    typescript-6: "npm:typescript@6.0.2"
+  bin:
+    rezics-wiki: ./src/cli.ts
   languageName: unknown
   linkType: soft
 
@@ -5803,6 +5821,13 @@ __metadata:
   version: 0.1.38
   resolution: "@webgpu/types@npm:0.1.38"
   checksum: 10c0/054e29b85a30149960d8b5897c869bdd2d6360215cff3faa736d21c823824c60047982aee293655ddc7ad91b8735c3649d33244d9d64e6908a1946ea5e8e4884
+  languageName: node
+  linkType: hard
+
+"@xmldom/xmldom@npm:0.9.12":
+  version: 0.9.12
+  resolution: "@xmldom/xmldom@npm:0.9.12"
+  checksum: 10c0/0a9ef38e203213717dde8d16c62743c26c37eb4195aeb4f286550a0aec2145c063a6c3633f253c29f75202f922d7c961d1acaad4dd93e5db1ef05c813354d178
   languageName: node
   linkType: hard
 
@@ -8675,17 +8700,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"fflate@npm:0.8.3, fflate@npm:^0.8.3":
+  version: 0.8.3
+  resolution: "fflate@npm:0.8.3"
+  checksum: 10c0/eab181ca37f5348ae76d4b6f840e0026e30220e33153289ac942222d8b9638237d486507dbcc09878d724095bd354993a2ee48bbee99c8f2c6440d4448719aa7
+  languageName: node
+  linkType: hard
+
 "fflate@npm:^0.7.3":
   version: 0.7.5
   resolution: "fflate@npm:0.7.5"
   checksum: 10c0/dd49302136bbe63d5e26a1e2ce7f2c9ff73a2c7eb591af433a20a4fd840e4914c7cad863945162067ec87dd871baa9250b755d06650f59c86b2d72dde4042f58
-  languageName: node
-  linkType: hard
-
-"fflate@npm:^0.8.3":
-  version: 0.8.3
-  resolution: "fflate@npm:0.8.3"
-  checksum: 10c0/eab181ca37f5348ae76d4b6f840e0026e30220e33153289ac942222d8b9638237d486507dbcc09878d724095bd354993a2ee48bbee99c8f2c6440d4448719aa7
   languageName: node
   linkType: hard
 
@@ -9043,6 +9068,15 @@ __metadata:
   version: 4.2.0
   resolution: "http-cache-semantics@npm:4.2.0"
   checksum: 10c0/45b66a945cf13ec2d1f29432277201313babf4a01d9e52f44b31ca923434083afeca03f18417f599c9ab3d0e7b618ceb21257542338b57c54b710463b4a53e37
+  languageName: node
+  linkType: hard
+
+"iconv-lite@npm:0.7.3":
+  version: 0.7.3
+  resolution: "iconv-lite@npm:0.7.3"
+  dependencies:
+    safer-buffer: "npm:>= 2.1.2 < 3.0.0"
+  checksum: 10c0/be2fd2414f7e94be3a63063fa0ad5919c16bc7b6e00c77eea0765ced6db405739f38dd51016583058fba25cc1d0106ba30b83fbb7a7e32f824d4db76f23d8d33
   languageName: node
   linkType: hard
 
@@ -11656,6 +11690,13 @@ __metadata:
   dependencies:
     regexp-tree: "npm:~0.1.1"
   checksum: 10c0/53eb5d3ecf4b3c0954dff465eb179af4d2f5f77f74ba7b57489adbc4fa44454c3d391f37379cd28722d9ac6fa5b70be3f4645d4bd25df395fd99b934f6ec9265
+  languageName: node
+  linkType: hard
+
+"safer-buffer@npm:>= 2.1.2 < 3.0.0":
+  version: 2.1.2
+  resolution: "safer-buffer@npm:2.1.2"
+  checksum: 10c0/7e3c8b2e88a1841c9671094bbaeebd94448111dd90a81a1f606f3f67708a6ec57763b3b47f06da09fc6054193e0e6709e77325415dc8422b04497a8070fa02d4
   languageName: node
   linkType: hard
 

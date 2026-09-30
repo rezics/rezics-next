@@ -11,6 +11,7 @@
     "packages/ui",
     "packages/zone-sdk",
     "services/main",
+    "packages/wiki-toolkit",
     "services/account",
     "services/content",
     "apphost"

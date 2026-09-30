@@ -49,6 +49,19 @@ workspace `.env.example` files show variables. Personal overrides belong in
 the ignored root `.env.dev`, not `.env` or `.env.local`, which Bun can load into
 unrelated processes.
 
+## Offline wiki conversion
+
+`@rezics/wiki-toolkit` distributes TypeScript source and requires Bun 1.4.2+,
+including for installed CLI execution. Node's source stripping does not run
+TypeScript packages inside `node_modules`. The package adds iconv-lite for
+reversible legacy decoding, fflate for ZIP reading and @xmldom/xmldom for inert
+XML parsing; these and its existing typebox protocol dependency use MIT licences.
+TypeScript 7 checks source types, and the TypeScript 6 alias supplies the test AST
+API (both Apache-2.0); @types/node and undici-types use MIT. Exact pins are in the
+inventory below and dependency notices in the package's NOTICE. Runtime source
+imports and the installed package are checked for the offline boundary; no
+network, inference or REZICS service implementation enters the package.
+
 ## Local image screening
 
 Main pins NSFWJS 4.4.0 (MIT), TensorFlow.js 4.22.0 (Apache-2.0), Buffer 6.0.3
@@ -132,6 +145,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @rezics/account | workspace:* | apps/accounts |
 | @rezics/main | workspace:* | apps/web |
 | @rezics/ui | workspace:* | apps/about, apps/accounts, apps/web |
+| @rezics/wiki-toolkit | workspace:* | packages/model, services/main |
 | @rezics/zone-sdk | workspace:* | apps/web |
 | @scalar/types | 0.18.3 | services/account, services/main |
 | @storybook/addon-a11y | 11.0.0-alpha.1 | apps/accounts, apps/web |
@@ -142,7 +156,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @tanstack/react-query | 5.103.2 | apps/web |
 | @tensorflow/tfjs | 4.22.0 | services/main |
 | @types/bun | 1.4.2 | apps/about, apps/accounts, packages/model, services/account, services/content, services/main |
-| @types/node | 26.6.2 | apphost, apps/about, apps/accounts, apps/web |
+| @types/node | 26.6.2 | apphost, apps/about, apps/accounts, apps/web, packages/wiki-toolkit |
 | @types/nodemailer | 8.0.2 | services/account |
 | @types/pg | 8.23.1 | services/account, services/content, services/main |
 | @types/react | 19.2.18 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
@@ -151,6 +165,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @vitejs/plugin-react | 6.1.1 | apps/accounts, apps/web |
 | @vitejs/plugin-rsc | 0.5.35 | apps/accounts, apps/web |
 | @vitest/browser-playwright | 5.0.2 | apps/accounts, apps/web |
+| @xmldom/xmldom | 0.9.12 | packages/wiki-toolkit |
 | astro | 7.3.5 | apps/about |
 | aws4fetch | 1.0.20 | services/main |
 | axe-core | 4.13.0 | apps/about, apps/web |
@@ -163,6 +178,8 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | envalid | 8.2.0 | apps/accounts, apps/web, services/account, services/main |
 | exact-mirror | 1.2.6 | services/account, services/main |
 | fast-check | 4.10.2 | packages/model |
+| fflate | 0.8.3 | packages/wiki-toolkit |
+| iconv-lite | 0.7.3 | packages/wiki-toolkit |
 | jose | 6.2.12 | services/account, services/main |
 | knip | 6.38.0 | . |
 | kysely | 0.29.6 | services/account |
@@ -192,9 +209,9 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | tailwindcss | 4.3.3 | apps/about, apps/accounts, apps/web |
 | tsx | 4.23.13 | apphost |
 | tw-animate-css | 1.4.0 | packages/ui |
-| typebox | 1.3.34 | packages/model, services/account, services/main |
-| typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/model, packages/ui, packages/zone-sdk, services/account, services/content, services/main |
-| typescript-6 | npm:typescript@6.0.2 | apps/about |
+| typebox | 1.3.34 | packages/model, packages/wiki-toolkit, services/account, services/main |
+| typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/model, packages/ui, packages/wiki-toolkit, packages/zone-sdk, services/account, services/content, services/main |
+| typescript-6 | npm:typescript@6.0.2 | apps/about, packages/wiki-toolkit |
 | vinext | 1.0.0-beta.11 | apps/accounts, apps/web |
 | vite | 8.3.0 | apps/about, apps/accounts, apps/web |
 | vitest | 5.0.2 | apps/accounts, apps/web |

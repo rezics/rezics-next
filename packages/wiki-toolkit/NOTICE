@@ -1,6 +1,17 @@
+SPDX-License-Identifier: Apache-2.0
 REZICS Wiki Toolkit protocol
 Copyright 2026 REZICS contributors
 
 The files distributed in this package, including the locator contract moved
 from packages/model, are licensed under the Apache License, Version 2.0.
 This package does not include or import REZICS's AGPL service implementation.
+
+Pinned runtime dependencies (distributed by their own packages):
+@xmldom/xmldom 0.9.12 — MIT — https://github.com/xmldom/xmldom
+fflate 0.8.3 — MIT — https://github.com/101arrowz/fflate
+iconv-lite 0.7.3 — MIT — https://github.com/pillarjs/iconv-lite
+typebox 1.3.34 — MIT — https://github.com/sinclairzx81/typebox
+Transitive runtime dependency: safer-buffer 2.1.2 — MIT.
+Development: @types/node 26.6.2 and undici-types (see lockfile) — MIT;
+TypeScript 7.0.2 and TypeScript 6.0.2 (test AST API) — Apache-2.0. Dependency copyright and licence texts
+are retained in their installed distributions. No dependencies are bundled.

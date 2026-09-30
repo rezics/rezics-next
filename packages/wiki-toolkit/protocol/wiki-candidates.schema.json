@@ -1,4 +1,5 @@
 {
+  "$comment": "SPDX-License-Identifier: Apache-2.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rezics.com/protocol/wiki-candidates-v1.schema.json",
   "type": "object",

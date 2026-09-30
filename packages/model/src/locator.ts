@@ -1,9 +1,9 @@
 import Type, { type Static } from 'typebox';
 import { Value } from 'typebox/value';
-import { locatorVersion, parseLocator, type Locator } from '../../wiki-toolkit/protocol/locator.ts';
+import { locatorVersion, parseLocator, type Locator } from '@rezics/wiki-toolkit/protocol';
 
 // Compatibility export: the independent Apache-2.0 protocol owns the locator contract.
-export * from '../../wiki-toolkit/protocol/locator.ts';
+export * from '@rezics/wiki-toolkit/protocol/locator';
 
 /** Content's existing wire target. Its enclosing comment already carries revisionId/byteDigest. */
 export const ContentCommentTargetSchema = Type.Object({

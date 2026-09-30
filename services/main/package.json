@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",
+    "@rezics/wiki-toolkit": "workspace:*",
     "@tensorflow/tfjs": "4.22.0",
     "aws4fetch": "1.0.20",
     "better-auth": "1.7.5",
