@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { registryProbeDirectory, registryProbeFiles, registryProbeProfile }
   from '../tests/fixtures/registry-probe.ts';
@@ -245,8 +246,10 @@ const historicalCanonical: [type: string, ...routes: string[]][] = [
     'content-search-eligibility-v1/decision modelRevision=https://rezics.com/definition/content-search-eligibility-v1',
     'content-search-eligibility-v2/decision modelRevision=https://rezics.com/definition/content-search-eligibility-v2'],
   ['ContentProjection', 'content-match-unit-v1/projection'],
-  ['Space', 'space-realm-v1/space'],
-  ['Realm', 'space-realm-v1/realm'],
+  ['Space', 'space-realm-v2/space definitionProfile=https://rezics.com/definition/space-realm-v2',
+    'space-realm-v1/space'],
+  ['Realm', 'space-realm-v2/realm definitionProfile=https://rezics.com/definition/space-realm-v2',
+    'space-realm-v1/realm'],
   ['ExperienceRatingContext', 'realm-experience-rating-context-v1/context'],
   ['ExperienceRatingObservation', 'realm-experience-rating-observation-v1/observation'],
   ['ExperienceRatingObservationRevision', 'realm-experience-rating-observation-v1/revision'],
@@ -393,4 +396,165 @@ test('G-071: ambiguous, duplicate or stale registry declarations fail generation
     .toThrow('demands bindings of both');
   expect(() => buildCommandRegistry(authoredProfiles, { established: { 'retired-profile-v1': {} } }))
     .toThrow('unknown profile retired-profile-v1');
+});
+
+interface AcceptedLock {
+  profiles: Record<string, { sha256: string; binding?: unknown }>;
+  facets: Record<string, string>;
+}
+
+/** A temp project with this compiler, so a mutation cannot touch the worktree. */
+async function copiedProject(mutate: (root: string) => void): Promise<{ root: string; generate: typeof generate }> {
+  mkdirSync(join(repo, '.temp'), { recursive: true });
+  const root = mkdtempSync(join(repo, '.temp/model-generation-'));
+  temporary.push(root);
+  cpSync(join(repo, 'model/compiler'), join(root, 'model/compiler'), {
+    recursive: true, filter: source => !source.endsWith('generate.test.ts'),
+  });
+  cpSync(join(repo, 'model/definitions'), join(root, 'model/definitions'), { recursive: true });
+  cpSync(join(repo, 'model/accepted-profiles.json'), join(root, 'model/accepted-profiles.json'));
+  symlinkSync(join(repo, 'infra'), join(root, 'infra'));
+  mutate(root);
+  const loaded = await import(join(root, 'model/compiler/generate.ts')) as { generate: typeof generate };
+  return { root, generate: loaded.generate };
+}
+
+function replaceIn(root: string, relative: string, from: string, to: string): void {
+  const path = join(root, relative);
+  const source = readFileSync(path, 'utf8');
+  if (!source.includes(from)) throw new Error(`missing ${from} in ${relative}`);
+  writeFileSync(path, source.replace(from, to));
+}
+
+test('accepted profiles reject an edited constraint before writing', async () => {
+  const { root, generate: copied } = await copiedProject(copy => replaceIn(copy,
+    'model/definitions/work-metadata-v1.ts',
+    "{ path: 'rv:scalarValue', maxCount: 1, nodeKind: 'sh:IRIOrLiteral' }",
+    "{ path: 'rv:scalarValue', maxCount: 2, nodeKind: 'sh:IRIOrLiteral' }"));
+  expect(() => copied(root, false)).toThrow('Accepted profile work-metadata-v1 changed; add a new version instead');
+  expect(() => copied(root, true)).toThrow('Accepted profile work-metadata-v1 changed; add a new version instead');
+  expect(existsSync(join(root, 'generated/model/manifest.json'))).toBe(false);
+});
+
+test('a shared compiler helper that changes rendered shapes fails generation', async () => {
+  const { root, generate: copied } = await copiedProject(copy => replaceIn(copy,
+    'model/compiler/ir.ts', 'a sh:NodeShape ;', 'a sh:NodeShape  ;'));
+  expect(() => copied(root, false)).toThrow('Accepted profile agent-profile-v1 changed; add a new version instead');
+  expect(existsSync(join(root, 'generated/model/shapes/agent-profile-v1.ttl'))).toBe(false);
+});
+
+test('deleting an accepted profile fails generation', async () => {
+  const { root, generate: copied } = await copiedProject(copy => rmSync(join(copy, 'model/definitions/release-v1.ts')));
+  expect(() => copied(root, true)).toThrow('Accepted profile release-v1 changed; add a new version instead');
+});
+
+test('changing an accepted Facet path fails generation', async () => {
+  const { root, generate: copied } = await copiedProject(copy => replaceIn(copy,
+    'model/definitions/facet-type-v1.ts', "predicate: 'rdf:type'", "predicate: 'rdf:value'"));
+  expect(() => copied(root, false)).toThrow('Accepted facet facet-type-v1 changed; add a new version instead');
+});
+
+test('whitespace in an accepted definition still generates and leaves the lock untouched', async () => {
+  const { root, generate: copied } = await copiedProject(copy => {
+    const path = join(copy, 'model/definitions/claim-v1.ts');
+    writeFileSync(path, `${readFileSync(path, 'utf8')}\n`);
+  });
+  const lockPath = join(root, 'model/accepted-profiles.json');
+  const lock = readFileSync(lockPath, 'utf8');
+  expect(() => copied(root, false)).not.toThrow();
+  expect(() => copied(root, true)).not.toThrow();
+  expect(readFileSync(lockPath, 'utf8')).toBe(lock);
+});
+
+test('release-v2 is refused until its lock entry is appended', async () => {
+  const { root, generate: copied } = await copiedProject(copy => writeFileSync(join(copy, 'model/definitions/release-v2.ts'),
+    `import type { ProfileDefinition } from '../compiler/ir.ts';
+
+export const releaseV2Profile = {
+  id: 'release-v2',
+  comments: ['A new version is admitted only with its own lock entry.'],
+  prefixes: [
+    ['sh', 'http://www.w3.org/ns/shacl#'],
+    ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
+    ['rv', 'https://rezics.com/vocab/'],
+  ],
+  layout: 'compact',
+  shapes: [{
+    iri: 'https://rezics.com/definition/release-v2/release-shape',
+    canonical: { types: ['rv:ReleaseNote'] },
+    properties: [{ path: 'rdf:type', hasValue: 'rv:ReleaseNote', maxCount: 1 }],
+  }],
+} as const satisfies ProfileDefinition;
+`));
+  let message = '';
+  try { copied(root, false); } catch (error) { message = error instanceof Error ? error.message : String(error); }
+  const match = /^Unaccepted profile release-v2: append (\{.*\}) to model\/accepted-profiles.json$/.exec(message);
+  expect(match?.[1]).toBeDefined();
+  expect(existsSync(join(root, 'generated/model/manifest.json'))).toBe(false);
+  const lockPath = join(root, 'model/accepted-profiles.json');
+  const lock = JSON.parse(readFileSync(lockPath, 'utf8')) as AcceptedLock;
+  Object.assign(lock.profiles, JSON.parse(match![1]!) as AcceptedLock['profiles']);
+  writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+  expect(() => copied(root, false)).not.toThrow();
+  expect(() => copied(root, true)).not.toThrow();
+});
+
+function gitText(args: string[]): string | undefined {
+  try { return execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
+  catch { return undefined; }
+}
+
+function assertBaselineUnchanged(baseline: AcceptedLock, current: AcceptedLock): void {
+  for (const [id, entry] of Object.entries(baseline.profiles)) {
+    const now = current.profiles[id];
+    if (!now || now.sha256 !== entry.sha256
+      || JSON.stringify(now.binding ?? null) !== JSON.stringify(entry.binding ?? null)) {
+      throw new Error(`Accepted profile ${id} changed; the merge-base lock entry must stay unchanged`);
+    }
+  }
+  for (const [id, digest] of Object.entries(baseline.facets)) {
+    if (current.facets[id] !== digest) {
+      throw new Error(`Accepted facet ${id} changed; the merge-base lock entry must stay unchanged`);
+    }
+  }
+}
+
+test('accepted lock entries recorded at the merge-base stay unchanged', () => {
+  const mergeBase = gitText(['merge-base', 'HEAD', 'main']);
+  if (!mergeBase) {
+    console.log('notice: skip accepted-lock merge-base guard; git or main is unavailable');
+    return;
+  }
+  const baselineText = gitText(['show', `${mergeBase}:model/accepted-profiles.json`]);
+  if (!baselineText) {
+    console.log('notice: skip accepted-lock merge-base guard; model/accepted-profiles.json is absent from the merge-base');
+    return;
+  }
+  const current = JSON.parse(readFileSync(join(repo, 'model/accepted-profiles.json'), 'utf8')) as AcceptedLock;
+  expect(() => assertBaselineUnchanged(JSON.parse(baselineText) as AcceptedLock, current)).not.toThrow();
+});
+
+test('rewriting an existing accepted lock entry fails the merge-base guard', () => {
+  const current = JSON.parse(readFileSync(join(repo, 'model/accepted-profiles.json'), 'utf8')) as AcceptedLock;
+  const rewritten = structuredClone(current);
+  rewritten.profiles['work-metadata-v1'] = { ...rewritten.profiles['work-metadata-v1']!, sha256: '0'.repeat(64) };
+  expect(() => assertBaselineUnchanged(current, rewritten))
+    .toThrow('Accepted profile work-metadata-v1 changed; the merge-base lock entry must stay unchanged');
+  const binding = structuredClone(current);
+  const roles = binding.profiles['classification-context-v1']!.binding as { roles: string[] };
+  roles.roles = ['global'];
+  expect(() => assertBaselineUnchanged(current, binding))
+    .toThrow('Accepted profile classification-context-v1 changed; the merge-base lock entry must stay unchanged');
+  const facet = structuredClone(current);
+  facet.facets['facet-type-v1'] = '0'.repeat(64);
+  expect(() => assertBaselineUnchanged(current, facet))
+    .toThrow('Accepted facet facet-type-v1 changed; the merge-base lock entry must stay unchanged');
+  const removed = structuredClone(current);
+  delete removed.profiles['work-metadata-v1'];
+  expect(() => assertBaselineUnchanged(current, removed))
+    .toThrow('Accepted profile work-metadata-v1 changed; the merge-base lock entry must stay unchanged');
+  const appended = structuredClone(current);
+  appended.profiles['release-v2'] = { sha256: 'a'.repeat(64) };
+  appended.facets['facet-release-v2'] = 'b'.repeat(64);
+  expect(() => assertBaselineUnchanged(current, appended)).not.toThrow();
 });

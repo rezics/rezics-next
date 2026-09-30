@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { facetId, renderFacetRegistry, type FacetDefinition } from './facet.ts';
+import { compileFacet, facetId, renderFacetRegistry, type FacetDefinition } from './facet.ts';
 import { renderProfile, type ProfileDefinition } from './ir.ts';
 import { artifactDigests, buildModelOutputs } from './outputs.ts';
 import { buildCommandRegistry, shapeRole, type RegistryOptions } from './registry.ts';
@@ -120,8 +120,64 @@ export function buildArtifacts(_root: string): Map<string, string> {
   return artifacts;
 }
 
+interface AcceptedBinding { required: string[]; optional?: string[]; roles: string[] }
+interface AcceptedProfile { sha256: string; binding?: AcceptedBinding }
+interface AcceptedLock { profiles: Record<string, AcceptedProfile>; facets: Record<string, string> }
+
+function acceptedLock(): AcceptedLock {
+  const path = join(repository, 'model/accepted-profiles.json');
+  let parsed: AcceptedLock;
+  try { parsed = JSON.parse(readFileSync(path, 'utf8')) as AcceptedLock; }
+  catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Cannot read model/accepted-profiles.json: ${reason}`);
+  }
+  if (!parsed?.profiles || !parsed.facets) throw new Error('model/accepted-profiles.json must map profiles and facets');
+  return parsed;
+}
+
+function profileEntry(profile: { sha256: string; binding?: AcceptedBinding }): AcceptedProfile {
+  return profile.binding ? { sha256: profile.sha256, binding: profile.binding } : { sha256: profile.sha256 };
+}
+
+/**
+ * Accepted profiles and Facets stay at the digests in model/accepted-profiles.json.
+ * Generation reads that lock and never writes it; a changed meaning is a new version.
+ */
+function assertAccepted(artifacts: Map<string, string>, facets: readonly FacetDefinition[]): void {
+  const lock = acceptedLock();
+  const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
+    profiles: { id: string; sha256: string; binding?: AcceptedBinding }[];
+  };
+  const built = new Map(manifest.profiles.map(profile => [profile.id, profile]));
+  for (const id of Object.keys(lock.profiles).sort()) {
+    const profile = built.get(id);
+    const locked = lock.profiles[id]!;
+    const same = profile && profile.sha256 === locked.sha256
+      && JSON.stringify(profile.binding ?? null) === JSON.stringify(locked.binding ?? null);
+    if (!same) throw new Error(`Accepted profile ${id} changed; add a new version instead`);
+  }
+  for (const profile of [...manifest.profiles].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (lock.profiles[profile.id]) continue;
+    const entry = JSON.stringify({ [profile.id]: profileEntry(profile) });
+    throw new Error(`Unaccepted profile ${profile.id}: append ${entry} to model/accepted-profiles.json`);
+  }
+  const digests = new Map(facets.map(facet => [facetId(facet), String(compileFacet(facet).digest)]));
+  for (const id of Object.keys(lock.facets).sort()) {
+    if (digests.get(id) !== lock.facets[id]) {
+      throw new Error(`Accepted facet ${id} changed; add a new version instead`);
+    }
+  }
+  for (const id of [...digests.keys()].sort()) {
+    if (lock.facets[id] !== undefined) continue;
+    const entry = JSON.stringify({ [id]: digests.get(id) });
+    throw new Error(`Unaccepted facet ${id}: append ${entry} to model/accepted-profiles.json`);
+  }
+}
+
 export function generate(root: string, check: boolean): void {
   const artifacts = buildArtifacts(root);
+  assertAccepted(artifacts, authoredFacets);
   for (const [relative, expected] of artifacts) {
     const path = join(root, relative);
     if (check) {

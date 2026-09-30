@@ -1,0 +1,740 @@
+{
+  "profiles": {
+    "agent-profile-v1": {
+      "sha256": "d91dccf08288f5c516f4d02de93c9b722869432d75b6d4bdeb6409003fb47c56"
+    },
+    "agent-profile-v2": {
+      "sha256": "c4b8bb40f451f742d13887220ac6ed3288a192301f4295097ac85a1f94fb5e27"
+    },
+    "agent-provision-v1": {
+      "sha256": "39be9701579192f77c67c10996d9c66aa5daf0b1182fa0566c07064281038028"
+    },
+    "assessment-v1": {
+      "sha256": "f4dceaac4879083028d3b97903a345b01e495f1b8b8a41fcf15a4b3d8e0a75ba"
+    },
+    "ballot-mandate-approval-v1": {
+      "sha256": "0fecd52c8455390decae35d5641030372402236bdad2c5c96cb32c57fdea6647"
+    },
+    "ballot-proxy-v1": {
+      "sha256": "f0d2242d2d8026b9f6283c38c1e5db4efb28e2fec203428a49e225c9a40246c7"
+    },
+    "ballot-v1": {
+      "sha256": "8ef327fb788d4ab18785ca37f3f6ced829f54458a3bc0087681608d0849ffc05"
+    },
+    "charter-revision-v1": {
+      "sha256": "7d3903702c3767fd57874688413fa8bd1501c5c0ae3abba04e87dd7c80b78169"
+    },
+    "claim-v1": {
+      "sha256": "e028a8f74d433a28cd3860fec7bbaa468afe259b50e82d72fa276fe34c27e36f"
+    },
+    "classification-context-v1": {
+      "sha256": "41aa65a8f1f780d5902b858a8e9238d7e932afc88add4b23d731c51cfcd0bd20",
+      "binding": {
+        "required": [
+          "realm",
+          "context"
+        ],
+        "optional": [],
+        "roles": [
+          "global",
+          "realm",
+          "context"
+        ]
+      }
+    },
+    "classification-direct-decision-v1": {
+      "sha256": "c33d12713979c86a3d29aa2fc6ebd4952f37bdece02a5aa6ba485fc48bda468b",
+      "binding": {
+        "required": [
+          "work",
+          "main",
+          "sense",
+          "sense-revision",
+          "context",
+          "context-kind",
+          "application",
+          "decision",
+          "slot",
+          "proposer",
+          "decider",
+          "outcome"
+        ],
+        "optional": [
+          "realm",
+          "context-revision",
+          "predecessor"
+        ],
+        "roles": [
+          "work",
+          "main",
+          "sense",
+          "context",
+          "application",
+          "decision"
+        ]
+      }
+    },
+    "classification-global-context-v1": {
+      "sha256": "b54360592563a2f10b526fc9f8f6441727da2b941d351d31720e675df9242f07"
+    },
+    "classification-proposition-v1": {
+      "sha256": "8bc799783d7d2c43da737b01d2b1f10bba4dc643716f1ac09524d1ef0e86dbd0",
+      "binding": {
+        "required": [
+          "scheme",
+          "concept",
+          "path",
+          "expression",
+          "sense"
+        ],
+        "optional": [],
+        "roles": [
+          "scheme",
+          "concept",
+          "path",
+          "expression",
+          "sense"
+        ]
+      }
+    },
+    "classification-proposition-v2": {
+      "sha256": "22b3c0f677296e5c268514d0f87cb0dabdd2ae9900873e28b1540e27a87e01a6",
+      "binding": {
+        "required": [
+          "scheme",
+          "concept",
+          "path",
+          "expression",
+          "sense"
+        ],
+        "optional": [],
+        "roles": [
+          "scheme",
+          "concept",
+          "path",
+          "expression",
+          "sense"
+        ]
+      }
+    },
+    "collection-curation-v1": {
+      "sha256": "f89da51e411b4d1dc4f402ba2059b63a123bd3093f865b527d751a3dfa3468fe"
+    },
+    "collection-public-name-v1": {
+      "sha256": "62e499bd577ea08182da6ac7b4694807568932445b6bbb464e1699d53cc08832"
+    },
+    "concept-scheme-revision-v1": {
+      "sha256": "d09696e2138aff8599880e1f445b8342679f1d6736a90596de97d881dd5801ff"
+    },
+    "content-match-unit-v1": {
+      "sha256": "c21cad7776103f50a982a1820fd5719da156d97edf07e8c856dd00bcd2f18478"
+    },
+    "content-private-match-unit-v1": {
+      "sha256": "4842523abc660d6edd620947dc2c0e8fdf85031268bff6c71d8de6f5599c7288"
+    },
+    "content-publication-v1": {
+      "sha256": "19f83eac251b0e11dcae8cfe4d69a02f311133d979bf4fabb4f92f4dc0b5736f"
+    },
+    "content-search-eligibility-v1": {
+      "sha256": "b8d630d9b5206bbdff3b979f815ac41a537d6569667b4859198896d56a22d3c1"
+    },
+    "content-search-eligibility-v2": {
+      "sha256": "a5c815048b2d021e85d03bcd041b2c5bd26a655daff4ff4476f5cc82402351da"
+    },
+    "context-definition-equivalence-v1": {
+      "sha256": "d70b454077f96a64b4c994ba987d95aeb58ba60071f8d2bbf8963d3e1b6c9daf"
+    },
+    "context-definition-state-v1": {
+      "sha256": "d6c25bc9f0dd2face7a57a997babc888ecd0f7931af5066634d5aeafb85f8948"
+    },
+    "context-selection-v1": {
+      "sha256": "4f8db2ae8afffc2e935afcac0fad2047c37474a3b3efb69b0a0d32e5d87efdc4"
+    },
+    "context-v1": {
+      "sha256": "d97d910f9feedbe38a7c95b62c52fd34af77683a5b6419ff6aee8f4c561da736"
+    },
+    "correction-decision-v1": {
+      "sha256": "7bd209b0f518409342d5e0ed62ffb4afd17b10dec40ce06caf54bdd3432b358b"
+    },
+    "correction-proposal-v1": {
+      "sha256": "9339a7d90b95ee5e93f40031bbd1564b60aff045081c590d579ff89f8e347fc5"
+    },
+    "erasure-graph-v1": {
+      "sha256": "4f9da33919733b1cc31907564ad8dc4c77835db6c74edab99a9b175b20db8505"
+    },
+    "event-time-v1": {
+      "sha256": "99a65a3caed9f50d636b3112150a957172c87974b253248d212001449ae8a0ae"
+    },
+    "first-party-bundle-v1": {
+      "sha256": "a41754111c9fd3150ef4f1666b9fce2221f5e58b7aa463022d85e87b6e7bf00e"
+    },
+    "fixed-native-text-release-v1": {
+      "sha256": "0f1b6ac3b4891b845fe67b9cfc8ed8296dfa146ba44668645cf8d74a8a91ea22",
+      "binding": {
+        "required": [
+          "release",
+          "work",
+          "main",
+          "revision",
+          "selection",
+          "contribution",
+          "decision",
+          "draft",
+          "language",
+          "digest",
+          "manifest",
+          "actor",
+          "receipt",
+          "scope",
+          "epoch"
+        ],
+        "optional": [],
+        "roles": [
+          "release"
+        ]
+      }
+    },
+    "global-rating-standing-context-v1": {
+      "sha256": "305e68af3c289f9cd3560a814bc34f9ab7d79b7733a2682f08c944073664191b",
+      "binding": {
+        "required": [
+          "context",
+          "question"
+        ],
+        "optional": [],
+        "roles": [
+          "context"
+        ]
+      }
+    },
+    "global-rating-standing-observation-v1": {
+      "sha256": "88ebf1f8b846fdbb5fbd44835c7f547280d6a4533e68a665d6804e7d77e193b9",
+      "binding": {
+        "required": [
+          "context",
+          "work",
+          "main",
+          "slot",
+          "observation",
+          "revision",
+          "availability"
+        ],
+        "optional": [
+          "value",
+          "predecessor"
+        ],
+        "roles": [
+          "context",
+          "work",
+          "main",
+          "observation",
+          "revision"
+        ]
+      }
+    },
+    "hub-item-v1": {
+      "sha256": "d5a9c3598792cac47e1301ef9704551df121e50988643d0c1274583436bb0da8"
+    },
+    "main-default-selection-v1": {
+      "sha256": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a"
+    },
+    "main-package-release-recommendation-v1": {
+      "sha256": "2560da59cda40c7ac9fd0fb38b39e2d63666e6fdb06dccf250728d7d28faab60"
+    },
+    "native-agent-credit-v1": {
+      "sha256": "5e40e324be6ea9a9aa0503e265264685ee72d858060aeedb0701db93b7f96dea"
+    },
+    "poll-allocation-v1": {
+      "sha256": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4"
+    },
+    "poll-resolution-v1": {
+      "sha256": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654"
+    },
+    "poll-snapshot-v1": {
+      "sha256": "f9471026df8866e1ce6379325f83fe20f7be7b3b68d160386e5a1319665b8214"
+    },
+    "proposal-v1": {
+      "sha256": "5fa5082efb1b4215773347902cf82a11dc925ed9bdb4396cc2461006fe8291ce"
+    },
+    "protection-revision-v1": {
+      "sha256": "92a6e82e55849a2c3ab4bae1076cb8d17f18a4516870d3d46bbd7f050bcdb396"
+    },
+    "rating-aggregate-default-policy-v1": {
+      "sha256": "0d9a0acbe78f4043628960ed5942b64bc7a90d915e5e1fe0cb40938bda5f6fe4",
+      "binding": {
+        "required": [
+          "context",
+          "revision",
+          "contextRevision",
+          "predecessor",
+          "aggregationPolicy"
+        ],
+        "optional": [],
+        "roles": [
+          "context",
+          "revision"
+        ]
+      }
+    },
+    "realm-daily-rating-context-v1": {
+      "sha256": "a1819809844d44a1766a4dd20713e8c639eed5b71d158c4458f861de0842e149",
+      "binding": {
+        "required": [
+          "realm",
+          "context",
+          "question",
+          "timeZone"
+        ],
+        "optional": [],
+        "roles": [
+          "realm",
+          "context"
+        ]
+      }
+    },
+    "realm-daily-rating-observation-v1": {
+      "sha256": "6f5ddc3f11cc7a0c31a859e7352d65ef7c9983161ae8d5ffde93eaa922a8e658",
+      "binding": {
+        "required": [
+          "realm",
+          "context",
+          "work",
+          "main",
+          "slot",
+          "observation",
+          "revision",
+          "availability",
+          "day",
+          "timeZone",
+          "periodStart",
+          "periodEnd"
+        ],
+        "optional": [
+          "value",
+          "predecessor"
+        ],
+        "roles": [
+          "realm",
+          "context",
+          "work",
+          "main",
+          "observation",
+          "revision"
+        ]
+      }
+    },
+    "realm-experience-rating-context-v1": {
+      "sha256": "161452da6d838da538d753061cda75b09fa0a97bccfbb1cc79f8f4bb847a2c8f",
+      "binding": {
+        "required": [
+          "realm",
+          "context",
+          "question"
+        ],
+        "optional": [],
+        "roles": [
+          "realm",
+          "context"
+        ]
+      }
+    },
+    "realm-experience-rating-observation-v1": {
+      "sha256": "c3ce902cafe8b737aac34080fb1caf4b3953f5c737e500129d16e1d630654afe",
+      "binding": {
+        "required": [
+          "realm",
+          "context",
+          "work",
+          "main",
+          "slot",
+          "observation",
+          "revision",
+          "availability",
+          "occasion"
+        ],
+        "optional": [
+          "value",
+          "predecessor"
+        ],
+        "roles": [
+          "realm",
+          "context",
+          "work",
+          "main",
+          "observation",
+          "revision"
+        ]
+      }
+    },
+    "realm-local-rejection-v1": {
+      "sha256": "8db4a0124cf3b2ac61a28595fb05677e8dff8977c4b0a126740f583de6589e02"
+    },
+    "realm-local-selection-v1": {
+      "sha256": "065cee2ee14324f92989a206e106a538a243621f3c54c55c9519cfcadf22def4"
+    },
+    "realm-policy-selection-v1": {
+      "sha256": "c695375f402934a868fc603ce59fb228640bf7d640000a6a3c5514693b57b472"
+    },
+    "realm-public-profile-v1": {
+      "sha256": "d03364027f8b706441ed9433b26360599f9b531f1a255bd1a49526d08f62ca24"
+    },
+    "realm-public-profile-v2": {
+      "sha256": "2c5bdf0a1d434d2ddf5566a0ad56e8ea84290599a76e729837677d03c4f8b852"
+    },
+    "realm-release-rating-context-v1": {
+      "sha256": "7520c99bb9669d866e67b4929ee624b1dafb3f2c6d616e67fca32bbd4a679c17",
+      "binding": {
+        "required": [
+          "realm",
+          "context",
+          "question"
+        ],
+        "optional": [],
+        "roles": [
+          "realm",
+          "context"
+        ]
+      }
+    },
+    "realm-release-rating-observation-v1": {
+      "sha256": "451a60e884d8c09b3f3e0c91742be3044f2067054479ad4f662b9abe9ba02f2f",
+      "binding": {
+        "required": [
+          "realm",
+          "context",
+          "work",
+          "main",
+          "release",
+          "slot",
+          "observation",
+          "revision",
+          "availability"
+        ],
+        "optional": [
+          "value",
+          "predecessor"
+        ],
+        "roles": [
+          "realm",
+          "context",
+          "work",
+          "main",
+          "release",
+          "observation",
+          "revision"
+        ]
+      }
+    },
+    "realm-reply-placement-v1": {
+      "sha256": "b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511",
+      "binding": {
+        "required": [
+          "slot",
+          "placement",
+          "realm",
+          "reply",
+          "root",
+          "revision",
+          "review",
+          "author",
+          "actor",
+          "receipt",
+          "scope",
+          "epoch"
+        ],
+        "optional": [],
+        "roles": [
+          "slot",
+          "placement"
+        ]
+      }
+    },
+    "realm-standing-rating-context-v1": {
+      "sha256": "be1cfde2f3f0c6207e684829b7a5a9c66383f52a640908051cd245ebf0454cd9",
+      "binding": {
+        "required": [
+          "realm",
+          "context",
+          "question"
+        ],
+        "optional": [],
+        "roles": [
+          "realm",
+          "context"
+        ]
+      }
+    },
+    "realm-standing-rating-observation-v1": {
+      "sha256": "a0206416dfc9d591e187dc22400ac802810a01245adb20e4ff48bdd4360960da",
+      "binding": {
+        "required": [
+          "realm",
+          "context",
+          "work",
+          "main",
+          "slot",
+          "observation",
+          "revision",
+          "availability"
+        ],
+        "optional": [
+          "value",
+          "predecessor"
+        ],
+        "roles": [
+          "realm",
+          "context",
+          "work",
+          "main",
+          "observation",
+          "revision"
+        ]
+      }
+    },
+    "realm-submission-selection-v1": {
+      "sha256": "9bfc405a024d6db800620c6080cfc98cbae49cf027f57e41ca007337943c8996"
+    },
+    "recipe-structure-v1": {
+      "sha256": "b950e8eb396bc5261a976cf9c8378e42655b0aa2bdf9531701c7aaa51958dd72"
+    },
+    "relation-occurrence-v1": {
+      "sha256": "085eb7668d18baad0c135943856d0f428d31d5a5429216155f967a8001b75222"
+    },
+    "release-v1": {
+      "sha256": "e0018a2144113c2c3cc6bfcdc3951f1ce282c919859950c0811aa018c4a1c92c"
+    },
+    "rights-offering-v1": {
+      "sha256": "dd10150cfac446923dbb9ac8501f47a0a24bb292dd0eb4ddbad9449ed1746f85"
+    },
+    "semantic-annotation-v1": {
+      "sha256": "d195472baf5db656b7086c576e95e0f17f057c95ebd766e3789bdecf033835a8"
+    },
+    "semantic-definition-v1": {
+      "sha256": "c4755adab864370f58a4b27067ecd9aa6e4d4923ef97249364b4b34a76147e3e"
+    },
+    "semantic-model-generation-v1": {
+      "sha256": "16d519183b325de019c55dc5ca2c5bf140b246ba4bb81609b16e386d431595f0"
+    },
+    "semantic-resource-v1": {
+      "sha256": "0ebbb7cd1f04b9adb75ecb0504013195561e38a8e59a398937b95e3c679bfd99"
+    },
+    "semantic-rule-v1": {
+      "sha256": "bf01a1cebd44c8ec698e408e49fe2bd08cb41aeccb8ffb88b2bf99fadbba29a2"
+    },
+    "source-field-statement-v1": {
+      "sha256": "ef3347dcf04ad576bb156afcfcbb8b35316abaeb3700dc30f2d4827e686594d2"
+    },
+    "source-open-library-work-v1": {
+      "sha256": "708b975233ceb3e4dc670ff4821011ba91c938a73c9739cfe94052ebdf22ce07"
+    },
+    "source-reification-v1": {
+      "sha256": "57e5a667cb62b1b72357b77aa2c7ac6133ed4f729732e681817ad1c537839100"
+    },
+    "space-realm-v1": {
+      "sha256": "74a39bad65c0fd259f557146bed386843c5919fac3491b7503032d1ce9e370c2"
+    },
+    "space-realm-v2": {
+      "sha256": "6bcaa955e1c473f450b97d2d50afad3205d0136447b7dd11e30650a888045185"
+    },
+    "statement-cutover-v1": {
+      "sha256": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa"
+    },
+    "statement-decision-v1": {
+      "sha256": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490"
+    },
+    "statement-v1": {
+      "sha256": "da4cf542d30ca2d0af244fa86efd53e4a8780a7b8feae260abc05168c358aa2a"
+    },
+    "structure-book-v1": {
+      "sha256": "5598fd9d04b2729c3008a647c92c03c9f1580b5c103dbe2e1a84f10e226e6242"
+    },
+    "structure-composition-v1": {
+      "sha256": "0043acb8748937d04d177a90695b06ac23fcccd5742b7d0da3c728e2d468d746"
+    },
+    "tag-proposal-concept-v1": {
+      "sha256": "a671d7af426d72082e47f328093c27c6088b2496a7d4925a38cd2ba29df0ca94"
+    },
+    "text-contribution-v1": {
+      "sha256": "4a42b1851eaa3cace3e06c5a142329e7c3c380e756123c3b131dc2584c9d2d8b"
+    },
+    "text-publication-v1": {
+      "sha256": "831355eccb08af104d4dfc8d972cb4b8e4e4c39b40a3d83aab6a13f67af0dd37"
+    },
+    "theme-activation-v1": {
+      "sha256": "a6783b594ea6ff88743128c994707b49dc59da2d234ac3969c0a1bd5f294d8b6"
+    },
+    "theme-first-party-v1": {
+      "sha256": "53e664d86fe7620d2c3fa5cf0583e8c551c0abe7ef1cf24c10c691e1a1398a40"
+    },
+    "translation-link-v1": {
+      "sha256": "4342e9d51554c176bda308d999f7620eb6b8b0096a1dab54e85a3265085a3f0e",
+      "binding": {
+        "required": [
+          "link",
+          "target-work",
+          "target-main",
+          "target-revision",
+          "source-work",
+          "source-main",
+          "status",
+          "language",
+          "translator",
+          "publisher",
+          "evidence",
+          "actor",
+          "receipt",
+          "scope",
+          "epoch"
+        ],
+        "optional": [
+          "source-revision"
+        ],
+        "roles": [
+          "link"
+        ]
+      }
+    },
+    "value-exact-v1": {
+      "sha256": "839d218f826651e984ec804d15a856d40f9c08126e88cf2f67585656be83c2e4"
+    },
+    "web-publication-v1": {
+      "sha256": "66ec301e867ac91a0e349d6411f2617f15196440b8520d2b56b9c43fdbc29fea"
+    },
+    "web-snapshot-v1": {
+      "sha256": "97defb2563a74cc56ae4dad08e8b6c75165c31c2b23574cb70d734d0b891365d"
+    },
+    "work-address-claim-v1": {
+      "sha256": "0447720e2e33c0f1a71259488f1710c0c837039a1a4f1931c8c1bed92f2848df"
+    },
+    "work-address-disposition-v1": {
+      "sha256": "30c4d9f8e3926e197186dbd3e0a9b6392db661fcd590251d3cee660880ab071c"
+    },
+    "work-address-lifecycle-v1": {
+      "sha256": "54a6ba17ab7e5e9a70f7e1a4c6cc8e854692b1946f5a24247db3f47ef070634f"
+    },
+    "work-author-credit-v1": {
+      "sha256": "369b1c406b627053c612fff0c97fe18353e633df2b8128746cb4463273369281",
+      "binding": {
+        "required": [
+          "credit",
+          "revision",
+          "work",
+          "work-head",
+          "key",
+          "ordinal",
+          "actor",
+          "receipt",
+          "scope",
+          "epoch",
+          "intent"
+        ],
+        "optional": [
+          "source-role"
+        ],
+        "roles": [
+          "credit",
+          "revision"
+        ]
+      }
+    },
+    "work-derivation-unresolved-v1": {
+      "sha256": "6c703f04dde8586aa0d5fbb5601fc532c0d572c2097eb18e927e4b601f8f71d2",
+      "binding": {
+        "required": [
+          "derivation",
+          "target-work",
+          "target-main",
+          "target-revision",
+          "source-work",
+          "kind",
+          "evidence",
+          "actor",
+          "receipt",
+          "scope",
+          "epoch"
+        ],
+        "optional": [
+          "source-main"
+        ],
+        "roles": [
+          "derivation"
+        ]
+      }
+    },
+    "work-derivation-v1": {
+      "sha256": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
+      "binding": {
+        "required": [
+          "derivation",
+          "target-work",
+          "target-main",
+          "target-revision",
+          "source-work",
+          "source-main",
+          "source-revision",
+          "kind",
+          "evidence",
+          "actor",
+          "receipt",
+          "scope",
+          "epoch"
+        ],
+        "optional": [],
+        "roles": [
+          "derivation"
+        ]
+      }
+    },
+    "work-editorial-field-v1": {
+      "sha256": "61a93b0c3f403a3450545c063cabfb8d12299586df48dbd4c9574d8831b30999"
+    },
+    "work-kind-v1": {
+      "sha256": "d1cfc2074299ba294307ed19b97c2641dd0197b759f06a43eb376584cbe2d1d2"
+    },
+    "work-kind-v2": {
+      "sha256": "83d22b37af19ca88386aa6767c96f94537e64614979b84db72fe9264dbdb1009"
+    },
+    "work-metadata-details-v1": {
+      "sha256": "905826519ea23297628a4e192c81176ff210b1089cb1ba821a48b10456032a09"
+    },
+    "work-metadata-details-v2": {
+      "sha256": "7ed4adc3c3f9379e5ce7c0b80a38ff2c602df761a5ffcfcf655ae3d6831e6ae6"
+    },
+    "work-metadata-v1": {
+      "sha256": "ac918cf0458150520bf03f9683e6a363ad702376ebc50eaa729f98d84b3b8760"
+    },
+    "work-metadata-v2": {
+      "sha256": "5f2a13cf49bf5d8692bf4a57d5d7e10c080f916d63f5e29c7c16dc217799f866"
+    },
+    "work-native-child-v1": {
+      "sha256": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5"
+    },
+    "work-title-control-v1": {
+      "sha256": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d"
+    },
+    "work-type-v1": {
+      "sha256": "e8ad5bd6e3e4bb4754e530c53f4caa5b60ec6e064e0d7b4a66bcdd23c7d7c6a4"
+    },
+    "work-type-v2": {
+      "sha256": "94ef660d31ca8af44f51d5ecc6ad767ea97c6c39d1dcbf7db4321b1152632b2f"
+    },
+    "zone-capability-v1": {
+      "sha256": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65"
+    },
+    "zone-presentation-v1": {
+      "sha256": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2"
+    }
+  },
+  "facets": {
+    "facet-author-v1": "2c16a404d3c13f1161102c924763ef302e4695fca2f09965f96a2e4193d9b48b",
+    "facet-concept-v1": "6a2438d45d2616af705374094389676616c09e0fbbc8eda2330754b4d325a5d5",
+    "facet-contributor-v1": "93579a0f6b18f88af7560a8e0ca63bd8673cfcf0049690144b1d5e951564ea97",
+    "facet-language-v1": "6fccc1a9beb900132c2a247a691b5fbef7df2572fc62e3000a87d6722f83a9f5",
+    "facet-rating-v1": "22962ff8e656c18b6bc7e3b40de8a49bf42022b45161a27b45a730664e7aa074",
+    "facet-realm-v1": "1eef10945c692bf3f4a15d74a6222ac454023f81831710de16b986f78a05ee65",
+    "facet-relation-v1": "34681c142eb5ce28e53f81618a125bf66e26c49fa89739c1675d3ebf2a1dad89",
+    "facet-role-v1": "50a1601af2fce441d8eb60d8f56b6a98b7492e64569836477536dbeec4c18229",
+    "facet-statement-v1": "834feca0b51901b385dad5fd3e6a78195c048e391ad4ece66c87b64850ec2986",
+    "facet-type-v1": "053c6b68d9822f3089323503b30c71269c0dd9a52cab3384ac8a35949e9405c5"
+  }
+}
