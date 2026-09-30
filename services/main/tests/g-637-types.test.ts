@@ -208,7 +208,7 @@ test('G-637: create, discovery and type-edit enums retain their complete origina
 test('G-637: generated public API retains old type-edit enums beside the open v3 request', () => {
   type BodySchema = {
     properties: {
-      semanticTypes?: { items: { enum: string[] } };
+      semanticTypes?: { items: { enum?: string[]; type?: string; format?: string } };
       profile?: { const: string };
       types?: { items: { enum?: string[]; type?: string; pattern?: string } };
     };
@@ -221,7 +221,13 @@ test('G-637: generated public API retains old type-edit enums beside the open v3
     paths: { '/v1/works': { post: Operation }; '/v1/works/{id}/type': { put: Operation } };
   };
   const create = api.paths['/v1/works'].post.requestBody.content['application/json'].schema;
-  expect(create.properties.semanticTypes!.items.enum).toEqual(historicalTypes);
+  const creates = create.anyOf!;
+  expect(creates).toHaveLength(2);
+  for (const body of creates) {
+    expect(body.properties.semanticTypes!.items.type).toBe('string');
+    expect(body.properties.semanticTypes!.items.enum).toBeUndefined();
+    expect(body.properties.semanticTypes!.items.format).toBe('rezics-work-type');
+  }
   const edits =
     api.paths['/v1/works/{id}/type'].put.requestBody.content['application/json'].schema.anyOf!;
   expect(edits).toHaveLength(3);

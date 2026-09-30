@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
-import { readFileSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { typeRegistry } from '../../../packages/model/src/generated/types.ts';
-import type { CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
+import type { CommandEnvelope, CommandResult } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AdmittedTypeStore } from '../../../services/main/src/modules/types/store.ts';
 import {
   admittedTypes,
@@ -30,9 +30,10 @@ import { AccessPolicyOwner } from '../../../services/main/src/modules/access/pol
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
+import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 
-test('G653: administrator admission, concurrent replay, live retyping, facets, retirement and retained edits', async () => {
+test('G653: HTTP admission and creation, native Java legacy retyping, facets, retirement and recovery', async () => {
   const directory = resolve('.temp', `g-653-${randomUUID()}`);
   const f = await authorCreditFixture(
     Bun.env as Record<string, string>,
@@ -48,6 +49,7 @@ test('G653: administrator admission, concurrent replay, live retyping, facets, r
     access: f.access,
     accessPolicy: new AccessPolicyOwner(f.accessPool),
     types,
+    catalogueIntake: new CatalogueIntakeStore(f.accessPool, f.env),
     content,
     contentAuthoring: content,
     mediaAccess: new MediaAccessBatchReader(f.accessPool, f.env.fuseki),
@@ -83,6 +85,18 @@ test('G653: administrator admission, concurrent replay, live retyping, facets, r
   try {
     const before = await json<{ digest: string }>(await call('GET', '/v1/types'));
     const webNovel = 'https://rezics.com/vocab/WebNovel';
+    const createBody = {
+      profile: 'metadata-only-v1',
+      authoring: 'catalogue',
+      grain: 'new-creative-scope',
+      candidateReceipt: randomUUID(),
+      title: `G653 serial ${randomUUID()}`,
+      language: 'en',
+      semanticTypes: [webNovel],
+      actingSubject: f.actor,
+    };
+    // Compile the creation validator before admission as well as the app itself.
+    await json(await call('POST', '/v1/works', createBody), 400);
     const {
       default: _default,
       creatable: _creatable,
@@ -185,7 +199,26 @@ test('G653: administrator admission, concurrent replay, live retyping, facets, r
         .replayed,
     ).toBe(true);
     types.refresh = refresh;
-    // Keep the owner command check separate from G-842's still-closed POST schema.
+    const candidates = await json<{ candidateReceipt: string }>(
+      await call('POST', '/v1/catalogue/candidates', {
+        profile: 'catalogue-candidates-v1',
+        originalTitle: { value: createBody.title, language: 'en' },
+        aliases: [], romanizations: [], creators: [], dates: [], identifiers: [],
+      }),
+    );
+    const creation = { ...createBody, candidateReceipt: candidates.candidateReceipt };
+    const creationKey = randomUUID();
+    type Created = { work: string; workRevision: string; mainVersion: string; replayed: boolean };
+    const created = await json<Created>(await call('POST', '/v1/works', creation, creationKey), 201);
+    expect(created.replayed).toBe(false);
+    expect(await json<Created>(await call('POST', '/v1/works', creation, creationKey)))
+      .toMatchObject({ work: created.work, replayed: true });
+    // Live types preserve G-842's grain dispatch and candidate-receipt requirement.
+    await json(await call('POST', '/v1/works', { ...creation, candidateReceipt: undefined }), 400);
+    expect(await json(await call('POST', '/v1/works', { ...creation, grain: 'translation' })))
+      .toMatchObject({ outcome: 'use-owner-api', grain: 'translation' });
+    await json(await call('POST', '/v1/works', { ...creation, semanticTypes: ['urn:unadmitted:type'] }), 400);
+    // Historical fixtures are written through the original v1/v2 admission profiles.
     const principal = await f.account.verifier.verify(
       new Request('http://main.local', {
         headers: { authorization: `Bearer ${f.account.tokenA}` },
@@ -195,7 +228,7 @@ test('G653: administrator admission, concurrent replay, live retyping, facets, r
     const create = async (
       title: string,
       semanticTypes: string[],
-      profile?: 'work-kind-v1' | 'work-kind-v2',
+      profile: 'work-kind-v1' | 'work-kind-v2',
     ) => {
       const digest = metadataWorkRequestDigest(title, semanticTypes, 'en');
       const registered = await f.access.register({
@@ -251,31 +284,35 @@ test('G653: administrator admission, concurrent replay, live retyping, facets, r
       });
       return created;
     };
-    const works = await Promise.all([
-      create(`G653 native ${randomUUID()}`, [webNovel]),
+    const historicalWorks = await Promise.all([
       create(`G653 v1 ${randomUUID()}`, ['https://schema.org/Book'], 'work-kind-v1'),
       create(`G653 v2 ${randomUUID()}`, ['https://schema.org/VideoGame'], 'work-kind-v2'),
     ]);
-    for (const work of works) {
+    const works = [created, ...historicalWorks];
+    const nativeRetypes: CommandResult[] = [];
+    const command = f.nativeFuseki.commandWithReceipt.bind(f.nativeFuseki);
+    f.nativeFuseki.commandWithReceipt = async envelope => {
+      const result = await command(envelope);
+      if (envelope.validations.some(validation => validation.profile === 'work-type-v3'))
+        nativeRetypes.push(result);
+      return result;
+    };
+    const retype = async (work: string, expectedHead: string, types: string[]) => {
+      const before = nativeRetypes.length;
+      const response = await call('PUT', `/v1/works/${shortId(work)}/type`, {
+        profile: 'work-type-v3', expectedHead, types, actingSubject: f.actor,
+      });
+      // Inspect the real Java result, including its policy report on failure.
+      expect(nativeRetypes.slice(before)).toMatchObject([{ status: 'committed' }]);
+      return json<{ revision: string }>(response);
+    };
+    // Retype the old anchors first: reintroducing a closed Java type list must reject this request.
+    for (const work of [...historicalWorks, created]) {
       await f.grant(`work:edit:${work.work}`, 'work.edit');
       await f.grant(`work:read:${work.work}`, 'work.read');
-      const edited = await json<{ revision: string }>(
-        await call('PUT', `/v1/works/${shortId(work.work)}/type`, {
-          profile: 'work-type-v3',
-          expectedHead: work.workRevision,
-          types: [webNovel],
-          actingSubject: f.actor,
-        }),
-      );
+      const edited = await retype(work.work, work.workRevision, [webNovel]);
       // A second retyping traverses the v3 historical anchor as well as the original one.
-      const again = await json<{ revision: string }>(
-        await call('PUT', `/v1/works/${shortId(work.work)}/type`, {
-          profile: 'work-type-v3',
-          expectedHead: edited.revision,
-          types: [webNovel, 'https://schema.org/Book'],
-          actingSubject: f.actor,
-        }),
-      );
+      const again = await retype(work.work, edited.revision, [webNovel, 'https://schema.org/Book']);
       work.workRevision = again.revision;
       const read = await json<{ types: string[] }>(
         await call(
@@ -285,6 +322,7 @@ test('G653: administrator admission, concurrent replay, live retyping, facets, r
       );
       expect(read.types).toContain(webNovel);
     }
+    f.nativeFuseki.commandWithReceipt = command;
     await json(
       await call('PUT', `/v1/works/${shortId(works[0].work)}/type`, {
         profile: 'work-type-v3',
@@ -379,6 +417,7 @@ test('G653: administrator admission, concurrent replay, live retyping, facets, r
       ).replayed,
     ).toBe(true);
     expect(() => metadataWorkRequestDigest('Retired serial', [webNovel])).toThrow();
+    await json(await call('POST', '/v1/works', creation), 400);
     await json(
       await call('PUT', `/v1/works/${shortId(target.work)}/type`, {
         profile: 'work-type-v3',
@@ -508,12 +547,3 @@ test('G653: administrator admission, concurrent replay, live retyping, facets, r
     rmSync(directory, { recursive: true, force: true });
   }
 }, 180_000);
-
-test('G653: the historical Work anchor guard explicitly retains all three profile generations', () => {
-  const java = readFileSync(
-    resolve('infra/jena/command-module/src/main/java/com/rezics/jena/ModelMutationPolicy.java'),
-    'utf8',
-  );
-  for (const profile of ['work-type-v1', 'work-type-v2', 'work-type-v3'])
-    expect(java).toContain(`validWorkTypeRevision(profiles, data, name, "${profile}")`);
-});
