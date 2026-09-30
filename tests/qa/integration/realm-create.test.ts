@@ -28,10 +28,10 @@ test('Community creation reserves one handle and filters the directory by global
     expect(created.owner).toBe(creator.actor);
     expect((await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
       GRAPH ${iri(GRAPHS.current)} { ${iri(created.realm)} rv:definitionProfile
-        <https://rezics.com/definition/space-realm-v2> . }
+        <https://rezics.com/definition/space-realm-v3> . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(created.realmRevision)}
-        rv:modelRevision <https://rezics.com/definition/space-realm-v2> ;
-        rv:shapeRevision <https://rezics.com/definition/space-realm-v2> . }
+        rv:modelRevision <https://rezics.com/definition/space-realm-v3> ;
+        rv:shapeRevision <https://rezics.com/definition/space-realm-v3> . }
     }`, 1024)).boolean).toBe(true);
     expect(await json(await stack.call('GET', '/v1/realms/by-handle/fantasy-readers'), 200))
       .toEqual({ realm: created.realm, handle: command.handle });

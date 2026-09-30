@@ -70,7 +70,7 @@ function ownerStorage(input: OwnerCreateInput, objectDirectory: string) {
 }
 
 for (const kind of ['zone', 'collection', 'definition'] as const) {
-  for (const language of ['ar', 'zh-hans', undefined]) test(`G-596 ${kind} creation preserves ${language ?? 'unrecorded'} name language, manifest and receipt replay`, async () => {
+  for (const language of ['ar', 'zh-hans', 'x-reader', undefined]) test(`G-596 ${kind} creation preserves ${language ?? 'unrecorded'} name language, manifest and receipt replay`, async () => {
     const root = resolve(import.meta.dir, '../../../.temp');
     mkdirSync(root, { recursive: true });
     const directory = mkdtempSync(`${root}/g-596-owner-`);
@@ -80,6 +80,8 @@ for (const kind of ['zone', 'collection', 'definition'] as const) {
         ...(kind === 'zone' ? { space: realm } : {}),
         ...(kind === 'definition' ? { query: { phrase: 'books', language: null }, resultBudget: 16 } : {}) };
       const recordedLanguage = language === 'zh-hans' ? 'zh-Hans' : language ?? 'und';
+      // With no declared script, the Arabic text sets direction without supplying a language.
+      const expectedDirection = recordedLanguage === 'zh-Hans' ? 'ltr' : 'rtl';
       const db = ownerStorage(input, directory);
       const request = new Request('http://main.test/v1/owners', { method: 'POST' });
       const created = await createAdmittedOwner(db.env, db.account, db.access, request, input);
@@ -90,11 +92,11 @@ for (const kind of ['zone', 'collection', 'definition'] as const) {
       else {
         expect(db.plain()).toEqual({ value: name, 'xml:lang': recordedLanguage });
         expect(selectDisplayName(new Map([[db.plain()!['xml:lang'], db.plain()!.value]]), ['en']))
-          .toMatchObject({ value: name, language: recordedLanguage, direction: language === 'ar' ? 'rtl' : 'ltr' });
+          .toMatchObject({ value: name, language: recordedLanguage, direction: expectedDirection });
         if (kind === 'collection') {
           const current = await readCollectionName(db.env, owner);
           expect(selectDisplayName(current.name, ['en']))
-            .toMatchObject({ value: name, language: recordedLanguage, direction: language === 'ar' ? 'rtl' : 'ltr' });
+            .toMatchObject({ value: name, language: recordedLanguage, direction: expectedDirection });
         }
       }
       const files = readdirSync(directory);
@@ -111,7 +113,7 @@ for (const kind of ['zone', 'collection', 'definition'] as const) {
 }
 
 test('G-596 invalid owner languages fail before admission or graph work', async () => {
-  for (const language of ['', 'en @evil', 'en-US; DROP', 'en--US', 'x-not-a-language']) {
+  for (const language of ['', 'en @evil', 'en-US; DROP', 'en--US', 'x']) {
     const input: OwnerCreateInput = { kind: 'zone', owner, actingSubject: actor,
       idempotencyKey: 'invalid', requestDigest: 'a'.repeat(64), disclosure: 'public', name, language };
     await expect(createAdmittedOwner({} as never, {} as never, {} as never,

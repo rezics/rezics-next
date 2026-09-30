@@ -59,7 +59,7 @@ export async function deliverRealmPolicy(env: WorkActivationEnvironment, op: Rea
     ? SPACE_REALM_PROFILE : spaceProfile === undefined && realmProfile === undefined
     ? SPACE_REALM_PROFILE_V1 : null;
   if (!profile) throw new Error('Realm Space profile is inconsistent');
-  const profileId = profile === SPACE_REALM_PROFILE ? 'space-realm-v2' : 'space-realm-v1';
+  const profileId = profile === SPACE_REALM_PROFILE ? 'space-realm-v3' : 'space-realm-v1';
   const validations = await profileValidations(env.fuseki, profileId, [
     { shape: `${profile}/space-shape`, focus: [space], graphs: [GRAPHS.current] },
     { shape: `${profile}/realm-shape`, focus: [op.realm], graphs: [GRAPHS.current] },
