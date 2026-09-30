@@ -246,6 +246,7 @@ export const messages = {
   stepEligibility: 'Let readers find and open it',
   stepDone: 'Done', stepFailed: 'Didn’t work', stepSkipped: 'Not done',
   publishDenied: 'This identity can’t publish this text.',
+  publishTranslationBasisRequired: 'This translation needs a recorded basis that permits public use of the source work. It can’t be published as your own original work.',
   publishStale: 'This text was published from another save meanwhile. Reload to see it, then publish again.',
   publishChapterStale: 'This chapter was published from another device. Studio can only update a publication made on this device for now.',
   publishFailed: 'Couldn’t publish. Your text is saved; try again.',

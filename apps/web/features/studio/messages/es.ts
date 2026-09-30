@@ -195,6 +195,7 @@ export default {
   stepEligibility: 'Permitir que los lectores lo encuentren y lo abran',
   stepDone: 'Hecho', stepFailed: 'No funcionó', stepSkipped: 'No realizado',
   publishDenied: 'Esta identidad no puede publicar este texto.',
+  publishTranslationBasisRequired: 'Esta traducción necesita una base registrada que permita el uso público de la obra original. No puedes publicarla como una obra original tuya.',
   publishStale: 'Mientras tanto, este texto se publicó desde otro guardado. Recarga para verlo y vuelve a publicar.',
   publishChapterStale: 'Este capítulo se publicó desde otro dispositivo. Por ahora, el Estudio solo puede actualizar una publicación hecha en este dispositivo.',
   publishFailed: 'No se pudo publicar. Tu texto está guardado; inténtalo de nuevo.',

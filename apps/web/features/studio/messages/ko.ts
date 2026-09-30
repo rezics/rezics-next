@@ -192,6 +192,7 @@ export default {
   stepEligibility: '독자가 찾아서 열 수 있게 하기',
   stepDone: '완료', stepFailed: '실패', stepSkipped: '진행 안 함',
   publishDenied: '이 프로필로는 이 본문을 공개할 수 없습니다.',
+  publishTranslationBasisRequired: '이 번역을 공개하려면 원작의 공개 이용을 허용하는 근거가 기록되어 있어야 합니다. 자신의 창작물로 공개할 수는 없습니다.',
   publishStale: '그사이 이 본문이 다른 저장본에서 공개되었습니다. 새로 고쳐 확인한 뒤 다시 공개하세요.',
   publishChapterStale: '이 챕터는 다른 기기에서 공개되었습니다. 지금은 스튜디오에서 이 기기에서 한 공개만 업데이트할 수 있습니다.',
   publishFailed: '공개하지 못했습니다. 본문은 저장되어 있으니 다시 시도해 주세요.',

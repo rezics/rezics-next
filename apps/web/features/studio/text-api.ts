@@ -59,10 +59,11 @@ export async function readLatest(actingSubject: string, text: string, main: Main
   return body === null ? null : { head: current.data.draftHead, body };
 }
 
-export type StepOutcome = 'done' | 'denied' | 'stale' | 'pending' | 'failed';
+export type StepOutcome = 'done' | 'denied' | 'stale' | 'translation-basis-required' | 'pending' | 'failed';
 
 const stepOf = (error: Failure): StepOutcome => error.status === 401 || error.status === 403 ? 'denied'
-  : error.status === 409 ? 'stale' : 'failed';
+  : code(error) === 'translation_basis_required' ? 'translation-basis-required'
+    : error.status === 409 ? 'stale' : 'failed';
 
 export interface Publication { publicationDecision: string; selectedDraft: string }
 

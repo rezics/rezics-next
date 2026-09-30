@@ -192,6 +192,7 @@ export default {
   stepEligibility: '讓讀者可以找到並開啟它',
   stepDone: '完成', stepFailed: '未成功', stepSkipped: '未進行',
   publishDenied: '此身分無法發布這份正文。',
+  publishTranslationBasisRequired: '發布這份譯文需要有記錄的依據，證明原作可以公開使用。不能將它作為你自己的原創作品發布。',
   publishStale: '這份正文剛從另一次儲存發布。請重新載入查看，然後再發布。',
   publishChapterStale: '這一章是從另一台裝置發布的。目前創作室只能更新在此裝置上發布的內容。',
   publishFailed: '無法發布。你的內容已儲存，請再試一次。',

@@ -195,6 +195,7 @@ export default {
   stepEligibility: 'Permettre aux lecteurs de le trouver et de l’ouvrir',
   stepDone: 'Terminé', stepFailed: 'Échec', stepSkipped: 'Non effectué',
   publishDenied: 'Cette identité ne peut pas publier ce texte.',
+  publishTranslationBasisRequired: 'Cette traduction nécessite un fondement enregistré autorisant l’utilisation publique de l’œuvre source. Elle ne peut pas être publiée comme votre propre œuvre originale.',
   publishStale: 'Ce texte a été publié entre-temps depuis un autre enregistrement. Rechargez pour le voir, puis publiez à nouveau.',
   publishChapterStale: 'Ce chapitre a été publié depuis un autre appareil. Pour l’instant, le Studio ne peut mettre à jour qu’une publication faite sur cet appareil.',
   publishFailed: 'Impossible de publier. Votre texte est enregistré ; réessayez.',

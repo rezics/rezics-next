@@ -65,7 +65,7 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
             expectedDraftHead: body.expectedDraftHead,
             expectedPublicationHead: body.expectedPublicationHead,
             rightsBasis: body.rightsBasis, disclosure: body.disclosure,
-            actingSubject: body.actingSubject, idempotencyKey });
+            actingSubject: body.actingSubject, idempotencyKey }, work.rights?.store);
         return Response.json({ contribution: receipt.contribution,
           publicationDecision: receipt.publicationDecision,
           selectedDraft: receipt.selectedDraft, predecessor: receipt.predecessor,

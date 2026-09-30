@@ -124,7 +124,8 @@ export interface PublishTarget {
   book?: boolean;
 }
 
-const failure = (outcome: StepOutcome, t: T) => outcome === 'denied' ? t.publishDenied : outcome === 'stale' ? t.publishStale
+const failure = (outcome: StepOutcome, t: T) => outcome === 'translation-basis-required' ? t.publishTranslationBasisRequired
+  : outcome === 'denied' ? t.publishDenied : outcome === 'stale' ? t.publishStale
   : outcome === 'pending' ? t.publishPending : t.publishFailed;
 
 /** Publishing a Work's own text, and optionally making it the text readers open for the Work. */
@@ -197,6 +198,7 @@ export function ChapterPublishDialog({ open, onOpenChange, agent, book, title, t
       update('publish', 'done');
       update('eligibility', result.outcome);
       if (result.publication) onPublished(result.publication, basis);
-      return result.outcome === 'done' ? null : result.outcome === 'stale' ? t.eligibilityStale : t.eligibilityFailed;
+      return result.outcome === 'done' ? null : result.outcome === 'translation-basis-required' ? t.publishTranslationBasisRequired
+        : result.outcome === 'stale' ? t.eligibilityStale : t.eligibilityFailed;
     }} />;
 }

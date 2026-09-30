@@ -79,7 +79,7 @@ export async function readChapterRevision(actingSubject: string, revision: strin
   return read.data && typeof body === 'string' ? { body, digest: read.data.reference.byteDigest } : null;
 }
 
-export type PublishOutcome = 'done' | 'denied' | 'stale' | 'pending' | 'failed';
+export type PublishOutcome = 'done' | 'denied' | 'stale' | 'translation-basis-required' | 'pending' | 'failed';
 
 export interface ChapterPublication {
   /** The Content publication decision now current; the next update names it as its expected head. */
@@ -106,7 +106,8 @@ export async function publishChapter(input: { target: ChapterTarget; basis: Draf
   { headers: { 'idempotency-key': `${input.key}:publish` } });
   if (published.error) {
     const status = published.error.status;
-    return { step: 'publish', outcome: status === 401 || status === 403 ? 'denied' : status === 409 ? 'stale' : 'failed' };
+    return { step: 'publish', outcome: code(published.error) === 'translation_basis_required' ? 'translation-basis-required'
+      : status === 401 || status === 403 ? 'denied' : status === 409 ? 'stale' : 'failed' };
   }
   const result = published.data;
   if (!result || 'operationId' in result || result.status === 'pending') return { step: 'publish', outcome: 'pending' };
@@ -120,7 +121,8 @@ export async function publishChapter(input: { target: ChapterTarget; basis: Draf
   if (eligible.error || !eligible.data || 'operationId' in eligible.data || !eligible.data.decision) {
     const status = eligible.error?.status ?? 0;
     return { step: 'eligibility', publication: { publication, eligibility: null },
-      outcome: status === 401 || status === 403 ? 'denied' : status === 409 ? 'stale' : eligible.error ? 'failed' : 'pending' };
+      outcome: eligible.error && code(eligible.error) === 'translation_basis_required' ? 'translation-basis-required'
+        : status === 401 || status === 403 ? 'denied' : status === 409 ? 'stale' : eligible.error ? 'failed' : 'pending' };
   }
   return { step: 'eligibility', outcome: 'done', publication: { publication, eligibility: eligible.data.decision } };
 }

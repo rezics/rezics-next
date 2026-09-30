@@ -4,6 +4,8 @@ import { RevisionNotFound } from '../work/history.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
+import type { RightsStore } from '../rights/store.ts';
+import { TranslationBasisRequired } from '../work/translation-links.ts';
 import { assertTextPublicationBody, checkedTextPublicationReceipt, EmptyTextPublicationBody, PublicationUnavailable,
   publishTextContribution, readTextPublicationReceipt, sealTextPublicationAdmission,
   StalePublicationHead, textPublicationDigest,
@@ -16,6 +18,7 @@ export async function publishAdmittedTextContribution(
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'canReadContributionDraft'>,
   request: Request,
   input: PublishTextContributionInput & { idempotencyKey: string },
+  rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>,
 ): Promise<TextPublicationReceipt & { replayed: boolean }> {
   const digest = textPublicationDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
@@ -39,9 +42,10 @@ export async function publishAdmittedTextContribution(
       if (!admission.dispatchEligible || admission.state === 'registered') {
         await sealTextPublicationAdmission(env, admission);
       } else {
-        try { await publishTextContribution(env, admission, input); }
+        try { await publishTextContribution(env, admission, input, rights); }
         catch (error) {
-          if (error instanceof IdempotencyConflict || error instanceof EmptyTextPublicationBody) throw error;
+          if (error instanceof IdempotencyConflict || error instanceof EmptyTextPublicationBody
+            || error instanceof TranslationBasisRequired) throw error;
           if (error instanceof PublicationUnavailable) {
             await sealTextPublicationAdmission(env, admission);
           }
@@ -55,7 +59,7 @@ export async function publishAdmittedTextContribution(
     return { ...checked, replayed: registered.replayed };
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof EmptyTextPublicationBody || error instanceof StalePublicationHead
-      || error instanceof PublicationUnavailable) throw error;
+      || error instanceof PublicationUnavailable || error instanceof TranslationBasisRequired) throw error;
     throw new PendingAdmittedWork(registered.id, 'contribution-publication');
   }
 }

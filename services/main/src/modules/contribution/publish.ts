@@ -5,6 +5,9 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readExactContributionDraft } from './history.ts';
+import type { RightsStore } from '../rights/store.ts';
+import { assertTranslationOriginalBasis, resolveTranslationOriginalPublicDomainBases,
+  translationOriginalBasisConflictPattern } from '../work/translation-links.ts';
 
 export const PUBLICATION_PROFILE = 'https://rezics.com/definition/text-publication-v1';
 const NONE = 'urn:rezics:none';
@@ -251,6 +254,7 @@ async function validateCandidate(env: WorkActivationEnvironment, decision: strin
 export async function publishTextContribution(
   env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: PublishTextContributionInput,
+  rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>,
 ): Promise<TextPublicationReceipt> {
   const digest = textPublicationDigest(input);
   if (admission.action !== 'contribution.publish'
@@ -294,6 +298,10 @@ export async function publishTextContribution(
     throw new PublicationUnavailable('draft identity differs from current Contribution');
   }
   if (!exact.body.trim()) throw new EmptyTextPublicationBody('Cannot publish an empty draft');
+  // The shared ancestor/source probe is O(translation links), independent of
+  // Contribution inventory. Pin each public-domain source again in the update.
+  const translationBases = await resolveTranslationOriginalPublicDomainBases(env, exact.work, exact.author, rights);
+  await assertTranslationOriginalBasis(env, exact.work, exact.author, translationBases);
   const decision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
   const validations = await validateCandidate(env, decision, exact.contribution, exact.work,
@@ -369,6 +377,9 @@ export async function publishTextContribution(
           rv:component ${iri(input.contribution)} .
       }
       FILTER(COALESCE(?prior, ${iri(NONE)}) = ${priorTerm(input)})
+      FILTER NOT EXISTS {
+        ${translationOriginalBasisConflictPattern(exact.work, exact.author, translationBases)}
+      }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?p ?o } }
@@ -384,6 +395,7 @@ export async function publishTextContribution(
   }
   const committed = await readTextPublicationReceipt(env, admission.id);
   if (committed) return checkedTextPublicationReceipt(committed, admission, input, digest);
+  await assertTranslationOriginalBasis(env, exact.work, exact.author, translationBases);
   const stale = await sealStalePublication(env, admission, input, digest);
   if (stale) return checkedTextPublicationReceipt(stale, admission, input, digest);
   throw new PendingActivation('publication guard did not match');

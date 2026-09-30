@@ -224,6 +224,7 @@ export default {
   stepEligibility: '让读者可以找到并打开它',
   stepDone: '完成', stepFailed: '未成功', stepSkipped: '未进行',
   publishDenied: '此身份不能发布这份正文。',
+  publishTranslationBasisRequired: '发布这份译文需要有记录的依据，证明原作可以公开使用。不能将它作为你自己的原创作品发布。',
   publishStale: '这份正文刚从另一次保存发布。请重新加载查看，然后再发布。',
   publishChapterStale: '这一章是从另一台设备发布的。目前创作室只能更新在此设备上发布的内容。',
   publishFailed: '无法发布。你的内容已保存，请重试。',

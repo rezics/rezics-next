@@ -195,6 +195,7 @@ export default {
   stepEligibility: 'Für Leser auffindbar und lesbar machen',
   stepDone: 'Erledigt', stepFailed: 'Fehlgeschlagen', stepSkipped: 'Nicht ausgeführt',
   publishDenied: 'Diese Identität kann diesen Text nicht veröffentlichen.',
+  publishTranslationBasisRequired: 'Für diese Übersetzung muss eine Grundlage erfasst sein, die die öffentliche Nutzung des Ausgangswerks erlaubt. Du kannst sie nicht als dein eigenes Originalwerk veröffentlichen.',
   publishStale: 'Dieser Text wurde inzwischen aus einer anderen Speicherung veröffentlicht. Lade neu, um ihn zu sehen, und veröffentliche dann erneut.',
   publishChapterStale: 'Dieses Kapitel wurde auf einem anderen Gerät veröffentlicht. Das Studio kann vorerst nur Veröffentlichungen aktualisieren, die auf diesem Gerät erfolgt sind.',
   publishFailed: 'Veröffentlichen fehlgeschlagen. Dein Text ist gespeichert; versuch es noch einmal.',

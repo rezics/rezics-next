@@ -192,6 +192,7 @@ export default {
   stepEligibility: '読者が見つけて開けるようにする',
   stepDone: '完了', stepFailed: '失敗', stepSkipped: '未実行',
   publishDenied: 'このエージェントではこの本文を公開できません。',
+  publishTranslationBasisRequired: 'この翻訳を公開するには、原作の公開利用を認める根拠が記録されている必要があります。自分のオリジナル作品としては公開できません。',
   publishStale: 'その間に、この本文は別の保存から公開されました。再読み込みして確認してから、もう一度公開してください。',
   publishChapterStale: 'この章は別の端末から公開されました。現在スタジオで更新できるのは、この端末で行った公開だけです。',
   publishFailed: '公開できませんでした。本文は保存されています。もう一度お試しください。',
