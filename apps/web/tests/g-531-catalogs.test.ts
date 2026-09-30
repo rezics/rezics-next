@@ -16,7 +16,8 @@ describe('per-locale catalogs keep the previous English and zh-Hans text', () =>
     expect(postText.title.en).toBe('Create a post');
     expect(postText.title['zh-Hans']).toBe('发布帖子');
     expect(postText.createWork['zh-Hans']).toBe('创建作品');
-    expect(postText.createWork.de).toBe('Create a Work');
+    expect(postText.createWork.de).toBe('Werk erstellen');
+    expect(postText.createWork.ja).toBe('Create a Work');
   });
 
   test('shell navigation, search conditions, unknown languages and fiction intervals moved intact', () => {

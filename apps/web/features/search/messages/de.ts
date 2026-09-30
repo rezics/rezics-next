@@ -70,4 +70,14 @@ export default {
   popularTitle: 'Beliebt auf REZICS',
   unsupportedTitle: "Diese Bedingungen können in der Suche nicht kombiniert werden",
   unsupportedHelp: "Entferne eine Bedingung oder ändere, wie die Werte abgeglichen werden.",
-} satisfies Partial<SearchMessages>;
+  conditionHeading: 'Bedingungen', conditionFacet: 'Tags', conditionMatch: 'Abgleich',
+  conditionAll: 'Alle', conditionAny: 'Beliebig', conditionSearch: 'Tags suchen',
+  conditionSearching: 'Suche läuft…', conditionEmpty: 'Keine Tags gefunden',
+  conditionFailed: 'Tags konnten nicht gesucht werden', conditionClear: 'Bedingungen löschen',
+  conditionRemove: insert('{{name}} entfernen', { name: String }),
+  conditionFixed: insert('{{name}}, Tag dieser Seite', { name: String }),
+  conditionFull: insert('Wähle hier höchstens {{count}} Tags.', { count: String }),
+  conditionAlsoOn: 'Auch in diesen Werken',
+  conditionIncludeName: insert('{{name}} einschließen', { name: String }),
+  conditionExcludeName: insert('{{name}} ausschließen', { name: String }),
+} satisfies SearchMessages;

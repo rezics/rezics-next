@@ -295,4 +295,11 @@ export default {
   previousPage: "Página anterior",
   pageOf: insert("Página {{page}} de {{pages}}", { page: String, pages: String }),
   viewInThread: "Ver en el hilo",
-} satisfies Partial<WorkPageMessages>;
+  volumeNumber: insert('Volumen {{number}}', { number: String }), extras: 'Extras',
+  groupChapters: plural({ one: insert('{{count}} capítulo'), other: insert('{{count}} capítulos') },
+    { count: asValue(number()) }),
+  noGroupChapters: 'Aún no hay capítulos', loadingGroup: 'Cargando los capítulos…',
+  groupChaptersFailed: 'No se pudieron cargar estos capítulos.',
+  allGroupChapters: insert('Todos los capítulos de {{group}}', { group: String }),
+  unknownLanguage: 'Idioma desconocido',
+} satisfies WorkPageMessages;

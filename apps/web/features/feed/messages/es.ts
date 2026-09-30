@@ -177,4 +177,7 @@ export default {
   communityRules: "Normas",
   moreAboutCommunity: "Más sobre esta comunidad",
   votesClosed: "Todavía no se puede votar aquí",
-} satisfies Partial<FeedMessages>;
+  blockedUser: 'Usuario bloqueado',
+  write: 'Escribir',
+  preview: 'Vista previa',
+} satisfies FeedMessages;

@@ -296,4 +296,11 @@ export default {
   previousPage: "Vorherige Seite",
   pageOf: insert("Seite {{page}} von {{pages}}", { page: String, pages: String }),
   viewInThread: "Im Thread ansehen",
-} satisfies Partial<WorkPageMessages>;
+  volumeNumber: insert('Band {{number}}', { number: String }), extras: 'Extras',
+  groupChapters: plural({ one: insert('{{count}} Kapitel'), other: insert('{{count}} Kapitel') },
+    { count: asValue(number()) }),
+  noGroupChapters: 'Noch keine Kapitel', loadingGroup: 'Kapitel werden geladen…',
+  groupChaptersFailed: 'Diese Kapitel konnten nicht geladen werden.',
+  allGroupChapters: insert('Alle Kapitel von {{group}}', { group: String }),
+  unknownLanguage: 'Unbekannte Sprache',
+} satisfies WorkPageMessages;

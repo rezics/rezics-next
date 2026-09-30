@@ -26,8 +26,10 @@ const en = {
 };
 
 type Strings = typeof en;
+type ZoneLocale = 'en' | 'zh-Hans' | 'zh-Hant' | 'ja' | 'ko' | 'de' | 'fr' | 'es';
+const zoneLocales = ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] as const satisfies readonly ZoneLocale[];
 
-const translations: Record<string, Partial<Strings>> = {
+const translations: Record<ZoneLocale, Strings> = {
   en,
   'zh-Hans': {
     featured: '精选',
@@ -167,5 +169,5 @@ const translations: Record<string, Partial<Strings>> = {
 export const localeStrings = translations;
 
 export function strings(locale: string): Strings {
-  return { ...en, ...translations[locale] };
+  return (zoneLocales as readonly string[]).includes(locale) ? translations[locale as ZoneLocale] : en;
 }

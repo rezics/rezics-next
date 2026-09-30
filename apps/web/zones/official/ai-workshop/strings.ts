@@ -28,8 +28,10 @@ const en = {
 };
 
 type Strings = typeof en;
+type ZoneLocale = 'en' | 'zh-Hans' | 'zh-Hant' | 'ja' | 'ko' | 'de' | 'fr' | 'es';
+const zoneLocales = ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] as const satisfies readonly ZoneLocale[];
 
-const translations: Record<string, Strings> = {
+const translations: Record<ZoneLocale, Strings> = {
   en,
   'zh-Hans': {
     official: 'REZICS 官方专区',
@@ -211,5 +213,5 @@ const translations: Record<string, Strings> = {
 export const localeStrings = translations;
 
 export function strings(locale: string): Strings {
-  return translations[locale] ?? en;
+  return (zoneLocales as readonly string[]).includes(locale) ? translations[locale as ZoneLocale] : en;
 }

@@ -66,4 +66,10 @@ export default {
   readerDescription: insert('Was {{name}} auf REZICS gerade liest, gelesen hat und lesen möchte.', { name: String }),
   organizationDescription: insert('Werke von {{name}} auf REZICS.', { name: String }),
   profileDescription: insert('{{name}} auf REZICS.', { name: String }),
-} satisfies Partial<ProfileMessages>;
+  activityTabs: 'Aktivität im Profil', overview: 'Überblick', posts: 'Beiträge', comments: 'Kommentare',
+  post: 'Beitrag', comment: 'Kommentar',
+  noPosts: 'Noch keine öffentlichen Beiträge', noComments: 'Noch keine öffentlichen Kommentare',
+  contributionsLoading: 'Aktivität wird geladen…',
+  contributionsFailed: 'Aktivität konnte nicht geladen werden. Versuch es noch einmal.',
+  showSpoiler: 'Spoiler anzeigen',
+} satisfies ProfileMessages;

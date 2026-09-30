@@ -295,4 +295,11 @@ export default {
   previousPage: "Page précédente",
   pageOf: insert("Page {{page}} sur {{pages}}", { page: String, pages: String }),
   viewInThread: "Voir dans la discussion",
-} satisfies Partial<WorkPageMessages>;
+  volumeNumber: insert('Tome {{number}}', { number: String }), extras: 'Hors-série',
+  groupChapters: plural({ one: insert('{{count}} chapitre'), other: insert('{{count}} chapitres') },
+    { count: asValue(number()) }),
+  noGroupChapters: 'Pas encore de chapitres', loadingGroup: 'Chargement des chapitres…',
+  groupChaptersFailed: 'Impossible de charger ces chapitres.',
+  allGroupChapters: insert('Tous les chapitres de {{group}}', { group: String }),
+  unknownLanguage: 'Langue inconnue',
+} satisfies WorkPageMessages;

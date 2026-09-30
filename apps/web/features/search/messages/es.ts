@@ -70,4 +70,14 @@ export default {
   popularTitle: 'Popular en REZICS',
   unsupportedTitle: "La búsqueda no admite estas condiciones combinadas",
   unsupportedHelp: "Quita una condición o cambia cómo deben coincidir los valores.",
-} satisfies Partial<SearchMessages>;
+  conditionHeading: 'Condiciones', conditionFacet: 'Etiquetas', conditionMatch: 'Coincidencia',
+  conditionAll: 'Todas', conditionAny: 'Cualquiera', conditionSearch: 'Buscar etiquetas',
+  conditionSearching: 'Buscando…', conditionEmpty: 'No se encontraron etiquetas',
+  conditionFailed: 'No se pudieron buscar las etiquetas', conditionClear: 'Borrar las condiciones',
+  conditionRemove: insert('Quitar {{name}}', { name: String }),
+  conditionFixed: insert('{{name}}, etiqueta de esta página', { name: String }),
+  conditionFull: insert('Elige hasta {{count}} etiquetas aquí.', { count: String }),
+  conditionAlsoOn: 'También en estas obras',
+  conditionIncludeName: insert('Incluir {{name}}', { name: String }),
+  conditionExcludeName: insert('Excluir {{name}}', { name: String }),
+} satisfies SearchMessages;
