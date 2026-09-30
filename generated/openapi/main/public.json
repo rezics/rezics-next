@@ -140665,6 +140665,1071 @@
         ]
       }
     },
+    "/v1/me/edition-preferences/{work}": {
+      "get": {
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "work",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "~elyTyp": 7,
+                  "additionalProperties": false,
+                  "nullable": true,
+                  "properties": {
+                    "edition": {
+                      "~elyTyp": 7,
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "realization",
+                            "release"
+                          ],
+                          "type": "string"
+                        },
+                        "resource": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "revision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "resource",
+                        "revision"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "language": {
+                      "maxLength": 35,
+                      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                      "type": "string"
+                    },
+                    "version": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "work": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "work",
+                    "language",
+                    "edition",
+                    "version"
+                  ],
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "putV1MeEdition-preferencesByWork",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "work",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "edition": {
+                    "~elyTyp": 7,
+                    "additionalProperties": false,
+                    "nullable": true,
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "realization",
+                          "release"
+                        ],
+                        "type": "string"
+                      },
+                      "resource": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "revision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "resource",
+                      "revision"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "expectedVersion": {
+                    "maximum": 9007199254740990,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "expectedVersion",
+                  "language",
+                  "edition"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "edition": {
+                    "~elyTyp": 7,
+                    "additionalProperties": false,
+                    "nullable": true,
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "realization",
+                          "release"
+                        ],
+                        "type": "string"
+                      },
+                      "resource": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "revision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "resource",
+                      "revision"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "expectedVersion": {
+                    "maximum": 9007199254740990,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "expectedVersion",
+                  "language",
+                  "edition"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "edition": {
+                    "~elyTyp": 7,
+                    "additionalProperties": false,
+                    "nullable": true,
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "realization",
+                          "release"
+                        ],
+                        "type": "string"
+                      },
+                      "resource": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "revision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "resource",
+                      "revision"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "expectedVersion": {
+                    "maximum": 9007199254740990,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "expectedVersion",
+                  "language",
+                  "edition"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "edition": {
+                      "~elyTyp": 7,
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "realization",
+                            "release"
+                          ],
+                          "type": "string"
+                        },
+                        "resource": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "revision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "resource",
+                        "revision"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "language": {
+                      "maxLength": 35,
+                      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "work": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "work",
+                    "language",
+                    "edition",
+                    "version",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "current": {
+                      "~elyTyp": 7,
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "edition": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "realization",
+                                "release"
+                              ],
+                              "type": "string"
+                            },
+                            "resource": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "revision": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "resource",
+                            "revision"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "language": {
+                          "maxLength": 35,
+                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                          "type": "string"
+                        },
+                        "version": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "work": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "work",
+                        "language",
+                        "edition",
+                        "version"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/me/feed-feedback": {
       "post": {
         "operationId": "postV1MeFeed-feedback",
@@ -158096,6 +159161,966 @@
               }
             },
             "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/me/progress-summaries/{resource}": {
+      "get": {
+        "operationId": "getV1MeProgress-summariesByResource",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "maxLength": 35,
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parent",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sessionCursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "releaseCursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "completedParts": {
+                      "items": {
+                        "properties": {
+                          "available": {
+                            "type": "boolean"
+                          },
+                          "displayLabel": {
+                            "type": "string"
+                          },
+                          "inclusion": {
+                            "enum": [
+                              "required",
+                              "optional",
+                              "extra"
+                            ],
+                            "type": "string"
+                          },
+                          "occurrence": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "work": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "occurrence",
+                          "work",
+                          "displayLabel",
+                          "inclusion",
+                          "available"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 100,
+                      "type": "array"
+                    },
+                    "continuation": {
+                      "properties": {
+                        "groups": {
+                          "items": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "parts": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "releases": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "sessions": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "parts",
+                        "groups",
+                        "sessions",
+                        "releases"
+                      ],
+                      "type": "object"
+                    },
+                    "counts": {
+                      "properties": {
+                        "completed": {
+                          "type": "integer"
+                        },
+                        "completedRequired": {
+                          "type": "integer"
+                        },
+                        "required": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "completed",
+                        "required",
+                        "completedRequired"
+                      ],
+                      "type": "object"
+                    },
+                    "furthestCompleted": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "locator": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "current": {
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "furthest": {
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "target": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "unit": {
+                              "enum": [
+                                "page",
+                                "percentage",
+                                "media-time"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "target",
+                            "unit",
+                            "current",
+                            "furthest"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "occurrence": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "resource": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "revision": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "resource",
+                            "revision"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "part": {
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "displayLabel": {
+                              "type": "string"
+                            },
+                            "inclusion": {
+                              "enum": [
+                                "required",
+                                "optional",
+                                "extra"
+                              ],
+                              "type": "string"
+                            },
+                            "occurrence": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "work": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "occurrence",
+                            "work",
+                            "displayLabel",
+                            "inclusion",
+                            "available"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "part",
+                        "occurrence",
+                        "locator"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "language": {
+                      "maxLength": 35,
+                      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                      "type": "string"
+                    },
+                    "next": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "part": {
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "displayLabel": {
+                              "type": "string"
+                            },
+                            "inclusion": {
+                              "enum": [
+                                "required",
+                                "optional",
+                                "extra"
+                              ],
+                              "type": "string"
+                            },
+                            "occurrence": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "work": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "occurrence",
+                            "work",
+                            "displayLabel",
+                            "inclusion",
+                            "available"
+                          ],
+                          "type": "object"
+                        },
+                        "reason": {
+                          "enum": [
+                            "next_available_required_part",
+                            "awaiting_chosen_language",
+                            "optional_extra"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "part",
+                        "reason"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "partial": {
+                      "type": "boolean"
+                    },
+                    "policy": {
+                      "const": "composition-progress-v2",
+                      "type": "string"
+                    },
+                    "preference": {
+                      "~elyTyp": 7,
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "edition": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "realization",
+                                "release"
+                              ],
+                              "type": "string"
+                            },
+                            "resource": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "revision": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "resource",
+                            "revision"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "language": {
+                          "maxLength": 35,
+                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                          "type": "string"
+                        },
+                        "version": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "work": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "work",
+                        "language",
+                        "edition",
+                        "version"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "primaryAction": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "edition": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "realization",
+                                "release"
+                              ],
+                              "type": "string"
+                            },
+                            "resource": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "revision": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "resource",
+                            "revision"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "language": {
+                          "maxLength": 35,
+                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                          "type": "string"
+                        },
+                        "work": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "work",
+                        "edition",
+                        "language"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "resource": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "revisions": {
+                      "properties": {
+                        "composition": {
+                          "properties": {
+                            "revision": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "structure": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "structure",
+                            "revision"
+                          ],
+                          "type": "object"
+                        },
+                        "graph": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "library": {
+                          "items": {
+                            "properties": {
+                              "version": {
+                                "type": "integer"
+                              },
+                              "work": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "work",
+                              "version"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 100,
+                          "type": "array"
+                        },
+                        "selections": {
+                          "items": {
+                            "properties": {
+                              "resource": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "revision": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "resource",
+                              "revision"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 4096,
+                          "type": "array"
+                        },
+                        "sessions": {
+                          "items": {
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 256,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "composition",
+                        "sessions",
+                        "library",
+                        "selections",
+                        "graph"
+                      ],
+                      "type": "object"
+                    },
+                    "scope": {
+                      "const": "disclosed-composition",
+                      "type": "string"
+                    },
+                    "states": {
+                      "properties": {
+                        "caughtUpWithAvailableMaterial": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "boolean",
+                            "null"
+                          ]
+                        },
+                        "correspondenceUnresolved": {
+                          "type": "boolean"
+                        },
+                        "finishedPublishedParts": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "boolean",
+                            "null"
+                          ]
+                        },
+                        "seriesConcluded": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "boolean",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "caughtUpWithAvailableMaterial",
+                        "finishedPublishedParts",
+                        "seriesConcluded",
+                        "correspondenceUnresolved"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "resource",
+                    "scope",
+                    "policy",
+                    "language",
+                    "completedParts",
+                    "counts",
+                    "states",
+                    "next",
+                    "furthestCompleted",
+                    "partial",
+                    "preference",
+                    "primaryAction",
+                    "revisions",
+                    "continuation"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
           },
           "500": {
             "content": {
