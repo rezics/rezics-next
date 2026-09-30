@@ -116,4 +116,9 @@ never exposes private reading history. Transfers, last-controller protection,
 recovery and revocation cover queued and running work. Handles retain redirects,
 reuse restrictions and confusable protection; creators can claim imported
 identities. [Durable addresses](../product/urls-and-seo.md#durable-addresses)
-records the rename rationale. These extensions are targets beyond installed profiles.
+records the rename rationale. Agent invitations install control, representation
+for `work.create`, and management of the Agent's resources as yourself. Transfer
+is invite, accept, then leave; an Agent without a configured control policy keeps
+at least one controller. Management grants stay within the Agent's own live
+ceiling; revoking a representation edge fences queued and running publishing.
+Resource installations, AI assignments and imported identity claims remain targets.

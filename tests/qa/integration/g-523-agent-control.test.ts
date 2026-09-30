@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
+import type { Pool } from 'pg';
+import { AccessTopology } from '../../../services/main/src/modules/access/topology.ts';
+import { ControlConflict, ControlStale } from '../../../services/main/src/modules/access/topology-control.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { sealMetadataWorkAdmission } from '../../../services/main/src/modules/work/seal.ts';
 import { readWorkTerminalReceipt } from '../../../services/main/src/modules/work/receipt.ts';
@@ -261,6 +264,16 @@ test('G-523: principal × Agent × action matrix keeps representation, resource 
         })
       ).status,
     ).toBe(200);
+    // An edge sharing the offer is not the edge the recipient accepted.
+    const unacceptedEdge = '00000000-0000-4000-8000-000000000523';
+    await h.accessPool.query(`INSERT INTO access.representation_edge (id,representative_subject,
+      represented_subject,action,max_path_edges,valid_until,assigned_by_principal,
+      issuer_representation_id,issuer_representation_generation,issuer_representation_action,
+      ceiling_grant_id,ceiling_grant_generation,ceiling_scope_id,ceiling_action,invitation_id)
+      SELECT $1,representative_subject,represented_subject,action,max_path_edges,valid_until,
+        assigned_by_principal,issuer_representation_id,issuer_representation_generation,
+        issuer_representation_action,ceiling_grant_id,ceiling_grant_generation,ceiling_scope_id,
+        ceiling_action,invitation_id FROM access.representation_edge WHERE id = $2`, [unacceptedEdge,edgeId]);
     const publish = { profile: 'metadata-only-v1', actingSubject: organization,
       title: 'Delegated Organization Work', language: 'en',
       semanticTypes: ['https://schema.org/Book'], authoring: 'own-work' };
@@ -278,6 +291,7 @@ test('G-523: principal × Agent × action matrix keeps representation, resource 
       JOIN access.representation_path_step s ON s.path_id = o.path_id
       WHERE a.principal_id = $1 AND a.idempotency_key = $2`, [b.principalId,publishKey])).rows[0]!;
     expect(proof).toMatchObject({ edge_id: edgeId, grant_id: workCeiling });
+    await h.accessPool.query('UPDATE access.representation_edge SET active = false WHERE id = $1', [unacceptedEdge]);
     const admissionId = proof.id;
     expect((await readWorkTerminalReceipt(h.environment.fuseki, admissionId))?.outcome).toBe('succeeded');
     const credits = await h.environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
@@ -328,10 +342,26 @@ test('G-523: principal × Agent × action matrix keeps representation, resource 
         .status,
     ).toBe(200);
     const scopeId = `governance:realm:${realm}`;
+    await h.accessPool.query(`UPDATE access.permission_grant SET valid_until = now() + interval '2 hours'
+      WHERE recipient_subject = $1 AND scope_id = $2`, [organization,scopeId]);
     const managed = await offer(h, a, organization, cPerson, 'manage', {
       scopeId,
       actions: ['realm.settings.manage', 'governance.rule.publish'],
     });
+    expect((await h.call('POST', '/v1/agents/invitations', a.token, {
+      profile: offerProfile, invitationId: randomUUID(), issuerSubject: organization,
+      recipientSubject: bPerson, offer: 'represent', actions: ['space.create'],
+      issuerLifetime: 'institutional', expectedAuthorityEpoch: await h.epoch(),
+      grantValidUntil: new Date(Date.now() + 3600_000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    })).status).toBe(400);
+    expect((await h.call('POST', '/v1/agents/invitations', a.token, {
+      profile: offerProfile, invitationId: randomUUID(), issuerSubject: organization,
+      recipientSubject: cPerson, offer: 'manage', actions: ['realm.settings.manage'], scopeId,
+      issuerLifetime: 'institutional', expectedAuthorityEpoch: await h.epoch(scopeId),
+      grantValidUntil: new Date(Date.now() + 7 * 24 * 3600_000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    })).status).toBe(403);
     expect(
       (
         await h.call('POST', '/v1/agents/invitation-acceptances', c.token, {
@@ -452,6 +482,22 @@ test('G-523: principal × Agent × action matrix keeps representation, resource 
     expect(
       (await h.call('POST', `/v1/me/authority-admissions/${admissionId}/checks`, b.token)).status,
     ).toBe(403);
+    // Both management actions are capped to their selected Agent ceiling,
+    // including SQL revocation and a fresh replacement ceiling episode.
+    const ceiling = (await h.accessPool.query<{ id: string; issuer_subject: string }>(
+      `SELECT g.id,g.issuer_subject FROM access.permission_grant g
+       JOIN access.grant_lineage l ON l.ceiling_grant_id = g.id
+       WHERE l.invitation_id = $1 AND l.action = 'realm.settings.manage'`, [managed])).rows[0]!;
+    await h.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [ceiling.id]);
+    expect((await h.call('GET', `${realmPath}/settings?actingSubject=${encodeURIComponent(cPerson)}`, c.token)).status).toBe(403);
+    await h.accessPool.query(`INSERT INTO access.permission_grant
+      (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$3,$4,'realm.settings.manage',now() + interval '2 hours')`,
+    [randomUUID(),ceiling.issuer_subject,organization,scopeId]);
+    expect((await h.call('GET', `${realmPath}/settings?actingSubject=${encodeURIComponent(cPerson)}`, c.token)).status).toBe(403);
+    expect((await h.accessPool.query<{ active: boolean }>(`SELECT g.active FROM access.permission_grant g
+      JOIN access.grant_lineage l ON l.grant_id = g.id WHERE l.invitation_id = $1
+      AND l.action = 'realm.settings.manage'`, [managed])).rows).toEqual([{ active: false }]);
     expect((await h.call('POST', '/v1/works', b.token, publish)).status).toBe(403);
     expect((await h.call('GET', drainPath, a.token)).body).toMatchObject({
       state: 'completed',
@@ -775,4 +821,63 @@ test('G-523: stale, expired, concurrent and recovery-held acceptance has no part
   } finally {
     await h.close();
   }
+}, 120_000);
+
+// Direct and topology controller departures must serialize on the same fences.
+test('G-523: controller edge revocation and controller leave use Work then topology without deadlock', async () => {
+  const h = await startAgentControlHarness('g-523-lock-order');
+  try {
+    const a = await h.user('controller');
+    const b = await h.user('edge-controller');
+    const person = await create(h, b, 'person');
+    const organization = await create(h, a, 'organization');
+    const mandate = await h.mandate(a.principalId, organization, 'access.representation.manage');
+    const edgeId = randomUUID();
+    const ceilingId = randomUUID();
+    await h.accessPool.query(`INSERT INTO access.permission_grant
+      (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$2,'work:create:root','access.representation.assign.agent.control','infinity')`,
+    [ceilingId,organization]);
+    await h.accessPool.query(`INSERT INTO access.representation_edge (id,representative_subject,
+      represented_subject,action,max_path_edges,valid_until,assigned_by_principal,
+      issuer_representation_id,issuer_representation_generation,issuer_representation_action,
+      ceiling_grant_id,ceiling_grant_generation,ceiling_scope_id,ceiling_action)
+      VALUES ($1,$2,$3,'agent.control',1,'infinity',$4,$5,0,'access.representation.manage',
+        $6,0,'work:create:root','access.representation.assign.agent.control')`,
+    [edgeId,person,organization,a.principalId,mandate,ceilingId]);
+    const controlId = (await h.accessPool.query<{ id: string }>(`SELECT id FROM access.representation
+      WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control' AND active`,
+    [a.principalId,organization])).rows[0]!.id;
+    const gates: string[] = [];
+    const observed = { connect: async () => {
+      const client = await h.accessPool.connect();
+      return new Proxy(client, { get(target, property) {
+        if (property === 'query') return (sql: string, values?: unknown[]) => {
+          if (sql.includes('FROM access.scope_gate') && sql.includes('FOR UPDATE')) {
+            gates.push(String(values?.[0] ?? (sql.includes("'work:create:root'") ? 'work:create:root' : 'unknown')));
+          }
+          return target.query(sql, values);
+        };
+        const value = Reflect.get(target, property);
+        return typeof value === 'function' ? value.bind(target) : value;
+      } });
+    } } as unknown as Pool;
+    const epoch = await h.epoch();
+    const topologyEpoch = await h.epoch('access:representation-topology');
+    const results = await Promise.allSettled([
+      new AccessTopology(observed).changeEdge({ issuer: h.accountIssuer, subject: a.accountId },
+        { idempotencyKey: randomUUID(), requestDigest: 'c'.repeat(64) }, {
+          action: 'revoke', edgeId, representedSubject: organization,
+          expectedObjectGeneration: '0', expectedTopologyEpoch: topologyEpoch }),
+      h.call('POST', '/v1/agents/controller-changes', a.token, controllerBody(organization,controlId,epoch)),
+    ]);
+    expect(gates.slice(0,2)).toEqual(['work:create:root','access:representation-topology']);
+    const edge = results[0]!;
+    if (edge.status === 'rejected') expect(edge.reason instanceof ControlConflict || edge.reason instanceof ControlStale).toBe(true);
+    const leave = results[1]!;
+    expect(leave.status).toBe('fulfilled');
+    if (leave.status === 'fulfilled') expect([200,409]).toContain(leave.value.status);
+    expect(Number((await h.accessPool.query<{ n: number }>(
+      'SELECT access.agent_controller_count($1) AS n', [organization])).rows[0]!.n)).toBe(1);
+  } finally { await h.close(); }
 }, 120_000);

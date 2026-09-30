@@ -105,7 +105,9 @@ export async function drainRevokedAuthority(
   id: string,
   generation: string,
   scope: string,
+  options: { revocationId?: string; mode?: 'ordinary' | 'strong' } = {},
 ): Promise<string> {
+  const mode = options.mode ?? 'strong';
   const admissionColumn =
     kind === 'representation' ? 'represented_representation_id' : 'represented_grant_id';
   const leaseColumn = kind === 'representation' ? 'representation_id' : 'grant_id';
@@ -114,7 +116,7 @@ export async function drainRevokedAuthority(
     search_read_lease_id: string | null;
     download_read_lease_id: string | null;
   }[] = [];
-  if (kind === 'representation_edge') {
+  if (mode === 'strong' && kind === 'representation_edge') {
     const admissions = (
       await client.query<{ id: string }>(
         `SELECT DISTINCT a.id FROM access.representation_path_step s
@@ -147,7 +149,7 @@ export async function drainRevokedAuthority(
       "state IN ('admitted','delivering')",
     ],
   ] as const) {
-    if (kind === 'representation_edge') continue;
+    if (mode !== 'strong' || kind === 'representation_edge') continue;
     const rows = (
       await client.query<{ id: string }>(
         `SELECT id FROM access.${table}
@@ -165,12 +167,12 @@ export async function drainRevokedAuthority(
     if (work.length > REVOCATION_AFFECTED_WORK_LIMIT)
       throw new PolicyUnavailable('strong revocation exceeds its drain budget');
   }
-  const revocationId = randomUUID();
+  const revocationId = options.revocationId ?? randomUUID();
   await client.query(
     `INSERT INTO access.revocation (id,principal_id,issuer_subject,mode,
     target_kind,${kind}_id,target_generation,scope_id,fence_authority_epoch,recovery_generation,
     affected_work,state,completed_at)
-    SELECT $1,$2,$3,'strong',$4,$5,$6,$7,g.authority_epoch,f.generation,$8,$9,
+    SELECT $1,$2,$3,$10,$4,$5,$6,$7,g.authority_epoch,f.generation,$8,$9,
       CASE WHEN $9 = 'completed' THEN clock_timestamp() END
     FROM access.scope_gate g CROSS JOIN access.recovery_fence f WHERE g.id = $7 AND f.id`,
     [
@@ -183,6 +185,7 @@ export async function drainRevokedAuthority(
       scope,
       work.length,
       work.length ? 'draining' : 'completed',
+      mode,
     ],
   );
   if (work.length)

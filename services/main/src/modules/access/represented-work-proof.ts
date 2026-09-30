@@ -3,6 +3,8 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { selectedGroupWorkProof } from './groups.ts';
 import { publicCatalogueWork, selectedRoleWorkProof } from './role-proof.ts';
 import { randomUUID } from 'node:crypto';
+import { ControlUnavailable } from './topology-control.ts';
+import { MAX_TOPOLOGY_WALK } from './topology-schema.ts';
 
 export interface RepresentedWorkProof {
   representationId: string;
@@ -76,15 +78,36 @@ async function invitedWorkProof(client: PoolClient, principalId: string,
   const topology = (await client.query<{ authority_epoch: string }>(`SELECT authority_epoch
     FROM access.scope_gate WHERE id = 'access:representation-topology' FOR SHARE`)).rows[0];
   if (!topology) return null;
-  const row = (await client.query<{ id: string; generation: string; subject_generation: string;
-    origin: string; edge_id: string; edge_generation: string; grant_id: string;
+  const row = (await invitedWorkRows(client, principalId, actingSubject, 1))[0];
+  return row ? { representationId: row.id, representationGeneration: row.generation,
+    subjectGeneration: row.subject_generation, grantId: row.grant_id,
+    grantGeneration: row.grant_generation, path: { origin: row.origin, edgeId: row.edge_id,
+      edgeGeneration: row.edge_generation, topologyEpoch: topology.authority_epoch,
+      validUntil: row.valid_until } } : null;
+}
+
+/** Identity discovery and Work eligibility share the accepted one-hop predicate.
+ * One indexed recipient/controller join, capped by the topology walk bound;
+ * neither the Work gate nor the recipient's own Work grants determine identity. */
+export async function invitedWorkAgents(client: PoolClient, principalId: string): Promise<string[]> {
+  const rows = await invitedWorkRows(client, principalId, null, MAX_TOPOLOGY_WALK + 1);
+  if (rows.length > MAX_TOPOLOGY_WALK) {
+    throw new ControlUnavailable('identity invitation walk exceeds supported limit');
+  }
+  return [...new Set(rows.map(row => row.acting_subject))].sort();
+}
+
+async function invitedWorkRows(client: PoolClient, principalId: string,
+  actingSubject: string | null, limit: number) {
+  return (await client.query<{ id: string; generation: string; subject_generation: string;
+    acting_subject: string; origin: string; edge_id: string; edge_generation: string; grant_id: string;
     grant_generation: string; valid_until: Date }>(`SELECT r.id,r.generation,
-      target.generation AS subject_generation,r.subject_id AS origin,e.id AS edge_id,
+      target.id AS acting_subject,target.generation AS subject_generation,r.subject_id AS origin,e.id AS edge_id,
       e.generation AS edge_generation,g.id AS grant_id,g.generation AS grant_generation,
       least(r.valid_until,e.valid_until,g.valid_until) AS valid_until
     FROM access.representation_edge e
     JOIN access.agent_invitation i ON i.id = e.invitation_id AND i.offer = 'represent'
-    JOIN access.agent_invitation_acceptance accepted ON accepted.invitation_id = i.id
+    JOIN access.agent_invitation_acceptance accepted ON accepted.invitation_id = i.id AND accepted.edge_id = e.id
     JOIN access.representation r ON r.subject_id = e.representative_subject
       AND r.principal_id = $1 AND r.action = 'agent.control' AND r.active
       AND r.valid_until > clock_timestamp()
@@ -96,18 +119,13 @@ async function invitedWorkProof(client: PoolClient, principalId: string,
       AND g.scope_id = 'work:create:root' AND g.action = 'work.create' AND g.active
       AND g.generation = e.ceiling_grant_generation AND g.valid_until > clock_timestamp()
     LEFT JOIN access.grant_lineage lineage ON lineage.grant_id = g.id
-    WHERE e.represented_subject = $2 AND e.action = 'work.create' AND e.active
+    WHERE ($2::text IS NULL OR e.represented_subject = $2) AND e.action = 'work.create' AND e.active
       AND e.valid_until > clock_timestamp() AND e.resource_subject IS NULL AND e.max_path_edges = 1
       AND lineage.representative_policy_id IS NULL
       AND NOT EXISTS (SELECT 1 FROM access.agent_invitation_revocation revoked
         WHERE revoked.invitation_id = i.id)
-    ORDER BY e.id,r.id LIMIT 1 FOR SHARE OF r,e,g,origin,target`,
-  [principalId, actingSubject])).rows[0];
-  return row ? { representationId: row.id, representationGeneration: row.generation,
-    subjectGeneration: row.subject_generation, grantId: row.grant_id,
-    grantGeneration: row.grant_generation, path: { origin: row.origin, edgeId: row.edge_id,
-      edgeGeneration: row.edge_generation, topologyEpoch: topology.authority_epoch,
-      validUntil: row.valid_until } } : null;
+    ORDER BY e.id,r.id LIMIT $3 FOR SHARE OF r,e,g,origin,target`,
+  [principalId, actingSubject, limit])).rows;
 }
 
 /** Persist the selected edge in the existing path/obligation objects so strong
@@ -166,7 +184,7 @@ export async function selectedRepresentedWorkProof(client: PoolClient,
         AND e.represented_subject = target.id AND e.action = 'work.create' AND e.active
         AND e.generation = $7 AND e.valid_until > clock_timestamp()
       JOIN access.agent_invitation i ON i.id = e.invitation_id AND i.offer = 'represent'
-      JOIN access.agent_invitation_acceptance a ON a.invitation_id = i.id
+      JOIN access.agent_invitation_acceptance a ON a.invitation_id = i.id AND a.edge_id = e.id
       JOIN access.permission_grant g ON g.id = $8 AND g.id = e.ceiling_grant_id
         AND g.recipient_subject = target.id AND g.scope_id = 'work:create:root' AND g.action = 'work.create'
         AND g.active AND g.generation = $9 AND g.generation = e.ceiling_grant_generation

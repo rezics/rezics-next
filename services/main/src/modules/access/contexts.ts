@@ -12,6 +12,7 @@ import { RoleUnavailable } from './roles.ts';
 import { roleWorkCreateProof, roleWorkCreateSubjects } from './role-proof.ts';
 import { baselineMemberProof, newBaselineProof } from './baseline.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
+import { invitedWorkAgents, representedWorkProof } from './represented-work-proof.ts';
 import { AccessTopology } from './topology.ts';
 import { ControlUnavailable } from './topology-control.ts';
 import { agentLocalizedName } from '../agent/localized-name.ts';
@@ -128,14 +129,22 @@ export async function transaction<T>(pool: Pool, work: (client: PoolClient) => P
 export async function currentGate(client: PoolClient): Promise<{
   authority_epoch: string; open: boolean; dispatch_open: boolean;
 }> {
-  await identityReadFence(client);
   const gate = await client.query<{
-    authority_epoch: string; open: boolean; dispatch_open: boolean;
+    recovery_open: boolean; authority_epoch: string | null; open: boolean; dispatch_open: boolean;
   }>(
-    'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
+    // The gate depends on the materialized recovery fence, preserving lock
+    // order while both owner fences cost one discovery round trip.
+    `WITH recovery AS MATERIALIZED (
+      SELECT open AS recovery_open FROM access.recovery_fence WHERE id = true FOR SHARE
+    ), gate AS MATERIALIZED (
+      SELECT authority_epoch, open, dispatch_open FROM access.scope_gate
+      WHERE id = $1 AND EXISTS (SELECT 1 FROM recovery WHERE recovery_open) FOR SHARE
+    ) SELECT recovery.recovery_open, gate.* FROM recovery LEFT JOIN gate ON true`,
     [WORK_CREATE_CONTEXT.scope]);
-  if (gate.rowCount !== 1) throw new ActingContextUnavailable('Work creation scope is unavailable');
-  return gate.rows[0]!;
+  const row = gate.rows[0];
+  if (row?.recovery_open !== true) throw new ActingContextUnavailable('Access is held for recovery');
+  if (row.authority_epoch === null) throw new ActingContextUnavailable('Work creation scope is unavailable');
+  return { authority_epoch: row.authority_epoch, open: row.open, dispatch_open: row.dispatch_open };
 }
 
 export async function identityReadFence(client: PoolClient): Promise<void> {
@@ -156,24 +165,26 @@ export async function actableSubjects(client: PoolClient, principalId: string): 
   const represented = await AccessTopology.representedAgents(client, principalId);
   // Provision is a terminal creation receipt, never current authority. Its
   // Agent appears only while a live mandate (or attribution) still covers it.
-  const other = await client.query<{ subject: string }>(`SELECT DISTINCT a.agent_subject AS subject
+  const other = await client.query<{ subject: string }>(`WITH candidates AS (
+    SELECT DISTINCT a.agent_subject AS subject
     FROM access.principal_agent_attribution a JOIN access.authority_subject s ON s.id = a.agent_subject
     WHERE a.principal_id = $1 AND a.active AND a.valid_until > clock_timestamp()
-      AND s.kind = 'agent' AND s.active ORDER BY a.agent_subject LIMIT $2`,
+      AND s.kind = 'agent' AND s.active ORDER BY a.agent_subject LIMIT $2)
+    SELECT live.agent_subject AS subject FROM candidates c CROSS JOIN LATERAL (
+      SELECT a.agent_subject FROM access.principal_agent_attribution a
+      JOIN access.authority_subject s ON s.id = a.agent_subject
+      WHERE a.principal_id = $1 AND a.agent_subject = c.subject AND a.active
+        AND a.valid_until > clock_timestamp() AND s.kind = 'agent' AND s.active
+      ORDER BY a.id LIMIT 1 FOR SHARE OF a,s) live ORDER BY live.agent_subject`,
   [principalId, bounds.actingContexts + 1]);
   const subjects = [...new Set([...represented, ...other.rows.map(value => value.subject)])].sort();
   if (subjects.length > bounds.actingContexts) {
     throw new ActingContextUnavailable('Agent discovery exceeds supported limit');
   }
-  // Share locks prevent a revoked attribution or inactive Agent
-  // from racing a saved choice's commit. Recheck after acquiring the locks.
-  const attributions = await client.query<{ agent_subject: string }>(`SELECT agent_subject
-    FROM access.principal_agent_attribution WHERE principal_id = $1 AND active
-      AND valid_until > clock_timestamp() AND agent_subject = ANY($2::text[]) FOR SHARE`,
-  [principalId, subjects]);
-  const live = new Set([...represented, ...attributions.rows.map(value => value.agent_subject)]);
+  // Candidate selection locks one complete attribution per Agent in the same
+  // read. Share locks keep revoked attributions from racing a saved choice.
   const agents = await client.query<{ id: string }>(`SELECT id FROM access.authority_subject
-    WHERE id = ANY($1::text[]) AND kind = 'agent' AND active ORDER BY id FOR SHARE`, [[...live]]);
+    WHERE id = ANY($1::text[]) AND kind = 'agent' AND active ORDER BY id FOR SHARE`, [subjects]);
   return agents.rows.map(value => value.id);
 }
 
@@ -189,20 +200,9 @@ export async function eligibleSubject(client: PoolClient, principalId: string,
   if (emailVerified
     && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [WORK_CREATE_CONTEXT.scope])).rowCount
     && await baselineMemberProof(client, principalId, actingSubject)) return true;
-  const subject = await client.query(`SELECT id FROM access.authority_subject
-    WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [actingSubject]);
-  const represented = await client.query(`SELECT id FROM access.representation
-    WHERE principal_id = $1 AND subject_id = $2 AND action = $3
-      AND active AND valid_until > clock_timestamp()
-    ORDER BY id LIMIT 1 FOR SHARE`,
-  [principalId, actingSubject, WORK_CREATE_CONTEXT.action]);
-  const granted = await client.query(`SELECT id FROM access.permission_grant
-    WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
-      AND active AND valid_until > clock_timestamp()
-    ORDER BY id LIMIT 1 FOR SHARE`,
-  [actingSubject, WORK_CREATE_CONTEXT.scope, WORK_CREATE_CONTEXT.action]);
-  if (subject.rowCount !== 1 || represented.rowCount !== 1) return false;
-  return granted.rowCount === 1
+  const proof = await representedWorkProof(client, principalId, actingSubject);
+  if (!proof) return false;
+  return proof.grantId !== null
     || await groupWorkCreateProof(client, actingSubject) !== null
     || await roleWorkCreateProof(client, actingSubject) !== null;
 }
@@ -354,7 +354,7 @@ export class AccessActingContexts {
           SELECT DISTINCT s.id AS acting_subject
           FROM access.representation r
           JOIN access.authority_subject s ON s.id = r.subject_id AND s.kind = 'agent' AND s.active
-          WHERE r.principal_id = $1 AND r.action = $2 AND r.active
+          WHERE r.principal_id = $1 AND r.action IN ($2,'agent.control') AND r.active
             AND r.valid_until > clock_timestamp()
           ORDER BY s.id LIMIT b.acting_contexts + 1
         ) candidates ON true ORDER BY candidates.acting_subject NULLS LAST`,
@@ -363,7 +363,10 @@ export class AccessActingContexts {
         throw new ActingContextUnavailable('operational bounds profile is not activated');
       }
       const bounds = accessBoundsFromRow(result.rows[0]);
-      const candidateSubjects = result.rows.flatMap(row => row.acting_subject ? [row.acting_subject] : []);
+      const candidateSubjects = [...new Set([
+        ...result.rows.flatMap(row => row.acting_subject ? [row.acting_subject] : []),
+        ...await invitedWorkAgents(client, principalId),
+      ])].sort();
       if (candidateSubjects.length > bounds.actingContexts) {
         throw new ActingContextUnavailable('acting context discovery exceeds supported limit');
       }

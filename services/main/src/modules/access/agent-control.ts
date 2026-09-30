@@ -382,6 +382,7 @@ export class AccessAgentControl {
       throw new ControlInvalid('invalid Agent recovery');
     }
     return controlTransaction(this.pool, async (client) => {
+      await client.query("SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR UPDATE");
       await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
       return receipted<RecoveryView>(

@@ -1,3 +1,4 @@
+import { replacementController } from './g-523-controller-fixture.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import * as fc from 'fast-check';
@@ -114,6 +115,7 @@ test('G-517: reader status keeps omitted dates, clears named dates and preserves
     const beforeRevocation = await read();
     expect(beforeRevocation).toMatchObject({ ...dates, status: null, version: 9 });
 
+    await replacementController(stack.accessPool, agent);
     await stack.accessPool.query(`UPDATE access.representation SET active = false
       WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control'`, [member.principalId, agent]);
     expect((await put({ status: 'read', expectedVersion: 9 })).status).toBe(403);

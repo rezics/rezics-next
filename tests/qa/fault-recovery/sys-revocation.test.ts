@@ -8,6 +8,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
 import { ExportStore } from '../../../services/main/src/modules/export/store.ts';
 import type { LicenseScopeHook } from '../../../services/main/src/modules/export/planner.ts';
@@ -104,6 +105,9 @@ beforeAll(async () => {
   await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
     VALUES ($1, $2, $3)`, [principalId, account.issuer, account.a.id]);
   await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
+  // Source acquisition keeps G-508's catalogue creation ceiling. This fixture
+  // supplies that authority before testing its withdrawal during provider work.
+  await permit('work:create:root', 'work.create');
 
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN,
     Bun.env.FUSEKI_COMMAND_TOKEN);
@@ -172,6 +176,7 @@ beforeAll(async () => {
     return typeof value === 'function' ? value.bind(target) : value;
   } }) as AccessAdmissionRegistry;
   const work = { environment, account: account.verifier, access,
+    actingContexts: new AccessActingContexts(accessPool),
     sourceAcquisitions, exports, exportRights, packageNpmResolutions: npm, packageLocks: locks,
     packageInstallations } as MainWorkDependencies;
   app = createMainApp(fuseki, work);
@@ -194,7 +199,13 @@ test('SYS06: revocation during source acquisition withholds delivery and replays
   activePrincipalChecks = 0;
   const acquisition = api('POST', '/v1/sources/acquisitions', body, key);
   try {
-    await pendingGate.entered;
+    let providerStarted = false;
+    await Promise.race([
+      pendingGate.entered.then(() => { providerStarted = true; }),
+      acquisition.then(async response => {
+        if (!providerStarted) throw new Error(`acquisition ended before provider: ${response.status} ${await response.text()}`);
+      }),
+    ]);
     await setPrincipalActive(false);
     pendingGate.release();
     const response = await acquisition;

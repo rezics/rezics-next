@@ -1,3 +1,4 @@
+import { replacementController } from './g-523-controller-fixture.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -188,8 +189,11 @@ test('author baseline: transfer fences registered and claimed commands; restored
     await h.fuseki.update(`INSERT DATA { GRAPH <urn:rezics:graph:current> {
       <${work.work}> <https://rezics.com/vocab/protectionHead> <${id()}> } }`);
     await expect(h.admit('work.edit', `work:edit:${work.work}`)).rejects.toBeInstanceOf(AdmissionDenied);
+    await replacementController(h.accessPool, h.actor);
     await h.accessPool.query(`UPDATE access.representation SET active = false,generation = generation + 1
-      WHERE subject_id = $1 AND action = 'agent.control'`, [h.actor]);
+      WHERE subject_id = $1 AND principal_id = (SELECT id FROM access.principal
+        WHERE account_issuer = $2 AND account_subject = $3) AND action = 'agent.control'`,
+      [h.actor, h.principal.issuer, h.principal.subject]);
     await expect(h.admit('work.edit', `work:edit:${work.work}`)).rejects.toBeInstanceOf(AdmissionDenied);
     expect((await h.call('GET', `/v1/my/submissions?actingSubject=${encodeURIComponent(h.actor)}`)).status).toBe(404);
   } finally { await h.close(); }

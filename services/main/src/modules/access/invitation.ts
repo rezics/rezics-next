@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto';import type { Pool, PoolClient } from 'pg';
+import { randomUUID } from 'node:crypto';
+import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import {
   AGENT_ACCESS_COST,
@@ -193,7 +194,9 @@ export class AccessInvitations {
       (input.offer === 'control' &&
         (input.actions !== undefined ||
           input.grantValidUntil !== undefined ||
-          scope !== WORK_SCOPE))
+          scope !== WORK_SCOPE)) ||
+      (input.offer === 'represent' &&
+        (scope !== WORK_SCOPE || actions.length !== 1 || actions[0] !== 'work.create'))
     ) {
       throw new ControlInvalid('invalid Agent invitation offer');
     }
@@ -234,23 +237,6 @@ export class AccessInvitations {
                 'management action is outside the installed resource profile',
               );
             }
-          } else if (
-            input.offer === 'represent' &&
-            actions.some(
-              (a) =>
-                ![
-                  'work.create',
-                  'space.create',
-                  'content.draft',
-                  'agent.profile.publish',
-                  'media.avatar',
-                  'realm.profile.publish',
-                ].includes(a),
-            )
-          ) {
-            throw new ControlInvalid(
-              'representation action is outside the installed publishing profile',
-            );
           }
           let ceiling: { id: string; generation: string } | null = null;
           for (const action of input.offer === 'control' ? [] : actions) {

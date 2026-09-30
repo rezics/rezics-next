@@ -1,3 +1,4 @@
+import { replacementController } from './g-523-controller-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
@@ -9,12 +10,56 @@ import { AccessTopology } from '../../../services/main/src/modules/access/topolo
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AgentPublicProfiles } from '../../../services/main/src/modules/agent/profile.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
+import { startAgentControlHarness } from './g-523-harness.ts';
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
   expect(response.status, body).toBe(status);
   return JSON.parse(body) as T;
 }
+
+test('G-521/G-523: an accepted publishing delegate discovers the Organization and loses it on revocation', async () => {
+  const h = await startAgentControlHarness('g-521-represent-delegate');
+  try {
+    const owner = await h.user('owner');
+    const delegate = await h.user('delegate');
+    const create = async (token: string, kind: 'person' | 'organization') => {
+      const result = await h.call('POST', '/v1/agents', token,
+        { profile: 'agent-provision-v1', kind, displayName: kind });
+      expect(result.status).toBe(201);
+      return String(result.body.agent);
+    };
+    await create(owner.token, 'person');
+    const person = await create(delegate.token, 'person');
+    const organization = await create(owner.token, 'organization');
+    await h.grant(organization, organization, 'work.create');
+    const inventory = async () => (await h.call('GET', '/v1/me/agents', delegate.token)).body.items as { actingSubject: string }[];
+    const invitationId = randomUUID();
+    expect((await h.call('POST', '/v1/agents/invitations', owner.token, {
+      profile: 'access-agent-invitation-v1', invitationId, issuerSubject: organization,
+      recipientSubject: person, offer: 'represent', actions: ['work.create'], issuerLifetime: 'institutional',
+      expectedAuthorityEpoch: await h.epoch(), grantValidUntil: new Date(Date.now() + 3600_000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    })).status).toBe(200);
+    expect((await inventory()).map(row => row.actingSubject)).not.toContain(organization);
+    expect((await h.call('POST', '/v1/agents/invitation-acceptances', delegate.token, {
+      profile: 'access-agent-invitation-acceptance-v1', invitationId, edgeId: randomUUID(),
+      expectedAuthorityEpoch: await h.epoch(),
+    })).status).toBe(200);
+    expect((await inventory()).map(row => row.actingSubject)).toContain(organization);
+    const contexts = new AccessActingContexts(h.accessPool);
+    expect((await contexts.discover({ issuer: h.accountIssuer, subject: delegate.accountId })).contexts.map(row => row.actingSubject)).toContain(organization);
+    expect((await contexts.check({ issuer: h.accountIssuer, subject: delegate.accountId }, organization, await h.epoch())).decision).toBe('eligible-now');
+    await h.accessPool.query("UPDATE access.scope_gate SET open = false,dispatch_open = false WHERE id = 'work:create:root'");
+    expect((await inventory()).map(row => row.actingSubject)).toContain(organization);
+    await h.accessPool.query("UPDATE access.scope_gate SET open = true,dispatch_open = true WHERE id = 'work:create:root'");
+    expect((await h.call('POST', '/v1/agents/invitation-revocations', owner.token, {
+      profile: 'access-agent-invitation-revocation-v1', invitationId, expectedAuthorityEpoch: await h.epoch(),
+    })).status).toBe(200);
+    expect((await inventory()).map(row => row.actingSubject)).not.toContain(organization);
+    expect((await contexts.discover({ issuer: h.accountIssuer, subject: delegate.accountId })).contexts.map(row => row.actingSubject)).not.toContain(organization);
+  } finally { await h.close(); }
+}, 120_000);
 
 test('G-521/IAM01: identity discovery and session/main choices are independent of every task gate and grant', async () => {
   const h = await agentProvisionHarness();
@@ -114,9 +159,10 @@ test('G-521/IAM01: identity discovery and session/main choices are independent o
       (id, principal_id, agent_subject, action, valid_until)
       VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`,
     [randomUUID(), principalId, attributed]);
-    const check = (actingSubject: string) => call('POST', '/v1/me/acting-context-checks', {
+    const check = async (actingSubject: string) => call('POST', '/v1/me/acting-context-checks', {
       profile: 'work-create-acting-context-check-v1', task: 'work.create', actingSubject,
-      expectedAuthorityEpoch: '0' }, h.wrongScopeToken);
+      expectedAuthorityEpoch: (await h.accessPool.query<{ authority_epoch: string }>(
+        "SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'")).rows[0]!.authority_epoch }, h.wrongScopeToken);
     const work = (actingSubject: string) => call('POST', '/v1/works', {
       profile: 'metadata-only-v1', title: 'G-521 denied work', language: 'en', actingSubject }, h.wrongScopeToken);
     let sessionRevision: string | null = null;
@@ -193,6 +239,7 @@ test('G-521/IAM01: identity discovery and session/main choices are independent o
       'SELECT representation_id, state FROM access.agent_provision WHERE agent_id = $1 AND principal_id = $2',
       [org.agent, principalId])).rows[0]!;
     expect(provision.state).toBe('active');
+    await replacementController(h.accessPool, org.agent);
     await h.accessPool.query('UPDATE access.representation SET active = false, generation = generation + 1 WHERE id = $1',
       [provision.representation_id]);
     expect((await h.accessPool.query<{ state: string }>(

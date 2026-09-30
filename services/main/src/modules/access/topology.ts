@@ -5,6 +5,7 @@ import { ControlDenied, ControlInvalid, ControlStale, ControlUnavailable, type C
   agentPattern, controlTransaction, generationPattern, idPattern, lockGate, receipted,
   requireAgent, requireCeiling, requireMandate, requirePrincipal, requireReceipt }
   from './topology-control.ts';
+import { invitedWorkAgents } from './represented-work-proof.ts';
 import { MAX_PATH_EDGES, MAX_TOPOLOGY_WALK, TOPOLOGY_SCOPE } from './topology-schema.ts';
 
 const MANAGE = 'access.representation.manage';
@@ -53,7 +54,7 @@ export class AccessTopology {
 
   /** Enumerate complete, action-preserving paths in the topology owner, then
    * use admission's selected-path evaluator for composed paths. No target
-   * grant or task gate participates in identity discovery. Cost: two batch reads, including one bounded
+   * grant or task gate participates in identity discovery. Cost: three batch reads, including two bounded
    * walk (at most 256 paths, eight edges), plus two indexed reads per composed
    * path; overflow is unavailable rather than a partial identity inventory. */
   static async representedAgents(client: PoolClient, principalId: string): Promise<string[]> {
@@ -76,6 +77,9 @@ export class AccessTopology {
       WHERE e.active AND e.valid_until > clock_timestamp() AND s.kind = 'agent' AND s.active
         AND c.active AND c.generation = e.ceiling_grant_generation
         AND c.valid_until > clock_timestamp()
+        AND (e.invitation_id IS NULL OR EXISTS (SELECT 1 FROM access.agent_invitation_acceptance a
+          WHERE a.edge_id = e.id AND NOT EXISTS (SELECT 1 FROM access.agent_invitation_revocation v
+            WHERE v.invitation_id = a.invitation_id)))
         AND cardinality(p.edge_ids) < LEAST(p.ceiling, e.max_path_edges, $2)
         AND NOT e.represented_subject = ANY(p.visited)
     ) SELECT subject, action, representation_id, edge_ids FROM path LIMIT $3`,
@@ -104,6 +108,10 @@ export class AccessTopology {
       }
       subjects.add(path.subject);
     }
+    for (const subject of await invitedWorkAgents(client, principalId)) subjects.add(subject);
+    if (subjects.size > MAX_TOPOLOGY_WALK) {
+      throw new ControlUnavailable('identity representation walk exceeds supported limit');
+    }
     return [...subjects].sort();
   }
 
@@ -120,6 +128,9 @@ export class AccessTopology {
       throw new ControlInvalid('invalid representation edge change');
     }
     return controlTransaction(this.pool, async client => {
+      // Controller edge revocation also fences Work. All topology writers
+      // acquire Work before topology, matching admission and controller leave.
+      await client.query("SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR UPDATE");
       const epoch = await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
       const mandate = await requireMandate(client, actor.id, change.representedSubject, MANAGE);
@@ -217,7 +228,10 @@ export class AccessTopology {
       WHERE e.id = ANY($1::uuid[]) AND e.action = $2 AND e.active
         AND e.valid_until > clock_timestamp() AND s.active AND c.active
         AND c.generation = e.ceiling_grant_generation
-        AND c.valid_until > clock_timestamp() FOR SHARE OF e, s, c`, [edgeIds, action]);
+        AND c.valid_until > clock_timestamp()
+        AND (e.invitation_id IS NULL OR EXISTS (SELECT 1 FROM access.agent_invitation_acceptance a
+          WHERE a.edge_id = e.id AND NOT EXISTS (SELECT 1 FROM access.agent_invitation_revocation v
+            WHERE v.invitation_id = a.invitation_id))) FOR SHARE OF e, s, c`, [edgeIds, action]);
     const byId = new Map(rows.rows.map(row => [row.id, row]));
     let previous = first.subject_id;
     let validUntil = first.valid_until;

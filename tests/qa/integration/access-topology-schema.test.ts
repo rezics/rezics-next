@@ -230,8 +230,9 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
       '055_agent_invitation.sql', '056_protected_rebind_and_enrollment.sql',
       '057_recovery_independence_on_edge.sql', '058_selected_grant_revocation.sql']);
 
-    // Upgrade: current head, a populated legacy authority fixture, then 050-059.
-    await migrate(upgrade, migrations.filter(file => !owned.includes(file)));
+    // Upgrade: the pre-050 head, its legacy authority rows, then owned migrations
+    // and later dependents in order. Later migrations may alter 050 objects.
+    await migrate(upgrade, migrations.filter(file => Number(file.slice(0, 3)) < 50));
     const legacy = owner(upgrade);
     await legacy.q(`INSERT INTO access.scope_gate (id, authority_epoch, group_generation)
       VALUES ($1, 3, 0) ON CONFLICT (id) DO UPDATE
@@ -298,6 +299,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     [mandate])).rows[0]).toEqual({ max_path_edges: 0, representative_policy_id: null,
       automation_installation_id: null, protected_change_id: null });
     expect(await legacy.epoch()).toBe('0');
+    await migrate(upgrade, migrations.filter(file => Number(file.slice(0, 3)) >= 50 && !owned.includes(file)));
     expect(await catalog(upgrade)).toEqual(await catalog(empty));
 
     // Legacy writers keep working on unprotected rows without lineage.
@@ -774,7 +776,8 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     await o.q("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [author]);
     const representative = await o.principal();
     const acceptor = await o.mandate(representative, author, ACCEPT_ACTION);
-    const accept = (invitation: string) => tx(empty, async client => {
+    const accept = (invitation: string, selectedCeiling = ceiling,
+      ceilingAction = 'access.grant.assign.work.create') => tx(empty, async client => {
       const grant = await o.grant(issuer, author, 'work.create', 19, client);
       await client.query(`INSERT INTO access.grant_lineage (grant_id, issuer_subject,
         recipient_subject, scope_id, action, lifetime, assigned_by_principal,
@@ -782,8 +785,8 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
         ceiling_grant_id, ceiling_grant_generation, ceiling_scope_id, ceiling_action, root_grant_id,
         depth, redelegation_depth, invitation_id)
         VALUES ($1, $2, $3, $4, 'work.create', 'institutional', $5, $6, 0, 'access.invitation.issue',
-          $7, 0, $4, 'access.grant.assign.work.create', $1, 0, 0, $8)`,
-      [grant, issuer, author, SCOPE, operator, operatorMandate, ceiling, invitation]);
+          $7, 0, $4, $9, $1, 0, 0, $8)`,
+      [grant, issuer, author, SCOPE, operator, operatorMandate, selectedCeiling, invitation, ceilingAction]);
       await client.query(`INSERT INTO access.agent_invitation_acceptance (invitation_id,
         issuer_subject, recipient_subject, scope_id, action, accepted_by_principal,
         acceptor_representation_id, acceptor_representation_generation,
@@ -797,10 +800,17 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     await accept(institutional);
     await rejects(accept(institutional), GUARD_VIOLATION, 'invitation already has an outcome');
     await rejects(o.q(`INSERT INTO access.agent_invitation_revocation (invitation_id,
-      revoked_by_principal) VALUES ($1, $2)`, [institutional, operator]), GUARD_VIOLATION, 'invitation already has an outcome');
+      revoked_by_principal) VALUES ($1, $2)`, [institutional, operator]), GUARD_VIOLATION, 'accepted invitation authority must be revoked');
+    await o.q(`UPDATE access.permission_grant g SET active = false FROM access.grant_lineage l
+      WHERE g.id = l.grant_id AND l.invitation_id = $1`, [institutional]);
+    await o.q(`INSERT INTO access.agent_invitation_revocation (invitation_id, revoked_by_principal)
+      VALUES ($1, $2)`, [institutional, operator]);
     // The operator departs: only the operator-dependent invitation stops activating.
     await o.q('UPDATE access.representation SET active = false WHERE id = $1', [operatorMandate]);
     await rejects(accept(dependent), GUARD_VIOLATION, 'invitation issuing mandate ended');
+    const wrongCeiling = await o.grant(root, issuer, 'access.grant.assign.space.create', 30);
+    await rejects(accept(later, wrongCeiling, 'access.grant.assign.space.create'),
+      GUARD_VIOLATION, 'invitation grant differs from its offer');
     await accept(later);
   });
 

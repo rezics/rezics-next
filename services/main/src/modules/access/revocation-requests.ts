@@ -5,14 +5,14 @@ import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import {
   agentPattern, generationPattern, PolicyConflict, PolicyDenied, PolicyInvalid, PolicyStale,
-  PolicyUnavailable, uuidPattern,
+  uuidPattern,
 } from './policy-errors.ts';
 import {
-  advanceScopeEpoch, inAccessTransaction, requireActivePrincipal, requireMandate,
+  advanceScopeEpoch, drainRevokedAuthority, inAccessTransaction, requireActivePrincipal, requireMandate,
   requireRecoveryOpen,
 } from './policy-transaction.ts';
 import {
-  REVOCATION_AFFECTED_WORK_LIMIT, type RevocationReceiptRow, type RevocationRow,
+  type RevocationReceiptRow, type RevocationRow,
 } from './revocation-schema.ts';
 
 export const REVOKE_ACTION = 'access.revoke';
@@ -29,10 +29,8 @@ export interface RevocationView {
 }
 
 const targets = {
-  permission_grant: { table: 'permission_grant', issuer: 'issuer_subject', scope: 'scope_id',
-    admission: 'represented_grant_id', lease: 'grant_id' },
-  representation: { table: 'representation', issuer: 'subject_id', scope: null,
-    admission: 'represented_representation_id', lease: 'representation_id' },
+  permission_grant: { table: 'permission_grant', issuer: 'issuer_subject', scope: 'scope_id' },
+  representation: { table: 'representation', issuer: 'subject_id', scope: null },
 } as const;
 
 async function pendingWork(client: PoolClient, revocationId: string): Promise<number> {
@@ -69,7 +67,10 @@ export class AccessRevocations {
       throw new PolicyInvalid('invalid revocation request');
     }
     return inAccessTransaction(this.pool, 'read committed', async client => {
-      const recoveryGeneration = await requireRecoveryOpen(client, true);
+      await requireRecoveryOpen(client, true);
+      // Controller revocations take the Work fence before any other gate or source.
+      if (request.target.kind === 'representation') await client.query(
+        "SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR UPDATE");
       const identity = await requireActivePrincipal(client, principal);
       // A closed scope still accepts a revocation: fencing never needs an open gate.
       const gate = (await client.query<{ authority_epoch: string }>(`SELECT authority_epoch
@@ -102,49 +103,9 @@ export class AccessRevocations {
       [request.target.id])).rows[0]!.generation : target.generation;
       if (generation === '0') throw new PolicyStale('source was never admitted');
       const fence = await advanceScopeEpoch(client, request.scopeId);
-      let admissions: string[] = [];
-      let reads: string[] = [];
-      let downloads: string[] = [];
-      if (request.mode === 'strong') {
-        admissions = (await client.query<{ id: string }>(`SELECT id FROM access.admission
-          WHERE ${shape.admission} = $1 AND state <> 'sealed' ORDER BY id
-          LIMIT ${REVOCATION_AFFECTED_WORK_LIMIT + 1}`, [request.target.id])).rows.map(row => row.id);
-        reads = (await client.query<{ id: string }>(`SELECT id FROM access.search_read_lease
-          WHERE ${shape.lease} = $1 AND state IN ('admitted', 'delivering') ORDER BY id
-          LIMIT ${REVOCATION_AFFECTED_WORK_LIMIT + 1}`, [request.target.id])).rows.map(row => row.id);
-        downloads = (await client.query<{ id: string }>(`SELECT id FROM access.download_read_lease
-          WHERE ${shape.lease} = $1 AND state IN ('admitted', 'delivering') ORDER BY id
-          LIMIT ${REVOCATION_AFFECTED_WORK_LIMIT + 1}`, [request.target.id])).rows.map(row => row.id);
-        if (admissions.length + reads.length + downloads.length > REVOCATION_AFFECTED_WORK_LIMIT) {
-          throw new PolicyUnavailable('strong revocation exceeds its drain budget');
-        }
-      }
-      const affected = admissions.length + reads.length + downloads.length;
-      await client.query(`INSERT INTO access.revocation (id, principal_id, issuer_subject, mode,
-          target_kind, ${request.target.kind}_id, target_generation, scope_id, fence_authority_epoch,
-          recovery_generation, affected_work, state, completed_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-          CASE WHEN $12 = 'completed' THEN clock_timestamp() END)`,
-      [request.revocationId, identity.id, request.issuerSubject, request.mode, request.target.kind,
-        request.target.id, generation, request.scopeId, fence, recoveryGeneration, affected,
-        affected > 0 ? 'draining' : 'completed']);
-      if (affected > 0) {
-        await client.query(`INSERT INTO access.revocation_affected_work (revocation_id, ordinal,
-            admission_id, search_read_lease_id, download_read_lease_id)
-          SELECT $1, w.ordinal, w.admission_id, w.search_read_lease_id, w.download_read_lease_id
-          FROM jsonb_to_recordset($2::jsonb) AS w(ordinal smallint, admission_id uuid,
-            search_read_lease_id uuid, download_read_lease_id uuid)`, [request.revocationId, JSON.stringify([
-          ...admissions.map(id => ({ admission_id: id, search_read_lease_id: null, download_read_lease_id: null })),
-          ...reads.map(id => ({ admission_id: null, search_read_lease_id: id, download_read_lease_id: null })),
-          ...downloads.map(id => ({ admission_id: null, search_read_lease_id: null, download_read_lease_id: id })),
-        ].map((row, index) => ({ ordinal: index + 1, ...row })))]);
-        // No byte of an undelivered read may start after the fence; delivering
-        // reads stay pending until their matched receipt or abort.
-        await client.query(`UPDATE access.search_read_lease SET state = 'aborted',
-          finished_at = clock_timestamp() WHERE id = ANY($1::uuid[]) AND state = 'admitted'`, [reads]);
-        await client.query(`UPDATE access.download_read_lease SET state = 'aborted',
-          finished_at = clock_timestamp() WHERE id = ANY($1::uuid[]) AND state = 'admitted'`, [downloads]);
-      }
+      await drainRevokedAuthority(client, identity.id, request.issuerSubject,
+        request.target.kind, request.target.id, generation, request.scopeId,
+        { revocationId: request.revocationId, mode: request.mode });
       await client.query(`INSERT INTO access.revocation_receipt (principal_id, idempotency_key,
           request_digest, revocation_id, result_authority_epoch) VALUES ($1, $2, $3, $4, $5)`,
       [identity.id, receipt.idempotencyKey, receipt.requestDigest, request.revocationId, fence]);

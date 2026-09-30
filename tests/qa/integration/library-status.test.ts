@@ -1,3 +1,4 @@
+import { replacementController } from './g-523-controller-fixture.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
@@ -506,6 +507,7 @@ test.each(['initial context', 'retained context'])(
     // Revoking Person control during rating hydration must discard the entire
     // response, including any owned rating already loaded from the inventory.
     const query = stack.fuseki.query.bind(stack.fuseki);
+    await replacementController(stack.accessPool, person.agent);
     let revoked = false;
     stack.fuseki.query = async (sparql, bytes) => {
       const result = await query(sparql, bytes);

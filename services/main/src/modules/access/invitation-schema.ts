@@ -11,8 +11,6 @@ export type InvitationOffer = 'control' | 'represent' | 'manage';
 export const AGENT_ACCESS_COST = {
   page: 50,
   actions: 16,
-  statementTimeoutMs: 5000,
-  lockTimeoutMs: 2000,
 } as const;
 
 export const agentInvitationTable = declareTable('agent_invitation', {

@@ -25,35 +25,25 @@ BEGIN
     RETURN NULL;
 END $$;
 
-CREATE FUNCTION access.lock_agent_controller_change() RETURNS trigger
+-- Statement locks precede source row locks, so a raw controller deactivation
+-- cannot hold a mandate while waiting for an admission's Work fence.
+CREATE FUNCTION access.lock_representation_gates() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-    IF OLD.action = 'agent.control' THEN
-        PERFORM 1 FROM access.scope_gate WHERE id = 'work:create:root' FOR UPDATE;
-        PERFORM 1 FROM access.scope_gate WHERE id = 'access:representation-topology' FOR UPDATE;
-    END IF;
-    RETURN NEW;
+    PERFORM 1 FROM access.scope_gate WHERE id = 'work:create:root' FOR UPDATE;
+    PERFORM 1 FROM access.scope_gate WHERE id = 'access:representation-topology' FOR UPDATE;
+    RETURN NULL;
 END $$;
 CREATE TRIGGER representation_controller_lock BEFORE UPDATE OF active ON access.representation
-    FOR EACH ROW WHEN (OLD.active AND NOT NEW.active)
-    EXECUTE FUNCTION access.lock_agent_controller_change();
-CREATE TRIGGER representation_edge_controller_lock BEFORE UPDATE OF active ON access.representation_edge
-    FOR EACH ROW WHEN (OLD.active AND NOT NEW.active)
-    EXECUTE FUNCTION access.lock_agent_controller_change();
+    FOR EACH STATEMENT EXECUTE FUNCTION access.lock_representation_gates();
+CREATE TRIGGER representation_edge_controller_lock BEFORE INSERT OR UPDATE ON access.representation_edge
+    FOR EACH STATEMENT EXECUTE FUNCTION access.lock_representation_gates();
 
 CREATE FUNCTION access.fence_agent_controller_work() RETURNS trigger
 LANGUAGE plpgsql AS $$
-DECLARE controlled text; scopes text[];
 BEGIN
-    IF TG_TABLE_NAME = 'representation' THEN controlled := NEW.subject_id;
-    ELSE controlled := NEW.represented_subject; END IF;
-    SELECT array_agg(scope_id ORDER BY scope_id) INTO scopes FROM (
-        SELECT DISTINCT scope_id FROM access.permission_grant WHERE recipient_subject = controlled LIMIT 257
-    ) owned;
-    IF cardinality(scopes) > 256 THEN RAISE EXCEPTION 'controller scope fence limit' USING ERRCODE = '54000'; END IF;
-    PERFORM 1 FROM access.scope_gate WHERE id = ANY(coalesce(scopes,ARRAY[]::text[])) ORDER BY id FOR UPDATE;
     UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1
-        WHERE id = 'work:create:root' OR id = ANY(coalesce(scopes,ARRAY[]::text[]));
+        WHERE id = 'work:create:root';
     RETURN NULL;
 END $$;
 CREATE TRIGGER representation_controller_work_fence AFTER UPDATE OF active ON access.representation
@@ -70,6 +60,8 @@ ALTER TABLE access.agent_invitation
     ALTER COLUMN ceiling_grant_id DROP NOT NULL,
     ALTER COLUMN ceiling_grant_generation DROP NOT NULL,
     ADD CONSTRAINT invitation_primary_action CHECK (action = actions[1]),
+    ADD CONSTRAINT invitation_representation_profile CHECK (
+        offer <> 'represent' OR (scope_id = 'work:create:root' AND actions = ARRAY['work.create'])),
     ADD CONSTRAINT invitation_control_ceiling CHECK (
         (offer = 'control' AND action = 'agent.control' AND actions = ARRAY['agent.control']
             AND issuer_representation_action = 'agent.control'
@@ -119,6 +111,9 @@ BEGIN
             invitation.issuer_representation_id, invitation.issuer_representation_generation,
             invitation.issuer_representation_action)
         OR NOT (NEW.action = ANY(invitation.actions))
+        OR (invitation.issuer_representation_action <> 'agent.control'
+            AND (NEW.ceiling_scope_id, NEW.ceiling_action) IS DISTINCT FROM
+                (invitation.ceiling_scope_id, invitation.ceiling_action))
         OR (invitation.issuer_lifetime = 'operator-dependent' AND NEW.action = invitation.action
             AND (NEW.ceiling_grant_id, NEW.ceiling_grant_generation)
                 IS DISTINCT FROM (invitation.ceiling_grant_id, invitation.ceiling_grant_generation)) THEN
@@ -130,8 +125,34 @@ BEGIN
         AND (NEW.ceiling_scope_id <> invitation.scope_id OR NEW.ceiling_action <> NEW.action) THEN
         RAISE EXCEPTION 'invitation ceiling is outside the owned resource' USING ERRCODE = '23514';
     END IF;
+    IF invitation.issuer_representation_action = 'agent.control' AND (
+        SELECT count(*) FROM (SELECT 1 FROM access.grant_lineage l
+        JOIN access.agent_invitation i ON i.id = l.invitation_id
+        JOIN access.permission_grant g ON g.id = l.grant_id AND g.active
+        WHERE l.ceiling_grant_id = NEW.ceiling_grant_id
+            AND i.issuer_representation_action = 'agent.control' AND i.offer = 'manage' LIMIT 256) live
+    ) >= 256 THEN
+        RAISE EXCEPTION 'invitation management ceiling fan-out limit' USING ERRCODE = '54000';
+    END IF;
     RETURN NEW;
 END $$;
+
+-- Management survives the issuing operator's departure, but never the Agent's
+-- own permission ceiling. Creation already caps expiry (053); any later
+-- ceiling generation change ends this exact grant episode, without revival.
+CREATE FUNCTION access.revoke_invitation_management_ceiling() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE access.permission_grant g SET active = false
+    FROM access.grant_lineage l JOIN access.agent_invitation i ON i.id = l.invitation_id
+    WHERE l.ceiling_grant_id = NEW.id AND l.grant_id = g.id AND g.active
+        AND i.offer = 'manage' AND i.issuer_representation_action = 'agent.control'
+        AND (NOT NEW.active OR NEW.generation <> l.ceiling_grant_generation
+            OR NEW.valid_until < g.valid_until);
+    RETURN NULL;
+END $$;
+CREATE TRIGGER permission_grant_invitation_ceiling AFTER UPDATE ON access.permission_grant
+    FOR EACH ROW EXECUTE FUNCTION access.revoke_invitation_management_ceiling();
 
 CREATE FUNCTION access.check_invitation_edge() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -424,10 +445,10 @@ BEGIN
             OR step.valid_until < proof.valid_until THEN
             RAISE EXCEPTION 'representation path is not one bounded chain' USING ERRCODE = '23514';
         END IF;
-        IF proof.mandate_action <> proof.action AND (step.resource_subject IS NOT NULL
+        IF (proof.mandate_action <> proof.action OR step.invitation_id IS NOT NULL) AND (step.resource_subject IS NOT NULL
             OR NOT EXISTS (SELECT 1 FROM access.agent_invitation i
                 JOIN access.agent_invitation_acceptance a ON a.invitation_id = i.id
-                WHERE i.id = step.invitation_id AND i.offer = 'represent'
+                WHERE i.id = step.invitation_id AND a.edge_id = step.edge_id AND i.offer = 'represent'
                     AND i.scope_id = 'work:create:root' AND proof.action = ANY(i.actions)
                     AND NOT EXISTS (SELECT 1 FROM access.agent_invitation_revocation v WHERE v.invitation_id = i.id))) THEN
             RAISE EXCEPTION 'controller path lacks its accepted edge' USING ERRCODE = '23514';

@@ -51,6 +51,7 @@ export const representationEdgeTable = declareTable('representation_edge', {
   ceiling_action: ['text', 'not null'],
   created_at: ['timestamptz', 'not null'],
   protected_change_id: ['uuid', 'null'],
+  invitation_id: ['uuid', 'null'],
 });
 export type RepresentationEdgeRow = RowOf<typeof representationEdgeTable>;
 

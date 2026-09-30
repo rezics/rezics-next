@@ -1,3 +1,4 @@
+import { replacementController } from './g-523-controller-fixture.ts';
 import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import type { ContentCore } from '../../../services/content/src/core.ts';
@@ -297,6 +298,7 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
       await expect(new ReaderReviews(stack.accessPool).eventsAfter('0')).rejects.toThrow();
     } finally { await releaseAccessRecoveryFence(stack.accessPool, generation); }
     expect((await call('GET', path)).status).toBe(200);
+    await replacementController(stack.accessPool, author);
     await stack.accessPool.query(`UPDATE access.representation SET active = false
       WHERE principal_id = $1 AND subject_id = $2`, [a.principalId, author]);
     expect((await notifications.readStream(a.principal, null)).items.find(item => item.id === createdItem.itemId)?.subject)

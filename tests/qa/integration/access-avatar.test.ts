@@ -1,3 +1,4 @@
+import { replacementController } from './g-523-controller-fixture.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -99,11 +100,11 @@ test('G-317: another controller, lost pen-name control and suspension deny admis
     const foreignPrincipal = randomUUID();
     await h.accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1,$2,$3)`, [foreignPrincipal, 'https://foreign.test', randomUUID()]);
-    await h.accessPool.query(`UPDATE access.representation SET active = false
-      WHERE subject_id = $1 AND action = 'agent.control'`, [foreign]);
     await h.accessPool.query(`INSERT INTO access.representation
       (id, principal_id, subject_id, action, valid_until)
       VALUES ($1,$2,$3,'agent.control','infinity')`, [randomUUID(), foreignPrincipal, foreign]);
+    await h.accessPool.query(`UPDATE access.representation SET active = false
+      WHERE subject_id = $1 AND principal_id = $2 AND action = 'agent.control'`, [foreign, h.principalId]);
     await expect(h.admit(foreign)).rejects.toBeInstanceOf(AdmissionDenied);
     expect((await h.call('PUT', `/v1/resources/${foreign.slice(-36)}/avatar`, {
       profile: 'resource-avatar-selection-v1', asset: randomUUID(), expectedSelection: null,
@@ -118,6 +119,7 @@ test('G-317: another controller, lost pen-name control and suspension deny admis
       GRAPH <urn:rezics:graph:current> { <${penName}> a rv:Agent ; rv:agentKind rv:PenNameAgent . }
     }`);
     const pending = await h.admit(penName);
+    await replacementController(h.accessPool, penName);
     await h.accessPool.query('UPDATE access.representation SET active = false WHERE id = $1', [control]);
     await expect(h.access.claim(pending.id, pending.requestDigest, h.principal))
       .rejects.toBeInstanceOf(AdmissionDenied);
