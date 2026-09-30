@@ -7,11 +7,14 @@ import { contentLanguages, languageListLiteral, originalLanguages, recordedLangu
 
 export const RELEASE_PROFILE_ID = 'release-v1';
 export const RELEASE_PROFILE = 'https://rezics.com/definition/release-v1';
+export const RELEASE_V2_PROFILE = 'https://rezics.com/definition/release-v2';
 export const RELEASE_KINDS = ['formal', 'web', 'fixed', 'virtual'] as const;
 export const RELEASE_STATUSES = ['official', 'unofficial', 'virtual', 'withdrawn', 'cancelled'] as const;
 /** One release page, then at most this many snapshots on each web publication. */
 export const RELEASE_COST = { languages: 8, stateBytes: 8 * 1024, snapshots: 20, page: 20,
   commandGraphCalls: 16, commandGraphBytes: 1024 * 1024, deadlineMs: 10_000 } as const;
+export const RELEASE_V2_COST = { coverage: 64, identifiers: 16, stateBytes: 48 * 1024,
+  page: 20, lookupCoverage: 1280 } as const;
 
 const closed = { additionalProperties: false } as const;
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
@@ -49,12 +52,73 @@ export type ReleaseWrite = Static<typeof releaseWrite>;
 export type ReleaseKind = ReleaseWrite['kind'];
 export type ReleaseStatus = ReleaseWrite['status'];
 export interface ReleaseRecord extends ReleaseWrite { work: string }
+export const releaseIdentifier = t.Object({ provider: t.String({ pattern: '^https://[^\\s<>"{}|\\\\^`]{1,240}$' }),
+  value: text(200) }, closed);
+export const releaseCoverage = t.Object({ realization: native, revision: native,
+  completeness: t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('trial'), t.Literal('unknown')]),
+  portion: t.Optional(text(120)) }, closed);
+const { contentLanguages: ignoredLanguages, isTranslation: ignoredTranslation,
+  originalLanguages: ignoredOriginals, coverage: ignoredCoverage, ...releaseFields } = releaseWrite.properties;
+export const releaseV2Write = t.Object({ ...releaseFields, profile: t.Literal('release-v2'),
+  identifiers: t.Array(releaseIdentifier, { maxItems: RELEASE_V2_COST.identifiers }),
+  platform: t.Nullable(text(120)), territory: t.Nullable(t.String({ pattern: '^(?:[A-Z]{2}|[0-9]{3})$' })),
+  coverage: t.Array(releaseCoverage, { minItems: 1, maxItems: RELEASE_V2_COST.coverage }),
+}, closed);
+export type ReleaseV2Write = Static<typeof releaseV2Write>;
+export interface CoveredRealization { realization: string; revision: string; work: string;
+  language: string; kind: 'original' | 'translation'; status: 'official' | 'unofficial' }
+export interface ReleaseV2Record extends ReleaseV2Write {
+  work: string; contentLanguages: string[]; isTranslation: boolean; originalLanguages: string[];
+  resolvedCoverage: CoveredRealization[];
+}
+export type AnyReleaseRecord = ReleaseRecord | ReleaseV2Record;
 export class InvalidRelease extends Error {}
 export class StaleRelease extends Error {}
 export class ReleaseUnavailable extends Error {}
 
-function isbnOk(value: string): boolean {
+export function isbnOk(value: string): boolean {
   return [...value].reduce((sum, digit, index) => sum + Number(digit) * (index % 2 === 0 ? 1 : 3), 0) % 10 === 0;
+}
+
+export function checkedReleaseV2(input: unknown, work: string): ReleaseV2Write & { work: string } {
+  if (!Value.Check(releaseV2Write, input) || !Value.Check(native, work)) {
+    throw new InvalidRelease('Release does not match release-v2');
+  }
+  // Reuse the closed publication rules; v2 coverage is independent of virtual scope.
+  const { identifiers: ignoredIdentifiers, platform: ignoredPlatform, territory: ignoredTerritory,
+    coverage: ignoredEntries, ...publication } = input;
+  const checked = checkedRelease({ ...publication, profile: 'release-v1',
+    contentLanguages: [], isTranslation: false, originalLanguages: [],
+    coverage: input.kind === 'virtual' ? { scope: 'realization coverage', complete: false } : null }, work);
+  if (new Set(input.coverage.map(entry => entry.realization)).size !== input.coverage.length) {
+    throw new InvalidRelease('A release covers each realization once; use a portion label');
+  }
+  if (new Set(input.identifiers.map(entry => JSON.stringify([entry.provider, entry.value]))).size !== input.identifiers.length) {
+    throw new InvalidRelease('Release identifiers are distinct provider-qualified values');
+  }
+  return { ...input, title: checked.title, titleLanguage: checked.titleLanguage,
+    tracklistLanguage: checked.tracklistLanguage, work,
+    identifiers: [...input.identifiers].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+    coverage: [...input.coverage].sort((a, b) => a.realization.localeCompare(b.realization)) };
+}
+
+export function resolvedReleaseV2(input: ReleaseV2Write & { work: string },
+  resolved: CoveredRealization[]): ReleaseV2Record {
+  if (resolved.length !== input.coverage.length || input.coverage.some(entry =>
+    !resolved.some(row => row.realization === entry.realization && row.revision === entry.revision))
+    || !resolved.some(row => row.work === input.work)) {
+    throw new InvalidRelease('Release coverage requires exact realizations, including its editing Work');
+  }
+  if (input.status === 'official' && resolved.some(row => row.status !== 'official')) {
+    throw new InvalidRelease('An unofficial realization cannot be presented as an official release');
+  }
+  const record: ReleaseV2Record = { ...input, resolvedCoverage: resolved,
+    contentLanguages: [...new Set(resolved.map(row => row.language))].sort(),
+    isTranslation: resolved.some(row => row.kind === 'translation'), originalLanguages: [] };
+  if (Buffer.byteLength(JSON.stringify(record)) > RELEASE_V2_COST.stateBytes) {
+    throw new InvalidRelease('Release exceeds its byte budget');
+  }
+  return record;
 }
 
 /** Kind and status stay paired: virtual is never a publication claim, and a
@@ -110,12 +174,17 @@ function recordedLanguage(value: string): string {
 
 /** A closed external record can be corrected with evidence. It cannot gain a later
  * translation or an extra content language. A virtual release may gain languages. */
-export function assertReleaseCorrection(before: ReleaseRecord, after: ReleaseRecord): void {
+export function assertReleaseCorrection(before: AnyReleaseRecord, after: AnyReleaseRecord): void {
   if (before.id !== after.id || before.work !== after.work || before.kind !== after.kind) {
     throw new InvalidRelease('A correction keeps the release and its kind');
   }
   assertReleasePairing(after.kind, after.status);
+  if (before.profile !== after.profile) throw new InvalidRelease('A correction keeps its release profile');
   if (!releaseChanged(before, after)) return;
+  if (before.profile === 'release-v2' && after.profile === 'release-v2' && before.kind !== 'virtual'
+    && after.coverage.some(entry => !before.coverage.some(old => old.realization === entry.realization))) {
+    throw new InvalidRelease('A later realization is a new release, not an extension of a closed record');
+  }
   if (before.kind === 'virtual') {
     if (after.status !== 'virtual') throw new InvalidRelease('Virtual status cannot become a publication claim');
     if (before.contentLanguages.some(tag => !after.contentLanguages.includes(tag))) {
@@ -131,30 +200,62 @@ export function assertReleaseCorrection(before: ReleaseRecord, after: ReleaseRec
   if (!after.evidence) throw new InvalidRelease('A correction of a closed release cites evidence');
 }
 
-export function releaseChanged(before: ReleaseRecord, after: ReleaseRecord): boolean {
-  const facts = (record: ReleaseRecord) => {
+export function releaseChanged(before: AnyReleaseRecord, after: AnyReleaseRecord): boolean {
+  const facts = (record: AnyReleaseRecord) => {
     const { evidence: ignoredEvidence, expectedHead: ignoredHead, actingSubject: ignoredActor, ...rest } = record;
     return rest;
   };
   return JSON.stringify(facts(before)) !== JSON.stringify(facts(after));
 }
 
-export function parseStoredRelease(raw: string, work: string): ReleaseRecord {
+export function parseStoredRelease(raw: string, work?: string): AnyReleaseRecord {
   try {
-    const value = JSON.parse(raw) as { work?: string };
+    const value = JSON.parse(raw) as AnyReleaseRecord;
     const { work: stored, ...body } = value;
-    if (stored && stored !== work) throw new ReleaseUnavailable('Release state is invalid');
-    return checkedRelease(body, work);
+    if (work && stored !== work) throw new ReleaseUnavailable('Release state is invalid');
+    if (body.profile === 'release-v2') {
+      const { resolvedCoverage, contentLanguages: languages, isTranslation, originalLanguages: originals, ...input } = body;
+      const record = resolvedReleaseV2(checkedReleaseV2(input, stored), resolvedCoverage);
+      if (JSON.stringify(record.contentLanguages) !== JSON.stringify(languages)
+        || record.isTranslation !== isTranslation || originals.length) throw new Error('Derived coverage differs');
+      return record;
+    }
+    return checkedRelease(body, stored);
   } catch (error) {
     if (error instanceof ReleaseUnavailable) throw error;
     throw new ReleaseUnavailable('Release state is invalid');
   }
 }
 
-export function releaseDigest(record: ReleaseRecord): string {
-  return createHash('sha256').update(JSON.stringify({ ...record, profile: RELEASE_PROFILE })).digest('hex');
+export function releaseDigest(record: AnyReleaseRecord | (ReleaseV2Write & { work: string })): string {
+  if (record.profile === 'release-v2') {
+    const payload = Object.fromEntries(Object.entries(record).filter(([key]) =>
+      !['resolvedCoverage', 'contentLanguages', 'isTranslation', 'originalLanguages'].includes(key)));
+    return createHash('sha256').update(canonicalRecord({ ...payload, profile: RELEASE_V2_PROFILE })).digest('hex');
+  }
+  const payload = { ...record, profile: releaseProfileOf(record) };
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
-export function releaseLanguageLiteral(record: ReleaseRecord): string | null {
+/** Request member order never changes a new Versioned command's retry identity.
+ * Retain release-v1's installed digest format for its existing receipts. */
+export function canonicalRecord(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalRecord).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.entries(value).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalRecord(item)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function identifierLiteral(identifier: { provider: string; value: string }): string {
+  return JSON.stringify([identifier.provider, identifier.value]);
+}
+
+export function releaseProfileOf(record: AnyReleaseRecord): string {
+  return record.profile === 'release-v2' ? RELEASE_V2_PROFILE : RELEASE_PROFILE;
+}
+
+export function releaseLanguageLiteral(record: AnyReleaseRecord): string | null {
   return languageListLiteral(record.contentLanguages);
 }

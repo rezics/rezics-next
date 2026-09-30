@@ -2,8 +2,8 @@ import { Elysia, t } from 'elysia';
 import { pendingOperation } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
 import { setRelease } from '../modules/release/command.ts';
-import { readWorkRelease, readWorkReleases } from '../modules/release/read.ts';
-import { InvalidRelease, ReleaseUnavailable, StaleRelease, releaseWrite } from '../modules/release/schema.ts';
+import { readWorkRelease, readWorkReleases, readReleasesByIdentifier } from '../modules/release/read.ts';
+import { InvalidRelease, ReleaseUnavailable, StaleRelease, releaseWrite, releaseV2Write } from '../modules/release/schema.ts';
 import { pageFields, pageQuery, readId, readLanguage, readPosition, readUuid } from '../modules/work/read-contract.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -18,16 +18,24 @@ const status = t.Union([t.Literal('official'), t.Literal('unofficial'), t.Litera
 const snapshot = t.Object({ id: readId, fetchedAt: t.String(), byteDigest: t.String(), byteLength: t.Integer(),
   coverage: t.Object({ scope: t.String(), complete: t.Boolean() }),
   acquisition: t.Union([t.Literal('fixture'), t.Literal('fetch')]) });
-const releaseView = t.Object({ id: readId, revision: readId, kind, status,
-  contentLanguages: t.Array(t.String(), { maxItems: 8 }), isTranslation: t.Boolean(),
+const releaseView = t.Object({ profile: t.Literal('release-v2'), id: readId, revision: readId, kind, status,
+  contentLanguages: t.Array(t.String(), { maxItems: 64 }), isTranslation: t.Boolean(),
   originalLanguages: t.Array(t.String(), { maxItems: 4 }), titleLanguage: t.Nullable(t.String()),
   tracklistLanguage: t.Nullable(t.String()), title: t.Object({ value: t.String(), language: t.String() }),
+  isbn13: t.Nullable(t.String()), editionStatement: t.Nullable(t.String()),
   publisher: t.Nullable(t.String()), publicationYear: t.Nullable(t.Integer()),
   originalUrl: t.Nullable(t.String()), fixedRelease: t.Nullable(readId),
-  coverage: t.Nullable(t.Object({ scope: t.String(), complete: t.Boolean() })),
+  identifiers: t.Array(t.Object({ provider: t.String(), value: t.String() }), { maxItems: 16 }),
+  platform: t.Nullable(t.String()), territory: t.Nullable(t.String()),
+  coverage: t.Array(t.Object({ realization: t.Nullable(readId), revision: t.Nullable(readId),
+    work: readId, mainVersion: readId, language: t.Nullable(t.String()),
+    completeness: t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('trial'), t.Literal('unknown')]),
+    portion: t.Optional(t.String()) }), { maxItems: 64 }),
+  legacyCoverage: t.Nullable(t.Object({ scope: t.String(), complete: t.Boolean() })),
   snapshots: t.Array(snapshot, { maxItems: 20 }) });
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 export const openApiOperations = {
+  '/v1/releases': { get: { bearer: false } },
   '/v1/works/{id}/releases': { get: { bearer: false } },
   '/v1/works/{id}/releases/{release}': { get: { bearer: false }, put: { bearer: true, idempotencyKey: true } },
 } as const;
@@ -49,8 +57,17 @@ function keyOf(request: Request): string | Response {
 
 export function releaseRoutes(work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/releases', { detail,
+      query: t.Object({ ...pageQuery, isbn13: t.Optional(t.String({ maxLength: 13 })),
+        provider: t.Optional(t.String({ maxLength: 248 })), identifier: t.Optional(t.String({ maxLength: 200 })) },
+        { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(releaseView, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+    }, async ({ request, query: options }) => {
+      try { return Response.json(await workRead(work, request, options, session => readReleasesByIdentifier(session, options)), { headers }); }
+      catch (error) { return releaseError(error); }
+    })
     .put('/v1/works/:id/releases/:release', { params: t.Object({ id: readUuid, release: readUuid }),
-      body: releaseWrite,
+      body: t.Union([releaseWrite, releaseV2Write]),
       response: { 200: t.Object({ work: readId, release: readId, revision: readId, receipt: t.String(),
         sourcePosition: readPosition, replayed: t.Boolean() }), 202: pendingOperation, ...writeProblems },
     }, async ({ request, params: path, body }) => {

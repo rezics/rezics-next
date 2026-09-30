@@ -89,6 +89,7 @@ import { libraryRoutes } from './routes/library.ts';
 import { realmProfileRoutes } from './routes/realm-profile.ts';
 import { workMetadataRoutes } from './routes/work-metadata.ts';
 import { releaseRoutes } from './routes/releases.ts';
+import { realizationRoutes } from './routes/realizations.ts';
 import { webPublicationRoutes } from './routes/web-publications.ts';
 import { discoveryRoutes } from './routes/discovery.ts';
 import { followsRoutes } from './routes/follows.ts';
@@ -162,6 +163,7 @@ function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(workReadRoutes(work))
     .use(alsoEnjoyedRoutes(work))
     .use(releaseRoutes(work))
+    .use(realizationRoutes(work))
     .use(webPublicationRoutes(work))
     .use(realmReadRoutes(work))
     .use(preferencesRoutes(work))

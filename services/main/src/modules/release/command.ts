@@ -9,9 +9,10 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent, prepareWorkC
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { workEditReceiptIri } from '../work/edit.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
+import { resolveReleaseCoverage } from '../realization/coverage.ts';
 import { languageListLiteral } from './languages.ts';
-import { assertReleaseCorrection, checkedRelease, parseStoredRelease, releaseDigest, releaseLanguageLiteral,
-  RELEASE_COST, RELEASE_PROFILE, InvalidRelease, ReleaseUnavailable, StaleRelease, type ReleaseRecord } from './schema.ts';
+import { assertReleaseCorrection, checkedRelease, checkedReleaseV2, resolvedReleaseV2, parseStoredRelease, releaseDigest, releaseLanguageLiteral, releaseProfileOf, identifierLiteral, RELEASE_V2_PROFILE,
+  RELEASE_COST, RELEASE_V2_COST, RELEASE_PROFILE, InvalidRelease, ReleaseUnavailable, StaleRelease, type AnyReleaseRecord } from './schema.ts';
 
 export function releaseReceiptIri(admissionId: string): string {
   return workEditReceiptIri(admissionId);
@@ -81,19 +82,19 @@ async function sealRelease(env: WorkActivationEnvironment, admission: Registered
 }
 
 async function loadRelease(env: WorkActivationEnvironment, work: string, release: string):
-  Promise<{ revision: string; record: ReleaseRecord } | null> {
+  Promise<{ revision: string; record: AnyReleaseRecord } | null> {
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?revision ?state WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(release)} a rv:Release ; rv:work ${iri(work)} ; rv:releaseHead ?revision }
       GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ${iri(release)} ; rv:releaseState ?state ;
-        rv:modelRevision ${iri(RELEASE_PROFILE)} }
-    } LIMIT 2`, 8192)).results?.bindings ?? [];
+        rv:modelRevision ?profile . VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} } }
+    } LIMIT 2`, RELEASE_V2_COST.stateBytes * 2)).results?.bindings ?? [];
   if (!rows.length) return null;
   if (rows.length !== 1 || !rows[0]?.revision || !rows[0].state) throw new ReleaseUnavailable('Release head is incomplete');
   return { revision: rows[0].revision.value, record: parseStoredRelease(rows[0].state.value, work) };
 }
 
-function projection(release: string, revision: string, record: ReleaseRecord): string {
+function projection(release: string, revision: string, record: AnyReleaseRecord): string {
   const languages = releaseLanguageLiteral(record);
   const originals = languageListLiteral(record.originalLanguages);
   const lines = [`${iri(release)} a rv:Release ; rv:work ${iri(record.work)} ; rv:releaseKind ${lit(record.kind)} ;
@@ -105,15 +106,28 @@ function projection(release: string, revision: string, record: ReleaseRecord): s
   if (record.isTranslation) lines.push(`${iri(release)} rv:isTranslation "true" .`);
   if (record.originalUrl) lines.push(`${iri(release)} rv:originalUrl ${lit(record.originalUrl)} .`);
   if (record.fixedRelease) lines.push(`${iri(release)} rv:fixedRelease ${iri(record.fixedRelease)} .`);
-  if (record.coverage) lines.push(`${iri(release)} rv:coverageScope ${lit(record.coverage.scope)} ;
+  if (record.profile === 'release-v1' && record.coverage) lines.push(`${iri(release)} rv:coverageScope ${lit(record.coverage.scope)} ;
     rv:coverageComplete ${lit(String(record.coverage.complete))} .`);
+  if (record.isbn13) lines.push(`${iri(release)} rv:isbn13 ${lit(record.isbn13)} .`);
+  if (record.profile === 'release-v2') {
+    lines.push(`${iri(release)} rv:definitionProfile ${iri(RELEASE_V2_PROFILE)} .`);
+    for (const entry of record.resolvedCoverage) lines.push(`${iri(release)} rv:work ${iri(entry.work)} ;
+      rv:coverageRealization ${iri(entry.realization)} ; rv:coverageRevision ${iri(entry.revision)} ;
+      rv:contentLanguage ${lit(entry.language)} .`);
+    for (const entry of record.coverage) lines.push(`${iri(release)} rv:completeness ${lit(entry.completeness)} .`);
+    for (const identifier of record.identifiers) lines.push(`${iri(release)} rv:identifier ${lit(identifierLiteral(identifier))} .`);
+    if (record.platform) lines.push(`${iri(release)} rv:platform ${lit(record.platform)} .`);
+    if (record.territory) lines.push(`${iri(release)} rv:territory ${lit(record.territory)} .`);
+  }
   return lines.join('\n');
 }
 
-/** One release CAS. Logical cost is the single current head plus its JSON state, within RELEASE_COST. */
+/** One release CAS. V2 adds one bounded join of at most 64 exact realization
+ * states, inside the same command call, byte and deadline budgets as v1. */
 export async function commitRelease(env: WorkActivationEnvironment, admission: RegisteredAdmission,
-  record: ReleaseRecord): Promise<boolean> {
+  record: AnyReleaseRecord): Promise<boolean> {
   const release = record.id;
+  const profile = releaseProfileOf(record);
   const digest = releaseDigest(record);
   if (admission.action !== 'work.edit' || admission.scope !== `work:edit:${record.work}`
     || admission.requestDigest !== digest) throw new IdempotencyConflict('Release admission differs');
@@ -141,9 +155,9 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
   if (rows.length !== 1 || !rows[0]?.sequence) throw new ReleaseUnavailable('Release work is unavailable');
   const revision = ID + Bun.randomUUIDv7();
   const validations = [
-    ...await profileValidations(env.fuseki, 'release-v1', [
-      { shape: `${RELEASE_PROFILE}/release-shape`, focus: [release], graphs: [GRAPHS.current, GRAPHS.revisions] },
-      { shape: `${RELEASE_PROFILE}/revision-shape`, focus: [revision], graphs: [GRAPHS.current, GRAPHS.revisions] },
+    ...await profileValidations(env.fuseki, record.profile, [
+      { shape: `${profile}/release-shape`, focus: [release], graphs: [GRAPHS.current, GRAPHS.revisions] },
+      { shape: `${profile}/revision-shape`, focus: [revision], graphs: [GRAPHS.current, GRAPHS.revisions] },
     ]),
     ...(record.kind === 'web' ? await profileValidations(env.fuseki, 'web-publication-v1', [
       { shape: `${WEB_PUBLICATION_PROFILE}/publication-shape`, focus: [release],
@@ -151,8 +165,8 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
     ]) : []),
   ];
   const manifest = env.workObjects
-    ? await prepareWorkComponent(env.workObjects, release, { record, revision }, RELEASE_PROFILE)
-    : prepareComponent(env.objectDirectory, release, { record, revision }, RELEASE_PROFILE);
+    ? await prepareWorkComponent(env.workObjects, release, { record, revision }, profile)
+    : prepareComponent(env.objectDirectory, release, { record, revision }, profile);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingAdmittedWork(admission.id, 'work-edit');
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(receipt)}`;
@@ -160,17 +174,7 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
   const update = `PREFIX rv: <${RV}>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
-      ${prior ? `GRAPH ${iri(GRAPHS.current)} { ${iri(release)} rv:releaseHead ${iri(prior)} ;
-        rv:releaseKind ?oldKind ; rv:releaseStatus ?oldStatus .
-        ${iri(release)} rv:contentLanguages ?oldLanguages .
-        ${iri(release)} rv:titleLanguage ?oldTitle .
-        ${iri(release)} rv:tracklistLanguage ?oldTrack .
-        ${iri(release)} rv:originalLanguages ?oldOriginals .
-        ${iri(release)} rv:isTranslation ?oldTranslation .
-        ${iri(release)} rv:originalUrl ?oldUrl .
-        ${iri(release)} rv:fixedRelease ?oldFixed .
-        ${iri(release)} rv:coverageScope ?oldScope .
-        ${iri(release)} rv:coverageComplete ?oldComplete . }` : ''}
+      ${prior ? `GRAPH ${iri(GRAPHS.current)} { ${iri(release)} ?oldPredicate ?oldValue }` : ''}
     }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -179,14 +183,14 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
         rv:component ${iri(release)} ; rv:releaseState ${lit(JSON.stringify(record))} ;
         ${prior ? `rv:predecessor ${iri(prior)} ;` : ''}
         ${record.evidence ? `rv:correctionEvidence ${iri(record.evidence)} ;` : ''}
-        rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ; rv:modelRevision ${iri(RELEASE_PROFILE)} ;
-        rv:shapeRevision ${iri(RELEASE_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+        rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ; rv:modelRevision ${iri(profile)} ;
+        rv:shapeRevision ${iri(profile)} ; rv:datasetId ${iri(DATASET)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
         rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(admission.id)} ;
         rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(admission.scope)} ;
         rv:work ${iri(record.work)} ; rv:release ${iri(release)} ; rv:releaseRevision ${iri(revision)} ;
-        rv:expectedHead ${iri(prior ?? release)} ; rv:action "work.edit" ; rv:commandFamily "release-v1" ;
+        rv:expectedHead ${iri(prior ?? release)} ; rv:action "work.edit" ; rv:commandFamily ${lit(record.profile)} ;
         ${record.evidence ? `rv:correctionEvidence ${iri(record.evidence)} ;` : ''}
         rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
@@ -198,18 +202,15 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . FILTER(?n = ${rows[0].sequence.value}) }
       GRAPH ${iri(GRAPHS.current)} { ${iri(record.work)} a <https://schema.org/CreativeWork> .
         ${prior ? `${iri(release)} a rv:Release ; rv:work ${iri(record.work)} ; rv:releaseHead ${iri(prior)} .
-          OPTIONAL { ${iri(release)} rv:releaseKind ?oldKind }
-          OPTIONAL { ${iri(release)} rv:releaseStatus ?oldStatus }
-          OPTIONAL { ${iri(release)} rv:contentLanguages ?oldLanguages }
-          OPTIONAL { ${iri(release)} rv:titleLanguage ?oldTitle }
-          OPTIONAL { ${iri(release)} rv:tracklistLanguage ?oldTrack }
-          OPTIONAL { ${iri(release)} rv:originalLanguages ?oldOriginals }
-          OPTIONAL { ${iri(release)} rv:isTranslation ?oldTranslation }
-          OPTIONAL { ${iri(release)} rv:originalUrl ?oldUrl }
-          OPTIONAL { ${iri(release)} rv:fixedRelease ?oldFixed }
-          OPTIONAL { ${iri(release)} rv:coverageScope ?oldScope }
-          OPTIONAL { ${iri(release)} rv:coverageComplete ?oldComplete }`
+          ${iri(release)} ?oldPredicate ?oldValue .
+          VALUES ?oldPredicate { rv:work rv:releaseHead rv:releaseKind rv:releaseStatus rv:contentLanguages
+            rv:titleLanguage rv:tracklistLanguage rv:originalLanguages rv:isTranslation rv:originalUrl
+            rv:fixedRelease rv:coverageScope rv:coverageComplete rv:isbn13 rv:definitionProfile
+            rv:coverageRealization rv:coverageRevision rv:contentLanguage rv:completeness rv:identifier rv:platform rv:territory }`
           : `FILTER NOT EXISTS { ${iri(release)} ?occupiedProperty ?occupiedValue }`} }
+      ${record.profile === 'release-v2' ? record.resolvedCoverage.map(entry => `
+        GRAPH ${iri(GRAPHS.current)} { ${iri(entry.realization)} a rv:Realization ; rv:work ${iri(entry.work)} }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(entry.revision)} a rv:RealizationRevision ; rv:component ${iri(entry.realization)} }`).join(' ') : ''}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
@@ -228,12 +229,8 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
 export async function setRelease(deps: MainWorkDependencies, request: Request,
   input: unknown & { work: string; idempotencyKey: string }) {
   const { work: workId, idempotencyKey, ...body } = input;
-  const record = checkedRelease(body, workId);
-  if (record.expectedHead) {
-    const current = await loadRelease(deps.environment, record.work, record.id);
-    if (!current || current.revision !== record.expectedHead) throw new StaleRelease('Release basis changed');
-    assertReleaseCorrection(current.record, record);
-  }
+  const record = (body as { profile?: string }).profile === 'release-v2'
+    ? checkedReleaseV2(body, workId) : checkedRelease(body, workId);
   const digest = releaseDigest(record);
   const signal = AbortSignal.timeout(RELEASE_COST.deadlineMs);
   return fusekiReadBudget.run({ signal, callsLeft: RELEASE_COST.commandGraphCalls,
@@ -254,16 +251,23 @@ export async function setRelease(deps: MainWorkDependencies, request: Request,
       try {
         if (admission.state === 'sealed') { /* A retry resolves the exact receipt below. */ }
         else if (!admission.dispatchEligible || admission.state === 'registered') await sealRelease(env, admission);
-        else committed = await commitRelease(env, admission, record);
-      } catch (error) { failure = error; }
+        else {
+          const resolved = record.profile === 'release-v2'
+            ? resolvedReleaseV2(record, await resolveReleaseCoverage(env, record.coverage)) : record;
+          committed = await commitRelease(env, admission, resolved);
+        }
+      } catch (error) {
+        failure = error;
+        if (error instanceof InvalidRelease) await sealRelease(env, admission);
+      }
       const terminal = await readReleaseReceipt(env, admission.id);
-      if (failure instanceof InvalidRelease) throw failure;
       if (!terminal) {
-        if (failure instanceof ReleaseUnavailable || failure instanceof IdempotencyConflict
+        if (failure instanceof InvalidRelease || failure instanceof ReleaseUnavailable || failure instanceof IdempotencyConflict
           || failure instanceof CommandRejected || failure instanceof StaleRelease) throw failure;
         throw new PendingAdmittedWork(admission.id, 'work-edit');
       }
       await deps.access.recordGraphOutcome(admission.id, terminal);
+      if (failure instanceof InvalidRelease) throw failure;
       await assertNotInvalidProfileReceipt(env.fuseki, terminal.receipt);
       if (failure instanceof CommandRejected) throw failure;
       if (terminal.outcome === 'cancelled') throw new StaleRelease('Release command was cancelled; refresh its basis');
