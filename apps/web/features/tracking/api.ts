@@ -79,8 +79,8 @@ export function mainTrackingApi(actingSubject: string, main: () => MainClient = 
     async editions(work) {
       const id = uuidOf(work);
       const [realizations, releases] = await Promise.all([
-        settle(() => main().v1.works({ id }).realizations.get({ query: { limit: 20 } })),
-        settle(() => main().v1.works({ id }).releases.get({ query: { limit: 20 } }))]);
+        settle(() => main().v1.works({ id }).realizations.get({ query: { actingSubject, limit: 20 } })),
+        settle(() => main().v1.works({ id }).releases.get({ query: { actingSubject, limit: 20 } }))]);
       if (!realizations.ok) return realizations;
       if (!releases.ok) return releases;
       return { ok: true, data: { realizations: realizations.data.items, releases: releases.data.items,
