@@ -158,7 +158,7 @@ one names what changes when it fails; none by itself ends the company.
    actual tools, inventories and weekly repeated work, and obtain three
    commitments from people who will maintain knowledge or a wiki. Without a
    concrete recurring problem, change the initial task before enlarging the
-   engine.
+   engine. The [demand study](demand-study.md) is the procedure.
 2. **Retention before expansion.** Within 90 days of a usable pilot, run two
    independently recruited cohorts of at least 30 people. At least 60% complete
    the first task unaided and at least 30% return for a meaningful action in
