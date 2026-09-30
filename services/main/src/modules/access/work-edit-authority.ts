@@ -4,6 +4,8 @@ import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionUnavailable, type VerifiedPrincipal } from './admission.ts';
 import { newBaselineProof } from './baseline.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
+import { roleWorkProof, type RoleWorkProof } from './role-proof.ts';
+import { representedWorkProof } from './represented-work-proof.ts';
 
 export interface WorkEditAuthorityProof {
   principalId: string; principalEpoch: string; actingSubject: string;
@@ -11,13 +13,15 @@ export interface WorkEditAuthorityProof {
   authorityEpoch: string; recoveryGeneration: string;
   representationId: string; representationGeneration: string;
   grantId: string | null; grantGeneration: string | null; validUntil: string;
+  role?: RoleWorkProof;
   baseline?: { kind: 'author-baseline-v1'; provisionId: string;
     policyGeneration: string; workGeneration: string };
 }
 
 /** No graph admission: the callback may only commit a short owner SQL transaction.
  * Access and Source use different databases, so this is a live lock envelope,
- * not a distributed transaction or a coordinated backup frontier. */
+ * not a distributed transaction or a coordinated backup frontier. Cost: indexed
+ * principal/controller/grant reads and at most 16 pinned catalogue bindings. */
 export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPrincipal,
   actingSubject: string, work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>,
   graph?: Pick<FusekiClient, 'query'>): Promise<T> {
@@ -80,31 +84,30 @@ export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPr
       await client.query('COMMIT');
       return result;
     }
-    const subject = (await client.query<{ generation: string }>(
-      "SELECT generation FROM access.authority_subject WHERE id = $1 AND kind = 'agent' AND active FOR SHARE",
-      [actingSubject])).rows[0];
-    const mandate = (await client.query<{ id: string; generation: string; valid_until: Date }>(
-      `SELECT id, generation, valid_until FROM access.representation
-       WHERE principal_id = $1 AND subject_id = $2 AND action = 'work.edit'
-         AND active AND valid_until > clock_timestamp() ORDER BY id LIMIT 1 FOR SHARE`,
-      [identity.id, actingSubject])).rows[0];
-    const grant = (await client.query<{ id: string; generation: string; valid_until: Date }>(
-      `SELECT id, generation, valid_until FROM access.permission_grant
-       WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'work.edit'
-         AND active AND valid_until > clock_timestamp() ORDER BY id LIMIT 1 FOR SHARE`,
-      [actingSubject, scope])).rows[0];
-    if (!subject || !mandate || !grant) throw new AdmissionDenied('Work edit mandate is unavailable');
+    const represented = await representedWorkProof(client, identity.id, actingSubject, 'work.edit', scope);
+    if (!represented) throw new AdmissionDenied('Work edit mandate is unavailable');
+    const role = !represented.grantId ? await roleWorkProof(client, actingSubject, 'work.edit') : null;
+    if (!represented.grantId && !role) throw new AdmissionDenied('Work edit permission is unavailable');
     // Recheck after every lock has been acquired, not at transaction start. Leave
     // more validity than the bounded five-second Source transaction can consume.
-    const validUntil = new Date(Math.min(mandate.valid_until.getTime(), grant.valid_until.getTime()));
-    const valid = await client.query<{ valid: boolean }>(
-      "SELECT $1::timestamptz > clock_timestamp() + interval '6 seconds' AS valid", [validUntil]);
-    if (!valid.rows[0]?.valid) throw new AdmissionDenied('Work edit mandate expires too soon');
+    // Person controller mandates use PostgreSQL infinity. Compute and cap the
+    // lease in SQL so both infinite and finite mandates yield a real instant.
+    const lease = (await client.query<{ valid_until: Date }>(`SELECT
+      LEAST(r.valid_until, COALESCE(g.valid_until, b.valid_until),
+        clock_timestamp() + interval '15 seconds') AS valid_until
+      FROM access.representation r
+      LEFT JOIN access.permission_grant g ON g.id = $2
+      LEFT JOIN access.role_binding b ON b.id = $3
+      WHERE r.id = $1 AND LEAST(r.valid_until, COALESCE(g.valid_until, b.valid_until))
+        > clock_timestamp() + interval '6 seconds'`,
+    [represented.representationId, represented.grantId, role?.bindingId ?? null])).rows[0];
+    if (!lease) throw new AdmissionDenied('Work edit mandate expires too soon');
     const result = await commit({ principalId: identity.id, principalEpoch: identity.enforcement_epoch,
-      actingSubject, subjectGeneration: subject.generation, scope, action: 'work.edit',
+      actingSubject, subjectGeneration: represented.subjectGeneration, scope, action: 'work.edit',
       authorityEpoch: gate.authority_epoch, recoveryGeneration: recovery.generation,
-      representationId: mandate.id, representationGeneration: mandate.generation,
-      grantId: grant.id, grantGeneration: grant.generation, validUntil: validUntil.toISOString() });
+      representationId: represented.representationId, representationGeneration: represented.representationGeneration,
+      grantId: represented.grantId, grantGeneration: represented.grantGeneration,
+      ...(role ? { role } : {}), validUntil: lease.valid_until.toISOString() });
     await client.query('COMMIT');
     return result;
   } catch (error) {

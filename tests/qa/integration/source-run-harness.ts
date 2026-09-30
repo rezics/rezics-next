@@ -4,6 +4,7 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
 import { SourceIntakeStore, SourceProviderRateLimited } from '../../../services/main/src/modules/source/intake.ts';
@@ -108,6 +109,14 @@ export async function runHarness(): Promise<RunHarness> {
   const ownerId = randomUUID();
   await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
     VALUES ($1, $2, $3), ($4, $2, $5)`, [ownerId, issuer, owner.subject, randomUUID(), other.subject]);
+  const administrator = `https://rezics.com/id/${randomUUID()}`;
+  await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [administrator]);
+  await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT DO NOTHING");
+  await accessPool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+    VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`, [randomUUID(), ownerId, administrator]);
+  await accessPool.query(`INSERT INTO access.permission_grant
+    (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+    VALUES ($1,$2,$2,'work:create:root','work.create',now() + interval '1 hour')`, [randomUUID(), administrator]);
   const account = { verify: async (request: Request, required: readonly string[]) => {
     const token = request.headers.get('authorization');
     if (token === 'Bearer owner') return owner;
@@ -123,6 +132,7 @@ export async function runHarness(): Promise<RunHarness> {
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
       objectDirectory: '.temp/source-run-unused' },
     account, access: new AccessAdmissionRegistry(accessPool),
+    actingContexts: new AccessActingContexts(accessPool),
     sourceIntake: new SourceIntakeStore(contentPool),
     sourceConversions: new OpenLibraryConversionStore(contentPool, new SourceIntakeStore(contentPool)),
     sourceAcquisitions: sourceAcquisitionServices(contentPool, { fetcher: provider.fetch, reserve: async () => {

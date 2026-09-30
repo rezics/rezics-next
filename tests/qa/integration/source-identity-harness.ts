@@ -4,6 +4,7 @@ import { Elysia } from 'elysia';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
@@ -35,6 +36,16 @@ export async function identityHarness(options: { realAccount?: boolean;
   const principalId = randomUUID(), otherId = randomUUID();
   await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
     VALUES ($1,$2,$3),($4,$2,$5)`, [principalId, issuer, owner.subject, otherId, other.subject]);
+  if (options.acquisition) {
+    const administrator = iri(randomUUID());
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [administrator]);
+    await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT DO NOTHING");
+    await accessPool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`, [randomUUID(), principalId, administrator]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,'work:create:root','work.create',now() + interval '1 hour')`, [randomUUID(), administrator]);
+  }
   const access = new AccessAdmissionRegistry(accessPool);
   const isolatedAccount = { verify: async (request: Request, required: readonly string[]) => {
     const token = request.headers.get('authorization');
@@ -52,6 +63,7 @@ export async function identityHarness(options: { realAccount?: boolean;
   const stores = { identity: new ProviderIdentityStore(pool), withdrawal: new SourceFieldWithdrawalStore(pool),
     score: new SourceScoreStore(pool) };
   const work = { account, access, sourceProviderIdentity: stores.identity,
+    actingContexts: new AccessActingContexts(accessPool),
     sourceFieldWithdrawals: stores.withdrawal, sourceScores: stores.score,
     ...(options.acquisition ? { sourceAcquisitions: sourceAcquisitionServices(pool,
       { fetcher: options.acquisition === 'live' ? fetch : provider.fetch,

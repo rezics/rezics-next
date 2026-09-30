@@ -13,8 +13,13 @@ type RoleRow = { id: string; recipient_subject: string; generation: string;
   family_id: string; role_revision: string; permissions: string[] };
 
 /** Select exactly one current role binding, preserving its pinned revision. */
-export async function roleWorkCreateProof(client: PoolClient,
-  subject: string): Promise<RoleWorkProof | null> {
+export async function roleWorkProof(client: PoolClient,
+  subject: string, permission: 'work.create' | 'work.edit'): Promise<RoleWorkProof | null> {
+  if (permission === 'work.edit') {
+    const gate = (await client.query<{ open: boolean; dispatch_open: boolean }>(`
+      SELECT open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root' FOR SHARE`)).rows[0];
+    if (!gate?.open || !gate.dispatch_open) return null;
+  }
   const rows = await client.query<RoleRow>(`SELECT b.id, b.recipient_subject,
     b.generation, b.family_id, b.role_revision, r.permissions
     FROM access.role_binding b JOIN access.role_revision r
@@ -29,10 +34,14 @@ export async function roleWorkCreateProof(client: PoolClient,
   if (rows.rows.length > MAX_BINDINGS_PER_AGENT) {
     throw new RoleUnavailable('Agent role bindings exceed supported profile');
   }
-  const selected = rows.rows.find(row => row.permissions.includes('work.create'));
+  const selected = rows.rows.find(row => row.permissions.includes(permission));
   return selected ? { bindingId: selected.id,
     bindingGeneration: selected.generation, familyId: selected.family_id,
     roleRevision: selected.role_revision } : null;
+}
+
+export async function roleWorkCreateProof(client: PoolClient, subject: string): Promise<RoleWorkProof | null> {
+  return roleWorkProof(client, subject, 'work.create');
 }
 
 /** Set-based discovery evaluates at most 16 bindings per represented Agent. */
@@ -67,8 +76,8 @@ export async function roleWorkCreateSubjects(client: PoolClient,
 
 /** Claim checks only the saved binding and exact immutable role revision. */
 export async function selectedRoleWorkProof(client: PoolClient, subject: string,
-  proof: RoleWorkProof): Promise<boolean> {
-  await roleWorkCreateProof(client, subject); // enforce the same per-Agent work ceiling
+  proof: RoleWorkProof, permission: 'work.create' | 'work.edit' = 'work.create'): Promise<boolean> {
+  if (!await roleWorkProof(client, subject, permission)) return false;
   const row = await client.query(`SELECT b.id FROM access.role_binding b
     JOIN access.role_revision r ON r.family_id = b.family_id
       AND r.revision = b.role_revision
@@ -78,8 +87,8 @@ export async function selectedRoleWorkProof(client: PoolClient, subject: string,
       AND (b.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership dep
         WHERE dep.id = b.membership_id AND dep.member_subject = b.recipient_subject
           AND dep.state = 'joined' AND dep.generation = b.membership_generation))
-      AND r.permissions @> ARRAY['work.create']::text[] FOR SHARE OF b`,
+      AND r.permissions @> ARRAY[$6]::text[] FOR SHARE OF b`,
   [proof.bindingId, subject, proof.bindingGeneration,
-    proof.familyId, proof.roleRevision]);
+    proof.familyId, proof.roleRevision, permission]);
   return row.rowCount === 1;
 }

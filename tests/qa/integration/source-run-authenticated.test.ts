@@ -8,6 +8,7 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
 import { idOf, FixtureOpenLibrary } from './source-run-harness.ts';
@@ -70,6 +71,14 @@ test('PKG20: real Account scopes and Access admission fence Go source runs', asy
     const principalId = randomUUID();
     await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1, $2, $3)`, [principalId, `${base}/api/auth`, member.id]);
+    const administrator = `https://rezics.com/id/${randomUUID()}`;
+    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [administrator]);
+    await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT DO NOTHING");
+    await accessPool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`, [randomUUID(), principalId, administrator]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,'work:create:root','work.create',now() + interval '1 hour')`, [randomUUID(), administrator]);
     const signedIn = await fetch(`${base}/api/auth/sign-in/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: base },
       body: JSON.stringify({ email: member.email, password: member.password }),
@@ -112,6 +121,7 @@ test('PKG20: real Account scopes and Access admission fence Go source runs', asy
         introspectUrl: `${base}/api/auth/oauth2/introspect`, clientId: verifier.client_id,
         clientSecret: verifier.client_secret! }),
       access: new AccessAdmissionRegistry(accessPool),
+      actingContexts: new AccessActingContexts(accessPool),
       sourceAcquisitions: sourceAcquisitionServices(contentPool,
         { fetcher: source.fetch, reserve: async () => undefined }) });
     const requestBody = { profile: 'go-proxy-live-run-v1', mainModule:

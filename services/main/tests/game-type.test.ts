@@ -8,6 +8,6 @@ const game = 'https://schema.org/VideoGame';
 test('a VideoGame is admitted at creation and type change with an external visit intent', () => {
   expect(metadataWorkRequestDigest('Stardew Valley', [game])).toMatch(/^[0-9a-f]{64}$/);
   expect(checkedWorkTypes([game])).toEqual([game]);
-  expect(workKinds[game]).toEqual({ interest: 'media', primaryAction: 'visit' });
+  expect(workKinds[game]).toEqual({ interest: 'media', primaryAction: 'visit', creation: 'contributor' });
   expect(() => checkedWorkTypes([game, 'https://schema.org/SoftwareApplication'])).toThrow();
 });

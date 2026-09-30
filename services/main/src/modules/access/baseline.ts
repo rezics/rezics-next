@@ -8,6 +8,7 @@ import type { AdmissionRequest } from './admission.ts';
 import { maintainerControllerProof, maintainerGeneration } from '../work/maintainer-proof.ts';
 import { publicReplyRoot } from '../realm-reply/root.ts';
 import { authorSubmissionProof, authorWithdrawalProof, authorWorkGeneration } from './author-baseline.ts';
+import { workKinds } from '../work/work-kinds.ts';
 
 export const BASELINE_MEMBER_POLICY = 'baseline-member-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -209,9 +210,16 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   return await authorWorkGeneration(client, graph, principalId, actingSubject, target.id) !== null;
 }
 
+/** Creation type policy is supplied by the owner adapter and bound in its digest. */
+export function baselineWorkCreationAllowed(request: Pick<AdmissionRequest, 'action' | 'workSemanticTypes'>): boolean {
+  return request.action !== 'work.create' || !request.workSemanticTypes?.some(type =>
+    Object.hasOwn(workKinds, type) && workKinds[type as keyof typeof workKinds].creation === 'administrator');
+}
+
 export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
   request: AdmissionRequest, principalId: string): Promise<BaselineProof | null> {
   if (request.principal.emailVerified !== true || request.authorityPath === 'direct-principal') return null;
+  if (!baselineWorkCreationAllowed(request)) return null;
   const target = baselineTarget(request.action, request.scope);
   if (!target) return null;
   const needsWork = target.kind === 'rating' || request.action === 'translation.link';

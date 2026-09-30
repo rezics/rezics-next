@@ -48,7 +48,7 @@ type BindingRow = { id: string; family_id: string; role_revision: string;
   active: boolean; generation: string; membership_id: string | null;
   membership_generation: string | null };
 
-/** Role revision and binding owner for the first exact work.create family. */
+/** Catalogue creation and editing share the existing role administrator boundary. */
 export class AccessRoles {
   constructor(private readonly pool: Pool) {}
 
@@ -111,8 +111,8 @@ export class AccessRoles {
   }
 
   private validPermissions(permissions: string[]): boolean {
-    return permissions.length === 0
-      || permissions.length === 1 && permissions[0] === 'work.create';
+    return permissions.length <= 2 && new Set(permissions).size === permissions.length
+      && permissions.every(permission => permission === 'work.create' || permission === 'work.edit');
   }
 
   async readFamily(principal: VerifiedPrincipal, issuerSubject: string,
@@ -159,7 +159,7 @@ export class AccessRoles {
       const authorityEpoch = await this.gate(client, true);
       const principalId = await this.authorize(client, context.principal,
         context.issuerSubject, 'access.role.manage',
-        permissions.includes('work.create') ? new Date() : undefined);
+        permissions.length ? new Date() : undefined);
       const prior = await client.query<{ request_digest: string; issuer_subject: string;
         family_id: string; revision: string }>(`SELECT request_digest, issuer_subject,
           family_id, revision FROM access.role_revision_receipt
@@ -350,7 +350,7 @@ export class AccessRoles {
           AND f.owner_subject = $3 AND f.scope_id = $4`,
       [familyId, roleRevision, context.issuerSubject, SCOPE]);
       if (!revision.rows[0]) throw new RoleDenied('role revision is unavailable to issuer');
-      if (revision.rows[0].permissions.includes('work.create')) {
+      if (revision.rows[0].permissions.length) {
         await this.authorize(client, context.principal, context.issuerSubject,
           'access.role.bind', validUntil);
       }

@@ -3,27 +3,27 @@ import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
 
 export type WorkPrimaryAction = 'read' | 'install' | 'copy' | 'watch' | 'visit';
 type WorkKind = { interest: Exclude<HomeInterestKind, 'discussions'> | null;
-  primaryAction: WorkPrimaryAction };
+  primaryAction: WorkPrimaryAction; creation: 'administrator' | 'contributor' };
 
 /** Native and source-adopted Work types share the same catalogue meaning.
  * A bare DigitalDocument has no human kind until a classification is accepted. */
 export const workKinds = {
-  'https://schema.org/Book': { interest: 'books', primaryAction: 'read' },
-  'https://schema.org/BookSeries': { interest: 'books', primaryAction: 'read' },
-  'https://schema.org/DigitalDocument': { interest: null, primaryAction: 'read' },
-  'https://schema.org/Recipe': { interest: 'recipes', primaryAction: 'read' },
-  'https://schema.org/SoftwareApplication': { interest: 'software', primaryAction: 'install' },
-  'https://schema.org/SoftwareSourceCode': { interest: 'software', primaryAction: 'install' },
-  'https://schema.org/VideoGame': { interest: 'media', primaryAction: 'visit' },
-  'https://rezics.com/vocab/ModPackage': { interest: 'software', primaryAction: 'install' },
-  'https://rezics.com/vocab/SkillPackage': { interest: 'ai', primaryAction: 'install' },
-  'https://rezics.com/vocab/PromptTemplate': { interest: 'ai', primaryAction: 'copy' },
-  'https://schema.org/Movie': { interest: 'media', primaryAction: 'watch' },
-  'https://schema.org/TVSeries': { interest: 'media', primaryAction: 'watch' },
-  'https://schema.org/VideoObject': { interest: 'media', primaryAction: 'watch' },
-  'https://schema.org/AudioObject': { interest: 'media', primaryAction: 'watch' },
-  'https://schema.org/MusicRecording': { interest: 'media', primaryAction: 'watch' },
-  'https://schema.org/MusicAlbum': { interest: 'media', primaryAction: 'watch' },
+  'https://schema.org/Book': { interest: 'books', primaryAction: 'read', creation: 'contributor' },
+  'https://schema.org/BookSeries': { interest: 'books', primaryAction: 'read', creation: 'contributor' },
+  'https://schema.org/DigitalDocument': { interest: null, primaryAction: 'read', creation: 'contributor' },
+  'https://schema.org/Recipe': { interest: 'recipes', primaryAction: 'read', creation: 'contributor' },
+  'https://schema.org/SoftwareApplication': { interest: 'software', primaryAction: 'install', creation: 'administrator' },
+  'https://schema.org/SoftwareSourceCode': { interest: 'software', primaryAction: 'install', creation: 'administrator' },
+  'https://schema.org/VideoGame': { interest: 'media', primaryAction: 'visit', creation: 'contributor' },
+  'https://rezics.com/vocab/ModPackage': { interest: 'software', primaryAction: 'install', creation: 'administrator' },
+  'https://rezics.com/vocab/SkillPackage': { interest: 'ai', primaryAction: 'install', creation: 'contributor' },
+  'https://rezics.com/vocab/PromptTemplate': { interest: 'ai', primaryAction: 'copy', creation: 'contributor' },
+  'https://schema.org/Movie': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
+  'https://schema.org/TVSeries': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
+  'https://schema.org/VideoObject': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
+  'https://schema.org/AudioObject': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
+  'https://schema.org/MusicRecording': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
+  'https://schema.org/MusicAlbum': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
 } as const satisfies Record<string, WorkKind>;
 
 export const workSemanticTypes = Object.keys(workKinds) as (keyof typeof workKinds)[];

@@ -30,26 +30,33 @@ export interface SavedRepresentedWorkProof {
   role_revision: string | null;
 }
 
-/** Select one bounded mandate and one direct grant. Group selection is a
- * separate branch so a direct grant and group grant are never pooled. */
+/** Select one indexed mandate and one direct grant. A provisioned Person's
+ * original live controller is sufficient representation, but grants no Work
+ * permission: a separate grant, group or role is still required. Reusing that
+ * mandate keeps revocation pinned without issuing a duplicate representation. */
 export async function representedWorkProof(client: PoolClient, principalId: string,
-  actingSubject: string): Promise<RepresentedWorkProof | null> {
+  actingSubject: string, action: 'work.create' | 'work.edit' = 'work.create',
+  scope = 'work:create:root'): Promise<RepresentedWorkProof | null> {
   const representation = await client.query<{
     id: string; generation: string; subject_generation: string;
   }>(`SELECT r.id, r.generation, s.generation AS subject_generation
     FROM access.representation r
     JOIN access.authority_subject s ON s.id = r.subject_id
-    WHERE r.principal_id = $1 AND r.subject_id = $2 AND r.action = 'work.create'
+    WHERE r.principal_id = $1 AND r.subject_id = $2
+      AND (r.action = $3 OR r.action = 'agent.control' AND EXISTS (
+        SELECT 1 FROM access.agent_provision a WHERE a.principal_id = r.principal_id
+          AND a.agent_id = r.subject_id AND a.representation_id = r.id
+          AND a.agent_kind = 'person' AND a.state = 'active'))
       AND r.active AND r.valid_until > clock_timestamp()
       AND s.kind = 'agent' AND s.active
-    ORDER BY r.id LIMIT 1 FOR SHARE OF r, s`, [principalId, actingSubject]);
+    ORDER BY r.id LIMIT 1 FOR SHARE OF r, s`, [principalId, actingSubject, action]);
   const selected = representation.rows[0];
   if (!selected) return null;
   const grant = await client.query<{ id: string; generation: string }>(`
     SELECT id, generation FROM access.permission_grant
-    WHERE recipient_subject = $1 AND scope_id = 'work:create:root'
-      AND action = 'work.create' AND active AND valid_until > clock_timestamp()
-    ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject]);
+    WHERE recipient_subject = $1 AND scope_id = $2
+      AND action = $3 AND active AND valid_until > clock_timestamp()
+    ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject, scope, action]);
   return { representationId: selected.id,
     representationGeneration: selected.generation,
     subjectGeneration: selected.subject_generation,
@@ -62,7 +69,8 @@ export async function representedWorkProof(client: PoolClient, principalId: stri
 export async function selectedRepresentedWorkProof(client: PoolClient,
   saved: SavedRepresentedWorkProof, principalEpoch: string,
   groupGeneration: string): Promise<boolean> {
-  if (saved.action !== 'work.create' || saved.scope_id !== 'work:create:root'
+  const edit = saved.action === 'work.edit' && saved.scope_id.startsWith('work:edit:');
+  if (!(saved.action === 'work.create' && saved.scope_id === 'work:create:root' || edit)
     || !saved.represented_representation_id
     || saved.represented_representation_generation === null
     || saved.represented_subject_generation === null
@@ -70,22 +78,25 @@ export async function selectedRepresentedWorkProof(client: PoolClient,
   const mandate = await client.query(`SELECT r.id FROM access.representation r
     JOIN access.authority_subject s ON s.id = r.subject_id
     WHERE r.id = $1 AND r.principal_id = $2 AND r.subject_id = $3
-      AND r.action = 'work.create' AND r.active
+      AND (r.action = $6 OR r.action = 'agent.control' AND EXISTS (
+        SELECT 1 FROM access.agent_provision a WHERE a.principal_id = r.principal_id
+          AND a.agent_id = r.subject_id AND a.representation_id = r.id
+          AND a.agent_kind = 'person' AND a.state = 'active')) AND r.active
       AND r.valid_until > clock_timestamp() AND r.generation = $4
       AND s.kind = 'agent' AND s.active AND s.generation = $5
     FOR SHARE OF r, s`, [saved.represented_representation_id,
     saved.principal_id, saved.acting_subject,
     saved.represented_representation_generation,
-    saved.represented_subject_generation]);
+    saved.represented_subject_generation, saved.action]);
   if (mandate.rowCount !== 1) return false;
   if (saved.represented_grant_id) {
     if (saved.group_grant_id || saved.role_binding_id
       || saved.represented_grant_generation === null) return false;
     const grant = await client.query(`SELECT id FROM access.permission_grant
       WHERE id = $1 AND recipient_subject = $2 AND scope_id = $3
-        AND action = 'work.create' AND active AND valid_until > clock_timestamp()
+        AND action = $5 AND active AND valid_until > clock_timestamp()
         AND generation = $4 FOR SHARE`, [saved.represented_grant_id,
-      saved.acting_subject, saved.scope_id, saved.represented_grant_generation]);
+      saved.acting_subject, saved.scope_id, saved.represented_grant_generation, saved.action]);
     return grant.rowCount === 1;
   }
   if (saved.role_binding_id) {
@@ -96,9 +107,9 @@ export async function selectedRepresentedWorkProof(client: PoolClient,
       bindingId: saved.role_binding_id,
       bindingGeneration: saved.role_binding_generation,
       familyId: saved.role_family_id, roleRevision: saved.role_revision,
-    });
+    }, edit ? 'work.edit' : 'work.create');
   }
-  return saved.represented_grant_generation === null
+  return !edit && saved.represented_grant_generation === null
     && saved.group_grant_id !== null && saved.group_member_id !== null
     && saved.group_generation === groupGeneration
     && await selectedGroupWorkProof(client, saved.acting_subject,

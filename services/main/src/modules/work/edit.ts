@@ -15,7 +15,8 @@ export class StaleWorkHead extends Error {}
 export class WorkEditUnavailable extends Error {}
 
 export interface EditMetadataWorkIntent {
-  admission: Pick<RegisteredAdmission, 'id' | 'scope' | 'action' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>;
+  admission: Pick<RegisteredAdmission, 'id' | 'scope' | 'action' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>
+    & Partial<Pick<RegisteredAdmission, 'actingSubject'>>;
   work: string;
   expectedHead: string;
   title: string;
@@ -243,6 +244,8 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   if (intent.admission.action !== 'work.edit' || !/^[0-9a-f-]{36}$/.test(intent.admission.id)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(intent.work)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(intent.expectedHead)
+    || intent.admission.actingSubject !== undefined
+      && !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(intent.admission.actingSubject)
     || !/^[0-9]+$/.test(intent.admission.authorityEpoch)) throw new Error('invalid Work edit admission');
   const digest = change.kind === 'title'
     ? metadataWorkEditDigest(intent.work, intent.expectedHead, change.title)
@@ -346,6 +349,7 @@ async function editWorkRevision(env: WorkActivationEnvironment,
         ${change.kind === 'types' ? nextTypes.map(type => `${iri(intent.work)} a <${type}> .`).join('\n') : ''} }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(intent.work)} ;
         rv:predecessor ${iri(intent.expectedHead)} ; rv:operation ${iri(operation)} ;
+        ${intent.admission.actingSubject ? `rv:actor ${iri(intent.admission.actingSubject)} ;` : ''}
         rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ; rv:modelRevision ${iri(PROFILE)} ;
         rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }

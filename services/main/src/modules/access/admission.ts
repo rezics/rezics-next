@@ -9,12 +9,12 @@ import { recordRatingAggregateHead, readRatingAggregateInventory,
 import { directWorkCreateProof, selectedDirectWorkProof } from './direct-principal.ts';
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof } from './represented-work-proof.ts';
-import { roleWorkCreateProof } from './role-proof.ts';
+import { roleWorkCreateProof, roleWorkProof } from './role-proof.ts';
 import { withWorkEditAuthority, type WorkEditAuthorityProof } from './work-edit-authority.ts';
 import { issueTitleAdmission } from './title-admission.ts';
 import type { CommandEnvelope } from '../../infrastructure/fuseki.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed,
+import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed, baselineWorkCreationAllowed,
   newBaselineProof, saveBaselineProof, savedBaselineProof } from './baseline.ts';
 import { reserveBaselineSpace, settleBaselineSpace } from './baseline-quota.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
@@ -48,6 +48,8 @@ export interface AdmissionRequest {
   baselineSourceRevision?: string;
   /** Exact public contribution offered by the submission owner. */
   baselineContribution?: string;
+  /** Owner-bound type configuration, covered by the Work creation digest. */
+  workSemanticTypes?: readonly string[];
 }
 
 export interface RegisteredAdmission {
@@ -730,6 +732,42 @@ export class AccessAdmissionRegistry {
     }
   }
 
+  /** Import authority uses creation's grant/group/role path, never member baseline.
+   * Cost: indexed identity/mandate/grant reads and at most 16 role bindings;
+   * discovery supplies its separately bounded candidate set. No admission or
+   * graph receipt is manufactured for a Source-owned SQL operation. */
+  async hasNonBaselineWorkCreateAuthority(principal: VerifiedPrincipal, actingSubject: string,
+    authorityPath: 'represented-agent' | 'direct-principal' = 'represented-agent'): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query(READ_BEGIN);
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      await requireRecoveryOpen(client);
+      const gate = (await client.query<GateRow>(`SELECT open, dispatch_open, authority_epoch
+        FROM access.scope_gate WHERE id = 'work:create:root' FOR SHARE`)).rows[0];
+      const identity = (await client.query<{ id: string }>(`SELECT id FROM access.principal
+        WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
+      [principal.issuer, principal.subject])).rows[0];
+      let allowed = false;
+      if (gate?.open && gate.dispatch_open && identity) {
+        if (authorityPath === 'direct-principal') {
+          allowed = !!await directWorkCreateProof(client, identity.id, actingSubject);
+        } else {
+          const proof = await representedWorkProof(client, identity.id, actingSubject);
+          allowed = !!proof && (!!proof.grantId
+            || !!await groupWorkCreateProof(client, actingSubject)
+            || !!await roleWorkCreateProof(client, actingSubject));
+        }
+      }
+      await client.query('COMMIT');
+      return allowed;
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally { client.release(); }
+  }
+
   async register(request: AdmissionRequest): Promise<RegisteredAdmission> {
     if (request.action === 'publication.reject.organization') {
       throw new AdmissionDenied('organization moderation requires its atomic episode admission');
@@ -797,6 +835,7 @@ export class AccessAdmissionRegistry {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
         const dispatchEligible = request.principal.emailVerified === true
+          && baselineWorkCreationAllowed(request)
           && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
           && await baselineProofCurrent(client, this.baselineGraph, savedBaseline, existing);
@@ -812,7 +851,8 @@ export class AccessAdmissionRegistry {
       // A retry may recover the immutable receipt after authority changes. Its
       // saved proof, rather than a newly selected alternative, decides dispatch.
       if (existing && authorityPath === 'represented-agent'
-        && request.action === 'work.create' && request.scope === 'work:create:root') {
+        && (request.action === 'work.create' && request.scope === 'work:create:root'
+          || request.action === 'work.edit' && existing.represented_representation_id)) {
         if (existing.request_digest !== request.requestDigest
           || existing.acting_subject !== request.actingSubject
           || existing.authority_path !== authorityPath
@@ -916,9 +956,11 @@ export class AccessAdmissionRegistry {
         // inheriting the exact Work editor mandate and grant boundary.
         const authorityAction = request.action === 'package.recommendation.set'
           ? 'work.edit' : request.action;
-        if (request.action === 'work.create' && request.scope === 'work:create:root') {
+        if (request.action === 'work.create' && request.scope === 'work:create:root'
+          || request.action === 'work.edit' && /^work:edit:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(request.scope)) {
           if (subject.rows[0]?.kind !== 'agent') throw new AdmissionDenied('acting subject is not an Agent');
-          const proof = await representedWorkProof(client, principalId, request.actingSubject);
+          const proof = await representedWorkProof(client, principalId, request.actingSubject,
+            request.action as 'work.create' | 'work.edit', request.scope);
           if (!proof) throw new AdmissionDenied('representation is not admitted');
           representedRepresentationId = proof.representationId;
           representedRepresentationGeneration = proof.representationGeneration;
@@ -927,12 +969,14 @@ export class AccessAdmissionRegistry {
           representedGrantId = proof.grantId;
           representedGrantGeneration = proof.grantGeneration;
           if (!proof.grantId) {
-            const group = await groupWorkCreateProof(client, request.actingSubject);
+            const group = request.action === 'work.create'
+              ? await groupWorkCreateProof(client, request.actingSubject) : null;
             groupMemberId = group?.memberId ?? null;
             groupGrantId = group?.grantId ?? null;
             groupGeneration = group?.groupGeneration ?? null;
             if (!group) {
-              const role = await roleWorkCreateProof(client, request.actingSubject);
+              const role = await roleWorkProof(client, request.actingSubject,
+                request.action as 'work.create' | 'work.edit');
               roleBindingId = role?.bindingId ?? null;
               roleBindingGeneration = role?.bindingGeneration ?? null;
               roleFamilyId = role?.familyId ?? null;
@@ -1141,7 +1185,8 @@ export class AccessAdmissionRegistry {
         }
       }
       if (!baseline && row.authority_path === 'represented-agent'
-        && row.action === 'work.create' && row.scope_id === 'work:create:root'
+        && (row.action === 'work.create' && row.scope_id === 'work:create:root'
+          || row.action === 'work.edit' && row.represented_representation_id)
         && !await selectedRepresentedWorkProof(client, row,
           principal.rows[0]!.enforcement_epoch, gateResult.rows[0]!.group_generation)) {
         throw new AdmissionDenied('represented authority changed before claim');

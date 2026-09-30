@@ -96,7 +96,10 @@ export class SourceNativeWorkAttachmentStore {
       || proof.action !== 'work.edit' || !(UUID.test(proof.grantId ?? '')
         || proof.grantId === null && proof.grantGeneration === null
           && proof.baseline?.kind === 'author-baseline-v1' && UUID.test(proof.baseline.provisionId)
-          && /^\d+$/.test(proof.baseline.policyGeneration) && /^\d+$/.test(proof.baseline.workGeneration))
+          && /^\d+$/.test(proof.baseline.policyGeneration) && /^\d+$/.test(proof.baseline.workGeneration)
+        || proof.grantId === null && proof.grantGeneration === null && proof.role
+          && UUID.test(proof.role.bindingId) && UUID.test(proof.role.familyId)
+          && /^\d+$/.test(proof.role.bindingGeneration) && /^[1-9]\d*$/.test(proof.role.roleRevision))
       || !UUID.test(proof.representationId)) {
       throw new SourceAdoptionUnavailable('attachment differs from retained evidence');
     }

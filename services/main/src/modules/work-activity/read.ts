@@ -110,8 +110,8 @@ export async function readWorkDiscussion(session: WorkReadSession, work: string,
   return pageResult(session, items, nextCursor(session, binding, rows, limit));
 }
 
-/** Current public decisions only. Actor identities and historical text stay out
- * of this feed. The Work-scoped native scan is O(H log H) for H retained events. */
+/** Current public decisions and public Agent attribution for metadata edits.
+ * The Work-scoped native scan is O(H log H) for H retained events. */
 export async function readWorkActivityHistory(session: WorkReadSession, work: string, kind?: Kind) {
   const basis = await readWorkBasis(session, work);
   const limit = session.options.limit ?? WORK_ACTIVITY_COST.pageSize;
@@ -119,12 +119,13 @@ export async function readWorkActivityHistory(session: WorkReadSession, work: st
     session.options.language ?? null, session.options.actingSubject ?? null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const epochs = await readEpochOrder(session);
-  const rows = await session.query(`SELECT ?id ?kind ?realm ?reply ?revision ?review ?sequence ?revisionEpoch ?epochOrder WHERE {
+  const rows = await session.query(`SELECT ?id ?kind ?actor ?realm ?reply ?revision ?review ?sequence ?revisionEpoch ?epochOrder WHERE {
     ${epochs}
     { GRAPH ${iri(GRAPHS.revisions)} {
         ?id a rv:RevisionAnchor ; rv:component ${iri(work)} ;
           rv:modelRevision <https://rezics.com/definition/work-metadata-v1> ;
           rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence .
+        OPTIONAL { ?id rv:actor ?actor }
         FILTER NOT EXISTS { ?id a rv:ErasedRevision } }
       BIND("metadata-revision" AS ?kind) }
     UNION { GRAPH ${iri(GRAPHS.current)} {
@@ -168,6 +169,7 @@ export async function readWorkActivityHistory(session: WorkReadSession, work: st
         || field(row, 'review') !== `urn:rezics:realm-review:${visible.reviewDecisionId}`) continue;
     }
     items.push({ id, kind: eventKind, dataEpoch: field(row, 'revisionEpoch'),
+      ...(eventKind === 'metadata-revision' && row.actor ? { actor: field(row, 'actor') } : {}),
       sequence: field(row, 'sequence'), href: eventKind === 'metadata-revision'
         ? `/v1/revisions/${id.slice(-36)}` : null });
   }

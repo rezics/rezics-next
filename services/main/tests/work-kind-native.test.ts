@@ -22,10 +22,10 @@ test('G318: every native catalogue kind has a reviewed type, human interest and 
       expect(matchingWorkKinds([type], [])).toContain(interest);
     }
   }
-  expect(workKinds['https://rezics.com/vocab/ModPackage']).toEqual({ interest: 'software', primaryAction: 'install' });
-  expect(workKinds['https://rezics.com/vocab/SkillPackage']).toEqual({ interest: 'ai', primaryAction: 'install' });
-  expect(workKinds['https://rezics.com/vocab/PromptTemplate']).toEqual({ interest: 'ai', primaryAction: 'copy' });
-  expect(workKinds['https://schema.org/Movie']).toEqual({ interest: 'media', primaryAction: 'watch' });
+  expect(workKinds['https://rezics.com/vocab/ModPackage']).toEqual({ interest: 'software', primaryAction: 'install', creation: 'administrator' });
+  expect(workKinds['https://rezics.com/vocab/SkillPackage']).toEqual({ interest: 'ai', primaryAction: 'install', creation: 'contributor' });
+  expect(workKinds['https://rezics.com/vocab/PromptTemplate']).toEqual({ interest: 'ai', primaryAction: 'copy', creation: 'contributor' });
+  expect(workKinds['https://schema.org/Movie']).toEqual({ interest: 'media', primaryAction: 'watch', creation: 'contributor' });
   expect(matchingWorkKinds(['https://schema.org/DigitalDocument'], [])).toEqual([]);
 });
 

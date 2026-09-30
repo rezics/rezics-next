@@ -8,6 +8,8 @@ import { SourceFeedStale } from '../modules/source/acquisition-feed.ts';
 import { OPEN_LIBRARY_WORKS_RUN, SourceRunBusy, SourceRunConflict, SourceRunInvalid,
   SourceRunUnavailable } from '../modules/source/acquisition-run.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
+import type { VerifiedPrincipal } from '../modules/access/admission.ts';
+import { AdmissionDenied } from '../modules/access/admission.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
 
@@ -100,8 +102,26 @@ function runError(error: unknown): Response {
 
 /** General source acquisition runs, their field drift and dump/change feeds. */
 export function sourceRunRoutes(work: MainWorkDependencies) {
-  const principal = async (request: Request, scope: 'source:acquire' | 'source:read') =>
-    work.access.activePrincipalId(await work.account.verify(request, [scope]));
+  const importAuthority = async (caller: VerifiedPrincipal) => {
+    if (!work.actingContexts || !work.access.hasNonBaselineWorkCreateAuthority) {
+      throw new SourceRunUnavailable('Access discovery is unavailable');
+    }
+    const discovered = await work.actingContexts.discover(caller);
+    // Discovery includes contributor baseline contexts. Evaluate the ordinary
+    // non-baseline authority path before any provider fetch or Source write.
+    for (const context of discovered.contexts) {
+      if (await work.access.hasNonBaselineWorkCreateAuthority(caller, context.actingSubject)) return;
+    }
+    for (const context of discovered.directContexts) {
+      if (await work.access.hasNonBaselineWorkCreateAuthority(caller, context.actingSubject, 'direct-principal')) return;
+    }
+    throw new AdmissionDenied('Source imports require catalogue creation authority');
+  };
+  const principal = async (request: Request, scope: 'source:acquire' | 'source:read') => {
+    const caller = await work.account.verify(request, [scope]);
+    if (scope === 'source:acquire') await importAuthority(caller);
+    return work.access.activePrincipalId(caller);
+  };
   const unavailable = () => problem(503, 'source_run_unavailable', 'Source acquisition owner is unavailable');
   const inactive = () => problem(403, 'authority_denied', 'Source principal is inactive');
   return new Elysia()
@@ -118,11 +138,13 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
         const caller = await work.account.verify(request, ['source:acquire']);
         const principalId = await work.access.activePrincipalId(caller);
         if (!principalId) return inactive();
+        await importAuthority(caller);
         const result = body.profile === OPEN_LIBRARY_WORKS_RUN
           ? await services.runs.runOpenLibraryWorks(principalId, key, body)
           : await runGoProxyLive(services.runs, principalId, key, body,
             goProxyResponseLoader(GO_PROXY_ORIGIN, services.runs.fetcher, GO_PROXY_CAPTURE_BYTES));
         if (await work.access.activePrincipalId(caller) !== principalId) return inactive();
+        await importAuthority(caller);
         return Response.json(result, { status: result.replayed ? 200 : 201, headers: noStore });
       } catch (error) { return runError(error); }
     })

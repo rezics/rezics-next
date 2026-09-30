@@ -85,6 +85,7 @@ export async function createAdmittedMetadataWork(
     action: 'work.create',
     idempotencyKey: input.idempotencyKey,
     requestDigest: digest,
+    workSemanticTypes: input.semanticTypes,
   });
   try {
     if (registered.state === 'sealed' || !registered.dispatchEligible) {

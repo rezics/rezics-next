@@ -5,6 +5,8 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { ReaderImportBudgetExceeded, ReaderImportConflict, ReaderLibraryImportStore }
   from '../../../services/main/src/modules/library-import/reader-import.ts';
 import { authorCreditFixture, nativeId } from '../fixtures/author-credit.ts';
+import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
+import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 
 test('G428: two readers add one Open Library identity and receive one native Work', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
@@ -24,6 +26,7 @@ test('G428: two readers add one Open Library identity and receive one native Wor
     const workId = `OL${String(Date.now()).slice(-9)}W`;
     const app = createMainApp(h.nativeFuseki, {
       account: h.account.verifier, access, environment: h.env,
+      accessPolicy: new AccessPolicyOwner(h.accessPool),
       libraryImport, sourceIntake: h.intake, sourceConversions: h.conversions,
       sourceGraph: h.graph, sourceProposals: h.proposals, sourceAdoptions: h.adoptions,
       openLibraryFetch: (async (url: string) => { fetched++;
@@ -63,6 +66,18 @@ test('G428: two readers add one Open Library identity and receive one native Wor
       JOIN source.native_work_binding b ON b.proposal_id = p.id
       WHERE r.provider = 'open-library' AND r.namespace = 'work' AND r.external_id = $1`, [workId]);
     expect(bindings.rows).toEqual([{ work: firstWork }]);
+    await new ReaderLibraryStatusStore(h.pool).putPrivateReview({ agent: h.actor, work: firstWork,
+      text: 'Private library row', language: 'en', spoiler: false, expectedVersion: 0,
+      idempotencyKey: randomUUID() });
+    const otherReader = await app.handle(new Request(`http://main.local/v1/works/${firstWork.slice(-36)}?actingSubject=${encodeURIComponent(otherActor)}`, {
+      headers: { authorization: `Bearer ${h.account.tokenB}` } }));
+    expect(otherReader.status).toBe(404);
+    const search = await app.handle(new Request('http://main.local/v1/queries', { method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${h.account.tokenB}` },
+      body: JSON.stringify({ profile: 'public-main-phrase-v1', phrase: 'Shared imported book', language: 'en' }) }));
+    expect(search.status).toBe(200);
+    const page = await search.json() as { results: { work: string }[] };
+    expect(page.results.some(item => item.work === firstWork)).toBe(false);
   } finally { await h.close(); }
 }, 120_000);
 

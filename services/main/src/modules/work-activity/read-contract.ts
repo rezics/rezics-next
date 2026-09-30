@@ -14,6 +14,7 @@ export const historyKind = t.Union([
 export const activityHistoryItem = t.Object({
   id: readId, kind: historyKind, dataEpoch: t.String(), sequence: t.String(),
   href: t.Nullable(t.String()),
+  actor: t.Optional(readId),
 });
 export const discussionPage = t.Object({ items: t.Array(discussionItem, { maxItems: 20 }), ...pageFields });
 export const activityHistoryPage = t.Object({ items: t.Array(activityHistoryItem, { maxItems: 20 }), ...pageFields });

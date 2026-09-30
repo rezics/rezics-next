@@ -40,7 +40,8 @@ const representationReadResult = t.Object({
   validUntil: t.String({ format: 'date-time' }),
   active: t.Boolean(), generation: groupGeneration, authorityEpoch: groupGeneration });
 
-const rolePermissions = t.Array(t.Literal('work.create'), { maxItems: 1 });
+const rolePermissions = t.Array(t.Union([t.Literal('work.create'), t.Literal('work.edit')]),
+  { maxItems: 2, uniqueItems: true });
 
 const roleFamilyBody = t.Object({ profile: t.Literal('work-create-role-family-v1'),
   familyId: groupUuid, issuerSubject: groupAgent,
