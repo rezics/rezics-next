@@ -114,7 +114,13 @@ function PreferenceForm({ work, preference, language, editions, api, locale, t, 
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" disabled={busy} onClick={() => void save(stale.mine, stale.current?.version ?? 0)}>{t.keepMine}</Button>
         <Button type="button" size="sm" variant="outline" disabled={busy}
-          onClick={() => { const current = stale.current; setStale(null); onSaved(current); if (current) onLanguage(current.language); }}>{t.useTheirs}</Button>
+          onClick={() => {
+            const current = stale.current;
+            setStale(null);
+            setEdition(current?.edition ? `${current.edition.kind}|${current.edition.resource}` : '');
+            onSaved(current);
+            if (current) onLanguage(current.language);
+          }}>{t.useTheirs}</Button>
       </div>
     </AlertDescription></Alert> : null}
   </form>;
@@ -226,7 +232,7 @@ export function SeriesProgressPanel({ work, locale, className }: { work: string;
     {hasParts ? <div className="grid gap-2 border-border/60 border-t pt-3">
       <h3 className="font-medium text-sm">{t.preference}</h3>
       <p className="text-muted-foreground text-xs">{t.preferenceNote}</p>
-      <PreferenceForm key={`${preference?.version ?? 0}`} work={work} preference={preference} language={language}
+      <PreferenceForm work={work} preference={preference} language={language}
         editions={setup.editions} api={api} locale={locale} t={t}
         onSaved={saved => setSetup({ ...setup, preference: saved })} onLanguage={setLanguage} />
     </div> : null}
