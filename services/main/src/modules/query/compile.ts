@@ -111,9 +111,9 @@ function conceptValues(condition: FilterCondition, operator: ConceptOperator): s
 }
 
 /**
- * The page Concept is an `all` or a one-value `any`. Additions are the other
- * included Condition. One included `all` stays the match-all Condition. A
- * multi-value `any` with no anchor is the shape that dropped the page Concept.
+ * The page Concept is an `all` or a one-value `any`, plus one additions
+ * Condition. One included `all` stays match-all. A single multi-value `any`
+ * is not an anchor; the caller compiles it as a union.
  */
 function conceptPageAnchor(included: { operator: 'any' | 'all'; values: string[] }[]):
   { concept: string; include: string[]; match: 'all' | 'any' } | undefined {
@@ -253,10 +253,14 @@ export function compileQuery(query: AdmittedQuery): CompiledQuery {
     }
     const distinct = (list: readonly string[] | undefined) => !!list?.length
       && list.every(value => nativeId.test(value)) && new Set(list).size === list.length;
-    // Newest is the Concept page. Top-rated, Mine and exclude-only are Discover,
-    // which has no page Concept and still matches any of one Condition.
+    // A plain any of several Concepts is a union: Discover's newest shelf sends
+    // that shape and has no page Concept. The Concept page is a separate anchor
+    // Condition plus any of the additions. Top-rated, Mine and exclude-only stay
+    // on the same union path.
+    const plainUnion = includedClauses.length === 1 && includedClauses[0]!.operator === 'any'
+      && includedClauses[0]!.values.length > 1;
     if (includedClauses.length > 1 && (mine || top)) fail('Top-rated and Mine keep one Concept Condition');
-    if (mine || top || !includedClauses.length) {
+    if (mine || top || plainUnion || !includedClauses.length) {
       const included = includedClauses[0]?.values;
       if (includedClauses[0]) request.match = includedClauses[0].operator === 'any' ? 'any' : 'all';
       if ((included && !distinct(included)) || (excluded && !distinct(excluded))

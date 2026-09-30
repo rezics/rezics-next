@@ -81,11 +81,13 @@ test('Query Concept Works and Concept page read the same all, any and exclusion 
       ? { ...condition, facet: CONCEPT_FACET } : condition) };
     expect(any.result.filter).toEqual(canonical);
     expect(legacy.filter).toEqual(canonical);
-    const flattened = await call('POST', '/v1/query', { context: 'global', scope: { kind: 'all' },
-      sort: 'newest', page: { size: 20 }, filter: { all: [
-        { facet: 'concept', any: [fantasy.concept, magic.concept, romance.concept] },
-      ] } });
-    expect(await json<{ code: string }>(flattened, 422)).toMatchObject({ code: 'unsupported_query_shape' });
+    // Discover's newest shelf: any of these Concepts, with no page anchor.
+    const union = await json<{ template: string; result: { items: { id: string }[] } }>(await call('POST',
+      '/v1/query', { context: 'global', scope: { kind: 'all' }, sort: 'newest', page: { size: 20 },
+        filter: { all: [{ facet: 'concept', any: [magic.concept, romance.concept] }] } }));
+    expect(union.template).toBe('concept-works-v1');
+    expect(ids(union.result.items)).toEqual(ids([
+      { id: works[0]!.work }, { id: works[1]!.work }, { id: works[2]!.work }]));
     const excludedResponse = await call('POST', '/v1/query', { context: 'global', scope: { kind: 'all' },
       sort: 'newest', page: { size: 20 }, filter: { all: [{ facet: 'concept', none: [romance.concept] }] } });
     expect(excludedResponse.status).toBe(200);

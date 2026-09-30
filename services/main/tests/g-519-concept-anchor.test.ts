@@ -40,15 +40,19 @@ test('G-519 an anchored match-any Filter is the page Concept and any of the addi
   ] }))).toMatchObject({ concept: id(1), request: { match: 'all', include: [id(2)], exclude: [id(4)] } });
 });
 
-test('G-519 a multi-value Concept any with no anchor is a typed refusal', () => {
-  expect(refusal({ all: [{ facet: 'concept', any: [id(1), id(2)] }] })).toBe('unsupported_query_shape');
-  expect(refusal({ all: [
+test('G-519 a plain Concept any compiles as a union, including Discover’s newest shelf', () => {
+  expect(compileQuery(page({ all: [{ facet: 'concept', any: [id(1), id(2)] }] }))).toMatchObject({
+    template: 'concept-works', request: { role: 'filter', sort: 'recent', match: 'any', include: [id(1), id(2)] } });
+  expect(compileQuery(page({ all: [
+    { facet: 'type', any: [book] }, { facet: 'concept', any: [id(1), id(2)] },
+  ] }))).toMatchObject({ request: { role: 'filter', sort: 'recent', match: 'any', include: [id(1), id(2)],
+    type: book } });
+  expect(compileQuery(page({ all: [
     { facet: 'concept', any: [id(1), id(2)] }, { facet: 'concept', none: [id(4)] },
-  ] })).toBe('unsupported_query_shape');
+  ] }))).toMatchObject({ request: { role: 'filter', match: 'any', include: [id(1), id(2)], exclude: [id(4)] } });
   expect(refusal({ all: [
     { facet: 'concept', any: [id(1), id(2)] }, { facet: 'concept', any: [id(3), id(4)] },
   ] })).toBe('unsupported_query_shape');
-  // Discover's top-rated shelf has no page Concept and still matches any of one Condition.
   expect(compileQuery({ ...page({ all: [{ facet: 'concept', any: [id(1), id(2)] }] }), sort: 'top-rated',
     profile: 'filter-document-v2', ratingContext: id(9) })).toMatchObject({
     request: { role: 'filter', sort: 'top-rated', match: 'any', include: [id(1), id(2)] } });
