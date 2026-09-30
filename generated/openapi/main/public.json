@@ -13299,6 +13299,49 @@
                     "additionalProperties": false,
                     "properties": {
                       "action": {
+                        "const": "end-policy",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "expectedHeadRevision": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "issuerSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "policyId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-policy-change-v1",
+                        "type": "string"
+                      },
+                      "scopeId": {
+                        "pattern": "^semantic:read:https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "issuerSubject",
+                      "expectedAuthorityEpoch",
+                      "action",
+                      "policyId",
+                      "scopeId",
+                      "expectedHeadRevision"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
                         "const": "publish-revision",
                         "type": "string"
                       },
@@ -13561,6 +13604,49 @@
                     "additionalProperties": false,
                     "properties": {
                       "action": {
+                        "const": "end-policy",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "expectedHeadRevision": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "issuerSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "policyId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-policy-change-v1",
+                        "type": "string"
+                      },
+                      "scopeId": {
+                        "pattern": "^semantic:read:https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "issuerSubject",
+                      "expectedAuthorityEpoch",
+                      "action",
+                      "policyId",
+                      "scopeId",
+                      "expectedHeadRevision"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
                         "const": "publish-revision",
                         "type": "string"
                       },
@@ -13819,6 +13905,49 @@
             "multipart/form-data": {
               "schema": {
                 "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "end-policy",
+                        "type": "string"
+                      },
+                      "expectedAuthorityEpoch": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "expectedHeadRevision": {
+                        "pattern": "^(0|[1-9][0-9]*)$",
+                        "type": "string"
+                      },
+                      "issuerSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "policyId": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "access-policy-change-v1",
+                        "type": "string"
+                      },
+                      "scopeId": {
+                        "pattern": "^semantic:read:https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "issuerSubject",
+                      "expectedAuthorityEpoch",
+                      "action",
+                      "policyId",
+                      "scopeId",
+                      "expectedHeadRevision"
+                    ],
+                    "type": "object"
+                  },
                   {
                     "additionalProperties": false,
                     "properties": {
@@ -14090,6 +14219,7 @@
                     "action": {
                       "enum": [
                         "publish-revision",
+                        "end-policy",
                         "admit-set",
                         "revoke-set"
                       ],
@@ -393840,7 +393970,7 @@
           {
             "in": "query",
             "name": "actingSubject",
-            "required": true,
+            "required": false,
             "schema": {
               "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
               "type": "string"
@@ -394173,12 +394303,7 @@
             },
             "description": "Response for status 503"
           }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
+        }
       }
     },
     "/v1/semantic/resources/{id}/revisions/{revision}": {
@@ -394206,7 +394331,7 @@
           {
             "in": "query",
             "name": "actingSubject",
-            "required": true,
+            "required": false,
             "schema": {
               "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
               "type": "string"
@@ -394539,12 +394664,7 @@
             },
             "description": "Response for status 503"
           }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
+        }
       }
     },
     "/v1/sitemap": {
