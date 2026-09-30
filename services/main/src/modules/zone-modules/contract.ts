@@ -66,7 +66,7 @@ export type ZoneBrowseSort = (typeof zoneBrowseSorts)[number];
 export const zoneLengthBands = ['0-99999', '100000-299999', '300000-999999', '1000000-'] as const;
 /** A Work type IRI; the read admits only `WORK_SEMANTIC_TYPES` (a literal union types as never through Eden). */
 const workType = t.String({ pattern: '^https://[!-~]{1,200}$' });
-const status = t.Union([t.Literal('ongoing'), t.Literal('completed'), t.Literal('hiatus')]);
+const status = t.String();
 const many = { minItems: 1, maxItems: ZONE_BROWSE_COST.filterValues, uniqueItems: true } as const;
 const sortValue = t.Union([t.Literal('relevance'), t.Literal('newest'), t.Literal('updated')]);
 /** Conditions as query parameters: values within a Facet match any, Facets match all. */

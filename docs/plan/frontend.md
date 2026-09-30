@@ -211,10 +211,11 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
 - **Browse beside the home** (2026-09-28, after Modrinth's search). Every Zone
   has `/r/<zone>/browse`: search, Facet Conditions, sort and a list or grid,
   each a link with its own URL. Every browse Condition is an admitted Facet
-  from Main's registry, including status, length and a mod's loader, game
-  version and environment; a Condition outside the registry is a vocabulary no
-  other Zone, client or agent can reuse, so the Zone contract's own list of
-  such facts moves into the registry.
+  from Main's registry: type, Concept, status and length. Mod loader, game
+  version, environment and dependency Conditions are deferred to correlated
+  release statements. A Condition outside the registry is a vocabulary no
+  other Zone, client or agent can reuse; Zone browse admits Conditions through
+  the shared Query compiler.
   The home leads with its search and those values; the Works tab became
   Browse's grid. It reads the Realm's newest adoptions as one bounded window
   and says so when a Zone outgrows it, until a listing projection replaces it.

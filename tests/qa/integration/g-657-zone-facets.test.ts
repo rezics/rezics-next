@@ -113,8 +113,17 @@ test('G657: registry Facets drive Fiction browse and Query; removed and unsuppor
     for (const condition of [{ facet: 'modLoader', any: ['Fabric'] }, { facet: 'language', any: ['en'] }]) {
       const refused = await call('/v1/query', { ...base, filter: { all: [condition] } });
       expect(refused.status).toBe(422);
-      expect(await refused.json()).toMatchObject({ code: 'unsupported_query_shape' });
+      expect(await refused.json()).toMatchObject({
+        code: condition.facet === 'modLoader' ? 'invalid_query' : 'unsupported_query_shape',
+      });
     }
+    const invalidStatus = await call(`${path}?status=unregistered-status`);
+    expect(invalidStatus.status).toBe(400);
+    expect(await invalidStatus.json()).toMatchObject({ code: 'invalid_query' });
+    const unknownGlobal = await call('/v1/query', { ...base, scope: { kind: 'all' },
+      filter: { all: [{ facet: 'modLoader', any: ['Fabric'] }] } });
+    expect(unknownGlobal.status).toBe(422);
+    expect(await unknownGlobal.json()).toMatchObject({ code: 'invalid_query' });
     expect(stack.fuseki.queries).toBe(before);
   } finally { await relay.end(); await stack.stop(); }
 }, 120_000);

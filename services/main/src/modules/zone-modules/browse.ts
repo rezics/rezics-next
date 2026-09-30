@@ -101,8 +101,9 @@ export function compileZoneBrowse(realm: string, query: Query) {
 }
 
 const holds = (item: BrowseCandidate, filter: BrowseFilter, except?: BrowseFacet) => {
-  if (except !== 'concept' && filter.conceptExclude?.some(value => item.concepts?.includes(value))) return false;
-  if (except !== 'status' && filter.statusExclude?.some(value => item.status === value)) return false;
+  // Exclusions remain active while the counted Facet's included values are ignored.
+  if (filter.conceptExclude?.some(value => item.concepts?.includes(value))) return false;
+  if (filter.statusExclude?.some(value => item.status === value)) return false;
   if (except !== 'length' && filter.length && (item.words === null
     || (filter.length.min !== undefined && item.words < Number(filter.length.min))
     || (filter.length.max !== undefined && item.words > Number(filter.length.max)))) return false;

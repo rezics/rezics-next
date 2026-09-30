@@ -64,8 +64,7 @@ function admit(filter: FilterDocument | undefined, zone = false): { conditions: 
   try { facets = checkedFilter(filter as Parameters<typeof checkedFilter>[0]); }
   catch (error) {
     if (error instanceof InvalidFilter) {
-      throw new QueryRejected(error.refusal === 'filter_too_large' ? 'query_budget_exceeded'
-          : zone && error.refusal === 'unknown_facet' ? 'unsupported_query_shape' : 'invalid_query',
+      throw new QueryRejected(error.refusal === 'filter_too_large' ? 'query_budget_exceeded' : 'invalid_query',
         `${error.refusal}: ${error.message}`);
     }
     throw error;

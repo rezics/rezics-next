@@ -34,7 +34,18 @@ test('Conditions within a Facet match any value and Facets match all, with self-
     .toContainEqual({ value: 'hiatus', count: 0 });
   const excluded = browseWindow(candidates, { statusExclude: ['completed'] }, null, 'newest');
   expect(titles(excluded.found)).not.toContain('Minecraft shaders: a gentle first setup');
-  expect(excluded.facets.status).toContainEqual({ value: 'completed', count: 1 });
+  expect(excluded.facets.status).toContainEqual({ value: 'completed', count: 0 });
+});
+
+test('excluded Concepts remain excluded from every Concept count, including overlapping Tags', () => {
+  const items = [{ ...candidates[0]!, concepts: [fabric, forge] }, candidates[1]!, candidates[2]!];
+  const filter = { conceptExclude: [fabric] };
+  const { found, facets } = browseWindow(items, filter, null, 'newest');
+  expect(found.map(item => item.work)).toEqual([id(2)]);
+  expect(facets.concept).toEqual([{ value: forge, count: 1 }, { value: fabric, count: 0 }]);
+  for (const { value, count } of facets.concept) {
+    expect(browseWindow(items, { ...filter, concept: [value] }, null, 'newest').found).toHaveLength(count);
+  }
 });
 
 test('status and length bands filter serials, and length bands keep their own order', () => {

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { Value } from 'typebox/value';
 import { resolveFacet } from '../src/modules/facets/registry.ts';
-import { compileQuery, QueryRejected } from '../src/modules/query/compile.ts';
+import { compileQuery, QueryRejected, type QueryRefusal } from '../src/modules/query/compile.ts';
 import { browseWindow, compileZoneBrowse, filterDocument } from '../src/modules/zone-modules/browse.ts';
 import { zoneBrowsePage, zoneBrowseQuery, zoneWork } from '../src/modules/zone-modules/contract.ts';
 
@@ -11,11 +11,12 @@ const concept = realm.replace(/1$/, '2');
 const base = { profile: 'filter-document-v2' as const, context: { realm },
   scope: { kind: 'realm' as const, realm }, sort: 'newest' as const, page: { size: 20 } };
 
-function refused(filter: NonNullable<Parameters<typeof compileQuery>[0]['filter']>) {
+function refused(filter: NonNullable<Parameters<typeof compileQuery>[0]['filter']>,
+  refusal: QueryRefusal = 'unsupported_query_shape') {
   try { compileQuery({ ...base, filter }); throw new Error('Condition was admitted'); }
   catch (error) {
     expect(error).toBeInstanceOf(QueryRejected);
-    expect((error as QueryRejected).refusal).toBe('unsupported_query_shape');
+    expect((error as QueryRejected).refusal).toBe(refusal);
   }
 }
 
@@ -67,10 +68,26 @@ test('G657: GET and POST share status, concept any/none and arbitrary length ran
 });
 
 test('G657: unadmitted and unsupported Facets, operators and duplicate Conditions refuse', () => {
-  refused({ all: [{ facet: 'modLoader', any: ['Fabric'] }] });
+  refused({ all: [{ facet: 'modLoader', any: ['Fabric'] }] }, 'invalid_query');
   refused({ all: [{ facet: 'language', any: ['en'] }] });
   refused({ all: [{ facet: 'type', none: ['https://schema.org/Book'] }] });
   refused({ all: [{ facet: 'concept', all: [concept] }] });
   refused({ all: [{ facet: 'status', any: ['ongoing'] }, { facet: 'status', any: ['completed'] }] });
   refused({ all: [{ facet: 'length', range: { min: '10' } }, { facet: 'length', range: { max: '20' } }] });
+});
+
+test('G657: status values use registry admission, and unknown Facets have the same refusal in every scope', () => {
+  expect(Value.Check(zoneBrowseQuery, { status: ['unregistered-status'] })).toBe(true);
+  expect(zoneBrowseQuery.properties.status.items).not.toHaveProperty('anyOf');
+  expect(zoneBrowseQuery.properties.status.items).not.toHaveProperty('pattern');
+  for (const scope of [{ kind: 'all' as const }, base.scope]) {
+    try {
+      compileQuery({ ...base, scope, filter: { all: [{ facet: 'unregistered-facet', any: ['x'] }] } });
+      throw new Error('Unknown Facet was admitted');
+    } catch (error) {
+      expect(error).toBeInstanceOf(QueryRejected);
+      expect((error as QueryRejected).refusal).toBe('invalid_query');
+    }
+  }
+  expect(() => compileZoneBrowse(realm, { status: ['unregistered-status'] })).toThrow(QueryRejected);
 });
