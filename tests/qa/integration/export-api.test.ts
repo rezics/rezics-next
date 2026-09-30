@@ -87,6 +87,7 @@ test('LIVE07/LIVE10/LIVE17/COMP08: owner values and fixed manifests export exact
     if (draft.outcome !== 'succeeded' || !draft.contribution || !draft.draftRevision) {
       throw new Error('Contribution fixture was unavailable');
     }
+    await grant(`contribution:read:${draft.contribution}`, 'contribution.read');
     await grant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
     const publication = await publishAdmittedTextContribution(environment, setupAccount, registry, setupRequest,
       { contribution: draft.contribution, expectedDraftHead: draft.draftRevision,

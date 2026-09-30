@@ -22,6 +22,9 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
+import { AgentPublicProfiles } from '../../../services/main/src/modules/agent/profile.ts';
+import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
 
@@ -66,6 +69,9 @@ test('baseline seed steps: verified signups, native Works, contributions, Spaces
     prefix: 'semantic/structure/' });
   await objects.initialize();
   const app = createMainApp(h.fuseki, { environment: h.env, account, access,
+    profiles: new ProfilesAccess(h.accessPool), personPreferences: new PersonPreferencesStore(h.accessPool),
+    agentProfiles: new AgentPublicProfiles(h.accessPool, h.env,
+      { avatarDelivery: async () => { throw new Error('No avatar in the seed fixture'); } }),
     agentHandles: new AgentVanityHandles(h.accessPool),
     agentProvisioning: new AgentProvisioning(h.accessPool, h.env), structureObjects: objects });
   const main = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: request => app.handle(request) });

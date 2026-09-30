@@ -25,7 +25,7 @@ test('IAM37: a Realm content editor publishes an Organization description withou
   await accessPool.query(`INSERT INTO access.org_realm_policy (realm, manager_subject, revision, terms_revision)
     VALUES ($1,$1,1,'description-test-terms')`, [realm]);
 
-  const issueContentGrant = async (scope: string, action: 'content.draft' | 'content.publish') => {
+  const issueContentGrant = async (scope: string, action: 'content.draft' | 'content.publish' | 'work.read') => {
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
     await accessPool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
       VALUES ($1,$2,$3,$4,now() + interval '1 hour')`,
@@ -37,6 +37,7 @@ test('IAM37: a Realm content editor publishes an Organization description withou
   };
   const draftScope = `content:draft:${organization}`;
   const publishScope = `content:publish:${organization}`;
+  await issueContentGrant(`work:read:${organization}`, 'work.read');
   await issueContentGrant(publishScope, 'content.publish');
   const assignmentAction = 'access.grant.assign.content.draft';
   const assignmentIssuer = `https://rezics.com/id/${randomUUID()}`;

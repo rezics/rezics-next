@@ -256,6 +256,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     const draft = await post<{ contribution: string; draftRevision: string }>('/v1/contributions', {
       profile: 'text-contribution-v1', work: work.work, language: 'en',
       body: originalBody, actingSubject: actor });
+    await grant(`contribution:read:${draft.contribution}`, 'contribution.read');
     await grant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
     const published = await post<{ publicationDecision: string }>('/v1/contribution-publications', {
       profile: 'text-publication-v1', contribution: draft.contribution,
@@ -393,6 +394,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       '/v1/contributions', { profile: 'text-contribution-v1', work: work.work,
         language: 'en', body: `${marker} ${alternativeMarker} realm alternative`,
         actingSubject: actor });
+    await grant(`contribution:read:${alternative.contribution}`, 'contribution.read');
     await grant(`contribution:publish:${alternative.contribution}`, 'contribution.publish');
     const alternativePublication = await post<{ publicationDecision: string }>(
       '/v1/contribution-publications', { profile: 'text-publication-v1',

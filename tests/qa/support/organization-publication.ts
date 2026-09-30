@@ -46,6 +46,7 @@ export async function organizationPublicationFixture(pool: Pool, env: WorkActiva
   const draft = await createAdmittedTextContribution(env, account, access, orgRequest,
     { work: work.work, actingSubject: f.org, body, language: 'en', idempotencyKey: randomUUID() });
   if (!draft.contribution || !draft.draftRevision) throw new Error('fixture draft missing');
+  await orgGrant(`contribution:read:${draft.contribution}`, 'contribution.read');
   await orgGrant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
   const published = await publishAdmittedTextContribution(env, account, access, orgRequest,
     { contribution: draft.contribution, expectedDraftHead: draft.draftRevision, expectedPublicationHead: null,

@@ -94,7 +94,7 @@ test('G-426 vocabulary shares a revisioned scheme and resolves bilingual hierarc
       200,
     );
     expect(rootPage).toMatchObject({
-      name: { value: '小说', language: 'zh-hans', basis: 'requested' },
+      name: { value: '小说', language: 'zh-Hans', basis: 'requested' },
       narrower: [{ id: child.concept, name: { value: '都市' } }],
     });
     const childPage = await home.json<Page>(

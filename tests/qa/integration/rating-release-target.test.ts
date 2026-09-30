@@ -148,6 +148,7 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
     const draft = await success<{ contribution: string; draftRevision: string }>(await post('/v1/contributions', {
       profile: 'text-contribution-v1', work: work.work, language: 'en',
       body: `Pinned release text ${randomUUID()}`, actingSubject: actor.a }));
+    await grant(`contribution:read:${draft.contribution}`, 'contribution.read');
     await grant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
     const published = await success<{ publicationDecision: string }>(await post('/v1/contribution-publications', {
       profile: 'text-publication-v1', contribution: draft.contribution,

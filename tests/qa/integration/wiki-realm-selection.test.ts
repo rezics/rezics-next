@@ -25,6 +25,7 @@ test('WIKI05: Realm serving text and search keep its accepted draft while the so
     const draft = await f.json<{ contribution: string; draftRevision: string }>(await f.call('POST',
       '/v1/contributions', { profile: 'text-contribution-v1', work: work.work,
         language: 'en', body: oldBody, actingSubject: f.actor }), 201);
+    await f.grant(`contribution:read:${draft.contribution}`, 'contribution.read');
     await f.grant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
     await f.grant(`contribution:edit:${draft.contribution}`, 'contribution.edit');
     const published = await f.json<{ publicationDecision: string; selectedDraft: string }>(
@@ -90,6 +91,7 @@ test('WIKI05: Realm media serves its accepted exact set after the source publish
     await author.grant(`publication:adopt:${space.realm}`, 'publication.adopt');
     await author.grant(`content:draft:${work.work}`, 'content.draft');
     const variantId = `urn:rezics:variant:${randomUUID()}`;
+    await author.grant(`work:read:${work.work}`, 'work.read');
     await author.grant(`content:publish:${work.work}`, 'content.publish');
     const oldBytes = png(32, 24);
     const nextBytes = png(40, 30);
