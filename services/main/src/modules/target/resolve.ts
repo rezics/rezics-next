@@ -30,9 +30,11 @@ export type ReportTargets = (session: WorkReadSession, resources: readonly strin
 /** Ownership, never descriptive type, chooses the exact revision path. */
 const revisionPatterns = {
   work: `GRAPH ${iri(GRAPHS.current)} { ?r a schema:CreativeWork ; rv:mainVersion ?main ; rv:head ?revision }`,
-  realization: `GRAPH ${iri(GRAPHS.current)} { ?r a rv:TextContribution ; rv:publicationHead ?publication }
+  realization: `{ GRAPH ${iri(GRAPHS.current)} { ?r a rv:TextContribution ; rv:publicationHead ?publication }
     GRAPH ${iri(GRAPHS.revisions)} { ?publication a rv:PublicationDecision ; rv:component ?r ;
-      rv:selectedDraft ?revision . ?revision a rv:RevisionAnchor ; rv:component ?r }`,
+      rv:selectedDraft ?revision . ?revision a rv:RevisionAnchor ; rv:component ?r } }
+    UNION { GRAPH ${iri(GRAPHS.current)} { ?r a rv:Realization ; rv:head ?revision }
+      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:RealizationRevision ; rv:component ?r } }`,
   release: `{ GRAPH ${iri(GRAPHS.current)} { ?r a rv:Release ; rv:releaseHead ?revision } }
     UNION { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:FixedRelease } BIND(?r AS ?revision) }`,
   occurrence: `GRAPH ${iri(GRAPHS.current)} { ?r a schema:ListItem ; rv:structure ?structure .

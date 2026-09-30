@@ -217,6 +217,8 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
             BIND("occurrence" AS ?type) }
           UNION { ?r a rv:TextContribution ; rv:work ?work ; rv:publicationHead ?publication .
             BIND("realization" AS ?type) }
+          UNION { ?r a rv:Realization ; rv:work ?work ; rv:head ?realizationRevision .
+            BIND("realization" AS ?type) }
           UNION { ?r a rv:Space . BIND("space" AS ?type) }
           UNION { ?r a rv:Collection ; rv:collectionState rv:Active .
             FILTER NOT EXISTS { ?r rv:protectionHead ?protection }

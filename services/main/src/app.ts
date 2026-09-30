@@ -23,6 +23,7 @@ import { collectionRoutes } from './routes/collections.ts';
 import { zoneRoutes } from './routes/zones.ts';
 import { progressRoutes } from './routes/progress.ts';
 import { sessionsRoutes } from './routes/sessions.ts';
+import { progressSummariesRoutes } from './routes/progress-summaries.ts';
 import { contentRoutes } from './routes/content.ts';
 import { contextRoutes } from './routes/contexts.ts';
 import { contributionRoutes } from './routes/contributions.ts';
@@ -154,6 +155,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies, mount
     .use(suitabilityRoutes(work))
     .use(sessionsRoutes(work))
     .use(publicReportRoutes(work))
+    .use(progressSummariesRoutes(work))
     .use(queryRoutes(fuseki, work))
     .use(savedFilterRoutes(work))
     .use(reviewRoutes(work))

@@ -96,6 +96,8 @@ import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
 import type { ConsumptionSessionStore } from '../modules/session/store.ts';
 
 export interface MainWorkDependencies {
+  editionPreferences?: import('../modules/session/preference-store.ts').EditionPreferenceStore;
+  seriesSessions?: import('../modules/session/series-store.ts').SeriesSessionReader;
   suitability?: import('../modules/suitability/store.ts').SuitabilityStore;
   sessions?: ConsumptionSessionStore;
   onboardingPersons?: import('../modules/onboarding/persons.ts').OnboardingPersons;
