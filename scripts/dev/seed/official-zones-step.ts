@@ -446,11 +446,17 @@ export async function checkModsDiscovery(state: SeedState) {
     source: { kind: string; context?: string } }> } }>(`/v1/realms/${short(realm)}/zone`);
   const context = zone.presentation.modules.find(item => item.id === 'games')?.source.context;
   if (!context) throw new Error('Mods game and loader navigation Context is unavailable');
-  const genres = await state.api.getPublic<{ items: Array<{ id: string; name: { value: string } }> }>(
-    `/v1/realms/${short(realm)}/modules/genres/${short(context)}?language=en`);
   const deadline = Date.now() + 60_000;
   let pending = 'Discovery refresh';
   while (Date.now() < deadline) {
+    let genres: { items: Array<{ id: string; name: { value: string } }> };
+    try {
+      genres = await state.api.getPublic(`/v1/realms/${short(realm)}/modules/genres/${short(context)}?language=en`);
+    } catch (error) {
+      if (!(error instanceof SeedApiError) || error.status !== 503 || !error.detail.includes('discovery_unavailable')) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      continue;
+    }
     const results: string[] = [];
     for (const label of ['Minecraft', 'Fabric', 'Forge', 'NeoForge']) {
       const term = genres.items.find(item => item.name.value === label)?.id;

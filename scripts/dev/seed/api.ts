@@ -146,10 +146,28 @@ export class SeedApi {
 
   private async write<T>(method: 'PUT' | 'POST', path: string, body: unknown,
     token: string, key: string): Promise<T> {
+    let attemptKey = key;
     for (let attempt = 0; attempt < 8; attempt++) {
       const response = await fetch(`${this.endpoints.main}${path}`, { method,
         headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,
-          'idempotency-key': key }, body: JSON.stringify(body) });
+          'idempotency-key': attemptKey }, body: JSON.stringify(body) });
+      // A read fence can move while another fixture writes. Retry only that
+      // explicit conflict; optimistic-head conflicts must remain failures.
+      if (response.status === 409 && attempt < 7) {
+        const detail = await response.clone().json().catch(() => null) as { code?: string } | null;
+        if (detail?.code === 'read_basis_changed') {
+          // This owner cancels its admission when the second root probe moves,
+          // before saving Content. That cancelled key cannot be re-admitted.
+          // A fresh deterministic attempt retains the body's expected-head CAS;
+          // pending/lost-response replays still use the current attempt key.
+          if (method === 'POST' && path === '/v1/member-reply-drafts') {
+            attemptKey = `seed-read:${createHash('sha256').update(`${key}:${attempt + 1}`).digest('hex')}`;
+          }
+          await response.body?.cancel();
+          await new Promise(resolve => setTimeout(resolve, 500));
+          continue;
+        }
+      }
       if (response.status !== 202) return payload<T>(response, `Main ${path}`);
       await response.body?.cancel();
       await new Promise(resolve => setTimeout(resolve, 500));
