@@ -117,6 +117,10 @@ const summary = (scope: WorkScope, context: RatingContext | null, counts: number
   return { profile: 'work-rating-read-v1' as const, work: workId, mainVersion,
     scope: { kind: scope.kind, realm: scope.kind === 'realm' ? iri(scope.realm) : null },
     context: context?.context ?? null, status: context ? 'available' as const : 'no-context' as const,
+    aggregationScope: context ? { question: context.question, grain: 'main-version' as const,
+      population: scope.kind === 'realm' ? 'account-principal' as const
+        : scope.kind === 'mine' ? 'reader-account-principal' as const : 'global-account-principal' as const,
+      countedTarget: mainVersion } : null,
     scale: context?.scale ?? null, count, mean: count ? total / count : null,
     distribution: counts.map((value, index) => ({ value: index + 1, count: value })), sourcePosition };
 };

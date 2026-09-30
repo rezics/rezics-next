@@ -210,12 +210,14 @@ function firstLine(text: string): { title: string; body: string } {
 
 /** A review's title: its stars, then its opening line, or its rating when it keeps the plot back. */
 function reviewHeading(card: Extract<FeedItem['card'], { kind: 'review' }>, t: T, locale: string) {
-  const rating = new Intl.NumberFormat(locale).format(card.rating);
+  const rating = card.rating === null ? null : new Intl.NumberFormat(locale).format(card.rating);
   const { title, body } = firstLine(card.opening ?? '');
   return { title: <span className="inline-flex max-w-full items-baseline gap-2">
-    <StarMeter mean={card.rating} max={card.scale} className="translate-y-px text-[0.8125rem]" />
-    <span className="sr-only">{t.ratedOutOf({ rating, scale: String(card.scale) })}</span>
-    {card.scale === 5 ? null : <span aria-hidden="true" className="font-semibold tabular-nums">{rating}/{card.scale}</span>}
+    {card.rating === null || rating === null ? null : <>
+      <StarMeter mean={card.rating} max={card.scale} className="translate-y-px text-[0.8125rem]" />
+      <span className="sr-only">{t.ratedOutOf({ rating, scale: String(card.scale) })}</span>
+      {card.scale === 5 ? null : <span aria-hidden="true" className="font-semibold tabular-nums">{rating}/{card.scale}</span>}
+    </>}
     <span className="min-w-0">{title || t.review}</span>
   </span>, body };
 }

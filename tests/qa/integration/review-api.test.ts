@@ -85,7 +85,7 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
 
     const body = { profile: 'reader-review-command-v1', actingSubject: author,
       context: context.context, target: work.work, expectedRevision: null,
-      language: 'en', text: 'A spoiler about the ending', spoiler: true, rating: 8 };
+      language: 'en', text: 'A spoiler about the ending', spoiler: true };
     const key = randomUUID();
     expect((await call('POST', '/v1/reviews', body, a.token, randomUUID(), true)).status).toBe(401);
     const first = await json<{ review: string; revision: string }>(await call('POST', '/v1/reviews', body, a.token, key), 201);
@@ -102,14 +102,14 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
       `${path}&actingSubject=${encodeURIComponent(author)}&showSpoilers=true`, undefined, a.token));
     expect(ownPage.items[0]).toMatchObject({ id: first.review, text: body.text });
     expect((await call('POST', '/v1/reviews', { ...body, actingSubject: voter,
-      text: 'A second perspective', spoiler: false }, b.token)).status).toBe(403);
+      text: 'A second perspective', spoiler: false, rating: 7 }, b.token)).status).toBe(403);
     await grant(b.principalId, voter, `rating:observe:${context.context}`, 'rating.observation.set');
     await json(await call('POST', '/v1/rating-observations', {
       profile: 'realm-standing-rating-observation-v1', context: context.context,
       work: work.work, mainVersion: work.mainVersion, expectedRevisionHead: null,
       value: 6, actingSubject: voter }, b.token), 201);
     const second = await json<{ review: string; revision: string }>(await call('POST', '/v1/reviews', {
-      ...body, actingSubject: voter, text: 'A second perspective', spoiler: false, rating: 6 }, b.token), 201);
+      ...body, actingSubject: voter, text: 'A second perspective', spoiler: false }, b.token), 201);
     const firstPage = await json<{ items: Array<{ id: string }>; nextCursor: string | null }>(
       await call('GET', `${path}&actingSubject=${encodeURIComponent(author)}&limit=1`, undefined, a.token));
     expect(firstPage.items.map(item => item.id)).toEqual([first.review]);

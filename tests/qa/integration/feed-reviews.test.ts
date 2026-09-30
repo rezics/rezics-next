@@ -93,7 +93,7 @@ test('G324: text reviews become grouped, live, spoiler-safe Work cards', async (
     expect(await cards()).toEqual([]); // Rating observations alone have no feed card.
     const write = (work: string, text: string, spoiler: boolean, expectedRevision: string | null = null) =>
       ({ profile: 'reader-review-command-v1', actingSubject: author, context: context.context,
-        target: work, expectedRevision, language: 'en', text, spoiler, rating: 8 });
+        target: work, expectedRevision, language: 'en', text, spoiler });
     const one = await json<{ review: string; revision: string }>(await call('POST', '/v1/reviews',
       write(first.work, 'The first opening lines', false), a.token), 201);
     const two = await json<{ review: string; revision: string }>(await call('POST', '/v1/reviews',

@@ -454,6 +454,21 @@ export const Chinese: Story = {
 
 export const Dark: Story = { globals: { theme: 'dark' } };
 
+export const UnscoredReviews: Story = {
+  args: { initial: { ok: true, data: page(everyKind.filter(item => item.card.kind === 'review')
+    .map(item => ({ ...item, card: { ...item.card, rating: null } }))) } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('article')).toHaveLength(2);
+    await expect(article(canvas, /Austen’s quietest novel/)).toHaveTextContent('Persuasion');
+    await expect(canvas.getByText('This review discusses the plot')).toBeVisible();
+    for (const review of canvas.getAllByRole('article')) {
+      await expect(review).not.toHaveTextContent(/Rated|null|0\/|9\//);
+      await expect(within(review).getByRole('link', { name: 'Read review' })).toBeVisible();
+    }
+  },
+};
+
 /** The distance between the bottom of one element and the top of the next, in CSS pixels. */
 const gap = (above: Element, below: Element) => below.getBoundingClientRect().top - above.getBoundingClientRect().bottom;
 const style = (element: Element) => getComputedStyle(element);

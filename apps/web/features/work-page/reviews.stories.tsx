@@ -123,12 +123,27 @@ export const EditAndDelete: Story = {
 
 export const RealmReadOnly: Story = {
   args: { viewer: { ...reader, canWrite: false }, scale: 10, api: fixture.memoryReviewApi(),
-    initial: fixture.reviewPage(fixture.reviews.map(review => ({ ...review, rating: review.rating * 2 }))) },
+    initial: fixture.reviewPage(fixture.reviews.map(review => ({ ...review,
+      rating: review.rating === null ? null : review.rating * 2 }))) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     // A community's ten-point question keeps its scale; writing happens from everyone's view.
     await expect(canvas.getAllByRole('article')[0]).toHaveTextContent('Rated 10 out of 10');
     await expect(canvas.queryByRole('button', { name: 'Write a review' })).toBeNull();
+  },
+};
+
+export const Unscored: Story = {
+  args: { initial: fixture.reviewPage(fixture.reviews.map(review => ({ ...review,
+    rating: null, ratingObservation: null, ratingRevision: null }))), api: fixture.memoryReviewApi() },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('article')).toHaveLength(3);
+    await expect(canvas.getByRole('link', { name: 'Aria Wang' })).toBeVisible();
+    for (const review of canvas.getAllByRole('article')) {
+      await expect(review).not.toHaveTextContent(/Rated|null|0 out of/);
+    }
+    await expect(canvas.getByText(/The best novel about maps I have read/)).toBeVisible();
   },
 };
 

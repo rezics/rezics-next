@@ -84,7 +84,7 @@ export class ReaderReviews {
 
   async write(principal: VerifiedPrincipal, input: ReviewIntent, key: string,
     proveRating: (head: { mainVersion: string | null; observation: string; revision: string },
-      principalId: string) => Promise<RatingLink>,
+      principalId: string) => Promise<RatingLink | null>,
     shelfDates: { startedOn: string | null; finishedOn: string | null },
     target: { mainVersion: string | null; realm: string | null; generic: boolean }): Promise<ReviewReceipt> {
     validateReviewIntent(input, key);
@@ -104,13 +104,9 @@ export class ReaderReviews {
         throw new ControlDenied('Review is restricted');
       }
       let linked: RatingLink | null = null;
-      // Omission preserves a live review's retained evidence; null clears it.
-      // A new or revived review with no supplied score remains unscored.
-      if (input.rating === undefined && prior && !prior.deleted && prior.rating !== null) {
-        linked = { mainVersion: prior.main_version, observation: prior.rating_observation!,
-          revision: prior.rating_revision!, value: prior.rating, realm: prior.realm };
-      }
-      if (input.rating != null) {
+      // Omission binds the reader's current rating, as existing clients expect.
+      // Null explicitly opts out; a reader without an available rating is unscored.
+      if (input.rating !== null) {
         const head = (await client.query<{ main_version: string | null; observation: string; revision: string }>(target.generic ? `
           SELECT NULL AS main_version, h.observation, h.revision
           FROM access.target_rating_head h JOIN access.admission a ON a.id = h.admission_id
@@ -121,13 +117,15 @@ export class ReaderReviews {
           WHERE h.principal_id = $1 AND h.context = $2 AND h.work = $3
             AND h.target_release IS NULL AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
           LIMIT 2 FOR SHARE OF h`, [owner, input.context, input.work])).rows;
-        if (head.length !== 1) throw new ControlDenied('An available standing rating is required');
-        linked = await proveRating({ mainVersion: head[0]!.main_version,
+        if (head.length > 1 || !head.length && input.rating !== undefined) {
+          throw new ControlDenied('An available standing rating is required');
+        }
+        if (head.length) linked = await proveRating({ mainVersion: head[0]!.main_version,
           observation: head[0]!.observation, revision: head[0]!.revision }, owner);
-        if (linked.mainVersion !== head[0]!.main_version || linked.observation !== head[0]!.observation
+        if (linked && (linked.mainVersion !== head[0]!.main_version || linked.observation !== head[0]!.observation
           || linked.revision !== head[0]!.revision || !Number.isInteger(linked.value)
-          || linked.value !== input.rating || linked.realm !== target.realm
-          || linked.value < 1 || linked.value > 10) throw new ControlDenied('Rating link changed');
+          || input.rating !== undefined && linked.value !== input.rating || linked.realm !== target.realm
+          || linked.value < 1 || linked.value > 10)) throw new ControlDenied('Rating link changed');
       }
       const revision = randomUUID();
       let id: string;

@@ -59,8 +59,9 @@ export async function readWorkRatingContexts(session: WorkReadSession, work: str
 export async function readWorkRating(session: WorkReadSession, work: string, selectedContext?: string) {
   const basis = await ratingTarget(session, work);
   const scope = await session.scope();
-  const contextRows = await session.query(`SELECT ?context WHERE { GRAPH ${iri(GRAPHS.current)} {
+  const contextRows = await session.query(`SELECT ?context ?question WHERE { GRAPH ${iri(GRAPHS.current)} {
     ${contextPattern(scope)}
+    ?context rv:question ?question . FILTER(LANG(?question) = "en")
     ${selectedContext ? `VALUES ?context { ${iri(selectedContext)} }` : ''}
   } } LIMIT 2`, 2);
   if (contextRows.length > 1) throw new WorkReadInvalid('Select a rating Context explicitly');
@@ -69,7 +70,7 @@ export async function readWorkRating(session: WorkReadSession, work: string, sel
   if (!context) {
     await fenceRatingTarget(session, work, basis.revision);
     return { profile: 'work-rating-read-v1' as const, work, mainVersion: basis.mainVersion, scope,
-      context, status: 'no-context' as const, scale: null, count: 0, mean: null, distribution: [],
+      context, status: 'no-context' as const, aggregationScope: null, scale: null, count: 0, mean: null, distribution: [],
       sourcePosition: session.position };
   }
   const access = session.deps.access;
@@ -88,6 +89,9 @@ export async function readWorkRating(session: WorkReadSession, work: string, sel
   await fenceRatingTarget(session, work, basis.revision);
   return { profile: 'work-rating-read-v1' as const, work, mainVersion: basis.mainVersion, scope,
     context, status: 'available' as const, scale: { ...result.scale, step: 1 as const },
+    aggregationScope: { question: contextRows[0]!.question!.value, grain: 'main-version' as const,
+      population: scope.kind === 'mine' ? 'reader-account-principal' as const : result.populationPolicy,
+      countedTarget: basis.mainVersion },
     count: result.count, mean: result.mean, distribution: result.histogram.map((count, i) =>
       ({ value: result.scale.min + i, count })), sourcePosition: session.position };
 }

@@ -1,5 +1,5 @@
 import { t } from 'elysia';
-import { readScope, readId, readPosition } from '../work/read-contract.ts';
+import { readScope, readId, readPosition, ratingRead } from '../work/read-contract.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadMissing,
   WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { readWorkRating, readWorkRatingContexts } from '../work/read-rating.ts';
@@ -18,6 +18,8 @@ export const targetRatingRead = t.Object({ profile: t.Literal('target-rating-rea
   count: t.Integer({ minimum: 0 }), mean: t.Nullable(t.Number()),
   distribution: t.Array(t.Object({ value: t.Integer(), count: t.Integer({ minimum: 0 }) }), { maxItems: 10 }),
   sourcePosition: readPosition });
+
+export const resourceRatingRead = t.Union([ratingRead, targetRatingRead]);
 
 /** Same exact target resolver as writes. Context pages use an IRI seek and P+1. */
 function contextPattern(grain: TargetGrain, scope: { kind: string; realm: string | null }) {

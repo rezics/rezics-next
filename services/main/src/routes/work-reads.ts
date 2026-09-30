@@ -10,9 +10,9 @@ import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkRea
 import { readWorkHeader } from '../modules/work/read-header.ts';
 import { readWorkPage } from '../modules/work/read-pages.ts';
 import { readWorkClassifications } from '../modules/work/read-classifications.ts';
-import { readResourceRating, readResourceRatingContexts, targetRatingRead } from '../modules/rating/target-read.ts';
+import { readResourceRating, readResourceRatingContexts, resourceRatingRead } from '../modules/rating/target-read.ts';
 import { adoptionItem, classificationItem, creditItem, pageFields, pageQuery,
-  ratingRead, readId, readLanguage, readQuery, readScope, readUuid, scopeQuery, versionItem,
+  readId, readLanguage, readQuery, readScope, readUuid, scopeQuery, versionItem,
   workHeader } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -101,7 +101,7 @@ export function workReadRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/resources/:resource/ratings', { params: resourceParams, detail,
       query: t.Object({ ...readQuery, ...scopeQuery, context: t.Optional(readId) }, { additionalProperties: false }),
-      response: { 200: t.Union([ratingRead, targetRatingRead]), ...workReadProblems },
+      response: { 200: resourceRatingRead, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,
         session => readResourceRating(session, `https://rezics.com/id/${path.resource}`, options.context)), { headers }); }

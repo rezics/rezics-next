@@ -92,11 +92,11 @@ function ReviewCard({ review, reviewer, own, highlighted, viewer, api, scale, on
         {own ? t.yourReview : reviewer
           ? <Link href={`/@${reviewer.handle}`} className="rounded-sm outline-none underline-offset-4 hover:underline
             focus-visible:ring-2 focus-visible:ring-ring">{reviewer.name}</Link> : t.reviewerFallback}</p>
-      <span className="flex items-center gap-1.5 text-sm">
+      {review.rating === null ? null : <span className="flex items-center gap-1.5 text-sm">
         <span className="sr-only">{t.ratedValue({ value: String(review.rating), max: String(scale) })}</span>
         {scale === 5 ? <StarMeter mean={review.rating} max={5} className="text-[0.95rem]" />
           : <span aria-hidden="true" className="font-semibold tabular-nums">{review.rating}/{scale}</span>}
-      </span>
+      </span>}
       <time dateTime={isoTime(review.createdAt)} className="text-muted-foreground text-sm">{formatDate(created, locale)}
         {edited ? ` · ${t.edited}` : ''}</time>
       {review.language.split('-')[0] !== locale.split('-')[0]

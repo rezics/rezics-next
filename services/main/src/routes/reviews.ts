@@ -67,7 +67,8 @@ export function reviewRoutes(work: MainWorkDependencies) {
             : { startedOn: null, finishedOn: null };
           const { target, ...intent } = body;
           return work.reviews!.write(principal, { ...intent, work: target }, key,
-            (head, principalId) => proveReviewRating(session, principalId, body.context, target, head), dates, proof);
+            (head, principalId) => proveReviewRating(session, principalId, body.context, target, head,
+              body.rating === undefined), dates, proof);
         });
         return Response.json(result, { status: !result.replayed && body.expectedRevision === null ? 201 : 200,
           headers });

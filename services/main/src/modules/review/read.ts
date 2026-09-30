@@ -63,7 +63,8 @@ export async function reviewTarget(session: TargetReadSession, context: string, 
 
 export async function proveReviewRating(session: WorkReadSession, principalId: string,
   context: string, work: string,
-  head: { mainVersion: string | null; observation: string; revision: string }): Promise<RatingLink> {
+  head: { mainVersion: string | null; observation: string; revision: string },
+  allowUnscored = false): Promise<RatingLink | null> {
   const target = await reviewTarget(session, context, work);
   if (target.mainVersion !== head.mainVersion) throw new WorkReadMoved('Rating Work selection changed');
   const slot = target.generic ? targetRatingSlotIri(principalId, context, work)
@@ -71,19 +72,23 @@ export async function proveReviewRating(session: WorkReadSession, principalId: s
   const type = target.generic ? 'TargetRatingObservation' : target.realm ? 'RatingObservation' : 'GlobalRatingObservation';
   const revisionType = target.generic ? 'TargetRatingObservationRevision'
     : target.realm ? 'RatingObservationRevision' : 'GlobalRatingObservationRevision';
-  const rows = await session.query(`SELECT ?value WHERE {
+  const rows = await session.query(`SELECT ?availability ?value WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ${iri(head.observation)} a rv:${type} ; rv:ratingSlot ${iri(slot)} ;
         rv:ratingContext ${iri(context)} ; ${target.generic ? `rv:target ${iri(work)}` : `rv:targetMainVersion ${iri(head.mainVersion!)}`} ;
         rv:observationHead ${iri(head.revision)} . }
     GRAPH ${iri(GRAPHS.revisions)} {
       ${iri(head.revision)} a rv:${revisionType} ; rv:component ${iri(head.observation)} ;
-        rv:ratingAvailability rv:Available ; rv:ratingValue ?value .
+        rv:ratingAvailability ?availability .
+      OPTIONAL { ${iri(head.revision)} rv:ratingValue ?value }
       FILTER NOT EXISTS { ${iri(head.revision)} a rv:ErasedRevision }
     }
   } LIMIT 2`, 2);
+  if (allowUnscored && rows.length === 1 && rows[0]?.availability?.value === 'https://rezics.com/vocab/Withdrawn'
+    && !rows[0].value) return null;
   const value = Number(rows[0]?.value?.value);
-  if (rows.length !== 1 || !Number.isInteger(value) || value < 1 || value > (target.realm ? 10 : 5)) {
+  if (rows.length !== 1 || rows[0]?.availability?.value !== 'https://rezics.com/vocab/Available'
+    || !Number.isInteger(value) || value < 1 || value > (target.realm ? 10 : 5)) {
     throw new WorkReadMissing('Available rating is required for a review');
   }
   return { mainVersion: head.mainVersion, observation: head.observation,

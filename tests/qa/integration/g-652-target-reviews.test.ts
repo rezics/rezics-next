@@ -13,7 +13,7 @@ import { startMediaStack } from './media-support.ts';
 const short = (value: string) => value.slice(-36);
 const nativeId = () => `https://rezics.com/id/${randomUUID()}`;
 interface Context { context: string; contextRevision: string }
-interface Opinion { observation: string; observationRevision: string }
+interface Opinion { observation: string; observationRevision: string; value: number | null }
 interface Review { review: string; revision: string }
 
 test('G-652: SAO edition, translation, chapter and resource reviews use exact grains with optional scores', async () => {
@@ -127,6 +127,12 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
       { grain: 'realization', target: translation.contribution, question: 'How good is this translation?' },
       { grain: 'occurrence', target: placed.occurrences[0]!, question: 'How good is this chapter?' },
       { grain: 'resource', target: character.component, question: 'How good is this character?' }] as const;
+    const storyReview = await json<Review>(await call('POST', '/v1/reviews', review(story.context, bunko.work), a.token), 201);
+    expect(await json(await call('GET', `/v1/resources/${short(bunko.work)}/reviews?context=${encodeURIComponent(story.context)}`)))
+      .toMatchObject({ items: [{ id: storyReview.review, rating: 9 }] });
+    expect(await json(await call('GET', `/v1/resources/${short(bunko.work)}/ratings?scope=realm&realm=${encodeURIComponent(realm.realm)}&context=${encodeURIComponent(story.context)}`)))
+      .toMatchObject({ count: 1, mean: 9, aggregationScope: { question: 'How good is the bunko story?',
+        grain: 'main-version', population: 'account-principal', countedTarget: bunko.mainVersion } });
     const contexts: Context[] = [];
     for (const target of targets) {
       const body = { profile: 'realm-target-rating-context-v1', realm: realm.realm,
@@ -153,7 +159,11 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
         .toMatchObject({ ...opinion, replayed: true });
       expect((await call('POST', '/v1/rating-observations', { ...rating, value: 7 }, a.token, ratingKey)).status).toBe(409);
       expect((await call('POST', '/v1/rating-observations', rating, a.token)).status).toBe(409);
-      const unscored = await json<Review>(await call('POST', '/v1/reviews', review(context.context, target.target), a.token), 201);
+      const automatic = await json<Review>(await call('POST', '/v1/reviews', review(context.context, target.target), a.token), 201);
+      expect(await json(await call('GET', `/v1/reviews/${automatic.review}?actingSubject=${encodeURIComponent(actor)}`, undefined, a.token)))
+        .toMatchObject({ rating: 8, ratingObservation: opinion.observation, ratingRevision: opinion.observationRevision });
+      const unscored = await json<Review>(await call('POST', '/v1/reviews', { ...review(context.context, target.target, null),
+        expectedRevision: automatic.revision }, a.token));
       const path = `/v1/resources/${short(target.target)}/reviews?context=${encodeURIComponent(context.context)}`;
       const suffix = target.grain === 'resource' ? `&actingSubject=${encodeURIComponent(actor)}` : '';
       expect(await json(await call('GET', path + suffix, undefined, suffix ? a.token : undefined)))
@@ -185,7 +195,8 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
         undefined, suffix ? a.token : undefined))).toMatchObject({ items: [{ context: context.context, question: target.question }] });
       expect(await json(await call('GET', `/v1/resources/${short(target.target)}/ratings?${readQuery}&context=${encodeURIComponent(context.context)}`,
         undefined, suffix ? a.token : undefined))).toMatchObject({ count: 1, mean: 8, target: target.target,
-        aggregationScope: { question: target.question, grain: target.grain, countedTarget: target.target } });
+        aggregationScope: { question: target.question, grain: target.grain,
+          population: 'account-principal', countedTarget: target.target } });
       await grant(`rating:read:${context.context}`, 'rating.observation.read');
       expect(await json(await call('GET', `/v1/rating-observations/${short(opinion.observation)}/revisions/${short(opinion.observationRevision)}`
         + `?profile=realm-target-rating-observation-v1&context=${encodeURIComponent(context.context)}`
@@ -195,15 +206,19 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
         ...rating, expectedRevisionHead: opinion.observationRevision, value }, a.token)));
       expect(changes.map(response => response.status).sort()).toEqual([201, 409]);
       const winner = await changes.find(response => response.status === 201)!.json() as Opinion;
+      scored = await json<Review>(await call('POST', '/v1/reviews', { ...review(context.context, target.target),
+        expectedRevision: scored.revision, text: 'An edit binding the newly current rating' }, a.token));
+      expect(await json(await call('GET', `/v1/reviews/${scored.review}?actingSubject=${encodeURIComponent(actor)}`, undefined, a.token)))
+        .toMatchObject({ rating: winner.value, ratingObservation: winner.observation, ratingRevision: winner.observationRevision });
       await json(await call('POST', '/v1/rating-observations', { ...rating, expectedRevisionHead: winner.observationRevision,
         value: null }, a.token), 201);
       expect(await json(await aggregate())).toMatchObject({ population: 1, count: 0, withdrawnCount: 1, mean: null });
       const omittedKey = randomUUID();
       const editText = { ...review(context.context, target.target), expectedRevision: scored.revision,
-        text: 'An edited review retaining its original score evidence' };
+        text: 'An edit after withdrawing the current rating' };
       scored = await json<Review>(await call('POST', '/v1/reviews', editText, a.token, omittedKey));
       expect(await json(await call('GET', `/v1/reviews/${scored.review}?actingSubject=${encodeURIComponent(actor)}`, undefined, a.token)))
-        .toMatchObject({ rating: 8, ratingObservation: opinion.observation, ratingRevision: opinion.observationRevision });
+        .toMatchObject({ rating: null, ratingObservation: null, ratingRevision: null });
       expect((await call('POST', '/v1/reviews', { ...editText, rating: null }, a.token, omittedKey)).status).toBe(409);
       expect((await call('POST', '/v1/reviews', { ...review(context.context, target.target, 8),
         expectedRevision: scored.revision }, a.token)).status).toBe(404);
