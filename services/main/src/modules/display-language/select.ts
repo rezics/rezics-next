@@ -1,29 +1,28 @@
-/** A bounded, independently selected field. The original is a language tag, not a second string. */
+import { canonicalLanguage, direction, languageMatch, parseLanguage } from './tag.ts';
+export { canonicalLanguage, direction, languageSatisfies, parseLanguage } from './tag.ts';
+export type { LanguageTag, LanguageMatch } from './tag.ts';
+
+/** An independently selected field. The original is a language tag, not a second string. */
 export interface LocalizedText { original: string; labels: Record<string, string> }
+export const DISPLAY_LANGUAGE_BASES = ['requested', 'same-script', 'other-script', 'fallback'] as const;
 export interface DisplayName { value: string; language: string; direction: 'ltr' | 'rtl';
-  basis: 'requested' | 'fallback' }
+  basis: (typeof DISPLAY_LANGUAGE_BASES)[number] }
 
-const rtl = new Set(['ar', 'arc', 'ckb', 'dv', 'fa', 'he', 'ks', 'ku', 'ps', 'sd', 'ug', 'ur', 'yi']);
-const tag = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
+export const LOCALIZED_TEXT_MAX_BYTES = 64 * 1024;
 
-export function canonicalLanguage(value: string): string | null {
-  if (!tag.test(value)) return null;
-  try { return Intl.getCanonicalLocales(value)[0] ?? null; } catch { return null; }
-}
-
-export function direction(language: string): 'ltr' | 'rtl' {
-  return rtl.has(language.split('-')[0]!.toLowerCase()) ? 'rtl' : 'ltr';
-}
-
-export function validLocalizedText(value: LocalizedText, maxLength: number): boolean {
+/** Cardinality is unrestricted; callers may supply their smaller UTF-8 payload budget. */
+export function validLocalizedText(value: LocalizedText, maxLength: number,
+  maxBytes = LOCALIZED_TEXT_MAX_BYTES): boolean {
   if (!value || typeof value !== 'object' || !value.labels || typeof value.labels !== 'object'
     || Array.isArray(value.labels) || typeof value.original !== 'string') return false;
   const labels = Object.entries(value.labels);
-  return labels.length >= 1 && labels.length <= 20
-    && canonicalLanguage(value.original) === value.original && value.original in value.labels
+  return labels.length >= 1
+    && canonicalLanguage(value.original) === value.original && Object.hasOwn(value.labels, value.original)
     && labels.every(([language, text]) => canonicalLanguage(language) === language
+      && language !== 'mul'
       && typeof text === 'string' && !!text.trim() && text.length <= maxLength
-      && !/[\u0000-\u001f\u007f]/u.test(text));
+      && !/[\u0000-\u001f\u007f]/u.test(text))
+    && new TextEncoder().encode(JSON.stringify(value)).byteLength <= maxBytes;
 }
 
 /** Query languages retain caller order; a header uses quality, then header order. */
@@ -38,31 +37,30 @@ export function readerLanguages(languages?: string | null, acceptLanguage?: stri
   return [...new Set(raw.map(canonicalLanguage).filter((value): value is string => !!value))].slice(0, 20);
 }
 
-function script(value: string): string | null {
-  try { return new Intl.Locale(value).maximize().script ?? null; } catch { return null; }
-}
-
-/** Exact tag, language plus script, then primary language for each reader preference. */
+/** Respect reader order among exact/same-script matches before any other-script fallback. */
 export function selectDisplayName(field: LocalizedText | ReadonlyMap<string, string>,
   requested: readonly string[] = []): DisplayName | null {
   const original = 'labels' in field ? field.original : null;
   const source = 'labels' in field ? Object.entries(field.labels) : [...field];
   const labels = source.flatMap(([language, value]) => {
-    const canonical = canonicalLanguage(language);
-    return canonical && value ? [{ language: canonical, value }] : [];
+    const parsed = parseLanguage(language);
+    return (parsed || language === '') && value ? [{ language: parsed?.tag ?? '', value, parsed }] : [];
   });
+  let otherScript: (typeof labels)[number] | undefined;
   for (const preference of requested) {
-    const language = canonicalLanguage(preference);
+    const language = parseLanguage(preference);
     if (!language) continue;
-    const primary = language.split('-')[0];
-    const selected = labels.find(row => row.language === language)
-      ?? labels.find(row => row.language.split('-')[0] === primary && script(row.language) === script(language))
-      ?? labels.find(row => row.language.split('-')[0] === primary);
-    if (selected) return { ...selected, direction: direction(selected.language), basis: 'requested' };
+    const exact = labels.find(row => row.parsed && languageMatch(row.parsed, language) === 'requested');
+    const selected = exact
+      ?? labels.find(row => row.parsed && languageMatch(row.parsed, language) === 'same-script');
+    if (selected) return { value: selected.value, language: selected.language,
+      direction: direction(selected.language), basis: exact ? 'requested' : 'same-script' };
+    otherScript ??= labels.find(row => row.parsed && languageMatch(row.parsed, language) === 'other-script');
   }
-  const selected = labels.find(row => row.language === canonicalLanguage(original ?? ''))
-    ?? labels.find(row => row.language === 'en') ?? labels[0];
-  return selected ? { ...selected, direction: direction(selected.language), basis: 'fallback' } : null;
+  const selected = otherScript ?? labels.find(row => row.language === (canonicalLanguage(original ?? '') ?? original))
+    ?? labels[0];
+  return selected ? { value: selected.value, language: selected.language,
+    direction: direction(selected.language), basis: otherScript ? 'other-script' : 'fallback' } : null;
 }
 
 export function legacyLocalizedText(labels: { en: string; 'zh-CN': string }): LocalizedText {

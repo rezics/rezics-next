@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./language": "./src/modules/display-language/select.ts",
     "./app": {
       "types": "./src/app.ts"
     }

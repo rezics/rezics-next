@@ -1,3 +1,5 @@
+import { canonicalLanguage } from '../display-language/select.ts';
+
 /** Content languages on a release or external edition, per RFC 5646 and MARC 041.
  * Empty means not recorded. `zxx` is no linguistic content and stands alone.
  * `und` is only for a slot that requires a tag. `mul` never replaces a list. */
@@ -9,9 +11,7 @@ const TAG_LENGTH = 35;
 
 export function recordedLanguageTag(value: string): string {
   if (value.length > TAG_LENGTH) throw new InvalidContentLanguages('Language tag is invalid');
-  let canonical: string;
-  try { canonical = Intl.getCanonicalLocales(value)[0] ?? ''; }
-  catch { throw new InvalidContentLanguages('Language tag is invalid'); }
+  const canonical = canonicalLanguage(value);
   if (!canonical || canonical.length > TAG_LENGTH || canonical.toLowerCase() === 'mul') {
     throw new InvalidContentLanguages('Language tag is invalid');
   }
@@ -49,7 +49,7 @@ export function originalLanguages(values: readonly string[], isTranslation: bool
 
 /** Printed title or track-list language. Absent means not recorded, so `und` is not used. */
 export function textLanguage(value: string | null): string | null {
-  if (value === null) return null;
+  if (value === null || value === '') return null;
   const tag = recordedLanguageTag(value);
   if (tag === 'und') throw new InvalidContentLanguages('An optional text language is omitted rather than und');
   return tag;

@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { displayLanguageBasis } from '../display-language/schema.ts';
 import { authorNameProvenance } from '../source/author-name.ts';
 import { recordedText, recordedRelevance } from './metadata-schema.ts';
 
@@ -8,7 +9,7 @@ export const readLanguage = t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*
 export const readPosition = t.Object({ dataEpoch: t.String(), sequence: t.String() });
 export const readName = t.Object({ value: t.String(), language: t.String(),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]),
-  basis: t.Union([t.Literal('requested'), t.Literal('fallback')]) });
+  basis: displayLanguageBasis });
 export const readAvatar = t.Union([
   t.Object({ kind: t.Literal('fallback'), policy: t.String(), key: t.String(), resourceType: t.String() }),
   t.Object({ kind: t.Literal('image'), selection: t.String(), url: t.String(), mediaType: t.String(),
