@@ -51,9 +51,20 @@ public final class CommandModule implements FusekiAutoModule {
         Assembler.general().implementWith(
             ResourceFactory.createResource("https://rezics.com/fuseki/FilteredGraphTextIndex"),
             new FilteredGraphTextAssembler());
+        org.apache.jena.sparql.function.FunctionRegistry.get().put(
+            "https://rezics.com/vocab/publicTextInventory", FilteredGraphTextAssembler.InventoryFunction.class);
+        org.apache.jena.sparql.function.FunctionRegistry.get().put(
+            "https://rezics.com/vocab/rankedText", FilteredGraphTextIndex.RankedFunction.class);
     }
 
     @Override public void prepare(FusekiServer.Builder builder, Set<String> datasetNames, Model configModel) {
         builder.registerOperation(COMMAND, new CommandService(profiles));
+    }
+
+    @Override public void configDataAccessPoint(org.apache.jena.fuseki.server.DataAccessPoint point, Model configModel) {
+        // Qualification precedes HTTP traffic, including after an offline rebuild.
+        // An empty/uninitialized dataset qualifies when bootstrap commits instead.
+        if (CommandService.deltaExclusive(point.getDataService()))
+            SearchDeltaJournal.qualifyAtStartup(point.getDataService().getDataset());
     }
 }

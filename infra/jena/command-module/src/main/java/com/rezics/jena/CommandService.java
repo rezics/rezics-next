@@ -84,7 +84,7 @@ final class CommandService extends ActionService {
                 respond(action, 200, Map.of("available", false)); return;
             }
             try {
-                Map<String, Object> proof = SearchDeltaJournal.proof(action.getDataService().getDataset(),
+                Map<String, Object> proof = SearchDeltaJournal.qualifiedProof(action.getDataService().getDataset(),
                     Long.parseLong(since), epoch);
                 if (publicSearchWriteEpoch.get() != epoch) proof = Map.of("available", false);
                 respond(action, 200, proof);
@@ -221,13 +221,29 @@ final class CommandService extends ActionService {
 
     private Map<String, Object> run(DatasetGraph dataset, String receipt, String digest, String update, JsonValue titleAdmission, CommandPolicy.Plan plan,
                                     List<Validation> validations, long deadline) {
+        // Jena may release its writer transaction at commit, before end(). Keep
+        // native writers serialized until the post-commit baseline is maintained.
+        synchronized (dataset) {
+            return runSerialized(dataset, receipt, digest, update, titleAdmission, plan, validations, deadline);
+        }
+    }
+
+    private Map<String, Object> runSerialized(DatasetGraph dataset, String receipt, String digest, String update,
+                                             JsonValue titleAdmission, CommandPolicy.Plan plan,
+                                             List<Validation> validations, long deadline) {
         dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
         boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
         boolean touchesPrivateIndex = plan.graphs().contains(CommandPolicy.PRIVATE_SEARCH);
-        if (touchesPublicIndex) publicSearchWriteEpoch.incrementAndGet();
+        // Every text-wrapper commit can publish a merge or a mapped field in
+        // another graph. Journal those commits without inventing public units.
+        boolean tracksIndex = touchesPublicIndex || touchesPrivateIndex || SearchDeltaJournal.canTrackCommit(dataset);
+        if (tracksIndex) {
+            publicSearchWriteEpoch.incrementAndGet();
+            SearchDeltaJournal.fenceBeforeWrite(dataset);
+        }
         if (touchesPrivateIndex) privateSearchWriteEpoch.incrementAndGet();
-        SearchDeltaJournal.Capture delta = touchesPublicIndex
-            ? new SearchDeltaJournal.Capture(dataset, plan.rebuild()) : null;
+        SearchDeltaJournal.Capture delta = tracksIndex
+            ? new SearchDeltaJournal.Capture(dataset, touchesPublicIndex && plan.rebuild()) : null;
         boolean commit = false;
         try {
             String existing = receiptValue(dataset, receipt, "requestDigest");
@@ -302,7 +318,7 @@ final class CommandService extends ActionService {
             Map<String, Object> result = committed(dataset, receipt);
             if (!result.containsKey("position")) return Map.of("status", "invalid", "report", "receipt position incomplete");
             if (delta != null) {
-                if (!plan.bootstrap() && !plan.rebuild()
+                if (touchesPublicIndex && !plan.bootstrap() && !plan.rebuild()
                     && !receipt.startsWith("urn:rezics:receipt:chapter-search-index:")) {
                     String claimed = receiptValue(dataset, receipt, "matchUnit");
                     if (!SearchDeltaJournal.matchesClaim(delta.changes(), claimed))
@@ -318,10 +334,23 @@ final class CommandService extends ActionService {
                 if (!commit) dataset.abort();
             } finally {
                 try {
-                    if (touchesPublicIndex) publicSearchWriteEpoch.incrementAndGet();
-                    if (touchesPrivateIndex) privateSearchWriteEpoch.incrementAndGet();
-                } finally {
                     dataset.end();
+                    if (commit && tracksIndex) {
+                        // Keep the odd process epoch and native writer monitor until
+                        // qualification completes, so no later native write races it.
+                        try {
+                            if (plan.bootstrap() || receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:"))
+                                SearchDeltaJournal.qualify(dataset);
+                            else if (touchesPublicIndex && plan.rebuild()) SearchDeltaJournal.invalidate(dataset);
+                            else SearchDeltaJournal.qualifiedProof(dataset, -1, publicSearchWriteEpoch.get() + 1);
+                        } catch (RuntimeException unavailable) {
+                            // Close reads without changing an already committed result.
+                            SearchDeltaJournal.invalidate(dataset);
+                        }
+                    }
+                } finally {
+                    if (tracksIndex) publicSearchWriteEpoch.incrementAndGet();
+                    if (touchesPrivateIndex) privateSearchWriteEpoch.incrementAndGet();
                 }
             }
         }

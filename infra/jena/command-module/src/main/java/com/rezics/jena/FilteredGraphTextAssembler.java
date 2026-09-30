@@ -16,4 +16,24 @@ public final class FilteredGraphTextAssembler extends TextIndexLuceneAssembler {
             throw new IllegalStateException("Lucene text index is unavailable");
         return new FilteredGraphTextIndex(lucene);
     }
+
+    /** Raw-update QA datasets cannot consume an exclusive-writer journal.
+     * Their fault-injection reads retain a streaming audit with no top-N cap. */
+    public static final class InventoryFunction extends org.apache.jena.sparql.function.FunctionBase {
+        @Override public void checkBuild(String uri, org.apache.jena.sparql.expr.ExprList args) {
+            if (!args.isEmpty()) throw new org.apache.jena.sparql.expr.ExprEvalException("inventory takes no arguments");
+        }
+        @Override public org.apache.jena.sparql.expr.NodeValue exec(java.util.List<org.apache.jena.sparql.expr.NodeValue> args) {
+            throw new org.apache.jena.sparql.expr.ExprEvalException("inventory requires a dataset");
+        }
+        @Override protected org.apache.jena.sparql.expr.NodeValue exec(
+            java.util.List<org.apache.jena.sparql.expr.NodeValue> args, org.apache.jena.sparql.function.FunctionEnv env) {
+            try {
+                return org.apache.jena.sparql.expr.NodeValue.makeInteger(SearchDeltaJournal.auditPopulation(
+                    env.getDataset(), FilteredGraphTextIndex.functionIndex(env).lucene()));
+            } catch (IllegalStateException unavailable) {
+                throw new org.apache.jena.sparql.expr.ExprEvalException(unavailable);
+            }
+        }
+    }
 }

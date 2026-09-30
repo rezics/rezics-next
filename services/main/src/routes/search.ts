@@ -29,6 +29,7 @@ import { decoratePhraseRelation, phraseWorkTypes } from '../modules/work/search-
 import { enrichSerialSearch } from '../modules/work/summary-serial.ts';
 import { enrichSearchCardPage, searchPageAuthors } from '../modules/search/result-cards.ts';
 import { searchCardWindow } from '../modules/search/card-window.ts';
+import { readRankedCatalogue, RANKED_CATALOGUE_COST } from '../modules/search/ranked.ts';
 import { withSearchGraphSnapshot } from '../modules/search/snapshot.ts';
 import { MAX_SEARCH_RESPONSE_BYTES } from '../modules/work/search-readiness.ts';
 import { assertPublicTextReady } from '../modules/work/search-readiness.ts';
@@ -36,10 +37,15 @@ import { querySearchFields, normalizedSearchText, SEARCH_FIELD_COST, fenceSearch
 import { workRead } from '../modules/work/read-session.ts';
 import { readName, readAvatar } from '../modules/work/read-contract.ts';
 import { discoveryCredit } from '../modules/discovery/contract.ts';
-import { problemResult, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
+import { problemResult, phraseMatch, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
   unsupportedPublicSearchSelectors, workTypeFilters } from '../api-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+
+/** Adapter discovery consumes the same public operation and its runtime schema. */
+export const capabilities = { '/v1/search/catalogue': { get: { disposition: 'supported',
+  mcp: { tool: 'search_catalogue', title: 'Search the catalogue',
+    description: 'Find public Works by a phrase in selected text. Results are ranked and continue with a cursor; counts state their precision. An optional Realm restricts results to its adoptions.' } } } } as const;
 
 const groupedNative = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const groupedReference = t.String({ pattern: '^https?://[^\\s<>"{}|\\\\^`]{1,2040}$' });
@@ -191,6 +197,50 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
   }
   return new Elysia()
     .use(websocket({ sendPings: false }))
+    .get('/v1/search/catalogue', {
+      query: t.Object({ q: t.String({ minLength: 2, maxLength: 80 }),
+        language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$', maxLength: 35 })),
+        author: t.Optional(groupedNative), realm: t.Optional(groupedNative),
+        limit: t.Optional(t.Integer({ minimum: 1, maximum: RANKED_CATALOGUE_COST.pageSize })),
+        cursor: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
+      response: { 200: t.Object({ profile: t.Literal('public-catalogue-ranked-v1'),
+        resultGrain: t.Literal('mainVersion'), retrieval: t.Literal('ranked'),
+        context: t.Union([t.Literal('main-version-default'), t.Object({ kind: t.Literal('realm-local'), id: groupedNative })]),
+        count: t.Object({ value: t.Integer({ minimum: 0 }),
+          precision: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }),
+        population: t.Integer({ minimum: 0 }), results: t.Array(phraseMatch, { maxItems: RANKED_CATALOGUE_COST.pageSize }),
+        next: t.Nullable(t.String({ maxLength: 2048 })), indexGeneration: t.String(),
+        sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }) }),
+        400: problemResult(400), 404: problemResult(404), 409: problemResult(409),
+        422: problemResult(422), 503: problemResult(503) },
+    }, async ({ query, request }) => {
+      try {
+        const result = await withStableSearchSnapshot(fuseki, () => withSearchGraphSnapshot(work.environment, async () => {
+          const selection = await presentationSelection(request);
+          const position = await assertPublicTextReady(fuseki, work.environment.lineage);
+          const page = await readRankedCatalogue(work.environment, { phrase: query.q,
+            language: query.language ?? null, author: query.author, realm: query.realm,
+            pageSize: query.limit ?? 20, continuation: query.cursor }, async rows => (await present(selection, {
+              results: rows, total: rows.length, sourcePosition: position,
+              context: query.realm ? { kind: 'realm-local' as const, id: query.realm } : 'main-version-default' as const,
+            })).results, selection?.generation);
+          const types = await phraseWorkTypes(work.environment, page.results, position);
+          const hydrated = await enrichSearchCardPage(work, request, { ...page,
+            results: page.results.map(row => ({ ...row, types: types.get(row.work) ?? [] })) }, query.language);
+          if (Buffer.byteLength(JSON.stringify(hydrated)) > MAX_SEARCH_RESPONSE_BYTES) {
+            throw new PublicQueryBudgetExceeded('Ranked catalogue page exceeds its byte bound');
+          }
+          return hydrated;
+        }));
+        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) {
+        if (error instanceof SearchContinuationRestart) return problem(409, 'search_restart_required',
+          'Public search changed; restart at page one');
+        if (error instanceof InvalidSearchContinuation) return problem(422, 'invalid_search_continuation',
+          'Public search continuation is invalid');
+        return commandError(error);
+      }
+    })
     .get('/v1/search/typeahead', {
       query: t.Object({ prefix: t.String({ minLength: 1, maxLength: 80 }),
         language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLength: 35 })) },

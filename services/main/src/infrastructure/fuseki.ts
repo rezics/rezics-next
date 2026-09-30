@@ -65,6 +65,8 @@ export interface SearchDeltaProof {
   available: boolean;
   ordinal?: string; dataEpoch?: string; sequence?: string; generation?: string;
   writeEpoch?: string; luceneGeneration?: string;
+  /** Startup/rebuild qualification maintained by the native delta writer. */
+  qualifiedPopulation?: string;
   deltas?: { ordinal: string; dataEpoch: string; sequence: string; generation: string;
     writeEpoch: string; changes: { unit: string; before: boolean; after: boolean }[] }[];
 }

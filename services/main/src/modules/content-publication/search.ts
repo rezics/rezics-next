@@ -4,7 +4,7 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance, MAX_PUBLIC_UNITS,
+import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance,
   MAX_SEARCH_RESPONSE_BYTES, PHRASE_HIT_PROBE,
   SearchSnapshotMoved, type PublicTextPosition } from '../work/search-readiness.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
@@ -75,7 +75,7 @@ async function auditContent(env: WorkActivationEnvironment,
         { SELECT DISTINCT ?declaredVariant WHERE { GRAPH ${iri(GRAPHS.current)} {
           ?declaredVariant a rv:ContentVariant ;
             rv:publicSearchEligibilityHead ?declaredEligibility .
-        } } LIMIT ${MAX_PUBLIC_UNITS + 1} }
+        } } }
       } }
       { SELECT (COUNT(DISTINCT ?headVariant) AS ?heads) WHERE {
         { SELECT DISTINCT ?headVariant WHERE {
@@ -85,7 +85,7 @@ async function auditContent(env: WorkActivationEnvironment,
           GRAPH ${iri(GRAPHS.revisions)} { ?headEligibility a rv:ContentSearchEligibilityDecision ;
             rv:variant ?headVariant ; rv:publicationDecision ?headDecision ;
             rv:disclosure rv:Public . }
-        } LIMIT ${MAX_PUBLIC_UNITS + 1} }
+        } }
       } }
       { SELECT (COUNT(DISTINCT ?missingVariant) AS ?missing) WHERE {
         { SELECT DISTINCT ?missingVariant WHERE {
@@ -112,12 +112,12 @@ async function auditContent(env: WorkActivationEnvironment,
           GRAPH ${iri(GRAPHS.revisions)} { ?eligibleEligibility a rv:ContentSearchEligibilityDecision ;
             rv:variant ?eligibleVariant ; rv:publicationDecision ?eligibleDecision ;
             rv:disclosure rv:Public . }
-        } LIMIT ${MAX_PUBLIC_UNITS + 1} }
+        } }
       } }
       { SELECT (COUNT(DISTINCT ?contentUnit) AS ?contentUnits) WHERE {
         { SELECT DISTINCT ?contentUnit WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
           ?contentUnit a rv:MatchUnit ; rv:projection ?contentProjection .
-        } } LIMIT ${MAX_PUBLIC_UNITS + 1} }
+        } } }
       } }
     }`, MAX_SEARCH_RESPONSE_BYTES);
   const rows = result.results?.bindings ?? [];
@@ -136,9 +136,6 @@ async function auditContent(env: WorkActivationEnvironment,
     throw new ContentProjectionUnavailable('Content search population is invalid');
   }
   const [declared, heads, missing, eligible, contentUnits] = counts;
-  if (declared! > MAX_PUBLIC_UNITS || contentUnits! > MAX_PUBLIC_UNITS) {
-    throw new ContentSearchBudgetExceeded('Content search population exceeds admitted bound');
-  }
   if (declared !== heads || missing !== 0 || heads !== eligible || eligible !== contentUnits) {
     throw new ContentProjectionUnavailable('Content publication has unprojected or stale search units');
   }

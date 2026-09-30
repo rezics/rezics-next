@@ -8,6 +8,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.text.DatasetGraphText;
@@ -26,6 +27,9 @@ import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.SimpleCollector;
+import org.apache.lucene.search.ScoreMode;
+import org.apache.lucene.index.LeafReaderContext;
 
 /** Native, transaction-derived public MatchUnit journal. Never accept a caller's unit list. */
 final class SearchDeltaJournal {
@@ -49,6 +53,226 @@ final class SearchDeltaJournal {
     private static final Node DATA_EPOCH = uri(RV + "dataEpoch");
     private static final Node SEQUENCE = uri(RV + "sequence");
 
+    private record Qualification(String epoch, String generation, long ordinal,
+                                 long luceneGeneration, long population, String sequence,
+                                 Map<String, FilteredGraphTextIndex.RankUnit> rankUnits) {}
+    private static final Map<DatasetGraph, Qualification> qualified = new WeakHashMap<>();
+    private static final Map<TextIndexLucene, Qualification> ranked = new WeakHashMap<>();
+
+    static void invalidate(DatasetGraph data) {
+        synchronized (qualified) {
+            qualified.remove(data);
+            synchronized (ranked) { ranked.remove(lucene(data)); }
+        }
+    }
+
+    /** Older restored datasets can predate the native journal. Install only
+     * its empty baseline before traffic; qualification still audits every RDF
+     * and Lucene body. No caller-provided unit inventory is accepted. */
+    static boolean qualifyAtStartup(DatasetGraph data) {
+        data.begin(org.apache.jena.query.ReadWrite.WRITE);
+        try {
+            CommandInvariant.Control position = CommandInvariant.readControl(data);
+            if (position == null || position.textGeneration() == null) return false;
+            if (!data.contains(GRAPH, STATE, ORDINAL, Node.ANY)) initialize(data);
+            data.commit();
+        } finally { data.end(); }
+        return qualify(data);
+    }
+
+    static boolean canTrackCommit(DatasetGraph data) {
+        if (lucene(data) == null) return false;
+        try {
+            var position = CommandInvariant.readControl(data);
+            return position != null && position.textGeneration() != null;
+        } catch (RuntimeException invalidControl) {
+            // Command preflight reports malformed control inside its abort/end
+            // scope; tracking discovery must not strand a writer transaction.
+            return false;
+        }
+    }
+
+    /** A later valid command must not conceal an earlier unjournaled index
+     * mutation. Check the committed reader before the native writer changes it. */
+    static void fenceBeforeWrite(DatasetGraph data) {
+        Qualification baseline;
+        synchronized (qualified) { baseline = qualified.get(data); }
+        if (baseline == null) return;
+        try (DirectoryReader reader = DirectoryReader.open(lucene(data).getDirectory())) {
+            if (reader.getIndexCommit().getGeneration() != baseline.luceneGeneration()) invalidate(data);
+        } catch (IOException | RuntimeException unavailable) { invalidate(data); }
+    }
+
+    /** Startup/rebuild work, never a query-time population admission limit. The
+     * collector streams documents; no top-N inventory can silently truncate it.
+     * Native deltas maintain this baseline between generation qualifications. */
+    static boolean qualify(DatasetGraph data) {
+        invalidate(data);
+        TextIndexLucene index = lucene(data);
+        Qualification baseline = auditGeneration(data, index, true);
+        if (baseline == null) return false;
+        synchronized (qualified) {
+            qualified.put(data, baseline);
+            synchronized (ranked) { ranked.put(index, baseline); }
+        }
+        return true;
+    }
+
+    private static Qualification auditGeneration(DatasetGraph data, TextIndexLucene lucene, boolean captureRankUnits) {
+        boolean ownsTransaction = !data.isInTransaction();
+        if (ownsTransaction) data.begin(org.apache.jena.query.ReadWrite.READ);
+        try {
+            CommandInvariant.Control position = CommandInvariant.readControl(data);
+            if (position == null || position.textGeneration() == null || lucene == null)
+                return null;
+            try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+                IndexSearcher searcher = new IndexSearcher(reader);
+                Set<String> seen = new LinkedHashSet<>();
+                Map<String, FilteredGraphTextIndex.RankUnit> rankUnits = captureRankUnits
+                    ? new java.util.concurrent.ConcurrentHashMap<>() : null;
+                // body:* excludes tokenless bodies, which cannot be qualified.
+                var parser = new org.apache.lucene.queryparser.classic.QueryParser("body", lucene.getQueryAnalyzer());
+                parser.setAllowLeadingWildcard(true);
+                BooleanQuery query = new BooleanQuery.Builder()
+                    .add(parser.parse("body:*"), BooleanClause.Occur.MUST)
+                    .add(new TermQuery(new Term("graph", CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER)
+                    .build();
+                searcher.search(query, new SimpleCollector() {
+                    private LeafReaderContext leaf;
+                    @Override protected void doSetNextReader(LeafReaderContext context) { leaf = context; }
+                    @Override public ScoreMode scoreMode() { return ScoreMode.COMPLETE_NO_SCORES; }
+                    @Override public void collect(int doc) throws IOException {
+                        Document stored = leaf.reader().storedFields().document(doc);
+                        String subject = stored.get("uri");
+                        if (subject == null || !seen.add(subject))
+                            throw new IllegalStateException("duplicate public body document");
+                        Node unit = uri(subject), body = one(data, PUBLIC, unit, BODY);
+                        if (!data.contains(PUBLIC, unit, RDF.type.asNode(), MATCH_UNIT)
+                            || body == null || !body.isLiteral() || stored.getValues("body").length != 1
+                            || !body.getLiteralLexicalForm().equals(stored.get("body"))
+                            || !body.getLiteralLanguage().equalsIgnoreCase(stored.get("lang") == null ? "" : stored.get("lang")))
+                            throw new IllegalStateException("public index differs from RDF");
+                        if (rankUnits != null) {
+                            var facts = FilteredGraphTextIndex.describeUnit(data, subject);
+                            if (facts != null) rankUnits.put(subject, facts);
+                        }
+                    }
+                });
+                long population = 0;
+                var units = data.find(PUBLIC, Node.ANY, RDF.type.asNode(), MATCH_UNIT);
+                try {
+                    while (units.hasNext()) {
+                        Node unit = units.next().getSubject();
+                        if (!unit.isURI() || !seen.contains(unit.getURI())) return null;
+                        population++;
+                    }
+                } finally { org.apache.jena.atlas.iterator.Iter.close(units); }
+                if (population != seen.size()) return null;
+                return new Qualification(position.epoch().getLiteralLexicalForm(),
+                    position.textGeneration().getURI(), ordinal(data),
+                    reader.getIndexCommit().getGeneration(), population, position.sequence().toString(), rankUnits);
+            } catch (IOException | org.apache.lucene.queryparser.classic.ParseException | IllegalStateException ex) {
+                return null;
+            }
+        } finally { if (ownsTransaction) data.end(); }
+    }
+
+    static long auditPopulation(DatasetGraph data, TextIndexLucene lucene) {
+        // A bypass-writer service audits its own snapshot. It must not install
+        // or invalidate the command-only service's generation qualification.
+        Qualification audited = auditGeneration(data, lucene, false);
+        if (audited == null) throw new IllegalStateException("public text generation is unqualified");
+        return audited.population();
+    }
+
+    static Map<String, FilteredGraphTextIndex.RankUnit> rankUnits(DatasetGraph data, TextIndexLucene index, long commit) {
+        Qualification baseline;
+        synchronized (ranked) { baseline = ranked.get(index); }
+        if (baseline == null || baseline.luceneGeneration() != commit) return null;
+        var position = CommandInvariant.readControl(data);
+        return position != null && position.textGeneration() != null
+            && baseline.epoch().equals(position.epoch().getLiteralLexicalForm())
+            && baseline.generation().equals(position.textGeneration().getURI())
+            && baseline.sequence().equals(position.sequence().toString()) ? baseline.rankUnits() : null;
+    }
+
+    private static TextIndexLucene lucene(DatasetGraph data) {
+        if (!(data instanceof DatasetGraphText text)) return null;
+        return text.getTextIndex() instanceof FilteredGraphTextIndex filtered
+            ? filtered.lucene() : text.getTextIndex() instanceof TextIndexLucene direct ? direct : null;
+    }
+
+    /** A request consumes an already-qualified generation and bounded native
+     * deltas. Missing/gapped baselines are unavailable, never an on-demand scan. */
+    static Map<String, Object> qualifiedProof(DatasetGraph data, long since, long writeEpoch) {
+        Qualification baseline;
+        synchronized (qualified) { baseline = qualified.get(data); }
+        if (baseline == null) return Map.of("available", false);
+        Map<String, Object> replay = proof(data, baseline.ordinal(), writeEpoch);
+        if (!Boolean.TRUE.equals(replay.get("available"))
+            || !baseline.epoch().equals(replay.get("dataEpoch"))
+            || !baseline.generation().equals(replay.get("generation"))) return Map.of("available", false);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> deltas = (List<Map<String, Object>>) replay.get("deltas");
+        long population = baseline.population();
+        for (Map<String, Object> delta : deltas) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> changes = (List<Map<String, Object>>) delta.get("changes");
+            for (Map<String, Object> change : changes) {
+                if (Boolean.TRUE.equals(change.get("before"))) population--;
+                if (Boolean.TRUE.equals(change.get("after"))) population++;
+            }
+        }
+        long luceneGeneration = Long.parseLong((String) replay.get("luceneGeneration"));
+        if (population < 0 || deltas.isEmpty() && luceneGeneration != baseline.luceneGeneration())
+            return Map.of("available", false);
+        Map<String, FilteredGraphTextIndex.RankUnit> changedFacts = new LinkedHashMap<>();
+        if (!deltas.isEmpty()) {
+            boolean ownsTransaction = !data.isInTransaction();
+            if (ownsTransaction) data.begin(org.apache.jena.query.ReadWrite.READ);
+            try {
+                var position = CommandInvariant.readControl(data);
+                if (position == null || position.textGeneration() == null
+                    || !position.epoch().getLiteralLexicalForm().equals(replay.get("dataEpoch"))
+                    || !position.sequence().toString().equals(replay.get("sequence"))
+                    || !position.textGeneration().getURI().equals(replay.get("generation")))
+                    return Map.of("available", false);
+                // Only bounded actual journal subjects refresh the public facts.
+                for (var delta : deltas) {
+                    @SuppressWarnings("unchecked")
+                    var changes = (List<Map<String, Object>>) delta.get("changes");
+                    for (var change : changes) {
+                        String unit = (String) change.get("unit");
+                        var facts = FilteredGraphTextIndex.describeUnit(data, unit);
+                        changedFacts.put(unit, facts);
+                    }
+                }
+            } finally { if (ownsTransaction) data.end(); }
+        }
+        Qualification next = new Qualification(baseline.epoch(), baseline.generation(),
+            Long.parseLong((String) replay.get("ordinal")), luceneGeneration, population,
+            (String) replay.get("sequence"), baseline.rankUnits());
+        synchronized (qualified) {
+            // A slower read must not overwrite a later writer's qualification.
+            if (qualified.get(data) == baseline) {
+                for (var change : changedFacts.entrySet()) {
+                    if (change.getValue() == null) baseline.rankUnits().remove(change.getKey());
+                    else baseline.rankUnits().put(change.getKey(), change.getValue());
+                }
+                qualified.put(data, next);
+                synchronized (ranked) { ranked.put(lucene(data), next); }
+            }
+        }
+        Map<String, Object> requested = since == -1 ? replay : proof(data, since, writeEpoch);
+        if (!Boolean.TRUE.equals(requested.get("available"))
+            || !requested.get("ordinal").equals(replay.get("ordinal"))
+            || !requested.get("luceneGeneration").equals(replay.get("luceneGeneration")))
+            return Map.of("available", false);
+        Map<String, Object> response = new LinkedHashMap<>(requested);
+        response.put("qualifiedPopulation", Long.toString(population));
+        return response;
+    }
+
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static Node literal(String value) { return NodeFactory.createLiteralString(value); }
     private static Node entry(long ordinal) { return uri("urn:rezics:search:delta:" + ordinal); }
@@ -57,9 +281,11 @@ final class SearchDeltaJournal {
     }
     private static Node one(DatasetGraph data, Node graph, Node subject, Node predicate) {
         var iter = data.find(graph, subject, predicate, Node.ANY);
-        if (!iter.hasNext()) return null;
-        Node value = iter.next().getObject();
-        return iter.hasNext() ? null : value;
+        try {
+            if (!iter.hasNext()) return null;
+            Node value = iter.next().getObject();
+            return iter.hasNext() ? null : value;
+        } finally { org.apache.jena.atlas.iterator.Iter.close(iter); }
     }
     private static long ordinal(DatasetGraph data) {
         Node node = one(data, GRAPH, STATE, ORDINAL);
@@ -210,7 +436,8 @@ final class SearchDeltaJournal {
     }
 
     static Map<String, Object> proof(DatasetGraph data, long since, long writeEpoch) {
-        data.begin(org.apache.jena.query.ReadWrite.READ);
+        boolean ownsTransaction = !data.isInTransaction();
+        if (ownsTransaction) data.begin(org.apache.jena.query.ReadWrite.READ);
         try {
             long head = ordinal(data);
             CommandInvariant.Control position = CommandInvariant.readControl(data);
@@ -267,7 +494,7 @@ final class SearchDeltaJournal {
             } catch (IOException | IllegalStateException ex) {
                 return Map.of("available", false);
             }
-        } finally { data.end(); }
+        } finally { if (ownsTransaction) data.end(); }
     }
 
     private static void verifySubject(DatasetGraph data, TextIndexLucene lucene,
