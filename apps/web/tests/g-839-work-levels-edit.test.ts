@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { allowedActionsOf, EDIT_ACTION, mayEdit } from '../features/work-levels-edit/authority.ts';
+import { allowedActionsOf, EDIT_ACTION, mayEdit } from '../features/work-levels-edit/allowed.ts';
 import { isRelationKind, relationKinds, viaOf } from '../features/work-levels-edit/kinds.ts';
 import { copyOf, englishMessages, messages } from '../features/work-levels-edit/messages.ts';
 import { editHref, workIdFrom, workIri } from '../features/work-levels-edit/route.ts';

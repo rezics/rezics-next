@@ -10,7 +10,8 @@ import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import { readWorkHeader, reader } from '../work-page/read.ts';
 import { addRealization, addRelease, changeParts, recordRelation } from './actions.ts';
-import { mayEdit, readAllowedActions } from './authority.ts';
+import { mayEdit } from './allowed.ts';
+import { readAllowedActions } from './authority.ts';
 import { EditFrame, NoAuthority } from './edit-frame.tsx';
 import { RealizationEditor, ReleaseEditor, type CoverableRealization } from './editions-editor.tsx';
 import { readKindOptions } from './read.ts';
@@ -88,11 +89,12 @@ export async function EditionsEditPage({ workRef, id, locale, pageMessages }: {
   const own: CoverableRealization[] = realizations.ok ? realizations.data.items.map(item => ({
     id: item.id, revision: item.revision, work: item.work, language: item.language })) : [];
   return <Shell frame={f} locale={locale}>
-    <div className="grid gap-6">
+    <section className="grid gap-6" aria-labelledby="editions-heading">
+      <h2 id="editions-heading" className="font-semibold text-xl">{f.t.editionsHeading}</h2>
       {f.header ? <RealizationEditor work={id} mainVersion={f.header.mainVersion} mainRevision={f.header.mainVersionRevision}
         existing={own} allowed={f.allowed} action={addRealization} t={f.t} /> : null}
       <ReleaseEditor work={id} own={own} allowed={f.allowed} locale={locale} action={addRelease} t={f.t} />
-    </div>
+    </section>
     <section className="grid gap-4" aria-labelledby="current-editions">
       <h2 id="current-editions" className="font-semibold text-xl">{f.t.currentEditions}</h2>
       <EditionsPage workRef={workRef} id={id} query={{}} locale={locale} pageMessages={pageMessages} edit={false} />

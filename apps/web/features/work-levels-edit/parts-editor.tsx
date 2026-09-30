@@ -9,7 +9,7 @@ import { ArrowDownIcon, ArrowUpIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lu
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
-import { mayEdit } from './authority.ts';
+import { mayEdit } from './allowed.ts';
 import type { Copy } from './messages.ts';
 import { useWrite } from './use-write.ts';
 import { invalidField, WriteStatus } from './write-status.tsx';

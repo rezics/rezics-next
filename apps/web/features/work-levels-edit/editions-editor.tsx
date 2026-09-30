@@ -9,7 +9,7 @@ import { BookPlusIcon, LanguagesIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { browserMainApi } from '../api/browser.ts';
-import { mayEdit } from './authority.ts';
+import { mayEdit } from './allowed.ts';
 import type { Copy } from './messages.ts';
 import { workIdFrom } from './route.ts';
 import { useWrite } from './use-write.ts';
@@ -116,7 +116,7 @@ function CoveragePicker({ work, own, locale, t, load, loadWorks, chosen }: {
     {others.map(entry => <div key={entry.work}>{group(t.coverageWorkHeading({ work: entry.work.slice(0, 8) }), entry.items)}</div>)}
     <div className="grid gap-2 rounded-xl border border-border/60 p-3">
       <span className="font-medium text-sm">{t.coverageMore}</span>
-      <WorkPicker name="coverageWork" locale={locale} t={t} load={loadWorks} initial="" />
+      <WorkPicker name="coverageWork" locale={locale} t={t} load={loadWorks} initial="" label={t.coverageMore} />
       <CoverageLoad t={t} onLoad={text => { void add(text); }} />
       {failed === 'none' ? <p role="status" className="text-muted-foreground text-sm">{t.coverageNone}</p> : null}
       {failed === 'error' ? <p role="alert" className="text-destructive text-sm">{t.coverageFailed}</p> : null}

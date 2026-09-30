@@ -6,7 +6,7 @@ import { Input } from '@rezics/ui/input';
 import { NativeSelect } from '@rezics/ui/native-select';
 import { LinkIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { mayEdit } from './authority.ts';
+import { mayEdit } from './allowed.ts';
 import { type KindOption, viaOf } from './kinds.ts';
 import type { Copy } from './messages.ts';
 import { useWrite } from './use-write.ts';

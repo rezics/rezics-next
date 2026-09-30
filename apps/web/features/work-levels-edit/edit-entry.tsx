@@ -2,7 +2,8 @@ import { buttonVariants } from '@rezics/ui/button';
 import { PencilIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
-import { mayEdit, readAllowedActions } from './authority.ts';
+import { mayEdit } from './allowed.ts';
+import { readAllowedActions } from './authority.ts';
 import { copyOf } from './messages.ts';
 import { type EditSection, editHref } from './route.ts';
 
