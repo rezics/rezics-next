@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
-import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
+import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
 import { activateTextContribution, textContributionDigest } from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest } from '../../../services/main/src/modules/contribution/publish.ts';
@@ -12,6 +12,9 @@ import { selectMainDefault, mainSelectionDigest } from '../../../services/main/s
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
 import { selectRealmLocal, realmSelectionDigest } from '../../../services/main/src/modules/work/select-realm.ts';
 import { queryPublicMainTitleBody } from '../../../services/main/src/modules/work/search-multifield.ts';
+import { CompositionConflict } from '../../../services/main/src/modules/structure/change.ts';
+import { structureProfileFor } from '../../../services/main/src/modules/structure/profiles.ts';
+import { readCompositionHeader } from '../../../services/main/src/modules/structure/graph.ts';
 import { queryPublicMainPhrase } from '../../../services/main/src/modules/work/search-public.ts';
 
 interface Work { work: string; mainVersion: string }
@@ -165,6 +168,24 @@ test('G-830: Index compositions retain local numbering, publication order, repla
     expect((await parts(gt, `&parent=${encodeURIComponent(grouped!.occurrences[0]!)}`)).parts[0]).toMatchObject({
       occurrence: firstGenesis.occurrence, work: firstGenesis.work, displayLabel: '1', inclusion: 'required' });
 
+    // Leading and trailing private uses cannot turn limit=1 into a hidden-item counter.
+    for (const work of [original, gt]) await f.accessPool.query(
+      'DELETE FROM access.permission_grant WHERE scope_id=$1', [`work:read:${work.work}`]);
+    const onlyDisclosed = await parts(overall, '&limit=1');
+    expect(onlyDisclosed.parts.map(item => item.work)).toEqual([nt.work]);
+    expect(onlyDisclosed.next).toBeNull();
+    expect(JSON.stringify(onlyDisclosed)).not.toContain(whole.occurrences[0]!);
+    expect(JSON.stringify(onlyDisclosed)).not.toContain(whole.occurrences[2]!);
+    const noWholes = await f.json<{ wholes: unknown[]; next: string | null }>(
+      await f.call('GET', `${wholePath}&limit=1`), 200);
+    expect(noWholes).toMatchObject({ wholes: [], next: null });
+    await f.grant(`work:read:${gt.work}`, 'work.read');
+    const oneWhole = await f.json<{ wholes: Array<{ work: string }>; next: string | null }>(
+      await f.call('GET', `${wholePath}&limit=1`), 200);
+    expect(oneWhole.wholes.map(item => item.work)).toEqual([gt.work]);
+    expect(oneWhole.next).toBeNull();
+    await f.grant(`work:read:${original.work}`, 'work.read');
+
     // Revoking one target withholds its whole occurrence, its label and all total/ordinal hints.
     await f.accessPool.query('DELETE FROM access.permission_grant WHERE scope_id=$1', [`work:read:${repeatedWork.work}`]);
     const privatePage = await parts(original);
@@ -177,6 +198,15 @@ test('G-830: Index compositions retain local numbering, publication order, repla
     const privateRaw = await f.json<{ occurrences: unknown[] }>(await f.call('GET', `/v1/compositions/${shortId(completed.structure)}${query}`), 200);
     expect(privateRaw).not.toHaveProperty('placementCount');
     expect(JSON.stringify(privateRaw)).not.toContain(repeatedWork.work);
+    const disclosedParts: Part[] = [];
+    let disclosedAfter: string | null = null;
+    do {
+      const page = await parts(original, `&limit=1${disclosedAfter ? `&after=${encodeURIComponent(disclosedAfter)}` : ''}`);
+      expect(page.parts).toHaveLength(1);
+      disclosedParts.push(...page.parts);
+      disclosedAfter = page.next;
+    } while (disclosedAfter);
+    expect(disclosedParts.map(item => item.occurrence)).toEqual(reordered.parts.slice(0, -1).map(item => item.occurrence));
     const links = await f.env.fuseki.query(`SELECT ?part ?parent WHERE { GRAPH ${iri(GRAPHS.current)} {
       VALUES ?part { ${[...before.parts.map(item => item.work!), original.work, nt.work, gt.work].map(iri).join(' ')} }
       ?part <https://schema.org/isPartOf> ?parent } }`);
@@ -269,4 +299,63 @@ test('G-830: a composed volume stays discoverable in multifield search, public s
     expect((await f.env.fuseki.query(`SELECT ?parent WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(volume.work)} <https://schema.org/isPartOf> ?parent } }`)).results?.bindings).toEqual([]);
   } finally { await f.close(); }
+}, 180_000);
+
+
+test('G-830: Zone restore validates the candidate generation and seals qualifier topology rejections', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
+  const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', `g-830-restore-${randomUUID()}`),
+    'openid work:create work:read space:create zone:edit collection:edit semantic:read');
+  const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!, bucket: Bun.env.MAIN_S3_BUCKET!,
+    region: Bun.env.MAIN_S3_REGION!, accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!,
+    secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix: 'semantic/structure/' });
+  await objects.initialize();
+  (f.env as WorkActivationEnvironment & { structureObjects: S3ImmutableObjects }).structureObjects = objects;
+  const profile = structureProfileFor('zone-navigation'), originalValidation = profile.qualifierValidations;
+  try {
+    await f.grant('space:create:root', 'space.create');
+    const space = await f.json<{ space: string }>(await f.call('POST', '/v1/spaces', {
+      profile: 'space-realm-v1', name: 'Restore mounts', capabilities: ['realm'], actingSubject: f.actor }), 201);
+    const collection = nativeId(), zoneId = nativeId();
+    await f.grant(`collection:edit:${collection}`, 'collection.edit');
+    await f.grant(`semantic:read:${collection}`, 'semantic.read');
+    await f.json(await f.call('POST', '/v1/collections', {
+      collection, name: 'Restored target', disclosure: 'public', actingSubject: f.actor }), 201);
+    await f.grant(`zone:edit:${zoneId}`, 'zone.edit');
+    const zone = await f.json<{ zone: string; navigation: string; revision: string }>(await f.call('POST', '/v1/zones', {
+      zone: zoneId, space: space.space, disclosure: 'public', actingSubject: f.actor }), 201);
+    const mounted = await f.json<Composition>(await f.call('POST', `/v1/zones/${shortId(zone.zone)}/mounts`, {
+      expectedHead: zone.revision, collection, routeSegment: 'restored', disclosure: 'public', actingSubject: f.actor }), 200);
+    const live = (await readCompositionHeader(f.env, zone.navigation))!;
+    let observedGeneration: string | undefined, rejectCandidate = false;
+    // Owner contract regression: replacement checks use the complete candidate;
+    // the same retained mount in the live generation is not a competing placement.
+    profile.qualifierValidations = async (env, changed, context) => {
+      expect(context?.replacement).toBe(true);
+      expect(context?.structure).toBe(zone.navigation);
+      expect(context?.generation).not.toBe(live.generation);
+      expect(context?.placements).toEqual(changed);
+      expect(changed).toHaveLength(1);
+      expect(changed[0]?.qualifier).toMatchObject({ type: 'zone-mount', routeSegment: 'restored' });
+      observedGeneration = context!.generation;
+      const current = await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+        GRAPH ${iri(GRAPHS.current)} { ?placement a rv:OccurrencePlacement ; rv:generation ${iri(live.generation)} ;
+          rv:qualifier ?qualifier . ?qualifier rv:routeSegment "restored" . } }`);
+      expect(current.boolean).toBe(true);
+      if (rejectCandidate) throw new CompositionConflict('candidate mount conflicts');
+      return await originalValidation?.(env, changed, context) ?? [];
+    };
+    const path = `/v1/compositions/${shortId(zone.navigation)}/restorations`;
+    const restored = await f.json<Composition>(await f.call('POST', path, {
+      expectedHead: mounted.revision, restoredFrom: mounted.revision, actingSubject: f.actor }), 200);
+    expect((await readCompositionHeader(f.env, zone.navigation))!.generation).toBe(observedGeneration!);
+    rejectCandidate = true;
+    const key = randomUUID(), body = { expectedHead: restored.revision, restoredFrom: mounted.revision, actingSubject: f.actor };
+    expect((await f.call('POST', path, body, key)).status).toBe(409);
+    expect((await f.call('POST', path, body, key)).status).toBe(409);
+    const receipts = await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?receipt WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:action "composition.restore" ; rv:reason rv:TopologyConflict } }`);
+    expect(receipts.results?.bindings).toHaveLength(1);
+    expect((await readCompositionHeader(f.env, zone.navigation))!.head).toBe(restored.revision);
+  } finally { profile.qualifierValidations = originalValidation; await f.close(); }
 }, 180_000);

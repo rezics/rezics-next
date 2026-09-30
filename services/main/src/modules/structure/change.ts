@@ -510,10 +510,19 @@ export const orderTree = (objects: ImmutableObjects) =>
 export const pinTree = (objects: ImmutableObjects) =>
   new StructureTree<PinEntry>(objects, 'pin', entry => `${entry.occurrence}\u0001${entry.variant ?? ''}`);
 
-async function validations(env: WorkActivationEnvironment, entries: readonly [string, string][]) {
+async function validations(env: WorkActivationEnvironment, entries: readonly [string, string][],
+  registration?: StructureProfileRegistration) {
   const both = [GRAPHS.current, GRAPHS.revisions];
-  return profileValidations(env.fuseki, PROFILE_ID, entries.map(([shape, focus]) => ({
-    shape: `${COMPOSITION_PROFILE}/${shape}-shape`, focus: [focus], graphs: both })));
+  const ownerProfile = registration?.topologyValidationProfile;
+  const ownerRoles = new Set(['structure', 'placement', 'removed-placement']);
+  const ownerEntries = ownerProfile ? entries.filter(([shape]) => ownerRoles.has(shape)) : [];
+  const commonEntries = entries.filter(entry => !ownerEntries.includes(entry));
+  return [...(commonEntries.length ? await profileValidations(env.fuseki, PROFILE_ID,
+    commonEntries.map(([shape, focus]) => ({
+      shape: `${COMPOSITION_PROFILE}/${shape}-shape`, focus: [focus], graphs: both }))) : []),
+  ...(ownerProfile && ownerEntries.length ? await profileValidations(env.fuseki, ownerProfile,
+    ownerEntries.map(([shape, focus]) => ({
+      shape: `https://rezics.com/definition/${ownerProfile}/${shape}-shape`, focus: [focus], graphs: both }))) : [])];
 }
 
 /** Include the owner when creation changes its current-graph Structure link. */
@@ -521,7 +530,7 @@ export async function structureCreationValidations(env: WorkActivationEnvironmen
   profile: StructureProfileRegistration, owner: string, structure: string,
   generation: string, revision: string): Promise<CommandValidation[]> {
   const common = await validations(env, [
-    ['structure', structure], ['generation', generation], ['revision', revision]]);
+    ['structure', structure], ['generation', generation], ['revision', revision]], profile);
   if (!profile.structurePredicate || !profile.ownerValidation) return common;
   return [...common, ...await profileValidations(env.fuseki, profile.ownerValidation.profile,
     [{ shape: profile.ownerValidation.shape, focus: [owner], graphs: [GRAPHS.current] }])];
@@ -531,7 +540,7 @@ async function projectStageBatch(env: WorkActivationEnvironment, admission: Admi
   input: { stageId: string; structure: string; generation: string; expectedHead: string;
     previousGeneration: string; ordinal: number; generationTriples: string;
     projection: readonly string[]; revisionTriples: string; focus: readonly [string, string][];
-    qualifierChecks?: readonly CommandValidation[] }): Promise<void> {
+    qualifierChecks?: readonly CommandValidation[]; registration?: StructureProfileRegistration }): Promise<void> {
   const receipt = `urn:rezics:receipt:structure-projection:${hash(`${input.stageId}\0${input.ordinal}`)}`;
   const digest = hash(JSON.stringify({ family: 'structure-projection-batch-v1',
     stage: input.stageId, ordinal: input.ordinal, projection: input.projection }));
@@ -571,7 +580,7 @@ async function projectStageBatch(env: WorkActivationEnvironment, admission: Admi
         : `GRAPH ${iri(GRAPHS.current)} { ${iri(input.generation)} rv:structure ${iri(input.structure)} ;
             rv:generationState rv:Staging . }`}
       BIND(?n + 1 AS ?next) }`;
-  const checks = [...await validations(env, input.focus), ...input.qualifierChecks ?? []];
+  const checks = [...await validations(env, input.focus, input.registration), ...input.qualifierChecks ?? []];
   const result = await env.fuseki.commandWithReceipt({ receipt, digest, update,
     validations: checks, deadlineMs: 10_000 });
   if (result.status === 'invalid' || result.status === 'unknown-profile') {
@@ -1267,11 +1276,20 @@ export async function changeComposition(env: WorkActivationEnvironment,
     await sealRejection(env, intent.admission, 'composition.change', 'CompositionTooLarge', headGuard);
     return { terminal: await settled(env, intent.admission), committed: false, occurrences };
   }
+  let qualifierChecks: CommandValidation[];
+  try {
+    qualifierChecks = await profile.qualifierValidations?.(env,
+      [...records.keys()].map(id => w.placements.get(id)!), {
+        structure: header.structure, generation: header.generation, replacement: false }) ?? [];
+  } catch (error) {
+    if (!(error instanceof CompositionConflict)) throw error;
+    await sealRejection(env, intent.admission, 'composition.change', 'TopologyConflict', headGuard);
+    return { terminal: await settled(env, intent.admission), committed: false, occurrences };
+  }
   const committed = await dispatch(env, intent.admission, update, [
-    ...await validations(env, focus),
+    ...await validations(env, focus, profile),
     ...(chapter ? await workMetadataValidations(env, chapter.work, chapter.mainVersion) : []),
-    ...(await profile.qualifierValidations?.(env,
-      [...records.keys()].map(id => w.placements.get(id)!)) ?? []),
+    ...qualifierChecks,
   ]);
   if (!committed && !await readCompositionReceipt(env, intent.admission.id, intent.admission.action)) {
     if (targetInvariant?.rejection) await sealRejection(env, intent.admission, 'composition.change',
@@ -1343,7 +1361,7 @@ export async function changeStructureMeasures(env: WorkActivationEnvironment, in
   }
   const committed = await dispatch(env, intent.admission, update,
     await validations(env, [['structure', header.structure], ['generation', header.generation],
-      ['revision', revision]]));
+      ['revision', revision]], registration));
   if (!committed && !await readCompositionReceipt(env, intent.admission.id, intent.admission.action)) {
     await sealRejection(env, intent.admission, 'structure.measures', 'StaleHead',
       `GRAPH ${iri(GRAPHS.current)} { ${iri(intent.structure)} rv:structureHead ?head }
@@ -1728,6 +1746,17 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   if (!intent.stage && focus.length > 100) {
     throw new CompositionTooLarge('restore requires the staged generation path');
   }
+  const qualifierContext = { structure: header.structure, generation, replacement: true,
+    placements: projectedStates };
+  let qualifierChecks: CommandValidation[];
+  try {
+    // The owner receives the complete candidate, even for batched projection.
+    qualifierChecks = await registration.qualifierValidations?.(env, projectedStates, qualifierContext) ?? [];
+  } catch (error) {
+    if (!(error instanceof CompositionConflict)) throw error;
+    await sealRejection(env, intent.admission, 'composition.restore', 'TopologyConflict', headGuard);
+    return { terminal: await settled(env, intent.admission), committed: false };
+  }
   if (intent.stage) {
     const generationTriples = `${iri(generation)} a rv:StructureGeneration ;
       rv:structure ${iri(header.structure)} ; rv:generationState rv:Staging ;
@@ -1751,13 +1780,19 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       const batchFocus: [string, string][] = ordinal === 0
         ? [['generation', generation], ['revision', revision]] : [];
       batchFocus.push(...focusByRecord.slice(first, last).flat());
+      const qualifierFocus = new Set(projectedStates.slice(first, last).flatMap(state => {
+        const projected = registration.projectQualifier?.(state, generation);
+        return projected ? [projected.iri] : [];
+      }));
       await projectStageBatch(env, intent.admission, { stageId: intent.stage.id,
         structure: header.structure, generation, expectedHead: intent.expectedHead,
         previousGeneration: header.generation, ordinal,
         generationTriples: ordinal === 0 ? generationTriples : '',
         revisionTriples: ordinal === 0 ? candidateRevisionTriples : '',
-        projection: batchProjection, focus: batchFocus,
-        qualifierChecks: await registration.qualifierValidations?.(env, projectedStates.slice(first, last)) });
+        projection: batchProjection, focus: batchFocus, registration,
+        qualifierChecks: qualifierChecks.map(check => ({ ...check,
+          focus: check.focus.filter(value => qualifierFocus.has(value)),
+        })).filter(check => check.focus.length > 0) });
       checkpoint = await intent.stage.onProjectionBatch(ordinal);
     }
   }
@@ -1799,8 +1834,9 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       ${headGuard}
       GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:selectedGeneration ${iri(header.generation)} .
-        ${iri(header.generation)} rv:generationState rv:Active .
-        ${targets.map((target, index) => `${iri(target)} rv:mainVersion ?main${index} .`).join('\n')} }
+        ${iri(header.generation)} rv:generationState rv:Active . }
+      ${targets.map((target, index) => `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(target)} ?targetProperty${index} ?targetValue${index} . } }`).join('\n')}
       ${stageGuard}
       ${targetInvariant?.guard ?? ''}
       ${intent.stage ? `GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:StructureRevision ;
@@ -1810,8 +1846,8 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       BIND(?n + 1 AS ?next) }`;
   const finalFocus: [string, string][] = [['structure', header.structure],
     ['generation', generation], ['generation', header.generation], ['revision', revision]];
-  const checks = [...await validations(env, intent.stage ? finalFocus : focus),
-    ...(!intent.stage ? await registration.qualifierValidations?.(env, projectedStates) ?? [] : [])];
+  const checks = [...await validations(env, intent.stage ? finalFocus : focus, registration),
+    ...(!intent.stage ? qualifierChecks : [])];
   const committed = await dispatch(env, intent.admission, update, checks);
   if (!committed && !await readCompositionReceipt(env, intent.admission.id, intent.admission.action)) {
     if (targetInvariant?.rejection) await sealRejection(env, intent.admission, 'composition.restore',

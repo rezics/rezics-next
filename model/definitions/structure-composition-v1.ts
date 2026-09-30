@@ -6,7 +6,7 @@ const uuid = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const orderKey = '^[a-z0-9]+(-[a-z0-9]+)*$';
 const oneIri = (path: `rv:${string}`) => ({ path, minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' as const });
 
-export const STRUCTURE_ROLES = ['rv:GroupRole', 'rv:ChapterRole', 'rv:PartRole', 'rv:MemberRole', 'rv:MountRole',
+export const STRUCTURE_ROLES = ['rv:GroupRole', 'rv:ChapterRole', 'rv:MemberRole', 'rv:MountRole',
   'rv:NavigationRole', 'rv:IngredientRole', 'rv:StepRole', 'rv:EquipmentRole'] as const;
 
 const position: readonly PropertyDefinition[] = [
@@ -77,7 +77,7 @@ export const structureCompositionProfile = {
         { path: 'rdf:type', hasValue: 'rv:Structure', maxCount: 1 },
         oneIri('rv:structureOf'),
         { path: 'rv:structureProfile', minCount: 1, maxCount: 1,
-          in: ['rv:BookComposition', 'rv:WorkComposition', 'rv:CollectionMembership', 'rv:ZoneNavigation',
+          in: ['rv:BookComposition', 'rv:CollectionMembership', 'rv:ZoneNavigation',
             'rv:WikiNavigation', 'rv:RecipeComposition'] },
         { path: 'rv:structureHead', minCount: 1, maxCount: 1, class: 'rv:StructureRevision' },
         { path: 'rv:selectedGeneration', minCount: 1, maxCount: 1, class: 'rv:StructureGeneration' },

@@ -204,7 +204,6 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
     const pins: Awaited<ReturnType<typeof readCompositionSeal>>['pins'] = [];
     let cursor: string | undefined;
     let coverage: 'complete' | 'partial' | undefined;
-    let unavailableCount: number | undefined;
     let revision: string | undefined;
     do {
       let page: Awaited<ReturnType<typeof readCompositionSeal>>;
@@ -216,19 +215,17 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
         throw error;
       }
       pinned(page.sourcePosition, selection.expectedPosition, deps.env.lineage.dataEpoch, 'composition seal');
-      if (coverage !== undefined && (coverage !== page.coverage
-        || unavailableCount !== page.unavailableCount || revision !== page.structureRevision)) {
+      if (coverage !== undefined && (coverage !== page.coverage || revision !== page.structureRevision)) {
         throw new ExportStale('composition seal pages differ');
       }
       coverage = page.coverage;
-      unavailableCount = page.unavailableCount;
       revision = page.structureRevision;
       pins.push(...page.pins);
       if (pins.length > 255) throw new InvalidExportPlan('composition seal exceeds export member limit');
       cursor = page.next ?? undefined;
     } while (cursor);
     const rootData = { structure: selection.structure, seal: selection.reference,
-      structureRevision: revision!, coverage: coverage!, unavailableCount: unavailableCount!,
+      structureRevision: revision!, coverage: coverage!,
       exportActor: actingSubject };
     const position = selection.expectedPosition;
     const root: VerifiedExportMember = { sourceOwner: 'graph', sourceNamespace: 'product',
@@ -247,7 +244,7 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
         ? 'private_dependency' as const : 'unavailable' as const, path: '/target',
         detail: { availability: pin.unavailable } }] : []);
     if (coverage === 'partial' && !residuals.length) residuals.push({ memberOrdinal: 1,
-      kind: 'unavailable', path: '/coverage', detail: { unavailableCount } });
+      kind: 'unavailable', path: '/coverage', detail: { coverage } });
     return planFromOwner({ targetProfile: 'rezics-composition-v1', useScope, members,
       residuals }, deps.rights);
   }

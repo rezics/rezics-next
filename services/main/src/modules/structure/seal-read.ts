@@ -3,7 +3,8 @@ import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activat
 import { checkStructureSealManifest, InvalidStructureObject, type PinEntry } from './format.ts';
 import { pinTree, structureObjects } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID } from './graph.ts';
-import { StructureObjectCorrupt, StructureObjectUnavailable, newCost, type TreeCost } from './tree.ts';
+import { StructureObjectCorrupt, StructureObjectUnavailable, newCost } from './tree.ts';
+import { decodeReadCursor, encodeReadCursor } from '../work/read-session.ts';
 
 export interface VisiblePin {
   occurrence: string;
@@ -18,11 +19,9 @@ export interface CompositionSealPage {
   seal: string;
   structureRevision: string;
   coverage: 'complete' | 'partial';
-  unavailableCount: number;
   pins: VisiblePin[];
   next: string | null;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
-  cost: TreeCost;
 }
 
 /** Retained fixed dependency reads never follow today's publication head. */
@@ -32,7 +31,7 @@ export async function readCompositionSeal(env: WorkActivationEnvironment, input:
 }): Promise<CompositionSealPage> {
   if (!NATIVE_ID.test(input.structure) || !NATIVE_ID.test(input.seal)
     || !Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100
-    || input.after && (input.after.length > 512 || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}\u0001/.test(input.after))) {
+    || input.after && input.after.length > 2048) {
     throw new CompositionUnavailable('invalid composition seal page');
   }
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?revision ?manifest ?coverage
@@ -74,17 +73,29 @@ export async function readCompositionSeal(env: WorkActivationEnvironment, input:
   const cost = newCost();
   cost.pagesRead++;
   const key = (pin: PinEntry) => `${pin.occurrence}\u0001${pin.variant ?? ''}`;
-  const ordered = await pinTree(objects).range(manifest.pins,
-    input.after ? `${input.after}\u0000` : '', '\uffff', input.limit + 1, cost);
-  const page = ordered.slice(0, input.limit);
-  const pins: VisiblePin[] = [];
-  for (const pin of page) {
-    pins.push(await input.canReadTarget(pin.target)
-      ? pin : { occurrence: pin.occurrence, unavailable: 'undisclosed' });
+  const position = { dataEpoch: value('epoch')!, sequence: value('sequence')! };
+  const binding = { structure: input.structure, seal: input.seal };
+  let after: string | undefined;
+  try { after = decodeReadCursor(input.after, binding, position)?.after; }
+  catch { throw new CompositionUnavailable('composition seal cursor is invalid'); }
+  const pins: PinEntry[] = [];
+  const access = new Map<string, boolean>();
+  while (true) {
+    const ordered = await pinTree(objects).range(manifest.pins,
+      after ? `${after}\u0000` : '', '\uffff', 101, cost);
+    for (const pin of ordered) {
+      if (!access.has(pin.target)) access.set(pin.target, await input.canReadTarget(pin.target));
+      if (access.get(pin.target)) pins.push(pin);
+      if (pins.length > input.limit) break;
+    }
+    if (pins.length > input.limit || ordered.length < 101) break;
+    after = key(ordered.at(-1)!);
   }
+  const hasNext = pins.length > input.limit;
+  pins.splice(input.limit);
   return { structure: input.structure, seal: input.seal,
-    structureRevision: manifest.structureRevision, coverage, unavailableCount: manifest.unavailableCount,
-    pins, next: ordered.length > input.limit ? key(page.at(-1)!) : null,
+    structureRevision: manifest.structureRevision, coverage,
+    pins, next: hasNext ? encodeReadCursor(binding, position, key(pins.at(-1)!)) : null,
     sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! },
-    cost };
+  };
 }

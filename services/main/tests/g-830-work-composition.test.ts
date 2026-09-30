@@ -1,11 +1,16 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
-import { checkedOperations, compositionChangeDigest } from '../src/modules/structure/change.ts';
+import { checkedOperations, compositionChangeDigest, pinTree, structureCreationValidations } from '../src/modules/structure/change.ts';
 import { checkOccurrenceRecord, OccurrenceRecord, WorkCompletion } from '../src/modules/structure/format.ts';
 import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { projectWorkPart, invalidWorkTargets, workTargetGuard } from '../src/modules/composition/structure-profile.ts';
 import { WORK_COMPOSITION_READ_COST } from '../src/modules/composition/read.ts';
+import { readCompositionSeal } from '../src/modules/structure/seal-read.ts';
+import { newCost } from '../src/modules/structure/tree.ts';
+import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import lock from '../../../model/accepted/profiles/structure-work-composition-v1.json';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -73,4 +78,54 @@ test('G-830: ancestry costs one bounded query, retains a transactional guard and
   expect(guarded.guard).toContain('FILTER NOT EXISTS');
   expect(guarded.rejection).toContain('FILTER EXISTS');
   expect(Number(WORK_COMPOSITION_READ_COST.candidateProbe)).toBe(WORK_COMPOSITION_READ_COST.page + 1);
+});
+
+
+test('G-830: creation validates the owner Structure shape and pins the generated profile lock', async () => {
+  const env = { fuseki: { commandHealth: async () => ({ profiles: Object.fromEntries(
+    Object.entries(profileRegistry).map(([id, profile]) => [id, profile.sha256])) }) } } as unknown as WorkActivationEnvironment;
+  const structure = id();
+  const checks = await structureCreationValidations(env, structureProfileFor('work-composition'), id(), structure, id(), id());
+  expect(checks.find(check => check.focus.includes(structure))).toMatchObject({
+    profile: 'structure-work-composition-v1',
+    shape: 'https://rezics.com/definition/structure-work-composition-v1/structure-shape' });
+  expect(lock).toEqual({ sha256: profileRegistry['structure-work-composition-v1'].sha256 });
+});
+
+test('G-830: seals page disclosed pins only and reveal no private occurrence IDs or counts', async () => {
+  const retained = new Map<string, Uint8Array>();
+  const objects: ImmutableObjects = { put: async bytes => {
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    retained.set(digest, bytes); return digest;
+  }, get: async digest => retained.get(digest)! };
+  const structure = id(), seal = id(), revision = id(), epoch = randomUUID();
+  const pins = Array.from({ length: 225 }, (_, index) => ({
+    occurrence: `https://rezics.com/id/00000000-0000-0000-0000-${String(index).padStart(12, '0')}`,
+    target: id(), unavailable: 'missing' as const }));
+  const cost = newCost(), tree = pinTree(objects);
+  const root = await tree.apply(await tree.empty(cost), new Map(pins.map(pin => [`${pin.occurrence}\u0001`, pin])), cost);
+  const digest = await objects.put(new TextEncoder().encode(JSON.stringify({
+    format: 'rezics-structure-seal-v1', structure, structureRevision: revision,
+    structureManifest: `sha256:${'a'.repeat(64)}`, pins: root, coverage: 'partial', unavailableCount: pins.length,
+    model: 'https://rezics.com/definition/structure-composition-v1' })));
+  const binding = (value: string) => ({ type: 'literal', value });
+  const env = { structureObjects: objects, fuseki: { query: async () => ({ results: { bindings: [{
+    revision: binding(revision), manifest: binding(`urn:rezics:sha256:${digest}`),
+    coverage: binding('https://rezics.com/vocab/Partial'), unavailable: binding(String(pins.length)),
+    epoch: binding(epoch), sequence: binding('3') }] } }) } } as unknown as WorkActivationEnvironment;
+  const canReadTarget = async (target: string) => [pins[103]!.target, pins[203]!.target].includes(target);
+  const first = await readCompositionSeal(env, { structure, seal, limit: 1, canReadTarget });
+  expect(first.pins).toEqual([pins[103]!]);
+  expect(first.next).not.toBeNull();
+  const last = await readCompositionSeal(env, { structure, seal, limit: 1, canReadTarget, after: first.next! });
+  expect(last.pins).toEqual([pins[203]!]);
+  expect(last.next).toBeNull();
+  for (const page of [first, last]) {
+    expect(page).not.toHaveProperty('unavailableCount');
+    expect(page).not.toHaveProperty('cost');
+    for (const hidden of pins.filter((_, index) => index !== 103 && index !== 203)) expect(JSON.stringify(page)).not.toContain(hidden.occurrence);
+  }
+  const empty = await readCompositionSeal(env, { structure, seal, limit: 1, canReadTarget: async () => false });
+  expect(empty.pins).toEqual([]);
+  expect(empty.next).toBeNull();
 });

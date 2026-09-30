@@ -168,7 +168,9 @@ test('BOOK03: an exact composition seal retains its selected Content revision', 
   expect(afterPublication.pins).toEqual(first.pins);
   const hidden = await readCompositionSeal(env, { structure, seal, limit: 10,
     canReadTarget: async () => false });
-  expect(hidden.pins).toEqual([{ occurrence, unavailable: 'undisclosed' }]);
+  expect(hidden.pins).toEqual([]);
+  expect(hidden.next).toBeNull();
+  expect(hidden).not.toHaveProperty('unavailableCount');
 });
 
 let state = '';

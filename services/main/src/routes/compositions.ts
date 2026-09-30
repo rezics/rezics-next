@@ -92,7 +92,7 @@ const pageResult = t.Object({ structure: ref, owner: ref, component: ref, work: 
   predecessor: t.Nullable(ref), placementCount: t.Optional(t.Integer()), completion: t.Optional(completion),
   occurrences: t.Array(occurrence),
   next: t.Nullable(t.String()), sourcePosition,
-  cost: t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer() }) });
+  cost: t.Optional(t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer() })) });
 const writeResponses = { 200: writeResult, 201: writeResult, 202: pendingOperation,
   400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500),
@@ -100,7 +100,8 @@ const writeResponses = { 200: writeResult, 201: writeResult, 202: pendingOperati
 const readResponses = { 200: pageResult, ...authorizedReadProblems };
 function disclosedPage(page: CompositionPage) {
   if (!page.completion) return page;
-  const { placementCount: _count, ...disclosed } = page;
+  // Scan costs depend on hidden membership and stay internal to the read.
+  const { placementCount: _count, cost: _cost, ...disclosed } = page;
   return disclosed;
 }
 export const openApiOperations = {
@@ -117,12 +118,12 @@ export const openApiOperations = {
   '/v1/compositions/{id}/refreshes': { post: { bearer: true, idempotencyKey: true } },
 } as const;
 const sealPageResult = t.Object({ structure: ref, seal: ref, structureRevision: ref,
-  coverage: t.Union([t.Literal('complete'), t.Literal('partial')]), unavailableCount: t.Integer(),
+  coverage: t.Union([t.Literal('complete'), t.Literal('partial')]),
   pins: t.Array(t.Object({ occurrence: ref, target: t.Optional(t.String()),
     variant: t.Optional(t.String()), revision: t.Optional(t.String()),
     unavailable: t.Optional(t.Union([t.Literal('erased'), t.Literal('withdrawn'),
       t.Literal('undisclosed'), t.Literal('missing')])) })), next: t.Nullable(t.String()),
-  sourcePosition, cost: t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer() }) });
+  sourcePosition });
 
 function key(request: Request): string | null {
   const value = request.headers.get('idempotency-key');
@@ -544,7 +545,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
     })
     .get('/v1/compositions/:id/seals/:seal', {
       params: t.Object({ id: groupUuid, seal: groupUuid }),
-      query: t.Object({ actingSubject: ref, after: t.Optional(t.String({ maxLength: 512 })),
+      query: t.Object({ actingSubject: ref, after: t.Optional(t.String({ maxLength: 2048 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
       { additionalProperties: false }),
       response: { 200: sealPageResult, ...authorizedReadProblems },

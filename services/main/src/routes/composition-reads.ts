@@ -25,11 +25,9 @@ const parts = t.Object({ resource: ref, mainVersion: ref, structure: ref, revisi
     labels: t.Array(t.Object({ value: t.String(), language: t.String() })),
     displayLabel: t.Optional(t.String()), inclusion: t.Optional(t.Union([
       t.Literal('required'), t.Literal('optional'), t.Literal('extra')])) })),
-  next: t.Nullable(t.String()), sourcePosition: position,
-  cost: t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer() }) });
+  next: t.Nullable(t.String()), sourcePosition: position });
 const wholes = t.Object({ resource: ref, wholes: t.Array(t.Object({ ...identity, work: ref,
-  mainVersion: ref, structure: ref })), next: t.Nullable(t.String()), sourcePosition: position,
-  cost: t.Object({ graphQueries: t.Integer() }) });
+  mainVersion: ref, structure: ref })), next: t.Nullable(t.String()), sourcePosition: position });
 const errors = { ...authorizedReadProblems, 409: problemResult(409), 422: problemResult(422) };
 const failure = (error: unknown) => {
   if (error instanceof CompositionUnavailable) return problem(404, 'composition_unavailable', 'Composition is unavailable');

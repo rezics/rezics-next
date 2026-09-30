@@ -143,12 +143,14 @@ reports "caught up with available material", "finished the published parts",
 ratings stay separate from its volumes' ratings; a derived statistic, if shown,
 states its formula and denominator.
 
-Missing today: general series membership and order, series pages and cross-level
-projections, release coverage beyond one Work, fragment correspondence and
-progress outside book composition (`services/main/src/routes/progress.ts`).
-Search hides results that are `isPartOf` another Work
-(`services/main/src/modules/work/search-multifield.ts`), which would hide
-volumes once they are Works. The M6 series briefs (G-602, G-608, G-609, G-611,
+Work-level membership and publication order now use the `work-composition`
+Structure profile, with local labels, inclusion and evidenced completion.
+The resource `parts` and `wholes` APIs traverse these levels while withholding
+unreadable uses. Membership does not write `schema:isPartOf`, so composed
+volumes remain discoverable in search, author listings and Zone browse.
+Missing today: series pages, release coverage beyond one Work, fragment
+correspondence and progress outside book composition
+(`services/main/src/routes/progress.ts`). The M6 series briefs (G-602, G-608, G-609, G-611,
 G-612) become adapters over the shared Composed, Versioned and Trackable
 capabilities, never a book-only store. The SAO and Index franchises and a set of
 works whose web and published versions diverge are the acceptance fixtures.

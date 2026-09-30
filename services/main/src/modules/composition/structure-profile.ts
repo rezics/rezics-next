@@ -75,6 +75,7 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   authorizeTarget: ({ access, principal, actingSubject, target }) => access.canReadWork(principal, actingSubject, target),
   targetGuard: workTargetGuard, withholdUnreadableTargets: true,
   roles: ['group', 'part'], targetRoles: ['part'], selectionRequiredRoles: [],
+  topologyValidationProfile: 'structure-work-composition-v1',
   projectQualifier: projectWorkPart, hydrateQualifier: hydrateWorkPart,
   qualifierValidations: async (env, changed) => {
     const focus = changed.filter(state => (state.active || state.tombstone) && state.qualifier?.type === 'work-part')

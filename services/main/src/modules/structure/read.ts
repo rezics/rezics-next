@@ -214,28 +214,46 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
   if (after && (!after.startsWith(prefix) || after.length > 512)) {
     throw new CompositionUnavailable('composition cursor is invalid');
   }
-  const ordered = await orderTree(objects).range(manifest.order,
-    after ? `${after}\u0000` : prefix, `${parent}\u0002`, input.limit + 1, cost);
-  const page = ordered.slice(0, input.limit);
-  const found = await recordTree(objects).lookup(manifest.records,
-    page.map(entry => entry.occurrence), cost);
   const occurrences: OccurrenceRecord[] = [];
-  for (const entry of page) {
-    const record = found.get(entry.occurrence);
-    if (!record || record.state !== 'active' || record.parent !== parent
-      || record.segmentKey !== entry.segmentKey || record.orderKey !== entry.orderKey) {
-      throw new StructureObjectCorrupt('composition order and occurrence records differ');
+  // A continuation means another disclosed item exists, never another raw placement.
+  // Each immutable range/lookup is bounded; the read deadline bounds the full scan.
+  let scanAfter = after;
+  let page: Array<Required<Pick<OccurrenceRecord, 'parent' | 'segmentKey' | 'orderKey'>>> = [];
+  let hasNext = false;
+  const disclosed = profile.withholdUnreadableTargets;
+  const scanLimit = disclosed ? 101 : input.limit + 1;
+  while (true) {
+    const ordered = await orderTree(objects).range(manifest.order,
+      scanAfter ? `${scanAfter}\u0000` : prefix, `${parent}\u0002`, scanLimit, cost);
+    if (!disclosed) { page = ordered.slice(0, input.limit); hasNext = ordered.length > input.limit; }
+    const candidates = disclosed ? ordered : ordered.slice(0, input.limit);
+    const found = await recordTree(objects).lookup(manifest.records,
+      candidates.map(entry => entry.occurrence), cost);
+    for (const entry of candidates) {
+      const record = found.get(entry.occurrence);
+      if (!record || record.state !== 'active' || record.parent !== parent
+        || record.segmentKey !== entry.segmentKey || record.orderKey !== entry.orderKey) {
+        throw new StructureObjectCorrupt('composition order and occurrence records differ');
+      }
+      try { checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
+        profile.selectionRequiredRoles ?? profile.targetRoles); }
+      catch (error) {
+        if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+        throw error;
+      }
+      if (record.target && !isCatalogTarget(profile, record.target)
+        && !await input.canReadTarget(record.target)) {
+        if (!profile.withholdUnreadableTargets) occurrences.push({ ...record, target: undefined, selection: undefined, labels: [] });
+      } else occurrences.push(record);
+      if (disclosed && occurrences.length > input.limit) break;
     }
-    try { checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
-      profile.selectionRequiredRoles ?? profile.targetRoles); }
-    catch (error) {
-      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
-      throw error;
-    }
-    if (record.target && !isCatalogTarget(profile, record.target)
-      && !await input.canReadTarget(record.target)) {
-      if (!profile.withholdUnreadableTargets) occurrences.push({ ...record, target: undefined, selection: undefined, labels: [] });
-    } else occurrences.push(record);
+    if (!disclosed || occurrences.length > input.limit || ordered.length < scanLimit) break;
+    scanAfter = orderTreeKey(ordered.at(-1)!);
+  }
+  if (disclosed) {
+    hasNext = occurrences.length > input.limit;
+    occurrences.splice(input.limit);
+    page = occurrences as Array<Required<Pick<OccurrenceRecord, 'parent' | 'segmentKey' | 'orderKey'>>>;
   }
   let outline: { offset: number; childCounts: Record<string, number>; parentOrdinal?: number } | undefined;
   if (input.outline && !profile.withholdUnreadableTargets) {
@@ -258,7 +276,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     revision, predecessor: value('predecessor') ?? null,
     placementCount: profile.withholdUnreadableTargets ? 0 : manifest.placementCount,
     ...(header.profile === 'work-composition' ? { completion: manifest.completion ?? { status: 'unknown', evidence: [] } } : {}),
-    occurrences, next: ordered.length > input.limit ? (profile.withholdUnreadableTargets
+    occurrences, next: hasNext ? (profile.withholdUnreadableTargets
       ? encodeReadCursor(cursorBinding, cursorPosition, orderTreeKey(page.at(-1)!))
       : orderTreeKey(page.at(-1)!)) : null,
     sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! },

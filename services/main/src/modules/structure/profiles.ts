@@ -57,15 +57,24 @@ export interface StructureProfileRegistration {
   targetRoles: readonly OccurrenceRole[];
   /** Target roles selecting Content require an explicit/follow-context revision policy. */
   selectionRequiredRoles?: readonly OccurrenceRole[];
+  /** Owner shapes replace only Structure/placement checks when extending kernel enums. */
+  topologyValidationProfile?: ProfileId;
   /** An owner projects its qualifier node alongside the common placement. */
   projectQualifier?: (state: PlacementState, generation: string) => {
     iri: string; triples: readonly string[] } | null;
   /** Recover the qualifier on bounded edits of an existing placement. */
   hydrateQualifier?: (env: WorkActivationEnvironment, state: PlacementState) =>
     Promise<OccurrenceRecord['qualifier'] | undefined>;
-  /** Owner profile SHACL checks for its projected qualifier nodes. */
+  /** Owner topology prechecks and SHACL checks for projected qualifier nodes.
+   * Replacements pass all candidate placements, including across stage batches.
+   */
   qualifierValidations?: (env: WorkActivationEnvironment,
-    changed: readonly PlacementState[]) => Promise<CommandValidation[]>;
+    changed: readonly PlacementState[], context?: {
+      structure: string; generation: string;
+      /** A replacement validates its complete candidate, never the live generation. */
+      replacement: boolean;
+      placements?: readonly PlacementState[];
+    }) => Promise<CommandValidation[]>;
   /**
    * Occurrence levels below the Structure, when the owner allows fewer than the shared
    * limit. A group never sits on the last level, where it could hold nothing.
