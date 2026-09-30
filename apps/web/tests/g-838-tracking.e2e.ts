@@ -83,7 +83,9 @@ test('attempts on two devices, series progress and the offered correspondence', 
   test.setTimeout(240_000);
   const { sao, index, spider } = catalogue;
   const volume = sao.volumes[0]!;
-  const [a, b] = await Promise.all([device(browser, info, desktop, at(volume)), device(browser, info, phone, at(volume))]);
+  // One after the other: two sign-ins at once sometimes stall on the Account service.
+  const a = await device(browser, info, desktop, at(volume));
+  const b = await device(browser, info, phone, at(volume));
 
   mark('signed in');
   // Device A starts an attempt on volume 1 in print, then adds the audiobook.
