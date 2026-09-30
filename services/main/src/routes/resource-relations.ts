@@ -4,8 +4,10 @@ import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { readDefinitionByKey, readExactDefinition } from '../modules/relation/change.ts';
 import { readResourceRelations, RELATION_PAGE_COST } from '../modules/relation/traversal.ts';
-import { referenceReader, canReadSemantic } from '../modules/semantic/admitted.ts';
-import { SemanticChangeRejected, SemanticTargetUnavailable } from '../modules/semantic/command.ts';
+import { referenceReader } from '../modules/semantic/admitted.ts';
+import { WorkReadInvalid } from '../modules/work/read-session.ts';
+import { workReadError } from './work-reads.ts';
+import { SemanticChangeRejected, SemanticTargetUnavailable, StaleSemanticHead } from '../modules/semantic/command.ts';
 import { readResourceSummaries } from '../modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../modules/media/store.ts';
 import { readerLanguages } from '../modules/display-language/select.ts';
@@ -29,7 +31,7 @@ const entry = t.Object({ relation: native, kind: t.Union([t.Literal('occurrence'
   targetMainRevision: t.Optional(native), rendering: t.Nullable(relationRenderingSchema), counterparts: t.Array(resourceSummary) });
 
 export const openApiOperations = {
-  '/v1/resources/{resource}/relations': { get: { bearer: true } },
+  '/v1/resources/{resource}/relations': { get: { bearer: false } },
   '/v1/resources/{resource}/derivations': { post: { bearer: true, idempotencyKey: true } },
 } as const;
 
@@ -71,7 +73,7 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
     })
     .get('/v1/resources/:resource/relations', {
       params: t.Object({ resource: groupUuid }),
-      query: t.Object({ actingSubject: native, languages: t.Optional(t.String({ maxLength: 8192 })),
+      query: t.Object({ actingSubject: t.Optional(native), languages: t.Optional(t.String({ maxLength: 8192 })),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: RELATION_PAGE_COST.pageLimit })),
         after: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
       response: { 200: t.Object({ profile: t.Literal('resource-relations-v1'), resource: native,
@@ -80,21 +82,36 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-        const principal = await work.account.verify(request, ['work:read']);
-        const canRead = referenceReader(work.access, principal, query.actingSubject);
+        if (request.headers.has('authorization') && !query.actingSubject) {
+          throw new WorkReadInvalid('actingSubject is required for authenticated reads');
+        }
+        const principal = request.headers.has('authorization')
+          ? await work.account.verify(request, ['work:read']) : null;
+        const actor = principal ? query.actingSubject! : null;
+        const canReadSemantic = (ref: string) => work.access.canReadSemanticResource?.(
+          principal, actor, ref, undefined, fuseki) ?? Promise.resolve(false);
+        const reader = {
+          canReadWork: principal && actor ? (ref: string) => work.access.canReadWork(principal, actor, ref) : undefined,
+          canReadSemantic,
+          ...(work.governance?.store ? { restrictedTitles: work.governance.store.restrictedTitles.bind(work.governance.store) } : {}),
+        };
         const languages = readerLanguages(query.languages, request.headers.get('accept-language'));
+        const summarize = async (resources: string[]) => (await readResourceSummaries(work.environment,
+          work.media?.store, reader, { resources, context: DEFAULT_MEDIA_CONTEXT,
+            language: null, languages, includeCollections: true })).summaries;
         const page = await fusekiReadBudget.run({ signal: AbortSignal.any([request.signal,
           AbortSignal.timeout(RELATION_PAGE_COST.deadlineMs)]), callsLeft: RELATION_PAGE_COST.graphCalls,
           bytesLeft: RELATION_PAGE_COST.graphBytes }, () => readResourceRelations(work.environment, {
-          resource: `https://rezics.com/id/${params.resource}`, languages, limit: query.limit ?? 20, after: query.after, canRead,
-          canReadOccurrence: ref => canReadSemantic(work.access, principal, query.actingSubject, ref),
-          summarize: async resources => (await readResourceSummaries(work.environment, work.media?.store, {
-            canReadWork: ref => work.access.canReadWork(principal, query.actingSubject, ref),
-            canReadSemantic: ref => canReadSemantic(work.access, principal, query.actingSubject, ref),
-            ...(work.governance?.store ? { restrictedTitles: (heads, context) => work.governance!.store.restrictedTitles(heads, context) } : {}),
-          }, { resources, context: DEFAULT_MEDIA_CONTEXT, language: null, languages, includeCollections: true })).summaries,
+          resource: `https://rezics.com/id/${params.resource}`, languages, limit: query.limit ?? 20, after: query.after,
+          canRead: async ref => await canReadSemantic(ref)
+            || (await summarize([ref]))[0]?.status === 'available',
+          canReadOccurrence: canReadSemantic, summarize,
         }));
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return semanticError(error); }
+      } catch (error) {
+        if (error instanceof SemanticChangeRejected || error instanceof SemanticTargetUnavailable
+          || error instanceof StaleSemanticHead) return semanticError(error);
+        return workReadError(error);
+      }
     });
 }

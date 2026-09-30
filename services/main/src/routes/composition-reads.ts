@@ -12,7 +12,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const params = t.Object({ resource: groupUuid });
-const query = t.Object({ actingSubject: ref, parent: t.Optional(ref),
+const query = t.Object({ actingSubject: t.Optional(ref), parent: t.Optional(ref),
   after: t.Optional(t.String({ maxLength: 2048 })),
   limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) }, { additionalProperties: false });
 const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() });
@@ -36,8 +36,8 @@ const failure = (error: unknown) => {
   return workReadError(error);
 };
 export const openApiOperations = {
-  '/v1/resources/{resource}/parts': { get: { bearer: true } },
-  '/v1/resources/{resource}/wholes': { get: { bearer: true } },
+  '/v1/resources/{resource}/parts': { get: { bearer: false } },
+  '/v1/resources/{resource}/wholes': { get: { bearer: false } },
 } as const;
 
 export function compositionReadRoutes(work: MainWorkDependencies) {
@@ -48,7 +48,7 @@ export function compositionReadRoutes(work: MainWorkDependencies) {
       { headers: { 'cache-control': 'private, no-store' } }); }
       catch (error) { return failure(error); }
     })
-    .get('/v1/resources/:resource/wholes', { params, query: t.Object({ actingSubject: ref,
+    .get('/v1/resources/:resource/wholes', { params, query: t.Object({ actingSubject: t.Optional(ref),
       after: query.properties.after, limit: query.properties.limit }, { additionalProperties: false }),
     response: { 200: wholes, ...errors } }, async ({ request, params, query }) => {
       try { return Response.json(await workRead(work, request, { actingSubject: query.actingSubject },

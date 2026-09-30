@@ -2,8 +2,7 @@ import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMissing, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { readCompositionPage } from '../structure/read.ts';
-import type { StructureProfileRegistration } from '../structure/profiles.ts';
-import { structureProfileFor, canReadStructureTarget } from '../structure/profiles.ts';
+import { canReadCompositionWork } from './disclosure-read.ts';
 
 /** Responses contain at most 100 disclosed uses and one disclosed lookahead.
  * Each scan batch is bounded to 101 candidates; hidden batches are skipped under
@@ -20,18 +19,11 @@ function checkLimit(limit: number) {
   }
 }
 
-async function canRead(session: WorkReadSession, profile: StructureProfileRegistration, target: string) {
-  return Boolean(session.principal && session.options.actingSubject
-    && await canReadStructureTarget(profile, { access: session.deps.access, principal: session.principal,
-      actingSubject: session.options.actingSubject, target }));
-}
-
 export async function readWorkParts(session: WorkReadSession, resource: string, input: {
   parent?: string; after?: string; limit: number;
 }) {
   checkLimit(input.limit);
-  const profile = structureProfileFor('work-composition');
-  if (!await canRead(session, profile, resource)) throw new WorkReadMissing('Work is unavailable');
+  if (!await canReadCompositionWork(session, resource)) throw new WorkReadMissing('Work is unavailable');
   const rows = await session.query(`SELECT ?structure ?main WHERE { GRAPH ${iri(GRAPHS.current)} {
     ${iri(resource)} a <https://schema.org/CreativeWork> ; rv:mainVersion ?main .
     ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile rv:WorkComposition .
@@ -44,7 +36,7 @@ export async function readWorkParts(session: WorkReadSession, resource: string, 
     structure: rows[0].structure.value, limit: input.limit,
     ...(input.parent ? { parent: input.parent } : {}), ...(input.after ? { after: input.after } : {}),
     canReadTarget: target => {
-      if (!access.has(target)) access.set(target, canRead(session, profile, target));
+      if (!access.has(target)) access.set(target, canReadCompositionWork(session, target));
       return access.get(target)!;
     },
   });
@@ -71,8 +63,7 @@ export async function readWorkWholes(session: WorkReadSession, resource: string,
   after?: string; limit: number;
 }) {
   checkLimit(input.limit);
-  const profile = structureProfileFor('work-composition');
-  if (!await canRead(session, profile, resource)) throw new WorkReadMissing('Work is unavailable');
+  if (!await canReadCompositionWork(session, resource)) throw new WorkReadMissing('Work is unavailable');
   const binding = { resource, kind: 'work-wholes', actor: session.options.actingSubject,
     subject: session.principal?.subject };
   let after = decodeReadCursor(input.after, binding, session.position)?.after;
@@ -99,7 +90,7 @@ export async function readWorkWholes(session: WorkReadSession, resource: string,
       const whole = row.whole?.value;
       if (!whole || !row.main?.value || !row.structure?.value || !row.occurrence?.value
         || !row.segment?.value || !row.order?.value) throw new WorkReadUnavailable('Whole projection is unavailable');
-      if (!access.has(whole)) access.set(whole, await canRead(session, profile, whole));
+      if (!access.has(whole)) access.set(whole, await canReadCompositionWork(session, whole));
       if (access.get(whole)) wholes.push({ work: whole, mainVersion: row.main.value,
         structure: row.structure.value, occurrence: row.occurrence.value,
         segmentKey: row.segment.value, orderKey: row.order.value });
