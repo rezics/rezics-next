@@ -241,6 +241,7 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
       async ids => new Set(ids)))[0];
     if (exactBefore?.status !== 'available') throw new Error('public Content bytes are unavailable');
     expect(exactBefore.serializedJson).toBe(publicBody);
+    await grant(`work:read:${publicWork.work}`, 'work.read');
     await grant(`content:publish:${publicWork.work}`, 'content.publish');
     const publication = await publishAdmittedContent(environment, content,
       verifierAccount, registry, request, {

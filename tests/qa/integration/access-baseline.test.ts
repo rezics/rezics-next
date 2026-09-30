@@ -90,7 +90,7 @@ test('baseline: current verified email enables real Work creation, without SQL g
   } finally { await h.close(); }
 }, 120_000);
 
-test('baseline: discovery, preflight and saved Agent choices expose only current verified member contexts', async () => {
+test('baseline: discovery and preflight require verified membership; saved Agent choices require live authority', async () => {
   const h = await fixture();
   try {
     const contexts = new AccessActingContexts(h.accessPool, h.env);
@@ -108,15 +108,29 @@ test('baseline: discovery, preflight and saved Agent choices expose only current
     await contexts.setPreference(principal, { actingSubject: penName, expectedRevision: null, idempotencyKey: randomUUID() });
     expect((await contexts.discover(principal)).preferredActingSubject).toBe(penName);
     const session = randomUUID();
-    await choices.setMain(principal, { actingSubject: h.subject, expectedRevision: null, idempotencyKey: randomUUID() });
+    const mainChoice = await choices.setMain(principal, { actingSubject: h.subject, expectedRevision: null, idempotencyKey: randomUUID() });
     expect((await choices.readSession(principal, session)).initialActingSubject).toBe(h.subject);
-    await choices.setSession(principal, session, { actingSubject: penName, expectedRevision: null, idempotencyKey: randomUUID() });
+    const sessionChoice = await choices.setSession(principal, session, { actingSubject: penName, expectedRevision: null, idempotencyKey: randomUUID() });
     expect((await choices.readSession(principal, session)).sessionAgent.eligible).toBe(true);
     await h.accountPool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [h.user.id]);
     const current = await h.verifier.verify(bearer(h.token), ['agent:create']);
     expect((await contexts.discover(current)).contexts).toEqual([]);
-    expect((await choices.readSession(current, session)).sessionAgent.eligible).toBe(false);
+    // Identity choices remain usable while the provisioned Agent's live control
+    // mandate survives, even when verified-member task authority is unavailable.
+    expect((await choices.readSession(current, session)).sessionAgent.eligible).toBe(true);
+    expect((await choices.readMain(current)).mainAgent.eligible).toBe(true);
     await expect(contexts.check(current, penName, discovery.authorityEpoch)).rejects.toBeInstanceOf(ActingContextDenied);
+    await h.accessPool.query(`UPDATE access.representation SET active = false, generation = generation + 1
+      WHERE subject_id = $1 AND action = 'agent.control'`, [penName]);
+    expect((await h.accessPool.query('SELECT state FROM access.agent_provision WHERE agent_id = $1',
+      [penName])).rows[0].state).toBe('active');
+    expect((await contexts.discoverAgents(current)).items.map(row => row.actingSubject)).not.toContain(penName);
+    expect((await choices.readSession(current, session)).sessionAgent).toMatchObject({
+      actingSubject: penName, eligible: false });
+    await expect(choices.setSession(current, session, { actingSubject: penName,
+      expectedRevision: sessionChoice.revision, idempotencyKey: randomUUID() })).rejects.toBeInstanceOf(ActingContextDenied);
+    await expect(choices.setMain(current, { actingSubject: penName,
+      expectedRevision: mainChoice.revision, idempotencyKey: randomUUID() })).rejects.toBeInstanceOf(ActingContextDenied);
     await h.accessPool.query('UPDATE access.baseline_member_policy SET active = false, generation = generation + 1');
     expect((await contexts.discover(await h.verified())).contexts).toEqual([]);
   } finally { await h.close(); }

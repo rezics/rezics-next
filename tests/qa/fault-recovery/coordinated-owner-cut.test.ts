@@ -365,6 +365,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     expect(packageOnlyCoverage.tables['pkg.go_sumdb_verification']!.count).toBe('1');
     expect(packageOnlyCoverage.tables['pkg.cargo_resolution']!.count).toBe('3');
     expect(packageOnlyCoverage.tables['pkg.npm_resolution']!.count).toBe('10');
+    await grant(`work:read:${work.work}`, 'work.read');
     await grant(`content:publish:${work.work}`, 'content.publish');
     const published = await publishAdmittedContent(env, content, account, access,
       new Request(request.url, { headers: { authorization: bearer } }), {

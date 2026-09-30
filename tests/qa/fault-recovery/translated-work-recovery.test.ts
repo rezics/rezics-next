@@ -20,7 +20,7 @@ import { reconcileRetainedContributionDraftCreate, reconcileRetainedContribution
   reconcileRetainedMainSelection, reconcileRetainedTranslationLink, reconcileRetainedWorkCreate,
   RetainedEffectConflict } from '../../../services/main/src/modules/work/reconcile-restored.ts';
 import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
-import { createAdmittedTranslationLink, readTranslationLinks,
+import { createAdmittedTranslationLink, readTranslationLinks, TranslationBasisRequired,
   type TranslationLinkInput } from '../../../services/main/src/modules/work/translation-links.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
@@ -147,12 +147,27 @@ test('WORK02/OPS03: isolated graph loss restores exact translated Work links fro
     if (draft.outcome !== 'succeeded' || !draft.contribution || !draft.draftRevision) {
       throw new Error('retained translation draft is unavailable');
     }
+    await grant(`contribution:read:${draft.contribution}`, 'contribution.read');
     await grant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
-    const publication = await publishAdmittedTextContribution(liveEnv, account, access, request,
-      { contribution: draft.contribution, expectedDraftHead: draft.draftRevision,
+    const publicationInput = { contribution: draft.contribution, expectedDraftHead: draft.draftRevision,
         expectedPublicationHead: null, rightsBasis: 'original-contribution',
         disclosure: 'public', actingSubject: actor,
-        idempotencyKey: `publication-${randomUUID()}` });
+        idempotencyKey: `publication-${randomUUID()}` } as const;
+    await expect(publishAdmittedTextContribution(liveEnv, account, access, request,
+      publicationInput)).rejects.toBeInstanceOf(TranslationBasisRequired);
+    // Custody and official-link authority do not establish source authorship.
+    // Seed the native credit used by the paired translation-basis integration
+    // fixture so this recovery tail publishes the author's own translation.
+    const sourceCredit = ID + randomUUID(), sourceCreditRevision = ID + randomUUID();
+    await liveFuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(sourceCredit)} a rv:NativeAgentCredit ;
+        rv:work ${iri(source.work)} ; rv:agent ${iri(actor)} ; schema:roleName "author" ;
+        rv:creditRevision ${iri(sourceCreditRevision)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(sourceCreditRevision)} a rv:NativeAgentCreditRevision ;
+        rv:component ${iri(sourceCredit)} ; rv:work ${iri(source.work)} ; rv:agent ${iri(actor)} ;
+        rv:workRevision ${iri(source.workRevision)} ; schema:roleName "author" . } }`);
+    const publication = await publishAdmittedTextContribution(liveEnv, account, access, request,
+      publicationInput);
     if (publication.outcome !== 'succeeded' || !publication.publicationDecision) {
       throw new Error('retained translation publication is unavailable');
     }

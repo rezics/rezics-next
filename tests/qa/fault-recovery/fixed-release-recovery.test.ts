@@ -121,6 +121,7 @@ test('MODEL01/WORK05/OPS03/LIVE10: graph loss restores the admitted fixed releas
     if (draft.outcome !== 'succeeded' || !draft.contribution || !draft.draftRevision) {
       throw new Error('retained draft creation is unavailable');
     }
+    await grant(`contribution:read:${draft.contribution}`, 'contribution.read');
     await grant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
     const publication = await publishAdmittedTextContribution(live, account, access, request,
       { contribution: draft.contribution, expectedDraftHead: draft.draftRevision,

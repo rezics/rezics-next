@@ -60,7 +60,7 @@ test('LIVE04/LIVE05/MODEL06/OPS03: native credit, field proof and withdrawals su
     await grant(`work:edit:${work.work}`, 'work.edit');
     const mapping = `fixture-${randomUUID().replaceAll('-', '')}-v1`;
     const sourceRecord = randomUUID(), observation = randomUUID(), conversion = randomUUID();
-    const raw = Buffer.from('{"semanticTypes":[]}');
+    const raw = Buffer.from(JSON.stringify({ semanticTypes: work.semanticTypes }));
     const digest = createHash('sha256').update(raw).digest('hex');
     const mappingClient = await pool.connect();
     try {
