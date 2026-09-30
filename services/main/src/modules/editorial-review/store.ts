@@ -78,8 +78,8 @@ export class EditorialReviewStore {
     if (adapter.kind !== kind || ![1,2].includes(adapter.requiredApprovals)) throw new EditorialInvalid('Invalid adapter');
     return adapter;
   }
-  private async begin(client: PoolClient) {
-    await client.query('BEGIN');
+  private async begin(client: PoolClient, snapshot = false) {
+    await client.query(snapshot ? 'BEGIN ISOLATION LEVEL REPEATABLE READ' : 'BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
     await client.query("SET LOCAL idle_in_transaction_session_timeout = '15s'");
@@ -231,7 +231,7 @@ export class EditorialReviewStore {
       if (replay) { await client.query('COMMIT'); return replay; }
       const proposal = rowToProposal(row);
       assertOpenRevision(proposal,await this.revision(client,id,input.revision)); this.pending(await this.application(client,id,row.latest));
-      await requireReview(client,proposal,principal,call.actingSubject);
+      await requireReview(client,proposal,principal,call.actingSubject,call.work.environment.fuseki);
       await this.insertReview(client,id,input.revision,principal,call.actingSubject,input.outcome,input.message);
       await this.event(client,id,input.revision,'reviewed',call.actingSubject);
       const result = { proposal: id,revision: input.revision,outcome: input.outcome,replayed: false };
@@ -309,7 +309,7 @@ export class EditorialReviewStore {
       }
       const proposal = rowToProposal(row), revision = await this.revision(client,id,input.revision);
       assertOpenRevision(proposal,revision);
-      await requireReview(client,proposal,principal,call.actingSubject);
+      await requireReview(client,proposal,principal,call.actingSubject,call.work.environment.fuseki);
       if (input.outcome === 'rejected') {
         await client.query(`INSERT INTO access.editorial_decision (proposal,revision,principal,actor,outcome)
           VALUES ($1,$2,$3,$4,'rejected')`,[id,revision.n,principal,call.actingSubject]);
@@ -322,8 +322,8 @@ export class EditorialReviewStore {
       const applicationId = randomUUID();
       const prospective = input.approve ? { principal,review: { id: applicationId,proposal: id,revision: revision.n,
         reviewer: call.actingSubject,reviewerKey: independenceKey(id,principal),outcome: 'approve' as const,message: input.message,sequence: '0' } } : undefined;
-      const basis = await reviewBasis(client,proposal,adapter.requiredApprovals,prospective);
-      const state = reviewState(proposal,basis.reviews,basis.authority,adapter.requiredApprovals,await viewerFor(client,proposal,principal,call.actingSubject));
+      const basis = await reviewBasis(client,proposal,adapter.requiredApprovals,call.work.environment.fuseki,prospective);
+      const state = reviewState(proposal,basis.reviews,basis.authority,adapter.requiredApprovals,await viewerFor(client,proposal,principal,call.actingSubject,call.work.environment.fuseki));
       if (!state.allowedActions.includes('apply')) throw new EditorialBlocked(state.blockers[0] ?? { code: 'review_authority_required' });
       await client.query(`INSERT INTO access.editorial_application
         (id,proposal,revision,principal,actor,operation_key,command_key,command_digest,approve,message,required)
@@ -336,9 +336,9 @@ export class EditorialReviewStore {
       let decision: TerminalDecision;
       let deliveryAttempted = false;
       try {
-        await requireReview(client,proposal,principal,call.actingSubject);
-        const fresh = await reviewBasis(client,proposal,adapter.requiredApprovals,prospective);
-        const viewer = await viewerFor(client,proposal,principal,call.actingSubject);
+        await requireReview(client,proposal,principal,call.actingSubject,call.work.environment.fuseki);
+        const fresh = await reviewBasis(client,proposal,adapter.requiredApprovals,call.work.environment.fuseki,prospective);
+        const viewer = await viewerFor(client,proposal,principal,call.actingSubject,call.work.environment.fuseki);
         deliveryAttempted = true;
         decision = await fusekiReadBudget.run({ signal: AbortSignal.timeout(EDITORIAL_STORE_COST.applyDeadlineMs),
           callsLeft: EDITORIAL_STORE_COST.graphCalls,bytesLeft: EDITORIAL_STORE_COST.graphBytes },
@@ -391,22 +391,37 @@ export class EditorialReviewStore {
   async get(call: Pick<EditorialCall,'work' | 'request' | 'actingSubject'> & { principal?: VerifiedPrincipal }, id: string,
     limit = 50, cursor?: string) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new EditorialInvalid('Page limit must be 1–50');
-    return this.locked(id,async client => {
+    const client = await this.pool.connect();
+    let recoveryLocked = false;
+    try {
       let row = await this.proposal(client,id);
       await this.resolveTarget(call,row.target.resource,row.target.context);
       const adapter = await this.adapter(row.kind,call), application = await this.application(client,id,row.latest);
       if (application && !application.outcome) {
-        await this.recover(client,row,adapter,application); row = await this.proposal(client,id);
+        // Never queue a read behind decide's lock during owner delivery. Only
+        // an unattended pending intent needs exclusive, receipt-only recovery.
+        recoveryLocked = (await client.query<{ acquired: boolean }>(
+          'SELECT pg_try_advisory_lock(hashtextextended($1,0)) AS acquired',[`editorial:${id}`])).rows[0]!.acquired;
+        if (recoveryLocked) {
+          row = await this.proposal(client,id);
+          const pending = await this.application(client,id,row.latest);
+          if (pending && !pending.outcome) await this.recover(client,row,adapter,pending);
+          await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[`editorial:${id}`]);
+          recoveryLocked = false;
+        }
       }
-      await this.begin(client);
+      await this.begin(client,true);
+      // One SQL snapshot keeps the candidate, decision and timeline coherent
+      // while writers append new immutable rows without waiting for this read.
+      row = await this.proposal(client,id);
       const proposal = rowToProposal(row), revision = await this.revision(client,id,row.latest);
       let viewer: Viewer = { agent: '',principalKey: '',eligibleReviewer: false,ownsProposal: false };
       if (call.principal && call.actingSubject) {
         const principal = await editorialPrincipal(client,call.principal);
-        try { await editorialController(client,principal,call.actingSubject); viewer = await viewerFor(client,proposal,principal,call.actingSubject); }
+        try { await editorialController(client,principal,call.actingSubject); viewer = await viewerFor(client,proposal,principal,call.actingSubject,call.work.environment.fuseki); }
         catch (error) { if (!(error instanceof AdmissionDenied)) throw error; }
       }
-      const basis = await reviewBasis(client,proposal,adapter.requiredApprovals);
+      const basis = await reviewBasis(client,proposal,adapter.requiredApprovals,call.work.environment.fuseki);
       const state = reviewState(proposal,basis.reviews,basis.authority,adapter.requiredApprovals,viewer);
       if (!row.decision && viewer.eligibleReviewer && viewer.principalKey !== row.proposer_key) {
         const counted = basis.reviews.some(review => review.outcome === 'approve' && review.reviewerKey === viewer.principalKey);
@@ -435,7 +450,13 @@ export class EditorialReviewStore {
         latestRevision: row.latest,decision: row.decision,reverts: row.reverts },revision: publicRevision,
         preview: await adapter.preview(revision),...state,staleApprovalIdsComplete: stale.length <= 50,timeline: page,
         nextCursor: events.length > limit ? cursorEncode(binding,page.at(-1)!.sequence) : null };
-    });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw normalizeControlError(error);
+    } finally {
+      if (recoveryLocked) await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[`editorial:${id}`]).catch(() => {});
+      client.release();
+    }
   }
   async list(call: Pick<EditorialCall,'work' | 'request' | 'actingSubject'> & { principal?: VerifiedPrincipal },
     options: { filter: 'mine' | 'review-requested' | 'target'; target?: string; limit: number; cursor?: string }) {
@@ -472,7 +493,7 @@ export class EditorialReviewStore {
             await this.begin(check);
             const principal = await editorialPrincipal(check,call.principal!);
             const proposal = rowToProposal(await this.proposal(check,row.id));
-            const viewer = await viewerFor(check,proposal,principal,call.actingSubject);
+            const viewer = await viewerFor(check,proposal,principal,call.actingSubject,call.work.environment.fuseki);
             await check.query('COMMIT');
             if (!viewer.eligibleReviewer || viewer.principalKey === proposal.proposerKey) continue;
           } finally { await check.query('ROLLBACK').catch(() => {}); check.release(); }

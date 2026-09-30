@@ -8,6 +8,8 @@ import type { CommandEnvelope } from '../../../services/main/src/infrastructure/
 import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
 import { independenceKey } from '../../../services/main/src/modules/editorial-review/authority.ts';
 import { AdmissionConflict } from '../../../services/main/src/modules/access/admission.ts';
+import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
+import { hash } from '../../../services/main/src/modules/work/activate.ts';
 import { metadataComponent, checkedMetadataState } from '../../../services/main/src/modules/work/metadata-schema.ts';
 import type { BaseHead, OwnerReceipt, TerminalDecision } from '../../../services/main/src/modules/editorial-review/contract.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
@@ -27,12 +29,17 @@ test('G-865: durable API lifecycle binds current independent review to header an
     'openid work:create work:edit work:read work:correct work:review');
   const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
   let hideReceipts = false, loseOwnerResponse = false, headerWrites = 0, semanticWrites = 0;
+  let ownerBarrier: { entered: () => void; released: Promise<void> } | undefined;
   const graph = new Proxy(f.env.fuseki,{ get(target,property) {
     if (property === 'commandWithReceipt') return async (envelope: CommandEnvelope) => {
       const header = envelope.update.includes('WorkMetadataChangedEvent');
       const semantic = envelope.update.includes('SemanticChangedEvent');
       if (header) headerWrites++;
       if (semantic) semanticWrites++;
+      if (header && ownerBarrier) {
+        const barrier = ownerBarrier; ownerBarrier = undefined;
+        barrier.entered(); await barrier.released;
+      }
       const result = await target.commandWithReceipt(envelope);
       if (header && loseOwnerResponse) {
         loseOwnerResponse = false; hideReceipts = true; throw new Error('lost committed owner response');
@@ -61,6 +68,9 @@ test('G-865: durable API lifecycle binds current independent review to header an
     expect({ status: response.status,...(response.status !== status ? { body } : {}) }).toEqual({ status });
     return body as T;
   }
+  const withoutWaitingForDelivery = <T>(read: Promise<T>) => Promise.race([read,Bun.sleep(2000).then(() => {
+    throw new Error('A read waited for the exclusive proposal delivery lock');
+  })]);
   const path = (id: string,suffix = '') => `/v1/editorial/proposals/${id}${suffix}`;
   const get = (id: string,token: string | null = null,agent?: string,query = '') => request('GET',path(id)
     + (agent || query ? `?${agent ? `actingSubject=${encodeURIComponent(agent)}&` : ''}${query}` : ''),undefined,token).then(r => json<Read>(r));
@@ -99,8 +109,11 @@ test('G-865: durable API lifecycle binds current independent review to header an
       await f.accessPool.query(`INSERT INTO access.role_binding (id,family_id,role_revision,issuer_subject,recipient_subject,valid_until,assigned_by_principal)
         VALUES ($1,$2,1,$3,$4,'infinity',$5)`,[id,roleFamily,f.actor,agent,f.principalId]); return id;
     };
-    const bindingB = await bind(actorB); await bind(actorC); await bind(otherActorA);
-    const work = await json<Work>(await request('POST','/v1/works',{ profile: 'metadata-only-v1',title: 'Initial Work',language: 'en',
+    const bindingB = await bind(actorB), bindingC = await bind(actorC); await bind(otherActorA);
+    // Bootstrap the controlled author's native Agent before using the current
+    // own-work creation API. Both Works remain private until publication.
+    await createAgentGraph(f.env,{ id: randomUUID(),agent: f.actor,kind: 'person',displayName: 'Editorial author',digest: hash(f.actor) });
+    const work = await json<Work>(await request('POST','/v1/works',{ profile: 'metadata-only-v1',authoring: 'own-work',title: 'Initial Work',language: 'en',
       semanticTypes: ['https://schema.org/Book'],actingSubject: f.actor }),201);
     await f.grant(`work:read:${work.work}`,'work.read');
     await f.grant(`semantic:read:${work.work}`,'semantic.read');
@@ -126,7 +139,7 @@ test('G-865: durable API lifecycle binds current independent review to header an
       publicationDecision: publication.publicationDecision,expectedSelectionHead: null,selectionBasis: 'main-maintainer',actingSubject: f.actor }),201);
     expect(Date.now() - preparation).toBeLessThan(600_000);
     const target = { resource: work.work,revision: work.workRevision,context: 'urn:rezics:context:global' };
-    const headerState = (description: string) => ({ kind: 'header',originalTitle: { value: 'Reviewed Work',language: 'en' },
+    const headerState = (description: string) => checkedMetadataState({ kind: 'header',originalTitle: { value: 'Reviewed Work',language: 'en' },
       localized: [{ language: 'en',title: null,description,mainVersionLabel: null }] });
     const component = metadataComponent(work.work,checkedMetadataState(headerState('First synopsis')));
     const base = [{ component,head: null }];
@@ -140,7 +153,67 @@ test('G-865: durable API lifecycle binds current independent review to header an
       request('POST',path(id,'/decisions'),{ profile: 'editorial-proposal-decide-v1',revision,outcome,approve,message: 'Checked evidence',actingSubject: agent },token,key);
     const revise = (id: string,revision: number,candidate: unknown,baseHeads: BaseHead[]) => request('POST',path(id,'/revisions'),{
       profile: 'editorial-proposal-revise-v1',revision,candidate,baseHeads,evidence,actingSubject: f.actor });
+    // A Work-specific read grant is disclosure, not an editorial edit permit.
+    // Neither an appointed global role nor a global-context review grant may
+    // change a private Work unless that reviewer also holds its edit authority.
+    const privateWork = await json<Work>(await request('POST','/v1/works',{ profile: 'metadata-only-v1',
+      authoring: 'own-work',title: 'Private Work',language: 'en',semanticTypes: ['https://schema.org/Book'],actingSubject: f.actor }),201);
+    await f.grant(`work:read:${privateWork.work}`,'work.read');
+    for (const agent of [actorB,actorC]) await f.accessPool.query(`INSERT INTO access.permission_grant
+      (id,issuer_subject,recipient_subject,scope_id,action,valid_until) VALUES ($1,$2,$3,$4,'work.read','infinity')`,
+    [randomUUID(),f.actor,agent,`work:read:${privateWork.work}`]);
+    await f.accessPool.query('UPDATE access.role_binding SET active = false WHERE id = $1',[bindingC]);
+    const contextScope = 'editorial:review:urn:rezics:context:global', contextGrant = randomUUID();
+    await f.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING',[contextScope]);
+    await f.accessPool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$3,$4,'work.review','infinity')`,[contextGrant,f.actor,actorC,contextScope]);
+    const privateComponent = metadataComponent(privateWork.work,checkedMetadataState(headerState('Private synopsis')));
+    const privateCandidate = { command: 'work-metadata',state: headerState('Private synopsis') };
+    const privateProposal = await json<Command>(await request('POST','/v1/editorial/proposals',{
+      profile: 'editorial-proposal-create-v1',kind: 'component-correction',
+      target: { resource: privateWork.work,revision: privateWork.workRevision,context: target.context },
+      candidate: privateCandidate,baseHeads: [{ component: privateComponent,head: null }],evidence: [],actingSubject: f.actor }),201);
+    await json(await request('GET',path(privateProposal.proposal),undefined,null),404);
+    for (const [agent,token] of [[actorB,tokenB],[actorC,tokenC]]) {
+      const visible = await get(privateProposal.proposal,token,agent);
+      expect(visible.revision.candidate).toEqual(privateCandidate);
+      expect(visible.allowedActions).toEqual([]);
+      expect(visible.blockers.map(b => b.code)).toContain('review_authority_required');
+      expect((await json<{ blocker: { code: string } }>(await review(privateProposal.proposal,1,'approve',agent,token),403))
+        .blocker.code).toBe('review_authority_required');
+      expect((await json<{ blocker: { code: string } }>(await decide(privateProposal.proposal,1,true,randomUUID(),agent,token),403))
+        .blocker.code).toBe('review_authority_required');
+    }
+    expect(headerWrites).toBe(0);
+    const privateEditScope = `work:edit:${privateWork.work}`;
+    await f.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)',[privateEditScope]);
+    const privateEdits = [randomUUID(),randomUUID()];
+    for (const [index,agent] of [actorB,actorC].entries()) await f.accessPool.query(`INSERT INTO access.permission_grant
+      (id,issuer_subject,recipient_subject,scope_id,action,valid_until) VALUES ($1,$2,$3,$4,'work.edit','infinity')`,
+    [privateEdits[index],f.actor,agent,privateEditScope]);
+    await json(await review(privateProposal.proposal,1,'approve',actorC,tokenC));
+    await json(await review(privateProposal.proposal,1,'approve'));
+    await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1',[privateEdits[0]]);
+    // The latest ineligible approval must not hide an older eligible one from
+    // the bounded approval query. Revocation changes both counts and actions.
+    const privateRead = await get(privateProposal.proposal,tokenB,actorB);
+    expect(privateRead.approvalIds).toHaveLength(1); expect(privateRead.allowedActions).toEqual([]);
+    const privateApplied = await json<Command>(await decide(privateProposal.proposal,1,false,randomUUID(),actorC,tokenC));
+    expect(privateApplied.receipt?.candidate).toEqual(privateCandidate); expect(headerWrites).toBe(1);
+    await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1',[contextGrant]);
+    await bind(actorC);
+    const beforeHeaderJourney = headerWrites;
     const created = await propose({ command: 'work-metadata',state: headerState('First synopsis') },base);
+    // Ordinary reads, including the receipt-only recovery route with no pending
+    // application, never acquire the mutation's exclusive proposal lock.
+    const held = await f.accessPool.connect();
+    try {
+      await held.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[`editorial:${created.proposal}`]);
+      await withoutWaitingForDelivery(Promise.all([get(created.proposal),request('POST',path(created.proposal,'/recovery'),
+        { profile: 'editorial-proposal-recover-v1' },null).then(r => json<Read>(r))]));
+    } finally {
+      await held.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[`editorial:${created.proposal}`]); held.release();
+    }
     await json(await review(created.proposal,1,'request_changes'));
     expect((await get(created.proposal)).state).toBe('changes_requested');
     await json(await review(created.proposal,1,'approve',actorC,tokenC));
@@ -161,7 +234,7 @@ test('G-865: durable API lifecycle binds current independent review to header an
     // Revision 2 uses appointed review authority, with no ordinary edit OAuth scope.
     const applyKey = randomUUID();
     const applied = await json<Command>(await decide(created.proposal,2,true,applyKey));
-    expect(applied.receipt?.beforeHeads).toEqual(base); expect(headerWrites).toBe(1);
+    expect(applied.receipt?.beforeHeads).toEqual(base); expect(headerWrites - beforeHeaderJourney).toBe(1);
     const replay = await json<Command>(await decide(created.proposal,2,true,applyKey));
     expect(replay.replayed).toBe(true); expect(replay.receipt).toEqual(applied.receipt);
     expect((await json<{ blocker: { code: string } }>(await decide(created.proposal,2),409)).blocker.code).toBe('terminal_decision');
@@ -205,6 +278,24 @@ test('G-865: durable API lifecycle binds current independent review to header an
     const beforeConcurrent = headerWrites;
     const concurrentResponses = await Promise.all([decide(concurrent.proposal,1),decide(concurrent.proposal,1)]);
     expect(concurrentResponses.map(r => r.status).sort()).toEqual([200,409]); expect(headerWrites - beforeConcurrent).toBe(1);
+    // The pending intent is readable while decide holds the exclusive lock and
+    // waits for its owner. Recovery reports pending without cancelling/redelivery.
+    const delivering = await propose({ command: 'work-metadata',state: headerState('Delivery barrier') },
+      [{ component,head: (await metadata()).revision }]);
+    const entered = Promise.withResolvers<void>(), released = Promise.withResolvers<void>();
+    ownerBarrier = { entered: () => entered.resolve(),released: released.promise };
+    const beforeDelivery = headerWrites, delivery = decide(delivering.proposal,1);
+    try {
+      await Promise.race([entered.promise,delivery.then(() => { throw new Error('Owner delivery did not reach its barrier'); })]);
+      const reads = await withoutWaitingForDelivery(Promise.all([get(delivering.proposal),get(delivering.proposal,tokenB,actorB),
+        request('POST',path(delivering.proposal,'/recovery'),{ profile: 'editorial-proposal-recover-v1' },null).then(r => json<Read>(r,202))]));
+      for (const read of reads) {
+        expect(read.proposal.decision).toBeNull(); expect(read.allowedActions).toEqual(['recover']);
+        expect(read.blockers.map(b => b.code)).toContain('apply_pending');
+      }
+      expect(headerWrites - beforeDelivery).toBe(1);
+    } finally { released.resolve(); await json<Command>(await delivery); }
+    expect((await get(delivering.proposal)).state).toBe('applied');
     // A lost graph response leaves a durable pending intent, including across restart.
     const lost = await propose({ command: 'work-metadata',state: headerState('Lost response candidate') },[{ component,head: (await metadata()).revision }]);
     const lostKey = randomUUID(), beforeLost = headerWrites; loseOwnerResponse = true;

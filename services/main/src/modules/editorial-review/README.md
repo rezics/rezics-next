@@ -16,6 +16,9 @@ current stance and one counted approval, across their Agents. Current Agent
 control and maintainer, contextual grant or appointed `work.review` role authority
 are checked again for the decision and owner admission. The proposer, their
 original controllers and current controllers cannot independently review it.
+Review authority covers publicly readable Works. A private Work additionally
+requires the reviewer's current Work-specific edit grant; a read grant plus a
+global review role or contextual review grant cannot authorize its correction.
 Private independence keys never enter API history, errors or hook events.
 
 The current-candidate rule follows the
@@ -44,6 +47,9 @@ The pre-registration cancellation proof applies only to adapters declaring
 mechanisms resolve their own receipts through `resolve(input)`; absence of a graph
 admission cannot prove their effect absent. Merge/wiki bindings retain this same
 lifecycle rather than treating a foreign owner effect as cancelled.
+Ordinary reads take no exclusive proposal lock. Pending recovery attempts that
+lock without waiting; an active owner delivery remains readable as pending.
+A SQL snapshot keeps each returned revision, decision and timeline coherent.
 
 `component-correction` calls the existing Work header metadata and semantic
 commands in process. The header corrects existing title/description fields.
@@ -60,7 +66,8 @@ mutates the original decision.
 `routes/editorial-proposals.ts` exposes create, revise, review, decide, withdraw,
 reversal, get/list and receipt-only recovery, with discoverable OpenAPI schemas.
 Writes require `Idempotency-Key` and `work:correct` or `work:review`; disclosure
-uses `work:read`. Review application needs no separate ordinary edit capability.
+uses `work:read`. Public catalogue review application needs no separate ordinary
+edit capability; private Work review preserves its Work-specific edit boundary.
 Public reads/recovery allow an anonymous viewer; private targets and contexts
 still require their owner disclosure proofs. Allowed actions are advisory current
 results, not reusable authority. GUI G-867 consumes these results without creating

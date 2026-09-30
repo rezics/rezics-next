@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { AdmissionConflict, AdmissionDenied, type AdmissionRequest, type RegisteredAdmission } from '../access/admission.ts';
 import { controlTransaction } from '../access/topology-control.ts';
 import { editorialController, editorialPrincipal, independenceKey, requireReview, reviewBasis, viewerFor } from './authority.ts';
@@ -25,18 +26,19 @@ async function permit(client: PoolClient, id: string): Promise<PermitRow> {
   }
   return row;
 }
-async function current(client: PoolClient, row: PermitRow) {
+async function current(client: PoolClient, row: PermitRow, graph: Pick<FusekiClient,'query'> | undefined) {
   await editorialController(client, row.principal, row.actor);
   const proposal: Proposal = { id: row.proposal, kind: row.kind, target: row.target,
     proposer: row.proposer_agent, proposerKey: row.proposer_key, latestRevision: row.revision, decision: null };
-  await requireReview(client, proposal, row.principal, row.actor);
-  const basis = await reviewBasis(client, proposal, row.required, row.approve ? { principal: row.principal,
+  await requireReview(client, proposal, row.principal, row.actor,graph);
+  const basis = await reviewBasis(client, proposal, row.required,graph,row.approve ? { principal: row.principal,
     review: { id: row.id, proposal: row.proposal, revision: row.revision, reviewer: row.actor,
       reviewerKey: independenceKey(row.proposal,row.principal), outcome: 'approve', message: row.message, sequence: '0' } } : undefined);
-  const state = reviewState(proposal,basis.reviews,basis.authority,row.required,await viewerFor(client,proposal,row.principal,row.actor));
+  const state = reviewState(proposal,basis.reviews,basis.authority,row.required,await viewerFor(client,proposal,row.principal,row.actor,graph));
   if (!state.allowedActions.includes('apply')) throw new EditorialBlocked(state.blockers[0] ?? { code: 'review_authority_required' });
 }
-export async function registerEditorialAdmission(pool: Pool, request: AdmissionRequest): Promise<RegisteredAdmission> {
+export async function registerEditorialAdmission(pool: Pool, request: AdmissionRequest,
+  graph: Pick<FusekiClient,'query'> | undefined): Promise<RegisteredAdmission> {
   return controlTransaction(pool, async client => {
     const principal = await editorialPrincipal(client, request.principal);
     // Serialize retries of this one permit without locking the proposal row
@@ -50,7 +52,7 @@ export async function registerEditorialAdmission(pool: Pool, request: AdmissionR
       || row.owner_command.scope !== request.scope || row.owner_command.digest !== request.requestDigest) {
       throw new AdmissionConflict('Owner command differs from its editorial permit');
     }
-    await current(client, row);
+    await current(client, row,graph);
     await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [request.scope]);
     const gate = (await client.query<{ authority_epoch: string }>(`SELECT authority_epoch::text
       FROM access.scope_gate WHERE id = $1 AND open AND dispatch_open FOR UPDATE`, [request.scope])).rows[0];
@@ -75,10 +77,11 @@ export async function registerEditorialAdmission(pool: Pool, request: AdmissionR
       dispatchEligible: saved.eligible && saved.state !== 'sealed', replayed: !!old };
   });
 }
-export async function checkEditorialAdmission(client: PoolClient, admission: string): Promise<boolean> {
+export async function checkEditorialAdmission(client: PoolClient, admission: string,
+  graph: Pick<FusekiClient,'query'> | undefined): Promise<boolean> {
   const binding = (await client.query<{ application: string }>(
     'SELECT application FROM access.editorial_owner_admission WHERE admission = $1', [admission])).rows[0];
   if (!binding) return false;
-  await current(client, await permit(client, binding.application));
+  await current(client, await permit(client, binding.application),graph);
   return true;
 }
