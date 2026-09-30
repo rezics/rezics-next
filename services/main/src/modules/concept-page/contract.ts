@@ -33,19 +33,28 @@ const values = t.Array(readId, { minItems: 1, maxItems: CONCEPT_WORKS_COST.value
 const conceptCondition = t.Union([t.Object({ facet: t.Literal(CONCEPT_FACET), all: values }, closed),
   t.Object({ facet: t.Literal(CONCEPT_FACET), any: values }, closed),
   t.Object({ facet: t.Literal(CONCEPT_FACET), none: values }, closed)]);
-export const conceptFilterDocument = t.Object({ all: t.Array(conceptCondition, { minItems: 1, maxItems: 2 }) }, closed);
+/** The page Concept, at most one additions Condition, and one exclusion. */
+export const conceptFilterDocument = t.Object({ all: t.Array(conceptCondition, { minItems: 1, maxItems: 3 }) }, closed);
 export type ConceptFilterDocument = Static<typeof conceptFilterDocument>;
 
 /** The one-Condition Filter a Concept's page lists and a follow of the Concept follows. */
 export const conceptFilter = (concept: string): ConceptFilterDocument =>
   ({ all: [{ facet: CONCEPT_FACET, any: [concept] }] });
 
-/** Included values match all or any; the page's Concept is always the first included. */
+/**
+ * The page Concept stays required. Match all is one Condition over the page and
+ * every addition. Match any is the page, then any of the additions, so a Saved
+ * Filter of what the page showed cannot drop the page Concept. No additions is
+ * the page alone.
+ */
 export function conceptWorksFilter(concept: string, include: readonly string[], exclude: readonly string[],
   match: 'all' | 'any'): ConceptFilterDocument {
-  const included = [concept, ...include];
-  return { all: [match === 'all' ? { facet: CONCEPT_FACET, all: included } : { facet: CONCEPT_FACET, any: included },
-    ...exclude.length ? [{ facet: CONCEPT_FACET, none: [...exclude] }] : []] };
+  const exclusion = exclude.length ? [{ facet: CONCEPT_FACET, none: [...exclude] }] : [];
+  if (match === 'any' && include.length) {
+    return { all: [{ facet: CONCEPT_FACET, all: [concept] }, { facet: CONCEPT_FACET, any: [...include] },
+      ...exclusion] };
+  }
+  return { all: [{ facet: CONCEPT_FACET, all: [concept, ...include] }, ...exclusion] };
 }
 
 const conceptLink = t.Object({ id: readId, name: readName });

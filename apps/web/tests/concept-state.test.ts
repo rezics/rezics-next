@@ -58,11 +58,50 @@ describe('Concept page URL state', () => {
         { facet: 'concept', none: [iri(romance)] },
       ] } });
     expect(conceptQuery({ ...parsed, match: 'any' }).filter).toEqual({ all: [
-      { facet: 'concept', any: [iri(concept), iri(magic)] },
+      { facet: 'concept', all: [iri(concept)] },
+      { facet: 'concept', any: [iri(magic)] },
       { facet: 'concept', none: [iri(romance)] },
     ] });
     expect(conceptQuery(parseConceptState(concept, {})!)).toMatchObject({ context: 'global',
       filter: { all: [{ facet: 'concept', all: [iri(concept)] }] } });
+  });
+
+  test('G-519 state round-trips through its address into a Filter that keeps the page Concept', () => {
+    const pool = [id(2), id(3), id(4)];
+    const subsets = (values: string[]): string[][] => values.reduce<string[][]>(
+      (sets, value) => [...sets, ...sets.map(set => [...set, value])], [[]]);
+    const scopes = [{ kind: 'global' as const }, { kind: 'realm' as const, realm }];
+    let cases = 0;
+    for (const include of subsets(pool)) {
+      const excludedFrom = pool.filter(value => !include.includes(value));
+      for (const exclude of subsets(excludedFrom)) {
+        for (const match of ['all', 'any'] as const) {
+          for (const scope of scopes) {
+            const state = { concept, scope, include, exclude, match };
+            const href = conceptHref(state);
+            const url = new URL(href, 'https://rezics.test');
+            const params = Object.fromEntries(url.searchParams);
+            const parsed = parseConceptState(url.pathname.split('/').at(-1)!, params);
+            const canonical = include.length || match === 'all' ? state : { ...state, match: 'all' as const };
+            expect(parsed).toEqual(canonical);
+            expect(conceptQuery(parsed!).filter).toEqual(conceptQuery(state).filter);
+            const filter = conceptQuery(state).filter;
+            if (!filter || !('all' in filter)) throw new Error('Concept Query has no Filter');
+            if (match === 'any' && include.length) {
+              expect(filter.all.slice(0, 2)).toEqual([
+                { facet: 'concept', all: [iri(concept)] },
+                { facet: 'concept', any: include.map(iri) },
+              ]);
+            } else {
+              expect(filter.all[0]).toEqual({ facet: 'concept', all: [concept, ...include].map(iri) });
+            }
+            cases += 1;
+          }
+        }
+      }
+    }
+    // 2^3 include subsets, and for each the exclude subsets of what remains, times match and scope.
+    expect(cases).toBe(108);
   });
 });
 

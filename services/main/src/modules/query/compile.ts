@@ -82,6 +82,9 @@ function admit(filter: FilterDocument | undefined): { conditions: FilterConditio
     const facet = resolveFacet(condition.facet)!;
     graphReads += facet.cost.graphReads;
   }
+  if (graphReads > QUERY_COST.graphReads && anchoredConceptExclusion(conditions)) {
+    graphReads -= resolveFacet('concept')!.cost.graphReads * 2;
+  }
   if (graphReads > QUERY_COST.graphReads) {
     throw new QueryRejected('query_budget_exceeded', 'Facet graph reads exceed the Query budget');
   }
@@ -92,6 +95,63 @@ function values(condition: FilterCondition, operator: 'any' | 'all' | 'none'): s
   const found = condition[operator];
   if (!found || found.some(value => typeof value !== 'string')) fail(`${condition.facet} needs IRI or lexical values`);
   return found as string[];
+}
+
+type ConceptOperator = 'any' | 'all' | 'none';
+
+function conceptOperator(condition: FilterCondition): ConceptOperator | undefined {
+  const present = (['any', 'all', 'none'] as const).filter(operator => condition[operator] !== undefined);
+  return present.length === 1 ? present[0] : undefined;
+}
+
+function conceptValues(condition: FilterCondition, operator: ConceptOperator): string[] | undefined {
+  const found = condition[operator];
+  if (!found?.length || found.some(value => typeof value !== 'string')) return undefined;
+  return found as string[];
+}
+
+/**
+ * The page Concept is an `all` or a one-value `any`. Additions are the other
+ * included Condition. One included `all` stays the match-all Condition. A
+ * multi-value `any` with no anchor is the shape that dropped the page Concept.
+ */
+function conceptPageAnchor(included: { operator: 'any' | 'all'; values: string[] }[]):
+  { concept: string; include: string[]; match: 'all' | 'any' } | undefined {
+  if (included.length === 1) {
+    const only = included[0]!;
+    if (only.operator === 'any' && only.values.length > 1) return undefined;
+    return { concept: only.values[0]!, include: only.values.slice(1),
+      match: only.operator === 'any' ? 'any' : 'all' };
+  }
+  if (included.length !== 2) return undefined;
+  const allAnchor = included.findIndex(clause => clause.operator === 'all' && clause.values.length === 1);
+  const anyAnchor = included.findIndex(clause => clause.operator === 'any' && clause.values.length === 1);
+  const chosen = allAnchor >= 0 ? allAnchor : anyAnchor;
+  if (chosen < 0) return undefined;
+  const additions = included[1 - chosen]!;
+  return { concept: included[chosen]!.values[0]!, include: additions.values, match: additions.operator };
+}
+
+/**
+ * An anchored page with an exclusion is three Concept Conditions and one
+ * visibility read. Charging the Facet per Condition would refuse that shape
+ * before the template runs.
+ */
+function anchoredConceptExclusion(conditions: FilterCondition[]): boolean {
+  const concepts = conditions.filter(condition => resolveFacet(condition.facet)?.name === 'concept');
+  if (concepts.length !== 3 || concepts.some(condition => condition.interpretation || condition.applicability
+    || condition.bind || condition.range || condition.where)) return false;
+  const clauses = concepts.map(condition => {
+    const operator = conceptOperator(condition);
+    const chosen = operator ? conceptValues(condition, operator) : undefined;
+    return operator && chosen ? { operator, values: chosen } : undefined;
+  });
+  if (clauses.some(clause => !clause)) return false;
+  const typed = clauses as { operator: ConceptOperator; values: string[] }[];
+  const excluded = typed.filter(clause => clause.operator === 'none');
+  const included = typed.filter((clause): clause is { operator: 'any' | 'all'; values: string[] } =>
+    clause.operator !== 'none');
+  return excluded.length === 1 && conceptPageAnchor(included) !== undefined;
 }
 
 /** A Query body is filter-document-v1 or filter-document-v2. v1 cannot name the revision fields. */
@@ -170,8 +230,8 @@ export function compileQuery(query: AdmittedQuery): CompiledQuery {
       if (typeof query.page.continuation !== 'string') fail('Concept Works continuation has the wrong form');
       request.cursor = query.page.continuation as string;
     }
-    let included: string[] | undefined;
     let excluded: string[] | undefined;
+    const includedClauses: { operator: 'any' | 'all'; values: string[] }[] = [];
     for (const condition of conditions) {
       const facet = resolveFacet(condition.facet)!;
       if (condition.interpretation || condition.applicability || condition.bind || condition.range) {
@@ -181,19 +241,29 @@ export function compileQuery(query: AdmittedQuery): CompiledQuery {
         const type = values(condition, 'any')[0]!;
         if (!(WORK_SEMANTIC_TYPES as readonly string[]).includes(type)) fail('Concept Works does not admit this type');
         request.type = type as NonNullable<ConceptWorksQuery['type']>;
-      } else if (facet.name === 'concept' && condition.none && !excluded) {
-        excluded = values(condition, 'none');
-      } else if (facet.name === 'concept' && (condition.any || condition.all) && !included) {
-        included = values(condition, condition.any ? 'any' : 'all');
-        request.match = condition.any ? 'any' : 'all';
+      } else if (facet.name === 'concept') {
+        const operator = conceptOperator(condition);
+        const chosen = operator ? conceptValues(condition, operator) : undefined;
+        if (!operator || !chosen) fail('concept Condition needs one operator');
+        else if (operator === 'none') {
+          if (excluded) fail('Concept Works admits one exclusion');
+          excluded = chosen;
+        } else includedClauses.push({ operator, values: chosen });
       } else fail(`${facet.name} has no Concept Works template`);
     }
-    if ((included ?? excluded)?.some(value => !nativeId.test(value))
-      || excluded?.some(value => included?.includes(value))
-      || (!included?.length && !excluded?.length)) {
-      fail('Concept Works needs visible, distinct native Concept values');
-    }
-    if (mine || top || !included?.length) {
+    const distinct = (list: readonly string[] | undefined) => !!list?.length
+      && list.every(value => nativeId.test(value)) && new Set(list).size === list.length;
+    // Newest is the Concept page. Top-rated, Mine and exclude-only are Discover,
+    // which has no page Concept and still matches any of one Condition.
+    if (includedClauses.length > 1 && (mine || top)) fail('Top-rated and Mine keep one Concept Condition');
+    if (mine || top || !includedClauses.length) {
+      const included = includedClauses[0]?.values;
+      if (includedClauses[0]) request.match = includedClauses[0].operator === 'any' ? 'any' : 'all';
+      if ((included && !distinct(included)) || (excluded && !distinct(excluded))
+        || excluded?.some(value => included?.includes(value))
+        || (!included?.length && !excluded?.length)) {
+        fail('Concept Works needs visible, distinct native Concept values');
+      }
       if (top && !ratingContext) fail('Top-rated needs a rating Context');
       if (mine && (!actingSubject || !ratingContext)) fail('Mine needs the reader and a rating Context');
       if ((top || mine) && !nativeId.test(ratingContext ?? '')) fail('Rating Context needs a native ID');
@@ -206,10 +276,18 @@ export function compileQuery(query: AdmittedQuery): CompiledQuery {
         ...(excluded?.length ? { exclude: excluded } : {}) };
       return { template: 'concept-works', concept: (included ?? excluded)![0]!, request: filtered, facets, graphReads };
     }
-    const [concept, ...extra] = included!;
-    if (extra.length) request.include = extra;
+    if (includedClauses.length > 2) fail('Concept Works admits an anchor and one additions Condition');
+    const anchor = conceptPageAnchor(includedClauses)
+      ?? fail('A multi-value Concept any needs an anchor Condition');
+    const pageValues = [anchor.concept, ...anchor.include, ...(excluded ?? [])];
+    if (pageValues.some(value => !nativeId.test(value)) || new Set(pageValues).size !== pageValues.length
+      || (excluded && !distinct(excluded))) {
+      fail('Concept Works needs visible, distinct native Concept values');
+    }
+    request.match = anchor.match;
+    if (anchor.include.length) request.include = anchor.include;
     if (excluded?.length) request.exclude = excluded;
-    return { template: 'concept-works', concept: concept!, request, facets, graphReads };
+    return { template: 'concept-works', concept: anchor.concept, request, facets, graphReads };
   }
   if (query.scope.kind === 'mine') fail('Mine has no phrase template');
   if (query.page.size > QUERY_COST.searchPageSize) {

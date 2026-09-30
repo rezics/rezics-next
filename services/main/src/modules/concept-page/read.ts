@@ -112,12 +112,34 @@ export async function readConcept(session: WorkReadSession, id: string): Promise
 }
 
 /**
+ * The smaller of two required groups drives a match-any seek. A tie, and an
+ * additions group too wide for the seek, drives with the page Concept: it has
+ * at most four interpretations and always fits.
+ */
+function anyCondition(anchor: string[], additions: string[], counts: Map<string, number>,
+  excluded: string[]): DiscoveryCondition | null {
+  const size = (group: string[]) => group.reduce((sum, term) => sum + (counts.get(term) ?? 0), 0);
+  if (!size(anchor) || !size(additions)) return null;
+  const additionsSmaller = size(additions) < size(anchor);
+  const preferred = additionsSmaller ? additions : anchor;
+  const other = additionsSmaller ? anchor : additions;
+  const drive = preferred.length <= DISCOVERY_CONDITION_COST.driveTerms ? preferred : other;
+  const group = drive === preferred ? other : preferred;
+  if (drive.length > DISCOVERY_CONDITION_COST.driveTerms || group.length > DISCOVERY_CONDITION_COST.groupTerms) {
+    throw new WorkReadLimit('Included values have more interpretations than a page seeks');
+  }
+  return { drive, groups: [group], excluded };
+}
+
+/**
  * `GET /v1/concepts/{id}/works`: public Works newest first whose accepted
  * values meet the Concept's Condition bar, from the scope's discovery
- * projection. Included values match all or any; excluded ones never. With
- * `all`, the included value with the fewest Works drives the seek and the
- * rest are checked per Work. A stale projection withholds its matches, as a
- * Discover genre shelf does.
+ * projection. The page Concept stays required. Additions match all or any of
+ * them; excluded values never match. With `any`, the page's interpretations
+ * and the union of the additions' interpretations are two required groups and
+ * the smaller drives. With `all`, the included value with the fewest Works
+ * drives and the rest are checked per Work. A stale projection withholds its
+ * matches, as a Discover genre shelf does.
  */
 export async function readConceptWorks(session: WorkReadSession, projection: DiscoveryProjection, concept: string,
   query: ConceptWorksQuery): Promise<Static<typeof conceptWorksPage>> {
@@ -160,8 +182,21 @@ export async function readConceptWorks(session: WorkReadSession, projection: Dis
   const excluded = exclude.flatMap(interpretations);
   let condition: DiscoveryCondition | null;
   if (match === 'any') {
-    const drive = included.flat();
-    condition = drive.length ? { drive, groups: [], excluded } : null;
+    const anchor = interpretations(concept);
+    const additions = [...new Set(include.flatMap(interpretations))];
+    if (!include.length) {
+      condition = anchor.length ? { drive: anchor, groups: [], excluded } : null;
+    } else if (!anchor.length || !additions.length) {
+      condition = null;
+    } else {
+      const counted = [...new Set([...anchor, ...additions])];
+      if (counted.length > CONCEPT_WORKS_COST.countedTerms) {
+        throw new WorkReadLimit('Included values have more interpretations than a page counts');
+      }
+      const counts = new Map((await projection.selectedTerms(active, counted))
+        .map(row => [row.term, Number(row.work_count)]));
+      condition = anyCondition(anchor, additions, counts, excluded);
+    }
   } else if (included.some(group => !group.length)) {
     // A value no Work was ever classified under: nothing can carry every value.
     condition = null;

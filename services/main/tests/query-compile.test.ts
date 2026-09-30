@@ -141,11 +141,17 @@ test('Query route: an unsupported shape returns a typed 422 before touching the 
 test('Query: Concept page Conditions use the bounded Works template', () => {
   const query: ResourceQuery = { context: 'global', scope: { kind: 'all' }, sort: 'newest',
     page: { size: 20 }, filter: { all: [
-      { facet: 'concept', any: [id(2), id(3)] }, { facet: 'concept', none: [id(4)] },
-      { facet: 'type', any: [book] },
+      { facet: 'concept', all: [id(2)] }, { facet: 'concept', any: [id(3)] },
+      { facet: 'concept', none: [id(4)] }, { facet: 'type', any: [book] },
     ] } };
   expect(compileQuery(query)).toMatchObject({ template: 'concept-works', concept: id(2),
     request: { scope: 'global', match: 'any', include: [id(3)], exclude: [id(4)], type: book } });
+  const flattened = { ...query, filter: { all: [
+    { facet: 'concept', any: [id(2), id(3)] }, { facet: 'concept', none: [id(4)] },
+  ] } };
+  expect(() => compileQuery(flattened)).toThrow(QueryRejected);
+  try { compileQuery(flattened); }
+  catch (error) { expect((error as QueryRejected).refusal).toBe('unsupported_query_shape'); }
   expect(() => compileQuery({ ...query, page: { size: 21 } })).toThrow(QueryRejected);
   expect(compileQuery({ ...query, filter: { all: [{ facet: 'concept', none: [id(4)] }] } }))
     .toMatchObject({ template: 'concept-works', concept: id(4),

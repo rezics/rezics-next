@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { conceptQuery } from '../../../apps/web/features/concept/state.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { CONCEPT_FACET } from '../../../services/main/src/modules/concept-page/contract.ts';
 import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { startHomeStack } from './feed-read-support.ts';
@@ -22,7 +24,7 @@ test('Query Concept Works and Concept page read the same all, any and exclusion 
     await author.grant('classification:define:global', 'classification.proposition.define');
     await author.grant('classification:decide:global', 'classification.decision.set');
     const works = [];
-    for (const index of [1, 2, 3]) works.push(await stack.publicWork(author.actor, ['en'],
+    for (const index of [1, 2, 3, 4]) works.push(await stack.publicWork(author.actor, ['en'],
       `Query Concept Work ${index} ${randomUUID()}`));
     const define = async (label: string) => json<{ concept: string; sense: string }>(await call('POST',
       '/v1/classification-propositions', { profile: 'classification-proposition-v1', label,
@@ -37,6 +39,7 @@ test('Query Concept Works and Concept page read the same all, any and exclusion 
     await accept(works[1]!, fantasy.sense);
     await accept(works[1]!, romance.sense);
     await accept(works[2]!, magic.sense);
+    await accept(works[3]!, fantasy.sense);
     type Generation = { generation: string; checkpoint: string; complete: boolean; state: string };
     let row = await json<Generation>(await call('POST', '/v1/discovery/generation-builds', {
       profile: 'discovery-generation-build-v1', actingSubject: author.actor,
@@ -50,25 +53,39 @@ test('Query Concept Works and Concept page read the same all, any and exclusion 
     await json(await call('POST', '/v1/discovery/generation-activations', {
       profile: 'discovery-generation-activation-v1', actingSubject: author.actor, generation: row.generation,
       expectedHeadRevision: head.activeHeadRevision }));
-    const query = (match: 'all' | 'any', exclude: boolean) => ({ context: 'global', scope: { kind: 'all' },
+    const ids = (items: { id: string }[]) => items.map(item => item.id).sort();
+    const anchored = (additions: string[], exclude: string[] = []) => ({ context: 'global', scope: { kind: 'all' },
       sort: 'newest', page: { size: 20 }, filter: { all: [
-        { facet: 'concept', [match]: [fantasy.concept, magic.concept] },
-        ...(exclude ? [{ facet: 'concept', none: [romance.concept] }] : []),
+        { facet: 'concept', all: [fantasy.concept] },
+        ...(additions.length ? [{ facet: 'concept', any: additions }] : []),
+        ...(exclude.length ? [{ facet: 'concept', none: exclude }] : []),
       ] } });
-    const run = async (match: 'all' | 'any', exclude: boolean) => {
-      const response = await call('POST', '/v1/query', query(match, exclude));
-      expect(response.status).toBe(200);
-      return json<{ template: string; result: { items: { id: string }[]; values: { id: string }[] } }>(response);
-    };
-    const all = await run('all', false);
+    const run = async (body: ReturnType<typeof anchored>) => json<{ template: string; result: {
+      items: { id: string }[]; filter: { all: { facet: string }[] } } }>(await call('POST', '/v1/query', body));
+    const all = await run({ context: 'global', scope: { kind: 'all' }, sort: 'newest', page: { size: 20 },
+      filter: { all: [{ facet: 'concept', all: [fantasy.concept, magic.concept] }] } });
     expect(all.template).toBe('concept-works-v1');
     expect(all.result.items.map(item => item.id)).toEqual([works[0]!.work]);
-    const any = await run('any', true);
-    expect(any.result.items.map(item => item.id).sort()).toEqual([works[0]!.work, works[2]!.work].sort());
-    const legacy = await json<{ items: { id: string }[] }>(await call('GET',
+    // {A}, {B}, {A,B}, {A,C}: additions B,C match any keeps A and returns {A,B} and {A,C}.
+    const any = await run(anchored([magic.concept, romance.concept]));
+    expect(ids(any.result.items)).toEqual(ids([{ id: works[0]!.work }, { id: works[1]!.work }]));
+    const excludedAddition = await run(anchored([magic.concept], [romance.concept]));
+    expect(ids(excludedAddition.result.items)).toEqual([works[0]!.work]);
+    const legacy = await json<{ items: { id: string }[]; filter: { all: { facet: string }[] } }>(await call('GET',
       `/v1/concepts/${short(fantasy.concept)}/works?include=${encodeURIComponent(magic.concept)}`
-      + `&match=any&exclude=${encodeURIComponent(romance.concept)}`));
-    expect(any.result.items.map(item => item.id)).toEqual(legacy.items.map(item => item.id));
+      + `&include=${encodeURIComponent(romance.concept)}&match=any`));
+    expect(ids(any.result.items)).toEqual(ids(legacy.items));
+    const emitted = conceptQuery({ concept: short(fantasy.concept), scope: { kind: 'global' },
+      include: [short(magic.concept), short(romance.concept)], exclude: [], match: 'any' }).filter!;
+    const canonical = { all: emitted.all.map(condition => 'facet' in condition
+      ? { ...condition, facet: CONCEPT_FACET } : condition) };
+    expect(any.result.filter).toEqual(canonical);
+    expect(legacy.filter).toEqual(canonical);
+    const flattened = await call('POST', '/v1/query', { context: 'global', scope: { kind: 'all' },
+      sort: 'newest', page: { size: 20 }, filter: { all: [
+        { facet: 'concept', any: [fantasy.concept, magic.concept, romance.concept] },
+      ] } });
+    expect(await json<{ code: string }>(flattened, 422)).toMatchObject({ code: 'unsupported_query_shape' });
     const excludedResponse = await call('POST', '/v1/query', { context: 'global', scope: { kind: 'all' },
       sort: 'newest', page: { size: 20 }, filter: { all: [{ facet: 'concept', none: [romance.concept] }] } });
     expect(excludedResponse.status).toBe(200);

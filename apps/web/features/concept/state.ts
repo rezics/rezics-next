@@ -15,7 +15,7 @@ export interface ConceptState {
   /** More Concepts, as UUIDs in the order they were added. */
   include: string[];
   exclude: string[];
-  /** Whether a Work carries every included value or any of them. */
+  /** Whether added Concepts must all be carried, or any of them, beside this page's Concept. */
   match: 'all' | 'any';
 }
 
@@ -76,11 +76,17 @@ export function hasRoom(state: ConceptState, operator: 'include' | 'exclude', ma
   return operator === 'include' ? state.include.length + 1 < maxValues : state.exclude.length < maxValues;
 }
 
-/** Main's Query for the Concept page's Conditions and newest Works. */
+/**
+ * Main's Query for the Concept page's Conditions and newest Works. The page
+ * Concept stays required. Match any is that Concept, then any of the additions.
+ */
 export function conceptQuery(state: ConceptState, cursor?: string): ResourceQuery {
+  const concept = iriOf(state.concept);
+  const included = state.match === 'any' && state.include.length
+    ? [{ facet: 'concept', all: [concept] }, { facet: 'concept', any: state.include.map(iriOf) }]
+    : [{ facet: 'concept', all: [concept, ...state.include.map(iriOf)] }];
   const filter: NonNullable<ResourceQuery['filter']> = { all: [
-    state.match === 'any' ? { facet: 'concept', any: [state.concept, ...state.include].map(iriOf) }
-      : { facet: 'concept', all: [state.concept, ...state.include].map(iriOf) },
+    ...included,
     ...(state.exclude.length ? [{ facet: 'concept', none: state.exclude.map(iriOf) }] : []),
   ] };
   return { context: state.scope.kind === 'realm' ? { realm: iriOf(state.scope.realm) } : 'global',

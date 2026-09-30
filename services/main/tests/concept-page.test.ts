@@ -27,7 +27,12 @@ test('G-409 a Concept page and its Condition bar are Filters over the one Concep
   expect(conceptWorksFilter(concept, [include], [exclude], 'all')).toEqual({ all: [
     { facet: CONCEPT_FACET, all: [concept, include] }, { facet: CONCEPT_FACET, none: [exclude] }] });
   expect(conceptWorksFilter(concept, [include], [], 'any')).toEqual({ all: [
-    { facet: CONCEPT_FACET, any: [concept, include] }] });
+    { facet: CONCEPT_FACET, all: [concept] }, { facet: CONCEPT_FACET, any: [include] }] });
+  expect(conceptWorksFilter(concept, [include, id(7)], [exclude], 'any')).toEqual({ all: [
+    { facet: CONCEPT_FACET, all: [concept] }, { facet: CONCEPT_FACET, any: [include, id(7)] },
+    { facet: CONCEPT_FACET, none: [exclude] }] });
+  expect(conceptWorksFilter(concept, [], [], 'any')).toEqual({ all: [{ facet: CONCEPT_FACET, all: [concept] }] });
+  expect(checkedFilter(conceptWorksFilter(concept, [include, id(7)], [exclude], 'any'))).toEqual([CONCEPT_FACET]);
   // The page's Concept and seven more reach the Facet's value bound; one more is a typed refusal.
   const seven = Array.from({ length: 7 }, (_, index) => id(20 + index));
   expect(checkedFilter(conceptWorksFilter(concept, seven, [], 'all'))).toEqual([CONCEPT_FACET]);
@@ -160,12 +165,23 @@ test('G-409 Works reaching a Concept seek by the rarest included value and check
   expect(read.queries).toHaveLength(CONCEPT_WORKS_COST.graphQueries);
   expect(read.summaries.filter(batch => batch.length)).toHaveLength(CONCEPT_WORKS_COST.summaryBatches);
 
-  // Any included value: every interpretation drives the seek and nothing else is required.
-  const any = fakeProjection({});
+  // Match any: the page Concept and the union of the additions are both required, and the smaller drives.
+  const any = fakeProjection({ [sense(1)]: 900, [sense(2)]: 4, [sense(3)]: 1 });
   await readConceptWorks(fakeSession({ queries: [], summaries: [] }, resolved(senses)), any.projection, concept,
     { include: [include, bare], match: 'any', limit: 5 });
-  expect(any.calls).toEqual([{ condition: { drive: [sense(1), sense(2), sense(3)], groups: [], excluded: [] },
+  expect(any.calls).toEqual([{ condition: { drive: [sense(2), sense(3)], groups: [[sense(1)]], excluded: [] },
     limit: 5 }]);
+  const pageDrives = fakeProjection({ [sense(1)]: 2, [sense(2)]: 40, [sense(3)]: 40, [sense(4)]: 9 });
+  await readConceptWorks(fakeSession({ queries: [], summaries: [] }, resolved(senses)), pageDrives.projection, concept,
+    { include: [include], exclude: [exclude], match: 'any' });
+  expect(pageDrives.calls).toEqual([{ condition: { drive: [sense(1)], groups: [[sense(2), sense(3)]],
+    excluded: [sense(4)] }, limit: CONCEPT_WORKS_COST.pageSize }]);
+  // An addition no Work was classified under empties `any` without a seek.
+  const untagged = fakeProjection({ [sense(1)]: 3 });
+  const emptyAny = await readConceptWorks(fakeSession({ queries: [], summaries: [] }, resolved(senses)),
+    untagged.projection, concept, { include: [bare], match: 'any' });
+  expect(untagged.calls).toEqual([]);
+  expect(emptyAny).toMatchObject({ items: [], matches: { value: 0, kind: 'exact' } });
 
   // A value no Work was classified under, or one with no Works, empties `all` without a seek.
   for (const [values, counts] of [[[bare], { [sense(1)]: 3 }], [[include], { [sense(1)]: 3 }]] as const) {
