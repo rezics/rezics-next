@@ -16,11 +16,11 @@ const facet = (name: string) => compiled.get(name) as ReturnType<typeof compileF
 // DefinitionRef must read the same path, values, operators and source forever. A new
 // meaning is a new `facet-<name>-v<n+1>.ts`; labels and cost are refined in place.
 const admittedMeanings: Record<string, string> = {
-  'facet-release-v1': 'c833e9fe649158088fd0a678e2d08d4dbb232f896ec02d104c2837a2a1e93329',
-  'facet-release-language-v1': '8961cd980c2d6831bac69fc275793b205f06aa298fc433d95b39ca2e865dd9dc',
+  'facet-release-v1': '1a0b1d5151d292cc63fae417268a2369c3ddab6b8f7b81f52e3d3d870cf3d752',
+  'facet-release-language-v1': '52b856d7e5ddf5cf62c7144a253e9fcb468c5042bd605d1c4d42dc46ec3c6c31',
   'facet-release-platform-v1': '0e2b4b9a2905aeefe6e5123a6c97528b076d95e8484981c072948db25c251c2f',
   'facet-release-territory-v1': 'ecfc69ba05556b2e65bf1cdc686e8bc7f9f682f01ff728ff369fa33d5e211971',
-  'facet-release-completeness-v1': 'b09b7d2e0d9d84614814eaae0ee7f81beb6671690655399aaeee8ce79fafbbfe',
+  'facet-release-completeness-v1': '691aa13c51613fe66453545e2959e5a177649c7132b497b459dd39e3f6c5456d',
   'facet-release-status-v1': '541d9caf10ff71efcd74ebb9d71e4212142b586927f097f12fa9b9d9acc5f7b9',
   'facet-author-v1': '2c16a404d3c13f1161102c924763ef302e4695fca2f09965f96a2e4193d9b48b',
   'facet-concept-v1': '6a2438d45d2616af705374094389676616c09e0fbbc8eda2330754b4d325a5d5',

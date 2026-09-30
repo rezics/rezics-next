@@ -49,7 +49,9 @@ type FacetStep =
    * Version, takes the bound role. A `where` group binds its Conditions to one such occurrence. */
   | { kind: 'occurrence' }
   /** One related node reached along this fixed path. `where` binds every Condition to that node. */
-  | { kind: 'related'; path: readonly { predicate: Term; inverse?: true }[]; types: readonly Term[] }
+  | { kind: 'related'; path: readonly { predicate: Term; inverse?: true }[]; types: readonly Term[];
+      /** Child paths starting with this predicate share one entry belonging to the queried Resource. */
+      correlation?: { predicate: Term; resource: Term; types: readonly Term[] } }
   /** The node's aggregate in the bound rating Context, which must fix these policies and supplies the question. */
   | { kind: 'rating'; target: Term; cadence: Term; population: Term; aggregation: Term;
     scale: { min: number; max: number } };
@@ -172,12 +174,19 @@ function step(value: FacetStep, location: string): Record<string, unknown> {
       knownFields(value, ['kind'], location);
       return { kind: value.kind };
     case 'related':
-      knownFields(value, ['kind', 'path', 'types'], location);
+      knownFields(value, ['kind', 'path', 'types', 'correlation'], location);
       if (!value.path.length || !value.types.length) throw new Error(`${location} needs a related path and types`);
+      if (value.correlation) {
+        knownFields(value.correlation, ['predicate', 'resource', 'types'], location);
+        if (!value.correlation.types.length) throw new Error(`${location} needs correlation types`);
+      }
       return { kind: 'related', path: value.path.map(item => {
         knownFields(item, ['predicate', 'inverse'], location);
         return { predicate: iri(item.predicate, location), ...(item.inverse ? { inverse: true } : {}) };
-      }), types: value.types.map(type => iri(type, location)) };
+      }), types: value.types.map(type => iri(type, location)),
+      ...(value.correlation ? { correlation: { predicate: iri(value.correlation.predicate, location),
+        resource: iri(value.correlation.resource, location),
+        types: value.correlation.types.map(type => iri(type, location)) } } : {}) };
     case 'units':
       knownFields(value, ['kind', 'unit'], location);
       return { kind: 'units', unit: iri(value.unit, location) };

@@ -8,6 +8,8 @@ import { resolveFacet } from '../src/modules/facets/registry.ts';
 import { releaseGroupPattern, releaseWorkConditions } from '../src/modules/facets/release-query.ts';
 import { releaseWorksPage, RELEASE_QUERY_COST } from '../src/modules/facets/release-contract.ts';
 import { admitSavedFilter } from '../src/modules/saved-filter/admit.ts';
+import { fusekiReadBudget } from '../src/infrastructure/fuseki.ts';
+import { withReleaseQueryBudget } from '../src/modules/facets/release-read.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const children: FilterCondition[] = [
@@ -31,7 +33,13 @@ test('G851: release group compiles one bound node and includes every child in ad
   for (const predicate of ['contentLanguage', 'platform', 'completeness', 'releaseStatus']) {
     expect(pattern).toContain(`?oneRelease <https://rezics.com/vocab/${predicate}>`);
   }
-  expect(pattern).toContain('rv:work|rv:coverageWork ?coveredWork');
+  expect(pattern).toContain('rv:work|rv:coverageWork|rv:coverage/rv:work ?coveredWork');
+  expect(pattern).toContain('?coveragegroup <https://rezics.com/vocab/work> ?work');
+  expect(pattern).toContain('?coveragegroup <https://rezics.com/vocab/contentLanguage>');
+  expect(pattern).toContain('?coveragegroup <https://rezics.com/vocab/completeness>');
+  expect(pattern).toContain('release-v1');
+  expect(pattern).toContain('release-v2');
+  expect(pattern).toContain('release-v3');
   expect(pattern).toContain('?covered_publicSelection');
   for (const facet of ['release', ...children.map(child => child.facet), 'releaseTerritory']) {
     expect(Value.Check(facetDefinition, resolveFacet(facet))).toBe(true);
@@ -49,6 +57,36 @@ test('G851: release children belong only to their declared release group', () =>
   expect(() => compileQuery({ ...base, filter: { all: [{ ...relation, where: { all: [
     { facet: 'role', any: [id(3)] },
   ] } }] } })).toThrow(QueryRejected);
+});
+
+test('G851: related dispatch follows the step kind and includes all declared target types', () => {
+  const facet = resolveFacet('release')!;
+  const related = facet.path.at(-1)!;
+  if (related.kind !== 'related') throw new Error('Missing related step');
+  const name = facet.name;
+  try {
+    facet.name = 'editionGroup';
+    related.types.push('https://rezics.com/vocab/OtherRelease');
+    expect(compiled().template).toBe('release-works');
+    expect(releaseGroupPattern(group, '?release', 'types')).toContain(
+      'VALUES ?releaseTypetypes { <https://rezics.com/vocab/Release> <https://rezics.com/vocab/OtherRelease> }');
+  } finally { facet.name = name; related.types.pop(); }
+});
+
+test('G851: each moved read attempt gets a fresh release ledger while debiting the request ledger', async () => {
+  const parent = { signal: AbortSignal.timeout(10_000), callsLeft: 160, bytesLeft: 4 * 1024 * 1024 };
+  await fusekiReadBudget.run(parent, async () => {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await withReleaseQueryBudget(async () => {
+        const budget = fusekiReadBudget.getStore()!;
+        expect(budget.callsLeft).toBe(RELEASE_QUERY_COST.graphCalls);
+        for (let call = 0; call < RELEASE_QUERY_COST.graphCalls; call++) budget.callsLeft--;
+        expect(budget.callsLeft).toBe(0);
+        expect(budget.signal.aborted).toBe(false);
+      });
+    }
+  });
+  expect(parent.callsLeft).toBe(160 - 4 * RELEASE_QUERY_COST.graphCalls);
 });
 
 test('G851: Saved Filters pin and round-trip the whole release group through shared Query admission', () => {
@@ -80,8 +118,8 @@ test('G851: resource Conditions stay on the Work, unsupported combinations refus
   const query = compileQuery({ ...base, filter: { all: [group, { facet: 'language', any: ['ja'] },
     { facet: 'type', any: ['https://schema.org/Book'] }, { facet: 'status', none: ['hiatus'] }] } });
   if (query.template !== 'release-works') throw new Error('Wrong template');
-  expect(releaseWorkConditions(query.request)).toContain('?work <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>');
-  expect(releaseWorkConditions(query.request)).toContain('?languageContribution rv:language');
+  expect(releaseWorkConditions(query.request, '?selectedContribution')).toContain('?work <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>');
+  expect(releaseWorkConditions(query.request, '?selectedContribution')).toContain('BIND(?selectedContribution AS ?languageContribution)');
   expect(() => compileQuery({ ...base, text: { phrase: 'story' }, sort: 'relevance' })).toThrow(QueryRejected);
   expect(() => compileQuery({ ...base, sort: 'updated' })).toThrow(QueryRejected);
   expect(() => compileQuery({ ...base, page: { size: 21 } })).toThrow('bound');

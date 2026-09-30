@@ -28,7 +28,9 @@ const facetStep = t.Union([
   t.Object({ kind: t.Literal('occurrence') }, closed),
   t.Object({ kind: t.Literal('related'), path: t.Array(t.Object({ predicate: iri,
     inverse: t.Optional(t.Literal(true)) }, closed), { minItems: 1 }),
-  types: t.Array(iri, { minItems: 1 }) }, closed),
+  types: t.Array(iri, { minItems: 1 }),
+  correlation: t.Optional(t.Object({ predicate: iri, resource: iri,
+    types: t.Array(iri, { minItems: 1 }) }, closed)) }, closed),
   t.Object({ kind: t.Literal('rating'), target: iri, cadence: iri, population: iri, aggregation: iri,
     scale: t.Object({ min: t.Integer(), max: t.Integer() }, closed) }, closed),
 ]);

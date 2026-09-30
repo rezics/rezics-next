@@ -4,7 +4,7 @@ import { Value } from 'typebox/value';
 import { startMediaStack, type MediaStack } from './media-support.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import type { RealizationWrite } from '../../../services/main/src/modules/realization/schema.ts';
-import type { ReleaseV2Write } from '../../../services/main/src/modules/release/schema.ts';
+import type { ReleaseV2Write, ReleaseWrite } from '../../../services/main/src/modules/release/schema.ts';
 import { RELEASE_QUERY_COST, releaseWorksPage } from '../../../services/main/src/modules/facets/release-contract.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
 
@@ -94,6 +94,88 @@ test('G851: one usable release supplies every condition and every explanation; d
       .toHaveLength(1);
     expect((await call([condition('language', 'en'), group(language('en'), platform('Windows'))])).items).toEqual([]);
 
+    // Entry correlation: Japanese complete + English trial on ONE release is not English complete.
+    const bilingual = await release(editor, vn.work, [ja, { ...en, completeness: 'trial', portion: 'Opening' }], 'Linux');
+    const bilingualGroup = { ...group(language('en'), complete), any: [bilingual.body.id] };
+    const coverageGuard = async () => expect((await call([bilingualGroup])).items).toEqual([]);
+    await coverageGuard();
+    const bilingualRead = await json<{ profile: string; coverage: { language: string; completeness: string; portion?: string }[] }>(
+      await stack.call('GET', `${root(vn.work)}/releases/${bilingual.body.id.slice(-36)}`));
+    expect(bilingualRead.profile).toBe('release-v2');
+    expect(bilingualRead.coverage).toContainEqual(expect.objectContaining({ language: 'en', completeness: 'trial', portion: 'Opening' }));
+    expect((await call([{ ...group(language('en'), condition('releaseCompleteness', 'trial')), any: [bilingual.body.id] }]))
+      .items[0]!.matchedReleases).toEqual([bilingual.body.id]);
+    // Deliberately decorrelate completeness to another entry of that release; this must break the guard.
+    stack.fuseki.query = (sparql, maxBytes) => originalQuery(sparql.replace(
+      /(\?coverage[\w]*) <https:\/\/rezics\.com\/vocab\/completeness>/g,
+      '$1 ^<https://rezics.com/vocab/coverage>/<https://rezics.com/vocab/coverage> ?otherEntry . ?otherEntry <https://rezics.com/vocab/completeness>'), maxBytes);
+    try { await expect(coverageGuard()).rejects.toThrow(); }
+    finally { stack.fuseki.query = originalQuery; }
+    const omnibus = await release(editor, vn.work, [ja, bookEn], 'Omnibus');
+    expect((await call([{ ...group(language('en')), any: [omnibus.body.id] }])).items.map(item => item.id)).toEqual([book.work]);
+    expect((await json<{ items: { id: string }[] }>(await stack.call('GET', `${root(vn.work)}/releases?contentLanguage=en`)))
+      .items.map(item => item.id)).not.toContain(omnibus.body.id);
+    expect((await json<{ items: { id: string }[] }>(await stack.call('GET', `${root(book.work)}/releases?contentLanguage=en`)))
+      .items.map(item => item.id)).toContain(omnibus.body.id);
+    // Every successful modern write uses v3, even a v2 request. Explicit v3 requests work too.
+    const v3Body = { ...bilingual.body, profile: 'release-v3', id: id() };
+    const v3 = await json<{ revision: string }>(await editor.send('PUT', `${root(vn.work)}/releases/${v3Body.id.slice(-36)}`, v3Body));
+    expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(v3.revision)} rv:modelRevision <https://rezics.com/definition/release-v3> } }`)).boolean).toBe(true);
+    // Freeze an old v2 projection: its irrecoverable aggregate semantics stay release-level.
+    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(bilingual.body.id)} rv:coverage ?entry ; rv:definitionProfile ?profile . ?entry ?p ?o }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(bilingual.saved.revision)} rv:modelRevision ?profile ; rv:shapeRevision ?profile }
+    } INSERT {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(bilingual.body.id)} rv:definitionProfile <https://rezics.com/definition/release-v2> ;
+        rv:contentLanguage ?language ; rv:completeness ?completeness ; rv:coverageRealization ?realization ; rv:coverageRevision ?coveredRevision }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(bilingual.saved.revision)} rv:modelRevision <https://rezics.com/definition/release-v2> ;
+        rv:shapeRevision <https://rezics.com/definition/release-v2> }
+    } WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(bilingual.body.id)} rv:coverage ?entry ; rv:definitionProfile ?profile .
+      ?entry rv:contentLanguage ?language ; rv:completeness ?completeness ; rv:realization ?realization ; rv:revision ?coveredRevision ; ?p ?o } }`);
+    expect((await call([bilingualGroup])).items[0]!.matchedReleases).toEqual([bilingual.body.id]);
+    expect((await json<{ coverage: unknown[] }>(await stack.call('GET',
+      `${root(vn.work)}/releases/${bilingual.body.id.slice(-36)}`))).coverage).toHaveLength(2);
+    const upgraded = await json<{ revision: string }>(await editor.send('PUT', `${root(vn.work)}/releases/${bilingual.body.id.slice(-36)}`,
+      { ...bilingual.body, expectedHead: bilingual.saved.revision, evidence: id(), publisher: 'Corrected' }));
+    await coverageGuard();
+    expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(bilingual.body.id)} rv:releaseHead ${iri(upgraded.revision)} ; rv:coverage ?entry .
+      ?entry rv:contentLanguage "en" ; rv:completeness "trial" ; rv:portion "Opening" }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(upgraded.revision)} rv:modelRevision <https://rezics.com/definition/release-v3> } }`)).boolean).toBe(true);
+    const changedCoverage = await json<{ revision: string }>(await editor.send('PUT',
+      `${root(vn.work)}/releases/${bilingual.body.id.slice(-36)}`, { ...bilingual.body,
+        expectedHead: upgraded.revision, evidence: id(), coverage: [ja, { ...en, completeness: 'partial' }] }));
+    expect((await call([{ ...group(language('en'), condition('releaseCompleteness', 'trial')), any: [bilingual.body.id] }])).items)
+      .toEqual([]);
+    expect((await call([{ ...group(language('en'), condition('releaseCompleteness', 'partial')), any: [bilingual.body.id] }]))
+      .items[0]!.matchedReleases).toEqual([bilingual.body.id]);
+    const correctedCoverage = await json<{ revision: string; coverage: { language: string; completeness: string; portion?: string }[] }>(
+      await stack.call('GET', `${root(vn.work)}/releases/${bilingual.body.id.slice(-36)}`));
+    expect(correctedCoverage.revision).toBe(changedCoverage.revision);
+    expect(correctedCoverage.coverage.find(entry => entry.language === 'en')).not.toHaveProperty('portion');
+    const legacy: ReleaseWrite = { profile: 'release-v1', id: id(), expectedHead: null, actingSubject: editor.actor,
+      kind: 'formal', status: 'official', contentLanguages: ['ja'], isTranslation: false, originalLanguages: [],
+      title: { value: 'Legacy release', language: 'ja' }, titleLanguage: null, tracklistLanguage: null,
+      editionStatement: null, publisher: null, publicationYear: null, isbn13: null, originalUrl: null,
+      fixedRelease: null, coverage: null, evidence: null };
+    const legacySaved = await json<{ revision: string }>(await editor.send('PUT', `${root(vn.work)}/releases/${legacy.id.slice(-36)}`, legacy));
+    expect((await call([{ ...group(playable), any: [legacy.id] }])).items[0]!.matchedReleases).toEqual([legacy.id]);
+    // Old v1 has rv:work alone and is still included by a status-only group.
+    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(legacy.id)} rv:coverageWork ${iri(vn.work)} ; rv:definitionProfile ?profile ; rv:legacyRelease "true" }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(legacySaved.revision)} rv:modelRevision ?profile ; rv:shapeRevision ?profile }
+    } INSERT { GRAPH ${iri(GRAPHS.revisions)} { ${iri(legacySaved.revision)} rv:modelRevision <https://rezics.com/definition/release-v1> ;
+      rv:shapeRevision <https://rezics.com/definition/release-v1> } }
+    WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(legacy.id)} rv:definitionProfile ?profile } }`);
+    expect((await call([{ ...group(playable), any: [legacy.id] }])).items[0]!.matchedReleases).toEqual([legacy.id]);
+
+    const legacyUpgraded = await json<{ revision: string }>(await editor.send('PUT',
+      `${root(vn.work)}/releases/${legacy.id.slice(-36)}`, { ...legacy, expectedHead: legacySaved.revision, evidence: id(), publisher: 'Correction' }));
+    expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(legacyUpgraded.revision)} rv:modelRevision <https://rezics.com/definition/release-v3> } }`)).boolean).toBe(true);
+    expect((await call([{ ...group(playable), any: [legacy.id] }])).items[0]!.matchedReleases).toEqual([legacy.id]);
+
     const th = await realization(editor, vn.work, 'th');
     const thaiRelease = await release(editor, vn.work, [th], 'Windows', { territory: 'TH', status: 'unofficial' });
     expect((await call([group(language('th'), platform('Windows'), complete,
@@ -131,18 +213,18 @@ test('G851: one usable release supplies every condition and every explanation; d
     expect(await misplaced.json()).toMatchObject({ code: 'invalid_query' });
     expect(stack.fuseki.queries).toBe(before);
   } finally { await stack.stop(); }
-}, 120_000);
+}, 180_000);
 
 /** Isolated query-owner fixture, built in one graph update. Owner commands are tested above.
  * Each Work has its own public selection, draft, head and release; 620 rows cross 60/128/512.
  * The oldest matching Work follows all nonmatching candidates to detect pre-filter LIMIT mutations. */
-async function catalogue(stack: MediaStack, realm: string, size: number) {
+async function catalogue(stack: MediaStack, realm: string, size: number, gap = 70) {
   const current: string[] = [], revisions: string[] = [], works: string[] = [], matching: string[] = [];
   for (let index = 0; index < size; index++) {
     const work = id(), main = id(), head = id(), contribution = id(), draft = id(), decision = id(), selection = id();
     const release = id(), releaseHead = id(), slot = id(), zoneSelection = id();
     works.push(work);
-    const yes = index >= 70;
+    const yes = index >= gap;
     if (yes) matching.push(work);
     current.push(`${iri(work)} a <https://schema.org/CreativeWork>, <https://schema.org/Book> ;
       rv:mainVersion ${iri(main)} ; rv:head ${iri(head)} ; <http://www.w3.org/2000/01/rdf-schema#label> ${lit(`Catalogue ${index}`)}@en .
@@ -185,6 +267,21 @@ test('G851: global and Zone inventories filter before pagination and traverse be
     const fixture = await catalogue(stack, realm, 620);
     const filter = { all: [group(language('th'), platform('Windows'), complete, playable,
       condition('releaseTerritory', '001'))] };
+    const boundedQuery = stack.fuseki.query.bind(stack.fuseki);
+    let checkedWindows = 0;
+    stack.fuseki.query = (sparql, maxBytes) => {
+      if (sparql.includes('SELECT DISTINCT ?work WHERE')) {
+        expect(sparql).toContain('VALUES (?work ?main)');
+        const values = sparql.match(/VALUES \(\?work \?main\) \{([^}]*)\}/)![1]!;
+        expect((values.match(/\(/g) ?? []).length).toBeLessThanOrEqual(RELEASE_QUERY_COST.candidateRows);
+        checkedWindows++;
+      }
+      if (sparql.includes('SELECT DISTINCT ?work ?head ?main ?epochOrder ?sequence')) {
+        expect(sparql).not.toContain('releaseHead');
+        expect(sparql).not.toContain('publicSelection');
+      }
+      return boundedQuery(sparql, maxBytes);
+    };
     for (const scope of [{ kind: 'all' }, { kind: 'realm', realm }]) {
       const seen: string[] = [];
       let pages = 0, maxRequestMs = 0, maxGraphCalls = 0;
@@ -215,10 +312,14 @@ test('G851: global and Zone inventories filter before pagination and traverse be
       console.info('G851 traversal:', JSON.stringify({ scope: scope.kind, works: seen.length,
         pages, maxRequestMs, maxGraphCalls }));
     }
+    expect(checkedWindows).toBeGreaterThan(50);
+    stack.fuseki.query = boundedQuery;
     const firstBody = { ...base, filter, page: { size: 1 } };
     const first = (await json<{ result: Page }>(await stack.call('POST', '/v1/query', { body: firstBody }))).result;
     const repeated = (await json<{ result: Page }>(await stack.call('POST', '/v1/query', { body: firstBody }))).result;
     expect(repeated.items).toEqual(first.items);
+    expect(first.items).toEqual([]);
+    expect(first.nextCursor).not.toBeNull();
     // Prove the complete traversal guard detects applying the former 60-Work window
     // before the release filter. The first 70 Works deliberately do not match.
     const liveQuery = stack.fuseki.query.bind(stack.fuseki);
@@ -230,7 +331,7 @@ test('G851: global and Zone inventories filter before pagination and traverse be
             rv:sequence ?mutantSequence } } ORDER BY DESC(?mutantSequence) LIMIT 60 }`), maxBytes);
     const paginationGuard = async () => {
       const page = (await json<{ result: Page }>(await stack.call('POST', '/v1/query', { body: firstBody }))).result;
-      expect(page.items.map(item => item.id)).toEqual([fixture.matching[0]!]);
+      expect(page.nextCursor).not.toBeNull();
     };
     try { await expect(paginationGuard()).rejects.toThrow(); }
     finally { stack.fuseki.query = liveQuery; }
@@ -239,13 +340,19 @@ test('G851: global and Zone inventories filter before pagination and traverse be
       page: { size: 1, continuation: first.nextCursor } } });
     expect(mismatched.status).toBe(400);
     expect(await mismatched.json()).toMatchObject({ code: 'invalid_work_read' });
-    // A real correction during a page read must never emit a mixed snapshot.
+    // A moved first-page attempt under a concurrent read burst must retain a fresh attempt
+    // ledger. The old enclosing 12-call ledger fails before this succeeds (Realm has extra reads).
     const original = stack.fuseki.query.bind(stack.fuseki);
-    let moved = false;
+    let moved = 0;
+    const retryBody = { ...firstBody, context: { realm }, scope: { kind: 'realm', realm },
+      filter: { all: [group(language('th'), platform('Switch'), complete, playable)] } };
+    const retryBasis = (await json<{ result: Page }>(await stack.call('POST', '/v1/query', { body: retryBody }))).result;
+    expect(retryBasis.items).toHaveLength(1);
+    const callsBeforeRetry = stack.fuseki.queries;
     stack.fuseki.query = async (...args) => {
       const result = await original(...args);
-      if (!moved && args[0].includes('SELECT DISTINCT ?work ?head ?main ?epochOrder ?sequence')) {
-        moved = true;
+      if (moved < 1 && args[0].includes('SELECT ?work ?release WHERE')) {
+        moved++;
         await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.control)} {
           ${iri(DATASET)} rv:sequence ?n } } INSERT { GRAPH ${iri(GRAPHS.control)} {
           ${iri(DATASET)} rv:sequence ?next } } WHERE { GRAPH ${iri(GRAPHS.control)} {
@@ -253,11 +360,36 @@ test('G851: global and Zone inventories filter before pagination and traverse be
       }
       return result;
     };
-    const changed = await stack.call('POST', '/v1/query', { body: firstBody });
+    const load = Promise.all(Array.from({ length: 12 }, () => original(`PREFIX rv: <${RV}>
+      SELECT (COUNT(*) AS ?rows) WHERE { GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }`)));
+    const changed = await stack.call('POST', '/v1/query', { body: retryBody });
     const recovered = (await json<{ result: Page }>(changed)).result;
-    expect(moved).toBe(true);
-    expect(recovered.items).toEqual(first.items);
-    expect(BigInt(recovered.sourcePosition.sequence)).toBeGreaterThan(BigInt(first.sourcePosition.sequence));
+    await load;
+    expect(moved).toBe(1);
+    expect(stack.fuseki.queries - callsBeforeRetry).toBeGreaterThan(12);
+    expect(recovered.items).toEqual(retryBasis.items);
+    expect(BigInt(recovered.sourcePosition.sequence)).toBeGreaterThan(BigInt(retryBasis.sourcePosition.sequence));
     stack.fuseki.query = original;
+    // A whole sparse candidate window yields a continuation, never a false terminal result.
+    // Reuse the same fixture and change the first 200 matching release platforms to nonmatching.
+    const sparseWorks = fixture.matching.slice(0, 200);
+    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} { ?release rv:platform "Windows" } }
+      INSERT { GRAPH ${iri(GRAPHS.current)} { ?release rv:platform "Switch" } }
+      WHERE { VALUES ?work { ${sparseWorks.map(iri).join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?release rv:coverageWork ?work ; rv:platform "Windows" } }`);
+    const expected = fixture.matching.slice(200);
+    let continuation: string | null = null;
+    const sparseSeen: string[] = [];
+    let emptyPages = 0;
+    do {
+      const page = (await json<{ result: Page }>(await stack.call('POST', '/v1/query', { body: {
+        ...base, filter, page: { size: 20, ...(continuation ? { continuation } : {}) },
+      } }))).result;
+      if (!page.items.length && page.nextCursor) emptyPages++;
+      sparseSeen.push(...page.items.map(item => item.id));
+      continuation = page.nextCursor;
+    } while (continuation);
+    expect(emptyPages).toBeGreaterThanOrEqual(2);
+    expect(sparseSeen).toEqual(expected);
   } finally { await stack.stop(); }
 }, 240_000);

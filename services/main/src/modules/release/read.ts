@@ -4,7 +4,7 @@ import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadMissing, WorkRe
   type WorkReadSession } from '../work/read-session.ts';
 import { fenceWorkBasis, readWorkBasis } from '../work/read-header.ts';
 import { recordedLanguageTag, InvalidContentLanguages } from './languages.ts';
-import { parseStoredRelease, RELEASE_COST, RELEASE_PROFILE, RELEASE_V2_PROFILE, RELEASE_V2_COST, isbnOk, releaseIdentifier, identifierLiteral, InvalidRelease, ReleaseUnavailable, type AnyReleaseRecord } from './schema.ts';
+import { parseStoredRelease, RELEASE_COST, RELEASE_PROFILE, RELEASE_V2_PROFILE, RELEASE_V3_PROFILE, RELEASE_V2_COST, isbnOk, releaseIdentifier, identifierLiteral, InvalidRelease, ReleaseUnavailable, type AnyReleaseRecord } from './schema.ts';
 
 export interface SnapshotView {
   id: string; fetchedAt: string; byteDigest: string; byteLength: number;
@@ -25,7 +25,7 @@ export interface ReleaseView {
 }
 
 function viewOf(record: AnyReleaseRecord, revision: string, snapshots: SnapshotView[], main: Map<string, string>): ReleaseView {
-  const coverage = record.profile === 'release-v2' ? record.coverage.map(entry => {
+  const coverage = record.profile !== 'release-v1' ? record.coverage.map(entry => {
     const covered = record.resolvedCoverage.find(row => row.realization === entry.realization)!;
     return { ...entry, work: covered.work, mainVersion: main.get(covered.work)!, language: covered.language };
   }) : [{ realization: null, revision: null, work: record.work, mainVersion: main.get(record.work)!,
@@ -37,13 +37,13 @@ function viewOf(record: AnyReleaseRecord, revision: string, snapshots: SnapshotV
     editionStatement: record.editionStatement, isbn13: record.isbn13, publicationYear: record.publicationYear,
     originalUrl: record.originalUrl, fixedRelease: record.fixedRelease,
     coverage, legacyCoverage: record.profile === 'release-v1' ? record.coverage : null,
-    identifiers: record.profile === 'release-v2' ? record.identifiers : [],
-    platform: record.profile === 'release-v2' ? record.platform : null,
-    territory: record.profile === 'release-v2' ? record.territory : null, snapshots };
+    identifiers: record.profile !== 'release-v1' ? record.identifiers : [],
+    platform: record.profile !== 'release-v1' ? record.platform : null,
+    territory: record.profile !== 'release-v1' ? record.territory : null, snapshots };
 }
 
 function coveredWorks(record: AnyReleaseRecord): string[] {
-  return record.profile === 'release-v2' ? [...new Set(record.resolvedCoverage.map(entry => entry.work))] : [record.work];
+  return record.profile !== 'release-v1' ? [...new Set(record.resolvedCoverage.map(entry => entry.work))] : [record.work];
 }
 
 /** At most 20 x 64 coverage entries, batched in the summary owner's groups of 64.
@@ -108,9 +108,13 @@ export async function readWorkReleases(session: WorkReadSession, work: string, c
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const rows = await session.query(`SELECT DISTINCT ?release ?revision WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?release a rv:Release ; rv:work|rv:coverageWork ${iri(work)} ; rv:releaseHead ?revision .
-      ${listed ? `?release rv:contentLanguages ?langs .
-        FILTER(CONTAINS(CONCAT(" ", STR(?langs), " "), ${lit(` ${listed} `)}))` : ''}
-    } ${cursor ? `FILTER(STR(?release) > ${lit(cursor.after)})` : ''}
+    }
+    ${listed ? `FILTER(EXISTS { GRAPH ${iri(GRAPHS.current)} {
+      ?release rv:coverage ?languageEntry . ?languageEntry rv:work ${iri(work)} ; rv:contentLanguage ${lit(listed)} }
+    } || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?release rv:contentLanguages ?langs .
+      FILTER NOT EXISTS { ?release rv:coverage ?knownCoverage }
+      FILTER(CONTAINS(CONCAT(" ", STR(?langs), " "), ${lit(` ${listed} `)})) } })` : ''}
+    ${cursor ? `FILTER(STR(?release) > ${lit(cursor.after)})` : ''}
   } ORDER BY STR(?release) LIMIT ${limit + 1}`, limit + 1);
   if (rows.some(row => !row.release || !row.revision) || new Set(rows.map(row => row.release!.value)).size !== rows.length) {
     throw new WorkReadUnavailable('Release identities are ambiguous');
@@ -119,7 +123,7 @@ export async function readWorkReleases(session: WorkReadSession, work: string, c
   const hydrated = page.length ? await session.query(`SELECT ?release ?revision ?state WHERE {
     VALUES (?release ?revision) { ${page.map(row => `(${iri(row.release!.value)} ${iri(row.revision!.value)})`).join(' ')} }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ReleaseRevision ; rv:component ?release ;
-      rv:modelRevision ?profile ; rv:releaseState ?state . VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} } }
+      rv:modelRevision ?profile ; rv:releaseState ?state . VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} ${iri(RELEASE_V3_PROFILE)} } }
   } LIMIT ${limit + 1}`, limit + 1) : [];
   if (hydrated.length !== page.length) throw new WorkReadUnavailable('Release revisions are incomplete');
   const byRelease = new Map(hydrated.map(row => [row.release?.value, row]));
@@ -161,7 +165,7 @@ export async function readWorkRelease(session: WorkReadSession, work: string, re
   const rows = await session.query(`SELECT DISTINCT ?revision ?state WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(release)} a rv:Release ; rv:work|rv:coverageWork ${iri(work)} ; rv:releaseHead ?revision }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ReleaseRevision ; rv:component ${iri(release)} ;
-      rv:modelRevision ?profile ; rv:releaseState ?state . VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} } }
+      rv:modelRevision ?profile ; rv:releaseState ?state . VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} ${iri(RELEASE_V3_PROFILE)} } }
   } LIMIT 2`, 2);
   if (!rows.length) throw new WorkReadMissing('Release is unavailable');
   if (rows.length !== 1 || !rows[0]?.revision || !rows[0].state) throw new WorkReadUnavailable('Release revision is incomplete');
@@ -215,7 +219,7 @@ export async function readReleasesByIdentifier(session: WorkReadSession, lookup:
     VALUES (?release ?revision) { ${page.map(row => `(${iri(row.release!.value)} ${iri(row.revision!.value)})`).join(' ')} }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ReleaseRevision ; rv:component ?release ;
       rv:modelRevision ?profile ; rv:releaseState ?state .
-      VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} } }
+      VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} ${iri(RELEASE_V3_PROFILE)} } }
   } LIMIT ${page.length + 1}`, page.length + 1) : [];
   if (hydrated.length !== page.length || new Set(hydrated.map(row => row.release?.value)).size !== page.length) {
     throw new WorkReadUnavailable('Release lookup is incomplete');
@@ -224,7 +228,7 @@ export async function readReleasesByIdentifier(session: WorkReadSession, lookup:
     if (!row.release || !row.revision || !row.state) throw new WorkReadUnavailable('Release lookup is incomplete');
     const record = parseStoredRelease(row.state.value);
     if (record.id !== row.release.value || (lookup.isbn13 ? record.isbn13 !== lookup.isbn13
-      : record.profile !== 'release-v2' || !record.identifiers.some(entry => identifierLiteral(entry) === value))) {
+      : record.profile === 'release-v1' || !record.identifiers.some(entry => identifierLiteral(entry) === value))) {
       throw new WorkReadUnavailable('Release identifier projection differs');
     }
     return { record, revision: row.revision.value, snapshots: [] };

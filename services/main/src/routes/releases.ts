@@ -3,7 +3,7 @@ import { pendingOperation } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
 import { setRelease } from '../modules/release/command.ts';
 import { readWorkRelease, readWorkReleases, readReleasesByIdentifier } from '../modules/release/read.ts';
-import { InvalidRelease, ReleaseUnavailable, StaleRelease, releaseWrite, releaseV2Write } from '../modules/release/schema.ts';
+import { InvalidRelease, ReleaseUnavailable, StaleRelease, releaseWrite, releaseV2Write, releaseV3Write } from '../modules/release/schema.ts';
 import { pageFields, pageQuery, readId, readLanguage, readPosition, readUuid } from '../modules/work/read-contract.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -67,7 +67,7 @@ export function releaseRoutes(work: MainWorkDependencies) {
       catch (error) { return releaseError(error); }
     })
     .put('/v1/works/:id/releases/:release', { params: t.Object({ id: readUuid, release: readUuid }),
-      body: t.Union([releaseWrite, releaseV2Write]),
+      body: t.Union([releaseWrite, releaseV2Write, releaseV3Write]),
       response: { 200: t.Object({ work: readId, release: readId, revision: readId, receipt: t.String(),
         sourcePosition: readPosition, replayed: t.Boolean() }), 202: pendingOperation, ...writeProblems },
     }, async ({ request, params: path, body }) => {

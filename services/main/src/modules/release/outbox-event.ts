@@ -3,7 +3,7 @@ import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { readReleaseReceipt } from './command.ts';
 import { readMetadataReceipt } from '../work/metadata-command.ts';
 import { checkedEditionV2 } from '../work/metadata-schema.ts';
-import { parseStoredRelease, releaseDigest, RELEASE_PROFILE, RELEASE_V2_PROFILE, RELEASE_V2_COST } from './schema.ts';
+import { parseStoredRelease, releaseDigest, RELEASE_PROFILE, RELEASE_V2_PROFILE, RELEASE_V3_PROFILE, RELEASE_V2_COST } from './schema.ts';
 
 export const outboxEventHandlers = [{
   kind: `${RV}WorkMetadataRevisedEvent`,
@@ -54,14 +54,14 @@ export const outboxEventHandlers = [{
       const states = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?state WHERE {
         GRAPH ${iri(GRAPHS.revisions)} { ${iri(releaseReceipt.revision!)} a rv:ReleaseRevision ;
           rv:component ${iri(releaseReceipt.release!)} ; rv:releaseState ?state ; rv:modelRevision ?profile .
-          VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} } }
+          VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} ${iri(RELEASE_V3_PROFILE)} } }
       } LIMIT 2`, RELEASE_V2_COST.stateBytes * 2)).results?.bindings ?? [];
       if (states.length !== 1 || !states[0]?.state) throw new Error('Release event revision is incomplete');
       const record = parseStoredRelease(states[0].state.value, releaseReceipt.work!);
       if (record.id !== releaseReceipt.release || releaseDigest(record) !== releaseReceipt.requestDigest) {
         throw new Error('Release event state differs from its receipt');
       }
-      if (record.profile === 'release-v2') coverage = { profile: record.profile,
+      if (record.profile !== 'release-v1') coverage = { profile: 'release-v2',
         works: [...new Set(record.resolvedCoverage.map(entry => entry.work))], coverage: record.coverage };
     }
     return { specversion: '1.0', id: eventId, source: 'https://rezics.com/services/main',

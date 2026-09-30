@@ -25,7 +25,7 @@ final class ModelMutationPolicy {
     private static final Node RECEIPTS = NodeFactory.createURI(CommandPolicy.RECEIPTS);
 
     record Subject(Node graph, CanonicalPolicy.Selection selection, Map<String, Set<Node>> selectors,
-                   Set<Node> types) {}
+                   Set<Node> types, Map<String, Set<Node>> releaseBasis) {}
     record Snapshot(Map<String, Subject> current, Map<String, Subject> revisions) {}
 
     static Snapshot capture(ProfileRegistry profiles, DatasetGraph data, CommandPolicy.Plan plan) {
@@ -46,8 +46,13 @@ final class ModelMutationPolicy {
             if (!revision && selected != null && selected.type().equals(RV + "RouteBinding"))
                 selectors.put(RV + "routeRevision", values(data, graph, node,
                     NodeFactory.createURI(RV + "routeRevision")));
+            Map<String, Set<Node>> releaseBasis = !revision && selected != null
+                && selected.type().equals(RV + "Release") ? Map.of(
+                    "releaseHead", values(data, graph, node, NodeFactory.createURI(RV + "releaseHead")),
+                    "work", values(data, graph, node, NodeFactory.createURI(RV + "work")),
+                    "releaseKind", values(data, graph, node, NodeFactory.createURI(RV + "releaseKind"))) : Map.of();
             result.put(name, new Subject(graph, selected, Map.copyOf(selectors),
-                values(data, graph, node, RDF.type.asNode())));
+                values(data, graph, node, RDF.type.asNode()), releaseBasis));
         }
         return Map.copyOf(result);
     }
@@ -109,11 +114,50 @@ final class ModelMutationPolicy {
         if (changed) {
             if (agentNameUpgrade(data, receipt, name, before))
                 return CanonicalPolicy.validate(profiles, data, name, false);
+            if (releaseCoverageUpgrade(data, receipt, name, before))
+                return CanonicalPolicy.validate(profiles, data, name, false);
             if (!routeLifecycle(data, receipt, name, before))
                 return CommandService.invalid("prestate canonical selector changed: " + name);
             return null;
         }
         return CanonicalPolicy.validateSelected(profiles, data, name, selected);
+    }
+
+    /** Only a receipted release CAS may upgrade the frozen aggregate projection to entry coverage.
+     * The revision payload remains immutable; arbitrary selector changes and downgrades stay refused. */
+    static boolean releaseCoverageUpgrade(DatasetGraph data, String receipt,
+                                                   String name, Subject before) {
+        if (!before.graph().equals(CURRENT) || before.selection() == null
+            || !before.selection().type().equals(RV + "Release")
+            || !Set.of("release-v1", "release-v2").contains(before.selection().route().profile())) return false;
+        Node release = NodeFactory.createURI(name);
+        Node own = NodeFactory.createURI(receipt);
+        Node v3 = NodeFactory.createURI("https://rezics.com/definition/release-v3");
+        Set<Node> heads = values(data, CURRENT, release, NodeFactory.createURI(RV + "releaseHead"));
+        Set<Node> expected = values(data, RECEIPTS, own, NodeFactory.createURI(RV + "expectedHead"));
+        if (heads.size() != 1 || expected.size() != 1) return false;
+        Node head = heads.iterator().next();
+        Node prior = expected.iterator().next();
+        Set<Node> works = values(data, CURRENT, release, NodeFactory.createURI(RV + "work"));
+        if (!head.isURI() || !prior.isURI() || head.equals(prior)
+            || !expected.equals(before.releaseBasis().get("releaseHead"))
+            || works.size() != 1 || !works.equals(before.releaseBasis().get("work"))
+            || !values(data, CURRENT, release, NodeFactory.createURI(RV + "releaseKind"))
+                .equals(before.releaseBasis().get("releaseKind"))) return false;
+        Node work = works.iterator().next();
+        return values(data, CURRENT, release, NodeFactory.createURI(RV + "definitionProfile")).equals(Set.of(v3))
+            && data.contains(RECEIPTS, own, NodeFactory.createURI(RV + "work"), work)
+            && data.contains(RECEIPTS, own, NodeFactory.createURI(RV + "admittedScope"),
+                NodeFactory.createLiteralString("work:edit:" + work.getURI()))
+            && data.contains(RECEIPTS, own, NodeFactory.createURI(RV + "release"), release)
+            && data.contains(RECEIPTS, own, NodeFactory.createURI(RV + "releaseRevision"), head)
+            && data.contains(RECEIPTS, own, NodeFactory.createURI(RV + "action"), NodeFactory.createLiteralString("work.edit"))
+            && data.contains(RECEIPTS, own, NodeFactory.createURI(RV + "outcome"), NodeFactory.createURI(RV + "Succeeded"))
+            && data.contains(REVISIONS, head, NodeFactory.createURI(RV + "component"), release)
+            && data.contains(REVISIONS, head, NodeFactory.createURI(RV + "predecessor"), prior)
+            && data.contains(REVISIONS, head, NodeFactory.createURI(RV + "modelRevision"), v3)
+            && data.contains(REVISIONS, head, NodeFactory.createURI(RV + "shapeRevision"), v3)
+            && data.contains(REVISIONS, prior, NodeFactory.createURI(RV + "component"), release);
     }
 
     /** An Agent's first localized profile advances the current shape selector with

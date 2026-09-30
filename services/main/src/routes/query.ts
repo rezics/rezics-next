@@ -97,9 +97,9 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const compiled = compileQuery(input as AdmittedQuery);
       if (compiled.template === 'release-works') {
         try {
-          const result = await withReleaseQueryBudget(() => workRead(work, publicLanguageRequest(request), {
+          const result = await workRead(work, publicLanguageRequest(request), {
             limit: compiled.request.limit, cursor: compiled.request.cursor,
-          }, session => readReleaseWorks(session, compiled.request)));
+          }, session => withReleaseQueryBudget(() => readReleaseWorks(session, compiled.request)));
           return Response.json({ profile: 'query-v1', template: 'release-works-v1',
             selection: selection(input as AdmittedQuery, compiled), result },
             { headers: { 'cache-control': 'private, no-store' } });

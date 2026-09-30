@@ -118,8 +118,10 @@ test('G833: SAO translations share Works, exact releases cover several volumes a
       expect((await stack.call('GET', `/v1/releases${query}`)).status).toBe(400);
     }
     const projected = await stack.fuseki.query(`PREFIX rv: <${RV}> ASK {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(paperback.id)} rv:contentLanguage "en" ; rv:platform "paperback" ;
-        rv:territory "US" ; rv:completeness "complete" ; rv:isbn13 "9780316371247" }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(paperback.id)} rv:coverage ?entry ; rv:platform "paperback" ;
+        rv:territory "US" ; rv:isbn13 "9780316371247" .
+        ?entry rv:work ${iri(work.work)} ; rv:realization ${iri(en.body.id)} ; rv:revision ${iri(en.result.revision)} ;
+          rv:contentLanguage "en" ; rv:completeness "complete" }
     }`);
     expect(projected.boolean).toBe(true);
 

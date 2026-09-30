@@ -8,6 +8,7 @@ import { contentLanguages, languageListLiteral, originalLanguages, recordedLangu
 export const RELEASE_PROFILE_ID = 'release-v1';
 export const RELEASE_PROFILE = 'https://rezics.com/definition/release-v1';
 export const RELEASE_V2_PROFILE = 'https://rezics.com/definition/release-v2';
+export const RELEASE_V3_PROFILE = 'https://rezics.com/definition/release-v3';
 export const RELEASE_KINDS = ['formal', 'web', 'fixed', 'virtual'] as const;
 export const RELEASE_STATUSES = ['official', 'unofficial', 'virtual', 'withdrawn', 'cancelled'] as const;
 /** One release page, then at most this many snapshots on each web publication. */
@@ -66,13 +67,24 @@ export const releaseV2Write = t.Object({ ...releaseFields, profile: t.Literal('r
   coverage: t.Array(releaseCoverage, { minItems: 1, maxItems: RELEASE_V2_COST.coverage }),
 }, closed);
 export type ReleaseV2Write = Static<typeof releaseV2Write>;
+export const releaseV3Write = t.Object({ ...releaseV2Write.properties, profile: t.Literal('release-v3') }, closed);
+export type ReleaseV3Write = Static<typeof releaseV3Write>;
 export interface CoveredRealization { realization: string; revision: string; work: string;
   language: string; kind: 'original' | 'translation'; status: 'official' | 'unofficial' }
 export interface ReleaseV2Record extends ReleaseV2Write {
   work: string; contentLanguages: string[]; isTranslation: boolean; originalLanguages: string[];
   resolvedCoverage: CoveredRealization[];
 }
-export type AnyReleaseRecord = ReleaseRecord | ReleaseV2Record;
+export type ReleaseV3Record = Omit<ReleaseV2Record, 'profile'> & { profile: 'release-v3' };
+export type AnyReleaseRecord = ReleaseRecord | ReleaseV2Record | ReleaseV3Record;
+
+export function checkedReleaseV3(input: unknown, work: string): ReleaseV3Write & { work: string } {
+  if (!Value.Check(releaseV3Write, input)) throw new InvalidRelease('Release does not match release-v3');
+  return { ...checkedReleaseV2({ ...input, profile: 'release-v2' }, work), profile: 'release-v3' };
+}
+export function resolvedReleaseV3(input: ReleaseV3Write & { work: string }, resolved: CoveredRealization[]): ReleaseV3Record {
+  return { ...resolvedReleaseV2({ ...input, profile: 'release-v2' }, resolved), profile: 'release-v3' };
+}
 export class InvalidRelease extends Error {}
 export class StaleRelease extends Error {}
 export class ReleaseUnavailable extends Error {}
@@ -180,9 +192,11 @@ export function assertReleaseCorrection(before: AnyReleaseRecord, after: AnyRele
     throw new InvalidRelease('A correction keeps the release and its kind');
   }
   assertReleasePairing(after.kind, after.status);
-  if (before.profile !== after.profile) throw new InvalidRelease('A correction keeps its release profile');
+  if ((before.profile === 'release-v1') !== (after.profile === 'release-v1')) {
+    throw new InvalidRelease('A correction keeps its coverage contract');
+  }
   if (!releaseChanged(before, after)) return;
-  if (before.profile === 'release-v2' && after.profile === 'release-v2' && before.kind !== 'virtual'
+  if (before.profile !== 'release-v1' && after.profile !== 'release-v1' && before.kind !== 'virtual'
     && after.coverage.some(entry => !before.coverage.some(old => old.realization === entry.realization))) {
     throw new InvalidRelease('A later realization is a new release, not an extension of a closed record');
   }
@@ -204,7 +218,7 @@ export function assertReleaseCorrection(before: AnyReleaseRecord, after: AnyRele
 export function releaseChanged(before: AnyReleaseRecord, after: AnyReleaseRecord): boolean {
   const facts = (record: AnyReleaseRecord) => {
     const { evidence: ignoredEvidence, expectedHead: ignoredHead, actingSubject: ignoredActor, ...rest } = record;
-    return rest;
+    return { ...rest, profile: record.profile === 'release-v2' ? 'release-v3' : record.profile };
   };
   return JSON.stringify(facts(before)) !== JSON.stringify(facts(after));
 }
@@ -214,9 +228,11 @@ export function parseStoredRelease(raw: string, work?: string): AnyReleaseRecord
     const value = JSON.parse(raw) as AnyReleaseRecord;
     const { work: stored, ...body } = value;
     if (work && stored !== work) throw new ReleaseUnavailable('Release state is invalid');
-    if (body.profile === 'release-v2') {
+    if (body.profile === 'release-v2' || body.profile === 'release-v3') {
       const { resolvedCoverage, contentLanguages: languages, isTranslation, originalLanguages: originals, ...input } = body;
-      const record = resolvedReleaseV2(checkedReleaseV2(input, stored), resolvedCoverage);
+      const record = input.profile === 'release-v3'
+        ? resolvedReleaseV3(checkedReleaseV3(input, stored), resolvedCoverage)
+        : resolvedReleaseV2(checkedReleaseV2(input, stored), resolvedCoverage);
       if (JSON.stringify(record.contentLanguages) !== JSON.stringify(languages)
         || record.isTranslation !== isTranslation || originals.length) throw new Error('Derived coverage differs');
       return record;
@@ -228,11 +244,11 @@ export function parseStoredRelease(raw: string, work?: string): AnyReleaseRecord
   }
 }
 
-export function releaseDigest(record: AnyReleaseRecord | (ReleaseV2Write & { work: string })): string {
-  if (record.profile === 'release-v2') {
+export function releaseDigest(record: AnyReleaseRecord | ((ReleaseV2Write | ReleaseV3Write) & { work: string })): string {
+  if (record.profile !== 'release-v1') {
     const payload = Object.fromEntries(Object.entries(record).filter(([key]) =>
       !['resolvedCoverage', 'contentLanguages', 'isTranslation', 'originalLanguages'].includes(key)));
-    return createHash('sha256').update(canonicalRecord({ ...payload, profile: RELEASE_V2_PROFILE })).digest('hex');
+    return createHash('sha256').update(canonicalRecord({ ...payload, profile: releaseProfileOf(record) })).digest('hex');
   }
   const payload = { ...record, profile: releaseProfileOf(record) };
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
@@ -253,7 +269,8 @@ export function identifierLiteral(identifier: { provider: string; value: string 
   return JSON.stringify([identifier.provider, identifier.value]);
 }
 
-export function releaseProfileOf(record: AnyReleaseRecord): string {
+export function releaseProfileOf(record: { profile: AnyReleaseRecord['profile'] }): string {
+  if (record.profile === 'release-v3') return RELEASE_V3_PROFILE;
   return record.profile === 'release-v2' ? RELEASE_V2_PROFILE : RELEASE_PROFILE;
 }
 

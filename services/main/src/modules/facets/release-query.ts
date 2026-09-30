@@ -19,6 +19,9 @@ const term = (value: string): string => {
   return `<${value}>`;
 };
 
+export const relatedCondition = (condition: FilterCondition): boolean =>
+  resolveFacet(condition.facet)!.path.at(-1)!.kind === 'related';
+
 /** Release groups share the FilterDocument's one grouping mechanism. Other templates stay unchanged. */
 export function compileReleaseQuery(query: AdmittedQuery, conditions: FilterCondition[]): ReleaseQuery {
   if (query.text || query.sort !== 'newest' || query.scope.kind === 'mine') {
@@ -33,8 +36,8 @@ export function compileReleaseQuery(query: AdmittedQuery, conditions: FilterCond
   if (query.page.continuation !== undefined && typeof query.page.continuation !== 'string') {
     unsupported('Release discovery continuation has the wrong form');
   }
-  const groups = conditions.filter(condition => resolveFacet(condition.facet)!.name === 'release');
-  const rest = conditions.filter(condition => resolveFacet(condition.facet)!.name !== 'release');
+  const groups = conditions.filter(relatedCondition);
+  const rest = conditions.filter(condition => !relatedCondition(condition));
   if (groups.length > RELEASE_QUERY_COST.groups) {
     throw new QueryRejected('query_budget_exceeded', 'Release groups exceed the bounded explanation reads');
   }
@@ -77,11 +80,27 @@ function valueTest(condition: FilterCondition, node: string, facet: AdmittedFace
     : `${condition.none ? '!' : ''}${exists(terms)}`;
 }
 
-function groupTest(group: FilterGroup, release: string, key: string): string {
+type CoverageBinding = { predicate: string; entry: string; legacy?: 'v1' | 'v2' };
+function groupTest(group: FilterGroup, release: string, key: string, coverage?: CoverageBinding): string {
   const all = 'all' in group;
-  return '(' + (all ? group.all : group.any).map((node: FilterNode, index) => 'facet' in node
-    ? valueTest(node, release, resolveFacet(node.facet)!, `${key}_${index}`)
-    : groupTest(node, release, `${key}_${index}`)).join(all ? ' && ' : ' || ') + ')';
+  return '(' + (all ? group.all : group.any).map((node: FilterNode, index) => {
+    if (!('facet' in node)) return groupTest(node, release, `${key}_${index}`, coverage);
+    const facet = resolveFacet(node.facet)!;
+    const scoped = facet.path[0]?.kind === 'triple' && facet.path[0].predicate === coverage?.predicate;
+    const target = scoped && !coverage?.legacy ? coverage!.entry : release;
+    if (scoped && coverage?.legacy === 'v1') {
+      const values = (node.any ?? node.all ?? node.none)! as string[];
+      const last = facet.path.at(-1)!;
+      if (last.kind !== 'triple') return unsupported('Legacy coverage needs a triple');
+      const language = last.predicate === 'https://rezics.com/vocab/contentLanguage';
+      const test = (value: string) => language ? `EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ${release} rv:contentLanguages ?legacyLanguages${key}_${index} .
+        FILTER(CONTAINS(CONCAT(" ", STR(?legacyLanguages${key}_${index}), " "), ${lit(` ${value} `)})) } }`
+        : String(value === 'unknown');
+      return `(${node.none ? '!' : ''}(${values.map(test).join(node.all ? ' && ' : ' || ')}))`;
+    }
+    return valueTest(node, target, facet, `${key}_${index}`);
+  }).join(all ? ' && ' : ' || ') + ')';
 }
 
 // A nested public-work pattern must have fresh internal variables. Otherwise its
@@ -91,27 +110,46 @@ function coveredPublic(): string {
     name === 'coveredWork' || name === 'coveredMain' ? `?${name}` : `?covered_${name}`);
 }
 
-/** One release variable holds every child, and every covered Work must be public.
- * The same pattern selects candidates and explains them; denied releases cannot influence either. */
+/** V3 binds all coverage children to one entry of the queried Work, while publication fields
+ * stay on that entry's release. Frozen v2 records only support release-level correlation;
+ * v1 coverage is unknown. Every covered Work must be public in every branch. */
 export function releaseGroupPattern(condition: FilterCondition, release: string, key: string): string {
-  const facet = resolveFacet(condition.facet)!;
-  const related = facet.path.at(-1)!;
+  const related = resolveFacet(condition.facet)!.path.at(-1)!;
   if (related.kind !== 'related') return unsupported('Release group has no related path');
   const path = related.path.map(step => `${step.inverse ? '^' : ''}${term(step.predicate)}`).join('/');
-  return `GRAPH ${iri(GRAPHS.current)} { ?work ${path} ${release} .
-    ${release} a ${term(related.types[0]!)} ; rv:releaseHead ?releaseHead${key} . }
-    GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} a rv:ReleaseRevision ; rv:component ${release} ;
-      rv:modelRevision <https://rezics.com/definition/release-v2> }
+  const entry = `?coverage${key}`;
+  const correlation = related.correlation;
+  const binding = correlation ? { predicate: correlation.predicate, entry } : undefined;
+  const v3 = `<https://rezics.com/definition/release-v3>`;
+  return `GRAPH ${iri(GRAPHS.current)} { ?work (${path}|^rv:work) ${release} .
+    VALUES ?releaseType${key} { ${related.types.map(term).join(' ')} }
+    ${release} a ?releaseType${key} ; rv:releaseHead ?releaseHead${key} . }
+    GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} a rv:ReleaseRevision ; rv:component ${release} }
+    {
+      GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:modelRevision ${v3} }
+      ${correlation ? `GRAPH ${iri(GRAPHS.current)} {
+        ${release} ${term(correlation.predicate)} ${entry} .
+        ${entry} ${term(correlation.resource)} ?work ; a ?coverageType${key} .
+        VALUES ?coverageType${key} { ${correlation.types.map(term).join(' ')} } }` : ''}
+      FILTER(${groupTest(condition.where!, release, key, binding)})
+    } UNION {
+      GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:component ${release} ; rv:modelRevision <https://rezics.com/definition/release-v2> }
+      FILTER(${groupTest(condition.where!, release, key, binding ? { ...binding, legacy: 'v2' } : undefined)})
+    } UNION {
+      { GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:component ${release} ; rv:modelRevision <https://rezics.com/definition/release-v1> } }
+      UNION { GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:modelRevision ${v3} }
+        GRAPH ${iri(GRAPHS.current)} { ${release} rv:legacyRelease "true" } }
+      FILTER(${groupTest(condition.where!, release, key, binding ? { ...binding, legacy: 'v1' } : undefined)})
+    }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${release} rv:protectionHead ?releaseProtection${key} } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} a rv:ErasedRevision } }
-    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${release} rv:work|rv:coverageWork ?coveredWork }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${release} rv:work|rv:coverageWork|rv:coverage/rv:work ?coveredWork }
       FILTER NOT EXISTS { ${coveredPublic()} } }
-    ${condition.any ? `FILTER(${release} IN (${(condition.any as string[]).map(iri).join(', ')}))` : ''}
-    FILTER(${groupTest(condition.where!, release, key)})`;
+    ${condition.any ? `FILTER(${release} IN (${(condition.any as string[]).map(iri).join(', ')}))` : ''}`;
 }
 
 /** Resource Conditions retain their Work/selected-publication meaning outside the release group. */
-export function releaseWorkConditions(query: ReleaseQuery): string {
+export function releaseWorkConditions(query: ReleaseQuery, publicContribution: string): string {
   return query.conditions.map((condition, index) => {
     const facet = resolveFacet(condition.facet)!;
     if (facet.name !== 'language') return `FILTER(${valueTest(condition, '?work', facet, `work${index}`)})`;
@@ -123,7 +161,7 @@ export function releaseWorkConditions(query: ReleaseQuery): string {
       GRAPH ${iri(GRAPHS.current)} { ?languageContribution rv:publicationHead ?languageDecision }
       GRAPH ${iri(GRAPHS.revisions)} { ?languageDecision rv:disclosure rv:Public }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?languageDraft a rv:ErasedRevision } }`
-      : 'BIND(?publicContribution AS ?languageContribution)';
+      : `BIND(${publicContribution} AS ?languageContribution)`;
     const values = (condition.any ?? condition.all ?? condition.none)! as string[];
     const exists = (chosen: string[]) => `EXISTS { ${selected}
       GRAPH ${iri(GRAPHS.current)} { ?languageContribution rv:language ?workLanguage }

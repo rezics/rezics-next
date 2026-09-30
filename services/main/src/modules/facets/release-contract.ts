@@ -1,10 +1,13 @@
 import { t } from 'elysia';
 import { pageFields, readAvatar, readId, readName } from '../work/read-contract.ts';
 
-/** Logical returned-row/round-trip bounds; native Jena orders the matching catalogue.
- * No candidate bound is a population cap: every page continues by the same stable key.
- * Worst-case graph work is O(W log W + R x coverage), not a latency measurement. */
-export const RELEASE_QUERY_COST = { pageSize: 20, candidateRows: 21, matchedReleases: 8,
+/** At most 64 candidate Works receive public-selection and release checks per attempt.
+ * The native head-key ordering can cost O(W log W); coverage checks cost O(window x R x coverage),
+ * independent of catalogue size. A sparse window continues after its last examined Work,
+ * including on empty pages. This bound is never a population cap.
+ * Twelve graph calls per attempt plus the shared Work read's fences; retries retain the
+ * Work read's 10 s deadline and aggregate 160-call/4 MiB ledger. */
+export const RELEASE_QUERY_COST = { pageSize: 20, candidateRows: 64, matchedReleases: 8,
   explanationRows: 9, groups: 3, graphCalls: 12, graphBytes: 2 * 1024 * 1024,
   deadlineMs: 10_000 } as const;
 

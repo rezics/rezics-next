@@ -8,7 +8,7 @@ import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkRe
 import { RELEASE_QUERY_COST } from './release-contract.ts';
 import { releaseGroupPattern, releaseWorkConditions, type ReleaseQuery } from './release-query.ts';
 
-/** Filters execute before DISTINCT/ORDER/LIMIT. A bounded explanation query reads at most
+/** One bounded head-key window, then a public/release check of those candidates. Explanations read at most
  * nine distinct satisfying release IDs per Work, regardless of its release inventory size. */
 export async function readReleaseWorks(session: WorkReadSession, query: ReleaseQuery) {
   if (query.scope.kind === 'realm') await readRealmBasis(session, query.scope.realm);
@@ -34,21 +34,34 @@ export async function readReleaseWorks(session: WorkReadSession, query: ReleaseQ
       rv:publicationDecision ?zoneDecision ; rv:selectedDraft ?zoneDraft .
       ?zoneDecision rv:disclosure rv:Public . FILTER NOT EXISTS { ?zoneDraft a rv:ErasedRevision } }` : '';
   const epochs = await readEpochOrder(session);
-  const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?epochOrder ?sequence WHERE {
+  const candidates = await session.query(`SELECT DISTINCT ?work ?head ?main ?epochOrder ?sequence WHERE {
     ${epochs}
-    ${publicWork('?work', '?main')}
-    ${scope}
-    GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head }
+    GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork ; rv:head ?head ; rv:mainVersion ?main }
     GRAPH ${iri(GRAPHS.revisions)} { ?head rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence }
-    ${query.groups.map((group, index) => `FILTER EXISTS { ${releaseGroupPattern(group, `?release${index}`, String(index))} }`).join('\n')}
-    ${releaseWorkConditions(query)}
     ${seek}
-  } ORDER BY ?epochOrder DESC(?sequence) STR(?work) LIMIT ${query.limit + 1}`, query.limit + 1);
-  if (rows.some(row => !row.work || !row.head || !row.main || !/^\d+$/.test(row.epochOrder?.value ?? '')
-    || !/^\d+$/.test(row.sequence?.value ?? '')) || new Set(rows.map(row => row.work!.value)).size !== rows.length) {
+  } ORDER BY ?epochOrder DESC(?sequence) STR(?work) LIMIT ${RELEASE_QUERY_COST.candidateRows + 1}`,
+  RELEASE_QUERY_COST.candidateRows + 1);
+  if (candidates.some(row => !row.work || !row.head || !row.main || !/^\d+$/.test(row.epochOrder?.value ?? '')
+    || !/^\d+$/.test(row.sequence?.value ?? '')) || new Set(candidates.map(row => row.work!.value)).size !== candidates.length) {
     throw new WorkReadUnavailable('Release discovery Work identities are ambiguous');
   }
+  const window = candidates.slice(0, RELEASE_QUERY_COST.candidateRows);
+  // VALUES bounds every disclosure/coverage test. Never run these over the full Work population.
+  const matched = window.length ? await session.query(`SELECT DISTINCT ?work WHERE {
+    VALUES (?work ?main) { ${window.map(row => `(${iri(row.work!.value)} ${iri(row.main!.value)})`).join(' ')} }
+    ${publicWork('?work', '?main')}
+    ${scope}
+    ${query.groups.map((group, index) => `FILTER EXISTS { ${releaseGroupPattern(group, `?release${index}`, String(index))} }`).join('\n')}
+    ${releaseWorkConditions(query, '?publicContribution')}
+  } LIMIT ${window.length + 1}`, window.length) : [];
+  const idsMatched = new Set(matched.map(row => row.work?.value));
+  if (matched.some(row => !row.work || !window.some(candidate => candidate.work!.value === row.work!.value))) {
+    throw new WorkReadUnavailable('Release candidates changed');
+  }
+  const rows = window.filter(row => idsMatched.has(row.work!.value));
   const page = rows.slice(0, query.limit);
+  const next = rows.length > query.limit ? page.at(-1)
+    : candidates.length > window.length ? window.at(-1) : undefined;
   // A LIMIT in each subquery bounds explanation IDs per Work, not across the page.
   const explained = page.length ? await session.query(`SELECT ?work ?release WHERE {
     ${page.map((row, index) => `{ SELECT DISTINCT ?work ?release WHERE {
@@ -82,10 +95,9 @@ export async function readReleaseWorks(session: WorkReadSession, query: ReleaseQ
   if ((await session.summaries(ids)).some(summary => summary.status !== 'available' || summary.disclosure !== 'public')) {
     throw new WorkReadUnavailable('Release discovery changed disclosure');
   }
-  const last = page.at(-1);
   return { profile: 'release-works-v1' as const, resultGrain: 'work' as const,
-    ...pageResult(session, items, rows.length > query.limit && last ? encodeReadCursor(binding, session.position,
-      last.work!.value, `${last.epochOrder!.value}:${last.sequence!.value}`) : null) };
+    ...pageResult(session, items, next ? encodeReadCursor(binding, session.position,
+      next.work!.value, `${next.epochOrder!.value}:${next.sequence!.value}`) : null) };
 }
 
 /** Enforce the operation's budget inside the shared read envelope, debiting its parent too.
@@ -101,6 +113,7 @@ export async function withReleaseQueryBudget<T>(read: () => Promise<T>): Promise
     get bytesLeft() { return Math.min(bytes, parent?.bytesLeft ?? bytes); },
     set bytesLeft(value: number) { const used = this.bytesLeft - value; bytes -= used; if (parent) parent.bytesLeft -= used; },
   };
-  // The envelope sits outside workRead: its ledger and deadline survive retries.
+  // Called inside the workRead operation: each retry gets a fresh attempt ledger.
+  // The parent retains the whole-request deadline and aggregate call/byte bounds.
   return fusekiReadBudget.run(budget, read);
 }
