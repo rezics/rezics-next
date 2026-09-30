@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
@@ -9,6 +9,7 @@ import { publicReportOwners } from '../../../services/main/src/modules/public-re
 import { PostgresRateLimitStore, type RateLimitOptions } from '../../../services/main/src/modules/rate-limit/store.ts';
 import { principalClasses, rateLimitBudgets } from '../../../services/main/src/modules/rate-limit/budgets.ts';
 import { AccountAssertionUnavailable } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { authorCreditFixture } from '../fixtures/author-credit.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
@@ -23,6 +24,8 @@ test('G-543/G-564: an exhausted writer files a real public report, reads its sta
   directory, 'openid work:create work:read work:edit agent:create governance:report');
   const accountPool = new Pool({ connectionString: databases.urls.account });
   try {
+    await createAgentGraph(f.env, { id: randomUUID(), agent: f.actor, kind: 'person',
+      displayName: 'Joint report writer', digest: createHash('sha256').update(f.actor).digest('hex') });
     const core = new ContentCore(f.pool);
     const options: RateLimitOptions = { secret: 'g543-joint-test-secret-at-least-32-characters',
       serviceClientIds: new Set(), trustedProxyPeers: new Set(), clientIpHeader: 'x-rezics-client-ip' };
@@ -46,7 +49,7 @@ test('G-543/G-564: an exhausted writer files a real public report, reads its sta
     };
     const create = () => call('POST', '/v1/works', { profile: 'metadata-only-v1', language: 'en',
       title: `Budget joint report ${randomUUID()}`, semanticTypes: ['https://schema.org/Book'],
-      actingSubject: f.actor }, f.account.tokenA);
+      authoring: 'own-work', actingSubject: f.actor }, f.account.tokenA);
     const work = await json<{ work: string; mainVersion: string }>(await create(), 201);
     await f.grant(`contribution:create:${work.work}`, 'contribution.create');
     const draft = await json<{ contribution: string; draftRevision: string }>(await call('POST', '/v1/contributions', {
