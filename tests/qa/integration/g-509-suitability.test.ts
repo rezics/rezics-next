@@ -8,6 +8,10 @@ import { createMainApp, type MainWorkDependencies } from '../../../services/main
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import {
+  grantPlatformModerationSeed,
+  type LocalOperatorInput,
+} from '../../../scripts/dev/seed/operator.ts';
+import {
   SuitabilityStore,
   PLATFORM_ACTION,
   PLATFORM_SCOPE,
@@ -15,10 +19,10 @@ import {
 } from '../../../services/main/src/modules/suitability/store.ts';
 import type {
   Assessed,
-  StoredAssessment,
+  ReadAssessment,
   Command,
 } from '../../../services/main/src/modules/suitability/contract.ts';
-import type { Labels } from '../../../services/main/src/modules/suitability/policy.ts';
+import { UNASSESSED, type Labels } from '../../../services/main/src/modules/suitability/policy.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 
 interface Write {
@@ -34,7 +38,7 @@ interface Read {
   };
   items: Array<{
     target: { resource: string; work: string | null; base: string };
-    assessment: StoredAssessment;
+    assessment: ReadAssessment;
     eligible: boolean;
     reasons: string[];
   }>;
@@ -50,6 +54,7 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
     'openid work:create work:edit work:read governance:decide',
   );
   let ownerStatements = 0;
+  let moderatorStatements = 0;
   let failInsert = false;
   let expireBeforeInsert = false;
   const statements: string[] = [];
@@ -63,6 +68,16 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
             get(target, property) {
               if (property === 'query')
                 return async (sql: string, values?: unknown[]) => {
+                  if (
+                    [
+                      'access.principal',
+                      'access.scope_gate',
+                      'access.representation',
+                      'access.permission_grant',
+                    ].some((table) => sql.includes(`FROM ${table}`))
+                  ) {
+                    moderatorStatements++;
+                  }
                   if (
                     sql.includes('suitability_assessment') ||
                     sql.includes('pg_advisory_xact_lock')
@@ -110,12 +125,13 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
     body?: object,
     key = randomUUID(),
     authenticated = true,
+    token = f.account.tokenA,
   ) =>
     app.handle(
       new Request(`http://main.local${path}`, {
         method,
         headers: {
-          ...(authenticated ? { authorization: `Bearer ${f.account.tokenA}` } : {}),
+          ...(authenticated ? { authorization: `Bearer ${token}` } : {}),
           'idempotency-key': key,
           ...(body ? { 'content-type': 'application/json' } : {}),
         },
@@ -140,14 +156,33 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
       { actingSubject: f.actor, labels, expectedRevision, basis },
       key,
     );
-  const read = (targets: string[], authenticated = true) =>
+  const read = (targets: string[], authenticated = true, token = f.account.tokenA) =>
     call(
       'POST',
       '/v1/suitability/reads',
       { targets, ...(authenticated ? { actingSubject: f.actor } : {}) },
       randomUUID(),
       authenticated,
+      token,
     );
+  const seedInput: LocalOperatorInput = {
+    endpoints: {
+      account: f.account.issuer.replace(/\/api\/auth$/, ''),
+      main: 'http://main.local',
+      mailpit: '',
+      clientId: 'g-509-seed',
+      redirectUri: 'http://localhost/callback',
+      resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
+      scope: 'openid work:read governance:decide',
+    },
+    credentials: f.account.a,
+    accountDatabaseUrl: Bun.env.ACCOUNT_DATABASE_URL!,
+    accountSecret: Bun.env.ACCOUNT_SECRET!,
+    accessDatabaseUrl: Bun.env.ACCESS_DATABASE_URL!,
+    accountSubject: f.account.a.id,
+    ownerAccountSubject: f.account.a.id,
+    actingSubject: f.actor,
+  };
   try {
     expect(Date.now() - preparation).toBeLessThan(600_000);
     const work = await json<{ work: string; mainVersion: string }>(
@@ -253,9 +288,7 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
     await f.grant(`semantic:read:${character.component}`, 'semantic.read');
     const targets = [work.work, release.release, character.component];
     const unknown = await json<Read>(await read(targets));
-    expect(unknown.items.map((item) => item.assessment)).toEqual(
-      targets.map(() => ({ status: 'unassessed' })),
-    );
+    expect(unknown.items.map((item) => item.assessment)).toEqual(targets.map(() => UNASSESSED));
     expect(unknown.items.every((item) => item.eligible)).toBe(true);
     expect(unknown.viewer).toEqual({
       signedIn: true,
@@ -273,7 +306,16 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
     // Characters have no Work edit envelope. A generic semantic edit grant is insufficient.
     expect((await write(character.component, ['r15'], null)).status).toBe(403);
     expect((await write(character.component, ['r15'], null, 'platform')).status).toBe(403);
-    const platformGrant = await f.grant(PLATFORM_SCOPE, PLATFORM_ACTION);
+    // Exercise the same loopback bootstrap as task dev:seed, including repeat runs.
+    await grantPlatformModerationSeed(seedInput);
+    await grantPlatformModerationSeed(seedInput);
+    const seededGrants = await f.accessPool.query<{ id: string }>(
+      `SELECT id FROM access.permission_grant WHERE recipient_subject = $1
+        AND scope_id = $2 AND action = $3 AND active AND valid_until > clock_timestamp()`,
+      [f.actor, PLATFORM_SCOPE, PLATFORM_ACTION],
+    );
+    expect(seededGrants.rows).toHaveLength(1);
+    const platformGrant = seededGrants.rows[0]!.id;
     await f.accessPool.query(
       "UPDATE access.permission_grant SET valid_until = 'infinity' WHERE id = $1",
       [platformGrant],
@@ -319,6 +361,51 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
     expect(assessed.items.map((item) => item.target.base)).toEqual(['work', 'release', 'resource']);
     expect(assessed.items.map((item) => item.target.work)).toEqual([work.work, work.work, null]);
 
+    const redacted = (value: ReadAssessment) => {
+      if (value.status === 'unassessed') return value;
+      const { assessor: _assessor, ...publicValue } = value;
+      return publicValue;
+    };
+    const publicRead = await json<Read>(await read([work.work, release.release], false));
+    expect(publicRead.items.map((item) => item.assessment)).toEqual(
+      heads.slice(0, 2).map(redacted),
+    );
+    expect(JSON.stringify(publicRead)).not.toContain('assessor');
+    // OAuth moderation consent alone grants no access to the assessor.
+    const consentOnly = await json<Read>(await read([work.work], true, f.account.tokenB));
+    expect(consentOnly.items[0]!.assessment).toEqual(redacted(heads[0]!));
+    // Access moderation authority alone cannot exceed a read-only OAuth token.
+    const readOnlyToken = await f.account.tokenFor(f.account.a, 'openid work:read');
+    const readOnly = await json<Read>(await read([work.work], true, readOnlyToken));
+    expect(readOnly.items[0]!.assessment).toEqual(redacted(heads[0]!));
+    for (const column of ['open', 'dispatch_open']) {
+      // A dispatch hold also closes admission, as required by the Access schema.
+      await f.accessPool.query(
+        'UPDATE access.scope_gate SET open = false, dispatch_open = $2 WHERE id = $1',
+        [PLATFORM_SCOPE, column === 'open'],
+      );
+      try {
+        await expect(grantPlatformModerationSeed(seedInput)).rejects.toThrow(
+          'Seed grant gate is closed',
+        );
+        expect(
+          (
+            await f.accessPool.query(`SELECT ${column} FROM access.scope_gate WHERE id = $1`, [
+              PLATFORM_SCOPE,
+            ])
+          ).rows[0]![column],
+        ).toBe(false);
+        const closed = await json<Read>(await read([work.work]));
+        expect(closed.items[0]!.assessment).toEqual(redacted(heads[0]!));
+        expect((await write(work.work, [], heads[0]!.revision, 'platform')).status).toBe(403);
+      } finally {
+        await f.accessPool.query(
+          'UPDATE access.scope_gate SET open = true, dispatch_open = true WHERE id = $1',
+          [PLATFORM_SCOPE],
+        );
+      }
+    }
+
     // Platform restrictions remain a floor, including across stronger author heads.
     const adult = await json<Write>(
       await write(work.work, ['r18'], heads[0]!.revision, 'platform'),
@@ -336,6 +423,7 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
       assessment: { labels: ['r18', 'r18g'] },
     });
     expect(anonymous.items[0]!.reasons).toContain('sign_in_required');
+    expect(JSON.stringify(anonymous)).not.toContain('assessor');
     const signedIn = await json<Read>(await read([work.work]));
     expect(signedIn.items[0]!.eligible).toBe(false);
     expect(signedIn.items[0]!.reasons).toContain('age_unknown');
@@ -395,6 +483,9 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
     try {
       expect((await read([release.release])).status).toBe(503);
       expect((await write(release.release, [], recovered.assessment.revision)).status).toBe(503);
+      await expect(grantPlatformModerationSeed(seedInput)).rejects.toThrow(
+        'Access recovery fence is closed',
+      );
     } finally {
       await f.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
     }
@@ -403,6 +494,7 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
     );
 
     ownerStatements = 0;
+    moderatorStatements = 0;
     statements.length = 0;
     const batch = await json<Read>(
       await read(Array.from({ length: 64 }, (_, index) => targets[index % 3]!)),
@@ -412,6 +504,7 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
       Array.from({ length: 64 }, (_, index) => targets[index % 3]!),
     );
     expect(ownerStatements).toBe(SUITABILITY_COST.readStatements);
+    expect(moderatorStatements).toBe(SUITABILITY_COST.moderatorAuthorityStatements);
     expect(statements[0]).toContain('ORDER BY revision_number DESC LIMIT 1');
     expect((await read(Array.from({ length: 65 }, () => work.work))).status).toBe(400);
     ownerStatements = 0;
@@ -444,7 +537,7 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
     ).toBe(403);
     expect(expireBeforeInsert).toBe(false);
     expect((await json<Read>(await read([character.component]))).items[0]!.assessment).toEqual(
-      beforeExpiry,
+      redacted(beforeExpiry),
     );
     await f.accessPool.query(
       "UPDATE access.permission_grant SET valid_until = 'infinity' WHERE id = $1",
@@ -461,6 +554,8 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
       platformGrant,
     ]);
     expect((await write(character.component, [], heads[2]!.revision, 'platform')).status).toBe(403);
+    const revoked = await json<Read>(await read([work.work, release.release]));
+    expect(JSON.stringify(revoked)).not.toContain('assessor');
 
     // Schema rejects rewrites, deletion, forks and cross-resource predecessors.
     const row = (

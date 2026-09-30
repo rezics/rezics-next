@@ -8,6 +8,8 @@ import {
 } from '../modules/access/topology-control.ts';
 import { command, commandResult, reads, readsResult } from '../modules/suitability/contract.ts';
 import { eligible, type Viewer } from '../modules/suitability/policy.ts';
+import { AccountAssertionInsufficientScope } from '../modules/account/verify-assertion.ts';
+import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { resolveTargets, TargetNotBound, TargetUnavailable } from '../modules/target/resolve.ts';
 import { readUuid } from '../modules/work/read-contract.ts';
 import { workRead, WorkReadUnavailable } from '../modules/work/read-session.ts';
@@ -87,7 +89,18 @@ export function suitabilityRoutes(work: MainWorkDependencies) {
             { actingSubject: body.actingSubject },
             async (session) => {
               const targets = await resolveTargets(session, body.targets, 'suitability');
-              const assessments = await work.suitability!.read(targets);
+              let moderator: { principal: VerifiedPrincipal; actingSubject: string } | undefined;
+              if (session.principal && body.actingSubject) {
+                try {
+                  moderator = {
+                    principal: await work.account.verify(request, [MODERATION_SCOPE]),
+                    actingSubject: body.actingSubject,
+                  };
+                } catch (error) {
+                  if (!(error instanceof AccountAssertionInsufficientScope)) throw error;
+                }
+              }
+              const assessments = await work.suitability!.read(targets, moderator);
               // Account has no age evidence; no trusted request-country input exists.
               // Do not accept client headers/body as evidence or store adult opt-ins.
               const viewer: Viewer = {

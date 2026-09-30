@@ -2,11 +2,12 @@ import { expect, test } from 'bun:test';
 import * as fc from 'fast-check';
 import { Value } from 'typebox/value';
 import { capabilityPath } from '../src/modules/target/contract.ts';
-import { assessment, command } from '../src/modules/suitability/contract.ts';
+import { assessment, readAssessment, command } from '../src/modules/suitability/contract.ts';
 import {
   atLeastAsRestrictive,
   eligible,
   validLabels,
+  UNASSESSED,
   type Age,
   type Assessment,
   type Channel,
@@ -97,21 +98,38 @@ test('G-509: policy truth table covers every label, age, opt-in, country, channe
         }
 });
 
-test('G-509: unassessed remains unknown and is admitted only on read and index', () => {
+test('G-509: unassessed is admitted on every channel and always labelled Not assessed', () => {
   for (const viewer of viewers)
     for (const channel of channels)
       for (const realmCeiling of [undefined, ...ceilings]) {
         expect(
           eligible({ assessment: { status: 'unassessed' }, viewer, channel, realmCeiling }),
-        ).toEqual(
-          channel === 'read' || channel === 'index'
-            ? { eligible: true, reasons: [] }
-            : { eligible: false, reasons: ['assessment_required'] },
-        );
+        ).toEqual({ eligible: true, reasons: [] });
       }
-  expect(Value.Check(assessment, { status: 'unassessed' })).toBe(true);
-  expect(Value.Check(assessment, { status: 'unassessed', labels: [] })).toBe(false);
+  expect(Value.Check(assessment, UNASSESSED)).toBe(true);
+  expect(Value.Check(readAssessment, UNASSESSED)).toBe(true);
+  expect(Value.Check(assessment, { status: 'unassessed' })).toBe(false);
+  expect(Value.Check(assessment, { ...UNASSESSED, displayLabel: 'General' })).toBe(false);
+  expect(Value.Check(assessment, { ...UNASSESSED, labels: [] })).toBe(false);
   expect(Value.Check(assessment, { status: 'general' })).toBe(false);
+});
+
+test('G-509: reads can redact an assessor while command results retain it', () => {
+  const value = {
+    status: 'assessed',
+    revision: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
+    predecessor: null,
+    labels: [],
+    basis: 'platform',
+    sourceId: null,
+    assessor: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002',
+    createdAt: '2026-10-01T00:00:00.000Z',
+  };
+  const { assessor: _assessor, ...redacted } = value;
+  expect(Value.Check(assessment, value)).toBe(true);
+  expect(Value.Check(readAssessment, value)).toBe(true);
+  expect(Value.Check(assessment, redacted)).toBe(false);
+  expect(Value.Check(readAssessment, redacted)).toBe(true);
 });
 
 test('G-509: independent adult opt-ins and machine-readable denial reasons', () => {

@@ -16,8 +16,8 @@ import {
   requirePrincipal,
 } from '../access/topology-control.ts';
 import { resolvedTarget, type ResolvedTarget } from '../target/contract.ts';
-import { command, type Assessed, type Command, type StoredAssessment } from './contract.ts';
-import { atLeastAsRestrictive, type Labels } from './policy.ts';
+import { command, type Assessed, type Command, type ReadAssessment } from './contract.ts';
+import { atLeastAsRestrictive, UNASSESSED, type Labels } from './policy.ts';
 
 export const PLATFORM_SCOPE = 'governance:platform';
 export const PLATFORM_ACTION = 'governance.moderate';
@@ -28,6 +28,7 @@ export const PLATFORM_ACTION = 'governance.moderate';
 export const SUITABILITY_COST = {
   targets: 64,
   readStatements: 1,
+  moderatorAuthorityStatements: 4,
   writeStatements: 6,
   lockTimeoutMs: 2000,
   statementTimeoutMs: 5000,
@@ -73,7 +74,10 @@ export class SuitabilityStore {
   ) {}
 
   /** Call only after target admission. Never expose assessments of unavailable targets. */
-  async read(targets: readonly ResolvedTarget[]): Promise<StoredAssessment[]> {
+  async read(
+    targets: readonly ResolvedTarget[],
+    reader?: { principal: VerifiedPrincipal; actingSubject: string },
+  ): Promise<ReadAssessment[]> {
     if (
       !targets.length ||
       targets.length > SUITABILITY_COST.targets ||
@@ -81,6 +85,26 @@ export class SuitabilityStore {
     )
       throw new ControlInvalid('Invalid suitability targets');
     return controlRead(this.pool, async (client) => {
+      // OAuth consent is checked by the route; Access decides actual authority.
+      // Keep the live grant/controller locks through reading and serialization.
+      let discloseAssessor = false;
+      if (reader) {
+        try {
+          const owner = await requirePrincipal(client, reader.principal);
+          await lockGate(client, PLATFORM_SCOPE, false);
+          await requireMandate(client, owner.id, reader.actingSubject, PLATFORM_ACTION);
+          await requireCeiling(
+            client,
+            reader.actingSubject,
+            PLATFORM_ACTION,
+            undefined,
+            PLATFORM_SCOPE,
+          );
+          discloseAssessor = true;
+        } catch (error) {
+          if (!(error instanceof ControlDenied)) throw error;
+        }
+      }
       const rows = (
         await client.query<Row>(
           `SELECT a.* FROM unnest($1::text[]) AS requested(target)
@@ -89,8 +113,15 @@ export class SuitabilityStore {
           [[...new Set(targets.map((target) => target.resource))]],
         )
       ).rows;
-      const byTarget = new Map(rows.map((row) => [row.target, serialize(row)]));
-      return targets.map((target) => byTarget.get(target.resource) ?? { status: 'unassessed' });
+      const byTarget = new Map(
+        rows.map((row): [string, ReadAssessment] => {
+          const value = serialize(row);
+          if (discloseAssessor) return [row.target, value];
+          const { assessor: _assessor, ...publicValue } = value;
+          return [row.target, publicValue];
+        }),
+      );
+      return targets.map((target) => byTarget.get(target.resource) ?? UNASSESSED);
     });
   }
 

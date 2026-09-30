@@ -11,23 +11,30 @@ export const labels = t.Union([
   t.Tuple([t.Literal('r18g')]),
   t.Tuple([t.Literal('r18'), t.Literal('r18g')]),
 ]);
+const unassessed = t.Object(
+  { status: t.Literal('unassessed'), displayLabel: t.Literal('Not assessed') },
+  { additionalProperties: false },
+);
+const assessedFields = {
+  status: t.Literal('assessed'),
+  revision: readId,
+  predecessor: t.Nullable(readId),
+  labels,
+  basis: t.Union([t.Literal('author'), t.Literal('platform'), t.Literal('source')]),
+  sourceId: t.Nullable(t.String({ maxLength: 512 })),
+  createdAt: t.String(),
+};
+/** Commands return their assessor; batch reads disclose it only to moderators. */
 export const assessment = t.Union([
-  t.Object({ status: t.Literal('unassessed') }, { additionalProperties: false }),
-  t.Object(
-    {
-      status: t.Literal('assessed'),
-      revision: readId,
-      predecessor: t.Nullable(readId),
-      labels,
-      basis: t.Union([t.Literal('author'), t.Literal('platform'), t.Literal('source')]),
-      sourceId: t.Nullable(t.String({ maxLength: 512 })),
-      assessor: readId,
-      createdAt: t.String(),
-    },
-    { additionalProperties: false },
-  ),
+  unassessed,
+  t.Object({ ...assessedFields, assessor: readId }, { additionalProperties: false }),
+]);
+export const readAssessment = t.Union([
+  unassessed,
+  t.Object({ ...assessedFields, assessor: t.Optional(readId) }, { additionalProperties: false }),
 ]);
 export type StoredAssessment = Static<typeof assessment>;
+export type ReadAssessment = Static<typeof readAssessment>;
 export type Assessed = Extract<StoredAssessment, { status: 'assessed' }>;
 export const command = t.Object(
   {
@@ -60,7 +67,7 @@ export const readsResult = t.Object({
   items: t.Array(
     t.Object({
       target: resolvedTarget,
-      assessment,
+      assessment: readAssessment,
       eligible: t.Boolean(),
       reasons: t.Array(t.Union(REASONS.map((reason) => t.Literal(reason)))),
     }),

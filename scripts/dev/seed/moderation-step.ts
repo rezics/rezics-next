@@ -1,8 +1,9 @@
-import { openRealmReportScope } from './operator.ts';
+import { grantPlatformModerationSeed, openRealmReportScope } from './operator.ts';
 import { seedRealmManagement } from './realm-management.ts';
 import type { SeedState } from './state.ts';
 
 export async function seedModeration(state: SeedState) {
+  if (state.operatorInput) await grantPlatformModerationSeed(state.operatorInput);
   const managed = state.createdRealms.find(realm => realm.id === 'fiction');
   if (!managed) return;
   if (state.operatorInput) await openRealmReportScope(state.operatorInput, managed.receipt.realm);

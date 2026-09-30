@@ -4,6 +4,10 @@ export type Label = 'r15' | 'r18' | 'r18g';
 /** General is the empty set. Adult dimensions are independent; r15 stands alone. */
 export type Labels = [] | ['r15'] | ['r18'] | ['r18g'] | ['r18', 'r18g'];
 export type Assessment = { status: 'unassessed' } | { status: 'assessed'; labels: Labels };
+export const UNASSESSED = Object.freeze({
+  status: 'unassessed',
+  displayLabel: 'Not assessed',
+} as const);
 export type Age = 'unknown' | 'under-15' | '15-17' | 'adult';
 /** Media, derivatives, history, caches and exports retain their delivery channel. */
 export type Channel = 'read' | 'index' | 'preview' | 'email' | 'push';
@@ -19,7 +23,6 @@ export interface RealmCeiling {
   grotesque: boolean;
 }
 export const REASONS = [
-  'assessment_required',
   'sign_in_required',
   'age_unknown',
   'country_unknown',
@@ -66,8 +69,9 @@ export function eligible(input: {
   const { assessment, realmCeiling, channel } = input;
   const viewer = channel === 'index' || channel === 'preview' ? ANONYMOUS_VIEWER : input.viewer;
   if (assessment.status === 'unassessed') {
-    const allowed = channel === 'read' || channel === 'index';
-    return { eligible: allowed, reasons: allowed ? [] : ['assessment_required'] };
+    // Manager's G-509 review admits missing assessments on every channel.
+    // Admission never changes their state or presents them as general.
+    return { eligible: true, reasons: [] };
   }
   const labels: readonly Label[] = assessment.labels;
   if (!labels.length) return { eligible: true, reasons: [] };

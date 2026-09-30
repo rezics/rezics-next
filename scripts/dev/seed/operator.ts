@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { setClientDisabled } from '../../../services/account/src/admin-actions.ts';
+import { PLATFORM_ACTION, PLATFORM_SCOPE } from '../../../services/main/src/modules/suitability/store.ts';
 import { SeedApi, type Credentials, type SeedEndpoints } from './api.ts';
 
 export interface LocalOperatorInput { endpoints: SeedEndpoints; credentials: Credentials;
@@ -49,7 +50,7 @@ export async function operatorSeedSession(input: LocalOperatorInput) {
     // Serialize selection, creation and retirement across repeated seed processes.
     await lock.query("SET lock_timeout = '5s'");
     await lock.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [`zone-seed:${signed.id}`]);
-    const scope = 'openid owner:operate zone:edit theme:approve theme:read source:acquire source:convert source:propose source:adopt source:read work:create work:edit';
+    const scope = 'openid owner:operate zone:edit theme:approve theme:read source:acquire source:convert source:propose source:adopt source:read work:create work:edit work:read governance:decide';
     const auth = createAccountAuth({ baseURL: input.endpoints.account,
       secret: input.accountSecret, resource: input.endpoints.resource,
       pool, operatorUserIds: new Set([signed.id]) });
@@ -94,9 +95,11 @@ async function grantImportedSeedScopes(input: LocalOperatorInput,
       ON CONFLICT (id) DO NOTHING`, [input.actingSubject]);
     for (const { action, scope } of grants) {
       await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
-      const gate = await client.query<{ open: boolean }>(
-        'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
-      if (gate.rows[0]?.open !== true) throw new Error(`Imported Work gate is closed: ${scope}`);
+      const gate = await client.query<{ open: boolean; dispatch_open: boolean }>(
+        'SELECT open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
+      if (gate.rows[0]?.open !== true || gate.rows[0]?.dispatch_open !== true) {
+        throw new Error(`Seed grant gate is closed: ${scope}`);
+      }
       await ensureRepresentation(client, operator, input.actingSubject, action);
       await ensureRepresentation(client, owner, input.actingSubject, action);
       const found = await client.query(`SELECT id FROM access.permission_grant
@@ -112,6 +115,11 @@ async function grantImportedSeedScopes(input: LocalOperatorInput,
     try { await client.query('ROLLBACK'); } catch { /* preserve first error */ }
     throw error;
   } finally { client.release(); await pool.end(); }
+}
+
+/** Local fixture moderation authority; closed gates remain an operator decision. */
+export async function grantPlatformModerationSeed(input: LocalOperatorInput): Promise<void> {
+  return grantImportedSeedScopes(input, [{ action: PLATFORM_ACTION, scope: PLATFORM_SCOPE }]);
 }
 
 const nativeSeedId = (value: string) => /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(value);
