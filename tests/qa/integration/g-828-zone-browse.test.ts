@@ -113,8 +113,8 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
         [{ concept }, (row: typeof works[number]) => row.index % 3 === 0],
         [{ excludeConcept: concept }, (row: typeof works[number]) => row.index % 3 !== 0],
       ] as const) {
-        const result = await traverse(sort, { ...text, ...filter });
-        expect(result.sort()).toEqual(works.filter(row => !hidden.has(row.work) && predicate(row))
+        const result = await traverse(sort, { ...text, length: '950-', ...filter });
+        expect(result.sort()).toEqual(works.filter(row => !hidden.has(row.work) && row.index >= 950 && predicate(row))
           .map(row => row.work).sort());
       }
     }

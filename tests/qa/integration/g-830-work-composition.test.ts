@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
+import { Pool } from 'pg';
+import { createMainApp } from '../../../services/main/src/app.ts';
+import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
@@ -293,9 +296,16 @@ test('G-830: a composed volume stays discoverable in multifield search, public s
       selectionBasis: 'realm-manager-review' as const, actingSubject: f.actor };
     expect((await selectRealmLocal(f.env, admission(`publication:adopt:${space.realm}`,
       'publication.adopt', realmSelectionDigest(adoptionInput)), adoptionInput)).outcome).toBe('succeeded');
-    const zone = await f.json<{ items: Array<{ id: string }> }>(await f.call('GET',
-      `/v1/realms/${shortId(space.realm)}/modules/browse`), 200);
-    expect(zone.items.map(item => item.id)).toContain(volume.work);
+    const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL! });
+    try {
+      const zoneBrowse = new ZoneBrowseProjection(f.accessPool, relay, f.env);
+      await zoneBrowse.backfill();
+      const zoneApp = createMainApp(f.env.fuseki, { environment: f.env, access: f.access, zoneBrowse,
+        account: f.account.verifier });
+      const zone = await f.json<{ items: Array<{ id: string }> }>(await zoneApp.handle(new Request(
+        `http://main.local/v1/realms/${shortId(space.realm)}/modules/browse`)), 200);
+      expect(zone.items.map(item => item.id)).toContain(volume.work);
+    } finally { await relay.end(); }
     expect((await f.env.fuseki.query(`SELECT ?parent WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(volume.work)} <https://schema.org/isPartOf> ?parent } }`)).results?.bindings).toEqual([]);
   } finally { await f.close(); }

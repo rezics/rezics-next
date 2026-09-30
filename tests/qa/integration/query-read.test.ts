@@ -23,6 +23,7 @@ import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
 import { selectRealmLocal, realmSelectionDigest }
   from '../../../services/main/src/modules/work/select-realm.ts';
+import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const book = 'https://schema.org/Book';
@@ -39,7 +40,10 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
     objectDirectory: join(state, 'objects') };
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
+  const zoneBrowse = new ZoneBrowseProjection(accessPool, relayPool, env);
   const app = createMainApp(fuseki, { environment: env,
+    zoneBrowse,
     account: { verify: async () => { throw new Error('public Query made an authority request'); } },
     access: new AccessAdmissionRegistry(accessPool) });
   const actor = ID + randomUUID();
@@ -118,6 +122,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     expect((await realmQuery.json() as { result: { results: unknown[] } }).result.results)
       .toEqual((await realmLegacy.json() as { results: unknown[] }).results);
 
+    await zoneBrowse.backfill();
     const zoneQuery = await send('/v1/query', { context: { realm: space.realm },
       scope: { kind: 'realm', realm: space.realm }, sort: 'newest', page: { size: 20 },
       filter: { all: [{ facet: 'type', any: [book] }] } });
@@ -206,6 +211,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     expect(refused.status).toBe(422);
     expect(await refused.json()).toMatchObject({ status: 422, code: 'unsupported_query_shape' });
   } finally {
+    await relayPool.end();
     await accessPool.end();
     rmSync(state, { recursive: true, force: true });
   }

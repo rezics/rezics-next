@@ -48,6 +48,9 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
         && prior.get(row.epoch.value) !== row.prior.value) throw new WorkReadUnavailable('Zone browse lineage is ambiguous');
       prior.set(row.epoch.value, row.prior.value);
     }
+    // Absolute retained-lineage ranks stay stable when a restore adds an epoch.
+    // Existing adoption keys remain immutable, so newest continuations may
+    // cross later selections while every disclosure is checked live.
     const epochs: string[] = [];
     let epoch: string | undefined = this.env.lineage.dataEpoch;
     while (epoch) {
@@ -55,7 +58,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
       epochs.push(epoch);
       epoch = prior.get(epoch);
     }
-    return `VALUES (?epoch ?epochOrder) { ${epochs.map((value, index) => `(${lit(value)} ${index})`).join(' ')} }`;
+    return `VALUES (?epoch ?epochOrder) { ${epochs.map((value, index) => `(${lit(value)} ${epochs.length - index})`).join(' ')} }`;
   }
 
   private async project(where: string, epochs: string): Promise<{ realm: string; work: string }[]> {
@@ -79,23 +82,33 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
         ${where}
       } ORDER BY STR(?realm) STR(?work) LIMIT ${ZONE_BROWSE_PROJECTION_COST.batch}`, 128 * 1024)).results?.bindings ?? [];
     const examined: { realm: string; work: string }[] = [];
-    for (const row of rows) {
-      const realm = row.realm?.value, work = row.work?.value;
-      if (realm && work) examined.push({ realm, work });
-      if (!realm || !work || !ID.test(realm) || !ID.test(work)
-        || !/^\d{1,38}$/.test(row.sequence?.value ?? '') || !/^\d+$/.test(row.epochOrder?.value ?? '')) {
-        console.error('Zone browse backfill skipped malformed adoption', { realm, work });
-        continue;
+    const client = await this.access.connect();
+    try {
+      await client.query('BEGIN');
+      // SerialStatisticsProjection holds this row FOR UPDATE while changing
+      // summaries. Its triggers cannot race an adoption's initial stats copy.
+      await client.query('SELECT generation FROM access.serial_stats_checkpoint WHERE singleton FOR SHARE');
+      for (const row of rows) {
+        const realm = row.realm?.value, work = row.work?.value;
+        if (realm && work) examined.push({ realm, work });
+        if (!realm || !work || !ID.test(realm) || !ID.test(work)
+          || !/^\d{1,38}$/.test(row.sequence?.value ?? '') || !/^\d+$/.test(row.epochOrder?.value ?? '')) {
+          console.error('Zone browse backfill skipped malformed adoption', { realm, work });
+          continue;
+        }
+        const order = BigInt(row.sequence!.value) + BigInt(row.epochOrder!.value) * 10n ** 38n;
+        await client.query(`INSERT INTO access.zone_browse_entry (realm, work, adopted_order, updated_at, word_count)
+          SELECT $1, $2, $3::numeric, s.last_updated_at, s.word_count
+          FROM (VALUES (true)) AS anchor(singleton)
+          LEFT JOIN access.serial_stats_checkpoint c USING (singleton)
+          LEFT JOIN access.serial_summary s ON s.generation = c.generation AND s.work = $2
+          ON CONFLICT (realm, work) DO UPDATE SET updated_at = EXCLUDED.updated_at, word_count = EXCLUDED.word_count`, [realm, work, order.toString()]);
       }
-      const order = BigInt(row.sequence!.value) - BigInt(row.epochOrder!.value) * 10n ** 38n;
-      await this.access.query(`INSERT INTO access.zone_browse_entry (realm, work, adopted_order, updated_at, word_count)
-        SELECT $1, $2, $3::numeric, s.last_updated_at, s.word_count
-        FROM (VALUES (true)) AS anchor(singleton)
-        LEFT JOIN access.serial_stats_checkpoint c USING (singleton)
-        LEFT JOIN access.serial_summary s ON s.generation = c.generation AND s.work = $2
-        ON CONFLICT (realm, work) DO UPDATE SET adopted_order = EXCLUDED.adopted_order,
-          updated_at = EXCLUDED.updated_at, word_count = EXCLUDED.word_count`, [realm, work, order.toString()]);
-    }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
     return examined;
   }
 
