@@ -80,6 +80,25 @@
       "severity": "error",
       "from": { "path": "(^|/)model/(schema|definitions|compiler)/" },
       "to": { "path": "(^|/)(apps|services|packages/model/src/generated|generated)/" }
+    },
+    {
+      "name": "shared-reads-do-not-depend-on-packages",
+      "comment": "Shared catalogue reads use the query and facet path. Package solving stays optional, so do not import services/main/src/modules/package/.",
+      "severity": "error",
+      "from": {
+        "path": "(^|/)services/main/src/modules/(zone|zone-modules|query|facets|search|discovery|concept-page|author-page|rankings|catalog|feed)/"
+      },
+      "to": { "path": "(^|/)services/main/src/modules/package/" }
+    },
+    {
+      "name": "web-host-loads-zone-packages-through-the-loader",
+      "comment": "Load an official Zone package through apps/web/zones/official/index.ts instead of importing apps/web/zones/official/<slug>/ from app or feature code.",
+      "severity": "error",
+      "from": {
+        "path": "(^|/)apps/web/(app|features)/",
+        "pathNot": "\\.stories\\.tsx$"
+      },
+      "to": { "path": "(^|/)apps/web/zones/official/[^/]+/" }
     }
   ],
   "options": {

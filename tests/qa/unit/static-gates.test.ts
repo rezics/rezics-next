@@ -17,6 +17,10 @@ function run(binary: string, args: string[]) {
   };
 }
 
+function plain(output: string): string {
+  return output.replaceAll(/\s+/g, ' ');
+}
+
 test('the import gate scans TypeScript edges and rejects forbidden boundaries', () => {
   const passing = run('depcruise', [
     '--config',
@@ -63,6 +67,46 @@ test('authored model and reusable packages cannot import their consumers', () =>
   expect(failing.code).not.toBe(0);
   expect(failing.output).toContain('authored-model-does-not-import-consumers');
   expect(failing.output).toContain('shared-packages-do-not-import-executables');
+});
+
+test('shared reads and the web host cannot grow a domain package edge', () => {
+  for (const [directory, rule, file, alternative] of [
+    [
+      'scripts/static/fixtures/anti-silo/package-import',
+      'shared-reads-do-not-depend-on-packages',
+      'zone-modules/leak.ts',
+      'Package solving stays optional',
+    ],
+    [
+      'scripts/static/fixtures/anti-silo/zone-loader',
+      'web-host-loads-zone-packages-through-the-loader',
+      'features/load-games.tsx',
+      'zones/official/index.ts',
+    ],
+  ] as const) {
+    const failing = run('depcruise', [
+      '--config',
+      '.dependency-cruiser.json',
+      '--output-type',
+      'err-long',
+      directory,
+    ]);
+    expect(failing.code, failing.output).not.toBe(0);
+    const text = plain(failing.output);
+    expect(text).toContain(rule);
+    expect(text).toContain(file);
+    expect(text).toContain(alternative);
+    expect(text).toMatch(/1 dependency violations/);
+  }
+  expect(
+    run('depcruise', [
+      '--config',
+      '.dependency-cruiser.json',
+      '--output-type',
+      'err-long',
+      'scripts/static/fixtures/anti-silo/zone-loader/apps/web/features/load-games.stories.tsx',
+    ]).code,
+  ).toBe(0);
 });
 
 test('the promise gate rejects floating and misused promises with type information', () => {

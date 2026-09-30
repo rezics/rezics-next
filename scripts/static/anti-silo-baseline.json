@@ -1,0 +1,161 @@
+{
+  "migrationHeads": {
+    "apps/about/migrations": 1,
+    "services/account/migrations": 71,
+    "services/content/migrations": 500,
+    "services/main/migrations/access": 965,
+    "services/main/migrations/relay": 16
+  },
+  "literalCounts": {
+    "apps/web/features/catalogue/work.ts": {
+      "https://rezics.com/vocab/ModPackage": 2,
+      "https://rezics.com/vocab/PromptTemplate": 2,
+      "https://rezics.com/vocab/SkillPackage": 2,
+      "https://schema.org/AudioObject": 2,
+      "https://schema.org/Book": 2,
+      "https://schema.org/BookSeries": 2,
+      "https://schema.org/DigitalDocument": 2,
+      "https://schema.org/Movie": 2,
+      "https://schema.org/MusicAlbum": 2,
+      "https://schema.org/MusicRecording": 2,
+      "https://schema.org/Recipe": 2,
+      "https://schema.org/SoftwareApplication": 2,
+      "https://schema.org/SoftwareSourceCode": 2,
+      "https://schema.org/TVSeries": 2,
+      "https://schema.org/VideoObject": 2
+    },
+    "apps/web/features/discover/state.ts": {
+      "https://schema.org/Book": 1,
+      "https://schema.org/DigitalDocument": 1,
+      "https://schema.org/Recipe": 1
+    },
+    "apps/web/features/library/labels.ts": {
+      "https://rezics.com/vocab/PromptTemplate": 1
+    },
+    "apps/web/features/manage/queue-subject.ts": {
+      "https://schema.org/Book": 1,
+      "https://schema.org/BookSeries": 1
+    },
+    "apps/web/features/onboarding/topics.ts": {
+      "https://rezics.com/vocab/ModPackage": 1,
+      "https://rezics.com/vocab/PromptTemplate": 1,
+      "https://rezics.com/vocab/SkillPackage": 1,
+      "https://schema.org/AudioObject": 1,
+      "https://schema.org/Book": 1,
+      "https://schema.org/BookSeries": 1,
+      "https://schema.org/DigitalDocument": 1,
+      "https://schema.org/Movie": 1,
+      "https://schema.org/MusicAlbum": 1,
+      "https://schema.org/MusicRecording": 1,
+      "https://schema.org/Recipe": 1,
+      "https://schema.org/SoftwareApplication": 1,
+      "https://schema.org/SoftwareSourceCode": 1,
+      "https://schema.org/TVSeries": 1,
+      "https://schema.org/VideoGame": 1,
+      "https://schema.org/VideoObject": 1
+    },
+    "apps/web/features/studio/types.ts": {
+      "https://rezics.com/vocab/ModPackage": 1,
+      "https://rezics.com/vocab/PromptTemplate": 1,
+      "https://rezics.com/vocab/SkillPackage": 1,
+      "https://schema.org/AudioObject": 1,
+      "https://schema.org/Book": 2,
+      "https://schema.org/BookSeries": 1,
+      "https://schema.org/DigitalDocument": 1,
+      "https://schema.org/Movie": 1,
+      "https://schema.org/MusicAlbum": 1,
+      "https://schema.org/MusicRecording": 1,
+      "https://schema.org/Recipe": 1,
+      "https://schema.org/SoftwareApplication": 1,
+      "https://schema.org/SoftwareSourceCode": 1,
+      "https://schema.org/TVSeries": 1,
+      "https://schema.org/VideoObject": 1
+    },
+    "apps/web/features/work-page/format.ts": {
+      "https://schema.org/Book": 1,
+      "https://schema.org/DigitalDocument": 1,
+      "https://schema.org/Recipe": 1
+    },
+    "apps/web/features/work-page/types/kind.ts": {
+      "https://rezics.com/vocab/PromptTemplate": 1,
+      "https://rezics.com/vocab/SkillPackage": 1,
+      "https://schema.org/DigitalDocument": 1,
+      "https://schema.org/Recipe": 1
+    },
+    "apps/web/features/zones/browse-state.ts": {
+      "https://schema.org/Book": 1
+    },
+    "apps/web/features/zones/work-sections.tsx": {
+      "https://rezics.com/vocab/ModPackage": 1
+    },
+    "services/main/src/api-contract.ts": {
+      "https://schema.org/Book": 2,
+      "https://schema.org/DigitalDocument": 2,
+      "https://schema.org/Recipe": 2
+    },
+    "services/main/src/modules/collection/structure-profile.ts": {
+      "https://schema.org/Book": 1,
+      "https://schema.org/DigitalDocument": 1
+    },
+    "services/main/src/modules/composition/structure-profile.ts": {
+      "https://schema.org/CreativeWork": 1
+    },
+    "services/main/src/modules/content-publication/publish.ts": {
+      "https://schema.org/CreativeWork": 2
+    },
+    "services/main/src/modules/feed/cards.ts": {
+      "https://schema.org/Recipe": 1
+    },
+    "services/main/src/modules/onboarding/choices.ts": {
+      "https://rezics.com/vocab/ModPackage": 1,
+      "https://rezics.com/vocab/PromptTemplate": 1,
+      "https://rezics.com/vocab/SkillPackage": 1,
+      "https://schema.org/AudioObject": 1,
+      "https://schema.org/Book": 1,
+      "https://schema.org/BookSeries": 1,
+      "https://schema.org/DigitalDocument": 1,
+      "https://schema.org/Movie": 1,
+      "https://schema.org/MusicAlbum": 1,
+      "https://schema.org/MusicRecording": 1,
+      "https://schema.org/Recipe": 1,
+      "https://schema.org/SoftwareApplication": 1,
+      "https://schema.org/SoftwareSourceCode": 1,
+      "https://schema.org/TVSeries": 1,
+      "https://schema.org/VideoGame": 1,
+      "https://schema.org/VideoObject": 1
+    },
+    "services/main/src/modules/recipe/structure-profile.ts": {
+      "https://schema.org/Recipe": 2
+    },
+    "services/main/src/modules/semantic/schema.ts": {
+      "https://schema.org/CreativeWork": 1
+    },
+    "services/main/src/modules/structure/profiles.ts": {
+      "https://schema.org/Book": 2,
+      "https://schema.org/DigitalDocument": 1
+    },
+    "services/main/src/modules/studio/works.ts": {
+      "https://schema.org/Book": 1,
+      "https://schema.org/DigitalDocument": 1,
+      "https://schema.org/Recipe": 1
+    },
+    "services/main/src/modules/work/edit.ts": {
+      "https://schema.org/Book": 2,
+      "https://schema.org/CreativeWork": 2
+    },
+    "services/main/src/modules/work/title-control.ts": {
+      "https://schema.org/CreativeWork": 1
+    },
+    "services/main/src/routes/sources.ts": {
+      "https://schema.org/Book": 2
+    },
+    "services/main/src/routes/studio.ts": {
+      "https://schema.org/Book": 1,
+      "https://schema.org/DigitalDocument": 1,
+      "https://schema.org/Recipe": 1
+    }
+  },
+  "zoneWorkDomainKeys": [
+    "hub"
+  ]
+}
