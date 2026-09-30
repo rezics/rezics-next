@@ -32882,9 +32882,10 @@
                         "basis": {
                           "enum": [
                             "requested",
+                            "same-script",
+                            "other-script",
                             "fallback"
-                          ],
-                          "type": "string"
+                          ]
                         },
                         "direction": {
                           "enum": [
@@ -37117,9 +37118,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -37822,9 +37824,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -37856,9 +37859,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -43652,9 +43656,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -43686,9 +43691,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -44288,9 +44294,10 @@
                             "basis": {
                               "enum": [
                                 "requested",
+                                "same-script",
+                                "other-script",
                                 "fallback"
-                              ],
-                              "type": "string"
+                              ]
                             },
                             "direction": {
                               "enum": [
@@ -44983,9 +44990,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -45017,9 +45025,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -75155,9 +75164,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -75198,9 +75208,10 @@
                         "basis": {
                           "enum": [
                             "requested",
+                            "same-script",
+                            "other-script",
                             "fallback"
-                          ],
-                          "type": "string"
+                          ]
                         },
                         "direction": {
                           "enum": [
@@ -75341,9 +75352,10 @@
                         "basis": {
                           "enum": [
                             "requested",
+                            "same-script",
+                            "other-script",
                             "fallback"
-                          ],
-                          "type": "string"
+                          ]
                         },
                         "direction": {
                           "enum": [
@@ -75379,9 +75391,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -76711,9 +76724,10 @@
                                     "basis": {
                                       "enum": [
                                         "requested",
+                                        "same-script",
+                                        "other-script",
                                         "fallback"
-                                      ],
-                                      "type": "string"
+                                      ]
                                     },
                                     "direction": {
                                       "enum": [
@@ -76894,9 +76908,10 @@
                                       "basis": {
                                         "enum": [
                                           "requested",
+                                          "same-script",
+                                          "other-script",
                                           "fallback"
-                                        ],
-                                        "type": "string"
+                                        ]
                                       },
                                       "direction": {
                                         "enum": [
@@ -77194,9 +77209,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -77228,9 +77244,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -77403,9 +77420,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -103316,9 +103334,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -110708,9 +110727,10 @@
                                             "basis": {
                                               "enum": [
                                                 "requested",
+                                                "same-script",
+                                                "other-script",
                                                 "fallback"
-                                              ],
-                                              "type": "string"
+                                              ]
                                             },
                                             "direction": {
                                               "enum": [
@@ -111258,9 +111278,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -111570,9 +111591,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -115278,9 +115300,10 @@
                             "basis": {
                               "enum": [
                                 "requested",
+                                "same-script",
+                                "other-script",
                                 "fallback"
-                              ],
-                              "type": "string"
+                              ]
                             },
                             "direction": {
                               "enum": [
@@ -122373,9 +122396,10 @@
                         "basis": {
                           "enum": [
                             "requested",
+                            "same-script",
+                            "other-script",
                             "fallback"
-                          ],
-                          "type": "string"
+                          ]
                         },
                         "direction": {
                           "enum": [
@@ -138579,9 +138603,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -139677,9 +139702,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -142805,9 +142831,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -143526,9 +143553,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -143650,9 +143678,10 @@
                                       "basis": {
                                         "enum": [
                                           "requested",
+                                          "same-script",
+                                          "other-script",
                                           "fallback"
-                                        ],
-                                        "type": "string"
+                                        ]
                                       },
                                       "direction": {
                                         "enum": [
@@ -157854,9 +157883,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -161317,9 +161347,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -165767,9 +165798,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -174254,9 +174286,10 @@
                                     "basis": {
                                       "enum": [
                                         "requested",
+                                        "same-script",
+                                        "other-script",
                                         "fallback"
-                                      ],
-                                      "type": "string"
+                                      ]
                                     },
                                     "direction": {
                                       "enum": [
@@ -174377,9 +174410,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -175026,9 +175060,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -175073,9 +175108,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -175236,9 +175272,10 @@
                                     "basis": {
                                       "enum": [
                                         "requested",
+                                        "same-script",
+                                        "other-script",
                                         "fallback"
-                                      ],
-                                      "type": "string"
+                                      ]
                                     },
                                     "direction": {
                                       "enum": [
@@ -270178,9 +270215,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -270212,9 +270250,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -272281,9 +272320,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -272315,9 +272355,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -274396,9 +274437,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -274430,9 +274472,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -276656,9 +276699,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -276690,9 +276734,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -278933,9 +278978,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -278967,9 +279013,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -281226,9 +281273,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -281260,9 +281308,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -286548,9 +286597,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -286582,9 +286632,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -287294,9 +287345,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -287328,9 +287380,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -288055,9 +288108,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -288089,9 +288143,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -288958,9 +289013,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -288992,9 +289048,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -289877,9 +289934,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -289911,9 +289969,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -290812,9 +290871,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -290846,9 +290906,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -292911,9 +292972,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -292945,9 +293007,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -293657,9 +293720,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -293691,9 +293755,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -294418,9 +294483,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -294452,9 +294518,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -295321,9 +295388,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -295355,9 +295423,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -296240,9 +296309,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -296274,9 +296344,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -297175,9 +297246,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -297209,9 +297281,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -297355,9 +297428,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -297406,9 +297480,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -297457,9 +297532,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -297508,9 +297584,10 @@
                                           "basis": {
                                             "enum": [
                                               "requested",
+                                              "same-script",
+                                              "other-script",
                                               "fallback"
-                                            ],
-                                            "type": "string"
+                                            ]
                                           },
                                           "direction": {
                                             "enum": [
@@ -297922,9 +297999,10 @@
                                       "basis": {
                                         "enum": [
                                           "requested",
+                                          "same-script",
+                                          "other-script",
                                           "fallback"
-                                        ],
-                                        "type": "string"
+                                        ]
                                       },
                                       "direction": {
                                         "enum": [
@@ -297956,9 +298034,10 @@
                                       "basis": {
                                         "enum": [
                                           "requested",
+                                          "same-script",
+                                          "other-script",
                                           "fallback"
-                                        ],
-                                        "type": "string"
+                                        ]
                                       },
                                       "direction": {
                                         "enum": [
@@ -298752,9 +298831,10 @@
                                       "basis": {
                                         "enum": [
                                           "requested",
+                                          "same-script",
+                                          "other-script",
                                           "fallback"
-                                        ],
-                                        "type": "string"
+                                        ]
                                       },
                                       "direction": {
                                         "enum": [
@@ -298786,9 +298866,10 @@
                                       "basis": {
                                         "enum": [
                                           "requested",
+                                          "same-script",
+                                          "other-script",
                                           "fallback"
-                                        ],
-                                        "type": "string"
+                                        ]
                                       },
                                       "direction": {
                                         "enum": [
@@ -299036,9 +299117,10 @@
                                             "basis": {
                                               "enum": [
                                                 "requested",
+                                                "same-script",
+                                                "other-script",
                                                 "fallback"
-                                              ],
-                                              "type": "string"
+                                              ]
                                             },
                                             "direction": {
                                               "enum": [
@@ -299219,9 +299301,10 @@
                                               "basis": {
                                                 "enum": [
                                                   "requested",
+                                                  "same-script",
+                                                  "other-script",
                                                   "fallback"
-                                                ],
-                                                "type": "string"
+                                                ]
                                               },
                                               "direction": {
                                                 "enum": [
@@ -299519,9 +299602,10 @@
                                       "basis": {
                                         "enum": [
                                           "requested",
+                                          "same-script",
+                                          "other-script",
                                           "fallback"
-                                        ],
-                                        "type": "string"
+                                        ]
                                       },
                                       "direction": {
                                         "enum": [
@@ -299553,9 +299637,10 @@
                                       "basis": {
                                         "enum": [
                                           "requested",
+                                          "same-script",
+                                          "other-script",
                                           "fallback"
-                                        ],
-                                        "type": "string"
+                                        ]
                                       },
                                       "direction": {
                                         "enum": [
@@ -299728,9 +299813,10 @@
                                       "basis": {
                                         "enum": [
                                           "requested",
+                                          "same-script",
+                                          "other-script",
                                           "fallback"
-                                        ],
-                                        "type": "string"
+                                        ]
                                       },
                                       "direction": {
                                         "enum": [
@@ -300467,9 +300553,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -300501,9 +300588,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -312900,9 +312988,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -313109,9 +313198,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -313204,9 +313294,10 @@
                             "basis": {
                               "enum": [
                                 "requested",
+                                "same-script",
+                                "other-script",
                                 "fallback"
-                              ],
-                              "type": "string"
+                              ]
                             },
                             "direction": {
                               "enum": [
@@ -313563,9 +313654,10 @@
                         "basis": {
                           "enum": [
                             "requested",
+                            "same-script",
+                            "other-script",
                             "fallback"
-                          ],
-                          "type": "string"
+                          ]
                         },
                         "direction": {
                           "enum": [
@@ -313795,9 +313887,10 @@
                         "basis": {
                           "enum": [
                             "requested",
+                            "same-script",
+                            "other-script",
                             "fallback"
-                          ],
-                          "type": "string"
+                          ]
                         },
                         "direction": {
                           "enum": [
@@ -313826,9 +313919,10 @@
                         "basis": {
                           "enum": [
                             "requested",
+                            "same-script",
+                            "other-script",
                             "fallback"
-                          ],
-                          "type": "string"
+                          ]
                         },
                         "direction": {
                           "enum": [
@@ -313906,9 +314000,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -313960,9 +314055,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -325480,9 +325576,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -325531,9 +325628,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -325582,9 +325680,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -325633,9 +325732,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -326047,9 +326147,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -326081,9 +326182,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -326786,9 +326888,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -327333,9 +327436,10 @@
                                     "basis": {
                                       "enum": [
                                         "requested",
+                                        "same-script",
+                                        "other-script",
                                         "fallback"
-                                      ],
-                                      "type": "string"
+                                      ]
                                     },
                                     "direction": {
                                       "enum": [
@@ -327375,9 +327479,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -327875,9 +327980,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -328391,9 +328497,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -328749,9 +328856,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -328783,9 +328891,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -329657,9 +329766,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -329691,9 +329801,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -330231,9 +330342,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -331607,9 +331719,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -331641,9 +331754,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -332340,9 +332454,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -332374,9 +332489,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -335557,9 +335673,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -335591,9 +335708,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -345528,9 +345646,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "direction": {
                                     "enum": [
@@ -346424,9 +346543,10 @@
                             "basis": {
                               "enum": [
                                 "requested",
+                                "same-script",
+                                "other-script",
                                 "fallback"
-                              ],
-                              "type": "string"
+                              ]
                             },
                             "direction": {
                               "enum": [
@@ -347028,9 +347148,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -347062,9 +347183,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -364568,9 +364690,10 @@
                                   "basis": {
                                     "enum": [
                                       "requested",
+                                      "same-script",
+                                      "other-script",
                                       "fallback"
-                                    ],
-                                    "type": "string"
+                                    ]
                                   },
                                   "context": {
                                     "type": "string"
@@ -374468,9 +374591,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -423017,9 +423141,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -428851,9 +428976,10 @@
                                     "basis": {
                                       "enum": [
                                         "requested",
+                                        "same-script",
+                                        "other-script",
                                         "fallback"
-                                      ],
-                                      "type": "string"
+                                      ]
                                     },
                                     "direction": {
                                       "enum": [
@@ -429034,9 +429160,10 @@
                                       "basis": {
                                         "enum": [
                                           "requested",
+                                          "same-script",
+                                          "other-script",
                                           "fallback"
-                                        ],
-                                        "type": "string"
+                                        ]
                                       },
                                       "direction": {
                                         "enum": [
@@ -429334,9 +429461,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -429368,9 +429496,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -429449,9 +429578,10 @@
                             "basis": {
                               "enum": [
                                 "requested",
+                                "same-script",
+                                "other-script",
                                 "fallback"
-                              ],
-                              "type": "string"
+                              ]
                             },
                             "direction": {
                               "enum": [
@@ -430848,9 +430978,10 @@
                         "basis": {
                           "enum": [
                             "requested",
+                            "same-script",
+                            "other-script",
                             "fallback"
-                          ],
-                          "type": "string"
+                          ]
                         },
                         "direction": {
                           "enum": [
@@ -430947,9 +431078,10 @@
                         "basis": {
                           "enum": [
                             "requested",
+                            "same-script",
+                            "other-script",
                             "fallback"
-                          ],
-                          "type": "string"
+                          ]
                         },
                         "direction": {
                           "enum": [
@@ -431082,9 +431214,10 @@
                         "basis": {
                           "enum": [
                             "requested",
+                            "same-script",
+                            "other-script",
                             "fallback"
-                          ],
-                          "type": "string"
+                          ]
                         },
                         "direction": {
                           "enum": [
@@ -431116,9 +431249,10 @@
                         "basis": {
                           "enum": [
                             "requested",
+                            "same-script",
+                            "other-script",
                             "fallback"
-                          ],
-                          "type": "string"
+                          ]
                         },
                         "direction": {
                           "enum": [
@@ -431841,9 +431975,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -433830,9 +433965,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -433864,9 +434000,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
@@ -436458,9 +436595,10 @@
                               "basis": {
                                 "enum": [
                                   "requested",
+                                  "same-script",
+                                  "other-script",
                                   "fallback"
-                                ],
-                                "type": "string"
+                                ]
                               },
                               "direction": {
                                 "enum": [
