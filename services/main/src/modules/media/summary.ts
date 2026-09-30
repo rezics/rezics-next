@@ -7,6 +7,7 @@ import { readWorkComponentState } from '../work/history.ts';
 import { readPublicRealmNames } from '../space/read.ts';
 import { currentProfile } from '../realm-profile/schema.ts';
 import { readerLanguages, selectDisplayName, type LocalizedText } from '../display-language/select.ts';
+import type { Base } from '../target/contract.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaUnavailable,
   type AvatarRow, type MediaStore } from './store.ts';
 
@@ -17,7 +18,15 @@ const languageTag = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 const RTL = new Set(['ar', 'arc', 'ckb', 'dv', 'fa', 'he', 'ks', 'ku', 'ps', 'sd', 'ug', 'ur', 'yi']);
 
 export type ResourceType = 'work' | 'main-version' | 'space' | 'realm' | 'concept'
-  | 'character' | 'context' | 'role' | 'relation-definition';
+  | 'character' | 'context' | 'role' | 'relation-definition'
+  | 'release' | 'occurrence' | 'realization' | 'resource';
+
+/** Main Version is an entry axis, so it has no capability target base. */
+export const summaryBases = { work: 'work', 'main-version': null, space: 'resource',
+  realm: 'resource', concept: 'resource', character: 'resource', context: 'resource',
+  role: 'resource', 'relation-definition': 'resource', release: 'release',
+  occurrence: 'occurrence', realization: 'realization', resource: 'resource',
+} as const satisfies Record<ResourceType, Base | null>;
 
 export interface SummaryReader {
   /** Current approved membership, including its revocation generations. */
@@ -51,6 +60,7 @@ export type AvatarDescriptor =
 
 export type ResourceSummary =
   | { reference: string; status: 'available'; type: ResourceType; disclosure: 'public' | 'restricted';
+    base: Base | null; work: string | null;
     name: { value: string; language: string; direction: 'ltr' | 'rtl'; basis: 'requested' | 'fallback';
       context?: string; preferenceRevision?: string };
     avatar: AvatarDescriptor }
@@ -114,7 +124,7 @@ async function readRelationDefinitionNames(env: WorkActivationEnvironment, resou
 
 /** Character and Role names from exact current semantic manifests in one graph read. */
 async function readSemanticResourceNames(env: WorkActivationEnvironment,
-  resources: ReadonlyMap<string, 'character' | 'role'>) {
+  resources: ReadonlyMap<string, 'character' | 'role' | 'resource'>) {
   const names = new Map<string, Map<string, string>>();
   if (!resources.size) return names;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?resource ?manifest WHERE {
@@ -131,7 +141,7 @@ async function readSemanticResourceNames(env: WorkActivationEnvironment,
     if (!type) continue;
     const state = await readWorkComponentState(env, row.manifest.value, row.resource.value, PROFILES.resource);
     if (state.component !== 'resource' || state.lifecycle !== 'active' || !Array.isArray(state.types)
-      || !state.types.includes(`${RV}${type === 'character' ? 'Character' : 'Role'}`)
+      || type !== 'resource' && !state.types.includes(`${RV}${type === 'character' ? 'Character' : 'Role'}`)
       || !Array.isArray(state.properties)) continue;
     const labels = new Map<string, string>();
     const ambiguous = new Set<string>();
@@ -150,7 +160,8 @@ async function readSemanticResourceNames(env: WorkActivationEnvironment,
   return names;
 }
 const typePriority: readonly ResourceType[] = [
-  'work', 'main-version', 'space', 'realm', 'concept', 'context', 'character', 'role', 'relation-definition',
+  'work', 'main-version', 'release', 'occurrence', 'realization',
+  'space', 'realm', 'concept', 'context', 'character', 'role', 'relation-definition', 'resource',
 ];
 
 export function direction(language: string): 'ltr' | 'rtl' {
@@ -183,6 +194,9 @@ function avatar(type: ResourceType, reference: string, row: AvatarRow | undefine
 
 /** One bounded graph query resolves type, labels and public disclosure for the batch. */
 async function graphRows(env: WorkActivationEnvironment, resources: readonly string[]) {
+  // Test the owner branch, not BOUND(?work): an OPTIONAL can bind an initially
+  // absent Work from its own label/head pattern and attach an unrelated owner.
+  const workType = '?type IN ("work", "main-version", "release", "occurrence", "realization")';
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
     SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased WHERE {
@@ -190,9 +204,18 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
         OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } }
       OPTIONAL {
         VALUES ?r { ${resources.map(iri).join(' ')} }
-        GRAPH ${iri(GRAPHS.current)} {
-          { ?r a schema:CreativeWork . BIND(?r AS ?work) BIND("work" AS ?type) }
+        { GRAPH ${iri(GRAPHS.current)} {
+          { ?r a schema:CreativeWork ; rv:mainVersion ?main . BIND(?r AS ?work) BIND("work" AS ?type) }
           UNION { ?r a rv:MainVersion ; rv:work ?work . BIND("main-version" AS ?type) }
+          UNION { ?r a rv:Release ; rv:work ?work . BIND("release" AS ?type) }
+          UNION { ?r a schema:ListItem ; rv:structure ?structure .
+            ?structure rv:structureOf ?component ; rv:selectedGeneration ?generation .
+            ?placement rv:generation ?generation ; rv:occurrence ?r ; a rv:OccurrencePlacement .
+            FILTER NOT EXISTS { ?placement rv:removedBy ?removedBy }
+            { ?component a rv:MainVersion ; rv:work ?work }
+            UNION { ?component a schema:CreativeWork ; rv:mainVersion ?main . BIND(?component AS ?work) }
+            BIND("occurrence" AS ?type) }
+          UNION { ?r a rv:TextContribution ; rv:work ?work . BIND("realization" AS ?type) }
           UNION { ?r a rv:Space . BIND("space" AS ?type) }
           UNION { ?r a rv:Realm ; rv:realmState rv:Active . BIND("realm" AS ?type) }
           UNION { ?r a skos:Concept ; rv:conceptState rv:Active . BIND("concept" AS ?type) }
@@ -201,26 +224,43 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           UNION { ?r a rv:Role ; rv:semanticHead ?semanticHead . BIND("role" AS ?type) }
           UNION { ?r a rv:SemanticDefinition ; rv:definitionKind rv:RelationDefinition ;
             rv:definitionHead ?definitionHead . BIND("relation-definition" AS ?type) }
-        }
-        OPTIONAL { FILTER(?type = "work" || ?type = "main-version")
+          UNION { ?r rv:semanticHead ?semanticHead . BIND("resource" AS ?type) }
+        } }
+        UNION { GRAPH ${iri(GRAPHS.revisions)} {
+          ?r a rv:FixedRelease ; rv:work ?work . BIND("release" AS ?type) } }
+        OPTIONAL { FILTER(${workType})
           GRAPH ${iri(GRAPHS.current)} { ?work rdfs:label ?label } }
-        OPTIONAL { FILTER(?type = "work" || ?type = "main-version")
+        OPTIONAL { FILTER(${workType})
           GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
         OPTIONAL { FILTER(?type = "space") GRAPH ${iri(GRAPHS.current)} { ?r rdfs:label ?label } }
         OPTIONAL { FILTER(?type = "concept") GRAPH ${iri(GRAPHS.current)} { ?r skos:prefLabel ?label } }
-        BIND(IF(?type = "work" || ?type = "main-version", EXISTS {
+        BIND(IF(${workType}, EXISTS {
           GRAPH ${iri(GRAPHS.current)} { ?variant rv:resource ?work ; rv:contentPublicationHead ?pin }
           GRAPH ${iri(GRAPHS.revisions)} { ?pin rv:contentRevision ?contentRevision .
             ?contentRevision a rv:ErasedRevision }
-        }, false) AS ?erased)
+        } || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?erasedHead }
+          GRAPH ${iri(GRAPHS.revisions)} { ?erasedHead a rv:ErasedRevision } }
+          || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work rv:protectionHead ?protection } }, false)
+          || EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:ErasedRevision } }
+          || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r ?headPredicate ?resourceHead .
+            VALUES ?headPredicate { rv:head rv:releaseHead rv:semanticHead } }
+            GRAPH ${iri(GRAPHS.revisions)} { ?resourceHead a rv:ErasedRevision } }
+          || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:structure ?erasedStructure .
+            ?erasedStructure rv:structureHead ?structureRevision }
+            GRAPH ${iri(GRAPHS.revisions)} { ?structureRevision a rv:ErasedRevision } }
+          || EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?r rv:selectedDraft ?erasedDraft .
+            ?erasedDraft a rv:ErasedRevision } }
+          || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:publicationHead ?publication }
+            GRAPH ${iri(GRAPHS.revisions)} { ?publication rv:selectedDraft ?erasedDraft .
+              ?erasedDraft a rv:ErasedRevision } } AS ?erased)
         BIND(IF(?type = "realm", EXISTS { GRAPH ${iri(GRAPHS.current)} {
           ?r rv:space ?realmSpace . ?realmSpace rv:realmCapability ?r ; rv:disclosure rv:Public } },
           IF(?type = "concept", true,
           IF(?type = "context", EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
           IF(?type = "space",
           EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
-          EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?pm . ?pm rv:selectionHead ?ps }
-            GRAPH ${iri(GRAPHS.revisions)} { ?ps rv:publicationDecision ?pd . ?pd rv:disclosure rv:Public } }))))
+          IF(${workType}, EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?pm . ?pm rv:selectionHead ?ps }
+            GRAPH ${iri(GRAPHS.revisions)} { ?ps rv:publicationDecision ?pd . ?pd rv:disclosure rv:Public } }, false)))))
           AS ?public)
       }
     }`);
@@ -230,9 +270,12 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     throw new MediaUnavailable('graph lineage is unavailable');
   }
   const rows = new Map<string, GraphRow>();
+  // A descriptive semantic component cannot revive an erased owner's identity.
+  const erased = new Set(bindings.filter(binding => binding.erased?.value === 'true')
+    .flatMap(binding => binding.r ? [binding.r.value] : []));
   for (const binding of bindings) {
     const reference = binding.r?.value;
-    if (!reference || !binding.type || binding.erased?.value === 'true') continue;
+    if (!reference || !binding.type || erased.has(reference)) continue;
     const type = binding.type.value as ResourceType;
     const previous = rows.get(reference);
     if (previous && typePriority.indexOf(previous.type) < typePriority.indexOf(type)) continue;
@@ -267,13 +310,13 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   for (const reference of unique) {
     const row = graph.rows.get(reference);
     if (!row) continue;
-    if (['realm', 'context', 'character', 'role', 'relation-definition'].includes(row.type)) {
+    if (['realm', 'context', 'character', 'role', 'relation-definition', 'resource'].includes(row.type)) {
       special.set(reference, row);
       continue;
     }
     if (!selectName(row.labels, null)) continue;
     if (row.public) { readable.set(reference, row); continue; }
-    if ((row.type === 'work' || row.type === 'main-version') && row.work) {
+    if (row.work) {
       restricted.set(reference, row.work);
     }
   }
@@ -322,8 +365,9 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   cost.graphQueries += contextBatch.graphQueries;
   const relationRefs = [...special].filter(([, row]) => row.type === 'relation-definition')
     .map(([reference]) => reference);
-  const semanticRefs = new Map([...special].filter(([, row]) => row.type === 'character' || row.type === 'role')
-    .map(([reference, row]) => [reference, row.type as 'character' | 'role']));
+  const semanticRefs = new Map([...special].filter(([, row]) =>
+    row.type === 'character' || row.type === 'role' || row.type === 'resource')
+    .map(([reference, row]) => [reference, row.type as 'character' | 'role' | 'resource']));
   const semanticResources = [...new Set([...semanticRefs.keys(), ...relationRefs])];
   let admittedSemantics = new Set<string>();
   if (semanticResources.length && reader.canReadSemantics) {
@@ -370,7 +414,8 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
       row.labels = names;
     }
     if (!row.labels.size) {
-      const kind = row.type === 'character' ? 'Character' : row.type === 'role' ? 'Role' : 'Relation definition';
+      const kind = row.type === 'character' ? 'Character' : row.type === 'role' ? 'Role'
+        : row.type === 'resource' ? 'Resource' : 'Relation definition';
       row.labels.set('en', `${kind} ${reference.slice(-8)}`);
     }
     row.public = false;
@@ -414,6 +459,7 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     const selectedContext = contextBatch.selectedNames.has(reference)
       ? contextBatch.contexts.get(input.context) : undefined;
     return { reference, status: 'available', type: row.type,
+      base: summaryBases[row.type], work: row.work,
       disclosure: row.public ? 'public' : 'restricted',
       name: { ...selectDisplayName(row.localizedName ?? row.labels,
         input.languages ?? readerLanguages(input.language))!,

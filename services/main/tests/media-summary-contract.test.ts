@@ -7,6 +7,7 @@ const base = { profile: 'resource-summary-batch-v1', complete: true,
   generation: { graph: 'epoch:7', media: null },
   cost: { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 0 } };
 const fallback = { reference, status: 'available', type: 'work', disclosure: 'public',
+  base: 'work', work: reference,
   name: { value: 'A work', language: 'en', direction: 'ltr', basis: 'requested' },
   avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'admitted-default', resourceType: 'work' } };
 

@@ -1,9 +1,11 @@
 import { t } from 'elysia';
 import { AVATAR_POLICY } from './store.ts';
 import { FALLBACK_POLICY, MAX_SUMMARY_BATCH } from './summary.ts';
+import { targetBase, targetRef } from '../target/contract.ts';
 
 const resourceType = t.Union(['work', 'main-version', 'space', 'realm', 'concept', 'character',
-  'context', 'role', 'relation-definition'].map(value => t.Literal(value)));
+  'context', 'role', 'relation-definition', 'release', 'occurrence', 'realization', 'resource']
+  .map(value => t.Literal(value)));
 const name = t.Object({ value: t.String(), language: t.String(),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]),
   basis: t.Union([t.Literal('requested'), t.Literal('fallback')]),
@@ -24,6 +26,7 @@ export const resourceSummary = t.Union([
   t.Object({ reference: t.String(), status: t.Literal('unavailable') },
     { additionalProperties: false }),
   t.Object({ reference: t.String(), status: t.Literal('available'), type: resourceType,
+    base: t.Nullable(targetBase), work: t.Nullable(targetRef),
     disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]), name, avatar },
   { additionalProperties: false }),
 ]);
