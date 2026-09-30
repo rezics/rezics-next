@@ -84,8 +84,8 @@ Quality is measured as confirmed duplicates per 1,000 new records after 30
 days, wrong merges, existing-record selection at creation, abandonment and
 editor minutes per trustworthy addition, by language and grain.
 
-The older checkout's [merge contracts](../../../rezics/services/main/src/services/units/merge/contracts.ts)
-hold preflight, two-review admission, redirects, reconciliation items and
+The older checkout's merge contracts (`services/main/src/services/units/merge/contracts.ts`
+in the sibling `rezics` repository) hold preflight, two-review admission, redirects, reconciliation items and
 recovery fixtures worth adapting, not porting wholesale. Today address
 redirects exist (`services/main/src/modules/address/`), provider identity and
 corrections are proposal-only, and creation has no candidate, grain or evidence
