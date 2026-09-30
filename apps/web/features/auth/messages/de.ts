@@ -39,4 +39,15 @@ export default {
   manageAccount: 'Dein REZICS-Konto verwalten',
   profileSettings: 'Profileinstellungen',
   chooseHandle: 'Benutzernamen wählen',
+  // Callback failures: what actually failed, never a bare status line.
+  signInFailedHeading: 'Anmeldung fehlgeschlagen',
+  failedState: 'Die Anmeldung hat zu lange gedauert oder wurde in einem anderen Browser gestartet und wurde deshalb nicht akzeptiert.',
+  failedIssuer: 'Die Antwort kam nicht von Ihrem REZICS-Konto-Dienst und wurde deshalb nicht akzeptiert.',
+  failedCode: 'Der Anmeldecode wurde bereits verwendet oder ist abgelaufen.',
+  failedExchange: 'REZICS konnte Ihren Konto-Dienst nicht erreichen, um die Anmeldung abzuschließen.',
+  failedConfig: 'Die Anmeldung ist auf dieser Website derzeit nicht verfügbar.',
+  failedSession: 'Das angemeldete Konto stimmt nicht mit dem Konto überein, das REZICS erhalten hat. Es wurde nichts gespeichert.',
+  failedProvider: 'Ihr Konto-Dienst hat bei der Anmeldung einen Fehler gemeldet.',
+  failedUnknown: 'Die Anmeldung konnte nicht abgeschlossen werden.',
+  providerCode: 'Fehlercode: {code}',
 } satisfies Partial<AuthMessages>;

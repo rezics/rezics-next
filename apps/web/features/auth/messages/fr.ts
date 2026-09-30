@@ -37,4 +37,15 @@ export default {
   manageAccount: 'Gérer votre compte REZICS',
   profileSettings: 'Paramètres du profil',
   chooseHandle: 'Choisir un nom d’utilisateur',
+  // Callback failures: what actually failed, never a bare status line.
+  signInFailedHeading: 'La connexion a échoué',
+  failedState: 'La connexion a pris trop de temps ou a été lancée dans un autre navigateur ; elle n’a donc pas été acceptée.',
+  failedIssuer: 'La réponse ne provenait pas du service de votre compte REZICS ; elle n’a donc pas été acceptée.',
+  failedCode: 'Le code de connexion a déjà été utilisé ou a expiré.',
+  failedExchange: 'REZICS n’a pas pu joindre le service de votre compte pour terminer la connexion.',
+  failedConfig: 'La connexion n’est pas disponible sur ce site pour le moment.',
+  failedSession: 'Le compte connecté ne correspond pas à celui reçu par REZICS. Rien n’a été enregistré.',
+  failedProvider: 'Le service de votre compte a signalé une erreur pendant la connexion.',
+  failedUnknown: 'La connexion n’a pas pu être terminée.',
+  providerCode: 'Code d’erreur : {code}',
 } satisfies Partial<AuthMessages>;

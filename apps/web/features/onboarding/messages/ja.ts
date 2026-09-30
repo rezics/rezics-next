@@ -3,9 +3,10 @@ import type { OnboardingMessages } from '../messages.ts';
 
 export default {
   welcome: 'REZICS へようこそ',
-  welcomeHelp: 'プロフィールのユーザー名を設定してください。公開名と一緒に表示されます。',
-  displayName: '表示名',
-  displayNameHelp: 'この名前は REZICS アカウントから引き継がれています。',
+  welcomeHelp: 'プロフィールの公開名とユーザー名を設定してください。続けるまで、何も公開されません。',
+  displayName: '公開名',
+  displayNameHelp: 'プロフィールと貢献に表示されます。',
+  invalidName: '200 文字以内の公開名を入力してください。',
   handle: 'ユーザー名',
   handleHelp: '半角英字、数字、アンダースコアを使って3〜30文字で設定してください。大文字と小文字は区別されません。',
   checking: '使用できるか確認中…',

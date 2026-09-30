@@ -39,4 +39,15 @@ export default {
   manageAccount: 'REZICS 계정 관리',
   profileSettings: '프로필 설정',
   chooseHandle: '사용자 이름 정하기',
+  // Callback failures: what actually failed, never a bare status line.
+  signInFailedHeading: '로그인하지 못했습니다',
+  failedState: '로그인이 너무 오래 걸렸거나 다른 브라우저에서 시작되어 받아들여지지 않았습니다.',
+  failedIssuer: '응답이 REZICS 계정 서비스에서 온 것이 아니어서 받아들여지지 않았습니다.',
+  failedCode: '이 로그인 코드는 이미 사용되었거나 만료되었습니다.',
+  failedExchange: 'REZICS가 계정 서비스에 연결하지 못해 로그인을 완료할 수 없었습니다.',
+  failedConfig: '현재 이 사이트에서는 로그인할 수 없습니다.',
+  failedSession: '로그인한 계정이 REZICS가 받은 계정과 일치하지 않습니다. 아무것도 저장되지 않았습니다.',
+  failedProvider: '계정 서비스가 로그인 중에 오류를 보고했습니다.',
+  failedUnknown: '로그인을 완료할 수 없었습니다.',
+  providerCode: '오류 코드: {code}',
 } satisfies Partial<AuthMessages>;

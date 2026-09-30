@@ -50,11 +50,15 @@ async function cookie(context: BrowserContext, name: string) {
 test('IAM02: invalid OAuth state is rejected at the web callback', async ({ page }) => {
   const issuer = `${process.env.ACCOUNT_ORIGIN ?? 'http://127.0.0.1:3004'}/api/auth`;
   const invalidCallback = await page.goto(`/auth/callback?code=invalid&state=invalid&iss=${encodeURIComponent(issuer)}`);
-  expect(invalidCallback?.status()).toBe(400);
-  await expect(page.getByText('Authorization state is invalid or expired')).toBeVisible();
+  // G-537: a failed callback lands on a page that says what failed and offers a retry.
+  expect(invalidCallback?.status()).toBe(200);
+  await expect(page).toHaveURL(/\/en\/identity\/failed\?reason=state/);
+  await expect(page.getByRole('alert')).toContainText('started in another browser');
+  await expect(page.getByRole('link', { name: 'Try signing in again' })).toBeVisible();
   const wrongIssuer = await page.goto('/auth/callback?code=invalid&state=invalid&iss=https://evil.test/api/auth');
-  expect(wrongIssuer?.status()).toBe(400);
-  await expect(page.getByText('Authorization issuer is invalid')).toBeVisible();
+  expect(wrongIssuer?.status()).toBe(200);
+  await expect(page).toHaveURL(/\/en\/identity\/failed\?reason=issuer/);
+  await expect(page.getByRole('alert')).toContainText('did not come from your REZICS Account service');
 });
 
 test('IAM01: a web session outlives its access token, keeps its Agent and signs out', async ({ page, context }, testInfo) => {

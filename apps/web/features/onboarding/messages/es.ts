@@ -3,9 +3,10 @@ import type { OnboardingMessages } from '../messages.ts';
 
 export default {
   welcome: 'Te damos la bienvenida a REZICS',
-  welcomeHelp: 'Elige un nombre de usuario para tu perfil. Tu nombre público aparecerá junto a él.',
-  displayName: 'Nombre visible',
-  displayNameHelp: 'Este nombre procede de tu cuenta de REZICS.',
+  welcomeHelp: 'Elige el nombre público y el nombre de usuario de tu perfil. Nada es público hasta que continúes.',
+  displayName: 'Nombre público',
+  displayNameHelp: 'Se muestra en tu perfil y en tus contribuciones.',
+  invalidName: 'Escribe un nombre público de 200 caracteres como máximo.',
   handle: 'Tu nombre de usuario',
   handleHelp: 'Usa entre 3 y 30 letras, números o guiones bajos. No distingue entre mayúsculas y minúsculas.',
   checking: 'Comprobando si está disponible…',

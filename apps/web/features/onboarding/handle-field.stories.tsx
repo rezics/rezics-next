@@ -16,7 +16,8 @@ const meta = { title: 'Onboarding/Choose handle', component: HandleField,
       <span className="text-muted-foreground text-sm">{messages.en.displayNameHelp}</span>
     </div> },
   decorators: [(Story, context) => {
-    const t = context.globals.locale === 'zh-Hans' ? messages['zh-Hans'] : messages.en;
+    const t = messages[(context.globals.locale as keyof typeof messages) in messages
+      ? context.globals.locale as keyof typeof messages : 'en'];
     return <PageContainer className="max-w-xl py-8 sm:py-16"><Card><CardContent
     className="grid gap-6 p-6 sm:p-8"><header className="grid gap-2">
       <h1 className="font-semibold text-2xl">{t.welcome}</h1>
@@ -67,5 +68,48 @@ export const Phone: Story = {
   globals: { viewport: { value: 'phone' } },
   async play() {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+/** First sign-in: nothing is filled in, and no Account data appears anywhere on the screen. */
+export const EmptyPublicName: Story = {
+  args: { askName: true, initial: '', children: undefined },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const name = canvas.getByRole('textbox', { name: 'Public name' });
+    await expect(name).toHaveValue('');
+    await expect(name).toBeRequired();
+    await expect(name).toHaveAttribute('autocomplete', 'off');
+    await expect(canvas.getByText('Shown on your profile and contributions.')).toBeInTheDocument();
+    await expect(canvas.getByRole('textbox', { name: 'Your handle' })).toHaveValue('');
+    await expect(canvas.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  },
+};
+
+export const SuggestsFromTheTypedName: Story = {
+  args: { askName: true, initial: '', children: undefined },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Public name' }), 'Ada Lovelace');
+    await expect(canvas.getByRole('textbox', { name: 'Your handle' })).toHaveValue('ada_lovelace');
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Continue' })).toBeEnabled());
+    // Once the handle is edited by hand, later typing leaves it alone.
+    await userEvent.clear(canvas.getByRole('textbox', { name: 'Your handle' }));
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Your handle' }), 'my_handle');
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Public name' }), ' Byron');
+    await expect(canvas.getByRole('textbox', { name: 'Your handle' })).toHaveValue('my_handle');
+  },
+};
+
+export const CjkPublicName: Story = {
+  args: { askName: true, initial: '', children: undefined, messages: messages['zh-Hant'],
+    submit: messages['zh-Hant'].continue },
+  globals: { locale: 'zh-Hant' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: '公開名稱' }), '林梅');
+    // No Latin letters, so no handle is suggested: the person chooses.
+    await expect(canvas.getByRole('textbox', { name: '您的使用者名稱' })).toHaveValue('');
+    await expect(canvas.getByRole('button', { name: '繼續' })).toBeDisabled();
   },
 };

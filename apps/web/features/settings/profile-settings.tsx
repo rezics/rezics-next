@@ -28,7 +28,8 @@ export function ProfileSettings({ agent, profile, locale, error, updated, accoun
   messages?: SettingsMessages;
 }) {
   const t = translatedMessages ?? fallbackMessages[locale];
-  const ownPerson = agent?.kind === 'person' && agent.path === 'direct-principal';
+  // A Person outside the publishing list has no known path; only a represented one is not the person's own.
+  const ownPerson = agent?.kind === 'person' && agent.path !== 'represented-agent';
   const name = profile?.displayName ?? (agent ? agentName(agent, authMessages[locale]) : '');
   const errors: Record<string, string> = { cooldown: t.cooldown, denied: t.denied,
     conflict: t.conflict, invalid: t.invalid, 'avatar-denied': t.avatarDenied,

@@ -37,4 +37,15 @@ export default {
   manageAccount: 'REZICS アカウントを管理',
   profileSettings: 'プロフィール設定',
   chooseHandle: 'ユーザー名を選択',
+  // Callback failures: what actually failed, never a bare status line.
+  signInFailedHeading: 'ログインに失敗しました',
+  failedState: 'ログインに時間がかかりすぎたか、別のブラウザーで開始されたため、受け付けられませんでした。',
+  failedIssuer: '応答が REZICS アカウントのサービスから届いたものではないため、受け付けられませんでした。',
+  failedCode: 'このログインコードはすでに使用されたか、有効期限が切れています。',
+  failedExchange: 'REZICS がアカウントのサービスに接続できず、ログインを完了できませんでした。',
+  failedConfig: 'このサイトでは現在ログインできません。',
+  failedSession: 'ログインしたアカウントと REZICS が受け取ったアカウントが一致しません。何も保存されていません。',
+  failedProvider: 'アカウントのサービスがログイン中にエラーを報告しました。',
+  failedUnknown: 'ログインを完了できませんでした。',
+  providerCode: 'エラーコード: {code}',
 } satisfies Partial<AuthMessages>;

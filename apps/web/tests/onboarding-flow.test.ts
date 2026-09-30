@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { ensureOnboarding, onboardingDestination, type OnboardingResult } from '../features/onboarding/ensure.ts';
-import { currentVanityHandle, normalizedHandle } from '../features/onboarding/handle.ts';
+import { currentVanityHandle, normalizedHandle, suggestedHandle } from '../features/onboarding/handle.ts';
 import { changeHandle } from '../features/onboarding/change-handle.ts';
 
 const person: OnboardingResult = { agent: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
@@ -15,6 +15,37 @@ test('G-431: a new Person Agent chooses a handle, then sets up Home; returning a
     .toBe('/en/studio');
   expect(onboardingDestination(created, true, '/en/studio', 'en')).toBe('/en/studio');
   expect(onboardingDestination({ kind: 'unavailable' }, true, '/en/studio', 'en')).toBe('/en/studio');
+});
+
+test('G-537: without a Person the name comes first, even for a session that already has a choice', () => {
+  const noName = { kind: 'name-required' as const };
+  expect(onboardingDestination(noName, false, '/en/studio', 'en'))
+    .toBe(`/en/onboarding?next=${encodeURIComponent('/en/welcome?next=%2Fen%2Fstudio')}`);
+  // An Organization held by control may already be the session choice; the Person is still missing.
+  expect(onboardingDestination(noName, true, '/en/studio', 'en'))
+    .toBe(`/en/onboarding?next=${encodeURIComponent('/en/welcome?next=%2Fen%2Fstudio')}`);
+});
+
+test('G-537: Main asking for a public name is an outcome, not a failure, and the typed name is sent once', async () => {
+  const sent: (string | undefined)[] = [];
+  expect(await ensureOnboarding('token', 'session', async () => {},
+    async (_token, _key, name) => { sent.push(name); return 'name-required'; }))
+    .toEqual({ kind: 'name-required' });
+  expect(await ensureOnboarding('token', 'session', async () => {},
+    async () => 'invalid-name', '林梅')).toEqual({ kind: 'invalid-name' });
+  const created = await ensureOnboarding('token', 'session', async () => {},
+    async (_token, _key, name) => { sent.push(name); return { ...person, suggestedHandle: 'reader' }; }, '林梅');
+  expect(created).toEqual({ kind: 'active', person: { ...person, suggestedHandle: 'reader' }, firstVisit: true });
+  expect(sent).toEqual([undefined, '林梅']);
+});
+
+test('G-537: a handle is suggested from the typed name only, and a name without Latin letters suggests none', () => {
+  expect(suggestedHandle('Ada Lovelace')).toBe('ada_lovelace');
+  expect(suggestedHandle('Zoë  Ünal!')).toBe('zoe_unal');
+  expect(suggestedHandle('林梅')).toBe('');
+  expect(suggestedHandle('ab')).toBe('');
+  expect(suggestedHandle('x'.repeat(40))).toBe('x'.repeat(30));
+  expect(suggestedHandle('')).toBe('');
 });
 
 test('202 provisioning retries without losing the first-visit decision', async () => {

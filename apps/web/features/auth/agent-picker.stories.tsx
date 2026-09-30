@@ -8,6 +8,20 @@ import { messages } from './messages.ts';
 const ada = 'https://rezics.com/id/b8df6385-cec9-4fa0-8b89-71def5fa82b5';
 const pen = 'https://rezics.com/id/1e1489d5-6994-402c-99f2-50547eeaef4d';
 const gone = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+const org = 'https://rezics.com/id/0d9c6a52-6bd3-4f3a-a2a6-6a8e8f2f1c11';
+const service = 'https://rezics.com/id/7a2f0c3e-5f0a-4d8e-9d55-3c1c2b7a9e42';
+const person = 'https://rezics.com/id/3f6c1a9e-0b1d-4c7e-8a55-9d2e4b6f1a70';
+
+// Every Agent Main lists: none of them needs to be able to publish, and none has an authority path.
+const everyKind = [
+  { iri: person, label: '林梅', labelText: { language: 'zh-Hant', direction: 'ltr' as const },
+    handle: 'meilin', kind: 'person' as const, path: null },
+  { iri: pen, label: 'Aster', labelText: { language: 'en', direction: 'ltr' as const },
+    handle: 'aster', kind: 'pen-name' as const, path: null },
+  { iri: org, label: 'مؤسسة النور', labelText: { language: 'ar', direction: 'rtl' as const },
+    handle: null, kind: 'organization' as const, path: null },
+  { iri: service, label: 'Nightly importer', labelText: { language: 'en', direction: 'ltr' as const },
+    handle: null, kind: 'service' as const, path: null }];
 
 const meta = { title: 'Auth/Agent picker', component: AgentPicker,
   args: { options: [{ iri: pen, label: 'Aster', handle: 'aster', kind: 'pen-name',
@@ -29,6 +43,49 @@ export const ChooseAnAgent: Story = {
     for (const radio of radios) await expect(radio).not.toBeChecked();
     await expect(canvas.getByRole('radio', { name: /Aster @aster/ })).toBeInTheDocument();
     await expect(canvas.getByRole('button', { name: 'Use this Agent' })).toBeInTheDocument();
+  },
+};
+
+export const EveryKind: Story = {
+  args: { options: everyKind },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('radio')).toHaveLength(4);
+    await expect(canvas.getByRole('radio', { name: /林梅 @meilin Person/ })).toBeInTheDocument();
+    await expect(canvas.getByRole('radio', { name: /Aster @aster Pen name/ })).toBeInTheDocument();
+    await expect(canvas.getByRole('radio', { name: /مؤسسة النور Organization/ })).toBeInTheDocument();
+    await expect(canvas.getByRole('radio', { name: /Nightly importer Service/ })).toBeInTheDocument();
+    // A label carries its own language and direction, whatever the page's.
+    await expect(canvas.getByText('مؤسسة النور')).toHaveAttribute('dir', 'rtl');
+    await expect(canvas.getByText('مؤسسة النور')).toHaveAttribute('lang', 'ar');
+    await expect(canvas.getByText('林梅')).toHaveAttribute('lang', 'zh-Hant');
+  },
+};
+
+export const OrganizationHeldByControlJapanese: Story = {
+  args: { options: [everyKind[2]!], messages: messages.ja, locale: 'ja', next: '/ja' },
+  globals: { locale: 'ja' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('radio', { name: /مؤسسة النور 組織/ })).toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: 'このエージェントを使う' })).toBeInTheDocument();
+  },
+};
+
+export const OrganizationHeldByControlGerman: Story = {
+  args: { options: [everyKind[2]!], messages: messages.de, locale: 'de', next: '/de' },
+  globals: { locale: 'de' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('radio', { name: /مؤسسة النور Organisation/ })).toBeInTheDocument();
+  },
+};
+
+export const EveryKindPhone: Story = {
+  args: { options: everyKind, messages: messages['zh-Hant'], locale: 'zh-Hant', next: '/zh-Hant' },
+  globals: { locale: 'zh-Hant', viewport: { value: 'phone' } },
+  async play() {
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
 

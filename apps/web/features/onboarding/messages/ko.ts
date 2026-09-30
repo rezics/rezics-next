@@ -3,9 +3,10 @@ import type { OnboardingMessages } from '../messages.ts';
 
 export default {
   welcome: 'REZICS에 오신 것을 환영합니다',
-  welcomeHelp: '프로필에 사용할 사용자 이름을 정해 주세요. 사용자 이름과 함께 공개 이름이 표시됩니다.',
-  displayName: '표시 이름',
-  displayNameHelp: 'REZICS 계정에서 가져온 이름입니다.',
+  welcomeHelp: '프로필에 사용할 공개 이름과 사용자 이름을 정해 주세요. 계속하기 전에는 아무것도 공개되지 않습니다.',
+  displayName: '공개 이름',
+  displayNameHelp: '프로필과 기여에 표시됩니다.',
+  invalidName: '200자 이내의 공개 이름을 입력해 주세요.',
   handle: '사용자 이름',
   handleHelp: '영문자, 숫자, 밑줄(_)을 사용해 3~30자로 입력하세요. 대소문자를 구분하지 않습니다.',
   checking: '사용할 수 있는지 확인 중…',

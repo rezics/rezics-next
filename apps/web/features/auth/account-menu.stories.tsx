@@ -42,7 +42,9 @@ export const SignedIn: Story = {
       return;
     }
     const menu = await within(canvasElement.ownerDocument.body).findByRole('menu');
-    await expect(menu).toHaveTextContent('ada@example.test');
+    // The Account's own name and email are private: the menu shows only the Agent.
+    await expect(menu).not.toHaveTextContent('ada@example.test');
+    await expect(menu).not.toHaveTextContent('Ada Lovelace');
     await expect(within(menu).getByRole('group', { name: 'Acting as' })).toHaveTextContent('Aster');
     // The menu opens with a short fade and zoom.
     await waitFor(() => expect(within(menu).getByRole('menuitem', { name: 'Switch Agent' })).toBeVisible());

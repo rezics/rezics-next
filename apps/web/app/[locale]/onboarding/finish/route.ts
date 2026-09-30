@@ -19,7 +19,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ loc
   const token = jar.get(ACCESS_COOKIE)?.value;
   const sessionKey = jar.get(SESSION_KEY_COOKIE)?.value;
   if (!token || !sessionKey) return NextResponse.redirect(back('unavailable'), 303);
-  const outcome = await ensureOnboarding(token, sessionKey);
+  // The typed name creates the Person; without one this continues an existing Person
+  // (Main keeps an existing Person's name and never reads Account data for it).
+  const typed = form.has('displayName') ? String(form.get('displayName')).trim() : undefined;
+  if (typed !== undefined && (!typed || typed.length > 200 || /[\u0000-\u001f\u007f]/.test(typed))) {
+    return NextResponse.redirect(back('invalid-name'), 303);
+  }
+  const outcome = await ensureOnboarding(token, sessionKey, undefined, undefined, typed);
+  if (outcome.kind === 'invalid-name') return NextResponse.redirect(back('invalid-name'), 303);
   if (outcome.kind !== 'active') return NextResponse.redirect(back('unavailable'), 303);
   const changed = await changeHandle(token, outcome.person.agent, String(form.get('handle') ?? ''),
     null, String(form.get('key') ?? ''));

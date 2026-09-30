@@ -11,15 +11,27 @@ export interface ActingContextDiscovery {
     handle: string | null; kind: AgentOption['kind'] }>;
 }
 
+/** Main's `GET /v1/me/agents` answer: every Agent the person may act as,
+ * whether or not it can publish. Labels carry their own language and direction. */
+export interface AgentDiscovery {
+  items: ReadonlyArray<{ actingSubject: string; displayName: AgentLabel | null;
+    handle: string | null; kind: AgentOption['kind'] }>;
+}
+
+export interface AgentLabel { value: string; language: string; direction: 'ltr' | 'rtl' }
+
 export interface AgentOption {
   iri: string;
   /** Main's public display name, or null when public metadata is absent. */
   label: string | null;
+  /** The label's language and direction, for `lang` and `dir` on the element that shows it. */
+  labelText?: Pick<AgentLabel, 'language' | 'direction'>;
   handle: string | null;
   avatarUrl?: string | null;
   kind: 'person' | 'pen-name' | 'organization' | 'service' | null;
-  /** Represented Agents act through a representation; a direct Agent is the person's own. */
-  path: 'represented-agent' | 'direct-principal';
+  /** Represented Agents act through a representation; a direct Agent is the person's own.
+   * Null when the Agent is not one the person can publish as, so no path is known. */
+  path: 'represented-agent' | 'direct-principal' | null;
 }
 
 export type SessionAgent =
@@ -45,6 +57,17 @@ export function agentOptions(discovery: ActingContextDiscovery): AgentOption[] {
       { iri: actingSubject, label: displayName, handle, kind, path: 'direct-principal' });
   }
   return [...options.values()];
+}
+
+/** Every Agent Main lists for the person, in its order. `publishing` is the
+ * work-creation list, which supplies each Agent's authority path when it has one. */
+export function identityOptions(discovery: AgentDiscovery,
+  publishing: readonly AgentOption[] = []): AgentOption[] {
+  const paths = new Map(publishing.map(option => [option.iri, option.path]));
+  return discovery.items.map(({ actingSubject, displayName, handle, kind }) => ({
+    iri: actingSubject, label: displayName?.value ?? null,
+    ...displayName ? { labelText: { language: displayName.language, direction: displayName.direction } } : {},
+    handle, kind, path: paths.get(actingSubject) ?? null }));
 }
 
 export function resolveSessionAgent(options: readonly AgentOption[] | null,

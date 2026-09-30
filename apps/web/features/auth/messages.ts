@@ -1,7 +1,14 @@
 import { defineMessages, withEnglish } from '../../i18n/define.ts';
+import de from './messages/de.ts';
+import es from './messages/es.ts';
+import fr from './messages/fr.ts';
+import ja from './messages/ja.ts';
+import ko from './messages/ko.ts';
 import zhHans from './messages/zh-Hans.ts';
+import zhHant from './messages/zh-Hant.ts';
 
-// Sign-in, acting identity and account menu strings. `{agent}` placeholders
+// Sign-in, acting identity and account menu strings. Pages read them by UI
+// locale, so every locale is registered here, not only in the lazy catalogs. `{agent}` placeholders
 // are filled with `formatMessage`, so the catalog is plain strings.
 
 const en = {
@@ -16,6 +23,17 @@ const en = {
   createAccountLink: 'Create an account',
   consentDeclined: 'REZICS was not given access to your account. Sign in again to continue.',
   consentHeading: 'Sign-in was not completed', signInAgain: 'Try signing in again',
+  // Callback failures: what actually failed, never a bare status line.
+  signInFailedHeading: 'Sign-in failed',
+  failedState: 'The sign-in took too long or was started in another browser, so it was not accepted.',
+  failedIssuer: 'The reply did not come from your REZICS Account service, so it was not accepted.',
+  failedCode: 'The sign-in code was already used or has expired.',
+  failedExchange: 'REZICS could not reach your Account service to finish signing in.',
+  failedConfig: 'Sign-in is not available on this site right now.',
+  failedSession: 'The Account that signed in did not match the one REZICS received. Nothing was saved.',
+  failedProvider: 'Your Account service reported an error while signing in.',
+  failedUnknown: 'Sign-in could not be completed.',
+  providerCode: 'Error code: {code}',
   // Choosing the session Agent.
   chooseAgentHeading: 'Choose who you act as',
   chooseAgentHelp: 'Your account can act as these Agents. The one you choose is shown as signed in across REZICS and proposed for what you do there. Each action is still checked when you take it.',
@@ -52,13 +70,13 @@ export const englishMessages = en;
 
 export const messages = defineMessages({
   en,
-  'zh-Hant': withEnglish(en, undefined),
+  'zh-Hant': withEnglish(en, zhHant),
   'zh-Hans': withEnglish(en, zhHans),
-  ja: withEnglish(en, undefined),
-  ko: withEnglish(en, undefined),
-  de: withEnglish(en, undefined),
-  fr: withEnglish(en, undefined),
-  es: withEnglish(en, undefined),
+  ja: withEnglish(en, ja),
+  ko: withEnglish(en, ko),
+  de: withEnglish(en, de),
+  fr: withEnglish(en, fr),
+  es: withEnglish(en, es),
 });
 
 export function formatMessage(template: string, values: Readonly<Record<string, string>>): string {

@@ -37,4 +37,15 @@ export default {
   manageAccount: '管理您的 REZICS 账户',
   profileSettings: '个人资料设置',
   chooseHandle: '选择用户名',
+  // Callback failures: what actually failed, never a bare status line.
+  signInFailedHeading: '登录失败',
+  failedState: '登录耗时过久，或是在另一个浏览器中发起，因此未被接受。',
+  failedIssuer: '响应并非来自您的 REZICS 账户服务，因此未被接受。',
+  failedCode: '此登录代码已使用过或已过期。',
+  failedExchange: 'REZICS 无法连接到您的账户服务以完成登录。',
+  failedConfig: '此网站目前无法登录。',
+  failedSession: '完成登录的账户与 REZICS 收到的账户不一致，未保存任何内容。',
+  failedProvider: '您的账户服务在登录时报告了错误。',
+  failedUnknown: '无法完成登录。',
+  providerCode: '错误代码：{code}',
 } satisfies Partial<AuthMessages>;

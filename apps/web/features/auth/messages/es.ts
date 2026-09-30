@@ -37,4 +37,15 @@ export default {
   manageAccount: 'Gestionar tu cuenta de REZICS',
   profileSettings: 'Ajustes del perfil',
   chooseHandle: 'Elegir un nombre de usuario',
+  // Callback failures: what actually failed, never a bare status line.
+  signInFailedHeading: 'No se pudo iniciar sesión',
+  failedState: 'El inicio de sesión tardó demasiado o se empezó en otro navegador, así que no se aceptó.',
+  failedIssuer: 'La respuesta no provino del servicio de tu cuenta de REZICS, así que no se aceptó.',
+  failedCode: 'El código de inicio de sesión ya se usó o ha caducado.',
+  failedExchange: 'REZICS no pudo comunicarse con el servicio de tu cuenta para terminar el inicio de sesión.',
+  failedConfig: 'El inicio de sesión no está disponible en este sitio en este momento.',
+  failedSession: 'La cuenta que inició sesión no coincide con la que recibió REZICS. No se guardó nada.',
+  failedProvider: 'El servicio de tu cuenta informó de un error durante el inicio de sesión.',
+  failedUnknown: 'No se pudo completar el inicio de sesión.',
+  providerCode: 'Código de error: {code}',
 } satisfies Partial<AuthMessages>;

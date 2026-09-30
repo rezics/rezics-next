@@ -3,9 +3,10 @@ import type { OnboardingMessages } from '../messages.ts';
 
 export default {
   welcome: '欢迎来到 REZICS',
-  welcomeHelp: '为个人资料选择用户名。公开名称会与用户名一起显示。',
-  displayName: '显示名称',
-  displayNameHelp: '此名称来自您的 REZICS 账户。',
+  welcomeHelp: '为个人资料选择公开名称和用户名。在您继续之前，不会公开任何内容。',
+  displayName: '公开名称',
+  displayNameHelp: '会显示在您的个人资料和贡献上。',
+  invalidName: '请输入不超过 200 个字符的公开名称。',
   handle: '您的用户名',
   handleHelp: '使用 3 至 30 个英文字母、数字或下划线。用户名不区分大小写。',
   checking: '正在检查是否可用…',

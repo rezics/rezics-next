@@ -2,12 +2,13 @@ import { cookies } from 'next/headers';
 import { cache } from 'react';
 import { mainApiWithToken } from '../api/main.ts';
 import type { AccountUser } from './account.ts';
-import { type ActingContextDiscovery, type AgentOption, agentOptions, resolveSessionAgent,
-  type SessionAgent } from './acting-identity.ts';
+import { type ActingContextDiscovery, type AgentDiscovery, type AgentOption, agentOptions,
+  identityOptions, resolveSessionAgent, type SessionAgent } from './acting-identity.ts';
 import { ACCESS_COOKIE, isSessionKey,
   SESSION_KEY_COOKIE } from './cookies.ts';
 import { currentSessionRecord } from './session-state.ts';
 import { readAgentProfile } from './agent-profile.ts';
+import { requestLocale } from '../../i18n/server.ts';
 
 export interface MainSessionAgentState {
   sessionAgent: { actingSubject: string | null; eligible: boolean; revision: string | null };
@@ -20,7 +21,7 @@ export interface Session {
   user: AccountUser;
   /** The session Agent and whether it is still eligible. */
   agent: SessionAgent;
-  /** Agents the person may switch to, or empty when Main could not list them. */
+  /** Agents the person may publish as (Studio's choices), or empty when Main could not list them. */
   agents: AgentOption[];
   /** ISO time the session ends unless it is used (each refresh extends it). */
   expiresAt: string;
@@ -41,6 +42,22 @@ export async function discoverActingContexts(accessToken?: string):
 
 /** The session's discovery, read once per request. */
 export const sessionDiscovery = cache(() => discoverActingContexts());
+
+/** Every Agent the person may act as, in the language of the page, or null
+ * when Main cannot answer. Needs no publishing eligibility. */
+export async function discoverAgents(accessToken?: string, languages?: string):
+  Promise<AgentDiscovery | null> {
+  try {
+    const token = accessToken ?? (await cookies()).get(ACCESS_COOKIE)?.value;
+    if (!token) return null;
+    const response = await mainApiWithToken(token).v1.me.agents.get({
+      query: languages ? { languages } : {} });
+    return response.error ? null : response.data;
+  } catch { return null; }
+}
+
+/** The session's Agent list, read once per request. */
+export const sessionAgents = cache(async () => discoverAgents(undefined, await requestLocale()));
 
 /** Main owns the selected Agent for this opaque web session. */
 export async function readMainSessionAgent(accessToken: string, sessionKey: string):
@@ -68,9 +85,11 @@ export const readSession = cache(async (): Promise<Session | null> => {
   // Proxy has already tried to refresh this request. A refresh cookie alone
   // cannot make the header signed in while page readers have no access token.
   if (!record) return null;
-  const [discovery, state] = await Promise.all([sessionDiscovery(), sessionAgentState()]);
+  const [discovery, listed, state] = await Promise.all([
+    sessionDiscovery(), sessionAgents(), sessionAgentState()]);
   const agents = discovery ? agentOptions(discovery) : null;
-  const agent = state ? resolveSessionAgent(agents, state.sessionAgent.actingSubject)
+  const identities = listed ? identityOptions(listed, agents ?? []) : null;
+  const agent = state ? resolveSessionAgent(identities, state.sessionAgent.actingSubject)
     : { status: 'unverified', previous: null } as const;
   if (agent.status === 'selected') {
     const profile = await readAgentProfile(agent.agent.iri, jar.get(ACCESS_COOKIE)?.value);

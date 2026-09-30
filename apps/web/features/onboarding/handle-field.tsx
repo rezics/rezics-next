@@ -2,7 +2,7 @@
 
 import { Button } from '@rezics/ui/button';
 import { useEffect, useId, useState } from 'react';
-import { currentVanityHandle, normalizedHandle } from './handle.ts';
+import { currentVanityHandle, normalizedHandle, suggestedHandle } from './handle.ts';
 import type { OnboardingMessages } from './messages.ts';
 
 export type HandleAvailability = 'available' | 'taken' | 'reserved';
@@ -16,17 +16,22 @@ async function checkHandle(handle: string, signal: AbortSignal): Promise<HandleA
     : answer.reason === 'reserved' || answer.reason === 'invalid' ? 'reserved' : 'taken';
 }
 
+/** Asking for the public name too: an empty required field, no default, and a
+ * handle suggested from what is typed until the person edits the handle. */
 export function HandleField({ action, initial, current = null, submit, messages, children,
-  checkAvailability = checkHandle }: {
+  askName = false, checkAvailability = checkHandle }: {
   action: string; initial: string; current?: string | null; submit: string;
-  messages: OnboardingMessages; children?: React.ReactNode;
+  messages: OnboardingMessages; children?: React.ReactNode; askName?: boolean;
   checkAvailability?: (handle: string, signal: AbortSignal) => Promise<HandleAvailability>;
 }) {
   const [value, setValue] = useState(initial);
+  const [name, setName] = useState('');
+  const [handleEdited, setHandleEdited] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [availability, setAvailability] = useState<'checking' | 'available' | 'current' | 'taken' | 'reserved' | 'invalid' | 'failed'>('checking');
   useEffect(() => setHydrated(true), []);
   const hintId = useId();
+  const nameId = useId();
   const handle = normalizedHandle(value);
   const unchanged = handle !== null && handle === currentVanityHandle(current);
   useEffect(() => {
@@ -41,7 +46,7 @@ export function HandleField({ action, initial, current = null, submit, messages,
     }, 300);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [handle, unchanged, checkAvailability]);
-  const text = availability === 'checking' ? messages.checking
+  const text = !value.trim() ? '' : availability === 'checking' ? messages.checking
     : availability === 'available' ? messages.available
       : availability === 'current' ? messages.current
       : availability === 'taken' ? messages.taken
@@ -49,6 +54,18 @@ export function HandleField({ action, initial, current = null, submit, messages,
           : availability === 'invalid' ? messages.invalid : messages.checkFailed;
   return <form method="post" action={action} className="grid gap-5">
     {children}
+    {askName ? <div className="grid gap-2">
+      <label htmlFor={nameId} className="font-medium text-sm">{messages.displayName}</label>
+      <input id={nameId} name="displayName" required maxLength={200} autoComplete="off" value={name}
+        aria-describedby={`${nameId}-help`} data-hydrated={hydrated ? 'true' : undefined}
+        onChange={event => {
+          setName(event.target.value);
+          if (!handleEdited) setValue(suggestedHandle(event.target.value));
+        }}
+        className="min-h-11 rounded-lg border border-input bg-background px-3 py-2 outline-none
+          focus-visible:ring-2 focus-visible:ring-ring" />
+      <p id={`${nameId}-help`} className="text-muted-foreground text-sm">{messages.displayNameHelp}</p>
+    </div> : null}
     <div className="grid gap-2">
       <label htmlFor={hintId} className="font-medium text-sm">{messages.handle}</label>
       <div className="flex min-h-11 items-center rounded-lg border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
@@ -57,12 +74,13 @@ export function HandleField({ action, initial, current = null, submit, messages,
           data-hydrated={hydrated ? 'true' : undefined}
           aria-describedby={`${hintId}-rules ${hintId}-status`}
           className="min-w-0 flex-1 border-0 bg-transparent px-1 py-2 outline-none"
-          value={value} onChange={event => setValue(event.target.value)} />
+          value={value}
+          onChange={event => { setHandleEdited(true); setValue(event.target.value); }} />
       </div>
       <p id={`${hintId}-rules`} className="text-muted-foreground text-sm">{messages.handleHelp}</p>
       <p id={`${hintId}-status`} role="status" aria-live="polite" className="text-sm">{text}</p>
     </div>
-    <Button type="submit" disabled={availability !== 'available' || unchanged} className="justify-self-start">
+    <Button type="submit" disabled={availability !== 'available' || unchanged || askName && !name.trim()} className="justify-self-start">
       {submit}</Button>
   </form>;
 }

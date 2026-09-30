@@ -13,7 +13,7 @@ export type AgentPickerNotice =
   | { kind: 'invalid' | 'stale-session' | 'stale-default' | 'default-not-saved' | 'unavailable' };
 
 export interface AgentPickerProps {
-  /** Eligible Agents, or null when Main could not list them. */
+  /** Every Agent the person may act as, or null when Main could not list them. */
   options: AgentOption[] | null;
   /** The session Agent, when it is still eligible. */
   current: string | null;
@@ -84,14 +84,16 @@ export function AgentPicker({ options, current, preferred, preferenceRevision, s
             className="mt-1 size-4 accent-primary" />
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{agentName(option, messages)}</span>
+              <span className="font-medium" lang={option.label ? option.labelText?.language : undefined}
+                dir={option.label ? option.labelText?.direction : undefined}>{agentName(option, messages)}</span>
               {option.handle ? <span className="text-muted-foreground text-sm">@{option.handle}</span> : null}
               {option.iri === current ? <Badge variant="secondary">{messages.currentAgent}</Badge> : null}
               {option.iri === preferred ? <Badge variant="outline">{messages.defaultAgent}</Badge> : null}
             </span>
             <span className="text-muted-foreground text-sm">{[
-              kindText(option.kind, messages), option.path === 'direct-principal'
-                ? messages.directPath : messages.representedPath].filter(Boolean).join(' · ')}</span>
+              kindText(option.kind, messages), option.path === 'direct-principal' ? messages.directPath
+                : option.path === 'represented-agent' ? messages.representedPath : null]
+              .filter(Boolean).join(' · ')}</span>
             <code className="truncate font-mono text-muted-foreground text-xs">{option.iri}</code>
           </span>
         </label>)}
