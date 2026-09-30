@@ -108,8 +108,8 @@ carries evidence and effects; these are operating responsibilities:
 - Copyright notices reach the platform, not the neutral wiki toolkit: publish
   the designated agent, restrict expeditiously, handle counter-notices and a
   repeat-infringer policy, and enforce decisions across graph reads, history,
-  search, caches, exports and every Zone. The report route must accept notices
-  without an account; today it requires authentication. EU notice-and-action
+  search, caches, exports and every Zone. Public report intake accepts notices
+  without an account and provides private case correspondence. EU notice-and-action
   under the DSA applies from the first EU user, and DSM Article 17's
   new-service regime still requires authorization efforts and notice-based
   removal. Credits naming real people (staff, voice actors) need a privacy
