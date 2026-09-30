@@ -40,8 +40,10 @@ async function hydrate(env: WorkActivationEnvironment, state: PlacementState):
     ...(row.presentation?.value ? { presentation: row.presentation.value } : {}) };
 }
 
-async function validate(env: WorkActivationEnvironment, changed: readonly PlacementState[]) {
-  const mounts = changed.filter(state => state.active && state.qualifier?.type === 'zone-mount');
+async function validate(env: WorkActivationEnvironment, changed: readonly PlacementState[],
+  context?: Parameters<NonNullable<StructureProfileRegistration['qualifierValidations']>>[2]) {
+  const candidate = context?.replacement ? context.placements ?? changed : changed;
+  const mounts = candidate.filter(state => state.active && state.qualifier?.type === 'zone-mount');
   const segments = new Set<string>();
   for (const state of mounts) {
     const mount = state.qualifier!;
@@ -51,6 +53,9 @@ async function validate(env: WorkActivationEnvironment, changed: readonly Placem
       throw new CompositionConflict('Zone route segment is reserved or already mounted');
     }
     segments.add(key);
+    // Replacement placements receive new IDs. The retained live generation is
+    // not a competitor; check every candidate mount, including later stage batches.
+    if (context?.replacement) continue;
     // This read precedes the Structure head CAS. Any competing insertion moves
     // that head, so two editors cannot both commit the same segment.
     const conflict = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
