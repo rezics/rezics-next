@@ -1,11 +1,15 @@
 # REZICS Goal
 
-Status: direction settled on 2026-09-29; not started, and paused while the
-maintainer finishes the documentation discussion. The previous work was wrapped
-up on 2026-09-30: G-486 merged; G-432, G-433 and G-435 were closed after one
+Status: direction settled on 2026-09-29 and revised by the documentation
+discussion that ended on 2026-09-30 (decisions 39–50; the
+[goal page](docs/product/goal.md) states the product goal). Ready to restart
+when the maintainer starts the manager. The M4–M8 brief drafts in
+`.temp/research/briefs-m4` to `-m8` predate that discussion: re-derive briefs
+from the current documents and use the drafts only as material. The previous
+work was wrapped up on 2026-09-30: G-486 merged; G-432, G-433 and G-435 were closed after one
 more run on GPT-6.1 Sol, their work kept on their `goal/g-43x` branches for the
 M5–M6 briefs to salvage; G-536, M4's first task, is stopped before any change.
-The M4–M8 brief drafts are untracked in `.temp/research/briefs-m4` to `-m8`. The previous
+The previous
 frontend-centred Goal paused after M3 at `59a85a96`. Backend phase 1 finished on
 2026-09-27: recorded run `20260927t101230-1616d8`, local tag
 `goal/backend-phase1`, history on `archive/goals`. The public about site (G-480

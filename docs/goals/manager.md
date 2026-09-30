@@ -70,6 +70,14 @@ bind until the maintainer changes them.
    may challenge a brief, correct documentation and process in their area, and
    propose a re-plan. Sonnet 5.5, GPT-6 Luna and Grok 4.7 carry out briefs and
    report problems instead of changing process.
+   **Model allocation** (maintainer, 2026-09-30): Sonnet 5.5 is the main
+   frontend worker; GPT-6.1 Sol is the main backend worker; Grok 4.7 (Grok CLI
+   and Cursor) takes simple, bounded tasks; Opus 5.5 and Sol take complex
+   research and first-of-kind design; Opus reviews. **Guard against Sol's
+   over-design**: every Sol brief states the smallest change that satisfies the
+   documents and names what not to build, and review rejects abstractions,
+   modules, layers or options the documents do not require (backend one,
+   frontend free).
 6. **Boundaries.** Work locally and commit on `main`; do not push, deploy to
    production, provision paid services or send repository data to other services
    unless the maintainer asks. Deployment is the next phase: this Goal prepares
@@ -149,7 +157,11 @@ Observations so far, to be revised with evidence:
 - **Opus 5.5.** Strongest here at frontend and UI judgment and whole-feature
   work; `xhigh` for architecture, first templates and hard design, `high` or
   `medium` for work that follows a verified template.
-- **GPT-6.1 Sol.** Replaced GPT-6 Sol and GPT-6 Astra on 2026-09-30. On its
+- **GPT-6.1 Sol.** Tends to over-design: its research on 2026-09-30 proposed a
+  heavy local wiki toolkit (a ledger, separate worker and uploader processes,
+  eight commands) that the maintainer cut to a thin skill plus a locator
+  package, and its reports readily add layers. Brief it with explicit scope
+  limits and review for unrequired machinery. Replaced GPT-6 Sol and GPT-6 Astra on 2026-09-30. On its
   first four tasks (G-432, G-433, G-435 at `xhigh`, G-486 at `high`) it
   reviewed inherited code sharply, found real defects and stopped rather than
   build on missing foundations (G-432), and ran thorough checks and browser
