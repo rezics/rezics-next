@@ -111,6 +111,67 @@ next chapter, then to keep up with communities, then to discover.
   `@rezics/ui` Select and Menu, enforced by a lint rule, so every control
   matches the design in every browser and theme.
 
+## Work page
+
+Maintainer, 2026-09-30: the Work page is a core entry and the hub; the wiki Zone
+is its deep end ([wiki+](../product/goal.md#wiki-the-flagship)). Bangumi's
+subject page is the reference; its density is not. The order below comes from
+R52's benchmark of Bangumi, VNDB, AniList, MyAnimeList, Douban, Letterboxd,
+Goodreads, The StoryGraph and Steam; sections a type does not support are
+omitted, and the rest keep stable anchors.
+
+1. **Identity and your next action**: cover, localized name with the original
+   quietly, kind, date and linked principal creators; a rating that names its
+   scale, count and scope; the selected edition, personal status and progress,
+   with one primary action (Continue, Start, Choose release). Follow and Add to
+   list stay separate.
+2. **About**: a spoiler-safe synopsis, essential facts, a few tags and content
+   warnings; full facts, sources and Propose correction on expansion.
+3. **Your edition and availability**: the selected release first, a short
+   matching list, then "Compare all" into a paginated inventory.
+4. **Parts and connections**: the next unfinished part, ordered volumes or
+   episodes, then typed sequels, adaptations and relations; publication order is
+   distinct from a curator's reading order.
+5. **Explore the wiki**: main characters, substantial credits, a timeline or
+   chapter-guide preview within the reader's position, and named route links;
+   a wiki shortcut also sits near the header.
+6. **Ratings and reviews**: the distribution, counts, and the question,
+   population and target behind them; filters by release and review language;
+   a review never requires a score.
+7. **Discussion and communities**: active Work, part and release threads with
+   "Discuss this episode" actions; reading needs no membership.
+8. **Lists and discovery**: curated lists and reading orders with reasons, then
+   explained recommendations; identifiers, provenance and history below.
+
+On phones the cover is a thumbnail beside the title, so identity, edition,
+status and the primary action fit the first viewport, and an "On this page"
+control replaces overflowing tabs. Status, progress, rating and lists edit in
+place with undo; facts and relations edit through proposals. Interface
+language, displayed name, release language, review language and voice or
+subtitle language stay distinct, and a translated title never implies an
+available translation.
+
+Kinds override slots, never add backend products: books and light novels show
+translator, publisher, format and volume contents in availability; visual
+novels put availability first, where one release must satisfy language,
+platform and coverage together, and keep routes and endings behind spoiler
+boundaries; anime shows seasons, episodes, broadcast schedule and
+subtitle-versus-dub availability; games show platforms, stores, requirements
+and DLC; LLMs use Versioned and Measured sections and never a universal star
+score; events and places use Scheduled, Located and Offered sections with
+calendar and directions actions instead of reading controls. Fan discussion,
+review conversation and fact-editing discussion stay visibly distinct, and
+moving between them keeps the selected release and spoiler position.
+
+Today the page falls back to books for unknown types, shows a large cover first
+on phones, places recommendations before reviews, and requires a Work-level
+score for every review; the release schema lacks platform, territory and
+structured coverage. The first increment is one bilingual franchise hub (a
+volume in two editions, an adaptation, a small wiki and discussion) proving four
+journeys on phones and through the API: choose a usable release, update
+progress and return to the right next part, open a wiki route within the
+spoiler boundary, and read or write a review that names its target.
+
 ## Zones
 
 Decided 2026-09-28 from KadoKado (the maintainer's reference), the old site

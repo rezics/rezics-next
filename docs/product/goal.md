@@ -71,8 +71,10 @@ toolkit with their own agent. The toolkit reads text, EPUB and common
 visual-novel script formats, lets the agent extract characters, aliases,
 relationships, events and places chapter by chapter with locators and short
 quotations, matches them to existing entities through REZICS's API, and submits
-them as a reviewable proposal. Full text never leaves the holder's machine, and
-the toolkit circumvents no DRM. REZICS supplies the protocol, evidence and
+them as a reviewable proposal. REZICS never receives the full text: the holder
+chooses which model reads it, and a strict mode keeps inference on the holder's
+machine. The toolkit circumvents no DRM and is permissively licensed so that any
+agent or tool can embed it. REZICS supplies the protocol, evidence and
 review; the holder supplies the compute. The
 [wiki owner](../contracts/information-verification.md#a-big-franchise-wiki-for-every-work)
 records the rules.

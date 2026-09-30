@@ -89,18 +89,34 @@ Maintainer, 2026-09-30: building the wiki is one action, and the wiki is the
 flagship; the [goal](../product/goal.md#wiki-the-flagship) describes the flow and
 the wiki+ positioning. The rules it relies on:
 
-- **Holder-provided compute.** An independent open-source toolkit (a CLI, an MCP
-  server and agent skills) runs on the holder's machine with the holder's own
-  agent and submits through the
+- **Holder-provided compute.** An independent toolkit in its own repository,
+  licensed Apache-2.0 (REZICS itself stays AGPL-3.0-only), runs on the holder's
+  machine as a CLI, an MCP server and agent skills, and submits through the
   [open contribution protocol](skills-and-prompts.md#open-agent-contribution-protocol).
   REZICS supplies protocol, evidence and review; the holder's agent extracts.
-- **Text stays local.** Full text never leaves the holder's machine, and the
-  toolkit circumvents no DRM. A proposal carries extracted characters, aliases,
-  relationships, events and places, each with a chapter locator and a short
-  quotation as evidence.
-- **Matching is a proposal.** The toolkit matches extractions to existing
-  entities through the API; a proposed equivalence is reviewed like any other
-  claim, never merged silently.
+- **REZICS never receives the full text.** A cloud agent sends what it reads to
+  its model provider, which is the holder's choice; a strict mode runs a local
+  model (for example through llama.cpp) with a network-less corpus worker and a
+  separate uploader that sends only approved records. A proposal carries
+  characters, aliases, relationships, events and places, each with a locator
+  and a short quotation under a per-source budget, so that quotations cannot
+  rebuild the text.
+- **No DRM circumvention.** The toolkit reads text files, EPUB and authorized or
+  unprotected script formats, and stops on unknown protection, key recovery or
+  licence checks. The first version reads TXT, EPUB 2/3 and literal Ren'Py
+  scripts; KiriKiri/TyranoScript and NScripter text follow, and compiled formats
+  only with demonstrated demand and authorized fixtures. It never executes
+  embedded script code.
+- **Verifiable locators.** TXT uses a representation hash and original byte
+  range; EPUB uses a range [EPUB CFI](https://idpf.org/epub/linking/cfi/) with a
+  quote fallback; visual-novel scripts use script hash, label and utterance
+  position with route guards. A reviewer holding the same edition verifies the
+  passage locally; changed editions need explicit alignment.
+- **Matching is a proposal.** The toolkit retrieves candidates through the API
+  and reports each extraction as matched, new, ambiguous or unavailable; a
+  proposed equivalence is reviewed like any other claim, never merged
+  silently, and new chapters produce deltas that never silently delete accepted
+  claims.
 - **The wiki is a Zone over graph facts.** Reviewed bundles publish into the
   Work's wiki Zone, a [routed site](../product/platform-thesis.md#zones-are-routed-sites)
   with character, location, timeline, chapter-guide and relationship pages,
@@ -110,6 +126,15 @@ the wiki+ positioning. The rules it relies on:
 - **The Work page stays the hub.** It shows the wiki's summary beside ratings,
   reviews, library status, discussion, relations and lists; the wiki Zone is its
   deep end, not a replacement.
+
+The shared capabilities this needs are missing today (R51): an evidence profile
+for externally held text with selectors, rights, continuity and revelation
+position; bounded batch reconciliation; a contribution-bundle lifecycle
+(validate, preview, submit, review, accept or reject, withdraw, receipt);
+dependency-safe publication across entities and statements; and MCP bindings
+for those operations. The first proof is one Work with two language editions,
+a wiki Zone and a chapter update, measured in editor minutes per accepted claim
+against manual work at equal quality.
 
 Each Realm decides whether agents may draft and whether generated prose is
 permitted. Facts and structure are the default because fluent prose can hide
