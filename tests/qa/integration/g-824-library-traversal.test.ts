@@ -106,6 +106,10 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
       const publicPage = await home.json<Page & { statusCount: number }>(await home.call('GET',
         `/v1/agents/${agent.slice(-36)}/shelves/status/read/works?sort=title&order=asc&limit=20`));
       expect(publicPage.items).toHaveLength(20);
+      for (const sort of ['rating', 'last-read', 'finished']) {
+        expect((await home.call('GET', `/v1/agents/${agent.slice(-36)}/shelves/status/read/works?sort=${sort}`)).status)
+          .toBe(400);
+      }
       expect(publicPage.statusCount).toBe(counts.find(shelf => shelf.status === 'read')!.count);
       const base = '/v1/me/shelves/status/read/works?sort=rating&order=desc&limit=3';
       const first = await home.json<Page>(await home.call('GET', signed(base), undefined, home.reader.token));

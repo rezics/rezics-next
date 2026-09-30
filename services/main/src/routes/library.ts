@@ -23,6 +23,7 @@ import { readRichReadingYear } from '../modules/library/stats.ts';
 
 const shelfSort = t.Optional(t.Union([t.Literal('added'), t.Literal('title'), t.Literal('rating'),
   t.Literal('last-read'), t.Literal('finished')]));
+const publicShelfSort = t.Optional(t.Union([t.Literal('added'), t.Literal('title')]));
 const shelfOrder = t.Optional(t.Union([t.Literal('asc'), t.Literal('desc')]));
 const status = t.Union([t.Literal('want-to-read'), t.Literal('reading'), t.Literal('read'), t.Null()]);
 const statusState = t.Object({ work: readId, status,
@@ -456,7 +457,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/agents/:id/shelves/status/:status/works', {
       params: t.Object({ id: readUuid, status: t.Exclude(status, t.Null()) }),
-      query: t.Object({ ...pageQuery, sort: shelfSort, order: shelfOrder }, { additionalProperties: false }),
+      query: t.Object({ ...pageQuery, sort: publicShelfSort, order: shelfOrder }, { additionalProperties: false }),
       response: { 200: publicStatusShelf, ...workReadProblems },
     }, async ({ request, params, query }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');

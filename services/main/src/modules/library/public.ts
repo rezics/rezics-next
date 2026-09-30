@@ -1,4 +1,4 @@
-import { WorkReadMoved, WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { WorkReadMoved, WorkReadMissing, WorkReadInvalid, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { readAgent } from '../profiles/read.ts';
 import { publishedWorks, readShelfPage, type ShelfOptions } from './shelf-page.ts';
 import { STATUS_SHELF_COST, type ReaderLibraryStatusStore, type ReadingStatus, type ShelfSort } from './status.ts';
@@ -56,6 +56,10 @@ export async function readPublicShelves(session: WorkReadSession, agent: string,
 
 export async function readPublicStatusShelf(session: WorkReadSession, agent: string,
   store: ReaderLibraryStatusStore, status: ReadingStatus, options: ShelfOptions = {}) {
+  // Sharing current shelf membership does not publish private rating or reading history.
+  if (options.sort && !['added', 'title'].includes(options.sort)) {
+    throw new WorkReadInvalid('This sort is private to the reader');
+  }
   const before = await projection(session, agent, store, options.sort);
   const statusCount = (await publishedCount(session, agent, store, status)).count;
   const page = await readShelfPage(session, agent, store, status, options,
