@@ -27547,11 +27547,15 @@
                   },
                   "permissions": {
                     "items": {
-                      "const": "work.create",
+                      "enum": [
+                        "work.create",
+                        "work.edit"
+                      ],
                       "type": "string"
                     },
-                    "maxItems": 1,
-                    "type": "array"
+                    "maxItems": 2,
+                    "type": "array",
+                    "uniqueItems": true
                   },
                   "profile": {
                     "const": "work-create-role-revision-v1",
@@ -27591,11 +27595,15 @@
                   },
                   "permissions": {
                     "items": {
-                      "const": "work.create",
+                      "enum": [
+                        "work.create",
+                        "work.edit"
+                      ],
                       "type": "string"
                     },
-                    "maxItems": 1,
-                    "type": "array"
+                    "maxItems": 2,
+                    "type": "array",
+                    "uniqueItems": true
                   },
                   "profile": {
                     "const": "work-create-role-revision-v1",
@@ -27635,11 +27643,15 @@
                   },
                   "permissions": {
                     "items": {
-                      "const": "work.create",
+                      "enum": [
+                        "work.create",
+                        "work.edit"
+                      ],
                       "type": "string"
                     },
-                    "maxItems": 1,
-                    "type": "array"
+                    "maxItems": 2,
+                    "type": "array",
+                    "uniqueItems": true
                   },
                   "profile": {
                     "const": "work-create-role-revision-v1",
@@ -27968,11 +27980,15 @@
                   },
                   "permissions": {
                     "items": {
-                      "const": "work.create",
+                      "enum": [
+                        "work.create",
+                        "work.edit"
+                      ],
                       "type": "string"
                     },
-                    "maxItems": 1,
-                    "type": "array"
+                    "maxItems": 2,
+                    "type": "array",
+                    "uniqueItems": true
                   },
                   "profile": {
                     "const": "work-create-role-family-v1",
@@ -28007,11 +28023,15 @@
                   },
                   "permissions": {
                     "items": {
-                      "const": "work.create",
+                      "enum": [
+                        "work.create",
+                        "work.edit"
+                      ],
                       "type": "string"
                     },
-                    "maxItems": 1,
-                    "type": "array"
+                    "maxItems": 2,
+                    "type": "array",
+                    "uniqueItems": true
                   },
                   "profile": {
                     "const": "work-create-role-family-v1",
@@ -28046,11 +28066,15 @@
                   },
                   "permissions": {
                     "items": {
-                      "const": "work.create",
+                      "enum": [
+                        "work.create",
+                        "work.edit"
+                      ],
                       "type": "string"
                     },
-                    "maxItems": 1,
-                    "type": "array"
+                    "maxItems": 2,
+                    "type": "array",
+                    "uniqueItems": true
                   },
                   "profile": {
                     "const": "work-create-role-family-v1",
@@ -28392,11 +28416,15 @@
                         "properties": {
                           "permissions": {
                             "items": {
-                              "const": "work.create",
+                              "enum": [
+                                "work.create",
+                                "work.edit"
+                              ],
                               "type": "string"
                             },
-                            "maxItems": 1,
-                            "type": "array"
+                            "maxItems": 2,
+                            "type": "array",
+                            "uniqueItems": true
                           },
                           "revision": {
                             "pattern": "^(0|[1-9][0-9]*)$",
@@ -74997,7 +75025,7 @@
                               }
                             ]
                           },
-                          "maxItems": 2,
+                          "maxItems": 3,
                           "minItems": 1,
                           "type": "array"
                         }
@@ -76356,7 +76384,7 @@
                               }
                             ]
                           },
-                          "maxItems": 2,
+                          "maxItems": 3,
                           "minItems": 1,
                           "type": "array"
                         }
@@ -81097,7 +81125,6 @@
                       },
                       "body": {
                         "maxLength": 65536,
-                        "minLength": 1,
                         "type": "string"
                       },
                       "direction": {
@@ -81182,7 +81209,6 @@
                       },
                       "body": {
                         "maxLength": 65536,
-                        "minLength": 1,
                         "type": "string"
                       },
                       "direction": {
@@ -81307,7 +81333,6 @@
                       },
                       "body": {
                         "maxLength": 65536,
-                        "minLength": 1,
                         "type": "string"
                       },
                       "direction": {
@@ -81392,7 +81417,6 @@
                       },
                       "body": {
                         "maxLength": 65536,
-                        "minLength": 1,
                         "type": "string"
                       },
                       "direction": {
@@ -81517,7 +81541,6 @@
                       },
                       "body": {
                         "maxLength": 65536,
-                        "minLength": 1,
                         "type": "string"
                       },
                       "direction": {
@@ -81602,7 +81625,6 @@
                       },
                       "body": {
                         "maxLength": 65536,
-                        "minLength": 1,
                         "type": "string"
                       },
                       "direction": {
@@ -83248,6 +83270,45 @@
             },
             "description": "Response for status 403"
           },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
           "409": {
             "content": {
               "application/problem+json": {
@@ -83286,6 +83347,45 @@
               }
             },
             "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
           },
           "500": {
             "content": {
@@ -95740,7 +95840,6 @@
                   },
                   "body": {
                     "maxLength": 65536,
-                    "minLength": 1,
                     "type": "string"
                   },
                   "contribution": {
@@ -95776,7 +95875,6 @@
                   },
                   "body": {
                     "maxLength": 65536,
-                    "minLength": 1,
                     "type": "string"
                   },
                   "contribution": {
@@ -95812,7 +95910,6 @@
                   },
                   "body": {
                     "maxLength": 65536,
-                    "minLength": 1,
                     "type": "string"
                   },
                   "contribution": {
@@ -96754,6 +96851,45 @@
             },
             "description": "Response for status 409"
           },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -96868,7 +97004,6 @@
                   },
                   "body": {
                     "maxLength": 65536,
-                    "minLength": 1,
                     "type": "string"
                   },
                   "language": {
@@ -96906,7 +97041,6 @@
                   },
                   "body": {
                     "maxLength": 65536,
-                    "minLength": 1,
                     "type": "string"
                   },
                   "language": {
@@ -96944,7 +97078,6 @@
                   },
                   "body": {
                     "maxLength": 65536,
-                    "minLength": 1,
                     "type": "string"
                   },
                   "language": {
@@ -122483,7 +122616,8 @@
                         "invalid",
                         "reserved",
                         "claimed",
-                        "retained"
+                        "retained",
+                        "confusable"
                       ],
                       "type": "string"
                     }
@@ -129711,6 +129845,357 @@
                     "preferredActingSubject",
                     "savedPreference",
                     "preferenceRevision",
+                    "complete"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/me/agents": {
+      "get": {
+        "operationId": "getV1MeAgents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "languages",
+            "required": false,
+            "schema": {
+              "maxLength": 400,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "complete": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "actingSubject": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "direction": {
+                                "enum": [
+                                  "ltr",
+                                  "rtl"
+                                ],
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "maxLength": 200,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "language",
+                              "direction"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "handle": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "kind": {
+                            "~elyTyp": 7,
+                            "enum": [
+                              "person",
+                              "pen-name",
+                              "organization",
+                              "service"
+                            ],
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "actingSubject",
+                          "kind",
+                          "handle",
+                          "displayName"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 50,
+                      "type": "array"
+                    },
+                    "profile": {
+                      "const": "agent-discovery-v1",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "items",
                     "complete"
                   ],
                   "type": "object"
@@ -294214,7 +294699,7 @@
                                       }
                                     ]
                                   },
-                                  "maxItems": 2,
+                                  "maxItems": 3,
                                   "minItems": 1,
                                   "type": "array"
                                 }
@@ -358802,7 +359287,11 @@
                                           "character",
                                           "context",
                                           "role",
-                                          "relation-definition"
+                                          "relation-definition",
+                                          "release",
+                                          "occurrence",
+                                          "realization",
+                                          "resource"
                                         ],
                                         "type": "string"
                                       }
@@ -358879,6 +359368,21 @@
                                   }
                                 ]
                               },
+                              "base": {
+                                "~elyTyp": 7,
+                                "enum": [
+                                  "work",
+                                  "realization",
+                                  "release",
+                                  "occurrence",
+                                  "resource"
+                                ],
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
                               "disclosure": {
                                 "enum": [
                                   "public",
@@ -358941,15 +359445,30 @@
                                   "character",
                                   "context",
                                   "role",
-                                  "relation-definition"
+                                  "relation-definition",
+                                  "release",
+                                  "occurrence",
+                                  "realization",
+                                  "resource"
                                 ],
                                 "type": "string"
+                              },
+                              "work": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               }
                             },
                             "required": [
                               "reference",
                               "status",
                               "type",
+                              "base",
+                              "work",
                               "disclosure",
                               "name",
                               "avatar"
@@ -436112,6 +436631,10 @@
                     "items": {
                       "items": {
                         "properties": {
+                          "actor": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
                           "dataEpoch": {
                             "type": "string"
                           },
@@ -442813,9 +443336,7 @@
                 "required": [
                   "actingSubject",
                   "expectedVersion",
-                  "status",
-                  "startedOn",
-                  "finishedOn"
+                  "status"
                 ],
                 "type": "object"
               }
@@ -442873,9 +443394,7 @@
                 "required": [
                   "actingSubject",
                   "expectedVersion",
-                  "status",
-                  "startedOn",
-                  "finishedOn"
+                  "status"
                 ],
                 "type": "object"
               }
@@ -442933,9 +443452,7 @@
                 "required": [
                   "actingSubject",
                   "expectedVersion",
-                  "status",
-                  "startedOn",
-                  "finishedOn"
+                  "status"
                 ],
                 "type": "object"
               }
