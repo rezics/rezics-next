@@ -103,7 +103,7 @@ export function RulesEditor({ drafts, published, problems, onChange, locale, mes
                 </div>
                 {language in draft.rule.title.labels || language === draft.rule.title.original ? <Field invalid={titleError !== undefined}>
                   <FieldLabel>{t.ruleTitleLabel({ language: name })}</FieldLabel>
-                  <Input {...textAttributes(language, draft.rule.title.labels[language])}
+                  <Input {...textAttributes(language, draft.rule.title.labels[language])} className="scroll-mb-40"
                     value={draft.rule.title.labels[language] ?? ''} maxLength={RULE_LIMITS.title + 20}
                     onChange={event => update(index, { ...draft.rule,
                       title: { ...draft.rule.title, labels: { ...draft.rule.title.labels, [language]: event.currentTarget.value } } })} />
@@ -111,7 +111,7 @@ export function RulesEditor({ drafts, published, problems, onChange, locale, mes
                 </Field> : null}
                 {language in draft.rule.body.labels || language === draft.rule.body.original ? <Field invalid={bodyError !== undefined}>
                   <FieldLabel>{t.ruleBodyLabel({ language: name })}</FieldLabel>
-                  <Textarea {...textAttributes(language, draft.rule.body.labels[language])} rows={3}
+                  <Textarea {...textAttributes(language, draft.rule.body.labels[language])} rows={3} className="scroll-mb-40"
                     value={draft.rule.body.labels[language] ?? ''}
                     maxLength={RULE_LIMITS.body + 50} onChange={event => update(index, { ...draft.rule,
                       body: { ...draft.rule.body, labels: { ...draft.rule.body.labels, [language]: event.currentTarget.value } } })} />

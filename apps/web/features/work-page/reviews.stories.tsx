@@ -91,8 +91,14 @@ export const WriteReview: Story = {
     const form = canvas.getByRole('form', { name: 'Write a review' });
     await userEvent.type(within(form).getByRole('textbox', { name: 'Your review' }), 'A patient, tidal book.');
     await userEvent.click(within(form).getByRole('checkbox', { name: 'It gives away the story' }));
+    // Nothing says which language this is until the writer does; the interface language is English.
+    await expect(within(form).getByRole('button', { name: 'Review language: Language not specified' })).toBeVisible();
+    await userEvent.click(within(form).getByRole('button', { name: /^Review language:/ }));
+    await userEvent.type(await within(document.body).findByRole('searchbox'), 'korean');
+    await userEvent.click(await within(document.body).findByRole('button', { name: /한국어/ }));
+    await expect(within(form).getByRole('textbox', { name: 'Your review' })).toHaveAttribute('lang', 'ko');
     await userEvent.click(within(form).getByRole('button', { name: 'Post review' }));
-    await waitFor(() => expect(api.calls).toContain('write:new:en:true'));
+    await waitFor(() => expect(api.calls).toContain('write:new:ko:true'));
     // The reader's own review leads the list, with Edit instead of Helpful.
     const own = await canvas.findByRole('article', { name: 'Your review' });
     await expect(own).toHaveTextContent('A patient, tidal book.');

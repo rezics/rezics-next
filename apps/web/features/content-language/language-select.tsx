@@ -2,7 +2,7 @@
 
 import { buttonVariants } from '@rezics/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@rezics/ui/input-group';
-import { Popover, PopoverBody, PopoverContent, PopoverTrigger } from '@rezics/ui/popover';
+import { Popover, PopoverBody, PopoverContent, PopoverHeader, PopoverTrigger } from '@rezics/ui/popover';
 import { cn } from '@rezics/ui/utils';
 import { CheckIcon, ChevronsUpDownIcon, PlusIcon, SearchIcon } from 'lucide-react';
 import { useId, useState } from 'react';
@@ -54,6 +54,7 @@ export function LanguageSelect({ value, onChange, locale, reading = [], original
           <ChevronsUpDownIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /></>}
     </PopoverTrigger>
     <PopoverContent className="w-80 max-w-[calc(100vw-2rem)]">
+      <PopoverHeader title={caption} />
       <PopoverBody className="grid gap-3">
         <InputGroup>
           <InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon>

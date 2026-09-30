@@ -66,12 +66,13 @@ describe('a post is sent in the language its writer chose', () => {
       const outcome = await submitPost(intent(language, body), newPostProgress(), () => undefined, main as unknown as Post);
       expect(outcome.kind).toBe('posted');
       expect(drafts[0]).toMatchObject({ language, direction });
-      expect(selections[0]).toEqual({ query: { language } });
+      // The Work's default revision is the root whatever language the post is in.
+      expect(selections[0]).toEqual({ query: {} });
     });
 
-  test('an unspecified language is sent as und, with the direction of the words and no language to select by', async () => {
+  test('an unspecified language is sent as und, with the direction of the words', async () => {
     const { drafts, selections, main } = recordingMain();
-    await submitPost(intent(UNSPECIFIED, 'שלום'), newPostProgress(), () => undefined, main as unknown as Post);
+    await submitPost({ ...intent(UNSPECIFIED, 'שלום'), title: 'כותרת' }, newPostProgress(), () => undefined, main as unknown as Post);
     expect(drafts[0]).toMatchObject({ language: 'und', direction: 'rtl' });
     expect(selections[0]).toEqual({ query: {} });
   });

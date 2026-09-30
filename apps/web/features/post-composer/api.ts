@@ -1,6 +1,5 @@
 import { direction } from '@rezics/main/language';
 import { browserMainApi } from '../api/browser.ts';
-import { UNSPECIFIED } from '../content-language/writing-language.ts';
 
 export interface PostIntent { realm: string; work: string; mainVersion: string;
   title: string; body: string; spoiler: boolean;
@@ -25,8 +24,9 @@ export async function submitPost(intent: PostIntent, original: PostProgress,
   const text = `${intent.spoiler ? 'Spoilers: ' : ''}${intent.title.trim()}\n${intent.body.trim()}`.trim();
   try {
     if (!step.rootRevision) {
+      // The post's root is the Work's own default revision; the language written in has no say in which.
       const { data } = await main.v1['main-versions']({ mainVersion: intent.mainVersion.slice(-36) })
-        .selection.get({ query: intent.language === UNSPECIFIED ? {} : { language: intent.language } });
+        .selection.get({ query: {} });
       if (!data || data.work !== intent.work) return { kind: 'failed', progress: step };
       step.rootRevision = data.selectedDraft;
       onProgress({ ...step });

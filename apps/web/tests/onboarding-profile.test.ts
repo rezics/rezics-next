@@ -35,7 +35,7 @@ test('avatar upload, selection and profile CAS use the same Agent in order', asy
   });
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'portrait.png', { type: 'image/png' });
   const input = profileSaveInput(profile, { token: 'token', agent, displayName: 'Ada',
-    bioText: 'Old bio', bioLanguage: 'zh-Hans', avatar: image, removeAvatar: false, key });
+    bioText: 'Old bio', bioLanguage: 'en', avatar: image, removeAvatar: false, key });
   expect(await saveAgentProfile(input, send)).toBe('saved');
   expect(calls.map(call => `${call.method} ${new URL(call.url).pathname}`)).toEqual([
     'POST /v1/media/uploads', 'PUT /v1/media/uploads/upload-id/bytes',

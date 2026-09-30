@@ -20,7 +20,8 @@ export const NewCommunity: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Add a translation' }));
     await userEvent.type(canvas.getByRole('textbox', { name: 'Translation language' }), 'zh-Hans');
     await userEvent.type(canvas.getByRole('textbox', { name: 'Translated name' }), '读书圈');
-    await expect(canvas.getByRole('textbox', { name: 'Name language' })).toHaveValue('en');
+    // No language is assumed from the interface; the author states it.
+    await expect(canvas.getByRole('button', { name: 'Name language: Language not specified' })).toBeVisible();
     await userEvent.click(canvas.getByRole('radio', { name: /Restricted/ }));
     await userEvent.click(canvas.getByRole('button', { name: 'Add a rule' }));
     await expect(canvas.getByRole('textbox', { name: 'Rule title' })).toBeVisible();

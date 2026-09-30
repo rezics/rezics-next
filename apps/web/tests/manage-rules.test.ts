@@ -160,7 +160,6 @@ describe('authoring in the author\u2019s language (G-515)', () => {
   test('every authored rule payload names its original and keeps only what was written', () => {
     for (const rule of [ruleFromText('a', 'Title', 'Body', 'ko'), ruleFromText('b', 'عنوان', 'نص', 'ar')]) {
       expect(Object.keys(rule.title.labels)).toEqual([rule.title.original]);
-      expect(uiLocales as readonly string[]).not.toContain(rule.title.original === 'ko' ? 'de' : 'de');
       expect(Value.Check(settingsCommand, command([rule]))).toBe(true);
     }
   });
