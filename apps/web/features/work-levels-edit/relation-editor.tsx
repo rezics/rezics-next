@@ -5,6 +5,7 @@ import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { NativeSelect } from '@rezics/ui/native-select';
 import { LinkIcon } from 'lucide-react';
+import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mayEdit } from './allowed.ts';
 import { type KindOption, viaOf } from './kinds.ts';
@@ -28,10 +29,11 @@ export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale
 }) {
   const t = materializeData(messages, { locale });
   const { state, run, pending, values, reload, reloading, formKey } = useWrite(action);
+  const [chosen, setChosen] = useState<string | null>(null);
   if (!mayEdit(allowed)) return null;
   const invalid = invalidField(state);
   if (!kinds.length) return <p role="status" className="text-muted-foreground text-sm">{t.noKindsBody}</p>;
-  const current = kinds.find(kind => kind.key === values.kind) ?? kinds[0]!;
+  const current = kinds.find(kind => kind.key === (chosen ?? values.kind)) ?? kinds[0]!;
   return <form key={formKey} action={run} aria-label={t.recordRelation}
     className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4">
     <h3 className="font-semibold text-base">{t.recordRelation}</h3>
@@ -41,7 +43,7 @@ export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale
     <input type="hidden" name="mainVersion" value={mainVersion} /><input type="hidden" name="head" value={head} />
     <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-start">
       <Field invalid={invalid === 'kind'}><FieldLabel>{t.relKind}</FieldLabel>
-        <NativeSelect name="kind" defaultValue={current.key}>
+        <NativeSelect name="kind" value={current.key} onChange={event => setChosen(event.currentTarget.value)}>
           {kinds.map(kind => <option key={kind.key} value={kind.key} lang={kind.language}>{kind.label}</option>)}
         </NativeSelect><FieldHelper>{t.relKindHelp}</FieldHelper></Field>
       <Field invalid={invalid === 'counterpart'}><FieldLabel>{t.relCounterpart}</FieldLabel>
@@ -51,7 +53,7 @@ export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale
     <Field invalid={invalid === 'evidence'}><FieldLabel>{t.relEvidence}</FieldLabel>
       <Input name="evidence" type="url" inputMode="url" defaultValue={values.evidence ?? ''} required maxLength={2048}
         autoComplete="off" placeholder="https://" /><FieldHelper>{t.relEvidenceHelp}</FieldHelper></Field>
-    {kinds.some(kind => viaOf(kind.key) === 'derivation') ? <label className="flex items-start gap-3 text-sm">
+    {viaOf(current.key) === 'derivation' ? <label className="flex items-start gap-3 text-sm">
       <input type="checkbox" name="unresolved" defaultChecked={values.unresolved === 'on'} className="mt-1 size-4 accent-primary" />
       <span className="grid gap-0.5"><span>{t.relUnresolved}</span>
         <span className="text-muted-foreground text-xs">{t.relUnresolvedHelp}</span></span></label> : null}
