@@ -5,18 +5,19 @@ import { resolve, join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { accountFixture, freePort } from './account-fixture.ts';
 
-test('G-543: real Turnstile test widget enrolls through Accounts and refuses a missing token', async () => {
+test('G-543: offline enrollment widget enrolls through Accounts and refuses a missing token', async () => {
   const root = resolve(import.meta.dir, '../../..');
   const evidence = join(root, '.temp', 'g-543-browser');
   mkdirSync(evidence, { recursive: true });
-  const f = await accountFixture({ turnstileSecretKey: '1x0000000000000000000000000000000AA' });
+  const f = await accountFixture({ turnstileMode: 'local' });
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
   const log = openSync(join(evidence, 'accounts.log'), 'w');
   const frontend = spawn('task', ['accounts:dev', '--', '--port', String(port)], {
     cwd: root, detached: true, stdio: ['ignore', log, log], env: { ...process.env,
       NODE_ENV: 'development', ACCOUNT_SERVICE_ORIGIN: f.baseURL, ACCOUNT_BASE_URL: f.baseURL,
-      ACCOUNT_TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
+      ACCOUNT_TURNSTILE_MODE: 'local', ACCOUNT_TURNSTILE_SITE_KEY: '',
+      WRANGLER_REGISTRY_PATH: join(evidence, 'wrangler-registry'),
     },
   });
   const browser = await chromium.launch({ headless: true });

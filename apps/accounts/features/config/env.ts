@@ -4,8 +4,10 @@
 import { cleanEnv, str, url } from 'envalid';
 
 export const accountsSpec = {
-  ACCOUNT_TURNSTILE_SITE_KEY: str({ devDefault: '1x00000000000000000000AA',
-    desc: 'Public Cloudflare Turnstile site key; production must supply a real key.' }),
+  ACCOUNT_TURNSTILE_MODE: str({ choices: ['local', 'cloudflare'], default: 'cloudflare', devDefault: 'local',
+    desc: 'Enrollment widget profile; must match Account. Local mode makes no provider request.' }),
+  ACCOUNT_TURNSTILE_SITE_KEY: str({ default: '',
+    desc: 'Public Cloudflare Turnstile site key; missing key disables only the enrollment widget.' }),
   ACCOUNT_SERVICE_ORIGIN: url({ default: 'http://127.0.0.1:3002',
     desc: 'Account service origin that /api/auth, /api/account, /oauth2 and /.well-known proxy to.' }),
   ACCOUNT_BASE_URL: url({ default: 'http://127.0.0.1:3004',
@@ -14,12 +16,19 @@ export const accountsSpec = {
 };
 
 export function accountsConfig(env: Record<string, string | undefined> = process.env) {
-  const config = cleanEnv(env, accountsSpec);
-  if (!config.ACCOUNT_TURNSTILE_SITE_KEY.trim()
-    || (env.NODE_ENV === 'production' && /^[123]x0+(?:AA|BB|FF)$/.test(config.ACCOUNT_TURNSTILE_SITE_KEY))) {
-    throw new Error('ACCOUNT_TURNSTILE_SITE_KEY must be configured; test keys are development-only');
+  return cleanEnv(env, accountsSpec);
+}
+
+/** Called only by forms that render enrollment challenges, never by proxies. */
+export function enrollmentSiteKey(env: Record<string, string | undefined> = process.env): string | undefined {
+  const config = accountsConfig(env);
+  if (config.ACCOUNT_TURNSTILE_MODE === 'local' && env.NODE_ENV !== 'production') return 'local';
+  const key = config.ACCOUNT_TURNSTILE_SITE_KEY.trim();
+  if (!key || (env.NODE_ENV === 'production' && /^[123]x0+(?:AA|BB|FF)$/.test(key))) {
+    console.error('Accounts enrollment widget disabled: configure ACCOUNT_TURNSTILE_SITE_KEY for cloudflare mode');
+    return undefined;
   }
-  return config;
+  return key;
 }
 
 /** The origin of an absolute HTTP(S) URL without a path, query or fragment. */

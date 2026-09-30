@@ -1,3 +1,4 @@
+import { TURNSTILE_TEST_SITE_KEY } from './turnstile.tsx';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { RecoveryForm } from './recovery-form.tsx';
@@ -8,7 +9,7 @@ import { AuthFrame } from '../shell/auth-frame.tsx';
 import { turnstileFixture } from './turnstile.fixture.ts';
 
 const meta = {
-  title: 'Accounts/Recovery', component: RecoveryForm, args: { email: 'ada@example.test' },
+  title: 'Accounts/Recovery', component: RecoveryForm, args: { turnstileSiteKey: TURNSTILE_TEST_SITE_KEY, email: 'ada@example.test' },
   decorators: [Story => <AuthFrame><Story /></AuthFrame>],
   beforeEach: () => turnstileFixture(),
 } satisfies Meta<typeof RecoveryForm>;

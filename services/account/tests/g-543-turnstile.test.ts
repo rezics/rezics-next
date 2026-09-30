@@ -1,16 +1,51 @@
 import { expect, test } from 'bun:test';
 import { accountFixture } from './account-fixture.ts';
 import { proxyAccountRequest } from '../../../apps/accounts/features/proxy/account-proxy.ts';
+import { accountsConfig, enrollmentSiteKey } from '../../../apps/accounts/features/config/env.ts';
+
+test('G-543 review: missing widget key leaves OAuth and auth proxy configuration usable', async () => {
+  const config = accountsConfig({ NODE_ENV: 'production', ACCOUNT_TURNSTILE_SITE_KEY: '' });
+  expect(config.ACCOUNT_SERVICE_ORIGIN).toBeTruthy();
+  const prior = console.error;
+  const logs: string[] = [];
+  console.error = message => { logs.push(String(message)); };
+  try { expect(enrollmentSiteKey({ NODE_ENV: 'production', ACCOUNT_TURNSTILE_SITE_KEY: '' })).toBeUndefined(); }
+  finally { console.error = prior; }
+  expect(logs.join()).toContain('enrollment widget disabled');
+  for (const path of ['/oauth2/authorize', '/api/auth/get-session']) {
+    const response = await proxyAccountRequest(new Request(`http://127.0.0.1:3004${path}`), {
+      serviceOrigin: config.ACCOUNT_SERVICE_ORIGIN, publicOrigin: config.ACCOUNT_BASE_URL,
+      fetch: Object.assign(async () => Response.json({ forwarded: true }), { preconnect: fetch.preconnect }),
+    });
+    expect(response.status).toBe(200);
+  }
+});
+
+test('G-543 review: explicit local enrollment verifies without a provider request', async () => {
+  const f = await accountFixture({ turnstileMode: 'local' });
+  try {
+    const body = { name: 'Offline', email: 'offline@example.test', password: 'a secure long password' };
+    expect((await f.request('/api/auth/sign-up/email', body)).status).toBe(400);
+    expect((await f.request('/api/auth/sign-up/email', { ...body, email: 'wrong-host@example.test' }, undefined,
+      { 'x-captcha-response': 'local:other.example:account-enrollment' })).status).toBe(403);
+    expect((await f.request('/api/auth/sign-up/email', { ...body, email: 'wrong-action@example.test' }, undefined,
+      { 'x-captcha-response': 'local:127.0.0.1:wrong-action' })).status).toBe(403);
+    expect((await f.request('/api/auth/sign-up/email', body, undefined,
+      { 'x-captcha-response': 'local:127.0.0.1:account-enrollment' })).status).toBe(200);
+  } finally { await f.close(); }
+}, 120_000);
 
 test('G-543: enrollment refuses absent, invalid and unavailable challenges before account/email effects', async () => {
-  let mode: 'accept' | 'reject' | 'outage' = 'accept';
+  let mode: 'accept' | 'reject' | 'outage' | 'wrong-host' | 'wrong-action' = 'accept';
   let verifications = 0;
   const verifier = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
     verifications++;
     const body = await request.json() as { secret: string; response: string };
     expect(body.secret).toBe('1x0000000000000000000000000000000AA');
     if (mode === 'outage') return new Response('unavailable', { status: 503 });
-    return Response.json({ success: mode === 'accept' && body.response === 'test-token', hostname: 'localhost' });
+    return Response.json({ success: mode !== 'reject' && body.response === 'test-token',
+      hostname: mode === 'wrong-host' ? 'other.example' : '127.0.0.1',
+      action: mode === 'wrong-action' ? 'different-action' : 'account-enrollment' });
   } });
   const f = await accountFixture({ turnstileSecretKey: '1x0000000000000000000000000000000AA',
     turnstileVerifyURL: `http://127.0.0.1:${verifier.port}/siteverify` });
@@ -28,6 +63,11 @@ test('G-543: enrollment refuses absent, invalid and unavailable challenges befor
     expect((await f.request('/api/auth/sign-up/email', { ...body, email: 'outage@example.test' }, undefined,
       { 'x-captcha-response': 'test-token' })).ok).toBe(false);
     expect((await f.pool.query('SELECT id FROM "user"')).rowCount).toBe(0);
+    for (const mismatch of ['wrong-host', 'wrong-action'] as const) {
+      mode = mismatch;
+      expect((await f.request('/api/auth/sign-up/email', { ...body, email: `${mismatch}@example.test` }, undefined,
+        { 'x-captcha-response': 'test-token' })).status).toBe(403);
+    }
     mode = 'accept';
     // Exercise the actual public-origin proxy too: without forwarding this
     // header a successful browser widget would still be rejected by Account.

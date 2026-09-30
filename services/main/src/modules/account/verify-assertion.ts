@@ -14,6 +14,9 @@ export interface AccountAssertionConfig {
 
 /** Account-signed consent basis exposed only after current introspection succeeds. */
 export interface VerifiedAccountAssertion extends VerifiedPrincipal {
+  /** Signed and introspected token expiry, in Unix seconds. Budget attribution only. */
+  accountExpiresAt?: number;
+  accountDisplayName?: string;
   accountAuthMode?: string;
   accountClientId?: string;
   accountConsentId?: string;
@@ -102,7 +105,7 @@ export class AccountAssertionVerifier {
     }
     const aud = typeof signed.aud === 'string' ? [signed.aud]
       : Array.isArray(signed.aud) ? signed.aud.filter((value): value is string => typeof value === 'string') : [];
-    return { issuer: signed.iss!, subject: signed.sub,
+    return { issuer: signed.iss!, subject: signed.sub, accountExpiresAt: signed.exp,
       currentAssertion: () => this.verify(request, requiredScopes),
       ...(current.email_verified === true && signed.rezics_auth_mode !== 'workload'
         ? { emailVerified: true } : {}),

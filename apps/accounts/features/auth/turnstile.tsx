@@ -5,7 +5,7 @@ import { useLocale } from '../../i18n/client.ts';
 
 export const TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000AA';
 export interface TurnstileAPI {
-  render(container: HTMLElement, options: { sitekey: string; size: 'flexible' | 'compact'; theme: 'auto'; language: string;
+  render(container: HTMLElement, options: { sitekey: string; action: string; size: 'flexible' | 'compact'; theme: 'auto'; language: string;
     callback(token: string): void; 'expired-callback'(): void; 'error-callback'(): void }): string;
   remove(id: string): void;
 }
@@ -50,13 +50,20 @@ export function Turnstile({ siteKey, attempt, onToken, onError }: { siteKey?: st
     let id: string | undefined;
     let api: TurnstileAPI | undefined;
     callbacks.current.onToken(undefined);
-    const key = siteKey ?? (['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
-      ? TURNSTILE_TEST_SITE_KEY : undefined);
+    const key = siteKey;
     if (!key) { callbacks.current.onError?.(); return; }
+    if (key === 'local') {
+      const token = `local:${window.location.hostname}:account-enrollment`;
+      const field = document.createElement('input');
+      field.type = 'hidden'; field.name = 'cf-turnstile-response'; field.value = token;
+      container.current?.append(field);
+      callbacks.current.onToken(token);
+      return () => { field.remove(); };
+    }
     void load().then(loaded => {
       if (disposed || !container.current) return;
       api = loaded;
-      id = api.render(container.current, { sitekey: key, size, theme: 'auto', language,
+      id = api.render(container.current, { sitekey: key, action: 'account-enrollment', size, theme: 'auto', language,
         callback: token => { if (!disposed) callbacks.current.onToken(token); },
         'expired-callback': () => { if (!disposed) callbacks.current.onToken(undefined); },
         'error-callback': () => { if (!disposed) { callbacks.current.onToken(undefined); callbacks.current.onError?.(); } },

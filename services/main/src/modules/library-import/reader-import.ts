@@ -17,7 +17,14 @@ export interface ImportPlacement { structure: string; expectedHead: string; atte
 /** The source record is site-wide. A session lock serializes this route's
  * read-before-acquire path for one Open Library identity across readers. */
 export class ReaderLibraryImportStore {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly budgets = {
+    sourceSearchesPerDay: READER_IMPORT_COST.sourceSearchesPerDay as number,
+    acquisitionsPerDay: READER_IMPORT_COST.acquisitionsPerDay as number,
+  }) {
+    if (Object.values(budgets).some(value => !Number.isSafeInteger(value) || value < 1 || value > 1_000_000)) {
+      throw new Error('Invalid Library import daily budgets');
+    }
+  }
   private dispatch: ((request: Request) => Promise<Response>) | null = null;
 
   setDispatch(dispatch: (request: Request) => Promise<Response>): void {
@@ -173,8 +180,7 @@ export class ReaderLibraryImportStore {
     if (!AGENT.test(agent)) throw new ReaderImportUnavailable('invalid reader');
     const day = now.toISOString().slice(0, 10);
     const column = kind === 'search' ? 'searches' : 'acquisitions';
-    const limit = kind === 'search' ? READER_IMPORT_COST.sourceSearchesPerDay
-      : READER_IMPORT_COST.acquisitionsPerDay;
+    const limit = kind === 'search' ? this.budgets.sourceSearchesPerDay : this.budgets.acquisitionsPerDay;
     const rows = await this.pool.query<{ agent: string }>(`
       INSERT INTO reader.library_import_daily_budget (agent, day, ${column}) VALUES ($1,$2,1)
       ON CONFLICT (agent, day) DO UPDATE SET ${column} = reader.library_import_daily_budget.${column} + 1

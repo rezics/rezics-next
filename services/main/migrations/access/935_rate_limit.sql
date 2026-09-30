@@ -4,7 +4,7 @@ ALTER TABLE access.principal ADD COLUMN first_seen_at timestamptz NOT NULL DEFAU
 
 CREATE TABLE access.rate_limit_v1 (
     key text NOT NULL CHECK (key ~ '^[0-9a-f]{64}$'),
-    family text NOT NULL CHECK (family IN ('write', 'upload', 'report', 'correspondence', 'search')),
+    family text NOT NULL CHECK (family IN ('write', 'upload', 'report', 'correspondence', 'search', 'provider')),
     count integer NOT NULL CHECK (count > 0),
     expires_at timestamptz NOT NULL,
     PRIMARY KEY (key, family)

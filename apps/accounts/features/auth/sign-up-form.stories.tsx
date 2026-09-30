@@ -1,3 +1,4 @@
+import { TURNSTILE_TEST_SITE_KEY } from './turnstile.tsx';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { SignUpForm } from './sign-up-form.tsx';
@@ -6,7 +7,7 @@ import { AuthFrame } from '../shell/auth-frame.tsx';
 import { turnstileFixture } from './turnstile.fixture.ts';
 
 const meta = {
-  title: 'Accounts/Create account', component: SignUpForm, args: { next: '/' },
+  title: 'Accounts/Create account', component: SignUpForm, args: { turnstileSiteKey: TURNSTILE_TEST_SITE_KEY, next: '/' },
   decorators: [Story => <AuthFrame><Story /></AuthFrame>],
   beforeEach: () => turnstileFixture(),
 } satisfies Meta<typeof SignUpForm>;
@@ -104,6 +105,16 @@ export const ChallengeUnavailable: Story = {
   async play({ canvasElement }) {
     await expect(await within(canvasElement).findByRole('alert')).toHaveTextContent(
       'The security check is unavailable. Reload this page to try again.');
+  },
+};
+export const MissingSiteKey: Story = {
+  args: { turnstileSiteKey: undefined },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(
+      'The security check is unavailable. Reload this page to try again.');
+    await expect(canvas.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await expect(canvas.queryByText('Security check')).not.toBeInTheDocument();
   },
 };
 export const Chinese: Story = {

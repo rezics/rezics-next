@@ -1,3 +1,4 @@
+import { TURNSTILE_TEST_SITE_KEY } from './turnstile.tsx';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { SignInFlow } from './sign-in-flow.tsx';
@@ -8,7 +9,7 @@ import { AuthSkeleton } from '../shell/skeletons.tsx';
 import { turnstileFixture } from './turnstile.fixture.ts';
 
 const meta = {
-  title: 'Accounts/Sign in', component: SignInFlow, args: { next: '/' },
+  title: 'Accounts/Sign in', component: SignInFlow, args: { turnstileSiteKey: TURNSTILE_TEST_SITE_KEY, next: '/' },
   decorators: [Story => <AuthFrame><Story /></AuthFrame>],
   beforeEach: () => turnstileFixture(),
 } satisfies Meta<typeof SignInFlow>;

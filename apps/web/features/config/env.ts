@@ -4,6 +4,8 @@
 import { cleanEnv, str, url } from 'envalid';
 
 export const webSpec = {
+  WEB_CLIENT_IP_HEADER: str({ default: 'cf-connecting-ip',
+    desc: 'Client IP source replaced by the trusted ingress; BFF forwards it as x-rezics-client-ip.' }),
   MAIN_ORIGIN: url({ default: 'http://127.0.0.1:3001', desc: 'Main origin the BFF proxies to.' }),
   ACCOUNT_ORIGIN: url({ default: 'http://127.0.0.1:3002', desc: 'Account origin for OAuth and the auth proxy.' }),
   MAIN_RESOURCE: str({ default: 'https://main.rezics.test', desc: 'OAuth resource identifier requested for Main.' }),

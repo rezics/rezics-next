@@ -335,6 +335,10 @@ const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
   ? openLibraryFixtureFetch(config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT) : fetch;
 const libraryImport = new ReaderLibraryImportStore(contentPool);
 configureLibraryShelves(contentPool, pool, fuseki);
+const libraryImport = new ReaderLibraryImportStore(contentPool, {
+  sourceSearchesPerDay: config.MAIN_READER_IMPORT_SEARCHES_PER_DAY,
+  acquisitionsPerDay: config.MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY,
+});
 const app = createMainApp(fuseki, {
   wikiQuotations: new WikiQuotationStore(contentPool),
   editorialReview: new EditorialReviewStore(pool),

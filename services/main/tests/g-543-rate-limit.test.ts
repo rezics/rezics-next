@@ -14,28 +14,41 @@ import { createMainApp } from '../src/app.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
+import { mainRequestHeaders } from '../../../apps/web/features/api/bff.ts';
+import { PrincipalBudgetCache } from '../src/modules/rate-limit/principal-cache.ts';
+import { appEnvironment } from '../../../scripts/dev/config.ts';
+import { ReaderLibraryImportStore } from '../src/modules/library-import/reader-import.ts';
 
 const options: RateLimitOptions = { secret: 'g543-test-counter-secret-at-least-32-characters',
   serviceClientIds: new Set(['installed-importer']), trustedProxyPeers: new Set(['127.0.0.2']),
   clientIpHeader: 'x-forwarded-for' };
 
-test('G-543: every generated mutation has a family and path boundaries protect safety budgets', () => {
+test('G-543: every generated operation has an explicit policy and path boundaries protect safety budgets', () => {
   const spec = JSON.parse(readFileSync(resolve(import.meta.dir, '../../../generated/openapi/main/public.json'), 'utf8')) as {
     paths: Record<string, Record<string, unknown>>;
   };
   let mutations = 0;
   for (const [path, methods] of Object.entries(spec.paths)) for (const method of Object.keys(methods)) {
-    if (['get', 'head', 'options', 'parameters'].includes(method)) continue;
-    expect(rateLimitFamily(method.toUpperCase(), path)).not.toBeNull();
+    if (method === 'parameters') continue;
+    expect(rateLimitFamily(method.toUpperCase(), path)).not.toBeUndefined();
     mutations++;
   }
   expect(mutations).toBeGreaterThan(50);
   expect(rateLimitFamily('GET', '/v1/works')).toBeNull();
-  expect(rateLimitFamily('GET', '/v1/search')).toBe('search');
-  expect(rateLimitFamily('HEAD', '/v1/search')).toBe('search');
+  expect(rateLimitFamily('POST', '/v1/query')).toBeNull();
+  expect(rateLimitFamily('POST', '/v1/resources/summaries')).toBeNull();
+  for (const path of ['/v1/rating-aggregates', '/v1/global-rating-aggregates', '/v1/rating-syntheses',
+    '/v1/classification-resolutions', '/v1/statement-resolutions', '/v1/context-interpretations']) {
+    expect(rateLimitFamily('POST', path)).toBeNull();
+  }
+  expect(rateLimitFamily('POST', '/v1/subscriptions/quotes')).toBe('write');
+  expect(rateLimitFamily('POST', '/v1/new-unclassified-operation')).toBeUndefined();
+  expect(rateLimitFamily('GET', '/v1/unclassified-read')).toBeUndefined();
+  expect(rateLimitFamily('HEAD', '/v1/works')).toBeNull();
+  expect(rateLimitFamily('POST', '/v1/queries')).toBe('search');
   expect(rateLimitFamily('POST', '/v1/queries/page')).toBe('search');
-  expect(rateLimitFamily('POST', '/v1/media/uploads/123')).toBe('upload');
-  expect(rateLimitFamily('POST', '/v1/media/uploads-evil')).toBe('write');
+  expect(rateLimitFamily('PUT', '/v1/media/uploads/123/bytes')).toBe('upload');
+  expect(rateLimitFamily('POST', '/v1/media/uploads-evil')).toBeUndefined();
   expect(rateLimitFamily('POST', '/v1/public-reports')).toBe('report');
   expect(rateLimitFamily('POST', '/v1/appeals')).toBe('report');
   expect(rateLimitFamily('POST', '/v1/rights/complaints')).toBe('report');
@@ -43,6 +56,111 @@ test('G-543: every generated mutation has a family and path boundaries protect s
   expect(rateLimitFamily('POST', '/v1/cases/123/messages')).toBe('correspondence');
   expect(() => rateLimitBudgets('{"member":{"write":{"maximum":0,"seconds":60}}}')).toThrow();
   expect(() => rateLimitBudgets('{"service":{"wriet":{"maximum":1,"seconds":60}}}')).toThrow();
+});
+
+test('G-543 review: hook caches token class while owner authorization remains current', async () => {
+  let classifications = 0, counters = 0, effects = 0, revoked = false;
+  const identities: string[] = [];
+  const account = { async verify() {
+    if (revoked) throw new AccountAssertionDenied();
+    return { issuer: 'account', subject: 'same', accountExpiresAt: Date.now() / 1000 + 300 };
+  } };
+  const app = new Elysia().use(rateLimitHook(account, { options, budgets: rateLimitBudgets(), store: {
+    async classify() { classifications++; return 'member'; },
+    async consume(identity) { identities.push(identity); counters++; return { allowed: true, retryAfter: 60 }; },
+  } })).post('/v1/works', async () => {
+    try { await account.verify(); effects++; return 'effect'; }
+    catch { return new Response('refused', { status: 401 }); }
+  });
+  const send = (token: string) => app.handle(new Request('http://localhost/v1/works', {
+    method: 'POST', headers: { authorization: `Bearer ${token}` },
+  }));
+  for (let i = 0; i < 10; i++) expect((await send('token-1')).status).toBe(200);
+  expect(classifications).toBe(1); expect(counters).toBe(10);
+  expect((await send('token-2')).status).toBe(200);
+  expect(classifications).toBe(2);
+  expect(new Set(identities).size).toBe(1);
+  revoked = true;
+  expect((await send('token-1')).status).toBe(401);
+  expect(effects).toBe(11); expect(classifications).toBe(2);
+});
+
+test('G-543 review: read POSTs survive counter loss; safety and provider intake do not depend on bearer health', async () => {
+  let verifications = 0;
+  const budgets = rateLimitBudgets();
+  const seen: Array<{ family: string; maximum: number }> = [];
+  const store = { async classify() { throw new Error('Access outage'); },
+    async consume(_identity: string, family: string, budget: { maximum: number }) {
+      seen.push({ family, maximum: budget.maximum });
+      return { allowed: true, retryAfter: 60 };
+    } };
+  for (const error of [new AccountAssertionDenied('suspended'), new AccountAssertionDenied('rejected'),
+    new AccountAssertionUnavailable('Account outage')]) {
+    const app = new Elysia().use(rateLimitHook({ async verify() { verifications++; throw error; } },
+      { options, budgets, store }))
+      .post('/v1/query', () => 'read').post('/v1/resources/summaries', () => 'read')
+      .post('/v1/public-reports', () => 'received').post('/v1/appeals', () => 'received')
+      .post('/v1/subscriptions/settlements', () => 'signed callback')
+      .post('/v1/new-unclassified-operation', () => 'effect');
+    for (const path of ['/v1/query', '/v1/resources/summaries', '/v1/public-reports', '/v1/appeals',
+      '/v1/subscriptions/settlements']) {
+      expect((await app.handle(new Request(`http://localhost${path}`, { method: 'POST',
+        headers: { authorization: 'Bearer rejected' } }))).status).toBe(200);
+    }
+    expect((await app.handle(new Request('http://localhost/v1/new-unclassified-operation', { method: 'POST' }))).status).toBe(503);
+  }
+  expect(verifications).toBe(0);
+  expect(seen.every(entry => entry.family === 'report' || entry.family === 'provider')).toBe(true);
+  expect(seen.filter(entry => entry.family === 'provider').every(entry => entry.maximum > 10)).toBe(true);
+  store.consume = async () => { throw new Error('counter outage'); };
+  const reads = new Elysia().use(rateLimitHook({ async verify() { throw new Error('Account outage'); } },
+    { options, budgets, store })).post('/v1/query', () => 'read').post('/v1/resources/summaries', () => 'read');
+  for (const path of ['/v1/query', '/v1/resources/summaries']) {
+    expect((await reads.handle(new Request(`http://localhost${path}`, { method: 'POST' }))).status).toBe(200);
+  }
+});
+
+test('G-543 review: token attribution coalesces, expires, and has bounded storage; counters use one operation', async () => {
+  let now = 1000, verified = 0, classified = 0;
+  const cache = new PrincipalBudgetCache(2, () => now);
+  const verify = async () => { verified++; return { issuer: 'account', subject: 'same', accountExpiresAt: 2 }; };
+  const classify = async () => { classified++; return 'member' as const; };
+  await Promise.all(Array.from({ length: 40 }, () => cache.resolve('token-1', verify, classify)));
+  expect(verified).toBe(1); expect(classified).toBe(1);
+  await cache.resolve('token-2', verify, classify);
+  await cache.resolve('token-3', verify, classify);
+  await cache.resolve('token-1', verify, classify);
+  expect(verified).toBe(4);
+  now = 2001;
+  await cache.resolve('token-1', verify, classify);
+  expect(verified).toBe(5);
+  let queries = 0;
+  const store = new PostgresRateLimitStore({ async query() {
+    queries++; return { rows: [{ allowed: true, retry_after: 60 }] };
+  } } as unknown as Pool, options);
+  await store.consume('identity', 'write', { maximum: 10, seconds: 60 });
+  expect(queries).toBe(1);
+});
+
+test('G-543 review: BFF replaces spoofed IP and stack/import policies come from configuration', async () => {
+  const forwarded = mainRequestHeaders(new Headers({ 'cf-connecting-ip': '198.51.100.7',
+    'x-rezics-client-ip': '203.0.113.1', 'x-forwarded-for': '203.0.113.2' }), undefined);
+  expect(forwarded.get('x-rezics-client-ip')).toBe('198.51.100.7');
+  expect(mainRequestHeaders(new Headers({ 'x-rezics-client-ip': '203.0.113.1' }), undefined)
+    .has('x-rezics-client-ip')).toBe(false);
+  const proxyOptions = { ...options, trustedProxyPeers: new Set(['127.0.0.2']), clientIpHeader: 'x-rezics-client-ip' };
+  const request = new Request('http://localhost/v1/works', { headers: forwarded });
+  expect(anonymousIdentity(request, '127.0.0.2', proxyOptions)).toBe('anonymous:198.51.100.7');
+  expect(anonymousIdentity(request, '127.0.0.1', proxyOptions)).toBe('anonymous:127.0.0.1');
+  const env = appEnvironment({ MAIN_RATE_LIMIT_BUDGETS: '{"member":{"write":{"maximum":321,"seconds":60}}}',
+    MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY: '77' }, '.temp/g-543-config');
+  expect(rateLimitBudgets(env.MAIN_RATE_LIMIT_BUDGETS).member.write.maximum).toBe(321);
+  const limits: number[] = [];
+  const imports = new ReaderLibraryImportStore({ async query(_sql: string, values: unknown[]) {
+    limits.push(values[2] as number); return { rowCount: 1 };
+  } } as unknown as Pool, { sourceSearchesPerDay: 321, acquisitionsPerDay: Number(env.MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY) });
+  await imports.takeBudget(`https://rezics.com/id/${Bun.randomUUIDv7()}`, 'acquisition');
+  expect(limits).toEqual([77]);
 });
 
 test('G-543: untrusted peers cannot rotate anonymous identities with forwarded headers', () => {
@@ -66,6 +184,7 @@ test('G-543: global hook reaches each Main plugin group and fails closed on depe
   // before domainRoutes. Merely testing a standalone plugin misses hook order.
   let guarded = 0;
   for (const route of app.routes) {
+    expect(rateLimitFamily(route.method, route.path)).not.toBeUndefined();
     if (rateLimitFamily(route.method, route.path) === null) continue;
     const hooks = (route.hooks.beforeHandle ?? []) as Function[];
     expect(hooks.some(hook => hook.name === 'enforceRateLimit')).toBe(true);
@@ -76,8 +195,8 @@ test('G-543: global hook reaches each Main plugin group and fails closed on depe
     headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profile: 'public-main-phrase-v1',
       phrase: 'needle', language: null }) }));
   expect(query.status).toBe(429);
-  const harness = new Elysia().use(rateLimitHook(work.account, limit)).post('/v1/test', () => 'effect');
-  const response = await harness.handle(new Request('http://localhost/v1/test', { method: 'POST' }));
+  const harness = new Elysia().use(rateLimitHook(work.account, limit)).post('/v1/works', () => 'effect');
+  const response = await harness.handle(new Request('http://localhost/v1/works', { method: 'POST' }));
   expect(response.status).toBe(429);
   expect(response.headers.get('retry-after')).toBe('31');
   expect(seen).toContain('write');
@@ -86,12 +205,12 @@ test('G-543: global hook reaches each Main plugin group and fails closed on depe
   expect((await searches.handle(new Request('http://localhost/v1/queries', { method: 'POST',
     headers: { authorization: 'Bearer verified' } }))).status).toBe(200);
   limit.store.consume = async () => { throw new Error('counter outage'); };
-  const outage = await harness.handle(new Request('http://localhost/v1/test', { method: 'POST' }));
+  const outage = await harness.handle(new Request('http://localhost/v1/works', { method: 'POST' }));
   expect(outage.status).toBe(503);
   expect(outage.headers.get('retry-after')).toBe('5');
   for (const [error, status] of [[new AccountAssertionDenied(), 401], [new AccountAssertionUnavailable(), 503]] as const) {
-    const failed = new Elysia().use(rateLimitHook({ async verify() { throw error; } }, limit)).post('/v1/test', () => 'effect');
-    expect((await failed.handle(new Request('http://localhost/v1/test', { method: 'POST',
+    const failed = new Elysia().use(rateLimitHook({ async verify() { throw error; } }, limit)).post('/v1/works', () => 'effect');
+    expect((await failed.handle(new Request('http://localhost/v1/works', { method: 'POST',
       headers: { authorization: 'Bearer test' } }))).status).toBe(status);
   }
 });
@@ -148,8 +267,8 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
     const registry = new AccessAdmissionRegistry(pool);
     const memberId = (await pool.query<{ id: string }>("SELECT id FROM access.principal WHERE account_subject = 'member'")).rows[0]!.id;
     const app = new Elysia().use(rateLimitHook(account, { store, options, budgets }))
-      .post('/v1/test', () => Response.json({ received: true }))
-      .post('/v1/admissions-test', async ({ request }) => Response.json(await registry.register({
+      .post('/v1/works', () => Response.json({ received: true }))
+      .post('/v1/agents', async ({ request }) => Response.json(await registry.register({
         principal: principals.get('member')!, actingSubject: agent, scope: 'work:create:root', action: 'work.create',
         idempotencyKey: request.headers.get('idempotency-key')!, requestDigest: 'a'.repeat(64),
       })))
@@ -157,13 +276,13 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
       .post('/v1/appeals', () => Response.json({ received: true }))
       .post('/v1/cases/1/messages', () => Response.json({ received: true }))
       .post('/v1/media/uploads', () => Response.json({ created: true }));
-    const send = (subject: string, path = '/v1/test', key?: string, token = 1) => app.handle(new Request(`http://localhost${path}`, {
+    const send = (subject: string, path = '/v1/works', key?: string, token = 1) => app.handle(new Request(`http://localhost${path}`, {
       method: 'POST', headers: { ...(subject === 'anonymous' ? {} : { authorization: `Bearer ${subject}-token-${token}` }),
         ...(key ? { 'idempotency-key': key } : {}) },
     }));
     for (const principal of principalClasses) {
-      expect((await send(principal, '/v1/test', `effect-${principal}`)).status).toBe(200);
-      expect((await send(principal, '/v1/test', `second-${principal}`, 2)).status).toBe(200);
+      expect((await send(principal, '/v1/works', `effect-${principal}`)).status).toBe(200);
+      expect((await send(principal, '/v1/works', `second-${principal}`, 2)).status).toBe(200);
       const exhausted = await send(principal);
       expect(exhausted.status).toBe(429);
       expect(Number(exhausted.headers.get('retry-after'))).toBeGreaterThan(0);
@@ -190,11 +309,11 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
     await pool.query(`INSERT INTO access.permission_grant(id, issuer_subject, recipient_subject, scope_id, action, valid_until)
       VALUES ($1,$2,$2,'work:create:root','work.create',now() + interval '1 hour')`, [Bun.randomUUIDv7(), agent]);
     await pool.query("UPDATE access.rate_limit_v1 SET expires_at = now() - interval '1 second' WHERE family = 'write'");
-    expect((await send('member', '/v1/admissions-test', 'admitted-member')).status).toBe(200);
+    expect((await send('member', '/v1/agents', 'admitted-member')).status).toBe(200);
     expect((await send('member')).status).toBe(200);
-    expect((await send('member', '/v1/admissions-test', 'admitted-member', 2)).status).toBe(429);
+    expect((await send('member', '/v1/agents', 'admitted-member', 2)).status).toBe(429);
     await pool.query("UPDATE access.rate_limit_v1 SET expires_at = now() - interval '1 second' WHERE family = 'write'");
-    const replay = await send('member', '/v1/admissions-test', 'admitted-member', 2);
+    const replay = await send('member', '/v1/agents', 'admitted-member', 2);
     expect(replay.status).toBe(200);
     expect((await replay.json() as { replayed: boolean }).replayed).toBe(true);
     expect((await pool.query("SELECT admission_id FROM access.admission_receipt WHERE idempotency_key = 'admitted-member'")).rowCount).toBe(1);
@@ -204,6 +323,30 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
       VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`, [Bun.randomUUIDv7(), trustedId, agent]);
     expect(await store.classify(principals.get('trusted')!)).toBe('trusted');
     await pool.query("UPDATE access.role_binding SET active = false WHERE family_id = $1", [familyId]);
+    expect(await store.classify(principals.get('trusted')!)).toBe('member');
+    // Compatibility with migration 870's catalogue editor vocabulary. This
+    // fixture also runs on the worker's older dispatch schema before rebase.
+    await pool.query(`ALTER TABLE access.role_revision DROP CONSTRAINT role_revision_permissions_check;
+      ALTER TABLE access.role_revision ADD CONSTRAINT role_revision_permissions_check CHECK (
+        cardinality(permissions) <= 2 AND permissions <@ ARRAY['work.create','work.edit']::text[])`);
+    const editorFamily = Bun.randomUUIDv7();
+    const editorScope = 'work:create:root';
+    const editorClient = await pool.connect();
+    try {
+      await editorClient.query('BEGIN');
+      await editorClient.query(`INSERT INTO access.role_family(id,owner_subject,scope_id,head_revision)
+        VALUES ($1,$2,$3,1)`, [editorFamily, agent, editorScope]);
+      await editorClient.query(`INSERT INTO access.role_revision(family_id,revision,permissions)
+        VALUES ($1,1,ARRAY['work.edit'])`, [editorFamily]);
+      await editorClient.query('COMMIT');
+    } finally { editorClient.release(); }
+    await pool.query(`INSERT INTO access.role_binding(id,family_id,role_revision,issuer_subject,recipient_subject,valid_until,assigned_by_principal)
+      VALUES ($1,$2,1,$3,$3,now() + interval '1 hour',$4)`, [Bun.randomUUIDv7(), editorFamily, agent, trustedId]);
+    expect(await store.classify(principals.get('trusted')!)).toBe('member');
+    await pool.query(`INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'work.edit',now() + interval '1 hour')`, [Bun.randomUUIDv7(), trustedId, agent]);
+    expect(await store.classify(principals.get('trusted')!)).toBe('trusted');
+    await pool.query('UPDATE access.scope_gate SET open = false WHERE id = $1', [editorScope]);
     expect(await store.classify(principals.get('trusted')!)).toBe('member');
     // Moderator bundles use current Access grants, never a display role name.
     const realm = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
@@ -229,11 +372,11 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
     // Exercise the real peer address supplied by Bun, as well as the pure
     // identity helper: caller-controlled XFF cannot rotate a live HTTP budget.
     const network = new Elysia().use(rateLimitHook(account, { store, options, budgets }))
-      .post('/v1/network-test', () => Response.json({ accepted: true }))
+      .post('/v1/claims', () => Response.json({ accepted: true }))
       .listen({ hostname: '127.0.0.1', port: 0 });
     try {
       for (const [ip, status] of [['1.1.1.1', 200], ['2.2.2.2', 200], ['3.3.3.3', 429]] as const) {
-        expect((await fetch(`http://127.0.0.1:${network.server!.port}/v1/network-test`, {
+        expect((await fetch(`http://127.0.0.1:${network.server!.port}/v1/claims`, {
           method: 'POST', headers: { 'x-forwarded-for': ip },
         })).status).toBe(status);
       }
@@ -259,8 +402,8 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
     const expiredBefore = Number((await pool.query<{ count: string }>("SELECT count(*) FROM access.rate_limit_v1 WHERE family = 'search' AND expires_at < now()")).rows[0]!.count);
     await store.consume('expiry-probe', 'write', { maximum: 2, seconds: 60 });
     const expiredAfter = Number((await pool.query<{ count: string }>("SELECT count(*) FROM access.rate_limit_v1 WHERE family = 'search' AND expires_at < now()")).rows[0]!.count);
-    expect(expiredBefore - expiredAfter).toBeGreaterThan(0);
-    expect(expiredBefore - expiredAfter).toBeLessThanOrEqual(RATE_LIMIT_COST_V1.expiryRows);
+    expect(expiredAfter).toBe(expiredBefore);
+    expect(RATE_LIMIT_COST_V1.counterQueries).toBe(1);
     const persisted = await pool.query<{ key: string }>('SELECT key FROM access.rate_limit_v1');
     expect(persisted.rows.every(row => /^[0-9a-f]{64}$/.test(row.key))).toBe(true);
     await pool.query('DROP TABLE access.rate_limit_v1');

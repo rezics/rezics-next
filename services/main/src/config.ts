@@ -26,6 +26,8 @@ export const mainSpec = {
   ACCESS_DATABASE_URL: postgres('Access owner PostgreSQL URL.'),
   MAIN_RATE_LIMIT_SECRET: str({ default: undefined, desc: 'Stable HMAC key (32+ characters) for principal/IP budgets; defaults to the title admission key.' }),
   MAIN_RATE_LIMIT_BUDGETS: str({ default: '{}', desc: 'Partial JSON overrides of main-rate-limit-v1 class/family maximum and seconds.' }),
+  MAIN_READER_IMPORT_SEARCHES_PER_DAY: num({ default: 200, desc: 'Daily Library source search budget; local stacks may override.' }),
+  MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY: num({ default: 50, desc: 'Daily Library acquisition budget; local stacks may override.' }),
   MAIN_RATE_LIMIT_SERVICE_CLIENT_IDS: str({ default: '', desc: 'Comma-separated operator-installed Account client IDs with service budgets.' }),
   MAIN_RATE_LIMIT_TRUSTED_PROXY_PEERS: str({ default: '', desc: 'Comma-separated exact peer IP addresses allowed to supply the client IP header.' }),
   MAIN_RATE_LIMIT_CLIENT_IP_HEADER: str({ default: 'x-rezics-client-ip', desc: 'Single client IP header replaced by a configured trusted proxy.' }),

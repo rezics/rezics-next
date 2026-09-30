@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 export interface SeedEndpoints {
+  enrollmentToken?: string;
   account: string;
   main: string;
   mailpit: string;
@@ -32,7 +33,8 @@ export class SeedApi {
     const { account, mailpit } = this.endpoints;
     const requestedAt = Date.now();
     const sent = await fetch(`${account}/api/auth/send-verification-email`, { method: 'POST',
-      headers: { 'content-type': 'application/json', origin: account },
+      headers: { 'content-type': 'application/json', origin: account,
+        ...(this.endpoints.enrollmentToken ? { 'x-captcha-response': this.endpoints.enrollmentToken } : {}) },
       body: JSON.stringify({ email }) });
     await payload<unknown>(sent, `Account verification request ${email}`);
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -63,7 +65,8 @@ export class SeedApi {
 
   async signInOrUp(user: Credentials): Promise<{ cookie: string; id: string }> {
     const account = this.endpoints.account;
-    const headers = { 'content-type': 'application/json', origin: account };
+    const headers = { 'content-type': 'application/json', origin: account,
+      ...(this.endpoints.enrollmentToken ? { 'x-captcha-response': this.endpoints.enrollmentToken } : {}) };
     const signIn = () => fetch(`${account}/api/auth/sign-in/email`, { method: 'POST', headers,
       body: JSON.stringify({ email: user.email, password: user.password }) });
     let response = await signIn();

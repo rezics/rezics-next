@@ -191,6 +191,19 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
   // Main still reads JWKS and introspection from the service directly.
   const account = compose.ACCOUNTS_PORT ? `http://127.0.0.1:${compose.ACCOUNTS_PORT}` : service;
   return {
+    // Seed/load/QA exercise the same admission code with an explicit local
+    // policy. Operators can lower any family through saved environment config.
+    MAIN_RATE_LIMIT_BUDGETS: compose.MAIN_RATE_LIMIT_BUDGETS ?? JSON.stringify(Object.fromEntries(
+      ['anonymous', 'new-account', 'member', 'trusted', 'service'].map(principal => [principal,
+        Object.fromEntries(['write', 'upload', 'report', 'correspondence', 'search', 'provider']
+          .map(family => [family, { maximum: 1_000_000, seconds: 60 }]))]))),
+    MAIN_RATE_LIMIT_TRUSTED_PROXY_PEERS: compose.MAIN_RATE_LIMIT_TRUSTED_PROXY_PEERS ?? '127.0.0.1,::1',
+    MAIN_READER_IMPORT_SEARCHES_PER_DAY: compose.MAIN_READER_IMPORT_SEARCHES_PER_DAY ?? '1000000',
+    MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY: compose.MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY ?? '1000000',
+    ACCOUNT_TURNSTILE_MODE: compose.ACCOUNT_TURNSTILE_MODE ?? 'local',
+    ACCOUNT_TURNSTILE_SECRET_KEY: compose.ACCOUNT_TURNSTILE_SECRET_KEY ?? '',
+    ACCOUNT_TURNSTILE_SITE_KEY: compose.ACCOUNT_TURNSTILE_SITE_KEY ?? '',
+    ACCOUNT_ENROLLMENT_TOKEN: compose.ACCOUNT_ENROLLMENT_TOKEN ?? 'local:127.0.0.1:account-enrollment',
     FUSEKI_URL: `http://127.0.0.1:${compose.FUSEKI_PORT}/rezics/`,
     FUSEKI_MAINTENANCE_TOKEN: compose.FUSEKI_MAINTENANCE_TOKEN,
     FUSEKI_COMMAND_TOKEN: compose.FUSEKI_COMMAND_TOKEN,
@@ -202,7 +215,7 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
     ACCOUNT_RELAY_DATABASE_URL: pgUrl('relay', compose.REZICS_RELAY_PASSWORD, compose.POSTGRES_PORT),
     MAIN_RELAY_DATABASE_URL: pgUrl('relay', compose.REZICS_RELAY_PASSWORD, compose.POSTGRES_PORT),
     MAIN_RELAY_CONSUMER: 'main-graph-v1',
-    ACCOUNT_BASE_URL: account, ACCOUNT_PORT: compose.ACCOUNT_PORT,
+    ACCOUNT_BASE_URL: account, ACCOUNT_SERVICE_ORIGIN: service, ACCOUNT_PORT: compose.ACCOUNT_PORT,
     ...(compose.ACCOUNTS_PORT ? { ACCOUNTS_PORT: compose.ACCOUNTS_PORT } : {}),
     // Each stack's Account email reaches that stack's Mailpit, not the shared one.
     ...(compose.MAILPIT_SMTP_PORT ? { ACCOUNT_SMTP_PORT: compose.MAILPIT_SMTP_PORT } : {}),

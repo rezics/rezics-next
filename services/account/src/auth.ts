@@ -31,6 +31,7 @@ export interface AccountConfig {
   requireEmailVerification?: boolean;
   /** Required by the HTTP process; protocol fixtures without enrollment may omit it. */
   turnstileSecretKey?: string;
+  turnstileMode?: 'local' | 'cloudflare';
   /** Embedded tests can substitute a local verifier; never configured by the HTTP process. */
   turnstileVerifyURL?: string;
   accessDeletionFence?: (accountSubject: string) => Promise<void>;
@@ -117,10 +118,7 @@ export function accountAuthOptions(config: AccountConfig) {
       },
     } },
     plugins: [
-      ...(config.turnstileSecretKey ? [captcha({ provider: 'cloudflare-turnstile',
-        secretKey: config.turnstileSecretKey, siteVerifyURLOverride: config.turnstileVerifyURL,
-        endpoints: ['/sign-up/email', '/request-password-reset', '/send-verification-email'],
-      })] : []),
+      ...((config.turnstileMode || config.turnstileSecretKey) ? [enrollmentChallenge(config)] : []),
       openAPI({ disableDefaultReference: true }),
       twoFactor({ issuer: 'REZICS', allowPasswordless: true,
         backupCodeOptions: { storeBackupCodes: 'encrypted' } }),
@@ -261,6 +259,26 @@ export function accountAuthOptions(config: AccountConfig) {
       }),
     ],
   };
+}
+
+/** The local profile is an explicit offline development verifier, never a
+ * fallback from a failed provider. OAuth and session endpoints are unaffected. */
+function enrollmentChallenge(config: AccountConfig) {
+  const endpoints = ['/sign-up/email', '/request-password-reset', '/send-verification-email'];
+  const hostname = new URL(config.baseURL).hostname;
+  const plugin = captcha({ provider: 'cloudflare-turnstile', secretKey: config.turnstileSecretKey ?? '',
+    siteVerifyURLOverride: config.turnstileVerifyURL, endpoints,
+    expectedAction: 'account-enrollment', allowedHostnames: [hostname] });
+  if (config.turnstileMode !== 'local') return plugin;
+  return { ...plugin, onRequest: async (request: Request) => {
+    const path = new URL(request.url).pathname.replace(/^\/api\/auth/, '').replace(/\/+$/, '');
+    if (!endpoints.includes(path)) return;
+    const token = request.headers.get('x-captcha-response');
+    if (!token) return { response: Response.json({ code: 'MISSING_CAPTCHA_RESPONSE' }, { status: 400 }) };
+    if (token !== `local:${hostname}:account-enrollment`) {
+      return { response: Response.json({ code: 'CAPTCHA_VERIFICATION_FAILED' }, { status: 403 }) };
+    }
+  } };
 }
 
 /** Every issued access token names the App installation that admitted it. An

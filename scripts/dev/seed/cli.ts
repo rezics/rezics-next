@@ -92,7 +92,7 @@ function configuration(): { endpoints: SeedEndpoints; fixture: SeedState['fixtur
     && env.ACCESS_DATABASE_URL && env.ACCOUNT_SECRET ? privateConfig.operator : null,
     accountDatabaseUrl: env.ACCOUNT_DATABASE_URL ?? null,
     accessDatabaseUrl: env.ACCESS_DATABASE_URL ?? null, accountSecret: env.ACCOUNT_SECRET ?? null },
-  endpoints: { account, main,
+  endpoints: { account, main, enrollmentToken: env.ACCOUNT_ENROLLMENT_TOKEN,
     mailpit: `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}`,
     clientId: publicConfig.clientId, redirectUri: publicConfig.redirectUris[0],
     resource: publicConfig.resource, scope: publicConfig.scope } };

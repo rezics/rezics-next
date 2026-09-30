@@ -2,6 +2,7 @@ import { SESSION_KEY_COOKIE } from '../auth/cookies.ts';
 import { CONTENT_LANGUAGES_COOKIE, displayLanguageHeaders } from '../../i18n/display-languages.ts';
 import { BFF_PREFIX } from './browser.ts';
 import { sameOriginWrite } from './origins.ts';
+import { isIP } from 'node:net';
 
 // The BFF forwards `/api/main/<Main path>` to Main with the session's bearer
 // token. It keeps Main's path shape, so the browser Eden client uses the same
@@ -33,13 +34,18 @@ export const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-language',
   'content-disposition', 'content-range', 'accept-ranges', 'etag', 'last-modified',
   'location', 'retry-after', 'www-authenticate'] as const;
 
-export function mainRequestHeaders(incoming: Headers, accessToken: string | undefined): Headers {
+export function mainRequestHeaders(incoming: Headers, accessToken: string | undefined,
+  clientIpHeader = 'cf-connecting-ip'): Headers {
   const headers = new Headers();
   for (const name of FORWARDED_REQUEST_HEADERS) {
     const value = incoming.get(name);
     if (value) headers.set(name, value);
   }
   if (accessToken) headers.set('authorization', `Bearer ${accessToken}`);
+  // The ingress must replace this source header. Never forward a caller's
+  // x-rezics-client-ip/XFF; Main additionally checks the proxy's peer address.
+  const clientIp = incoming.get(clientIpHeader)?.trim();
+  if (clientIp && isIP(clientIp)) headers.set('x-rezics-client-ip', clientIp);
   return headers;
 }
 
@@ -139,7 +145,7 @@ async function applyDisplayLanguages(request: Request, headers: Headers, input: 
 
 /** Forwards one browser request to Main and streams both bodies. */
 export async function forwardToMain(request: Request, segments: readonly string[], input: {
-  mainOrigin: string; accessToken: string | undefined; fetch?: typeof fetch;
+  mainOrigin: string; accessToken: string | undefined; fetch?: typeof fetch; clientIpHeader?: string;
 }): Promise<Response> {
   const target = mainTarget(segments, new URL(request.url).search, input.mainOrigin);
   if (!target) return Response.json({ error: 'unknown API path' }, { status: 404 });
@@ -153,7 +159,7 @@ export async function forwardToMain(request: Request, segments: readonly string[
   const writesLanguages = request.method === 'PUT'
     && (segments[2] === 'person-preferences' || segments[2] === 'feed-preferences');
   const fetchImpl = input.fetch ?? fetch;
-  const headers = mainRequestHeaders(request.headers, input.accessToken);
+  const headers = mainRequestHeaders(request.headers, input.accessToken, input.clientIpHeader);
   await applyDisplayLanguages(request, headers, { ...input, fetch: fetchImpl, segments, writing: writesLanguages });
   let response: Response;
   try {

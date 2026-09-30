@@ -19,7 +19,7 @@ export interface RateLimitOptions {
 
 export const RATE_LIMIT_COST_V1 = {
   principalRows: 1, representations: 64, roleRowsPerRepresentation: 64,
-  classificationQueries: 66, counterQueries: 2, expiryRows: 64,
+  classificationQueries: 66, counterQueries: 1,
 } as const;
 
 /** A proxy must replace this header and be explicitly trusted by peer address.
@@ -35,7 +35,8 @@ export function anonymousIdentity(request: Request, peer: string | undefined, op
 
 /** Cost: one indexed principal lookup, <=65 represented Agents and <=65
  * role candidates per Agent; overflow is unavailable, never a trust upgrade.
- * Consume uses one atomic PK upsert and one <=64-row expiry sweep. */
+ * Classification is cached for the verified token's lifetime by the hook.
+ * Consume uses one atomic PK upsert; an expired key resets lazily. */
 export class PostgresRateLimitStore implements RateLimitStore {
   constructor(private readonly pool: Pool, private readonly options: RateLimitOptions) {
     if (options.secret.length < 32) throw new Error('Rate limit HMAC secret must contain at least 32 characters');
@@ -55,15 +56,17 @@ export class PostgresRateLimitStore implements RateLimitStore {
     const agents = (await this.pool.query<{ subject_id: string; action: string }>(`SELECT DISTINCT r.subject_id, r.action
       FROM access.representation r JOIN access.authority_subject s ON s.id = r.subject_id AND s.active
       WHERE r.principal_id = $1 AND r.active AND r.valid_until > now()
-        AND r.action IN ('work.create', 'governance.moderate') LIMIT $2`, [row.id, RATE_LIMIT_COST_V1.representations + 1])).rows;
+        AND r.action IN ('work.create', 'work.edit', 'governance.moderate') LIMIT $2`, [row.id, RATE_LIMIT_COST_V1.representations + 1])).rows;
     if (agents.length > RATE_LIMIT_COST_V1.representations) throw new Error('Rate limit representation budget exceeded');
     let trusted = false;
     for (const agent of agents) {
-      const roles = (await this.pool.query<{ trusted: boolean }>(`SELECT 'work.create' = ANY(v.permissions) AS trusted
+      const roles = (await this.pool.query<{ trusted: boolean }>(`SELECT $2 = ANY(v.permissions) AS trusted
         FROM access.role_binding b JOIN access.role_revision v ON v.family_id = b.family_id AND v.revision = b.role_revision
-        JOIN access.scope_gate g ON g.id = 'work:create:root' AND g.open
+        JOIN access.role_family f ON f.id = b.family_id
+        JOIN access.scope_gate g ON g.id = f.scope_id AND g.open AND g.dispatch_open
         LEFT JOIN access.membership m ON m.id = b.membership_id
-        WHERE b.recipient_subject = $1 AND $2 = 'work.create' AND b.active AND b.valid_until > now()
+        WHERE b.recipient_subject = $1 AND $2 IN ('work.create', 'work.edit') AND b.active AND b.valid_until > now()
+          AND f.scope_id = 'work:create:root'
           AND (b.membership_id IS NULL OR (m.state = 'joined' AND m.member_subject = b.recipient_subject
             AND m.generation = b.membership_generation))
         UNION ALL
@@ -90,9 +93,6 @@ export class PostgresRateLimitStore implements RateLimitStore {
         expires_at = CASE WHEN r.expires_at <= now() THEN now() + $3 * interval '1 second' ELSE r.expires_at END
       RETURNING count <= $4 AS allowed, GREATEST(1, ceil(extract(epoch FROM expires_at - now())))::int AS retry_after`,
     [key, family, budget.seconds, budget.maximum]);
-    await this.pool.query(`DELETE FROM access.rate_limit_v1 WHERE (key, family) IN
-      (SELECT key, family FROM access.rate_limit_v1 WHERE expires_at <= now() ORDER BY expires_at LIMIT $1 FOR UPDATE SKIP LOCKED)`,
-    [RATE_LIMIT_COST_V1.expiryRows]);
     const row = result.rows[0];
     if (!row) throw new Error('Rate limit counter unavailable');
     return { allowed: row.allowed, retryAfter: row.retry_after };
