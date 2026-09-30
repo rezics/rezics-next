@@ -9,7 +9,7 @@ import { ModelGenerationChanged } from './generation-guard.ts';
 import { canonicalRelation, changeRelationOccurrence, readExactDefinition, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
   relationChangeDigest, type RelationChangeResult, type RelationInput } from '../relation/change.ts';
 import { changeSemanticComponent, checkedComponentState, readSemanticChangeTerminal, referencedResources,
-  semanticChangeDigest, type SemanticChangeResult } from './change.ts';
+  semanticChangeDigest, semanticPredecessor, type SemanticChangeResult } from './change.ts';
 import { cancelSemanticAdmission, checkedSemanticTerminal, familyReceiptIri, SemanticChangeRejected,
   SemanticTargetUnavailable, StaleSemanticHead, type SemanticAdmission, type SemanticTerminal } from './command.ts';
 
@@ -56,7 +56,7 @@ interface AdmittedCall<T> {
   references: (principal: VerifiedPrincipal) => Promise<string[]>;
   dispatch: (admission: SemanticAdmission) => Promise<T>;
   readTerminal: (admissionId: string) => Promise<SemanticTerminal | null>;
-  result: (terminal: SemanticTerminal, dispatched?: T) => T;
+  result: (terminal: SemanticTerminal, dispatched?: T) => T | Promise<T>;
 }
 
 /**
@@ -96,7 +96,7 @@ export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
     if (!terminal) throw new PendingSemanticChange(registered.id, phase);
     await call.access.recordGraphOutcome(registered.id, terminal);
     checkedSemanticTerminal(terminal, registered, call.digest);
-    return call.result(terminal, dispatched);
+    return await call.result(terminal, dispatched);
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof StaleSemanticHead
       || error instanceof SemanticChangeRejected || error instanceof CommandRejected
@@ -122,12 +122,12 @@ export async function admittedSemanticChange(env: WorkActivationEnvironment,
   return admitted({ env, account, access, request, actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, action: 'semantic.change', family: 'semantic-change',
     scope: input.target ? `semantic:edit:${input.target}` : 'semantic:create:root', digest,
-    references: async () => referencedResources(state),
+    references: async () => [...new Set([...(input.target ? [input.target] : []), ...referencedResources(state)])],
     dispatch: admission => changeSemanticComponent(env, { admission, ...(input.target ? { target: input.target } : {}),
       expectedHead: input.expectedHead, state }),
     readTerminal: id => readSemanticChangeTerminal(env, id),
-    result: (terminal, dispatched) => ({ component: terminal.component!, revision: terminal.revision!,
-      predecessor: terminal.expectedHead ?? null, receipt: terminal.receipt, dataEpoch: terminal.dataEpoch,
+    result: async (terminal, dispatched) => ({ component: terminal.component!, revision: terminal.revision!,
+      predecessor: dispatched ? dispatched.predecessor : await semanticPredecessor(env, terminal), receipt: terminal.receipt, dataEpoch: terminal.dataEpoch,
       sequence: terminal.sequence, replayed: dispatched?.replayed ?? true }) });
 }
 

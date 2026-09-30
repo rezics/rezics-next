@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { GRAPHS, ID, IdempotencyConflict, PendingActivation, RV, hash, iri, lit,
+import { GRAPHS, ID, IdempotencyConflict, PendingActivation, RV, WORK_SEMANTIC_TYPES, hash, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
 import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGeneration,
@@ -49,6 +49,7 @@ export interface SemanticChangeIntent {
   admission: SemanticAdmission;
   /** Absent for a create; the owner allocates the identity. */
   target?: string;
+  /** The semantic head, or the existing Work head for its first description. */
   expectedHead: string | null;
   state: ComponentInput;
 }
@@ -68,7 +69,9 @@ const fail = (code: SemanticChangeRejected['code'], message: string): never => {
 };
 
 function checkedTypes(types: readonly unknown[]): string[] {
-  if (!Array.isArray(types) || types.length < 1 || types.length > SEMANTIC_CHANGE_LIMITS.typesPerResource
+  // The component already supplies rdfs:Resource. An attached description needs
+  // no invented descriptive type in addition to its owner's existing types.
+  if (!Array.isArray(types) || types.length > SEMANTIC_CHANGE_LIMITS.typesPerResource
     || new Set(types).size !== types.length) fail('invalid', 'semantic type set is invalid');
   for (const type of types) {
     if (typeof type !== 'string') fail('invalid', 'semantic type is invalid');
@@ -229,7 +232,10 @@ export async function readCurrentComponent(env: WorkActivationEnvironment, targe
   // Open resource: predicates other components own on this subject are preserved and ignored.
   const owned = new Set([...expected].map(triple => triple.slice(0, triple.indexOf('> ') + 1)));
   const projection = await env.fuseki.query(`SELECT ?p ?o WHERE { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(target)} ?p ?o . FILTER(?p IN (${[...owned].join(', ')})) } } LIMIT ${expected.size + 1}`);
+    ${iri(target)} ?p ?o . FILTER(?p IN (${[...owned].join(', ')}))
+    FILTER(?p != <${TYPE}> || ?o IN (${state.component === 'resource'
+      ? [RDFS_RESOURCE, ...state.types].map(type => `<${type}>`).join(', ')
+      : `<${RV}SemanticDefinition>`})) } } LIMIT ${expected.size + 1}`);
   const actual = new Set((projection.results?.bindings ?? [])
     .map(row => `<${row.p!.value}> ${term(row.o!)}`));
   if (actual.size !== expected.size || [...expected].some(item => !actual.has(item))) {
@@ -261,8 +267,18 @@ Promise<SemanticTerminal | null> {
   return readSemanticTerminal(env, familyReceiptIri(admissionId, SEMANTIC_CHANGE_FAMILY));
 }
 
-function resultOf(terminal: SemanticTerminal, replayed: boolean): SemanticChangeResult {
-  return { component: terminal.component!, revision: terminal.revision!, predecessor: terminal.expectedHead ?? null,
+/** The structural attachment guard is not a semantic predecessor. Read the
+ * immutable anchor so first attachment and receipt replay report the same lineage. */
+export async function semanticPredecessor(env: WorkActivationEnvironment, terminal: SemanticTerminal): Promise<string | null> {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?predecessor WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(terminal.revision!)} rv:predecessor ?predecessor }
+  } LIMIT 2`)).results?.bindings ?? [];
+  if (rows.length > 1) throw new RevisionCorrupt('semantic predecessor is ambiguous');
+  return rows[0]?.predecessor?.value ?? null;
+}
+
+async function resultOf(env: WorkActivationEnvironment, terminal: SemanticTerminal, replayed: boolean): Promise<SemanticChangeResult> {
+  return { component: terminal.component!, revision: terminal.revision!, predecessor: await semanticPredecessor(env, terminal),
     receipt: terminal.receipt, dataEpoch: terminal.dataEpoch, sequence: terminal.sequence, replayed };
 }
 
@@ -277,14 +293,48 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
   const digest = semanticChangeDigest(intent.target, intent.expectedHead, state);
   const receipt = familyReceiptIri(intent.admission.id, SEMANTIC_CHANGE_FAMILY);
   const existing = await assertSemanticDispatchable(env, intent.admission, receipt, digest);
-  if (existing) return checkedResult(existing, intent, true);
+  if (existing) return checkedResult(env, existing, intent, true);
   const generation = await ensureModelGeneration(env);
   const target = intent.target ?? `${ID}${Bun.randomUUIDv7()}`;
+  if (intent.target && state.component === 'resource'
+    && state.types.some(type => WORK_SEMANTIC_TYPES.some(ownedType => ownedType === type))) {
+    const isWork = await env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(target)} a <https://schema.org/CreativeWork> } }`);
+    if (isWork.boolean) fail('reserved-owner', 'Work kinds belong to the Work type command');
+  }
   const current = intent.target ? await readCurrentComponent(env, target, state.component) : null;
-  if (intent.target && !current) throw new SemanticTargetUnavailable('semantic component is unavailable');
+  // A first description attaches to the existing Work under its structural head.
+  // Later edits compare only the independently owned semantic head.
+  const attachment = intent.target && !current && state.component === 'resource'
+    ? await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(target)} a schema:CreativeWork ; rv:head ?head .
+        FILTER NOT EXISTS { ${iri(target)} rv:semanticHead ?semanticHead }
+        FILTER NOT EXISTS { ${iri(target)} rv:protectionHead ?protection }
+      } FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:ErasedRevision } } } LIMIT 2`)
+    : null;
+  const workHead = attachment?.results?.bindings;
+  if (intent.target && !current && (workHead?.length !== 1 || !workHead[0]?.head)) {
+    // Another first attachment may commit between the component and Work reads.
+    // Resolve that race as stale rather than reporting the existing Work missing.
+    const raced = state.component === 'resource' ? await readCurrentComponent(env, target, state.component) : null;
+    if (raced && raced.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, target, state);
+    throw new SemanticTargetUnavailable('semantic component is unavailable');
+  }
+  if (workHead?.[0]?.head?.value !== undefined && workHead[0].head.value !== intent.expectedHead) {
+    return sealStale(env, intent, receipt, digest, target, state);
+  }
   if (current && current.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, target, state);
   if (current?.state.component === 'definition' && state.component === 'definition'
     && current.state.kind !== state.kind) fail('invalid', 'a definition keeps its kind');
+  const addedTypes = state.component === 'resource' ? state.types.filter(type =>
+    current?.state.component !== 'resource' || !current.state.types.includes(type)) : [];
+  if (intent.target && addedTypes.length) {
+    const overlap = await env.fuseki.query(`SELECT ?type WHERE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(target)} a ?type . VALUES ?type { ${addedTypes.map(type => `<${type}>`).join(' ')} }
+    } } LIMIT 1`);
+    if (overlap.results?.bindings.length) fail('reserved-owner', 'semantic type already belongs to another component');
+  }
   const prior = current?.state.component === 'resource' ? current.state.properties : [];
   const { stored, rdf } = state.component === 'resource' ? propertyRdf(state.properties, prior)
     : { stored: [], rdf: [] };
@@ -322,23 +372,30 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
         ${rdf.flatMap(item => item.node ? item.node.triples.map(triple => `${triple} .`) : []).join('\n')} }`,
     where: `${modelGenerationHeadGuard(generation)}
       ${current ? `GRAPH ${iri(GRAPHS.current)} { ${old.map(triple => `${iri(target)} ${triple} .`).join('\n')} }`
-        : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(target)} ?anyP ?anyO } }`}
+        : workHead ? `GRAPH ${iri(GRAPHS.current)} {
+            ${iri(target)} a <https://schema.org/CreativeWork> ; rv:head ${iri(intent.expectedHead!)} . }
+            FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(target)} rv:semanticHead ?otherHead } }
+            FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(target)} rv:protectionHead ?protection } }
+            FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(intent.expectedHead!)} a rv:ErasedRevision } }`
+          : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(target)} ?anyP ?anyO } }`}
       ${references.map(ref => `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a ?refType } }`).join('\n')}
+      ${intent.target && addedTypes.length ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(target)} a ?ownedType . VALUES ?ownedType { ${addedTypes.map(type => `<${type}>`).join(' ')} } } }` : ''}
       ${state.component === 'definition' && state.successor ? `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(state.successor)} a rv:SemanticDefinition } }` : ''}
       ${nodes.map(node => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(node.iri)} ?nodeP ?nodeO } }`).join('\n')}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?revP ?revO } }`,
     receiptFields: `rv:operation ${iri(operation)} ; rv:component ${iri(target)} ; rv:revision ${iri(revision)} ;
-      ${current ? `rv:expectedHead ${iri(current.head)} ;` : ''}`,
+      ${intent.expectedHead ? `rv:expectedHead ${iri(intent.expectedHead)} ;` : ''}`,
   });
   const committed = await readSemanticTerminal(env, receipt);
-  if (committed) return checkedResult(committed, intent, committed.revision !== revision);
+  if (committed) return checkedResult(env, committed, intent, committed.revision !== revision);
   const changedGeneration = await sealSemanticRejection(env, receipt, digest, intent.admission, 'generation-changed',
     `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
       ${iri(MODEL_COMPONENT)} rv:generationHead ${iri(generation)} } }`);
   if (changedGeneration) {
     const terminal = checkedSemanticTerminal(changedGeneration, intent.admission, digest);
-    return checkedResult(terminal, intent, terminal.revision !== revision);
+    return checkedResult(env, terminal, intent, terminal.revision !== revision);
   }
   if (intent.target) {
     const now = await readCurrentComponent(env, target, state.component).catch(() => null);
@@ -348,7 +405,7 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     const sealed = await sealSemanticRejection(env, receipt, digest, intent.admission, 'unavailable-reference',
       `FILTER (${references.map(ref => `NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a ?t } }`)
         .join(' || ')})`);
-    if (sealed) return checkedResult(sealed, intent, false);
+    if (sealed) return checkedResult(env, sealed, intent, false);
   }
   throw new PendingActivation('semantic change guard did not match');
 }
@@ -363,19 +420,23 @@ async function sealStale(env: WorkActivationEnvironment, intent: SemanticChangeI
   digest: string, target: string, state: ComponentInput): Promise<SemanticChangeResult> {
   const head = state.component === 'resource' ? 'semanticHead' : 'definitionHead';
   const terminal = await sealSemanticRejection(env, receipt, digest, intent.admission, 'stale-head',
-    `GRAPH ${iri(GRAPHS.current)} { ${iri(target)} rv:${head} ?currentHead }
+    `{ GRAPH ${iri(GRAPHS.current)} { ${iri(target)} rv:${head} ?currentHead } }
+     ${state.component === 'resource' ? `UNION { GRAPH ${iri(GRAPHS.current)} {
+       ${iri(target)} a <https://schema.org/CreativeWork> ; rv:head ?currentHead .
+       FILTER NOT EXISTS { ${iri(target)} rv:semanticHead ?semanticHead } } }` : ''}
      FILTER(?currentHead != ${iri(intent.expectedHead!)})`);
   if (!terminal) throw new PendingActivation('stale semantic outcome is not sealed');
-  return checkedResult(terminal, intent, false);
+  return checkedResult(env, terminal, intent, false);
 }
 
-function checkedResult(terminal: SemanticTerminal, intent: SemanticChangeIntent, replayed: boolean): SemanticChangeResult {
+async function checkedResult(env: WorkActivationEnvironment, terminal: SemanticTerminal, intent: SemanticChangeIntent,
+  replayed: boolean): Promise<SemanticChangeResult> {
   const checked = checkedSemanticTerminal(terminal, intent.admission, intent.admission.requestDigest);
   if ((intent.target !== undefined && checked.component !== intent.target)
     || (checked.expectedHead ?? null) !== intent.expectedHead) {
     throw new IdempotencyConflict('semantic receipt targets another intent');
   }
-  return resultOf(checked, replayed);
+  return resultOf(env, checked, replayed);
 }
 
 export { StaleSemanticHead };

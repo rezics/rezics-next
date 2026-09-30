@@ -1,4 +1,5 @@
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia';
+import { entityPageRoutes } from './routes/entity-pages.ts';
 import type { FusekiClient } from './infrastructure/fuseki.ts';
 import { accessAuthorityRoutes } from './routes/access-authority.ts';
 import { agentRoutes } from './routes/agents.ts';
@@ -159,6 +160,12 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(managedRealmRoutes(work))
     .use(studioRoutes(work))
     .use(realmAdminRoutes(work));
+    .use(realmAdminRoutes(work))
+    .use(memberReplyRoutes(work));
+    .use(memberReplyRoutes(work))
+    .use(workMaintainerRoutes(work))
+    .use(entityPageRoutes(work))
+    .use(lexiconRoutes(fuseki, work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

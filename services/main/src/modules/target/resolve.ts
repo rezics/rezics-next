@@ -45,7 +45,7 @@ const revisionPatterns = {
 const requiresWork = { work: true, realization: true, release: true, occurrence: true,
   resource: false } satisfies Record<Base, boolean>;
 
-function readerFor(session: WorkReadSession): SummaryReader {
+export function targetSummaryReader(session: WorkReadSession): SummaryReader {
   const { deps, principal, options } = session;
   const actingSubject = options.actingSubject;
   const reader: SummaryReader = deps.governance?.store ? {
@@ -113,7 +113,7 @@ export async function resolveTargets(session: WorkReadSession, iris: readonly st
     }
   }
   const summaries = await readResourceSummaries(session.deps.environment, session.deps.media?.store,
-    readerFor(session), { resources, context: DEFAULT_MEDIA_CONTEXT,
+    targetSummaryReader(session), { resources, context: DEFAULT_MEDIA_CONTEXT,
       language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages });
   if (summaries.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
     throw new WorkReadMoved('Graph changed during target resolution');
