@@ -27,7 +27,7 @@ final class HeadCasPolicy {
 
     private record Key(Node subject, Node predicate) {}
     private record Transition(Key key, Node before, Node next, Node ownerType,
-                              List<Node> preserved, String language) {}
+                              List<Node> preserved, String language, Node work) {}
     record Snapshot(List<Transition> transitions, String error) {}
 
     static Snapshot capture(DatasetGraph data, CommandPolicy.Plan plan, String receipt) {
@@ -88,7 +88,8 @@ final class HeadCasPolicy {
             boolean context = data.contains(CURRENT, key.subject(), RDF.type.asNode(), CONTEXT);
             if (statement && context) return new Snapshot(List.of(), "head target has ambiguous owner profile");
             transitions.add(new Transition(key, before, nextValues.getFirst(),
-                statement ? STATEMENT : context ? CONTEXT : null, preserved, language));
+                statement ? STATEMENT : context ? CONTEXT : null, preserved, language,
+                one(data, CURRENT, key.subject(), rv("work"))));
         }
         if (transitions.size() > 2) return new Snapshot(List.of(), "one head transition required");
         Transition expected = transitions.isEmpty() ? null : transitions.getFirst();
@@ -169,6 +170,17 @@ final class HeadCasPolicy {
                         return "Statement head lacks a withdrawn source revision";
                     requiredScope = "statement:speak:" + speaker.getURI();
                 } else requiredScope = "context:change:" + subject.getURI();
+            } else if (transition.work() != null) {
+                // Work-owned Versioned components use the same registry and Access
+                // scope. Their identities and exact revisions remain their own.
+                Node work = transition.work();
+                if (!work.isURI() || !same(data, CURRENT, subject, "work", work)
+                    || !data.contains(CURRENT, work, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))
+                    || !same(data, RECEIPTS, own, "work", work)
+                    || !same(data, RECEIPTS, own, "component", subject)
+                    || !same(data, RECEIPTS, own, "revision", next))
+                    return "Work-owned component head differs from its receipt or owner";
+                requiredScope = "work:edit:" + work.getURI();
             } else {
                 if (before == null || !same(data, RECEIPTS, own, "work", subject)
                     || !same(data, RECEIPTS, own, "workRevision", next))

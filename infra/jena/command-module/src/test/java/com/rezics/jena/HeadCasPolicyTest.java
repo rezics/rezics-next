@@ -112,4 +112,44 @@ public class HeadCasPolicyTest {
         assertEquals("Main selection paired heads differ from their receipt",
             result(false, MAIN, PRIOR, true));
     }
+
+    private static String component(boolean wrongScope, boolean wrongRevision, boolean changedOwner) {
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(org.apache.jena.query.ReadWrite.WRITE);
+        try {
+            String work = "urn:test:work";
+            UpdateAction.parseExecute("PREFIX rv: <" + RV + "> INSERT DATA { GRAPH " + iri(CommandPolicy.CURRENT)
+                + " { " + iri(MAIN) + " rv:head " + iri(OLD_MAIN) + " ; rv:work " + iri(work)
+                + " . " + iri(work) + " a <https://schema.org/CreativeWork> } }", DatasetFactory.wrap(data));
+            String text = "PREFIX rv: <" + RV + "> DELETE { GRAPH " + iri(CommandPolicy.CURRENT)
+                + " { " + iri(MAIN) + " rv:head " + iri(OLD_MAIN) + " } } INSERT { GRAPH "
+                + iri(CommandPolicy.CURRENT) + " { " + iri(MAIN) + " rv:head " + iri(NEW_MAIN)
+                + " } GRAPH " + iri(CommandPolicy.REVISIONS) + " { " + iri(NEW_MAIN)
+                + " a rv:RevisionAnchor ; rv:component " + iri(MAIN) + " ; rv:predecessor " + iri(OLD_MAIN)
+                + " } GRAPH " + iri(CommandPolicy.RECEIPTS) + " { " + iri(RECEIPT)
+                + " rv:outcome rv:Succeeded ; rv:admissionId \"" + ADMISSION
+                + "\" ; rv:authorityEpoch \"0\" ; rv:admittedScope \"work:edit:" + (wrongScope ? MAIN : work)
+                + "\" ; rv:work " + iri(work) + " ; rv:component " + iri(MAIN)
+                + " ; rv:revision " + iri(wrongRevision ? OLD_MAIN : NEW_MAIN)
+                + " ; rv:expectedHead " + iri(OLD_MAIN) + " } } WHERE { GRAPH "
+                + iri(CommandPolicy.CURRENT) + " { " + iri(MAIN) + " rv:head " + iri(OLD_MAIN) + " } }";
+            CommandPolicy.Plan plan = CommandPolicy.parse(text, RECEIPT);
+            HeadCasPolicy.Snapshot before = HeadCasPolicy.capture(data, plan, RECEIPT);
+            UpdateAction.execute(plan.request(), DatasetFactory.wrap(data));
+            if (changedOwner) {
+                data.delete(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(MAIN),
+                    NodeFactory.createURI(RV + "work"), NodeFactory.createURI(work));
+                data.add(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(MAIN),
+                    NodeFactory.createURI(RV + "work"), NodeFactory.createURI("urn:test:other-work"));
+            }
+            return HeadCasPolicy.check(data, RECEIPT, before);
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void workOwnedComponentsKeepTheirIdentityScopeAndOwnerAcrossHeadCas() {
+        assertNull(component(false, false, false));
+        assertEquals("head transition Access scope differs from target", component(true, false, false));
+        assertEquals("Work-owned component head differs from its receipt or owner", component(false, true, false));
+        assertEquals("Work-owned component head differs from its receipt or owner", component(false, false, true));
+    }
 }
