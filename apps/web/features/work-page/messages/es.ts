@@ -12,7 +12,6 @@ export default {
   regionMissing: 'Este contenido no está disponible aquí o ya no existe.',
   regionDenied: 'Inicia sesión con una cuenta que tenga acceso a esta obra para ver esta parte.',
 
-  work: 'Obra', book: 'Libro', digitalDocument: 'Guía', recipe: 'Receta',
   restricted: 'Privada', restrictedHelp: 'Solo las personas con permiso pueden ver esta obra.',
   titleFallback: insert('Todavía no hay título en {{requested}}; se muestra en {{shown}}', { requested: String, shown: String }),
   mainVersion: 'Edición',
@@ -208,8 +207,6 @@ export default {
   textNotFoundBody: 'Esta obra no tiene texto publicado en este idioma o se lee por capítulos.',
   textUnavailableTitle: 'Ahora no se puede mostrar este texto',
   textFormat: 'Este texto usa un formato que el lector aún no puede mostrar.',
-  prompt: "Prompt",
-  skill: "Skill",
   recipeMethod: "Receta",
   viewRecipe: "Ver receta",
   recipeYield: "Rinde",

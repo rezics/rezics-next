@@ -12,7 +12,6 @@ export default {
   regionMissing: '여기에서 볼 수 없거나 더 이상 존재하지 않습니다.',
   regionDenied: '이 부분을 보려면 이 작품에 접근 권한이 있는 계정으로 로그인하세요.',
 
-  work: '작품', book: '책', digitalDocument: '가이드', recipe: '레시피',
   restricted: '비공개', restrictedHelp: '접근 권한을 받은 사람만 이 작품을 볼 수 있습니다.',
   titleFallback: insert('{{requested}} 제목이 아직 없어 {{shown}} 제목을 표시합니다', { requested: String, shown: String }),
   mainVersion: '판',
@@ -207,7 +206,7 @@ export default {
   textNotFoundTitle: '읽을 내용이 없습니다',
   textNotFoundBody: '이 작품은 이 언어로 텍스트가 공개되지 않았거나 챕터별로 읽는 작품입니다.',
   textUnavailableTitle: '지금은 이 텍스트를 표시할 수 없습니다', textFormat: '리더에서 아직 표시할 수 없는 형식의 텍스트입니다.',
-  prompt: '프롬프트', skill: '스킬', recipeMethod: '레시피', viewRecipe: '레시피 보기',
+  recipeMethod: '레시피', viewRecipe: '레시피 보기',
   recipeYield: '완성 분량', servings: '인분', totalTime: '전체 시간', activeTime: '실제 작업 시간',
   ingredients: '재료', method: '조리 방법', scaleRecipe: '분량 환산', scaling: '환산 중…',
   scaleFailed: '분량을 환산하지 못했습니다. 다시 시도해 주세요.',

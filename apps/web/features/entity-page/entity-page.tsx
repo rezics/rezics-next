@@ -17,10 +17,8 @@ import { type Copy, copyOf } from './messages.ts';
 import { readEntityProjection, sectionOf } from './read.ts';
 import { entityHref, type EntityCursors, parseEntityRef, standaloneHrefFor } from './route.ts';
 import { DiscussionSection, RatingsSection, RelationsSection, ReviewsSectionOf, StatementsSection } from './sections.tsx';
+import { drawnSections } from './views.tsx';
 import type { EntityProjection, EntitySection, HrefFor, SectionId } from './types.ts';
-
-/** The sections this page draws. Others the projection lists (contents, releases, a Work's recipe) belong to their own hosts. */
-export const drawnSections: readonly SectionId[] = ['statements', 'relations', 'ratings', 'reviews', 'discussion'];
 
 function Unavailable({ t, messages, frame }: { t: Copy; messages: WorkPageMessages; frame: boolean }) {
   const body = <EmptyState icon={TriangleAlertIcon} tone="destructive" role="alert" headingLevel={1}

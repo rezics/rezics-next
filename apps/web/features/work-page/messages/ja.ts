@@ -12,7 +12,6 @@ export default {
   regionMissing: 'ここでは表示できないか、すでに存在しない内容です。',
   regionDenied: 'この部分を表示するには、アクセス権のあるアカウントでログインしてください。',
 
-  work: '作品', book: '本', digitalDocument: 'ガイド', recipe: 'レシピ',
   restricted: '非公開', restrictedHelp: 'アクセスを許可された人だけがこの作品を表示できます。',
   titleFallback: insert('{{requested}}のタイトルはありません。{{shown}}で表示しています', { requested: String, shown: String }),
   mainVersion: '版',
@@ -206,7 +205,7 @@ export default {
   textNotFoundTitle: 'ここには読むものがありません',
   textNotFoundBody: 'この作品はこの言語ではまだ本文が公開されていないか、章ごとに読む形式です。',
   textUnavailableTitle: '現在、この本文を表示できません', textFormat: 'この本文の形式は、まだリーダーで表示できません。',
-  prompt: 'プロンプト', skill: 'スキル', recipeMethod: 'レシピ', viewRecipe: 'レシピを見る',
+  recipeMethod: 'レシピ', viewRecipe: 'レシピを見る',
   recipeYield: 'できあがり量', servings: '人分', totalTime: '合計時間', activeTime: '作業時間',
   ingredients: '材料', method: '作り方', scaleRecipe: '分量を換算', scaling: '換算中…',
   scaleFailed: '分量を換算できませんでした。もう一度お試しください。',

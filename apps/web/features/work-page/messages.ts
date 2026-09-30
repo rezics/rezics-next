@@ -19,7 +19,6 @@ const en = {
   regionMissing: 'This isn’t visible here, or it no longer exists.',
   regionDenied: 'Sign in with access to this Work to see this part.',
 
-  work: 'Work', book: 'Book', digitalDocument: 'Guide', recipe: 'Recipe', prompt: 'Prompt', skill: 'Skill',
   recipeMethod: 'Recipe', viewRecipe: 'View recipe', recipeYield: 'Yield', servings: 'Servings',
   totalTime: 'Total', activeTime: 'Active', ingredients: 'Ingredients', method: 'Method',
   scaleRecipe: 'Scale', scaling: 'Scaling…', scaleFailed: 'Quantities could not be scaled. Try again.',

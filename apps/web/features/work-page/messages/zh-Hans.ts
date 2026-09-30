@@ -12,7 +12,6 @@ export default {
   regionMissing: '这里无法查看此内容，或者它已不存在。',
   regionDenied: '请使用有权访问此作品的账户登录后查看此部分。',
 
-  work: '作品', book: '图书', digitalDocument: '指南', recipe: '食谱', prompt: '提示词', skill: '技能',
   recipeMethod: '食谱', viewRecipe: '查看食谱', recipeYield: '产量', servings: '份数',
   totalTime: '总用时', activeTime: '动手时间', ingredients: '食材', method: '做法',
   scaleRecipe: '换算', scaling: '正在换算…', scaleFailed: '用量换算失败，请重试。',

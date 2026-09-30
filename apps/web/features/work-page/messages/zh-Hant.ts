@@ -12,7 +12,6 @@ export default {
   regionMissing: '此處無法查看這項內容，或是它已不存在。',
   regionDenied: '請登入有權存取此作品的帳戶，以查看這個部分。',
 
-  work: '作品', book: '書籍', digitalDocument: '指南', recipe: '食譜',
   restricted: '私人', restrictedHelp: '只有獲准的人才能查看此作品。',
   titleFallback: insert('目前沒有{{requested}}標題，改以{{shown}}顯示', { requested: String, shown: String }),
   mainVersion: '版本',
@@ -206,7 +205,7 @@ export default {
   textNotFoundTitle: '這裡沒有可讀內容',
   textNotFoundBody: '這部作品尚未以此語言發布正文，或正文是按章節閱讀。',
   textUnavailableTitle: '目前無法顯示這篇正文', textFormat: '閱讀器尚無法顯示此正文使用的格式。',
-  prompt: '提示詞', skill: '技能', recipeMethod: '食譜', viewRecipe: '查看食譜',
+  recipeMethod: '食譜', viewRecipe: '查看食譜',
   recipeYield: '成品份量', servings: '份數', totalTime: '總時間', activeTime: '動手時間',
   ingredients: '食材', method: '做法', scaleRecipe: '換算份量', scaling: '正在換算…',
   scaleFailed: '無法換算用量，請再試一次。',
