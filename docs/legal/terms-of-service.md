@@ -58,7 +58,7 @@ Realm rules may add restrictions but cannot waive platform rules.
 
 REZICS supports multilingual content, catalogue information, personal libraries, creative work and communities. Features become available as they are released. A roadmap, visible Zone or product description does not promise that every related capability is available.
 
-Our initial public service is text-first. New image uploads and image imports remain disabled until the required media-safety clearance operates.
+Cover and image uploads are available from launch. Uploaded and imported images pass automated safety checks, likely explicit images are held for review, new accounts have upload limits, and we remove images on valid reports.
 
 [REZICS TO FILL: public feature-status page and actual launch configuration.]
 

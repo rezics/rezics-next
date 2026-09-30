@@ -64,13 +64,19 @@ We limit victim-identifying information and do not reveal a reporter’s identit
 
 **5. Media admission**
 
-New images and image imports remain disabled until the approved upload-clearance process is operating. Initial covers are typographic.
+Image and cover uploads are available at launch. Uploads, imports, replacements, avatars and covers pass the same layered controls:
 
-Before enabling images, REZICS’s process requires private quarantine, known-CSAM hash matching, explicit-image screening and appropriate review. Imports, replacements, avatars and covers use the same boundary. A scanner outage must not silently publish an uncleared image.
+- Cloudflare CSAM scanning checks images as they are served and blocks matches to known child sexual abuse material.
+- REZICS applies for Microsoft PhotoDNA and adds upload matching once approval and a working integration exist. PhotoDNA is not a launch prerequisite.
+- A locally run open-source classifier screens new images and holds those likely to be sexually explicit for human review before they are shown.
+- New accounts have upload rate limits.
+- Anyone can report an image, with or without an account.
 
-The planned matching service is Microsoft PhotoDNA, subject to approval and working integration. Cloudflare CSAM scanning is secondary protection, not a substitute for upload clearance.
+During a scanner or classifier outage, new uploads are held for review rather than published unscreened. Cloudflare scanning acts when images are served; it does not screen an upload before it is stored.
 
-[REZICS TO FILL: PhotoDNA approval and operational status, actual screening tools, Cloudflare configuration and supported media formats.]
+Imported covers display with attribution to their source and are removed on a valid notice. Non-consensual intimate imagery is removed within 48 hours of a valid request under the [NCII Takedown Policy](ncii-takedown-policy.md). Copyright notices, including notices about covers, go to our designated agent under the [Copyright and DMCA Policy](copyright-and-dmca-policy.md).
+
+[REZICS TO FILL: PhotoDNA application and approval status, the classifier and threshold in use, new-account upload limits, Cloudflare configuration and supported media formats.]
 
 Hash matching detects known material; it cannot prove that an unmatched image is lawful or consensual. Microsoft and Cloudflare describe these services’ scope and limitations in their [PhotoDNA FAQ](https://www.microsoft.com/en-us/photodna/faq) and [CSAM scanning documentation](https://developers.cloudflare.com/cache/reference/csam-scanning/).
 

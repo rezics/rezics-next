@@ -88,7 +88,7 @@ Birth information is private. We provide an appropriate correction route without
 
 **7. Availability and review**
 
-The initial service is text-first, with typographic covers. New images and image imports remain off until media clearance is operational.
+Image and cover uploads are available at launch under the layered media controls in the [Child Safety Policy](child-safety-policy.md), including screening that holds likely sexually explicit images for review. Imported covers show their source and are removed on a valid notice. A Work without a cover shows a typographic cover.
 
 [REZICS TO FILL: actual enabled rating categories by market, effective dates and feature restrictions. Eligibility in this policy must not be presented as current feature availability.]
 

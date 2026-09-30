@@ -50,15 +50,17 @@ The decisions and primary evidence used by these drafts now have lasting owners:
 [distribution](../contracts/distribution.md#creator-distribution) and
 [recognition and value](../product/markets-and-growth.md#recognition-points-and-credit).
 
-Decision 2, maintainer, 2026-09-29: the zero-budget risk acceptance keeps the EU
-reachable while representatives wait for revenue and defers paid counsel until
-affordable, potentially around one million users or investment. The urgent-harm
-processes operate from day one; TAKE IT DOWN handling is included. Earlier
-research advice to defer EEA access was not selected. This is an internal risk
-decision, not a legal exemption, waiver by users or assurance that obligations
-begin at that size. The public policies must not suggest otherwise. The safety
-owner records the reason and launch controls; the references below explain why
-legal applicability still needs review.
+Decision 2, maintainer, 2026-09-29, revised 2026-09-30: the zero-budget risk
+acceptance keeps the EU reachable while representatives wait for revenue and
+defers paid counsel until affordable. The earlier "roughly one million users or
+investment" threshold is withdrawn: REZICS meets the duties that apply from its
+first user and keeps closed any feature whose obligations it cannot meet at zero
+cost. The urgent-harm processes operate from day one; TAKE IT DOWN handling is
+included. Earlier research advice to defer EEA access was not selected. This is
+an internal risk decision, not a legal exemption, waiver by users or assurance
+that obligations begin at some size. The public policies must not suggest
+otherwise. The safety owner records the reason and launch controls; the
+references below explain why legal applicability still needs review.
 
 **3. Policy sources**
 
@@ -107,7 +109,7 @@ The drafts do not carry over GitHub’s broad AI-training licence, Microsoft-aff
 
 They do not carry over Automattic’s advertising programmes, extensive product portfolio, asserted international arrangements or retention periods.
 
-They replace those provisions with REZICS’s actual direction: Account and Agent separation, Realm authority, private reading records, permission-backed translations, independent adult-content gates, no explicit images, a text-first launch and limited creator distribution.
+They replace those provisions with REZICS’s actual direction: Account and Agent separation, Realm authority, private reading records, permission-backed translations, independent adult-content gates, no explicit images, image and cover uploads at launch under free layered controls (Cloudflare CSAM scanning, PhotoDNA once approved, a local explicit-image classifier, new-account upload limits, reporting, 48-hour NCII removal and a DMCA agent) and limited creator distribution.
 
 **6. Legal and operational references**
 

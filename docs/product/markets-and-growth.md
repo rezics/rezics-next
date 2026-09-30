@@ -1,11 +1,16 @@
 # Markets and growth
 
-## Beat the weakest incumbent with cost
+## Strong demand, weak incumbent
 
-Decision 36, maintainer, 2026-09-29. In each niche and language market, first
-outperform the weakest incumbent at the complete recurring task. Open dumps,
-the vertical engine, agents and community tools make a small market affordable;
-matching every feature of its strongest incumbent would defeat that advantage.
+Decision 36, maintainer, 2026-09-29, refined 2026-09-30. In each niche and
+language market, first outperform the weakest incumbent at the complete
+recurring task. Open dumps, the vertical engine, agents and community tools make
+a small market affordable; matching every feature of its strongest incumbent
+would defeat that advantage. A weak incumbent can also mean weak demand, so
+choose niches where people already spend effort and complain: fan wikis leaving
+ad-heavy hosts, the [TV Time shutdown](https://techcrunch.com/2026/07/02/popular-tv-tracking-app-tv-time-is-shutting-down-as-company-focuses-on-ai/)
+that deleted every account after 15 July 2026, trackers split across five apps.
+Each launch must also add connections to the [one graph](goal.md#three-values-one-bet).
 This is a strategy hypothesis, not measured superiority or proven demand.
 
 Start with multilingual light-novel readers and curators, then small creator-led
@@ -13,8 +18,9 @@ serial-fiction communities and suitable VN creators. Edition-aware migration,
 reading continuity, evidenced availability, spoiler-aware discussion and faithful
 export offer value before friends arrive. Recruit connected curator groups with
 named stewards and responders. A creator brings both legitimate source material
-and a recurring release calendar. Broader wiki migrations wait for proven
-preservation.
+and a recurring release calendar. The franchise wiki Zone built with holders'
+agents is the flagship of the first launch; wholesale migration of existing wiki
+hosts waits for proven preservation.
 
 The initial channel hypotheses are English/Traditional Chinese reader clusters
 in the US, Taiwan and Singapore with Japanese catalogue stewards; creator-led
@@ -27,11 +33,14 @@ show how invitations can carry social context;
 [StoryGraph's founder account](https://buttondown.com/nodunayo/archive/55-the-storygraph-explodes/)
 shows both migration demand and import overload. Neither proves REZICS retention.
 
-## First verticals
+## Launch sequence over one graph
 
 Settled research adoption, product manager under maintainer delegation,
-2026-09-29. Open light novels and visual novels as two views over the same
-catalogue/library, after the shared engine and complete journeys qualify.
+2026-09-29; revised 2026-09-30. Rankings order recruitment; they never define
+product boundaries, and every launch reuses the same identities and
+capabilities. Open light novels and visual novels as two views over the same
+catalogue and library, with their franchise wikis, after the shared engine and
+complete journeys qualify.
 Then consider science-fiction/fantasy bibliography and interactive fiction.
 A narrowly curated skills/MCP workflow pilot is fifth and conditional on
 maintainers committing to updates; general AI-directory acquisition stays deferred.
@@ -57,6 +66,71 @@ so European-language experiments retain the US/Asia-first marketing constraint.
 Require repeat use, accurate exports, non-UI languages and complete traversal
 against the cohort's actual tools before promotion. Do not open five campaigns
 merely because five manifests are possible.
+
+## Cross-domain promises
+
+Product manager, 2026-09-30, from R42. These are what one graph gives that a
+specialist cannot, stated as user benefits; each needs its own evidence before
+it is advertised:
+
+1. **Follow the whole story** across novel, manga, anime and game, with reading
+   and viewing orders and availability.
+2. **One library that knows what comes next**, across reading, watching and
+   playing, keeping each medium's own progress units, editions and languages.
+3. **Lists that become plans**: mixed-type lists with notes and order, reusable
+   as calendars or maps.
+4. **Follow a person across their work**: books, games, credits and
+   contributions under one recognizable identity.
+5. **Take your interests into the world**: events and places linked to the
+   Works you follow.
+
+## Places, events and opportunities
+
+Product manager, 2026-09-30, from R46. Geography and time are shared
+capabilities, not a map product. Answer engines already serve generic local and
+job searches; REZICS serves places, events and openings that matter because they
+link to Works, creators and organizations in the graph. The order:
+
+1. **Work-linked events**: conventions, signings, demos and release events from
+   authorized organizers, with external ticketing.
+2. **Public pilgrimage places**: progress-aware and spoiler-safe, with evidence;
+   never private homes, check-ins or location trails.
+3. **Specialist bookstores**: operator-confirmed shops; edition availability only
+   from dated partner observations, otherwise shown as unknown.
+4. **Studio and AI-lab jobs**, later: verified employer listings from authorized
+   feeds, applied for on the employer's site.
+
+Not at zero budget: a general map, restaurant or review marketplace, job-seeker
+profiles and recruitment, native reservations or ticket settlement. Each pilot
+names a source owner and a backup and must stay within two founder-hours of
+routine maintenance a week.
+
+## Revenue order
+
+Product manager, 2026-09-30, from R45. Distribution of books and games stays
+central to the product, but it finances slowly: after tax, processing and the
+creator's 90%, a $10 sale leaves REZICS about $0.91 before support. The order by
+fit and timing:
+
+1. Managed community sites and creator operations (Zones, imports, release
+   administration), which can earn before commerce qualifies.
+2. Contracted book and game [distribution](../contracts/distribution.md#creator-distribution)
+   after retained demand, rights and payment approval.
+3. Member subscriptions for enhancements, after repeat use; basic participation
+   and takeout stay free.
+4. Hosted APIs, update feeds and reconciliation, after integrations recur.
+5. Sponsorship and grants as bridges, not proof of a business.
+
+Fundraising strategy lives in the marketing repository.
+
+## AI as distribution, not the business
+
+Product manager, 2026-09-30, from R47. APIs and MCP make REZICS usable when an
+agent chooses it; they do not by themselves earn citations, and AI answers send
+publishers little traffic ([Pew, 2025](https://www.pewresearch.org/short-reads/2025/07/22/google-users-are-less-likely-to-click-on-links-when-an-ai-summary-appears-in-the-results/)).
+Publish distinctive, evidenced knowledge with stable citation URLs and let
+agents contribute through reviewed proposals; never mass-generate pages to chase
+AI or search visibility.
 
 ## Hype only what works
 

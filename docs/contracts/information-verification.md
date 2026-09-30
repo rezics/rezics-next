@@ -85,6 +85,32 @@ public-domain or author-supplied text and structured dumps. Reviewers publish
 coherent bundles and new-chapter deltas; nothing reaches readers without human
 review, and readers see only what their consumption position admits.
 
+Maintainer, 2026-09-30: building the wiki is one action, and the wiki is the
+flagship; the [goal](../product/goal.md#wiki-the-flagship) describes the flow and
+the wiki+ positioning. The rules it relies on:
+
+- **Holder-provided compute.** An independent open-source toolkit (a CLI, an MCP
+  server and agent skills) runs on the holder's machine with the holder's own
+  agent and submits through the
+  [open contribution protocol](skills-and-prompts.md#open-agent-contribution-protocol).
+  REZICS supplies protocol, evidence and review; the holder's agent extracts.
+- **Text stays local.** Full text never leaves the holder's machine, and the
+  toolkit circumvents no DRM. A proposal carries extracted characters, aliases,
+  relationships, events and places, each with a chapter locator and a short
+  quotation as evidence.
+- **Matching is a proposal.** The toolkit matches extractions to existing
+  entities through the API; a proposed equivalence is reviewed like any other
+  claim, never merged silently.
+- **The wiki is a Zone over graph facts.** Reviewed bundles publish into the
+  Work's wiki Zone, a [routed site](../product/platform-thesis.md#zones-are-routed-sites)
+  with character, location, timeline, chapter-guide and relationship pages,
+  read at each reader's spoiler position. Its infoboxes and lists are the same
+  records that filters, lists and other Zones read, so a correction in one wiki
+  improves every view of that fact.
+- **The Work page stays the hub.** It shows the wiki's summary beside ratings,
+  reviews, library status, discussion, relations and lists; the wiki Zone is its
+  deep end, not a replacement.
+
 Each Realm decides whether agents may draft and whether generated prose is
 permitted. Facts and structure are the default because fluent prose can hide
 invented citations. [Wookieepedia sourcing](https://starwars.fandom.com/wiki/Wookieepedia%3ASourcing)
@@ -97,4 +123,4 @@ appearances, relationship lists, basic timelines, citations and backlinks.
 Family trees, adaptation alignment, world maps and chronologies follow.
 Completeness means coverage of an identified corpus, never page count. The
 [agent contribution owner](skills-and-prompts.md#open-agent-contribution-protocol)
-supplies the common review boundary and holder-provided compute.
+supplies the common review boundary for holder-provided compute.

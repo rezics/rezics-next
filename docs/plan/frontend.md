@@ -116,9 +116,15 @@ next chapter, then to keep up with communities, then to discover.
 Decided 2026-09-28 from KadoKado (the maintainer's reference), the old site
 and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
 
-- **A Zone is a Realm's publication**, built from named editorial modules that
-  read the Realm's curation; every pick links to the decision behind it, and
-  covers carry a one-line hook, as KadoKado's do.
+- **A Zone is a routed site over shared resources**: its own routes,
+  navigation, templates, documents and saved views over the one catalogue, as
+  a franchise wiki or a specialist catalogue needs
+  ([routed sites](../product/platform-thesis.md#zones-are-routed-sites),
+  revised 2026-09-30). A Realm's publication is one preset: named editorial
+  modules that read the Realm's curation, where every pick links to the
+  decision behind it and covers carry a one-line hook, as KadoKado's do. A
+  single configurable home page on fixed Realm tabs could hold neither a wiki
+  nor a catalogue.
 - **Each Zone presents information the way its field's best site does**
   (maintainer, 2026-09-28). The point of a Zone is its information layout,
   not its colours, and it is never Home's post feed. Fiction and Books follow
@@ -128,18 +134,26 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
   search-first browsing by game version, loader and category, with versions
   and dependencies. Software follows the best software directories. Each
   vertical needs a fitting listing, browse and detail presentation, with fields
-  from Main. The maintainer's 2026-09-29
+  from Main's generic projection, never a per-domain payload: per-domain
+  payloads are how per-domain fact tables entered the backend. The
+  maintainer's 2026-09-29
   [vertical-engine decision](../product/platform-thesis.md#the-vertical-engine-is-the-product)
   refines how: shared default pages and templates, with slot overrides for the
-  core families, rather than copied per-vertical implementations.
+  core families, rather than copied per-vertical implementations. Under
+  [backend one, frontend free](../product/goal.md#backend-one-frontend-free)
+  a Zone may also ship bespoke presentation code that consumes only public APIs
+  and holds no business logic.
 - **One visual language.** Zones use REZICS's shared visual language for now.
   A Zone changes colours or type only when it explicitly asks to; until one
   can, the host applies only a Zone's structure tokens, and a test keeps
   package CSS to the platform's colours and faces.
 - **Browse beside the home** (2026-09-28, after Modrinth's search). Every Zone
-  has `/r/<zone>/browse`: search, Facet Conditions (`type`, `concept` and the
-  facts Main reads, such as status, length and a mod's loader, game version
-  and environment), sort and a list or grid, each a link with its own URL.
+  has `/r/<zone>/browse`: search, Facet Conditions, sort and a list or grid,
+  each a link with its own URL. Every browse Condition is an admitted Facet
+  from Main's registry, including status, length and a mod's loader, game
+  version and environment; a Condition outside the registry is a vocabulary no
+  other Zone, client or agent can reuse, so the Zone contract's own list of
+  such facts moves into the registry.
   The home leads with its search and those values; the Works tab became
   Browse's grid. It reads the Realm's newest adoptions as one bounded window
   and says so when a Zone outgrows it, until a listing projection replaces it.
@@ -196,7 +210,9 @@ A read picks each field independently in this order: the page's explicit
 `?language=`, the reader's ordered content languages, the UI locale, the
 browser's languages, then the object's original name. A tag matches exactly
 first, then by language and script (`zh-TW` is `zh-Hant`), then by primary
-language (`zh-Hant` may show a `zh-Hans` name). Reads return the chosen
+language only as a marked fallback (`zh-Hant` may show a `zh-Hans` name, never
+presented as Traditional; see
+[vocabulary labels](../contracts/content-languages.md#vocabulary-labels-are-graph-content)). Reads return the chosen
 value with its language, direction and whether it was a fallback, so pages
 set `lang`/`dir`. The original appears as a quiet second line only where
 identity matters (a Work's or Realm's own page), never in lists. People keep

@@ -109,3 +109,29 @@ it. [BCP 47](https://www.rfc-editor.org/rfc/rfc5646.html) and
 locale enum or primary-language direction heuristic cannot represent native
 content. The reason for one contract is to prevent each adapter from making a
 different fallback decision and losing meaning on export or re-edit.
+
+## Vocabulary labels are graph content
+
+Maintainer and product manager, 2026-09-30. Labels of definitions and relations
+(types, properties, roles, Concepts and Facets, with the forms the
+[relation lexicon](semantic-model.md#relation-lexicon) defines) are graph
+content, edited through Main in any BCP 47 language, like names. UI message
+catalogues hold only interface text such as buttons, errors and navigation. The
+eight UI locales are reviewed first; any other language works without
+deployment and reports whether its label is reviewed. Labels shipped with code
+would make each new relation or language wait for a deployment and cap
+vocabulary at the UI locales.
+
+Fallback preserves script and says so. `zh-Hant` never silently becomes
+Simplified, nor `sr-Latn` Cyrillic; [OpenCC](https://github.com/BYVoid/OpenCC)
+conversion is a marked fallback, not a reviewed translation, and never rewrites
+proper names. Each embedded name keeps its own language and direction and is
+bidi-isolated (`bdi` with `lang` in HTML, Unicode isolates in plain text), so
+Arabic or Hebrew around a Latin or CJK name keeps its order.
+
+Current gaps to fix: [display-language selection](../../services/main/src/modules/display-language/select.ts)
+caps stored labels at twenty and derives direction from the primary language
+subtag, so `az-Arab` gets the wrong direction and fallback can cross scripts;
+[Zone presentation](../../services/main/src/modules/zone/presentation-format.ts)
+and [Facet labels](../../model/compiler/facet.ts) still accept only the eight
+UI locales.

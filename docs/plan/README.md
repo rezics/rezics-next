@@ -20,7 +20,7 @@ are dependency order and acceptance requirements, not reports of completed code.
 | S0 Graph substrate | Pinned Fuseki bundle, Java, one text-wrapped TDB2 dataset and persistent directories; follow [installation](../operations/installation.md). | Insert/read/text-match public fixture, graceful restart, backup and isolated restore; service remains private. |
 | S1 Safe command foundation | Minimal Main HTTP adapter, Account verification, PostgreSQL Access, fixed model/shape artifact, guarded graph updates, immutable component revisions and polling outbox. | Same-head race has one winner; lost response reconciles its receipt; denied/invalid writes change nothing; old revision still resolves. |
 | S2 First authenticated API journey | Create metadata-only Work/MainVersion, publish one text contribution, assign different classification decisions in two Realms, search the eligible public view, then edit and read the prior revision through real APIs. | Shared Work identity, distinct Realm decisions, exact comments, current authority and graph/text completeness remain correct end to end. |
-| S3 Broaden to retained backend/API gates | Add ratings, multilingual relevance, qualified private search, all indexing domains, sources and package flows through stages B–G below. | Owning backend/API capability, integration and operations matrices pass independently of frontend. |
+| S3 Broaden to retained backend/API gates | Add ratings, multilingual relevance, qualified private search, every admitted catalogue type, sources and package flows through stages B–G below. | Owning backend/API capability, integration and operations matrices pass independently of frontend. |
 
 S0 can be followed from this documentation checkout; S1 and later require new
 runtime code. S0 does not require a model compiler, Redis, a broker, a cluster,
@@ -101,7 +101,7 @@ selected owners or mark any runtime gate complete.
 | A | Minimal identity/value profile, Fuseki guarded commands, PostgreSQL Content and local receipts/outbox, common immutable history, Context and Account/Access; expand the IR as profiles grow. | Semantics, rejected states, retries, publication preparation and authority fences. |
 | B | Space capabilities, concepts/expressions/applications, Realm fallback and rating contexts. | Two-Realms/one-resource journey with conflicting decisions and private data. |
 | C | Work/Main Version, content/structure anchors, translations, Post chapters and fixed releases. | Stable common entry, precise history/comments and publication/adoption recovery. |
-| D | Graph-integrated full-text/CJK, exact PostgreSQL-body projections and all five native indexing domains. | Joint relation/text/context queries, complete ranking, fixed whole-request bounds and bounded updates/rebuild. |
+| D | Graph-integrated full-text/CJK, exact PostgreSQL-body projections and every admitted catalogue type. | Joint relation/text/context queries, complete ranking, fixed whole-request bounds and bounded updates/rebuild. |
 | E | Live source conversion and universal package profiles, lock/install/update/rollback. | Current-source semantics, native-tool comparisons and interrupted operation recovery. |
 | F | Remaining native interactions, governance, communication, export and admitted commercial applications. | Capability coverage and cross-owner workflows. |
 | G | Deployment selection, installation, practical load and recovery on available hosts. | Measured bounded behavior, restore and explicitly accepted initial outage model. |
@@ -139,7 +139,7 @@ do not insert narrative evidence here.
 | --- | --- | --- |
 | Shared architecture and selected technology | Jena startup boundary, TypeScript/Elysia 2/Bun, Yarn and vinext/Workers selected; [toolchain lock](../development/toolchain.md) adopted. | S0 passed OPS14 and OPS16. Phase 0 connects the toolchain and harness. Complete S1–S3 and product gates pending. |
 | Space, Context, classification and Main Version | Selected first-stage foundation. | Qualified in the [recorded run](qualification.md); the web journey is outside the backend Goal. |
-| Five domains and universal packages | Selected with ecosystem profiles and live validation. | Pending conversion/resolver/install tests. |
+| Catalogue types and optional packages | One catalogue of admitted types; packages selected as an optional capability with ecosystem profiles and live validation. | Pending conversion/resolver/install tests. |
 | Security, operations and user experience | Specified owner protocols and acceptance. | Pending their respective gates. |
 
 ## Documentation verification

@@ -2,14 +2,19 @@
 
 ## Safety and legal readiness
 
-Decision 2, 2026-09-29: the product manager selected the safety scope under
-maintainer delegation. The maintainer chose REZICS Inc, a US company, as operator
-and a zero-budget launch: no paid counsel or scanning, accepting imperfect
-compliance until roughly one million users or investment. Child exploitation,
-non-consensual intimate imagery (NCII) and credible threats are day-one duties.
-The EU remains reachable while representatives wait for revenue; marketing
-starts in the US and Asian markets. This records accepted risk, not an exemption
-from law or evidence that the service is ready.
+Decision 2, 2026-09-29, revised by the maintainer on 2026-09-30. REZICS Inc, a
+US company, operates at zero budget with **minimal compliance by narrowing
+scope**: it meets the duties that apply from its first user and opens only what
+it can carry. Child exploitation, non-consensual intimate imagery (NCII) and
+credible threats are day-one duties; other harms go through reporting, removal
+and appeals. A feature whose obligations cannot be met at zero cost stays
+closed, such as job-seeker data, reviews of businesses and precise location
+histories. User counts and funding do not define legal scope (GDPR, APPI, PIPA
+and PDPA apply from the first user), so the earlier "until roughly one million
+users or investment" threshold is withdrawn. Counsel, paid scanning and EU
+representatives are added when affordable; the EU remains reachable, and
+marketing starts in the US and Asian markets. This records accepted risk, not an
+exemption from law or evidence that the service is ready.
 
 The launch policy excludes sexually explicit images and advertising trackers.
 Minimum age is 13, 14 in South Korea and 16 in the EEA. Sexual and grotesque
@@ -20,18 +25,22 @@ market/feature matrix covering registration, adult features, privacy, transfers,
 analytics and GDPR/DSA representatives; obtain counsel's approval when affordable.
 The [legal owner](../legal/README.md) retains the review agenda and policy drafts.
 
-The reason for text-first launch with typographic covers is operational: known
-CSAM matching must work before new image uploads open. Apply for
-[PhotoDNA](https://www.microsoft.com/en-us/photodna/faq), free for approved
-services, and register with [NCMEC as an electronic service provider](https://ncmec.org/csam).
-Hash access and provider approval are separate facts to establish.
+Cover and image uploads open at launch behind free, layered controls, as on
+ordinary forums; the maintainer rejected a text-first launch on 2026-09-30.
+US law requires reporting known CSAM, not general scanning. The layers:
 [Cloudflare CSAM scanning](https://developers.cloudflare.com/cache/reference/csam-scanning/)
-is backup detection on cached delivery, not an upload-clearance substitute.
-Evaluate [NSFWJS](https://github.com/infinitered/nsfwjs) or
-[OpenNSFW2](https://github.com/bhky/opennsfw2) on CPU for explicit-image screening;
-classifier output is review evidence, not clearance. Use
+checks delivered images from day one; apply for
+[PhotoDNA](https://www.microsoft.com/en-us/photodna/faq), free for approved
+services, and register with [NCMEC as an electronic service provider](https://ncmec.org/csam),
+adding pre-publication matching once approved rather than waiting for it. A
+local classifier ([NSFWJS](https://github.com/infinitered/nsfwjs) or
+[OpenNSFW2](https://github.com/bhky/opennsfw2) on CPU) holds likely explicit
+images for review; its output is review evidence, not clearance. New accounts
+have upload rate limits, and
 [Turnstile](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)
-for abuse-prone enrollment. Scan outage keeps new media unavailable.
+protects abuse-prone enrollment. Imported covers display with their source
+attribution and are removed on a valid notice. A scanner outage holds new
+uploads for review instead of disabling media.
 
 ## Intake, response and recovery
 

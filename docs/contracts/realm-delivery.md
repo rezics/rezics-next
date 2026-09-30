@@ -3,7 +3,10 @@
 The [fixed-site owner](../../services/main/src/modules/pro-site/store.ts) and
 [SUB cases](../../scripts/qa/cases/subscriptions-and-pro.ts) cover site
 configuration, sparse Realm queries and independent reply placements. General
-REZICS and fixed-Realm sites are intended to share frontend and APIs.
+REZICS and fixed-Realm sites are intended to share frontend and APIs. A
+fixed-Realm site is a [Zone](../product/platform-thesis.md#zones-are-routed-sites)
+whose population is one Realm's selection; its host binding should move from the
+separate `site.definition` store into the Zone so that one site abstraction remains.
 
 The fixed Realm boundary still needs end-to-end qualification across SSR, browser
 navigation, direct APIs, Search, downloads, shared links and caches. An empty or

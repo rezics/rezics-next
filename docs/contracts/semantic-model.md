@@ -56,6 +56,22 @@ and [recorded qualification](../plan/qualification.md) name the exercised paths.
 This profile does not grant a general semantic-change API. Its choice of the
 Work component avoids a separate null-first-head relay protocol.
 
+## Types, capabilities and Access
+
+Maintainer and product manager, 2026-09-30. Types describe; capabilities behave;
+Access authorizes. A [capability](../product/platform-thesis.md#capabilities)
+such as facets, measurements, location, schedules, releases, credits, lists,
+ratings, discussion or follows is implemented once in Main and bound to types
+through validated definitions that declare prerequisites, property bindings,
+owner commands with authority and outcomes, projections, query budgets and
+conformance fixtures. It attaches to any admitted resource, not only Works: a
+place, an organization or a person carries ratings, lists and discussion through
+the same operations. An imported predicate or `rdf:type` never grants authority;
+conflicting bindings fail activation; absent data never yields a misleading map,
+score or availability claim. The reason is that behaviour keyed to Works forces
+every other domain either to be mistyped as a Work or to grow its own backend
+path.
+
 ## Values, relations and admission
 
 Exact integers, decimals and rationals cross JSON as lexicals. Temporal values
@@ -89,3 +105,44 @@ the trusted server. External contexts and ontology imports require controlled
 acquisition. [Model profiles](model-profiles.md) explain term choice and
 [validation operations](../implementation/model-profile-validation.md) explain
 profile activation.
+
+## Relation lexicon
+
+Maintainer and product manager, 2026-09-30
+([relations in every language](../product/platform-thesis.md#relations-in-every-language)).
+One shared relation lexicon serves
+every domain, Zone and client; manifests reference its definitions and never
+clone "author", "character" or "adaptation". Three layers are versioned
+separately:
+
+- **Meaning**: identity, exact revision, scope with examples, participant slots,
+  cardinalities and qualifiers.
+- **Viewing directions**: each `fromRole → toRole` projection, including those
+  of n-ary relations, so "Protagonist: A" on B and "Protagonist of: B" on A come
+  from one occurrence, never from a stored inverse fact.
+- **Presentation per language**: labels in any BCP 47 language with a noun
+  form, heading and plural forms; optional grammatical forms keyed by case,
+  number or gender; optional reviewed sentence templates in
+  [MessageFormat 2](https://cldr.unicode.org/downloads/cldr-47) with typed
+  slots; source, licence, review status and the compatible meaning revision.
+
+A wording edit creates a presentation revision and never changes meaning. A
+change of meaning creates a semantic revision, invalidates incompatible
+translations and leaves historical occurrences with the meaning they had.
+
+Main returns the rendering contract: meaning and revision, bindings, selected
+labels or template, typed arguments, the language, script and direction
+actually used, review status and fallback provenance. Structured rows, role
+chips and plural headings are the baseline; sentences appear only where prose
+earns it (feeds, notifications, agent answers). No client concatenates a
+translated predicate between names, appends "of" for an inverse or infers
+gender from a name. Selection and fallback follow
+[content languages](content-languages.md#vocabulary-labels-are-graph-content).
+
+Narrative role (protagonist), prominence (main, supporting), credit role
+(author, voice actor) and participant slot (character) stay distinct concepts:
+a prominent antagonist is main without being the protagonist, and a source's
+"main" maps only after review. Today the
+[definition change operation](../../services/main/src/modules/semantic/change.ts)
+rejects label and grammar fields and graph queries return no localized
+presentation; both remain to be built.

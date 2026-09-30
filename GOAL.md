@@ -20,8 +20,9 @@ revisited, recovered and exported through authorized APIs and an accessible
 browser experience, on phones as on desktops, at the quality GitHub, Reddit,
 Fandom and Notion set for the same job. Their combined inventories are benchmarks,
 not scope. The API is the complete experience; the UI simulates it for people;
-every capability is accepted through both. The
-[product scope](docs/product/capabilities.md#first-scenarios) owns the four first
+every capability is accepted through both. The [goal](docs/product/goal.md)
+states what REZICS is for and how success is judged; the
+[product scope](docs/product/capabilities.md#first-scenarios) owns the first
 scenarios and the longer-term knowledge, creator and distribution direction.
 
 **Ready for production** means deployment to the prepared fleet is operations
@@ -87,15 +88,29 @@ this Goal is replaced.
 
 34. <a id="decision-34"></a>[The vertical engine is the product](docs/product/platform-thesis.md#the-vertical-engine-is-the-product).
 35. <a id="decision-35"></a>[One graph, many language fronts](docs/product/platform-thesis.md#one-graph-many-language-fronts).
-36. <a id="decision-36"></a>[Beat the weakest incumbent with cost](docs/product/markets-and-growth.md#beat-the-weakest-incumbent-with-cost).
+36. <a id="decision-36"></a>[Strong demand, weak incumbent](docs/product/markets-and-growth.md#strong-demand-weak-incumbent).
 37. <a id="decision-37"></a>[Hype only what works](docs/product/markets-and-growth.md#hype-only-what-works).
 38. <a id="decision-38"></a>[AI speed through open interfaces](docs/contracts/skills-and-prompts.md#ai-speed-through-open-interfaces).
+
+#### The goal (2026-09-30)
+
+Settled by the maintainer after research round R40–R50; the
+[goal page](docs/product/goal.md) states the mission, values and success tests.
+
+39. <a id="decision-39"></a>[One graph, one experience, one engine](docs/product/goal.md#three-values-one-bet); build horizontally, launch vertically.
+40. <a id="decision-40"></a>[Backend one, frontend free](docs/product/goal.md#backend-one-frontend-free).
+41. <a id="decision-41"></a>[Wiki+ is the flagship](docs/product/goal.md#wiki-the-flagship): one-click wiki building by holders' agents into a routed Zone.
+42. <a id="decision-42"></a>[Minimal compliance by narrowing scope](docs/product/goal.md#minimal-compliance-by-narrowing-scope); uploads open at launch ([safety owner](docs/operations/trust-and-safety.md#safety-and-legal-readiness)).
+43. <a id="decision-43"></a>[Capabilities on one abstraction base](docs/product/platform-thesis.md#capabilities); types describe, capabilities behave, Access authorizes.
+44. <a id="decision-44"></a>[Zones are routed sites](docs/product/platform-thesis.md#zones-are-routed-sites).
+45. <a id="decision-45"></a>[Relations in every language](docs/product/platform-thesis.md#relations-in-every-language).
+46. <a id="decision-46"></a>[Success measures and kill criteria](docs/product/goal.md#how-success-is-judged).
 
 Settled research, also adopted on 2026-09-29:
 
 - R30: [URLs and SEO](docs/product/urls-and-seo.md).
-- R34: [Vertical manifests and the four-hour acceptance test](docs/product/platform-thesis.md).
-- R35: [First verticals](docs/product/markets-and-growth.md#first-verticals).
+- R34: [Vertical manifests](docs/product/platform-thesis.md#vertical-manifests) and [expansion acceptance](docs/product/platform-thesis.md#expansion-acceptance).
+- R35: [Launch sequence over one graph](docs/product/markets-and-growth.md#launch-sequence-over-one-graph).
 - R36: [Release-to-return event loop](docs/product/markets-and-growth.md#release-to-return-loop).
 
 ## Milestones
@@ -116,10 +131,13 @@ and the `product-audit` skill finds no open P0 or P1 class in its area.
   principal budgets, the registry and its adapters. Exit: inventories traverse
   past every former bound; a retried operation has one effect; policy holds on
   every channel; pending contributions and legal cases reach real outcomes.
-- **M6 The vertical engine, the four scenarios and the first verticals.** The
+- **M6 The vertical engine, the first scenarios and the first verticals.** The
   [shared engine](docs/product/platform-thesis.md), configurable through both
-  the API and an administrator UI;
-  then, as configuration on it: library import, sessions and export; series,
+  the API and an administrator UI: capabilities on any admitted resource, a
+  served type registry, the relation lexicon and Zones as routed sites, with
+  the domain-specific backend paths found in R49 removed;
+  then, as configuration on it: the franchise wiki Zone with one-click building
+  by holders' agents; library import, sessions and export; series,
   edition and availability tracking; serial drafting, scheduling, reading and
   discussion; VN discovery by release; the Light Novels and ACGN Zones with
   episode tracking on the shared progress foundation; and the LLM index with
@@ -127,13 +145,13 @@ and the `product-audit` skill finds no open P0 or P1 class in its area.
   paired API and browser journeys pass with ambiguous editions, expired loans,
   mixed formats, non-UI languages, thousand-chapter inventories, revoked
   editors, interrupted exports and two-device progress; the
-  [four-hour unanticipated-vertical test](docs/product/platform-thesis.md#first-manifests-and-proof)
-  passes from configuration alone.
+  [expansion acceptance](docs/product/platform-thesis.md#expansion-acceptance)
+  passes.
 - **M7 Contribution, knowledge and assistance.** Classification and
   corrections, the review lifecycle, subscriptions and inbox, community
   completeness, settings and modes, saved views, the editor and Realm wikis,
-  developer onboarding and non-core developer extras, worldbuilding and the
-  first wiki-builder pilot, the agent platform with the first-batch agents, and
+  developer onboarding and non-core developer extras, worldbuilding, wiki
+  maintenance on new chapters, the agent platform with the first-batch agents, and
   distribution's first scope behind the payment gate. Exit: propose, review, revise, decide, notify and recover work
   end to end; changed candidates invalidate approval; historical wiki rendering
   and export survive dependency changes; replacing an assistant keeps its

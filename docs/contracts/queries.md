@@ -16,7 +16,7 @@ from the queried Resource to it.
 | Facet | One admitted, versioned path from the queried Resource to a value, with labels, value domain, operators, Statement source and cost. `rdf:type` is one Facet; genre, based-on, author, language, rating and character appearance are others. |
 | Condition | A Facet, an operator and values, or a group of Conditions bound to one occurrence. |
 | Filter | A boolean combination of Conditions: the FilterDocument below. |
-| Query | A Filter with text, scope (such as a Realm), Context, sort and page. |
+| Query | A Filter with text, scope (such as a Zone's population), Context, sort and page. |
 | Saved Filter | A Filter with its own identity and name, such as "Female lead" or a Zone's scope. |
 
 For example, fiction based on Blue Archive with a female lead, as Global reads it
@@ -102,8 +102,13 @@ and controls; editors group Facets for display without changing meaning. Server
 field and Work policies set privileges and budgets; a Saved Filter cannot
 enlarge either.
 
-The compiler must intersect site, resource and user scopes, including a
-mandatory fixed-Realm site boundary. Named terms resolve through an explicit,
+The compiler must intersect the Zone's explicit population, declared by its
+Saved Filters and mounted Collections, with resource authorization and the
+viewer's Access; none can enlarge another, and a detail route checks the same
+membership. A Zone is a [routed site](../product/platform-thesis.md#zones-are-routed-sites)
+over shared resources, so a fixed Realm is not its boundary: one Zone may span
+several domains and Realms, and a Realm's Context selects acceptance, not
+population (2026-09-30). Named terms resolve through an explicit,
 speaker, entry or Global policy before compiling their admitted definitions;
 equal-priority meanings remain ambiguous. Saved Filters retain exact
 DefinitionRefs and Context revisions. A new Concept cannot erase another's

@@ -1,11 +1,17 @@
 # REZICS architecture and implementation design
 
-REZICS is a shared semantic knowledge and content platform with collaborative wiki
-editing and curation. Native resources, community perspectives and maintained
-main versions let people classify, create,
-discuss and reuse content without fragmenting its identity across editions,
-languages, sources or communities. Apache Jena Fuseki serves SPARQL over TDB2; jena-text integrates Lucene
-full-text matching with graph queries. PostgreSQL owns document bodies/revisions,
+REZICS is one open, multilingual platform on one shared graph. Every work,
+person, organization, place, event and model has one identity across domains,
+languages and communities, and any community can build a complete Zone site
+over that graph. Its flagship is **wiki+**: franchise wikis of correctly
+modelled facts, with native lists, tracking, ratings and discussion on the same
+graph. The [goal](product/goal.md) states why and how success is judged.
+
+Native resources, community perspectives and maintained main versions let
+people classify, create, discuss and reuse content without fragmenting its
+identity across editions, languages, sources or communities. Apache Jena
+Fuseki serves SPARQL over TDB2; jena-text integrates Lucene full-text matching
+with graph queries. PostgreSQL owns document bodies/revisions,
 drafts and private/operational state; Main provides one history contract with
 owner-specific adapters and asynchronous exact-revision publication.
 
@@ -26,7 +32,7 @@ a Goal explicitly. Its manager follows the [manager charter](goals/manager.md)
 and runs worker processes, claims and integration waves through the
 [Goal program](goals/README.md); workers follow the [worker protocol](goals/worker.md).
 
-1. [Product scope and capabilities](product/capabilities.md).
+1. [Goal](product/goal.md), then [product scope and capabilities](product/capabilities.md).
 2. [Architecture overview](architecture/overview.md) and [service boundaries](architecture/services.md).
 3. [Context and classification](contracts/context.md), [Space](contracts/space.md) and [classification](contracts/classification.md).
 4. [Main versions and revisions](contracts/main-version.md).
@@ -35,7 +41,7 @@ and runs worker processes, claims and integration waves through the
 7. [Implementation blueprints](implementation/README.md): graph records, API/events,
    authorization bridge and recoverable package/vertical workflows.
 
-Lasting product decisions: [vertical engine](product/platform-thesis.md),
+Lasting product decisions: [goal](product/goal.md), [platform thesis](product/platform-thesis.md),
 [markets and growth](product/markets-and-growth.md), [URLs and SEO](product/urls-and-seo.md),
 and [trust and safety operations](operations/trust-and-safety.md). These pages
 retain intent and evidence independently of the active Goal; installed contracts

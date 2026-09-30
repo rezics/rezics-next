@@ -38,6 +38,17 @@ constraints win; an adopted change goes to its owner.
    [research and validation](../../.agents/skills/research-and-validation/SKILL.md).
    API tests do not establish usability, and screenshots do not establish human
    task success. Revisit a default when ordinary tasks need advanced concepts.
+7. **Types describe; capabilities behave; Access authorizes.** A type says what
+   something is. Behaviour comes from a capability implemented once and bound to
+   any admitted type, not only Works; authority comes only from Access. An
+   imported predicate or `rdf:type` never grants authority, and no capability
+   branches on a domain's name, because each such branch becomes a separate
+   product to maintain ([semantic model](../contracts/semantic-model.md#types-capabilities-and-access)).
+8. **Backend one, frontend free.** A new descriptive domain adds no backend code
+   path, table, profile version or domain branch. A Zone's frontend may be
+   bespoke when it only consumes public APIs and holds no business logic.
+   Generated code makes presentation cheap, not backend complexity
+   ([goal](goal.md#backend-one-frontend-free)).
 
 ## Meaning survives every adapter
 
