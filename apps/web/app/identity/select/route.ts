@@ -4,7 +4,7 @@ import { mainApi } from '../../../features/api/main.ts';
 import { sameOriginWrite } from '../../../features/api/origins.ts';
 import { identityOptions } from '../../../features/auth/acting-identity.ts';
 import { SESSION_KEY_COOKIE } from '../../../features/auth/cookies.ts';
-import { choiceKey } from '../../../features/auth/choice-key.ts';
+import { choiceKey } from './choice-key.ts';
 import { safeReturnPath, signInPath } from '../../../features/auth/paths.ts';
 import { readSession, sessionAgents, sessionAgentState } from '../../../features/auth/session.ts';
 import { isUiLocale } from '../../../i18n/define.ts';

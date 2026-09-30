@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { agentName, identityOptions, type AgentDiscovery } from '../features/auth/acting-identity.ts';
 import { checkCallback } from '../features/auth/callback-check.ts';
-import { choiceKey } from '../features/auth/choice-key.ts';
+import { choiceKey } from '../app/identity/select/choice-key.ts';
 import { messages as authMessages } from '../features/auth/messages.ts';
 import { isSignInFailure, plainProviderCode, signInFailures } from '../features/auth/paths.ts';
 import { messages as onboardingMessages } from '../features/onboarding/messages.ts';
