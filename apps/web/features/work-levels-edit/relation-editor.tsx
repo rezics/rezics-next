@@ -1,0 +1,59 @@
+'use client';
+
+import { Button } from '@rezics/ui/button';
+import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
+import { Input } from '@rezics/ui/input';
+import { NativeSelect } from '@rezics/ui/native-select';
+import { LinkIcon } from 'lucide-react';
+import type { UiLocale } from '../../i18n/define.ts';
+import { mayEdit } from './authority.ts';
+import { type KindOption, viaOf } from './kinds.ts';
+import type { Copy } from './messages.ts';
+import { useWrite } from './use-write.ts';
+import { invalidField, WriteStatus } from './write-status.tsx';
+import type { WriteState } from './write.ts';
+import { WorkPicker, type WorkLoader } from './work-picker.tsx';
+
+/**
+ * Records how the Work being edited relates to another, with evidence. The kinds and their words
+ * are Main's: the form offers what the lexicon renders for this Work's side and never a label of
+ * its own. A derivation pins the Work's Main Version at the head the page showed, so Main refuses it
+ * if the Work moved since. Renders nothing for a viewer whose allowed actions do not include editing.
+ */
+export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale, action, t, load }: {
+  work: string; mainVersion: string; head: string; kinds: readonly KindOption[];
+  allowed: readonly string[]; locale: UiLocale; action: (previous: WriteState, form: FormData) => Promise<WriteState>; t: Copy;
+  load?: WorkLoader;
+}) {
+  const { state, run, pending, values, reload, formKey } = useWrite(action);
+  if (!mayEdit(allowed)) return null;
+  const invalid = invalidField(state);
+  if (!kinds.length) return <p role="status" className="text-muted-foreground text-sm">{t.noKindsBody}</p>;
+  const current = kinds.find(kind => kind.key === values.kind) ?? kinds[0]!;
+  return <form key={formKey} action={run} aria-label={t.recordRelation}
+    className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4">
+    <h3 className="font-semibold text-base">{t.recordRelation}</h3>
+    <p className="text-muted-foreground text-sm">{t.relationsHelp}</p>
+    <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} /></div>
+    <input type="hidden" name="work" value={work} />
+    <input type="hidden" name="mainVersion" value={mainVersion} /><input type="hidden" name="head" value={head} />
+    <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-start">
+      <Field invalid={invalid === 'kind'}><FieldLabel>{t.relKind}</FieldLabel>
+        <NativeSelect name="kind" defaultValue={current.key}>
+          {kinds.map(kind => <option key={kind.key} value={kind.key} lang={kind.language}>{kind.label}</option>)}
+        </NativeSelect><FieldHelper>{t.relKindHelp}</FieldHelper></Field>
+      <Field invalid={invalid === 'counterpart'}><FieldLabel>{t.relCounterpart}</FieldLabel>
+        <WorkPicker name="counterpart" locale={locale} t={t} load={load} initial={values.counterpart ?? ''}
+          invalid={invalid === 'counterpart'} /><FieldHelper>{t.relCounterpartHelp}</FieldHelper></Field>
+    </div>
+    <Field invalid={invalid === 'evidence'}><FieldLabel>{t.relEvidence}</FieldLabel>
+      <Input name="evidence" type="url" inputMode="url" defaultValue={values.evidence ?? ''} required maxLength={2048}
+        autoComplete="off" placeholder="https://" /><FieldHelper>{t.relEvidenceHelp}</FieldHelper></Field>
+    {kinds.some(kind => viaOf(kind.key) === 'derivation') ? <label className="flex items-start gap-3 text-sm">
+      <input type="checkbox" name="unresolved" defaultChecked={values.unresolved === 'on'} className="mt-1 size-4 accent-primary" />
+      <span className="grid gap-0.5"><span>{t.relUnresolved}</span>
+        <span className="text-muted-foreground text-xs">{t.relUnresolvedHelp}</span></span></label> : null}
+    <Button type="submit" isLoading={pending} disabled={pending} className="w-fit">
+      <LinkIcon aria-hidden="true" />{pending ? t.submitting : t.recordButton}</Button>
+  </form>;
+}

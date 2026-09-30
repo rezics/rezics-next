@@ -3,6 +3,7 @@ import type { WorkPageMessages } from '../work-page/messages.ts';
 import { idOf, iriOf } from '../work-page/route.ts';
 import { buttonVariants } from '@rezics/ui/button';
 import Link from '../shell/localized-link.tsx';
+import { EditEntry } from '../work-levels-edit/edit-entry.tsx';
 import { ConnectionsSection, type Franchise } from './connections.tsx';
 import { EditionsSection, ReleaseCard } from './editions.tsx';
 import { copyOf } from './messages.ts';
@@ -58,6 +59,7 @@ export async function ConnectionsPage({ workRef, id, query, locale, pageMessages
   ];
   const names = await namesOf(references);
   return <div className="grid gap-10">
+    <EditEntry workRef={workRef} id={id} section="parts" locale={locale} />
     <PartsSection parts={parts} wholes={wholes} names={names} workRef={workRef} query={query} locale={locale} t={t}
       pageMessages={pageMessages} />
     <ConnectionsSection relations={relations} franchises={franchises} names={names} workRef={workRef} current={id}
@@ -73,8 +75,10 @@ async function followedBy(loaded: readonly Realization[], known: (realization: s
     readRealization(idOf(work) ?? work, idOf(realization) ?? realization)))).flatMap(read => (read.ok ? [read.data] : []));
 }
 
-export async function EditionsPage({ workRef, id, query, locale, pageMessages }: {
+export async function EditionsPage({ workRef, id, query, locale, pageMessages, edit = true }: {
   workRef: string; id: string; query: EditionsQuery; locale: UiLocale; pageMessages: WorkPageMessages;
+  /** Whether to offer the edit link; the edit page itself lists the same records without it. */
+  edit?: boolean;
 }) {
   const t = copyOf(locale);
   const [realizations, releases] = await Promise.all([readRealizations(id, query.realizationsAfter),
@@ -86,8 +90,11 @@ export async function EditionsPage({ workRef, id, query, locale, pageMessages }:
       ...(item.source.kind === 'main-version' ? [item.source.mainVersion] : [])]),
     ...(releases.ok ? releases.data.items.flatMap(item => item.coverage.map(entry => entry.work)) : []),
   ];
-  return <EditionsSection realizations={realizations} sources={sources} releases={releases} names={await namesOf(references)}
-    workRef={workRef} query={query} locale={locale} t={t} pageMessages={pageMessages} />;
+  return <div className="grid gap-4">
+    {edit ? <EditEntry workRef={workRef} id={id} section="editions" locale={locale} /> : null}
+    <EditionsSection realizations={realizations} sources={sources} releases={releases} names={await namesOf(references)}
+      workRef={workRef} query={query} locale={locale} t={t} pageMessages={pageMessages} />
+  </div>;
 }
 
 /** A release's page: Main's release, the realizations it carries, and the names of everything it reaches. */
