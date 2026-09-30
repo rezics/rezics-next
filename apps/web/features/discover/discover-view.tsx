@@ -2,7 +2,10 @@ import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { CircleSlashIcon, HourglassIcon, LibraryBigIcon, LinkIcon, StarIcon, XIcon } from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
+import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { isolate } from '../language/untagged.ts';
+import { withName } from '../language/with-name.tsx';
 import { type ReaderActions, ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import type { ReaderSeed } from '../catalogue/reader-store.ts';
 import type { CatalogueWork } from '../catalogue/work.ts';
@@ -74,6 +77,11 @@ export function shelfTitle(shelf: Pick<LoadedShelf, 'spec' | 'genre'>, t: Text):
 /** A community's name, or "Community 1a2b3c4d" while Main cannot name it. */
 export const realmName = (realm: ScopeRealm, t: Text) => realm.name?.value ?? t.realmFallback({ id: shortId(realm.id) });
 
+/** A sentence naming the community: the name keeps its own language and direction inside the interface's. */
+function realmSentence(realm: ScopeRealm, message: (name: string) => string, t: Text): ReactNode {
+  return realm.name ? withName(message, realm.name) : message(realmName(realm, t));
+}
+
 /** Moving between scopes: a pinned rating question belongs to its scope, and Mine has no genres. */
 function hrefIn(state: DiscoverState, scope: BrowseScope): string {
   return discoverHref({ ...state, scope, context: null, term: scope.kind === 'mine' ? null : state.term });
@@ -85,15 +93,15 @@ const pill = cn('inline-flex h-9 items-center rounded-full px-4 font-medium text
 
 /** Whose picks the page shows, small beside the title: scope matters here, but is not the headline. */
 function CommunitySwitch({ state, realm, t }: { state: DiscoverState; realm: ScopeRealm | null; t: Text }) {
-  const choices: { scope: BrowseScope; label: string; lang?: string }[] = [
+  const choices: { scope: BrowseScope; label: string; lang?: string; dir?: 'ltr' | 'rtl' }[] = [
     { scope: { kind: 'global' }, label: t.everyone },
     ...(state.scope.kind === 'realm' && realm ? [{ scope: state.scope, label: realmName(realm, t),
-      lang: realm.name?.language }] : []),
+      lang: realm.name?.language, dir: realm.name?.direction }] : []),
     { scope: { kind: 'mine' }, label: t.mine },
   ];
   return <nav aria-label={t.community} className="flex max-w-full gap-1 overflow-x-auto rounded-full border
     border-border/70 p-1 scrollbar-none">
-    {choices.map(choice => <Link key={choice.label} href={hrefIn(state, choice.scope)} lang={choice.lang}
+    {choices.map(choice => <Link key={choice.label} href={hrefIn(state, choice.scope)} lang={choice.lang} dir={choice.dir}
       aria-current={sameScope(choice.scope, state.scope) ? 'page' : undefined}
       className={cn(pill, 'h-8 max-w-56 shrink-0 truncate px-3.5')}>{choice.label}</Link>)}
   </nav>;
@@ -123,7 +131,7 @@ function Overview({ shelves, fallback, realm, state, neighbour, seeAll, signInHr
   const failure = leadingFailure(shelves);
   const substitutes = rows.length ? null : <>
     {fallback?.trending.length ? <WorkShelf heading={{ title: state.scope.kind === 'realm' && realm
-      ? t.trendingIn({ realm: realmName(realm, t) }) : t.trending }} works={fallback.trending}
+      ? realmSentence(realm, name => t.trendingIn({ realm: name }), t) : t.trending }} works={fallback.trending}
       avatarQuery={avatarQuery} locale={locale} /> : null}
     {fallback?.shelves.map(shelf => <DiscoverShelf key={`everyone-${shelf.spec.key}`} mode="row" scope={{ kind: 'global' }}
       heading={{ title: shelfTitle(shelf, t), subtitle: t.fromEveryone, seeAll: { href: discoverHref({ scope: { kind:
@@ -177,13 +185,13 @@ export function DiscoverView({ state, realm, realmMissing, shelves, conceptNames
   }
   const { scope } = state;
   const heading = scope.kind === 'realm' && realm
-    ? { title: t.titleRealm({ realm: realmName(realm, t) }), description: t.descriptionRealm, lang: realm.name?.language }
+    ? { title: realmSentence(realm, name => t.titleRealm({ realm: name }), t), description: t.descriptionRealm }
     : scope.kind === 'mine' ? { title: t.titleMine, description: t.descriptionMine } : { title: t.title, description: t.description };
   const overview = scope.kind !== 'mine' && !state.type && !state.term;
   const neighbour = scope.kind === 'global' ? undefined : { href: hrefIn(state, { kind: 'global' }), label: t.seeEverything };
   const genre = shelves.find(shelf => shelf.genre)?.genre
     ?? shelves.flatMap(shelf => shelf.initial.ok && shelf.initial.data.matchedTerm ? [shelf.initial.data.matchedTerm.name] : [])[0];
-  const genreLabel = genre ? t.genreFilter({ genre: genre.value }) : t.genreUnknown;
+  const genreLabel = genre ? t.genreFilter({ genre: isolate(genre.value) }) : t.genreUnknown;
   const seeAll = (shelf: LoadedShelf) => {
     const { topic } = shelf.spec;
     if (!overview || topic.kind === 'mine') return undefined;
@@ -195,7 +203,7 @@ export function DiscoverView({ state, realm, realmMissing, shelves, conceptNames
       <header className="grid gap-5">
         <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
           <div className="min-w-0 space-y-1.5">
-            <h1 lang={heading.lang} className="text-balance font-semibold text-3xl tracking-tight sm:text-4xl">
+            <h1 className="text-balance font-semibold text-3xl tracking-tight sm:text-4xl">
               {heading.title}</h1>
             <p className="text-pretty text-muted-foreground">{heading.description}</p>
           </div>
@@ -209,7 +217,8 @@ export function DiscoverView({ state, realm, realmMissing, shelves, conceptNames
               aria-current={state.type === type.key ? 'page' : undefined} className={pill}>{t[type.key]}</Link>)}
           </nav>
           {state.term ? <p className="inline-flex h-9 items-center gap-1 rounded-full bg-secondary ps-4 pe-1 text-sm">
-            <span lang={genre?.language} className="max-w-[min(24rem,60vw)] truncate">{genreLabel}</span>
+            <span className="max-w-[min(24rem,60vw)] truncate">{genre
+              ? withName(name => t.genreFilter({ genre: name }), genre) : genreLabel}</span>
             <Link href={discoverHref({ ...state, term: null })} aria-label={t.removeFilter({ filter: genreLabel })}
               className="grid size-7 place-items-center rounded-full outline-none hover:bg-background/70
                 focus-visible:ring-2 focus-visible:ring-ring"><XIcon aria-hidden="true" className="size-3.5" /></Link>

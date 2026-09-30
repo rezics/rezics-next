@@ -65,12 +65,12 @@ export const HebrewAuthorInCredits: Story = {
   },
 };
 
-/** When nothing recorded the language, the element makes no `lang` claim. */
+/** When nothing recorded the language, the element says so (`lang=""`) instead of inheriting the interface's. */
 export const UnknownLanguageTitle: Story = {
   args: { text: { value: 'Untitled draft', language: '', direction: 'ltr' }, as: 'span' },
   play: async ({ canvasElement }) => {
     const title = within(canvasElement).getByText('Untitled draft');
-    await expect(title).not.toHaveAttribute('lang');
+    await expect(title).toHaveAttribute('lang', '');
     await expect(title).toHaveAttribute('dir', 'ltr');
   },
 };

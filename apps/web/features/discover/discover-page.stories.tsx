@@ -119,7 +119,7 @@ export const Genre: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('region', { name: 'Popular in Adventure' })).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'New in Adventure' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Remove Genre: Adventure' })).toHaveAttribute('href', '/en/discover');
+    await expect(canvas.getByRole('link', { name: 'Remove Genre: \u2068Adventure\u2069' })).toHaveAttribute('href', '/en/discover');
   },
 };
 

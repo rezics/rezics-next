@@ -424,7 +424,7 @@ export const G516NonLatinNames: Story = {
     const author = canvas.getAllByText('עמוס עוז').find(node => node.tagName === 'BDI')!;
     await expect(author).toBeVisible();
     await expect(author).toHaveAttribute('dir', 'rtl');
-    await expect(author).not.toHaveAttribute('lang');
+    await expect(author).toHaveAttribute('lang', '');
     const original = canvas.getAllByText('مكتبة الأدب').find(node => node.tagName === 'BDI')!;
     await expect(original).toHaveAttribute('lang', 'ar');
     await expect(original).toHaveAttribute('dir', 'rtl');

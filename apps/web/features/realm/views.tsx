@@ -5,8 +5,10 @@ import type { ZoneDecision } from '@rezics/zone-sdk';
 import { ArrowLeftIcon, ArrowRightIcon, GavelIcon, LandmarkIcon, PlusIcon, RotateCwIcon, ScaleIcon, ShieldIcon,
   TagIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
+import { direction } from '@rezics/main/language';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { isolate } from '../language/untagged.ts';
 import { ProfileAvatar } from '../profile/profile-avatar.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -143,8 +145,9 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
     <div className="grid min-w-0 grid-cols-1 gap-6">
       <section aria-labelledby="realm-about" className="grid grid-cols-1 gap-3 rounded-(--zone-radius-card) bg-(--zone-panel)
         p-(--zone-panel-pad)">
-        <ModuleHeading id="realm-about">{t.aboutTitle({ realm: realmName })}</ModuleHeading>
-        {description ? <p lang={description.lang} className="max-w-2xl whitespace-pre-line text-pretty leading-relaxed">
+        <ModuleHeading id="realm-about">{t.aboutTitle({ realm: isolate(realmName) })}</ModuleHeading>
+        {description ? <p lang={description.lang} dir={direction(description.lang, description.value)}
+          className="max-w-2xl whitespace-pre-line text-pretty leading-relaxed">
           {description.value}</p> : null}
         {members ? <p className="text-muted-foreground text-sm">{members}</p> : null}
       </section>
@@ -152,7 +155,7 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
         p-(--zone-panel-pad)">
         <ModuleHeading id="realm-rules">{messages.rules}</ModuleHeading>
         {rules?.length ? <ol className="grid grid-cols-1 gap-3">
-          {rules.map((rule, index) => <li key={rule.id} lang={rule.lang} className="grid grid-cols-[auto_1fr] gap-x-3
+          {rules.map((rule, index) => <li key={rule.id} lang={rule.lang} dir={direction(rule.lang, rule.title)} className="grid grid-cols-[auto_1fr] gap-x-3
             gap-y-1 rounded-xl bg-muted/50 p-4">
             <span aria-hidden="true" className="row-span-2 grid size-7 place-items-center rounded-full bg-primary
               font-semibold text-primary-foreground text-sm tabular-nums">{index + 1}</span>
@@ -195,7 +198,7 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
           {others.map(other => <li key={other.href}>
             <LocalizedLink href={other.href} className="flex flex-col rounded-lg px-2 py-2 outline-none hover:bg-accent/60
               focus-visible:ring-2 focus-visible:ring-ring">
-              <span lang={other.name.lang} className="truncate font-medium text-sm">{other.name.value}</span>
+              <span lang={other.name.lang} dir={direction(other.name.lang, other.name.value)} className="truncate font-medium text-sm">{other.name.value}</span>
               {other.members ? <span className="text-muted-foreground text-xs">{other.members}</span> : null}
             </LocalizedLink></li>)}
         </ul>

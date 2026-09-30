@@ -14,6 +14,7 @@ export interface ShelfHeading {
   title: ReactNode;
   /** The title's language when it names content, such as a Realm or a genre in another language. */
   lang?: string;
+  dir?: 'ltr' | 'rtl';
   /** A short line under the title. */
   subtitle?: ReactNode;
   /** The shelf's full list. */
@@ -27,7 +28,7 @@ export function ShelfHeader({ id, heading, locale, children }: {
   const t = materializeData(messages[locale], { locale });
   return <header className="flex items-end justify-between gap-4">
     <div className="min-w-0 space-y-1">
-      <h2 id={id} lang={heading.lang} className="text-balance font-semibold text-xl tracking-tight">{heading.title}</h2>
+      <h2 id={id} lang={heading.lang} dir={heading.dir} className="text-balance font-semibold text-xl tracking-tight">{heading.title}</h2>
       {heading.subtitle ? <p className="text-pretty text-muted-foreground text-sm">{heading.subtitle}</p> : null}
     </div>
     <div className="flex shrink-0 items-center gap-3">

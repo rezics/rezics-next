@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { zonePeople, zoneWork } from '../features/realm/adapt.ts';
 import type { WorkCard } from '../features/realm/types.ts';
-import { contentText, untaggedName, zoneContentText } from '../features/language/untagged.ts';
+import { contentText, isolate, untaggedName, zoneContentText } from '../features/language/untagged.ts';
 import { valueLabel } from '../features/zones/browse-view.ts';
 import { zoneWorkCards } from '../features/zones/adapt-cards.ts';
 import { messages } from '../features/zones/messages.ts';
@@ -69,6 +69,15 @@ describe('G-516 content text keeps its own language and direction', () => {
     for (const file of files) {
       const source = readFileSync(new URL(`../features/${file}`, import.meta.url), 'utf8');
       expect(source.match(/\bdir(?:ection)?: 'ltr'|\blang(?:uage)?: ''/g) ?? [], file).toEqual([]);
+    }
+  });
+
+  test('a name set into plain text is isolated, and content that sets lang also sets dir', () => {
+    expect(isolate('مكتبة')).toBe('\u2068مكتبة\u2069');
+    for (const file of ['realm/views.tsx', 'realm/thread-rail.tsx', 'catalogue/work-shelf.tsx', 'discover/discover-view.tsx']) {
+      const source = readFileSync(new URL(`../features/${file}`, import.meta.url), 'utf8');
+      const count = (pattern: RegExp) => source.match(pattern)?.length ?? 0;
+      expect(count(/\blang=\{/g), file).toBeLessThanOrEqual(count(/\bdir=\{/g));
     }
   });
 });

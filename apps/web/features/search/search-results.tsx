@@ -18,6 +18,8 @@ import { Notice } from '../discover/notice.tsx';
 import { workHref } from '../discover/scope.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import type { SearchFallback } from './fallback.ts';
+import { contentText } from '../language/untagged.ts';
+import { withName } from '../language/with-name.tsx';
 import type { SearchMessages } from './messages.ts';
 import { bffSearch, SearchError, type SearchLoader, searchPagesOptions } from './query.ts';
 import { phraseStatus, type SearchState, searchHref } from './state.ts';
@@ -77,12 +79,9 @@ export function hitWork(hit: SearchHit, state: SearchState): CatalogueWork {
     completion: hit.completion };
 }
 
-const SLOT = '\u0000';
-
-/** A message with one value set in place, in the value's own language, wherever the message puts it. */
+/** A message with one value set in place, in the value's own language and isolated, wherever the message puts it. */
 export function withValue(message: (value: string) => string, value: string, lang: string | null): ReactNode {
-  const [before = '', after = ''] = message(SLOT).split(SLOT);
-  return <span>{before}<span lang={lang ?? undefined}>{value}</span>{after}</span>;
+  return withName(message, contentText(value, lang ?? ''));
 }
 
 /** Where the phrase was found, in words: the title (or another of its titles), an author, the tagline or the text. */

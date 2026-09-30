@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import { ChevronDownIcon, ScrollTextIcon, UsersRoundIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -30,8 +31,9 @@ export function ThreadRail({ name, description, members, aboutHref, rules, label
     <section aria-labelledby="rail-about" className={card}>
       <h2 id="rail-about" className="font-semibold text-muted-foreground text-xs uppercase tracking-wide">
         {labels.about}</h2>
-      <p lang={name.lang} className="font-semibold">{name.value}</p>
-      {description ? <p lang={description.lang} className="text-pretty text-muted-foreground text-sm/relaxed">
+      <p lang={name.lang} dir={direction(name.lang, name.value)} className="font-semibold">{name.value}</p>
+      {description ? <p lang={description.lang} dir={direction(description.lang, description.value)}
+        className="text-pretty text-muted-foreground text-sm/relaxed">
         {description.value}</p> : null}
       {members ? <p className="flex items-center gap-1.5 text-sm"><UsersRoundIcon aria-hidden="true"
         className="size-4 text-muted-foreground" />{members}</p> : null}
@@ -42,7 +44,7 @@ export function ThreadRail({ name, description, members, aboutHref, rules, label
       <h2 id="rail-rules" className="flex items-center gap-1.5 font-semibold text-muted-foreground text-xs uppercase
         tracking-wide"><ScrollTextIcon aria-hidden="true" className="size-3.5" />{labels.rules}</h2>
       <ol className="grid divide-y divide-border/60">
-        {rules.map((rule, index) => <li key={rule.id} lang={rule.lang}>
+        {rules.map((rule, index) => <li key={rule.id} lang={rule.lang} dir={direction(rule.lang, rule.title)}>
           <details className="group/rule py-2">
             <summary className="flex cursor-pointer list-none items-start gap-2 rounded-md text-sm outline-none
               focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">

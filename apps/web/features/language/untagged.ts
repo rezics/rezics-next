@@ -19,3 +19,8 @@ export function contentText(value: string, language = '') {
 export function untaggedName(value: string) {
   return { ...contentText(value), basis: 'fallback' as const };
 }
+
+/** A name set into a plain-text message (an `aria-label`, a title): the isolate keeps its direction from reordering the words around it. */
+export function isolate(value: string): string {
+  return `⁨${value}⁩`;
+}

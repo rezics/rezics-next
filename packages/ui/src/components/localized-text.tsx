@@ -12,12 +12,12 @@ export interface LocalizedValue {
  * Content text in its own language and direction. `bdi` (the default) isolates a
  * name embedded in an interface sentence, so its direction never reorders the
  * words around it; `span` is for text that stands alone as a block. A language
- * nobody recorded renders no `lang`, never a guess.
+ * nobody recorded renders `lang=""` (unknown), never the interface's language:
+ * leaving `lang` out would make the text inherit it.
  * https://www.w3.org/International/questions/qa-bidi-unicode-controls
  */
 export function LocalizedText({ text, as: Tag = 'bdi', className }: {
   text: LocalizedValue; as?: 'bdi' | 'span'; className?: string;
 }): React.ReactElement {
-  const language = !text.language || text.language === 'und' ? undefined : text.language;
-  return <Tag lang={language} dir={text.direction} className={className}>{text.value}</Tag>;
+  return <Tag lang={text.language} dir={text.direction} className={className}>{text.value}</Tag>;
 }
