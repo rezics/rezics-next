@@ -140,6 +140,7 @@ export const AnonymousReporter: Story = {
     const report = within(statement.closest('li')!);
     await expect(report.queryByText(/wrote/)).not.toBeInTheDocument();
     await expect(statement.closest('li')!.querySelector('time')).toBeVisible();
+    if (!args.api) throw new Error('Queue API is unavailable');
     const basis = await args.api.basis(queue[0]!);
     if (!basis.ok) throw new Error('Report basis is unavailable');
     await expect(reporters(basis.data)).toEqual([]);
