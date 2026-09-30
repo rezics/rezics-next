@@ -20,6 +20,7 @@ import { commerceRoutes } from './routes/commerce.ts';
 import { compositionRoutes } from './routes/compositions.ts';
 import { compositionReadRoutes } from './routes/composition-reads.ts';
 import { collectionRoutes } from './routes/collections.ts';
+import { collectionGrainRoutes } from './routes/collection-grain.ts';
 import { zoneRoutes } from './routes/zones.ts';
 import { progressRoutes } from './routes/progress.ts';
 import { sessionsRoutes } from './routes/sessions.ts';
@@ -157,6 +158,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(collectionGrainRoutes(work))
     .use(catalogueCandidateRoutes(work))
     .use(wikiRoutes(fuseki, work))
     .use(editorialProposalRoutes(work))
