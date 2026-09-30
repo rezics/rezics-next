@@ -63,6 +63,7 @@ test('G-506: API-seeded SAO targets preserve exact grain, owner disclosure and b
       profile: 'text-contribution-v1', work: work.work, language: 'en', body: `SAO text ${randomUUID()}`,
       actingSubject: f.actor }), 201);
     await f.grant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
+    await f.grant(`contribution:read:${draft.contribution}`, 'contribution.read');
     const decision = await json<{ publicationDecision: string }>(await call('POST', '/v1/contribution-publications', {
       profile: 'text-publication-v1', contribution: draft.contribution, expectedDraftHead: draft.draftRevision,
       expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: f.actor }), 201);
