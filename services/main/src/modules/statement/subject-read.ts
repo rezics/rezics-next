@@ -21,13 +21,13 @@ import {
 } from '../work/read-session.ts';
 import { STATEMENT_LIMITS, type StatementValue } from './schema.ts';
 
-/** Two paged graph reads (candidate + hydration), 20 candidates, bounded owner
- * qualifiers/evidence. The semantic component holds at most 256 properties.
- * Candidate pages may be empty after disclosure; their opaque continuation
- * still advances. No sample window or per-inventory COUNT limits traversal. */
+/** Bounded candidate/hydration batches fill a page from disclosed items, with one
+ * disclosed lookahead. Withheld rows never produce a short continuing page.
+ * Scanning shares WorkRead's call/byte/deadline ceilings: exceeding them fails
+ * explicitly rather than exposing a truncated page or a hidden-row cursor. */
 export const SUBJECT_STATEMENT_COST = {
   pageSize: 20,
-  inventoryQueries: 2,
+  inventoryQueriesPerBatch: 2,
   candidates: 21,
   componentProperties: 256,
   referencesPerCandidate: 25,
@@ -200,7 +200,7 @@ export async function readSubjectStatements(
     return allowed;
   };
   const items: Item[] = [];
-  let nextCursor: string | null = null;
+  const positions: { phase: 'component' | 'statement'; key: string; predicate?: string }[] = [];
   if (after.phase === 'component') {
     const component = await readCurrentComponent(session.deps.environment, resource, 'resource');
     const properties =
@@ -211,59 +211,67 @@ export async function readSubjectStatements(
       .map((property) => ({ key: JSON.stringify([property.predicate, property.value]), property }))
       .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
       .filter((item) => !cursor || item.key > cursor.after);
-    const page = keyed.slice(0, limit);
-    const allowed = await checkReferences(
-      page.flatMap(({ property }) =>
-        property.value.kind === 'resource' ? [property.value.ref] : [],
-      ),
-    );
-    for (const { property } of page) {
-      if (property.value.kind === 'resource' && !allowed.has(property.value.ref)) continue;
-      items.push({
-        kind: 'component-property',
-        revision: component!.head,
-        predicate: property.predicate,
-        value: property.value,
-        qualifiers: { applicability: [], interpretationDefinitions: [] },
-        sources: [],
-      });
-    }
-    if (keyed.length > limit)
-      nextCursor = encodeReadCursor(
-        binding,
-        session.position,
-        keyed[limit - 1]!.key,
-        JSON.stringify({ phase: 'component' }),
+    for (
+      let offset = 0;
+      offset < keyed.length && items.length <= limit;
+      offset += SUBJECT_STATEMENT_COST.candidates
+    ) {
+      const page = keyed.slice(offset, offset + SUBJECT_STATEMENT_COST.candidates);
+      const allowed = await checkReferences(
+        page.flatMap(({ property }) =>
+          property.value.kind === 'resource' ? [property.value.ref] : [],
+        ),
       );
+      for (const { property } of page) {
+        if (property.value.kind === 'resource' && !allowed.has(property.value.ref)) continue;
+        items.push({
+          kind: 'component-property',
+          revision: component!.head,
+          predicate: property.predicate,
+          value: property.value,
+          qualifiers: { applicability: [], interpretationDefinitions: [] },
+          sources: [],
+        });
+        positions.push({
+          phase: 'component',
+          key: JSON.stringify([property.predicate, property.value]),
+        });
+      }
+    }
   }
-  if (!nextCursor) {
-    const remaining = limit - items.length;
+  if (items.length <= limit) {
     const pattern = acceptedStatementPattern(context, inherit ?? false);
-    const rows =
-      inherit === null
-        ? []
-        : await session.query(
-            `SELECT ?predicate ?statement
+    let statementAfter =
+      cursor && after.phase === 'statement'
+        ? { predicate: after.predicate!, statement: cursor.after }
+        : null;
+    while (items.length <= limit) {
+      const batchSize = SUBJECT_STATEMENT_COST.candidates;
+      const rows =
+        inherit === null
+          ? []
+          : await session.query(
+              `SELECT ?predicate ?statement
       (MIN(CONCAT(STR(?decision), "|", ?decisionSource)) AS ?acceptance) WHERE {
       GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rdf:subject ${iri(resource)} ;
         rdf:predicate ?predicate ; rv:statementState rv:Active ; rv:meaningKey ?key . }
       ${pattern}
       ${
-        cursor && after.phase === 'statement'
-          ? `FILTER(STR(?predicate) > ${lit(after.predicate!)} ||
-        STR(?predicate) = ${lit(after.predicate!)} && STR(?statement) > ${lit(cursor.after)})`
+        statementAfter
+          ? `FILTER(STR(?predicate) > ${lit(statementAfter.predicate)} ||
+        STR(?predicate) = ${lit(statementAfter.predicate)} && STR(?statement) > ${lit(statementAfter.statement)})`
           : ''
       }
-    } GROUP BY ?predicate ?statement ORDER BY STR(?predicate) STR(?statement) LIMIT ${remaining + 1}`,
-            remaining + 1,
-          );
-    const page = rows.slice(0, remaining);
-    if (page.some((row) => !row.statement || !row.predicate || !row.acceptance)) {
-      throw new WorkReadUnavailable('Statement inventory is incomplete');
-    }
-    if (page.length) {
-      const hydrated = await session.query(
-        `SELECT ?statement ?predicate ?object ?relation ?speaker ?key ?head
+    } GROUP BY ?predicate ?statement ORDER BY STR(?predicate) STR(?statement) LIMIT ${batchSize}`,
+              batchSize,
+            );
+      const page = rows;
+      if (page.some((row) => !row.statement || !row.predicate || !row.acceptance)) {
+        throw new WorkReadUnavailable('Statement inventory is incomplete');
+      }
+      if (page.length) {
+        const hydrated = await session.query(
+          `SELECT ?statement ?predicate ?object ?relation ?speaker ?key ?head
         ?pin ?ctx ?disclosure ?speakerRealm
         (GROUP_CONCAT(DISTINCT STR(?definition); separator="|") AS ?definitions)
         (GROUP_CONCAT(DISTINCT STR(?applicability); separator="|") AS ?qualifiers)
@@ -283,104 +291,121 @@ export async function readSubjectStatements(
           GRAPH ${iri(GRAPHS.current)} { ?ctx rv:disclosure ?disclosure } }
       } GROUP BY ?statement ?predicate ?object ?relation ?speaker ?key ?head ?pin ?ctx ?disclosure ?speakerRealm
       LIMIT ${page.length + 1}`,
-        page.length,
-      );
-      if (
-        hydrated.length !== page.length ||
-        new Set(hydrated.map((row) => row.statement?.value)).size !== page.length
-      ) {
-        throw new WorkReadUnavailable('Statement hydration is incomplete or ambiguous');
-      }
-      const byId = new Map(hydrated.map((row) => [row.statement!.value, row]));
-      const allowed = await checkReferences(
-        hydrated.flatMap((row) => {
-          const value = statementValue(row);
-          return [
-            ...(value.kind === 'resource' ? [value.iri] : []),
-            ...list(row.qualifiers?.value, STATEMENT_LIMITS.applicability),
-            ...list(row.sources?.value, STATEMENT_LIMITS.evidence),
-          ];
-        }),
-      );
-      for (const candidate of page) {
-        const row = byId.get(candidate.statement!.value);
+          page.length,
+        );
         if (
-          !row?.head ||
-          !row.relation ||
-          !row.speaker ||
-          !row.key ||
-          row.predicate?.value !== candidate.predicate!.value
+          hydrated.length !== page.length ||
+          new Set(hydrated.map((row) => row.statement?.value)).size !== page.length
         ) {
-          throw new WorkReadUnavailable('Statement hydration differs from its candidate');
+          throw new WorkReadUnavailable('Statement hydration is incomplete or ambiguous');
         }
-        if (
-          row.pin &&
-          row.disclosure?.value !== `${RV}Public` &&
-          !(
-            row.disclosure?.value === `${RV}Private` &&
-            row.ctx &&
-            (await canReadPrivate(row.ctx.value))
-          )
-        )
-          continue;
-        if (row.speakerRealm) {
-          try {
-            await session.realm(row.speakerRealm.value);
-          } catch (error) {
-            if (error instanceof WorkReadMissing) continue;
-            throw error;
+        const byId = new Map(hydrated.map((row) => [row.statement!.value, row]));
+        const allowed = await checkReferences(
+          hydrated.flatMap((row) => {
+            const value = statementValue(row);
+            return [
+              ...(value.kind === 'resource' ? [value.iri] : []),
+              ...list(row.qualifiers?.value, STATEMENT_LIMITS.applicability),
+              ...list(row.sources?.value, STATEMENT_LIMITS.evidence),
+            ];
+          }),
+        );
+        for (const candidate of page) {
+          const row = byId.get(candidate.statement!.value);
+          if (
+            !row?.head ||
+            !row.relation ||
+            !row.speaker ||
+            !row.key ||
+            row.predicate?.value !== candidate.predicate!.value
+          ) {
+            throw new WorkReadUnavailable('Statement hydration differs from its candidate');
           }
-        }
-        const value = statementValue(row);
-        if (value.kind === 'resource' && nativeReference.test(value.iri) && !allowed.has(value.iri))
-          continue;
-        const qualifiers = {
-          applicability: list(row.qualifiers?.value, STATEMENT_LIMITS.applicability),
-          interpretationDefinitions: list(
-            row.definitions?.value,
-            STATEMENT_LIMITS.interpretationDefinitions,
-          ),
-        };
-        const sources = list(row.sources?.value, STATEMENT_LIMITS.evidence);
-        if (
-          [...qualifiers.applicability, ...sources].some(
-            (ref) => nativeReference.test(ref) && !allowed.has(ref),
+          if (
+            row.pin &&
+            row.disclosure?.value !== `${RV}Public` &&
+            !(
+              row.disclosure?.value === `${RV}Private` &&
+              row.ctx &&
+              (await canReadPrivate(row.ctx.value))
+            )
           )
-        )
-          continue;
-        const [decision, source] = candidate.acceptance!.value.split('|');
-        if (!decision || !['local', 'global', 'inherited-global'].includes(source!)) {
-          throw new WorkReadUnavailable('Statement acceptance is incomplete');
+            continue;
+          if (row.speakerRealm) {
+            try {
+              await session.realm(row.speakerRealm.value);
+            } catch (error) {
+              if (error instanceof WorkReadMissing) continue;
+              throw error;
+            }
+          }
+          const value = statementValue(row);
+          if (
+            value.kind === 'resource' &&
+            nativeReference.test(value.iri) &&
+            !allowed.has(value.iri)
+          )
+            continue;
+          const qualifiers = {
+            applicability: list(row.qualifiers?.value, STATEMENT_LIMITS.applicability),
+            interpretationDefinitions: list(
+              row.definitions?.value,
+              STATEMENT_LIMITS.interpretationDefinitions,
+            ),
+          };
+          const sources = list(row.sources?.value, STATEMENT_LIMITS.evidence);
+          if (
+            [...qualifiers.applicability, ...sources].some(
+              (ref) => nativeReference.test(ref) && !allowed.has(ref),
+            )
+          )
+            continue;
+          const [decision, source] = candidate.acceptance!.value.split('|');
+          if (!decision || !['local', 'global', 'inherited-global'].includes(source!)) {
+            throw new WorkReadUnavailable('Statement acceptance is incomplete');
+          }
+          items.push({
+            kind: 'statement',
+            statement: row.statement!.value,
+            revision: row.head.value,
+            predicate: row.predicate!.value,
+            value,
+            relationDefinition: row.relation.value,
+            speaker: row.speaker.value,
+            meaningKey: row.key.value,
+            qualifiers,
+            sources,
+            acceptance: {
+              context,
+              decision,
+              source: source as 'local' | 'global' | 'inherited-global',
+            },
+          });
+          positions.push({
+            phase: 'statement',
+            key: row.statement!.value,
+            predicate: row.predicate!.value,
+          });
         }
-        items.push({
-          kind: 'statement',
-          statement: row.statement!.value,
-          revision: row.head.value,
-          predicate: row.predicate!.value,
-          value,
-          relationDefinition: row.relation.value,
-          speaker: row.speaker.value,
-          meaningKey: row.key.value,
-          qualifiers,
-          sources,
-          acceptance: {
-            context,
-            decision,
-            source: source as 'local' | 'global' | 'inherited-global',
-          },
-        });
       }
+      if (rows.length < batchSize) break;
+      const last = rows.at(-1)!;
+      statementAfter = { predicate: last.predicate!.value, statement: last.statement!.value };
     }
-    if (rows.length > remaining) {
-      const last = page.at(-1);
-      // A full component page can continue at the beginning of Statements.
-      nextCursor = encodeReadCursor(
-        binding,
-        session.position,
-        last?.statement?.value ?? '',
-        JSON.stringify({ phase: 'statement', predicate: last?.predicate?.value ?? '' }),
-      );
-    }
+  }
+  let nextCursor: string | null = null;
+  if (items.length > limit) {
+    const last = positions[limit - 1]!;
+    nextCursor = encodeReadCursor(
+      binding,
+      session.position,
+      last.key,
+      JSON.stringify({
+        phase: last.phase,
+        ...(last.predicate ? { predicate: last.predicate } : {}),
+      }),
+    );
+    items.splice(limit);
   }
   const fencedReferences = await visibleResourceReferences(session, [...visibleReferences]);
   if ([...visibleReferences].some((ref) => !fencedReferences.has(ref)))

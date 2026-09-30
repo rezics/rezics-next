@@ -2,12 +2,7 @@ import type { Static } from 'typebox';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { MAX_SUMMARY_BATCH, readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
-import {
-  capabilityBases,
-  capabilityPath,
-  type Base,
-  type ResolvedTarget,
-} from '../target/contract.ts';
+import { capabilityBases, type Base, type ResolvedTarget } from '../target/contract.ts';
 import { resolveTargets, targetSummaryReader } from '../target/resolve.ts';
 import { admittedTypes } from '../types/registry.ts';
 import { readWorkHeader } from '../work/read-header.ts';
@@ -33,12 +28,11 @@ export const baseSections = {
     'ratings',
     'reviews',
     'discussion',
-    'lists',
   ],
-  release: ['statements', 'relations', 'credits', 'ratings', 'reviews', 'discussion', 'lists'],
-  realization: ['statements', 'relations', 'discussion', 'lists'],
-  occurrence: ['statements', 'relations', 'discussion', 'lists'],
-  resource: ['statements', 'relations', 'discussion', 'lists'],
+  release: ['statements', 'relations', 'credits', 'ratings', 'reviews', 'discussion'],
+  realization: ['statements', 'relations', 'discussion'],
+  occurrence: ['statements', 'relations', 'discussion'],
+  resource: ['statements', 'relations', 'discussion'],
 } as const satisfies Record<Base, readonly SectionId[]>;
 
 export function pageRegistry(target: Pick<ResolvedTarget, 'base' | 'types'>) {
@@ -54,24 +48,30 @@ export function pageRegistry(target: Pick<ResolvedTarget, 'base' | 'types'>) {
   return selected;
 }
 
-export function pageSections(target: ResolvedTarget): Static<typeof entitySection>[] {
+export function pageSections(
+  target: ResolvedTarget,
+  mountedReads: ReadonlySet<string>,
+): Static<typeof entitySection>[] {
   const registry = pageRegistry(target);
   const typeSection =
     target.base === 'work' && ['recipe', 'prompt', 'skill'].includes(registry.presentation)
       ? (registry.presentation as 'recipe' | 'prompt' | 'skill')
       : null;
-  const sections: Static<typeof entitySection>[] = baseSections[target.base].map((id) => ({
-    id,
-    href:
-      id === 'lists'
-        ? capabilityPath(target.resource, 'collection-member')
-        : capabilityPath(target.resource, id),
-    actions: [],
-  }));
-  if (typeSection)
+  // Prefer a generic owner read when mounted; legacy Work reads remain valid
+  // only for a Work. Pending owner inventories do not advertise dead links.
+  const sections: Static<typeof entitySection>[] = baseSections[target.base].flatMap((id) => {
+    const paths = [
+      `/v1/resources/:id/${id}`,
+      ...(target.base === 'work' ? [`/v1/works/:id/${id}`] : []),
+    ];
+    const path = paths.find((candidate) => mountedReads.has(candidate));
+    return path ? [{ id, href: path.replace(':id', target.resource.slice(-36)), actions: [] }] : [];
+  });
+  const typePath = `/v1/${typeSection === 'recipe' ? 'recipes' : 'hub'}/works/:id`;
+  if (typeSection && mountedReads.has(typePath))
     sections.splice(1, 0, {
       id: typeSection,
-      href: `/v1/${typeSection === 'recipe' ? 'recipes' : 'hub'}/works/${target.resource.slice(-36)}`,
+      href: typePath.replace(':id', target.resource.slice(-36)),
       actions: [],
     });
   // The table is deliberately checked against capability admission, so future
@@ -94,13 +94,17 @@ export function pageSections(target: ResolvedTarget): Static<typeof entitySectio
   return sections;
 }
 
-export async function readEntityPage(session: WorkReadSession, resource: string) {
+export async function readEntityPage(
+  session: WorkReadSession,
+  resource: string,
+  mountedReads: ReadonlySet<string>,
+) {
   const target = (await resolveTargets(session, [resource], 'discussion'))[0]!;
   // Resolve again after hydration: graph-position fences alone do not detect an
   // Access revocation. Use G-506's reader, including semantic/Context grants.
   const summaryBatch = await resolveSummary(session, target.resource);
   const registry = pageRegistry(target);
-  const sections = pageSections(target);
+  const sections = pageSections(target, mountedReads);
   const work = target.base === 'work' ? await readWorkHeader(session, target.resource) : null;
   if (
     work?.disclosure === 'public' &&
@@ -109,8 +113,9 @@ export async function readEntityPage(session: WorkReadSession, resource: string)
   ) {
     try {
       const rating = await readWorkRating(session, resource);
-      if (rating.status === 'available' && rating.context) {
-        sections.find((section) => section.id === 'ratings')!.count = {
+      const section = sections.find((section) => section.id === 'ratings');
+      if (section && rating.status === 'available' && rating.context) {
+        section.count = {
           value: rating.count,
           precision: 'exact',
           context: rating.context,

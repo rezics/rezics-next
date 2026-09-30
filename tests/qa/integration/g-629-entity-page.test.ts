@@ -109,12 +109,10 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
               : []),
         'releases',
         'contents',
-        'relations',
         'credits',
         'ratings',
         'reviews',
         'discussion',
-        'lists',
       ]);
       expect(
         page.sections.every(
@@ -131,6 +129,16 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
     expect((await read(sao.bunko.work, 'page', '&unknown=1')).status).toBe(400);
 
     await f.grant('semantic:create:root', 'semantic.change');
+    expect(
+      (
+        await f.call('POST', '/v1/semantic/changes', {
+          profile: 'semantic-change-v1',
+          expectedHead: null,
+          state: { component: 'resource', types: [], properties: [] },
+          actingSubject: f.actor,
+        })
+      ).status,
+    ).toBe(400);
     const unknown = await f.json<Change>(
       await f.call('POST', '/v1/semantic/changes', {
         profile: 'semantic-change-v1',
@@ -155,16 +163,38 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
     expect(unknownPage.target).toMatchObject({ base: 'resource', work: null });
     expect(unknownPage.registry).toMatchObject({ default: true, presentation: 'default' });
     expect(unknownPage.work).toBeNull();
-    expect(unknownPage.sections.map((section) => section.id)).toEqual([
-      'statements',
-      'relations',
-      'discussion',
-      'lists',
-    ]);
+    expect(unknownPage.sections.map((section) => section.id)).toEqual(['statements']);
+    await f.grant(`semantic:edit:${unknown.component}`, 'semantic.change');
+    expect((await change(unknown.component, unknown.revision, [])).status).toBe(400);
 
     // Attaching the first description is a CAS against the existing Work head;
     // subsequent changes compare the independent semantic head.
     await f.grant(`semantic:edit:${sao.bunko.work}`, 'semantic.change');
+    const workOwned = [
+      ...[
+        'head',
+        'mainVersion',
+        'continuityProfile',
+        'scalarValue',
+        'release',
+        'protectionHead',
+        'titleControlHead',
+        'descriptiveMetadataHead',
+        'completionStatus',
+      ].map((local) => `${RV}${local}`),
+      'http://www.w3.org/2000/01/rdf-schema#label',
+      ...['alternateName', 'description', 'isPartOf'].map((local) => `https://schema.org/${local}`),
+    ];
+    const rejectWorkFields = async (head: string) => {
+      for (const predicate of workOwned) {
+        const response = await change(sao.bunko.work, head, [
+          { predicate, value: { kind: 'string', lexical: 'Forged owner field' } },
+        ]);
+        expect(response.status).toBe(422);
+        expect(await response.json()).toMatchObject({ code: 'reserved_owner' });
+      }
+    };
+    await rejectWorkFields(sao.bunko.workRevision);
     const staleKey = randomUUID();
     expect((await change(sao.bunko.work, nativeId(), [], staleKey)).status).toBe(409);
     const properties = [
@@ -209,6 +239,7 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
       200,
     );
     expect(edited.predecessor).toBe(attached.revision);
+    await rejectWorkFields(edited.revision);
     const refused = await f.call('POST', '/v1/semantic/changes', {
       profile: 'semantic-change-v1',
       target: sao.bunko.work,
@@ -234,10 +265,15 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
       ]),
     ]);
     expect(concurrent.map((response) => response.status).sort()).toEqual([200, 409]);
+    const concurrentWinner = await f.json<Change>(
+      concurrent.find((response) => response.status === 200)!,
+      200,
+    );
     // A lost graph acknowledgement still resolves the committed receipt.
     await f.grant(`semantic:edit:${sao.web.work}`, 'semantic.change');
     const originalGraph = f.env.fuseki;
     let lost = false;
+    let recoveredHead = '';
     f.env.fuseki = new Proxy(originalGraph, {
       get(target, property) {
         if (property === 'commandWithReceipt')
@@ -261,9 +297,140 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
       expect(recovered.component).toBe(sao.web.work);
       expect(recovered.receipt).toBeTruthy();
       expect(lost).toBe(true);
+      recoveredHead = recovered.revision;
     } finally {
       f.env.fuseki = originalGraph;
     }
+
+    // Unlisted predicates already present on a shared subject are also owned.
+    await f.grant(`semantic:edit:${game.work}`, 'semantic.change');
+    const otherPredicate = 'https://example.org/otherComponent';
+    const externalField = `${iri(game.work)} <${otherPredicate}> "Other owner" .`;
+    await f.nativeFuseki.update(
+      `INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${externalField} } }`,
+    );
+    const overlappingProperty = [
+      { predicate: otherPredicate, value: { kind: 'string', lexical: 'Overwrite' } },
+    ];
+    expect((await change(game.work, game.workRevision, overlappingProperty)).status).toBe(422);
+    await f.nativeFuseki.update(
+      `DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${externalField} } }`,
+    );
+    let overlapRace = false;
+    f.env.fuseki = new Proxy(originalGraph, {
+      get(target, property) {
+        if (property === 'commandWithReceipt')
+          return async (envelope: Parameters<typeof target.commandWithReceipt>[0]) => {
+            if (
+              !overlapRace &&
+              envelope.update.includes('a rv:SemanticRevision, rv:RevisionAnchor')
+            ) {
+              overlapRace = true;
+              await f.nativeFuseki.update(
+                `INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${externalField} } }`,
+              );
+            }
+            return target.commandWithReceipt(envelope);
+          };
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    try {
+      expect((await change(game.work, game.workRevision, overlappingProperty)).status).toBe(422);
+      expect(overlapRace).toBe(true);
+    } finally {
+      f.env.fuseki = originalGraph;
+    }
+    expect(
+      (await f.nativeFuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} { ${externalField} } }`))
+        .boolean,
+    ).toBe(true);
+    await f.nativeFuseki.update(
+      `DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${externalField} } }`,
+    );
+
+    const protect = async (work: Work) => {
+      await f.grant(`work:protect:${work.work}`, 'work.protection.tighten');
+      const basis = await f.json<{
+        contentHead: string;
+        protectionHead: string | null;
+        controlHead: string | null;
+        controlEpoch: string;
+        ruleRevision: string;
+      }>(
+        await f.call(
+          'GET',
+          `/v1/works/${shortId(work.work)}/editorial-state?actingSubject=${encodeURIComponent(f.actor)}`,
+        ),
+        200,
+      );
+      await f.json(
+        await f.call('POST', '/v1/work-title-protections', {
+          profile: 'work-title-protection-v1',
+          action: 'tighten',
+          work: work.work,
+          expectedHead: basis.contentHead,
+          expectedProtection: basis.protectionHead,
+          expectedControl: basis.controlHead,
+          expectedControlEpoch: basis.controlEpoch,
+          expectedRuleRevision: basis.ruleRevision,
+          actingSubject: f.actor,
+          reason: 'Keep the protected Work under its owner commands',
+          evidence: [],
+        }),
+        201,
+      );
+    };
+    await protect(sao.web);
+    expect((await change(sao.web.work, recoveredHead, [])).status).toBe(404);
+    expect(
+      (
+        await f.nativeFuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(sao.web.work)} <${RV}semanticHead> ${iri(recoveredHead)} } }`)
+      ).boolean,
+    ).toBe(true);
+    // Protection committed after the precheck also prevents a later semantic edit.
+    let protectionRace = false;
+    f.env.fuseki = new Proxy(originalGraph, {
+      get(target, property) {
+        if (property === 'commandWithReceipt')
+          return async (envelope: Parameters<typeof target.commandWithReceipt>[0]) => {
+            if (
+              !protectionRace &&
+              envelope.update.includes('a rv:SemanticRevision, rv:RevisionAnchor')
+            ) {
+              protectionRace = true;
+              await protect(sao.volume1);
+            }
+            return target.commandWithReceipt(envelope);
+          };
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    try {
+      expect((await change(sao.volume1.work, concurrentWinner.revision, properties)).status).toBe(
+        404,
+      );
+      expect(protectionRace).toBe(true);
+    } finally {
+      f.env.fuseki = originalGraph;
+    }
+    expect(
+      (
+        await f.nativeFuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(sao.volume1.work)} <${RV}semanticHead> ${iri(concurrentWinner.revision)} } }`)
+      ).boolean,
+    ).toBe(true);
+    await protect(game);
+    expect((await change(game.work, game.workRevision, properties)).status).toBe(404);
+    expect(
+      (
+        await f.nativeFuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(game.work)} <${RV}semanticHead> ?head } }`)
+      ).boolean,
+    ).toBe(false);
 
     // One command-created Statement proves the real owner path. The large
     // inventory extends that admitted graph shape as a deterministic read fixture.
@@ -301,18 +468,30 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
       }),
       201,
     );
+    const inventoryDescription = await f.json<Change>(
+      await change(sao.bunko.work, edited.revision, [
+        { ...properties[0], value: { kind: 'integer', lexical: '2008' } },
+        ...Array.from({ length: 26 }, (_, n) => ({
+          predicate: `https://example.org/aHidden${n}`,
+          value: { kind: 'resource', ref: unknown.component },
+        })),
+      ]),
+      200,
+    );
     const expected = new Set([spoken.statement]);
     const hidden: string[] = [];
-    for (let offset = 0; offset < 1003; offset += 100) {
+    for (let offset = 0; offset < 1051; offset += 100) {
       const current: string[] = [],
         revisions: string[] = [];
-      for (let n = offset; n < Math.min(offset + 100, 1003); n++) {
+      for (let n = offset; n < Math.min(offset + 100, 1051); n++) {
         const statement = nativeId(),
           head = nativeId(),
           decision = nativeId();
-        const predicate = `https://example.org/p${n % 7}`;
-        const privateValue = n === 1001;
-        const rejected = n === 1002;
+        const privateValue = n >= 1001 && n < 1050;
+        const predicate = privateValue
+          ? 'https://example.org/aPrivate'
+          : `https://example.org/p${n % 7}`;
+        const rejected = n === 1050;
         const value = privateValue
           ? { kind: 'resource' as const, iri: unknown.component }
           : {
@@ -368,6 +547,7 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
       );
       expect(Value.Check(subjectStatementPage, page)).toBe(true);
       const items = page.groups.flatMap((group) => group.items);
+      if (page.nextCursor) expect(items.length).toBe(20);
       expect(page.count).toEqual({ value: items.length, kind: 'exact-page', total: null });
       for (const item of items)
         if (item.kind === 'statement') {
@@ -389,9 +569,9 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
     expect([...seen].sort()).toEqual([...expected].sort());
     const first = await f.json<Statements>(await read(sao.bunko.work, 'statements'), 200);
     expect(first.nextCursor).toBeTruthy();
-    expect((await read(game.work, 'statements', `&cursor=${first.nextCursor}`)).status).toBe(400);
+    expect((await read(recipe.work, 'statements', `&cursor=${first.nextCursor}`)).status).toBe(400);
     expect((await read(sao.bunko.work, 'statements', '&cursor=invalid')).status).toBe(400);
-    await change(sao.bunko.work, edited.revision, []);
+    await change(sao.bunko.work, inventoryDescription.revision, []);
     expect((await read(sao.bunko.work, 'statements', `&cursor=${first.nextCursor}`)).status).toBe(
       409,
     );

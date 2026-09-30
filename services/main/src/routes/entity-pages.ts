@@ -38,7 +38,10 @@ function pageError(error: unknown) {
     return problem(503, 'entity_page_unavailable', 'Resource page is unavailable');
   return workReadError(error);
 }
-export function entityPageRoutes(work: MainWorkDependencies) {
+export function entityPageRoutes(
+  work: MainWorkDependencies,
+  mountedReads: () => ReadonlySet<string>,
+) {
   return new Elysia()
     .get(
       '/v1/resources/:id/page',
@@ -52,7 +55,7 @@ export function entityPageRoutes(work: MainWorkDependencies) {
         try {
           return response(
             await workRead(work, request, query, (session) =>
-              readEntityPage(session, `https://rezics.com/id/${path.id}`),
+              readEntityPage(session, `https://rezics.com/id/${path.id}`, mountedReads()),
             ),
           );
         } catch (error) {

@@ -15,6 +15,16 @@ import { modelGenerationHeadGuard } from './generation-guard.ts';
 const RDFS_RESOURCE = 'http://www.w3.org/2000/01/rdf-schema#Resource';
 export const SEMANTIC_CHANGE_FAMILY = 'semantic-change';
 
+/** Work projections have independent command heads, even when a field is absent.
+ * Descriptions cannot take ownership of their structural or editorial fields. */
+export const WORK_OWNER_PREDICATES: ReadonlySet<string> = new Set([
+  ...['head', 'mainVersion', 'continuityProfile', 'scalarValue', 'release',
+    'protectionHead', 'titleControlHead', 'descriptiveMetadataHead', 'completionStatus']
+    .map(local => `${RV}${local}`),
+  'http://www.w3.org/2000/01/rdf-schema#label',
+  ...['alternateName', 'description', 'isPartOf'].map(local => `https://schema.org/${local}`),
+]);
+
 /** Types routed to another owner's canonical shape can never be added generically. */
 export const CANONICAL_TYPES: ReadonlySet<string> = new Set((JSON.parse(readFileSync(
   join(import.meta.dir, '../../../../../generated/model/manifest.json'), 'utf8')) as {
@@ -163,6 +173,9 @@ export function semanticChangeDigest(target: string | undefined, expectedHead: s
   if (target !== undefined) checkedNativeIri(target);
   if (expectedHead !== null) checkedNativeIri(expectedHead);
   if ((target === undefined) !== (expectedHead === null)) fail('invalid', 'a create has no head; an edit names one');
+  if (target === undefined && state.component === 'resource' && state.types.length === 0) {
+    fail('invalid', 'a new semantic resource requires a descriptive type');
+  }
   return hash(JSON.stringify({ family: 'semantic-change-v1', target: target ?? null, expectedHead,
     state: checkedComponentState(state) }));
 }
@@ -282,6 +295,14 @@ async function resultOf(env: WorkActivationEnvironment, terminal: SemanticTermin
     receipt: terminal.receipt, dataEpoch: terminal.dataEpoch, sequence: terminal.sequence, replayed };
 }
 
+async function assertPredicatesUnowned(env: WorkActivationEnvironment, target: string, predicates: readonly string[]) {
+  if (!predicates.length) return;
+  const overlap = await env.fuseki.query(`SELECT ?predicate WHERE { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(target)} ?predicate ?value . VALUES ?predicate { ${predicates.map(predicate => `<${predicate}>`).join(' ')} }
+  } } LIMIT 1`);
+  if (overlap.results?.bindings.length) fail('reserved-owner', 'predicate already belongs to another component');
+}
+
 /**
  * Create or revise one semantic component (a Resource's semantic description or a
  * versioned definition) under the expected head. The update guards the head, the
@@ -296,13 +317,25 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
   if (existing) return checkedResult(env, existing, intent, true);
   const generation = await ensureModelGeneration(env);
   const target = intent.target ?? `${ID}${Bun.randomUUIDv7()}`;
-  if (intent.target && state.component === 'resource'
-    && state.types.some(type => WORK_SEMANTIC_TYPES.some(ownedType => ownedType === type))) {
-    const isWork = await env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(target)} a <https://schema.org/CreativeWork> } }`);
-    if (isWork.boolean) fail('reserved-owner', 'Work kinds belong to the Work type command');
+  const isWork = intent.target && state.component === 'resource'
+    ? (await env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(target)} a <https://schema.org/CreativeWork> } }`)).boolean === true : false;
+  if (state.component === 'resource') {
+    if (!isWork && state.types.length === 0) fail('invalid', 'only a Work description may omit types');
+    if (isWork && (state.types.some(type => WORK_SEMANTIC_TYPES.some(ownedType => ownedType === type))
+      || state.properties.some(property => WORK_OWNER_PREDICATES.has(property.predicate)))) {
+      fail('reserved-owner', 'Work fields belong to their owning commands');
+    }
+  }
+  if (intent.target && (await env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(target)} <${RV}protectionHead> ?protection } }`)).boolean) {
+    throw new SemanticTargetUnavailable('semantic component is unavailable');
   }
   const current = intent.target ? await readCurrentComponent(env, target, state.component) : null;
+  if (isWork && current?.state.component === 'resource'
+    && current.state.properties.some(property => WORK_OWNER_PREDICATES.has(property.predicate))) {
+    fail('reserved-owner', 'stored description overlaps a Work field');
+  }
   // A first description attaches to the existing Work under its structural head.
   // Later edits compare only the independently owned semantic head.
   const attachment = intent.target && !current && state.component === 'resource'
@@ -336,6 +369,11 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     if (overlap.results?.bindings.length) fail('reserved-owner', 'semantic type already belongs to another component');
   }
   const prior = current?.state.component === 'resource' ? current.state.properties : [];
+  const addedPredicates = state.component === 'resource' ? [...new Set(state.properties
+    .map(property => property.predicate).filter(predicate => !prior.some(property => property.predicate === predicate)))] : [];
+  if (intent.target && addedPredicates.length) {
+    await assertPredicatesUnowned(env, target, addedPredicates);
+  }
   const { stored, rdf } = state.component === 'resource' ? propertyRdf(state.properties, prior)
     : { stored: [], rdf: [] };
   const exact: ComponentState = state.component === 'resource' ? { ...state, properties: stored } : state;
@@ -371,6 +409,8 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.revisions)} { ${anchor}
         ${rdf.flatMap(item => item.node ? item.node.triples.map(triple => `${triple} .`) : []).join('\n')} }`,
     where: `${modelGenerationHeadGuard(generation)}
+      ${intent.target ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(target)} rv:protectionHead ?protection } }` : ''}
       ${current ? `GRAPH ${iri(GRAPHS.current)} { ${old.map(triple => `${iri(target)} ${triple} .`).join('\n')} }`
         : workHead ? `GRAPH ${iri(GRAPHS.current)} {
             ${iri(target)} a <https://schema.org/CreativeWork> ; rv:head ${iri(intent.expectedHead!)} . }
@@ -381,6 +421,8 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
       ${references.map(ref => `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a ?refType } }`).join('\n')}
       ${intent.target && addedTypes.length ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(target)} a ?ownedType . VALUES ?ownedType { ${addedTypes.map(type => `<${type}>`).join(' ')} } } }` : ''}
+      ${intent.target && addedPredicates.length ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(target)} ?ownedPredicate ?ownedValue . VALUES ?ownedPredicate { ${addedPredicates.map(predicate => `<${predicate}>`).join(' ')} } } }` : ''}
       ${state.component === 'definition' && state.successor ? `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(state.successor)} a rv:SemanticDefinition } }` : ''}
       ${nodes.map(node => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(node.iri)} ?nodeP ?nodeO } }`).join('\n')}
@@ -398,8 +440,13 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     return checkedResult(env, terminal, intent, terminal.revision !== revision);
   }
   if (intent.target) {
+    if ((await env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(target)} <${RV}protectionHead> ?protection } }`)).boolean) {
+      throw new SemanticTargetUnavailable('semantic component is unavailable');
+    }
     const now = await readCurrentComponent(env, target, state.component).catch(() => null);
     if (now && now.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, target, state);
+    await assertPredicatesUnowned(env, target, addedPredicates);
   }
   if (references.length) {
     const sealed = await sealSemanticRejection(env, receipt, digest, intent.admission, 'unavailable-reference',

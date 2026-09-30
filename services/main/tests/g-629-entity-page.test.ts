@@ -20,6 +20,7 @@ import {
   ownedTriples,
   term,
   type ResourceState,
+  semanticChangeDigest,
 } from '../src/modules/semantic/change.ts';
 import { PROFILES } from '../src/modules/semantic/schema.ts';
 import {
@@ -31,6 +32,15 @@ import { prepareComponent, RV } from '../src/modules/work/activate.ts';
 import { openApiOperations } from '../src/routes/entity-pages.ts';
 import { WorkReadSession } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { createMainApp } from '../src/app.ts';
+
+const futureReads = new Set(
+  Object.values(baseSections)
+    .flat()
+    .map((section) => `/v1/resources/:id/${section}`),
+);
+futureReads.add('/v1/recipes/works/:id');
+futureReads.add('/v1/hub/works/:id');
 
 const id = (n: number) =>
   `https://rezics.com/id/00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
@@ -54,12 +64,11 @@ test('G-629: base × registry presentation matrix admits only bound sections and
       'ratings',
       'reviews',
       'discussion',
-      'lists',
     ],
-    release: ['statements', 'relations', 'credits', 'ratings', 'reviews', 'discussion', 'lists'],
-    realization: ['statements', 'relations', 'discussion', 'lists'],
-    occurrence: ['statements', 'relations', 'discussion', 'lists'],
-    resource: ['statements', 'relations', 'discussion', 'lists'],
+    release: ['statements', 'relations', 'credits', 'ratings', 'reviews', 'discussion'],
+    realization: ['statements', 'relations', 'discussion'],
+    occurrence: ['statements', 'relations', 'discussion'],
+    resource: ['statements', 'relations', 'discussion'],
   };
   for (const base of Object.keys(expected) as Base[]) {
     for (const entry of [
@@ -68,7 +77,7 @@ test('G-629: base × registry presentation matrix admits only bound sections and
     ]) {
       const resolved = target(base, [entry.type]);
       const registry = pageRegistry(resolved);
-      const sections = pageSections(resolved);
+      const sections = pageSections(resolved, futureReads);
       const typeSection =
         base === 'work' &&
         entry.base === base &&
@@ -103,23 +112,22 @@ test('G-629: registry precedence and component types cannot retarget a Work or g
     'https://schema.org/Book',
     'https://rezics.com/vocab/PromptTemplate',
   ]);
-  expect(pageSections(prompt).find((section) => section.id === 'prompt')?.href).toBe(
+  expect(pageSections(prompt, futureReads).find((section) => section.id === 'prompt')?.href).toBe(
     `/v1/hub/works/${id(1).slice(-36)}`,
   );
   expect(
-    pageSections(target('work', ['https://schema.org/Recipe'])).find(
+    pageSections(target('work', ['https://schema.org/Recipe']), futureReads).find(
       (section) => section.id === 'recipe',
     )?.href,
   ).toBe(`/v1/recipes/works/${id(1).slice(-36)}`);
   expect(
-    pageSections(target('resource', ['https://example.org/Unknown'])).map(
+    pageSections(target('resource', ['https://example.org/Unknown']), futureReads).map(
       (section) => section.href,
     ),
   ).toEqual([
     `/v1/resources/${id(1).slice(-36)}/statements`,
     `/v1/resources/${id(1).slice(-36)}/relations`,
     `/v1/resources/${id(1).slice(-36)}/discussion`,
-    `/v1/resources/${id(1).slice(-36)}/collection-member`,
   ]);
 });
 
@@ -129,7 +137,7 @@ test('G-629: read contracts expose optional bearer, fixed projection profile and
     '/v1/resources/{id}/page': { get: { bearer: false } },
     '/v1/resources/{id}/statements': { get: { bearer: false } },
   });
-  expect(SUBJECT_STATEMENT_COST.inventoryQueries).toBe(2);
+  expect(SUBJECT_STATEMENT_COST.inventoryQueriesPerBatch).toBe(2);
   expect(Number(SUBJECT_STATEMENT_COST.candidates)).toBe(SUBJECT_STATEMENT_COST.pageSize + 1);
   const inherited = acceptedStatementPattern(id(10), true);
   expect(inherited).toContain('rv:Withdrawn');
@@ -143,6 +151,50 @@ test('G-629: read contracts expose optional bearer, fixed projection profile and
     properties: [],
     lifecycle: 'active',
   });
+  expect(() =>
+    semanticChangeDigest(undefined, null, {
+      component: 'resource',
+      types: [],
+      properties: [],
+      lifecycle: 'active',
+    }),
+  ).toThrow('requires a descriptive type');
+});
+
+test('G-629: every advertised section href matches a GET mounted by Main', () => {
+  const graph = new FusekiClient('http://graph.invalid');
+  const app = createMainApp(graph, {
+    environment: {
+      fuseki: graph,
+      lineage: { dataEpoch: 'epoch', routingEpoch: 'route' },
+      objectDirectory: '.temp/g-629-unused',
+    },
+    account: {},
+    access: {},
+  } as unknown as NonNullable<Parameters<typeof createMainApp>[1]>);
+  const mounted = new Set(
+    app.routes.filter((route) => route.method === 'GET').map((route) => route.path),
+  );
+  for (const base of Object.keys(baseSections) as Base[]) {
+    for (const entry of admittedTypes) {
+      const sections = pageSections(target(base, [entry.type]), mounted);
+      expect(sections.some((section) => section.id === 'statements')).toBe(true);
+      for (const section of sections) {
+        expect(mounted.has(section.href.replace(id(1).slice(-36), ':id'))).toBe(true);
+        expect(section.id).not.toBe('lists');
+      }
+    }
+  }
+  const work = pageSections(target('work', ['https://schema.org/Book']), mounted);
+  for (const section of ['contents', 'releases', 'credits'])
+    expect(work.find((item) => item.id === section)?.href).toBe(
+      `/v1/works/${id(1).slice(-36)}/${section}`,
+    );
+  expect(
+    pageSections(target('resource', ['https://example.org/Unknown']), mounted).map(
+      (section) => section.id,
+    ),
+  ).toEqual(['statements']);
 });
 
 test('G-629: 500 native value/qualifier/source references use eight owner batches and withhold denied identities', async () => {
