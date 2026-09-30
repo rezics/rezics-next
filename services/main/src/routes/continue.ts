@@ -1,7 +1,8 @@
 import { Elysia, t } from 'elysia';
-import { CONTINUE_COST, continueQuery, continueResult, hiddenCommand, hiddenResult }
+import { CONTINUE_COST, continueQuery, continueResult, hiddenCommand, hiddenResult,
+  workResumeQuery, workResumeResult, WORK_RESUME_COST }
   from '../modules/continue/contract.ts';
-import { readContinue } from '../modules/continue/read.ts';
+import { readContinue, readWorkResume } from '../modules/continue/read.ts';
 import { readUuid } from '../modules/work/read-contract.ts';
 import { workRead, WorkReadLimit, WorkReadUnavailable } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -9,6 +10,7 @@ import { homeError, homeHeaders } from './follows.ts';
 import { workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
+  '/v1/me/continue/{work}': { get: { bearer: true } },
   '/v1/me/continue': { get: { bearer: true } },
   '/v1/me/continue/{work}/hidden': { put: { bearer: true, idempotencyKey: true } },
 } as const;
@@ -23,6 +25,18 @@ export function continueRoutes(work: MainWorkDependencies) {
         session => readContinue(session, principal, query.actingSubject, query.limit));
       const body = JSON.stringify(result);
       if (Buffer.byteLength(body) > CONTINUE_COST.responseBytes) throw new WorkReadLimit('Continue response too large');
+      return new Response(body, { headers: { ...homeHeaders, 'content-type': 'application/json' } });
+    } catch (error) { return homeError(error); }
+  }).get('/v1/me/continue/:work', { params: t.Object({ work: readUuid }),
+    query: workResumeQuery, response: { 200: workResumeResult, ...workReadProblems },
+  }, async ({ request, params, query }) => {
+    try {
+      const principal = await work.account.verify(request, ['work:read']);
+      const result = await workRead(work, request, query,
+        session => readWorkResume(session, principal, query.actingSubject,
+          `https://rezics.com/id/${params.work}`));
+      const body = JSON.stringify(result);
+      if (Buffer.byteLength(body) > WORK_RESUME_COST.responseBytes) throw new WorkReadLimit('Resume response too large');
       return new Response(body, { headers: { ...homeHeaders, 'content-type': 'application/json' } });
     } catch (error) { return homeError(error); }
   }).put('/v1/me/continue/:work/hidden', { params: t.Object({ work: readUuid }),

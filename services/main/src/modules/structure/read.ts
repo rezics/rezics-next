@@ -100,7 +100,12 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
   canReadTarget: (target: string) => Promise<boolean>; outline?: boolean;
   /** The Structure's header when the caller already read it for this request; saves two queries. */
   header?: CompositionHeader;
+  /** An owner's disclosure projection filters inside the immutable range scan,
+   * before lookahead, so sparse pages do not repeat graph/header reads per item. */
+  visible?: (record: OccurrenceRecord) => boolean;
+  signal?: AbortSignal;
 }): Promise<CompositionPage> {
+  input.signal?.throwIfAborted();
   if (!NATIVE_ID.test(input.structure) || input.revision && !NATIVE_ID.test(input.revision)
     || input.parent && !NATIVE_ID.test(input.parent)
     || input.occurrence && !NATIVE_ID.test(input.occurrence) || !Number.isInteger(input.limit)
@@ -190,7 +195,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       revision, predecessor: value('predecessor') ?? null,
       placementCount: profile.withholdUnreadableTargets ? 0 : manifest.placementCount,
       ...(header.profile === 'work-composition' ? { completion: manifest.completion ?? { status: 'unknown', evidence: [] } } : {}),
-      occurrences: [visible], next: null,
+      occurrences: !input.visible || input.visible(visible) ? [visible] : [], next: null,
       sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! },
       cost, occurrenceContext };
   }
@@ -220,9 +225,10 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
   let scanAfter = after;
   let page: Array<Required<Pick<OccurrenceRecord, 'parent' | 'segmentKey' | 'orderKey'>>> = [];
   let hasNext = false;
-  const disclosed = profile.withholdUnreadableTargets;
+  const disclosed = profile.withholdUnreadableTargets || !!input.visible;
   const scanLimit = disclosed ? 101 : input.limit + 1;
   while (true) {
+    input.signal?.throwIfAborted();
     const ordered = await orderTree(objects).range(manifest.order,
       scanAfter ? `${scanAfter}\u0000` : prefix, `${parent}\u0002`, scanLimit, cost);
     if (!disclosed) { page = ordered.slice(0, input.limit); hasNext = ordered.length > input.limit; }
@@ -230,6 +236,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     const found = await recordTree(objects).lookup(manifest.records,
       candidates.map(entry => entry.occurrence), cost);
     for (const entry of candidates) {
+      input.signal?.throwIfAborted();
       const record = found.get(entry.occurrence);
       if (!record || record.state !== 'active' || record.parent !== parent
         || record.segmentKey !== entry.segmentKey || record.orderKey !== entry.orderKey) {
@@ -241,15 +248,18 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
         if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
         throw error;
       }
-      if (record.target && !isCatalogTarget(profile, record.target)
-        && !await input.canReadTarget(record.target)) {
-        if (!profile.withholdUnreadableTargets) occurrences.push({ ...record, target: undefined, selection: undefined, labels: [] });
-      } else occurrences.push(record);
+      const withheld = record.target && !isCatalogTarget(profile, record.target)
+        && !await input.canReadTarget(record.target);
+      if (!withheld || !profile.withholdUnreadableTargets) {
+        const visible = withheld ? { ...record, target: undefined, selection: undefined, labels: [] } : record;
+        if (!input.visible || input.visible(visible)) occurrences.push(visible);
+      }
       if (disclosed && occurrences.length > input.limit) break;
     }
     if (!disclosed || occurrences.length > input.limit || ordered.length < scanLimit) break;
     scanAfter = orderTreeKey(ordered.at(-1)!);
   }
+  input.signal?.throwIfAborted();
   if (disclosed) {
     hasNext = occurrences.length > input.limit;
     occurrences.splice(input.limit);

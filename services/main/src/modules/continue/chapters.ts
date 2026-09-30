@@ -49,9 +49,9 @@ async function nextRecord(session: WorkReadSession, structure: string, progress?
 
 export async function continueChapters(session: WorkReadSession, principal: VerifiedPrincipal,
   works: readonly string[]): Promise<{ chapters: ReadonlyMap<string, Chapter>;
-    progress: ReadonlyMap<string, WorkProgress> }> {
+    progress: ReadonlyMap<string, WorkProgress>; structures: ReadonlyMap<string, string> }> {
   const status = session.deps.libraryStatus;
-  if (!status || !works.length) return { chapters: new Map(), progress: new Map() };
+  if (!status || !works.length) return { chapters: new Map(), progress: new Map(), structures: new Map() };
   const rows = await session.query(`SELECT ?work ?main ?structure ?language WHERE {
     VALUES ?work { ${works.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} {
@@ -81,6 +81,7 @@ export async function continueChapters(session: WorkReadSession, principal: Veri
     if (entry.languages.length > MAIN_LANGUAGE_LIMIT) throw new WorkReadUnavailable('Book languages exceed budget');
     byWork.set(work, entry);
   }
+  const structures = new Map([...byWork].map(([work, item]) => [work, item.structure]));
   const byStructure = await status.progress(principal, [...new Set([...byWork.values()].map(item => item.structure))]);
   const progress = new Map([...byWork].flatMap(([work, item]) => {
     const saved = byStructure.get(item.structure);
@@ -105,7 +106,7 @@ export async function continueChapters(session: WorkReadSession, principal: Veri
     if (next?.record.target) selected.push({ work, structure: entry.structure, language: language.toLowerCase(),
       record: next.record, pageCount: next.pageCount, ordinal: next.ordinal });
   }));
-  if (!selected.length) return { chapters: new Map(), progress };
+  if (!selected.length) return { chapters: new Map(), progress, structures };
   const shortStructures = [...new Set(selected.filter(item => item.pageCount <= CONTINUE_COST.exactCountPlacements)
     .map(item => item.structure))];
   const groups = shortStructures.length ? await session.query(`SELECT DISTINCT ?structure WHERE {
@@ -186,5 +187,5 @@ export async function continueChapters(session: WorkReadSession, principal: Veri
       unreadCount: { value: exact ? Math.max(1, item.pageCount - item.ordinal + 1) : 1,
         kind: exact ? 'exact' : 'lower-bound' } });
   }
-  return { chapters, progress };
+  return { chapters, progress, structures };
 }

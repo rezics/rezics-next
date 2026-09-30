@@ -20,8 +20,9 @@ export class StaleLibraryStatus extends Error {}
 export class LibraryStatusConflict extends Error {}
 export interface YearlyGoal { year: number; target: number | null; completed: number;
   version: number; changedAt: string | null; replayed?: boolean }
-export const READING_STATS_COST = { finishedWorks: 240, completedOccurrences: 2400,
-  baseSqlStatements: 3, detailBatch: 20, conceptPairsPerWork: 8 } as const;
+export const READING_TOTALS_COST = { sqlStatements: 1, resultRows: 12, responseBytes: 8 * 1024 } as const;
+/** Rich graph-derived details still require an owner aggregate projection. */
+export const READING_STATS_COST = { finishedWorks: 240, detailBatch: 20, conceptPairsPerWork: 8 } as const;
 export interface ReadingMonth { month: number; books: number; chapters: number }
 export interface ReadingYear { year: number; books: number; chapters: number; months: ReadingMonth[] }
 export interface PrivateImportReview { work: string; text: string; language: string;
@@ -113,38 +114,36 @@ export class ReaderLibraryStatusStore {
     } finally { client.release(); }
   }
 
-  /** Dated Read statuses and first completed chapter commands are distinct counters.
-   * Both inputs have explicit ceilings; the read fails instead of presenting a partial year. */
+  /** Whole-year totals are one MVCC snapshot and twelve SQL aggregate rows.
+   * Chapter completions use UTC calendar months, independent of the DB timezone.
+   * No Work or occurrence inventory is transferred to Main. */
   async readingYear(agent: string, principal: VerifiedPrincipal, year: number): Promise<ReadingYear> {
     if (!ID.test(agent) || !Number.isInteger(year) || year < 1900 || year > 2100) {
       throw new InvalidLibraryStatus('invalid reading stats year');
     }
-    const [books, chapters] = await Promise.all([
-      this.pool.query<{ finished_on: string }>(`
-        SELECT finished_on::text AS finished_on FROM reader.library_status
-        WHERE agent = $1 AND status = 'read' AND finished_on >= make_date($2,1,1)
-          AND finished_on < make_date($2 + 1,1,1)
-        ORDER BY finished_on, work LIMIT ${READING_STATS_COST.finishedWorks + 1}`, [agent, year]),
-      this.pool.query<{ completed_at: string }>(`
-        SELECT created_at::text AS completed_at FROM structure.progress_command
-        WHERE principal_issuer = $1 AND principal_subject = $2 AND first_finish
-          AND created_at >= make_date($3,1,1) AND created_at < make_date($3 + 1,1,1)
-        ORDER BY created_at, structure, occurrence
-        LIMIT ${READING_STATS_COST.completedOccurrences + 1}`, [principal.issuer, principal.subject, year]),
-    ]);
-    if (books.rows.length > READING_STATS_COST.finishedWorks
-      || chapters.rows.length > READING_STATS_COST.completedOccurrences) {
-      throw new WorkReadLimit('Reading stats exceed the yearly read budget');
-    }
-    const months: ReadingMonth[] = Array.from({ length: 12 }, (_, index) =>
-      ({ month: index + 1, books: 0, chapters: 0 }));
-    for (const row of books.rows) months[Number(row.finished_on.slice(5, 7)) - 1]!.books++;
-    for (const row of chapters.rows) {
-      const completed = new Date(row.completed_at);
-      if (completed.getUTCFullYear() === year) months[completed.getUTCMonth()]!.chapters++;
-    }
-    return { year, books: books.rows.length, chapters: months.reduce((total, month) => total + month.chapters, 0),
-      months };
+    const result = await this.pool.query<{ month: number; books: string; chapters: string }>(`
+      WITH books AS (
+        SELECT extract(month FROM finished_on)::integer AS month, count(*) AS count
+        FROM reader.library_status
+        WHERE agent = $1 AND status = 'read' AND finished_on >= make_date($4,1,1)
+          AND finished_on < make_date($4 + 1,1,1)
+        GROUP BY 1
+      ), chapters AS (
+        SELECT extract(month FROM created_at AT TIME ZONE 'UTC')::integer AS month, count(*) AS count
+        FROM structure.progress_command
+        WHERE principal_issuer = $2 AND principal_subject = $3 AND first_finish
+          AND created_at >= (make_date($4,1,1)::timestamp AT TIME ZONE 'UTC')
+          AND created_at < (make_date($4 + 1,1,1)::timestamp AT TIME ZONE 'UTC')
+        GROUP BY 1
+      )
+      SELECT month, coalesce(books.count,0)::text AS books, coalesce(chapters.count,0)::text AS chapters
+      FROM generate_series(1,12) AS months(month)
+      LEFT JOIN books USING (month) LEFT JOIN chapters USING (month) ORDER BY month`,
+    [agent, principal.issuer, principal.subject, year]);
+    const months = result.rows.map(row => ({ month: row.month, books: Number(row.books),
+      chapters: Number(row.chapters) }));
+    return { year, books: months.reduce((total, month) => total + month.books, 0),
+      chapters: months.reduce((total, month) => total + month.chapters, 0), months };
   }
 
   /** Private, bounded Work IDs for the richer year summary. The route never returns them. */

@@ -24,3 +24,13 @@ export const hiddenResult = t.Object({ profile: t.Literal('home-exclusion-v1'), 
  * position reads per Book. Exact counts retain the former small-Book ceiling. */
 export const CONTINUE_COST = { candidatesPerSource: 8, maxCandidates: 16, exactCountPlacements: 20,
   responseBytes: 64 * 1024 } as const;
+
+export const workResumeQuery = t.Object({ actingSubject: readId,
+  language: t.Optional(t.String({ minLength: 2, maxLength: 35 })) }, { additionalProperties: false });
+export const workResumeResult = t.Object({ profile: t.Literal('work-resume-v1'), work: readId,
+  sourcePosition: continueResult.properties.sourcePosition,
+  lastPosition: continueItem.properties.lastPosition,
+  nextUnread: t.Nullable(continueItem.properties.nextUnread),
+  unreadCount: t.Nullable(continueItem.properties.unreadCount) });
+export const WORK_RESUME_COST = { works: 1, progressReads: 2, chapterPositionReads: 3,
+  graphCalls: 30, sqlStatements: 110, responseBytes: 8 * 1024 } as const;

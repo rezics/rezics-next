@@ -3,11 +3,11 @@ import { pendingOperation, problemResult } from '../api-contract.ts';
 import { readMyShelves, readReaderStates, readStatusShelf, READER_LIBRARY_COST }
   from '../modules/library/read.ts';
 import { readPublicShelves, readPublicStatusShelf } from '../modules/library/public.ts';
-import { InvalidLibraryStatus, LibraryStatusConflict, StaleLibraryStatus }
+import { InvalidLibraryStatus, LibraryStatusConflict, READING_TOTALS_COST, StaleLibraryStatus }
   from '../modules/library/status.ts';
 import { readWorkBasis } from '../modules/work/read-header.ts';
 import { canonicalChapterWorks } from '../modules/structure/chapter-work.ts';
-import { workRead, WorkReadInvalid } from '../modules/work/read-session.ts';
+import { workRead, WorkReadInvalid, WorkReadLimit } from '../modules/work/read-session.ts';
 import { pageQuery, readId, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
 import { shelfWork } from '../modules/profiles/read-contract.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
@@ -68,6 +68,10 @@ const yearlyGoal = t.Object({ year: t.Integer({ minimum: 1900, maximum: 2100 }),
   target: t.Nullable(t.Integer({ minimum: 1, maximum: 1000 })),
   completed: t.Integer({ minimum: 0 }), version: t.Integer({ minimum: 0 }),
   changedAt: t.Nullable(t.String()), replayed: t.Optional(t.Boolean()) });
+const readingTotals = t.Object({ year: t.Integer({ minimum: 1900, maximum: 2100 }),
+  books: t.Integer({ minimum: 0 }), chapters: t.Integer({ minimum: 0 }),
+  months: t.Array(t.Object({ month: t.Integer({ minimum: 1, maximum: 12 }),
+    books: t.Integer({ minimum: 0 }), chapters: t.Integer({ minimum: 0 }) }), { minItems: 12, maxItems: 12 }) });
 const readingStats = t.Object({ year: t.Integer({ minimum: 1900, maximum: 2100 }),
   books: t.Integer({ minimum: 0 }), chapters: t.Integer({ minimum: 0 }),
   averageRating: t.Nullable(t.Number({ minimum: 1, maximum: 5 })),
@@ -105,6 +109,7 @@ export const openApiOperations = {
   '/v1/agents/{id}/shelves': { get: { bearer: false } },
   '/v1/agents/{id}/shelves/status/{status}/works': { get: { bearer: false } },
   '/v1/me/reading-goal': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
+  '/v1/me/reading-stats/summary': { get: { bearer: true } },
   '/v1/me/reading-stats': { get: { bearer: true } },
   '/v1/me/import-reviews': { get: { bearer: true } },
   '/v1/me/import-reviews/{id}': { put: { bearer: true, idempotencyKey: true } },
@@ -408,6 +413,21 @@ export function libraryRoutes(work: MainWorkDependencies) {
         }
         return commandError(error);
       }
+    })
+    .get('/v1/me/reading-stats/summary', {
+      query: t.Object({ actingSubject: readId, year: t.Numeric({ minimum: 1900, maximum: 2100 }) },
+        { additionalProperties: false }), response: { 200: readingTotals, ...errors },
+    }, async ({ request, query }) => {
+      if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
+      try {
+        const principal = await reader(request, query.actingSubject);
+        if (!principal) return problem(403, 'reader_library_denied', 'Reader library unavailable');
+        const result = await work.libraryStatus.readingYear(query.actingSubject, principal, query.year);
+        if (!await reader(request, query.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
+        const body = JSON.stringify(result);
+        if (Buffer.byteLength(body) > READING_TOTALS_COST.responseBytes) throw new WorkReadLimit('Reading totals response too large');
+        return new Response(body, { headers: { ...privateHeaders, 'content-type': 'application/json' } });
+      } catch (error) { return failure(error); }
     })
     .get('/v1/me/reading-stats', {
       query: t.Object({ actingSubject: readId, year: t.Numeric({ minimum: 1900, maximum: 2100 }) },

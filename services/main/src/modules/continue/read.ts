@@ -1,6 +1,6 @@
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { readFollowTargets } from '../follows/read.ts';
-import { WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
+import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { GRAPHS, iri, MAX_WORK_SEMANTIC_TYPES, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { inOrder, settle, unwrap } from '../feed/settled.ts';
 import { CONTINUE_COST } from './contract.ts';
@@ -67,4 +67,43 @@ export async function readContinue(session: WorkReadSession, principal: Verified
     items: shown.map(item => ({ ...item, types: typeRows.filter(row => row.work?.value === item.work)
       .flatMap(row => row.type ? [row.type.value] : []).sort() })),
     scanned: { reading: reading.length, followed: followed.rows.length, limit: CONTINUE_COST.maxCandidates } };
+}
+
+/** A direct Work read never consults the ranked Continue preview, follows or
+ * Home exclusions. It shares Continue's exact chapter-selection and progress
+ * logic, so an old or unshelved Work can still resume. */
+export async function readWorkResume(session: WorkReadSession, principal: VerifiedPrincipal,
+  agent: string, work: string) {
+  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)) {
+    throw new WorkReadInvalid('Invalid resume Work');
+  }
+  const status = session.deps.libraryStatus;
+  const canRead = session.deps.access.canReadAsBaselineMember;
+  if (!status || !canRead || !await canRead.call(session.deps.access, principal, agent)) {
+    throw new WorkReadUnavailable('Work resume is unavailable');
+  }
+  const summary = (await session.summaries([work]))[0];
+  if (summary?.status !== 'available' || summary.type !== 'work'
+    || !await session.deps.access.canReadWork(principal, agent, work)) {
+    throw new WorkReadMissing('Work is unavailable');
+  }
+  const { chapters, progress, structures } = await continueChapters(session, principal, [work]);
+  const next = chapters.get(work), saved = progress.get(work);
+  // Fence the same principal's latest progress without re-reading the chapters.
+  // A save racing this request must not produce an already-read resume link.
+  const structure = structures.get(work);
+  if (structure) {
+    const current = (await status.progress(principal, [structure])).get(structure);
+    if (JSON.stringify(current) !== JSON.stringify(saved)) throw new WorkReadMoved('Work progress changed');
+  }
+  if (!await canRead.call(session.deps.access, principal, agent)
+    || !await session.deps.access.canReadWork(principal, agent, work)) {
+    throw new WorkReadMoved('Reader authority changed');
+  }
+  return { profile: 'work-resume-v1' as const, work, sourcePosition: session.position,
+    lastPosition: saved ? { occurrence: saved.occurrence, position: saved.position,
+      completed: saved.completed, updatedAt: saved.changedAt } : null,
+    nextUnread: next ? { occurrence: next.occurrence, title: next.title,
+      href: `/w/${work.slice(-36)}/read/${next.occurrence.slice(-36)}?language=${encodeURIComponent(next.language)}` } : null,
+    unreadCount: next?.unreadCount ?? null };
 }
