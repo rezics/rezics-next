@@ -323,7 +323,8 @@ async function assertPredicatesUnowned(env: WorkActivationEnvironment, target: s
 /**
  * Create or revise one semantic component (a Resource's semantic description or a
  * versioned definition) under the expected head. The update guards the head, the
- * pinned model generation, referenced targets and receipt absence in one TDB2 write.
+ * pinned model generation, Work ownership/protection, lexicon key uniqueness,
+ * referenced targets and receipt absence in one TDB2 write.
  */
 export async function changeSemanticComponent(env: WorkActivationEnvironment,
   intent: SemanticChangeIntent): Promise<SemanticChangeResult> {
