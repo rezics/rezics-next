@@ -20,6 +20,17 @@ async function stableKey(parts: unknown[]): Promise<string> {
   return `library-import:${[...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('').slice(0, 40)}`;
 }
 
+/** Retry the same idempotent intent after Main's short-window admission.
+ * Retry-After accepts seconds or an HTTP date; an absent value waits one second. */
+async function waitForAdmission(response: { response: Response }): Promise<void> {
+  const value = response.response.headers.get('retry-after');
+  const seconds = value && /^\d+$/.test(value) ? Number(value) : undefined;
+  const date = value && seconds === undefined ? Date.parse(value) : NaN;
+  const delay = seconds !== undefined ? seconds * 1000
+    : Number.isFinite(date) ? Math.max(0, date - Date.now()) : 1000;
+  await new Promise(resolve => setTimeout(resolve, delay));
+}
+
 /** One reviewed intent is sent to Main. Main resumes at most eight rows per
  * response and retains each row result; the browser only polls the same intent. */
 export async function submitReviewedBatch(agent: string, context: string | null, language: string,
@@ -34,6 +45,7 @@ export async function submitReviewedBatch(agent: string, context: string | null,
   for (let attempt = 0; attempt < limit; attempt++) {
     const answer = await main().v1.me['library-import'].batches.post(body,
       { headers: { 'idempotency-key': idempotencyKey } });
+    if (answer.status === 429) { await waitForAdmission(answer); continue; }
     if (!answer.data) throw new Error('Library import is unavailable');
     const progress = answer.data as ImportBatchProgress;
     onProgress(progress);
@@ -56,6 +68,7 @@ export async function adoptOpenLibraryBook(agent: string, workId: string, locale
     if (written.data && 'work' in written.data) return written.data.work;
     if (written.status === 429 && (written.error?.value as { code?: string } | undefined)?.code
       === 'reader_import_adoption_budget') throw new ReaderImportBudgetError('adoption');
+    if (written.status === 429) { await waitForAdmission(written); continue; }
     if (written.status !== 202) throw new Error('Could not add Open Library Work');
     await new Promise(resolve => setTimeout(resolve, 1000));
   }

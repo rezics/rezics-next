@@ -35,7 +35,7 @@ test('G-543: every generated operation has an explicit policy and path boundarie
   }
   expect(mutations).toBeGreaterThan(50);
   expect(rateLimitFamily('GET', '/v1/works')).toBeNull();
-  expect(rateLimitFamily('POST', '/v1/query')).toBeNull();
+  expect(rateLimitFamily('POST', '/v1/query')).toBe('search');
   expect(rateLimitFamily('POST', '/v1/resources/summaries')).toBeNull();
   for (const path of ['/v1/rating-aggregates', '/v1/global-rating-aggregates', '/v1/rating-syntheses',
     '/v1/classification-resolutions', '/v1/statement-resolutions', '/v1/context-interpretations']) {
@@ -102,7 +102,7 @@ test('G-543 review: read POSTs survive counter loss; safety and provider intake 
       .post('/v1/public-reports', () => 'received').post('/v1/appeals', () => 'received')
       .post('/v1/subscriptions/settlements', () => 'signed callback')
       .post('/v1/new-unclassified-operation', () => 'effect');
-    for (const path of ['/v1/query', '/v1/resources/summaries', '/v1/public-reports', '/v1/appeals',
+    for (const path of ['/v1/resources/summaries', '/v1/public-reports', '/v1/appeals',
       '/v1/subscriptions/settlements']) {
       expect((await app.handle(new Request(`http://localhost${path}`, { method: 'POST',
         headers: { authorization: 'Bearer rejected' } }))).status).toBe(200);
@@ -115,7 +115,7 @@ test('G-543 review: read POSTs survive counter loss; safety and provider intake 
   store.consume = async () => { throw new Error('counter outage'); };
   const reads = new Elysia().use(rateLimitHook({ async verify() { throw new Error('Account outage'); } },
     { options, budgets, store })).post('/v1/query', () => 'read').post('/v1/resources/summaries', () => 'read');
-  for (const path of ['/v1/query', '/v1/resources/summaries']) {
+  for (const path of ['/v1/resources/summaries']) {
     expect((await reads.handle(new Request(`http://localhost${path}`, { method: 'POST' }))).status).toBe(200);
   }
 });
@@ -172,6 +172,18 @@ test('G-543: untrusted peers cannot rotate anonymous identities with forwarded h
   expect(anonymousIdentity(request('1.1.1.1'), undefined, options)).toBe('anonymous:unknown');
 });
 
+test('G-543 review: IPv6 interface rotation shares one canonical /64 budget', () => {
+  const identity = (ip: string) => anonymousIdentity(new Request('http://localhost'), ip, options);
+  expect(identity('2001:db8:1234:abcd::1')).toBe(identity('2001:0DB8:1234:ABCD:ffff:ffff:ffff:ffff'));
+  expect(identity('2001:db8:1234:abce::1')).not.toBe(identity('2001:db8:1234:abcd::1'));
+  expect(identity('::1')).toBe(identity('0:0:0:0:0:0:0:ffff'));
+  expect(identity('2001:db8::192.0.2.1')).toBe(identity('2001:db8:0:0:ffff::1'));
+  const trusted = anonymousIdentity(new Request('http://localhost', {
+    headers: { 'x-forwarded-for': '2001:db8:1234:abcd::dead' },
+  }), '127.0.0.2', options);
+  expect(trusted).toBe(identity('2001:db8:1234:abcd::1'));
+});
+
 test('G-543: global hook reaches each Main plugin group and fails closed on dependency loss', async () => {
   const seen: string[] = [];
   const limit = { options, budgets: rateLimitBudgets(), store: {
@@ -182,6 +194,8 @@ test('G-543: global hook reaches each Main plugin group and fails closed on depe
   const app = createMainApp(new FusekiClient('http://127.0.0.1:1/rezics'), work);
   // The guard must be present in every plugin group, including those composed
   // before domainRoutes. Merely testing a standalone plugin misses hook order.
+  expect(app.routes.filter(route => rateLimitFamily(route.method, route.path) === undefined)
+    .map(route => `${route.method} ${route.path}`)).toEqual([]);
   let guarded = 0;
   for (const route of app.routes) {
     expect(rateLimitFamily(route.method, route.path)).not.toBeUndefined();
@@ -200,7 +214,11 @@ test('G-543: global hook reaches each Main plugin group and fails closed on depe
   expect(response.status).toBe(429);
   expect(response.headers.get('retry-after')).toBe('31');
   expect(seen).toContain('write');
-  const searches = new Elysia().use(rateLimitHook(work.account, limit)).post('/v1/queries', () => 'results');
+  const searches = new Elysia().use(rateLimitHook(work.account, limit))
+    .post('/v1/queries', () => 'results').post('/v1/query', () => 'results');
+  expect((await searches.handle(new Request('http://localhost/v1/query', { method: 'POST' }))).status).toBe(429);
+  expect((await searches.handle(new Request('http://localhost/v1/query', { method: 'POST',
+    headers: { authorization: 'Bearer verified' } }))).status).toBe(200);
   expect((await searches.handle(new Request('http://localhost/v1/queries', { method: 'POST' }))).status).toBe(429);
   expect((await searches.handle(new Request('http://localhost/v1/queries', { method: 'POST',
     headers: { authorization: 'Bearer verified' } }))).status).toBe(200);
@@ -371,6 +389,9 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
     expect(await store.classify(principals.get('trusted')!)).toBe('member');
     // Exercise the real peer address supplied by Bun, as well as the pure
     // identity helper: caller-controlled XFF cannot rotate a live HTTP budget.
+    const expiredProbe = '0'.repeat(64);
+    await pool.query(`INSERT INTO access.rate_limit_v1(key,family,count,expires_at)
+      VALUES ($1,'provider',1,now() - interval '1 day')`, [expiredProbe]);
     const network = new Elysia().use(rateLimitHook(account, { store, options, budgets }))
       .post('/v1/claims', () => Response.json({ accepted: true }))
       .listen({ hostname: '127.0.0.1', port: 0 });
@@ -380,6 +401,10 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
           method: 'POST', headers: { 'x-forwarded-for': ip },
         })).status).toBe(status);
       }
+      const sweepDeadline = Date.now() + 5000;
+      while ((await pool.query('SELECT key FROM access.rate_limit_v1 WHERE key = $1', [expiredProbe])).rowCount
+        && Date.now() < sweepDeadline) await Bun.sleep(20);
+      expect((await pool.query('SELECT key FROM access.rate_limit_v1 WHERE key = $1', [expiredProbe])).rowCount).toBe(0);
       const peerKey = createHmac('sha256', options.secret).update('anonymous:127.0.0.1').digest('hex');
       expect((await pool.query("SELECT count FROM access.rate_limit_v1 WHERE key = $1 AND family = 'write'", [peerKey])).rowCount).toBe(1);
     } finally { await network.stop(true); }
@@ -398,11 +423,17 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
     expect((await send('overflow')).status).toBe(503);
     // Expiry work stays bounded even when the stored population grows.
     await pool.query(`INSERT INTO access.rate_limit_v1(key,family,count,expires_at)
-      SELECT lpad(to_hex(n),64,'0'),'search',1,now() - interval '1 day' FROM generate_series(1,1000) n`);
+      SELECT lpad(to_hex(n),64,'0'),'search',1,now() - interval '1 day' FROM generate_series(1,1005) n`);
     const expiredBefore = Number((await pool.query<{ count: string }>("SELECT count(*) FROM access.rate_limit_v1 WHERE family = 'search' AND expires_at < now()")).rows[0]!.count);
     await store.consume('expiry-probe', 'write', { maximum: 2, seconds: 60 });
     const expiredAfter = Number((await pool.query<{ count: string }>("SELECT count(*) FROM access.rate_limit_v1 WHERE family = 'search' AND expires_at < now()")).rows[0]!.count);
-    expect(expiredAfter).toBe(expiredBefore);
+    expect(expiredAfter).toBe(expiredBefore); // Request does no cleanup operation.
+    expect(await store.sweepExpired()).toBe(RATE_LIMIT_COST_V1.expirySweepRows);
+    expect(Number((await pool.query("SELECT count(*) FROM access.rate_limit_v1 WHERE family = 'search' AND expires_at < now()")).rows[0].count))
+      .toBe(expiredBefore - RATE_LIMIT_COST_V1.expirySweepRows);
+    expect(await store.sweepExpired()).toBeGreaterThanOrEqual(5);
+    expect((await pool.query("SELECT key FROM access.rate_limit_v1 WHERE expires_at <= now()")).rowCount).toBe(0);
+    expect((await pool.query("SELECT key FROM access.rate_limit_v1 WHERE expires_at > now()")).rowCount).toBeGreaterThan(0);
     expect(RATE_LIMIT_COST_V1.counterQueries).toBe(1);
     const persisted = await pool.query<{ key: string }>('SELECT key FROM access.rate_limit_v1');
     expect(persisted.rows.every(row => /^[0-9a-f]{64}$/.test(row.key))).toBe(true);

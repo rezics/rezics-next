@@ -13,7 +13,10 @@ export interface MainRateLimit {
 
 export function rateLimitHook(account: Pick<AccountAssertionVerifier, 'verify'>, limit?: MainRateLimit) {
   const cache = new PrincipalBudgetCache();
-  return new Elysia({ name: 'main-rate-limit-v1' }).beforeHandle('global', async function enforceRateLimit({ request, server }) {
+  return new Elysia({ name: 'main-rate-limit-v1' })
+    .setup(() => { limit?.store.startExpirySweep?.(); })
+    .cleanup(async () => { await limit?.store.stopExpirySweep?.(); })
+    .beforeHandle('global', async function enforceRateLimit({ request, server }) {
     // Embedded route fixtures may omit deployment dependencies. The HTTP
     // composition root always supplies the store; no runtime fail-open switch.
     if (!limit) return;

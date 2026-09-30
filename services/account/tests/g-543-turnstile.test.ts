@@ -25,13 +25,10 @@ test('G-543 review: explicit local enrollment verifies without a provider reques
   const f = await accountFixture({ turnstileMode: 'local' });
   try {
     const body = { name: 'Offline', email: 'offline@example.test', password: 'a secure long password' };
-    expect((await f.request('/api/auth/sign-up/email', body)).status).toBe(400);
-    expect((await f.request('/api/auth/sign-up/email', { ...body, email: 'wrong-host@example.test' }, undefined,
-      { 'x-captcha-response': 'local:other.example:account-enrollment' })).status).toBe(403);
-    expect((await f.request('/api/auth/sign-up/email', { ...body, email: 'wrong-action@example.test' }, undefined,
-      { 'x-captcha-response': 'local:127.0.0.1:wrong-action' })).status).toBe(403);
-    expect((await f.request('/api/auth/sign-up/email', body, undefined,
-      { 'x-captcha-response': 'local:127.0.0.1:account-enrollment' })).status).toBe(200);
+    // Same direct API call used by admin.e2e.ts: no captcha header.
+    expect((await f.request('/api/auth/sign-up/email', body)).status).toBe(200);
+    expect((await f.request('/api/auth/sign-up/email', { ...body, email: 'localhost@example.test' }, undefined,
+      { 'x-captcha-response': 'local:localhost:account-enrollment' })).status).toBe(200);
   } finally { await f.close(); }
 }, 120_000);
 

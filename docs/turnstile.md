@@ -18,12 +18,13 @@ hostname with Cloudflare. A missing site key disables the enrollment widget and
 logs its configuration problem on the server. General site configuration, OAuth,
 sessions and `/api/auth` proxying do not require a widget key.
 
-Local stacks explicitly set `ACCOUNT_TURNSTILE_MODE=local`. The form supplies
-`local:<public-hostname>:account-enrollment`; the service accepts that local proof
-without a script download or Siteverify exchange. This predictable verifier is
+Local stacks explicitly set `ACCOUNT_TURNSTILE_MODE=local`. The forms select their local widget,
+and the service uses an always-pass verifier without a script download or
+Siteverify exchange. Direct API clients need no challenge header, and opening
+the site at `localhost` works with the same profile as `127.0.0.1`. This predictable verifier is
 for offline development and tests only; Account refuses local mode in production.
 Without a configured secret, development/test configuration defaults to this
-mode. Local seed clients receive the proof through `ACCOUNT_ENROLLMENT_TOKEN`.
+mode. Local seed clients may send `ACCOUNT_ENROLLMENT_TOKEN`; local mode does not require it.
 Provider behavior tests substitute a local Siteverify HTTP fixture, including
 wrong-hostname, wrong-action and unavailable responses.
 Provider failure and blocked-network states need typed, accessible retry

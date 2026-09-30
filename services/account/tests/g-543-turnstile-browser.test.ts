@@ -5,13 +5,13 @@ import { resolve, join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { accountFixture, freePort } from './account-fixture.ts';
 
-test('G-543: offline enrollment widget enrolls through Accounts and refuses a missing token', async () => {
+test('G-543: offline enrollment works at localhost and permits direct admin setup', async () => {
   const root = resolve(import.meta.dir, '../../..');
   const evidence = join(root, '.temp', 'g-543-browser');
   mkdirSync(evidence, { recursive: true });
   const f = await accountFixture({ turnstileMode: 'local' });
   const port = await freePort();
-  const origin = `http://127.0.0.1:${port}`;
+  const origin = `http://localhost:${port}`;
   const log = openSync(join(evidence, 'accounts.log'), 'w');
   const frontend = spawn('task', ['accounts:dev', '--', '--port', String(port)], {
     cwd: root, detached: true, stdio: ['ignore', log, log], env: { ...process.env,
@@ -42,8 +42,8 @@ test('G-543: offline enrollment widget enrolls through Accounts and refuses a mi
           email: 'missing-browser@example.test', password: 'a long secure password' }) });
       return response.status;
     });
-    expect(missing).toBe(400);
-    expect((await f.pool.query('SELECT id FROM "user"')).rowCount).toBe(0);
+    expect(missing).toBe(200);
+    expect((await f.pool.query('SELECT id FROM "user"')).rowCount).toBe(1);
     await page.waitForFunction(() => !!document.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]')?.value,
       undefined, { timeout: 60_000 });
     await page.evaluate(async () => { await document.fonts.ready; });
@@ -68,7 +68,7 @@ test('G-543: offline enrollment widget enrolls through Accounts and refuses a mi
     expect(enrolled.status()).toBe(200);
     expect(enrolled.request().headers()['x-captcha-response']).toBeTruthy();
     await page.getByRole('heading', { name: 'Check your email' }).waitFor();
-    expect((await f.pool.query('SELECT id FROM "user"')).rowCount).toBe(1);
+    expect((await f.pool.query('SELECT id FROM "user"')).rowCount).toBe(2);
     await page.screenshot({ path: join(evidence, 'signup-confirmation.png'), fullPage: true });
     expect(errors).toEqual([]);
   } catch (error) {

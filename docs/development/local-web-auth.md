@@ -49,9 +49,11 @@ X-Forwarded-For never selects a Main budget identity.
 
 Main caches budget class attribution for a verified token's lifetime, bounded
 to 300 seconds and 4096 entries. Owner authorization still checks live Account
-and Access state. Each limited request performs one atomic counter operation;
-expired counters reset when their key is next used. Report/appeal and provider
-intake use independent IP capacity without making Account verification a
+and Access state. Each limited request performs one atomic counter operation.
+Expired counters reset when their key is next used; a separate lifecycle worker
+deletes at most 1000 expired rows per second using the expiry index. Anonymous
+IPv6 identities share a /64, so rotating interface addresses cannot multiply
+capacity. Report/appeal and provider intake use independent IP capacity without making Account verification a
 prerequisite; their owning handlers retain intake or signature verification.
 
 WebAuthn refuses IP addresses as relying-party IDs, so a loopback issuer names

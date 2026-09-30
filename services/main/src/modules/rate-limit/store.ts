@@ -6,6 +6,8 @@ import type { Budget, PrincipalClass, RateLimitFamily } from './budgets.ts';
 
 export interface LimitDecision { allowed: boolean; retryAfter: number }
 export interface RateLimitStore {
+  startExpirySweep?(): void;
+  stopExpirySweep?(): Promise<void>;
   classify(principal: VerifiedAccountAssertion): Promise<PrincipalClass>;
   consume(identity: string, family: RateLimitFamily, budget: Budget): Promise<LimitDecision>;
 }
@@ -19,7 +21,7 @@ export interface RateLimitOptions {
 
 export const RATE_LIMIT_COST_V1 = {
   principalRows: 1, representations: 64, roleRowsPerRepresentation: 64,
-  classificationQueries: 66, counterQueries: 1,
+  classificationQueries: 66, counterQueries: 1, expirySweepRows: 1000, expirySweepIntervalMs: 1000,
 } as const;
 
 /** A proxy must replace this header and be explicitly trusted by peer address.
@@ -30,6 +32,17 @@ export function anonymousIdentity(request: Request, peer: string | undefined, op
     const forwarded = request.headers.get(options.clientIpHeader)?.trim();
     if (forwarded && isIP(forwarded)) address = forwarded;
   }
+  if (isIP(address) === 6) {
+    // URL canonicalizes IPv6 spelling, including embedded IPv4. Expand only
+    // to obtain the first four hextets; rotating interface IDs shares one /64.
+    const canonical = new URL(`http://[${address.split('%')[0]}]/`).hostname.slice(1, -1);
+    const [left, right] = canonical.split('::');
+    const prefix = left ? left.split(':') : [];
+    const suffix = right ? right.split(':') : [];
+    const groups = canonical.includes('::')
+      ? [...prefix, ...Array<string>(8 - prefix.length - suffix.length).fill('0'), ...suffix] : prefix;
+    address = `${groups.slice(0, 4).map(group => parseInt(group, 16).toString(16)).join(':')}::/64`;
+  }
   return `anonymous:${address}`;
 }
 
@@ -38,6 +51,37 @@ export function anonymousIdentity(request: Request, peer: string | undefined, op
  * Classification is cached for the verified token's lifetime by the hook.
  * Consume uses one atomic PK upsert; an expired key resets lazily. */
 export class PostgresRateLimitStore implements RateLimitStore {
+  private expiryTimer?: ReturnType<typeof setInterval>;
+  private expiryPending?: Promise<void>;
+
+  /** Separate lifecycle work: requests still issue exactly one counter query.
+   * Indexed, locked batches keep each sweep bounded across Main replicas. */
+  async sweepExpired(): Promise<number> {
+    const result = await this.pool.query(`DELETE FROM access.rate_limit_v1 WHERE (key, family) IN (
+      SELECT key, family FROM access.rate_limit_v1 WHERE expires_at <= now()
+      ORDER BY expires_at LIMIT $1 FOR UPDATE SKIP LOCKED)`, [RATE_LIMIT_COST_V1.expirySweepRows]);
+    return result.rowCount ?? 0;
+  }
+
+  startExpirySweep(): void {
+    if (this.expiryTimer) return;
+    const tick = () => {
+      if (this.expiryPending) return;
+      this.expiryPending = this.sweepExpired().then(() => undefined)
+        .catch(error => { console.error('Main rate limit expiry sweep failed', error); })
+        .finally(() => { this.expiryPending = undefined; });
+    };
+    this.expiryTimer = setInterval(tick, RATE_LIMIT_COST_V1.expirySweepIntervalMs);
+    this.expiryTimer.unref();
+    tick();
+  }
+
+  async stopExpirySweep(): Promise<void> {
+    clearInterval(this.expiryTimer);
+    this.expiryTimer = undefined;
+    await this.expiryPending;
+  }
+
   constructor(private readonly pool: Pool, private readonly options: RateLimitOptions) {
     if (options.secret.length < 32) throw new Error('Rate limit HMAC secret must contain at least 32 characters');
   }

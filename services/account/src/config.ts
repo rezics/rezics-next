@@ -16,7 +16,7 @@ export const accountCoreSpec = {
 export const accountSpec = {
   ...accountCoreSpec,
   ACCOUNT_TURNSTILE_MODE: str({ choices: ['local', 'cloudflare'], default: 'cloudflare', devDefault: 'local',
-    desc: 'Enrollment verifier: cloudflare in production; explicit local mode requires no network.' }),
+    desc: 'Enrollment verifier: cloudflare in production; local always-pass mode permits offline dev/test API clients.' }),
   ACCOUNT_TURNSTILE_SECRET_KEY: str({ default: '',
     desc: 'Cloudflare Turnstile secret, required only in cloudflare mode.' }),
   ACCOUNT_PORT: port({ default: 3002, desc: 'Port Account listens on at 127.0.0.1.' }),

@@ -270,15 +270,10 @@ function enrollmentChallenge(config: AccountConfig) {
     siteVerifyURLOverride: config.turnstileVerifyURL, endpoints,
     expectedAction: 'account-enrollment', allowedHostnames: [hostname] });
   if (config.turnstileMode !== 'local') return plugin;
-  return { ...plugin, onRequest: async (request: Request) => {
-    const path = new URL(request.url).pathname.replace(/^\/api\/auth/, '').replace(/\/+$/, '');
-    if (!endpoints.includes(path)) return;
-    const token = request.headers.get('x-captcha-response');
-    if (!token) return { response: Response.json({ code: 'MISSING_CAPTCHA_RESPONSE' }, { status: 400 }) };
-    if (token !== `local:${hostname}:account-enrollment`) {
-      return { response: Response.json({ code: 'CAPTCHA_VERIFICATION_FAILED' }, { status: 403 }) };
-    }
-  } };
+  // Explicit local mode is always-pass, so offline API clients and localhost
+  // aliases need neither a widget nor a host-bound synthetic token. Production
+  // configuration rejects this mode; the cloudflare branch still binds both.
+  return { ...plugin, onRequest: async () => undefined };
 }
 
 /** Every issued access token names the App installation that admitted it. An
