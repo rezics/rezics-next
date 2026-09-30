@@ -37,7 +37,7 @@ record; AI authorship is not a spam verdict.
 | Search before creation | Code | Search original titles, language-tagged aliases, romanizations, creators, dates and identifiers before the form; offer use existing, add alias, add version or publication, or create |
 | Declare grain | Contributor, validated by code | New creative scope, version or translation, publication, part, or collection, with its parent or coverage; models may suggest, never choose |
 | Assess candidates | Cheap matcher, stronger model for hard cases | Same, different, related or uncertain, with compared attributes and evidence; different-grain matches become relation proposals |
-| Assess abuse | Jev, code, human escalation | Advertising, SEO, impersonation, fabrication, vandalism and missing evidence are separate flags; a pass means "not detected" |
+| Assess abuse | Jev, code, human escalation | Advertising, SEO, impersonation, fabrication, vandalism and missing evidence are separate flags; a pass means "not detected"; holders of the bypass grant skip the classifier, recorded on the receipt |
 | Publish provisionally | Code | Visible and marked unverified with field provenance; excluded from trusted exports and recommendations until verified |
 | Reconcile and maintain | Reviewers decide, code executes | Merge and split plans, audits of accepted and rejected decisions |
 

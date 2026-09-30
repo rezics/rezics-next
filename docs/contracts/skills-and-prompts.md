@@ -40,6 +40,14 @@ and human override. The approximately $20/million-items figure is a planning
 estimate to verify against the provider and local workload, not qualified cost.
 The maintainer approved a funded cap of US$10 a month on 2026-09-30; when it is
 reached, Jev pauses and review falls back to people until the next month.
+Tests and development never call Jev: they use a deterministic fake classifier
+with controllable verdicts and no network, and only production uses the paid
+model. A dedicated, vendor-neutral grant, "bypass automated content screening",
+lets trusted editors, official bulk imports (the older site's records, admitted
+dumps) and test principals skip the classifier (maintainer, 2026-09-30). It is
+granted explicitly per person or agent and per operation class, never implied
+by an administrator role, recorded on every receipt that used it, and revocable;
+rate limits, reports and later review still apply.
 
 Other first-batch agents propose post/book tags against shared vocabulary,
 maintain entity relations, normalize free-form posts into structured content such
