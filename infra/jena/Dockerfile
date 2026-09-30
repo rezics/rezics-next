@@ -3,6 +3,7 @@ WORKDIR /build
 COPY infra/jena/command-module/pom.xml /build/pom.xml
 RUN mvn -B -ntp dependency:go-offline
 COPY infra/jena/command-module/src /build/src
+COPY generated/model/ /build/profiles/
 RUN mvn -B -ntp package
 
 FROM maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 AS distribution

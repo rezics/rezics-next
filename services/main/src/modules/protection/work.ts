@@ -9,6 +9,7 @@ import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit,
   metadataWorkRequestDigest, prepareComponent, prepareWorkComponent, workMetadataValidations,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { readWorkPayloadForRevision } from '../work/history.ts';
+import { canonicalLanguage } from '../display-language/select.ts';
 import { PROTECTION_RULE } from './schema.ts';
 import { protectionReceiptIri, workReceiptFamilies, type WorkProtectionAdmissionAction } from './receipt-family.ts';
 
@@ -76,7 +77,8 @@ function digest(profile: string, value: WorkProtectionChange | WorkCorrectionPro
     expectedControlEpoch: value.expectedControlEpoch, expectedRuleRevision: value.expectedRuleRevision,
     actingSubject: value.actingSubject, reason: value.reason, evidence: [...value.evidence].sort() };
   return hash(JSON.stringify('action' in value ? { ...basis, action: value.action }
-    : 'title' in value ? { ...basis, title: value.title, ...(value.language === undefined ? {} : { language: value.language }), predecessor: value.predecessor }
+    : 'title' in value ? { ...basis, title: value.title,
+      ...(value.language === undefined ? {} : { language: canonicalLanguage(value.language) ?? value.language }), predecessor: value.predecessor }
       : { ...basis, proposalRevision: value.proposalRevision, candidateDigest: value.candidateDigest,
         expectedDecisionHead: value.expectedDecisionHead, outcome: value.outcome }));
 }
@@ -204,7 +206,7 @@ async function changeCommand(env: WorkActivationEnvironment, admission: Register
   const protection = ID + Bun.randomUUIDv7();
   const control = input.action === 'confirm' ? ID + Bun.randomUUIDv7() : null;
   const operation = operationId(admission);
-  const intent = { ...input, action: admission.action, titleLanguage: prior.language, operation };
+  const intent = { ...input, action: admission.action, titleLanguage: canonicalLanguage(prior.language)!, operation };
   if (JSON.stringify(intent).length > JSON_LIMIT) throw new WorkProtectionInvalid('protection intent exceeds its bound');
   const manifest = await put(env, input.work, { intent, protection, control }, PROTECTION_PROFILE);
   const controlManifest = control ? await put(env, input.work,
@@ -221,7 +223,7 @@ async function changeCommand(env: WorkActivationEnvironment, admission: Register
   const deleteControl = control ? `${iri(input.work)} rv:titleControlHead ?oldControl .` : '';
   const insertControl = control ? `${iri(input.work)} rv:titleControlHead ${iri(control)} .` : '';
   const controlTriples = control ? `${iri(control)} a rv:RevisionAnchor, rv:EditorialControlRevision ;
-    rv:component ${iri(input.work)} ; rv:controlField "title" ; rv:controlLanguage ${lit(prior.language)} ; rv:controlMode rv:HumanControlled ;
+    rv:component ${iri(input.work)} ; rv:controlField "title" ; rv:controlLanguage ${lit(intent.titleLanguage)} ; rv:controlMode rv:HumanControlled ;
     rv:controlEpoch ${BigInt(input.expectedControlEpoch) + 1n} ; rv:workRevision ${iri(input.expectedHead)} ;
     rv:operation ${iri(operation)} ; ${controlPredecessor} rv:controlIntent ${lit(JSON.stringify(intent))} ;
     rv:manifest ${iri(`urn:rezics:sha256:${controlManifest}`)} ; rv:modelRevision ${iri(CONTROL_PROFILE)} ;
@@ -282,7 +284,7 @@ async function proposeCommand(env: WorkActivationEnvironment, admission: Registe
   const logHead = logRows[0]?.head?.value ?? null;
   const logCount = logRows[0]?.count?.value ?? '0';
   if (!/^(0|[1-9][0-9]{0,17})$/.test(logCount)) throw new WorkProtectionUnavailable('correction log count is invalid');
-  const language = input.language ?? prior.language;
+  const language = canonicalLanguage(input.language ?? prior.language)!;
   metadataWorkRequestDigest(input.title, undefined, language);
   const intent = { ...input, action: admission.action, titleLanguage: language, proposal, candidate, operation };
   if (JSON.stringify(intent).length > JSON_LIMIT) throw new WorkProtectionInvalid('proposal intent exceeds its bound');
@@ -534,6 +536,7 @@ export async function proposeWorkCorrection(env: WorkActivationEnvironment, acco
   validateBasis(input);
   try { metadataWorkRequestDigest(input.title, undefined, input.language); }
   catch { throw new WorkProtectionInvalid('invalid title or declared language'); }
+  if (input.language !== undefined) input = { ...input, language: canonicalLanguage(input.language)! };
   const requestDigest = digest('work-title-correction-v1', input);
   return dispatch(env, account, access, signer, request, input, 'work.correction.propose', 'work:correct',
     requestDigest, async admission => ({ command: await proposeCommand(env, admission, input), proposerAdmissionId: null }));

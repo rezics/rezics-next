@@ -71,7 +71,8 @@ export function titleControlDigest(intent: TitleControlIntent): string {
   return hash(JSON.stringify({ profile: intent.language === undefined ? 'work-title-control-v1' : 'work-title-control-v2', work: intent.work,
     expectedHead: intent.expectedHead, basis: { head: intent.basis.head, epoch: intent.basis.epoch,
       protection: intent.basis.protection },
-    action: intent.action, title: intent.title, ...(intent.language === undefined ? {} : { language: intent.language }), source: intent.source ? {
+    action: intent.action, title: intent.title,
+    ...(intent.language === undefined ? {} : { language: canonicalLanguage(intent.language)! }), source: intent.source ? {
       binding: intent.source.binding, record: intent.source.record, observation: intent.source.observation,
       conversion: intent.source.conversion, proposal: intent.source.proposal,
       mapping: intent.source.mapping, initialHead: intent.source.initialHead } : null }));
@@ -186,6 +187,7 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
   controlProfile: typeof TITLE_PROFILE | typeof TITLE_PROFILE_V1 = TITLE_PROFILE): Promise<CommandEnvelope> {
   const digest = titleControlDigest(intent);
   if (digest !== admission.requestDigest || intent.action !== admission.action) throw new IdempotencyConflict('title admission differs');
+  if (!retained && intent.language !== undefined) intent = { ...intent, language: canonicalLanguage(intent.language)! };
   const current = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?main ?type ?scalar ?workManifest WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:mainVersion ?main ; a ?type .
       OPTIONAL { ${iri(intent.work)} <${SCALAR_PREDICATE}> ?scalar } }
@@ -204,10 +206,10 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
     throw new TitleControlUnavailable('Work scalar state is ambiguous');
   }
   const prior = await readWorkPayloadForRevision(env, priorManifests.values().next().value!, intent.work);
-  const language = intent.language ?? prior.language;
-  if (!canonicalLanguage(language)) throw new TitleControlInvalid('invalid title language');
+  const language = canonicalLanguage(intent.language ?? prior.language);
+  if (!language) throw new TitleControlInvalid('invalid title language');
   if (intent.action === 'work.title.return' && (intent.title !== prior.title
-    || language.toLowerCase() !== prior.language.toLowerCase())) {
+    || canonicalLanguage(language) !== canonicalLanguage(prior.language))) {
     throw new TitleControlInvalid('return must preserve the current title and language');
   }
   let currentScalar;
@@ -307,7 +309,7 @@ export async function changeTitleControl(env: WorkActivationEnvironment,
   // Do not retain transport identities in the public control record.
   const { work, expectedHead, basis, action, title, source, language } = input;
   const intent: TitleControlIntent = { work, expectedHead, basis, action, title,
-    ...(language === undefined ? {} : { language }), source };
+    ...(language === undefined ? {} : { language: canonicalLanguage(language) ?? language }), source };
   const digest = titleControlDigest(intent);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);

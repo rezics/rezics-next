@@ -62,8 +62,10 @@ profiles, and the transactional checks in `ProtectionPolicy`. Identify a field
 by its admitted definition, occurrence and adoption context; never derive its
 identity from its current literal or an array position. Add an owner-specific
 field footprint and canonical SHACL route before allowing that field's writes.
-The Work title's `"title:en"` slot and `rdfs:label` footprint are one concrete
-binding of this protocol; they are not a wildcard over other fields. A new field
+The Work title uses `"title:en"` as the retained protection/correction slot key,
+independent of the title's language. New title control revisions use the `"title"`
+field with `controlLanguage`; the adopted `rdfs:label` carries that language.
+This is one concrete binding of the protocol. A new field
 writer must guard every writer that can alter its adopted projection, including
 source and legacy commands, and preserve exact absence semantics. A new field
 also needs its own read and history route, receipt family and event declaration.

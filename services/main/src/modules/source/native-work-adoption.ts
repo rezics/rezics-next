@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { canonicalLanguage } from '../display-language/select.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { createAdmittedMetadataWork } from '../work/create-admitted.ts';
@@ -563,6 +564,11 @@ export class SourceNativeWorkAdoptionStore {
       || !ACTOR.test(work) || !ACTOR.test(input.expectedHead)
       || !ACTOR.test(input.actingSubject)) {
       throw new SourceAdoptionInvalid('invalid source title application intent');
+    }
+    if (input.language !== undefined) {
+      const language = canonicalLanguage(input.language);
+      if (!language || language.length > 35) throw new SourceAdoptionInvalid('invalid source title language');
+      input = { ...input, language };
     }
     const support = await this.readSupport(principalId, work);
     if (!support) return null;

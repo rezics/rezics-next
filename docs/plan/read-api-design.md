@@ -19,7 +19,7 @@ general audit-log collection was found. Collections/compositions, report items,
 Realm reply items/counts and private progress already have reads. Phrase search
 in `api-contract.ts` requires 2–80 characters.
 
-The Work metadata profile currently stores an English title and semantic types;
+The Work metadata profile stores a title with its declared language and semantic types;
 it has no original-title marker or Main Version label. AuthorCredit records are
 confirmed external author references; they are not native Agents. Agent creation
 now allocates a public profile handle through G-238. Classification acceptance is not a numeric

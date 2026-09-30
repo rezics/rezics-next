@@ -235,7 +235,9 @@ test('P0.3: invalid or changed authored constraints cannot silently reuse the pr
 // The command module's hand-written chains before G-071, in match order: the registry
 // must route every type to the same shape and demand the same bound profile.
 const historicalCanonical: [type: string, ...routes: string[]][] = [
-  ['EditorialControlRevision', 'work-title-control-v1/control'],
+  ['EditorialControlRevision',
+    'work-title-control-v2/control modelRevision=https://rezics.com/definition/work-title-control-v2',
+    'work-title-control-v1/control'],
   ['AuthorCredit', 'work-author-credit-v1/credit'],
   ['AuthorCreditRevision', 'work-author-credit-v1/revision'],
   ['https://schema.org/CreativeWork', 'work-metadata-v1/work'],
@@ -247,8 +249,10 @@ const historicalCanonical: [type: string, ...routes: string[]][] = [
     'content-search-eligibility-v2/decision modelRevision=https://rezics.com/definition/content-search-eligibility-v2'],
   ['ContentProjection', 'content-match-unit-v1/projection'],
   ['Space', 'space-realm-v2/space definitionProfile=https://rezics.com/definition/space-realm-v2',
+    'space-realm-v3/space definitionProfile=https://rezics.com/definition/space-realm-v3',
     'space-realm-v1/space'],
   ['Realm', 'space-realm-v2/realm definitionProfile=https://rezics.com/definition/space-realm-v2',
+    'space-realm-v3/realm definitionProfile=https://rezics.com/definition/space-realm-v3',
     'space-realm-v1/realm'],
   ['ExperienceRatingContext', 'realm-experience-rating-context-v1/context'],
   ['ExperienceRatingObservation', 'realm-experience-rating-observation-v1/observation'],

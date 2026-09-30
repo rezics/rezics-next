@@ -153,18 +153,20 @@ function fixture(language = 'ja') {
 }
 const request = new Request('http://rezics.test');
 
-for (const language of ['ja', 'zh-Hant', 'und']) {
-  test(`G-512 command matrix preserves ${language} through create/edit/source/protect/review/replay`, async () => {
+for (const [submitted, language] of [['ja', 'ja'], ['zh-Hant', 'zh-Hant'], ['und', 'und'],
+  ['zh-hant', 'zh-Hant'], ['ja-jp', 'ja-JP']] as const) {
+  test(`G-512 command matrix preserves canonical ${submitted} through create/edit/source/protect/review/replay`, async () => {
     const f = fixture(language);
     try {
-      const created = await activateMetadataWork(f.env, { title: '作品', language,
-        admission: f.admitted('work.create', metadataWorkRequestDigest('作品', undefined, language), 'work:create:root') });
+      const created = await activateMetadataWork(f.env, { title: '作品', language: submitted,
+        admission: f.admitted('work.create', metadataWorkRequestDigest('作品', undefined, submitted), 'work:create:root') });
+      expect(metadataWorkRequestDigest('作品', undefined, submitted)).toBe(metadataWorkRequestDigest('作品', undefined, language));
       expect(f.fuseki.commands[0]!.update).toContain(`rdfs:label "作品"@${language}`);
       expect((await readWorkPayloadForRevision(f.env,
         manifest(f.fuseki.commands[0]!, created.work, f.directory).manifest, created.work)).language).toBe(language);
       f.fuseki.receipts.clear(); f.fuseki.commands = [];
       for (const action of ['work.edit', 'work.title.apply'] as const) {
-        for (const declared of [language, undefined]) {
+        for (const declared of [submitted, undefined]) {
           const intent: TitleControlIntent = { ...f.title, action, ...(declared ? { language: declared } : {}),
             source: action === 'work.edit' ? null : { binding: ids[4]!, record: ids[5]!, observation: ids[6]!,
               conversion: ids[7]!, proposal: ids[8]!, initialHead: head, mapping: 'open-library-work-map-v1' } };
@@ -176,6 +178,7 @@ for (const language of ['ja', 'zh-Hant', 'und']) {
           expect(saved.state.localizedTitle).toEqual({ value: 'Original name', language: 'en' });
           const control = manifest(command, work, f.directory, TITLE_PROFILE).state;
           expect(control.language).toBe(language);
+          if (declared) expect((control.intent as TitleControlIntent).language).toBe(language);
           expect(command.update).toContain('rv:controlField "title"');
           expect(command.update).toContain(`rv:controlLanguage "${language}"`);
           expect(command.update).toContain(`rv:head <${head}> ; rdfs:label ?oldTitle`);
@@ -185,7 +188,8 @@ for (const language of ['ja', 'zh-Hant', 'und']) {
       expect(f.fuseki.commands.at(-1)!.update).toContain(`rv:controlLanguage "${language}"`);
       f.fuseki.receipts.clear();
       await proposeWorkCorrection(f.env, f.account, f.access, f.signer, request,
-        { ...f.basis, title: '訂正した名前', predecessor: null });
+        { ...f.basis, title: '訂正した名前', predecessor: null,
+          ...(submitted !== language ? { language: submitted } : {}) });
       const proposalCommand = f.fuseki.commands.at(-1)!;
       const candidate = manifest(proposalCommand, work, f.directory);
       expect(candidate.state.language).toBe(language);
@@ -200,10 +204,10 @@ for (const language of ['ja', 'zh-Hant', 'und']) {
         expectedDecisionHead: null, outcome: 'approved' });
       expect(f.fuseki.commands.at(-1)!.update).toContain(`"訂正した名前"@${language}`);
       f.fuseki.receipts.clear();
-      const input = { ...f.title, language, actingSubject: actor, idempotencyKey: 'edit-replay' };
+      const input = { ...f.title, language: submitted, actingSubject: actor, idempotencyKey: 'edit-replay' };
       const first = await changeTitleControl(f.env, f.account, f.access, request, input);
       const count = f.fuseki.commands.length;
-      const replay = await changeTitleControl(f.env, f.account, f.access, request, input);
+      const replay = await changeTitleControl(f.env, f.account, f.access, request, { ...input, language });
       expect(replay).toEqual({ ...first, replayed: true });
       expect(f.fuseki.commands).toHaveLength(count);
     } finally { f.cleanup(); }
@@ -231,6 +235,7 @@ test('G-512 explicit title and correction language can differ from the prior hea
 test('G-512 unknown creation uses und; title digests bind explicit language and keep v1 omission bytes', () => {
   expect(publicTitleProjection('作品')).toBe('\"作品\"@und');
   expect(publicTitleProjection('作品', 'de-u-co-phonebk')).toBe('\"作品\"@de-u-co-phonebk');
+  expect(publicTitleProjection('作品', 'zh-hant')).toBe('\"作品\"@zh-Hant');
   expect(metadataWorkRequestDigest('作品')).toBe(metadataWorkRequestDigest('作品', undefined, 'und'));
   const f = fixture();
   try {
@@ -238,12 +243,33 @@ test('G-512 unknown creation uses und; title digests bind explicit language and 
     expect(titleControlDigest(intent)).toBe(hash(JSON.stringify({ profile: 'work-title-control-v1', work,
       expectedHead: head, basis: { head: intent.basis.head, epoch: intent.basis.epoch, protection: intent.basis.protection }, action: 'work.edit', title: intent.title, source: null })));
     expect(titleControlDigest({ ...intent, language: 'ja' })).not.toBe(titleControlDigest({ ...intent, language: 'en' }));
+    expect(titleControlDigest({ ...intent, language: 'zh-hant' })).toBe(titleControlDigest({ ...intent, language: 'zh-Hant' }));
     expect(() => titleControlDigest({ ...intent, language: 'ja"; DROP' })).toThrow();
     const proposal = { ...f.basis, title: 'same bytes', predecessor: null };
+    expect(workProtectionDigest('work-title-correction-v1', { ...proposal, language: 'zh-hant' }))
+      .toBe(workProtectionDigest('work-title-correction-v1', { ...proposal, language: 'zh-Hant' }));
     expect(workProtectionDigest('work-title-correction-v1', { ...proposal, language: 'ja' }))
       .not.toBe(workProtectionDigest('work-title-correction-v1', { ...proposal, language: 'zh-Hant' }));
   } finally { f.cleanup(); }
 });
+
+for (const [submitted, language] of [['zh-hant', 'zh-Hant'], ['ja-jp', 'ja-JP']] as const) {
+  test(`G-512 Space creation canonicalizes ${submitted} before its digest, manifest and label`, async () => {
+    const f = fixture();
+    try {
+      const input = { name: '読者の会', language: submitted, actingSubject: actor };
+      const digest = spaceCreationDigest(input);
+      expect(digest).toBe(spaceCreationDigest({ ...input, language }));
+      const admitted = f.admitted('space.create', digest, 'space:create:root');
+      const receipt = await createRealmSpace(f.env, admitted, input);
+      const command = f.fuseki.commands[0]!;
+      expect(command.update).toContain(`rdfs:label "読者の会"@${language}`);
+      expect(manifest(command, receipt.space!, f.directory, SPACE_REALM_PROFILE).state.language).toBe(language);
+      expect(await createRealmSpace(f.env, admitted, { ...input, language })).toEqual(receipt);
+      expect(f.fuseki.commands).toHaveLength(1);
+    } finally { f.cleanup(); }
+  });
+}
 
 test('G-512 Arabic Space creation retains its immutable language and API read direction', async () => {
   const f = fixture();
@@ -275,11 +301,13 @@ function retainedPool(envelope: MainCloudEvent): Pool {
   return { connect: async () => client } as unknown as Pool;
 }
 
-for (const language of ['ja', 'zh-Hant', 'en']) {
-  test(`G-512 held restore replays ${language} title/control manifests, including legacy English v1`, async () => {
+for (const [language, returning] of [['ja', false], ['zh-Hant', false], ['en', false], ['zh-hant', true]] as const) {
+  test(`G-512 held restore replays ${language} ${returning ? 'return' : 'edit'} manifests, including legacy English v1`, async () => {
     const f = fixture(language);
     try {
-      const intent = { ...f.title, ...(language === 'en' ? {} : { language }) };
+      const intent: TitleControlIntent = { ...f.title, ...(language === 'en' || returning ? {} : { language }),
+        ...(returning ? { action: 'work.title.return', title: '元の名前', source: { binding: ids[4]!, record: ids[5]!,
+          observation: ids[6]!, conversion: ids[7]!, proposal: ids[8]!, initialHead: head, mapping: 'open-library-work-map-v1' } } : {}) };
       const input = { ...intent, actingSubject: actor, idempotencyKey: 'g-512' };
       const effect = await changeTitleControl(f.env, f.account, f.access, request, input);
       effect.replayed = true;
@@ -307,7 +335,10 @@ for (const language of ['ja', 'zh-Hant', 'en']) {
       const result = await reconcileRetainedTitleControl(f.env, access, relay, coverage, '1');
       expect(result.replayed).toBe(false);
       const recovered = f.fuseki.commands.at(-1)!;
-      expect(recovered.update).toContain(`rdfs:label "新しい名前"@${language}`);
+      if (returning) {
+        expect(recovered.update.split('INSERT')[1]!.split('WHERE')[0]).not.toContain('rdfs:label');
+        expect(recovered.update).toContain('rv:controlLanguage "zh-Hant"');
+      } else expect(recovered.update).toContain(`rdfs:label "新しい名前"@${language}`);
       expect(recovered.update).toContain('rv:restoreHold true');
       expect(recovered.validations.at(-1)!.profile).toBe(language === 'en' ? 'work-title-control-v1' : 'work-title-control-v2');
       expect((await reconcileRetainedTitleControl(f.env, access, relay, coverage, '1')).replayed).toBe(true);
@@ -379,7 +410,7 @@ test('G-512 Space and protected correction HTTP commands accept languages outsid
     const post = (path: string, body: unknown) => app.handle(new Request(`http://localhost${path}`, {
       method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': 'g-512' }, body: JSON.stringify(body),
     }));
-    const space = await post('/v1/spaces', { profile: 'space-realm-v3', name: 'مجتمع القراء', language: 'ar', capabilities: ['realm'], actingSubject: actor });
+    const space = await post('/v1/spaces', { profile: 'space-realm-v2', name: 'مجتمع القراء', language: 'ar', capabilities: ['realm'], actingSubject: actor });
     expect(space.status).toBe(201);
     const created = await space.json() as { space: string; realm: string; spaceRevision: string; realmRevision: string };
     const command = f.fuseki.commands[0]!, operation = object(command.update, 'operation')!;

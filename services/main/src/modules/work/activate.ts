@@ -119,9 +119,11 @@ export function metadataWorkRequestDigest(title: string,
   }
   const types = normalizeWorkSemanticTypes(semanticTypes);
   assertNativeWorkTypeCombination(types);
-  if (!canonicalLanguage(language) || language.length > 35) {
+  const canonical = canonicalLanguage(language);
+  if (!canonical || canonical.length > 35) {
     throw new InvalidWorkTitleLanguage('Title language is invalid');
   }
+  language = canonical;
   for (const [name, value, maximum] of [['localized title', details.localizedTitle, 500],
     ['description', details.description, 4000]] as const) {
     if (value && (!value.value || value.value.length > maximum || /[\u0000-\u001f\u007f]/.test(value.value)
@@ -292,8 +294,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const semanticTypes = normalizeWorkSemanticTypes(intent.semanticTypes);
   // A missing declaration records an undetermined language; no interface locale
   // can supply the authored title's language.
-  const language = intent.language ?? 'und';
-  const digest = metadataWorkRequestDigest(intent.title, semanticTypes, language, intent);
+  const digest = metadataWorkRequestDigest(intent.title, semanticTypes, intent.language, intent);
+  const language = canonicalLanguage(intent.language ?? 'und')!;
   const receipt = workReceiptIri(admission.id);
   await assertNotInvalidProfileReceipt(env.fuseki, workReceiptIri(admission.id));
   const existing = await readWorkTerminalReceipt(env.fuseki, admission.id);

@@ -127,6 +127,7 @@ export class SourceNativeWorkAttachmentStore {
     if (!UUID.test(principalId) || !NATIVE.test(work) || !KEY.test(key)
       || ![input.proposal, input.expectedHead, input.actingSubject].every(value => NATIVE.test(value))
       || !canonicalLanguage(input.titleLanguage) || input.titleLanguage.length > 35) throw new SourceAdoptionInvalid('invalid attachment intent');
+    input = { ...input, titleLanguage: canonicalLanguage(input.titleLanguage)! };
     const original = await this.adoptions.readSupport(principalId, work);
     const proposal = await this.proposals.read(principalId, id(input.proposal));
     if (!original || !proposal) return null;
@@ -136,7 +137,7 @@ export class SourceNativeWorkAttachmentStore {
     if (prior) {
       sameIntent(prior, principalId, work, key, input);
       const attachment = await this.receipt(prior, original.binding);
-      if (attachment.titleLanguage.toLowerCase() !== input.titleLanguage.toLowerCase()) {
+      if (canonicalLanguage(attachment.titleLanguage) !== input.titleLanguage) {
         throw new SourceAdoptionConflict('source attachment language changed');
       }
       return { attachment, replayed: true };
@@ -147,7 +148,7 @@ export class SourceNativeWorkAttachmentStore {
     }
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
     const revision = await readExactWorkRevision(this.env, input.expectedHead, async target => target === work);
-    if (revision.title !== input.confirmedTitle || revision.language.toLowerCase() !== input.titleLanguage.toLowerCase()) {
+    if (revision.title !== input.confirmedTitle || canonicalLanguage(revision.language) !== input.titleLanguage) {
       throw new SourceAdoptionConflict('source title differs from native Work revision');
     }
     // All Jena/object reads finish before Access locks. This receipt describes

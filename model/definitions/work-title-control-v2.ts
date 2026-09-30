@@ -5,7 +5,10 @@ export const workTitleControlV2Profile = {
   comments: ['One native Work title control epoch, independent of its declared language. No generic protection or source rights claim.'],
   prefixes: [['sh', 'http://www.w3.org/ns/shacl#'], ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
     ['xsd', 'http://www.w3.org/2001/XMLSchema#'], ['schema', 'https://schema.org/'], ['rv', 'https://rezics.com/vocab/']],
-  shapes: [{ iri: 'https://rezics.com/definition/work-title-control-v2/control-shape', properties: [
+  shapes: [{ iri: 'https://rezics.com/definition/work-title-control-v2/control-shape',
+    canonical: { types: ['rv:EditorialControlRevision'], when: [{ path: 'rv:modelRevision',
+      value: '<https://rezics.com/definition/work-title-control-v2>' }] },
+    properties: [
     { path: 'rdf:type', in: ['rv:EditorialControlRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
     { path: 'rv:component', minCount: 1, maxCount: 1, class: 'schema:CreativeWork' },
     { path: 'rv:controlField', hasValue: '"title"', maxCount: 1 },

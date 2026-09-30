@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { canonicalLanguage } from '../display-language/select.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { signTitleAdmission } from '../access/title-admission.ts';
 import { hash, type WorkActivationEnvironment } from './activate.ts';
@@ -45,8 +46,8 @@ export async function reconcileRetainedTitleControl(env: WorkActivationEnvironme
   }
   const content = await readWorkPayloadForRevision(env, effect.workManifest, effect.work);
   if (content.title !== effect.intent.title || (controlProfile === TITLE_PROFILE
-    && state.language !== content.language) || (effect.intent.language !== undefined
-    && effect.intent.language !== content.language)
+    && (typeof state.language !== 'string' || canonicalLanguage(state.language) !== canonicalLanguage(content.language)))
+    || (effect.intent.language !== undefined && canonicalLanguage(effect.intent.language) !== canonicalLanguage(content.language))
     || controlProfile === TITLE_PROFILE_V1 && content.language !== 'en') {
     throw new RetainedEffectConflict('immutable title content differs');
   }

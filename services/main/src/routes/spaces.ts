@@ -30,7 +30,7 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       body: t.Union([
         t.Object({ profile: t.Literal('space-realm-v1'), ...spaceCreateFields },
           { additionalProperties: false }),
-        t.Object({ profile: t.Union([t.Literal('space-realm-v2'), t.Literal('space-realm-v3')]), ...spaceCreateFields,
+        t.Object({ profile: t.Literal('space-realm-v2'), ...spaceCreateFields,
         handle: t.Optional(t.String({ pattern: '^[a-z][a-z0-9-]{2,29}$' })),
         topics: t.Optional(t.Array(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
           { maxItems: 3, uniqueItems: true })),

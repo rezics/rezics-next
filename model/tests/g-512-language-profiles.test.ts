@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { renderProfile } from '../compiler/ir.ts';
 import { buildCommandRegistry } from '../compiler/registry.ts';
+import { authoredProfiles } from '../compiler/generate.ts';
 import { workTitleControlProfile } from '../definitions/work-title-control-v1.ts';
 import { workTitleControlV2Profile } from '../definitions/work-title-control-v2.ts';
 import { spaceRealmProfile } from '../definitions/space-realm-v1.ts';
@@ -14,6 +15,16 @@ test('G-512 one native title epoch carries its language and leaves the English v
   expect(current).toContain('sh:path rv:controlLanguage ; sh:minCount 1 ; sh:maxCount 1');
   expect(current).not.toContain('title:en');
   expect(current).not.toContain('"en"');
+});
+
+test('G-512 canonical title validation selects v2 by model revision and retains the v1 fallback', () => {
+  const registry = buildCommandRegistry(authoredProfiles);
+  const entry = registry.canonical.find(entry => entry.type === 'https://rezics.com/vocab/EditorialControlRevision');
+  expect(entry?.routes).toEqual([
+    { profile: 'work-title-control-v2', shape: 'https://rezics.com/definition/work-title-control-v2/control-shape',
+      when: [{ path: 'https://rezics.com/vocab/modelRevision', value: 'https://rezics.com/definition/work-title-control-v2' }] },
+    { profile: 'work-title-control-v1', shape: 'https://rezics.com/definition/work-title-control-v1/control-shape', when: [] },
+  ]);
 });
 
 test('G-512 Space payload language is versioned without losing legacy community profiles', () => {

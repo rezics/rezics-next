@@ -48,10 +48,10 @@ export interface SpaceCreationReceipt {
 }
 
 export function spaceCreationDigest(input: CreateRealmSpaceInput): string {
-  const language = input.language ?? 'und';
+  const language = canonicalLanguage(input.language ?? 'und');
   if (input.name.length < 1 || input.name.length > 120
     || /[\u0000-\u001f\u007f]/u.test(input.name)
-    || !nativeId.test(input.actingSubject) || !canonicalLanguage(language) || language.length > 35
+    || !nativeId.test(input.actingSubject) || !language || language.length > 35
     || input.handle !== undefined && !COMMUNITY_HANDLE.test(input.handle)
     || input.topics !== undefined && (input.topics.length > SPACE_CREATE_COST.topics
       || input.topics.some(topic => !nativeId.test(topic))
@@ -158,6 +158,7 @@ async function validateCandidate(env: WorkActivationEnvironment, space: string, 
 export async function createRealmSpace(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, input: CreateRealmSpaceInput): Promise<SpaceCreationReceipt> {
   const digest = spaceCreationDigest(input);
+  const language = canonicalLanguage(input.language ?? 'und')!;
   if (admission.action !== 'space.create' || admission.scope !== 'space:create:root'
     || admission.actingSubject !== input.actingSubject || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('Space admission differs from intent');
@@ -177,7 +178,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   const operation = ID + Bun.randomUUIDv7();
   const validations = await validateCandidate(env, space, realm, input);
   const spaceManifest = prepareComponent(env.objectDirectory, space,
-    { name: input.name, language: input.language ?? 'und', owner: input.actingSubject, realmCapability: realm,
+    { name: input.name, language, owner: input.actingSubject, realmCapability: realm,
       capabilities: ['realm'], disclosure: 'public' }, SPACE_REALM_PROFILE);
   const realmManifest = prepareComponent(env.objectDirectory, realm,
     { space, state: 'active', selectionPolicy: SELECTION_POLICY,
@@ -200,7 +201,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
         ${iri(space)} a rv:Space ; rv:owner ${iri(input.actingSubject)} ;
           rv:definitionProfile ${iri(SPACE_REALM_PROFILE)} ;
           rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public ;
-          rdfs:label ${lit(input.name)}@${input.language ?? 'und'} ; rv:head ${iri(spaceRevision)} .
+          rdfs:label ${lit(input.name)}@${language} ; rv:head ${iri(spaceRevision)} .
         ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ;
           rv:definitionProfile ${iri(SPACE_REALM_PROFILE)} ;
           ${input.handle ? `rv:communityHandle ${lit(input.handle)} ;` : ''}

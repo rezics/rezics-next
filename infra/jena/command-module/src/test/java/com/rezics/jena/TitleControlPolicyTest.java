@@ -6,6 +6,8 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
@@ -39,7 +41,10 @@ public class TitleControlPolicyTest {
                                    boolean stale, boolean unsigned) throws Exception {
         DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
         data.begin(ReadWrite.WRITE);
+        boolean committed = false;
         try {
+            data.add(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(WORK),
+                org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI("https://schema.org/CreativeWork"));
             data.add(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(WORK),
                 NodeFactory.createURI(RV + "head"), NodeFactory.createURI(stale ? NEXT : HEAD));
             data.add(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(WORK),
@@ -61,7 +66,11 @@ public class TitleControlPolicyTest {
                 + "; rv:workRevision " + iri(NEXT) + "; rv:controlMode rv:HumanControlled; rv:controlEpoch 1; rv:controlField \""
                 + (legacy ? "title:en" : "title") + "\"; "
                 + (legacy ? "" : "rv:controlLanguage \"" + (declared == null ? language : declared) + "\"; ")
-                + "rv:controlIntent " + jsonLiteral + " . " + iri(NEXT) + " a rv:RevisionAnchor; rv:component " + iri(WORK) + " } "
+                + "rv:controlIntent " + jsonLiteral + "; rv:operation <urn:rezics:operation:title-language>; "
+                + "rv:manifest <urn:rezics:sha256:title-language>; rv:modelRevision "
+                + iri("https://rezics.com/definition/work-title-control-" + (legacy ? "v1" : "v2"))
+                + "; rv:shapeRevision " + iri("https://rezics.com/definition/work-title-control-" + (legacy ? "v1" : "v2"))
+                + "; rv:dataEpoch \"epoch\"; rv:sequence 1 . " + iri(NEXT) + " a rv:RevisionAnchor; rv:component " + iri(WORK) + " } "
                 + "GRAPH " + iri(CommandPolicy.RECEIPTS) + " { " + iri(RECEIPT)
                 + " rv:outcome rv:Succeeded; rv:work " + iri(WORK) + "; rv:expectedHead " + iri(HEAD)
                 + "; rv:expectedControl rv:Absent; rv:expectedProtection rv:Absent; rv:expectedControlEpoch 0; rv:titleControl " + iri(CONTROL)
@@ -77,8 +86,20 @@ public class TitleControlPolicyTest {
             var snapshot = TitleControlPolicy.capture(data, CommandPolicy.parse(update, RECEIPT), RECEIPT, "digest", update, unsigned ? null : proof, KEY, false);
             if (snapshot.error() != null) return snapshot.error();
             UpdateAction.parseExecute(update, DatasetFactory.wrap(data));
-            return TitleControlPolicy.check(data, RECEIPT, snapshot);
-        } finally { data.abort(); data.end(); data.close(); }
+            String error = TitleControlPolicy.check(data, RECEIPT, snapshot);
+            if (error != null) return error;
+            // This is the canonical validation used by CommandService.validateScope,
+            // with the real generated manifest, not request-selected focus or a mock.
+            ProfileRegistry profiles = ProfileRegistry.load(Files.isDirectory(Path.of("profiles"))
+                ? Path.of("profiles") : Path.of("../../../generated/model"));
+            assertEquals("work-title-control-" + (legacy ? "v1" : "v2"),
+                CanonicalPolicy.select(profiles, data, CONTROL, true).route().profile());
+            var canonical = CanonicalPolicy.validate(profiles, data, CONTROL, true);
+            if (canonical != null) return String.valueOf(canonical.get("report"));
+            data.commit();
+            committed = true;
+            return null;
+        } finally { if (!committed) data.abort(); data.end(); data.close(); }
     }
 
     @Test public void g512DeclaredAndOmittedLanguagesSurviveTheSignedCommand() throws Exception {
