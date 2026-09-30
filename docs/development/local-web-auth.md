@@ -29,6 +29,31 @@ script refuses partly initialized or already attempted projects; inspect the
 private `web-auth-bootstrap.log` if owner/graph bootstrap fails, then reset the
 QA project. A changed Account issuer retires the old fixture and creates a new one.
 
+Local stack environment generation supplies explicit high Main class/family
+budgets in `MAIN_RATE_LIMIT_BUDGETS` for seed, load and QA workloads. Production
+defaults remain in the versioned rate-limit table. Override the JSON policy in
+the saved Compose environment, or `.env.dev` for dev processes, to exercise
+exhaustion. Library's separate daily source budgets use
+`MAIN_READER_IMPORT_SEARCHES_PER_DAY` and
+`MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY`; local stack configuration raises
+these too. Runtime admission has no development/test bypass.
+
+Enrollment uses the offline profile described in [Turnstile](../turnstile.md).
+`task dev:seed` reads its local challenge proof from the prepared environment.
+The web BFF replaces `x-rezics-client-ip` from `WEB_CLIENT_IP_HEADER` (Cloudflare's
+`cf-connecting-ip` by default). The ingress must replace that source header, and
+Main accepts the forwarded value only from an exact peer in
+`MAIN_RATE_LIMIT_TRUSTED_PROXY_PEERS`. Local stacks trust loopback proxies;
+production must configure its proxy peer addresses explicitly. Caller-supplied
+X-Forwarded-For never selects a Main budget identity.
+
+Main caches budget class attribution for a verified token's lifetime, bounded
+to 300 seconds and 4096 entries. Owner authorization still checks live Account
+and Access state. Each limited request performs one atomic counter operation;
+expired counters reset when their key is next used. Report/appeal and provider
+intake use independent IP capacity without making Account verification a
+prerequisite; their owning handlers retain intake or signature verification.
+
 WebAuthn refuses IP addresses as relying-party IDs, so a loopback issuer names
 passkeys for `localhost` (`passkeyRelyingParty` in
 `services/account/src/account-settings.ts`): open the Accounts app at
