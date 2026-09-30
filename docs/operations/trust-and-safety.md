@@ -42,6 +42,46 @@ protects abuse-prone enrollment. Imported covers display with their source
 attribution and are removed on a valid notice. A scanner outage holds new
 uploads for review instead of disabling media.
 
+## Platform suitability moderation setup
+
+Before a responder uses platform suitability assessments, the Access operator
+provisions the fixed `governance:platform` scope. Create its `access.scope_gate`
+row if absent, and explicitly open both `open` and `dispatch_open` after the
+responder is approved. An existing closure requires an operator decision; an
+OAuth scope alone does not open this gate.
+
+Grant the approved active Agent `governance.moderate` on that exact scope through
+`access.permission_grant`, and give each approved caller's active
+`access.principal` a current `access.representation` for the same Agent and
+action. Record the granting Agent, caller, expiry and reason in the operator's
+provisioning record. Use bounded expiry and revoke the grant or representation
+when the responder leaves. Provision while `access.recovery_fence` is open;
+recovery holds must not be bypassed. These are Access operator setup steps,
+not permissions automatically granted to every registered account.
+
+The caller also needs Account OAuth consent for `governance:decide` and
+`work:read`, and permission to read the target. A platform correction uses
+`PUT /v1/suitability/{target}` with `basis: platform`, the Agent as
+`actingSubject`, the expected revision and an idempotency key. Anonymous and
+ordinary batch readers receive the assessment without the assessor's identity;
+batch disclosure requires both moderation consent and current platform
+authority. The PUT result retains the assessor for the caller's confirmation.
+
+For the loopback development fixture, `task dev:seed` creates the platform gate
+and grants eight-hour moderation authority to the first demo owner's Agent,
+with representations for that owner and the fixture operator. Repeated runs
+reuse current grants. The seed refuses a closed admission or dispatch gate and
+a recovery hold; it never reopens them. Production operators provision their
+approved responders explicitly rather than running the demo seed.
+
+The manager's 2026-10-01 suitability decision admits unassessed content on share
+previews, email and push as well as reads and indexing. Show **Not assessed**
+wherever its assessment is shown, and keep it separate from general counts.
+Without age evidence, `r15`, `r18` and `r18g` remain gated; admission of unassessed
+content does not establish an age or supply an adult opt-in. The shared
+[suitability policy](../contracts/classification-judgments.md#suitability-and-disclosure)
+also applies to derivatives and delivery channels.
+
 ## Intake, response and recovery
 
 Before registration opens, name a primary and backup responder, test the public

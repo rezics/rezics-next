@@ -36,9 +36,12 @@ until their schemas and behavioral tests carry them.
 Decision 1, product manager under maintainer delegation, 2026-09-29.
 Keep recognizable `general`, `r15`, `r18` (sexual) and `r18g` (grotesque) labels,
 with independent sexual and grotesque gates: material with both requires both
-opt-ins. Missing assessment is `unassessed`, never `general`. Signed-out viewers
-and people under 15 receive only general-eligible representations; `r15` starts
-at 15, and separate adult opt-ins at 18, subject to
+opt-ins. Missing assessment is `unassessed`, never `general`. The manager's
+2026-10-01 review admits unassessed content on reads, indexing, share previews,
+email and push; show **Not assessed** wherever the assessment is shown and never
+count it as general. Signed-out viewers and people under 15 can receive general
+and unassessed representations; `r15` starts at 15, and separate adult opt-ins at
+18, subject to
 [market restrictions](../operations/trust-and-safety.md#safety-and-legal-readiness).
 
 Imports retain source meaning: VNDB age 18 maps to `r18`, image sexual level 2
