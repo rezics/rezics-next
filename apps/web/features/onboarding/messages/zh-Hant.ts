@@ -32,7 +32,7 @@ export default {
   yourLanguages: '你的語言（最常讀的在前）',
   languagesOrder: '標題和名稱會用作品具有的、排在最前的語言顯示。',
   allLanguages: '尚未選擇：首頁顯示所有語言。',
-  languagesFull: '最多可以保留八種語言。',
+  languagesFull: '最多可以保留二十種語言。',
   suggestedLanguages: '推薦', addLanguage: '新增其他語言',
   addLanguageHint: '語言名稱，或代碼（如 pt-BR）',
   addLanguageNamed: insert('新增{{language}}', { language: String }),

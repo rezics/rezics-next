@@ -48,12 +48,35 @@ export const Person: Story = {
     await expect(canvas.getByRole('combobox', { name: 'Who can follow you' })).toBeVisible();
     await expect(canvas.getByRole('switch', { name: 'Hide my reading activity from other people’s Home' }))
       .toBeVisible();
-    await expect(canvas.getByRole('textbox', { name: 'Content languages' })).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: 'Your languages, first choice first' })).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: 'Unread chapter spoilers' })).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: 'Theme' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Open Accounts' }))
       .toHaveAttribute('href', 'https://account.rezics.test');
   },
+};
+
+const ownName = (tag: string) => new Intl.DisplayNames([tag], { type: 'language', fallback: 'code' }).of(tag) ?? tag;
+
+/** The languages Main keeps, in the reader's order, including one outside the interface locales. */
+export const ReadingLanguages: Story = {
+  args: { readingLanguages: ['ja', 'ko', 'yue-Hant'] },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const text = canvas.getByRole('region', { name: 'Your languages, first choice first' }).textContent ?? '';
+    const ja = text.indexOf(ownName('ja'));
+    const ko = text.indexOf(ownName('ko'));
+    const yue = text.indexOf(ownName('yue-Hant'));
+    await expect(ja).toBeGreaterThanOrEqual(0);
+    await expect(ko).toBeGreaterThan(ja);
+    await expect(yue).toBeGreaterThan(ko);
+  },
+};
+
+export const ReadingLanguagesPhone: Story = {
+  args: { readingLanguages: ['ja', 'ko', 'yue-Hant'] },
+  globals: { viewport: { value: 'phone' } },
+  play: ReadingLanguages.play,
 };
 
 export const PenName: Story = {

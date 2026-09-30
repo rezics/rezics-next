@@ -32,7 +32,7 @@ export default {
   yourLanguages: '내 언어 (가장 많이 읽는 순서)',
   languagesOrder: '제목과 이름은 작품이 가진 언어 중 이 순서에서 가장 앞선 언어로 보여요.',
   allLanguages: '선택 안 함: 홈에 모든 언어가 보여요.',
-  languagesFull: '언어는 최대 8개까지 둘 수 있어요.',
+  languagesFull: '언어는 최대 20개까지 둘 수 있어요.',
   suggestedLanguages: '추천', addLanguage: '다른 언어 추가',
   addLanguageHint: '언어 이름이나 pt-BR 같은 코드',
   addLanguageNamed: insert('{{language}} 추가', { language: String }),

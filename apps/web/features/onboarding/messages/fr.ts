@@ -32,7 +32,7 @@ export default {
   yourLanguages: 'Vos langues, la préférée d’abord',
   languagesOrder: 'Les titres et les noms s’affichent dans la première de ces langues qu’une œuvre possède.',
   allLanguages: 'Aucune choisie : l’accueil montre toutes les langues.',
-  languagesFull: 'Vous pouvez garder huit langues au maximum.',
+  languagesFull: 'Vous pouvez garder vingt langues au maximum.',
   suggestedLanguages: 'Suggestions', addLanguage: 'Ajouter une autre langue',
   addLanguageHint: 'Le nom d’une langue ou un code comme pt-BR',
   addLanguageNamed: insert('Ajouter {{language}}', { language: String }),

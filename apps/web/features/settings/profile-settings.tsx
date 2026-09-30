@@ -17,7 +17,7 @@ import { ProfileEditForm } from './profile-edit-form.tsx';
 import { SettingsSections } from './settings-sections.tsx';
 
 export function ProfileSettings({ agent, profile, locale, error, updated, accountOrigin, preview,
-  messages: translatedMessages }: {
+  messages: translatedMessages, readingLanguages }: {
   agent: AgentOption | null;
   profile: PublicAgentProfile | null;
   locale: UiLocale;
@@ -26,6 +26,8 @@ export function ProfileSettings({ agent, profile, locale, error, updated, accoun
   accountOrigin?: string;
   preview?: boolean;
   messages?: SettingsMessages;
+  /** Story preview of the languages Main keeps. */
+  readingLanguages?: readonly string[];
 }) {
   const t = translatedMessages ?? fallbackMessages[locale];
   const ownPerson = agent?.kind === 'person' && agent.path === 'direct-principal';
@@ -51,7 +53,8 @@ export function ProfileSettings({ agent, profile, locale, error, updated, accoun
       <AlertDescription role="status">{errorText ?? (updated === 'profile' ? t.profileSaved : t.saved)}</AlertDescription>
     </Alert> : null}
     <SettingsSections agent={agent?.iri ?? null} locale={locale} t={t}
-      accountOrigin={accountOrigin ?? 'https://account.rezics.com'} preview={preview}>
+      accountOrigin={accountOrigin ?? 'https://account.rezics.com'} preview={preview}
+      previewLanguages={readingLanguages}>
       {agent ? <>
       <Card id="profile"><CardContent className="grid gap-5 p-6">
         <div className="grid gap-1"><h2 className="font-semibold text-xl">{t.title}</h2>

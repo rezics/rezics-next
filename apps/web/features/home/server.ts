@@ -11,14 +11,16 @@ import type { Community, Moderated } from '../shell/communities.ts';
 // failure never takes down another; the rail streams in after the feed.
 
 /** The reader's saved default view and suggestion choice, read alongside their follows rather than after them. */
-async function readSavedDefaults(): Promise<{ defaults: FeedDefaults; recommendations: boolean } | null> {
+async function readSavedDefaults(): Promise<{ defaults: FeedDefaults; recommendations: boolean;
+  contentLanguages: string[] } | null> {
   const reader = await shellReader();
   if (!reader.actingSubject) return null;
   const read = await settle(() => reader.main.v1.me['feed-preferences'].get({ query: {
     actingSubject: reader.actingSubject! } }));
   // Before a first choice Main answers its defaults with no revision; those fit a follower too.
   return read.ok ? { defaults: { tab: read.data.preferences.tab, sort: read.data.preferences.sort },
-    recommendations: read.data.preferences.recommendations } : null;
+    recommendations: read.data.preferences.recommendations,
+    contentLanguages: read.data.preferences.contentLanguages } : null;
 }
 
 /** The reader's default view as Main keeps it; a person who follows nothing starts on All. */
@@ -56,6 +58,8 @@ export interface HomeView {
   newPerson: boolean | null;
   /** Whether Following fills a quiet page with suggestions; null signed out or unread. */
   recommendations: boolean | null;
+  /** Main's reading languages, in the reader's order. Null signed out or when Home could not be read. */
+  readingLanguages: readonly string[] | null;
   followed: { realms: Community[]; zones: Community[]; complete: boolean } | null;
 }
 
@@ -81,6 +85,7 @@ export async function readHomeView(params: Record<string, string | string[] | un
   const query = feedQuery(state, { language: locale, ...(actingSubject ? { actingSubject } : {}) });
   return { signedIn: reader.signedIn, actingSubject, avatarQuery: reader.avatarQuery, state, defaults, query,
     newPerson: any === null ? null : !any, recommendations: saved?.recommendations ?? null,
+    readingLanguages: saved?.contentLanguages ?? null,
     followed: realms && zones ? { realms: realms.items, zones: zones.items, complete: realms.complete && zones.complete }
       : null };
 }

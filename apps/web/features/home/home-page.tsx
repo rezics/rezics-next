@@ -39,6 +39,8 @@ export interface HomePageProps {
   avatarQuery: string;
   state: FeedState;
   defaults: FeedDefaults;
+  /** The signed-in reader's languages from Main, in their order. Null when signed out or unknown. */
+  readingLanguages?: readonly string[] | null;
   /** True for a signed-in person who follows nothing yet. */
   newPerson: boolean;
   followed: { realms: Community[]; zones: Community[]; complete: boolean } | null;
@@ -197,7 +199,7 @@ export function HomePage(props: HomePageProps) {
         <section aria-labelledby="home-posts" className="min-w-0">
           <h2 id="home-posts" className="sr-only">{feed.posts}</h2>
           <FeedControls state={state} defaults={defaults} signedIn={Boolean(actingSubject)} locale={locale}
-            messages={messages.feed} realms={realms} tabs={tabs} />
+            messages={messages.feed} realms={realms} tabs={tabs} readingLanguages={props.readingLanguages ?? null} />
           {props.posts}
         </section>
       </div>

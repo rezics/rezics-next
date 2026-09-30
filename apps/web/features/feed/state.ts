@@ -1,3 +1,5 @@
+import { CONTENT_LANGUAGE_LIMIT } from '../../i18n/display-languages.ts';
+import { languageTag } from '../onboarding/languages.ts';
 import type { FeedQuery } from './types.ts';
 
 // The feed a reader is looking at, kept in the URL so every view has an
@@ -12,7 +14,7 @@ export type FeedSort = (typeof feedSorts)[number];
 export const topWindows = ['week', 'month', 'all'] as const;
 type TopWindow = (typeof topWindows)[number];
 
-/** Content languages a reader can filter by: the interface locales' writing systems. */
+/** Languages offered to a signed-out reader. A signed-in reader's filter is the list Main keeps. */
 export const contentLanguages = ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 
 export interface FeedState {
@@ -32,7 +34,7 @@ export interface FeedDefaults { tab: Exclude<FeedTab, 'pinned'>; sort: FeedSort 
 
 const realmId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const MAX_LANGUAGES = 8, MAX_REALMS = 8;
+const MAX_REALMS = 8;
 
 type Params = URLSearchParams | Record<string, string | string[] | undefined>;
 
@@ -60,7 +62,10 @@ export function parseFeedState(params: Params, signedIn: boolean,
   if (tab === 'following' && sort === 'top') sort = 'best';
   const window = oneOf(topWindows, all(params, 't')[0]) ?? 'week';
   const languages = filter ? [] : [...new Set(all(params, 'lang').flatMap(value => value.split(','))
-    .filter(value => (contentLanguages as readonly string[]).includes(value)))].slice(0, MAX_LANGUAGES);
+    .flatMap(value => {
+      const tag = languageTag(value);
+      return tag ? [tag] : [];
+    }))].slice(0, CONTENT_LANGUAGE_LIMIT);
   const realms = filter ? [] : [...new Set(all(params, 'realm').filter(value => realmId.test(value)))].slice(0, MAX_REALMS);
   return { tab, filter, sort, window, languages, realms };
 }

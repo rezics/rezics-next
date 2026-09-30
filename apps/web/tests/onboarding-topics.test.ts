@@ -54,7 +54,7 @@ describe('G-431 the setup\'s languages', () => {
     expect(languageTag('')).toBeNull();
   });
 
-  test('the list keeps its order: added last, moved one place up, never repeated or past eight', () => {
+  test('the list keeps its order: added last, moved one place up, never repeated or past the bound', () => {
     expect(added(['en'], 'ja')).toEqual(['en', 'ja']);
     expect(added(['en', 'ja'], 'en')).toEqual(['en', 'ja']);
     const eight = Array.from({ length: MAX_LANGUAGES }, (_, index) => `x${index}`);

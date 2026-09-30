@@ -389,6 +389,25 @@ export const FiltersKeptAndEmpty: Story = {
   },
 };
 
+/** Signed in, the language filter is Main's list, in order, including a language outside the interface locales. */
+export const ReadingLanguages: Story = {
+  args: props({ readingLanguages: ['ja', 'ko', 'yue-Hant'], state: state({ tab: 'all' }) }),
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Filters' }));
+    const sheet = within(await within(document.body).findByRole('dialog', { name: 'Filter your feed' }));
+    const values = sheet.getAllByRole('checkbox').map(box => box.getAttribute('value'));
+    await expect(values.slice(0, 3)).toEqual(['ja', 'ko', 'yue-Hant']);
+    await expect(values).not.toContain('en');
+    await userEvent.keyboard('{Escape}');
+  },
+};
+
+export const ReadingLanguagesPhone: Story = {
+  args: props({ readingLanguages: ['ja', 'ko', 'yue-Hant'], state: state({ tab: 'all' }) }),
+  globals: { viewport: { value: 'phone' } },
+  play: ReadingLanguages.play,
+};
+
 /** The Filters sheet: languages and followed Realms, submitted as the same view's URL. */
 export const FiltersSheet: Story = {
   args: props({ state: state({ sort: 'new' }) }),

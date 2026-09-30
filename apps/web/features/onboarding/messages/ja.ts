@@ -32,7 +32,7 @@ export default {
   yourLanguages: 'あなたの言語（よく読む順）',
   languagesOrder: 'タイトルや名前は、作品が持つ言語のうちこの順で最初のもので表示されます。',
   allLanguages: '未選択：ホームにはすべての言語が表示されます。',
-  languagesFull: '保存できる言語は8つまでです。',
+  languagesFull: '保存できる言語は20までです。',
   suggestedLanguages: 'おすすめ', addLanguage: 'ほかの言語を追加',
   addLanguageHint: '言語名、または pt-BR のようなコード',
   addLanguageNamed: insert('{{language}}を追加', { language: String }),

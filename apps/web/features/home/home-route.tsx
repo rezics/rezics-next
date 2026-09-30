@@ -67,7 +67,8 @@ export async function HomeRoute({ locale, searchParams }: { locale: UiLocale;
   const allHref = localizedPath(`/${feedSearch(withChange(view.state, { tab: 'all' }), view.defaults)}`, locale);
   return <HomePage locale={locale} messages={messages} now={Date.now()}
     signedIn={view.signedIn} actingSubject={view.actingSubject} avatarQuery={view.avatarQuery} state={view.state}
-    defaults={view.defaults} newPerson={view.newPerson === true} followed={view.followed}
+    defaults={view.defaults} readingLanguages={view.readingLanguages} newPerson={view.newPerson === true}
+    followed={view.followed}
     continueItems={continueItems} official={official} savedFilters={savedFilters}
     setupHref={`${localizedPath('/welcome', locale)}?next=${encodeURIComponent(here)}`}
     setupLater={jar.get(PICKER_COOKIE)?.value === 'skipped'}

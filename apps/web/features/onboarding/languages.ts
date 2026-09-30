@@ -1,10 +1,12 @@
+import { CONTENT_LANGUAGE_LIMIT } from '../../i18n/display-languages.ts';
+
 // Content languages a reader keeps in their person settings: any BCP 47 tag,
 // in the order they prefer them, since names show in the reader's languages
 // one at a time (docs/plan/frontend.md). Pure helpers shared by the setup,
 // its stories and tests.
 
-/** Person settings keep at most eight (Main's bound). */
-export const MAX_LANGUAGES = 8;
+/** Person settings keep Main's reading-language bound, not the count of interface locales. */
+export const MAX_LANGUAGES = CONTENT_LANGUAGE_LIMIT;
 
 /**
  * Languages offered to add beyond Main's suggestions, as tags `Intl` names.
@@ -26,7 +28,7 @@ export function languageTag(value: string): string | null {
   } catch { return null; }
 }
 
-/** The list after adding a language at the end; a repeat or a ninth changes nothing. */
+/** The list after adding a language at the end; a repeat or one past the bound changes nothing. */
 export function added(languages: readonly string[], language: string): string[] {
   return languages.includes(language) || languages.length >= MAX_LANGUAGES ? [...languages] : [...languages, language];
 }

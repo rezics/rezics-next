@@ -64,7 +64,7 @@ describe('pinned tabs', () => {
 describe('the feed query sent to Main', () => {
   test('an empty filter adds no hidden defaults', () => {
     const query = feedQuery(parseFeedState({}, false), { language: 'zh-Hans' });
-    expect(query).toEqual({ scope: 'all', sort: 'best', language: 'zh-Hans' });
+    expect(query).toEqual({ scope: 'all', sort: 'best' });
     expect(Object.keys(query)).not.toContain('contentLanguages');
     expect(Object.keys(query)).not.toContain('kinds');
   });
@@ -73,16 +73,16 @@ describe('the feed query sent to Main', () => {
     const agent = 'https://rezics.com/id/ef4ffe88-cffd-4b05-9c7f-590b8b3b6486';
     expect(feedQuery(parseFeedState({ tab: 'all', sort: 'top', t: 'all', lang: 'ja', realm }, true),
       { language: 'en', actingSubject: agent, cursor: 'c2' })).toEqual({ scope: 'all', sort: 'top', window: 'all',
-      contentLanguages: ['ja'], realms: [realm], language: 'en', actingSubject: agent, cursor: 'c2' });
+      contentLanguages: ['ja'], realms: [realm], actingSubject: agent, cursor: 'c2' });
   });
 
   test('G-431: a pinned tab reads All through its Saved Filter and sends no Conditions of its own', () => {
     const agent = 'https://rezics.com/id/ef4ffe88-cffd-4b05-9c7f-590b8b3b6486';
     expect(feedQuery(parseFeedState({ tab: saved, sort: 'top', lang: 'ja' }, true),
       { language: 'en', actingSubject: agent })).toEqual({ scope: 'all', sort: 'top', window: 'week',
-      savedFilter: saved, language: 'en', actingSubject: agent });
+      savedFilter: saved, actingSubject: agent });
     expect(feedQuery(parseFeedState({ kind: 'recipes' }, false), { language: 'en' })).toEqual({ scope: 'all',
-      sort: 'best', language: 'en' });
+      sort: 'best' });
   });
 });
 

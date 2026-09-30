@@ -3,12 +3,37 @@ import { pathLocale } from './locale.ts';
 
 export const CONTENT_LANGUAGES_COOKIE = 'rezics_content_languages';
 
+/** Main keeps at most this many reading languages (`READING_LANGUAGE_LIMIT`). */
+export const CONTENT_LANGUAGE_LIMIT = 20;
+
 export function storedContentLanguages(value?: string | null): string[] {
   if (!value) return [];
   try {
     const parsed: unknown = JSON.parse(decodeURIComponent(value));
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string').slice(0, 8) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string').slice(0, CONTENT_LANGUAGE_LIMIT) : [];
   } catch { return []; }
+}
+
+/**
+ * Signed-in readers use Main's list, including when it is empty.
+ * The cookie is only the signed-out reader's list.
+ */
+export function readerContentLanguages(input: { signedIn: boolean; profile?: readonly string[] | null;
+  cookie?: string | null }): string[] {
+  if (input.signedIn) return (input.profile ?? []).filter((language): language is string => typeof language === 'string');
+  return storedContentLanguages(input.cookie);
+}
+
+/** Headers for one Main call. A signed-in call never copies the content-language cookie into them. */
+export function displayLanguageHeaders(input: { signedIn: boolean; profile?: readonly string[] | null;
+  cookie?: string | null; pageUrl?: string | null; browser?: readonly string[] | string | null }):
+  { 'accept-language'?: string; 'x-rezics-display-languages'?: string } {
+  const languages = displayLanguages({ pageUrl: input.pageUrl, browser: input.browser,
+    content: readerContentLanguages(input) });
+  if (!languages.length) return {};
+  const value = languages.join(',');
+  return { 'accept-language': value, 'x-rezics-display-languages': value };
 }
 
 export function contentLanguageCookie(languages: readonly string[]): string {

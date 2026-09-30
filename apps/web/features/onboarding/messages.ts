@@ -41,7 +41,7 @@ const en = {
   yourLanguages: 'Your languages, first choice first',
   languagesOrder: 'Titles and names show in the first of these a work has.',
   allLanguages: 'None chosen: Home shows every language.',
-  languagesFull: 'Eight languages is the most you can keep.',
+  languagesFull: 'Twenty languages is the most you can keep.',
   suggestedLanguages: 'Suggested', addLanguage: 'Add another language',
   addLanguageHint: 'A language’s name, or a code such as pt-BR',
   addLanguageNamed: insert('Add {{language}}', { language: String }),

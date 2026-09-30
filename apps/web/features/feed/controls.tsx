@@ -70,12 +70,14 @@ export function LinkMenu<V extends string>({ label, value, options, icon, classN
  * keeps only the sort. Home has one view of posts, so there is no card/compact
  * switch. Every choice has its own address; filters survive tab and sort changes.
  */
-export function FeedControls({ state, defaults, signedIn, locale, messages, realms, tabs }: {
+export function FeedControls({ state, defaults, signedIn, locale, messages, realms, tabs, readingLanguages = null }: {
   state: FeedState; defaults: FeedDefaults; signedIn: boolean; locale: UiLocale; messages: FeedMessages;
   /** Realms the reader can narrow to: those they follow. */
   realms: readonly RealmChoice[];
   /** The tab strip, when the page draws its own (Home's pinned tabs); otherwise Following and All. */
   tabs?: ReactNode;
+  /** The signed-in reader's languages from Main, in their order. Null when signed out or still unknown. */
+  readingLanguages?: readonly string[] | null;
 }) {
   const t = materializeData(messages, { locale });
   const href = (change: Partial<FeedState>) => localizedPath(`/${feedSearch(withChange(state, change), defaults)}`, locale);
@@ -101,7 +103,8 @@ export function FeedControls({ state, defaults, signedIn, locale, messages, real
       {state.sort === 'top' ? <LinkMenu label={t.period} value={state.window} options={topWindows.map(window =>
         ({ value: window, label: window === 'week' ? t.week : window === 'month' ? t.month : t.allTime,
           href: href({ window }) }))} /> : null}
-      {state.tab === 'pinned' ? null : <Filters state={state} defaults={defaults} locale={locale} t={t} realms={realms} />}
+      {state.tab === 'pinned' ? null : <Filters state={state} defaults={defaults} locale={locale} t={t} realms={realms}
+        readingLanguages={readingLanguages} />}
       {chips.length ? <ul aria-label={t.activeFilters} className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto
         [scrollbar-width:none]">
         {chips.map(chip => <li key={chip.key} className="shrink-0">
@@ -128,8 +131,8 @@ function Choice({ name, value, checked, lang, children }: { name: string; value:
  * Languages and Realms: a form that loads the same feed with the chosen
  * filters, in a popover beside the line and a sheet on phones.
  */
-function Filters({ state, defaults, locale, t, realms }: { state: FeedState; defaults: FeedDefaults;
-  locale: UiLocale; t: T; realms: readonly RealmChoice[] }) {
+function Filters({ state, defaults, locale, t, realms, readingLanguages }: { state: FeedState; defaults: FeedDefaults;
+  locale: UiLocale; t: T; realms: readonly RealmChoice[]; readingLanguages: readonly string[] | null }) {
   const [open, setOpen] = useState<'popover' | 'sheet' | null>(null);
   const count = activeFilterCount(state);
   const names = new Intl.DisplayNames([locale], { type: 'language' });
@@ -142,8 +145,9 @@ function Filters({ state, defaults, locale, t, realms }: { state: FeedState; def
     <div className={cn('grid content-start gap-5', footer === 'popover' ? 'max-h-[60vh] overflow-y-auto p-4' : '')}>
       <fieldset className="grid gap-0.5">
         <legend className="mb-1.5 font-semibold text-sm">{t.languages}</legend>
-        {contentLanguages.map(language => <Choice key={language} name="lang" value={language}
-          checked={state.languages.includes(language)}>{names.of(language) ?? language}</Choice>)}
+        {(readingLanguages ? [...new Set([...readingLanguages, ...state.languages])] : contentLanguages)
+          .map(language => <Choice key={language} name="lang" value={language}
+            checked={state.languages.includes(language)}>{names.of(language) ?? language}</Choice>)}
       </fieldset>
       <fieldset className="grid gap-0.5">
         <legend className="mb-1.5 font-semibold text-sm">{t.realms}</legend>

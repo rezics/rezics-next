@@ -32,7 +32,7 @@ export default {
   yourLanguages: 'Tus idiomas, el preferido primero',
   languagesOrder: 'Los títulos y nombres se muestran en el primero de estos que tenga una obra.',
   allLanguages: 'Ninguno elegido: el inicio muestra todos los idiomas.',
-  languagesFull: 'Puedes guardar como máximo ocho idiomas.',
+  languagesFull: 'Puedes guardar como máximo veinte idiomas.',
   suggestedLanguages: 'Sugeridos', addLanguage: 'Añadir otro idioma',
   addLanguageHint: 'El nombre de un idioma o un código como pt-BR',
   addLanguageNamed: insert('Añadir {{language}}', { language: String }),

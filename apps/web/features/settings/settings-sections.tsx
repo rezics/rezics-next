@@ -4,12 +4,13 @@ import { Button } from '@rezics/ui/button';
 import { Card, CardContent } from '@rezics/ui/card';
 import { ChoiceSelect } from '@rezics/ui/select';
 import { Switch } from '@rezics/ui/switch';
+import { materializeData } from 'native-i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
-import { CONTENT_LANGUAGES_COOKIE, contentLanguageCookie } from '../../i18n/display-languages.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { LanguagePicker } from '../onboarding/language-picker.tsx';
+import { messages as onboardingMessages } from '../onboarding/messages.ts';
 import { useOptionalShell } from '../shell/shell-provider.tsx';
-import { preferenceCookie } from '../shell/preferences.ts';
 import type { SettingsMessages } from './messages.ts';
 
 type Channel = 'inbox' | 'email';
@@ -206,34 +207,52 @@ function Reading({ agent, t, preview = false, extra }: { agent: string | null; t
   </Section>;
 }
 
-function PersonControls({ agent, t, preview = false }: { agent: string; t: SettingsMessages; preview?: boolean }) {
-  const [current, setCurrent] = useState<PersonPreferences | null>(preview ? previewPerson : null);
+function PersonControls({ agent, locale, t, preview = false, previewLanguages = [] }: { agent: string;
+  locale: UiLocale; t: SettingsMessages; preview?: boolean; previewLanguages?: readonly string[] }) {
+  const languageT = materializeData(onboardingMessages[locale], { locale });
+  const [current, setCurrent] = useState<PersonPreferences | null>(preview
+    ? { ...previewPerson, contentLanguages: [...previewLanguages] } : null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [blockName, setBlockName] = useState('');
-  const [languages, setLanguages] = useState('');
+  const [languages, setLanguages] = useState<string[]>(preview ? [...previewLanguages] : []);
+  const [suggested, setSuggested] = useState<string[]>(preview
+    ? ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] : []);
   const path = `/v1/me/person-preferences?actingSubject=${encodeURIComponent(agent)}`;
+  const reload = async () => {
+    const value = await read<PersonPreferences>(path);
+    setCurrent(value);
+    setLanguages(value.contentLanguages);
+    return value;
+  };
   useEffect(() => {
     if (preview) return;
     let active = true;
-    void read<PersonPreferences>(path).then(value => { if (active) {
-      setCurrent(value); setLanguages(value.contentLanguages.join(', '));
-      document.cookie = preferenceCookie(CONTENT_LANGUAGES_COOKIE,
-        contentLanguageCookie(value.contentLanguages), location.protocol === 'https:');
-    } }).catch(() => { if (active) setStatus(t.personUnavailable); });
+    void read<PersonPreferences>(path).then(value => {
+      if (!active) return;
+      setCurrent(value); setLanguages(value.contentLanguages);
+    }).catch(() => { if (active) setStatus(t.personUnavailable); });
+    void fetch(`${BFF_PREFIX}/v1/onboarding/choices?locale=${encodeURIComponent(locale)}`, { cache: 'no-store' })
+      .then(response => response.ok ? response.json() as Promise<{ languages?: unknown }> : null)
+      .then(value => {
+        if (!active || !value || !Array.isArray(value.languages)) return;
+        setSuggested(value.languages.filter((language): language is string => typeof language === 'string'));
+      }).catch(() => { /* suggestions are optional; any tag can still be typed */ });
     return () => { active = false; };
-  }, [path, preview, t]);
+  }, [path, preview, t, locale]);
   const save = async (patch: Partial<PersonPreferences>) => {
     if (!current || busy || preview) return;
     setBusy(true); setStatus('');
     try {
       const { profile: _profile, version: _version, blockedPeople: _blocked, ...prior } = current;
       const next = await write<PersonPreferences>('/v1/me/person-preferences', {
-        actingSubject: agent, expectedVersion: current.version, ...prior, ...patch });
-      setCurrent(next); setLanguages(next.contentLanguages.join(', ')); setStatus(t.personSaved);
-      document.cookie = preferenceCookie(CONTENT_LANGUAGES_COOKIE,
-        contentLanguageCookie(next.contentLanguages), location.protocol === 'https:');
-    } catch (error) { setStatus(String(error).includes('409') ? t.sectionStale : t.sectionFailed); }
+        actingSubject: agent, expectedVersion: current.version, ...prior, contentLanguages: languages, ...patch });
+      setCurrent(next); setLanguages(next.contentLanguages); setStatus(t.personSaved);
+    } catch (error) {
+      const conflict = String(error).includes('409');
+      setStatus(conflict ? t.sectionStale : t.sectionFailed);
+      if (conflict) await reload().catch(() => { /* the conflict message stays */ });
+    }
     setBusy(false);
   };
   const block = async (target: string, blocked: boolean) => {
@@ -287,14 +306,11 @@ function PersonControls({ agent, t, preview = false }: { agent: string; t: Setti
     <div className="grid gap-1"><h3 className="font-medium">{t.contentPreferences}</h3>
       <p className="text-muted-foreground text-sm">{t.contentPreferencesHelp}</p></div>
     {current ? <>
-      <form className="flex flex-wrap items-end gap-2" onSubmit={event => {
-        event.preventDefault(); void save({ contentLanguages: languages.split(',').map(value => value.trim())
-          .filter(Boolean) });
-      }}><label className="grid min-w-48 flex-1 gap-1 text-sm font-medium">{t.contentLanguages}
-        <input className="rounded-md border bg-background px-3 py-2 text-sm" value={languages}
-          placeholder={t.contentLanguagesExample} disabled={busy || preview}
-          onChange={event => setLanguages(event.target.value)} /></label>
-        <Button type="submit" disabled={busy || preview}>{t.saveSection}</Button></form>
+      <LanguagePicker t={languageT} locale={locale} suggested={suggested} value={languages}
+        onChange={next => { if (!busy) setLanguages(next); }} />
+      <Button type="button" className="w-fit" disabled={busy || preview
+        || languages.join() === current.contentLanguages.join()}
+        onClick={() => void save({ contentLanguages: languages })}>{t.saveSection}</Button>
       <label className="grid gap-1 text-sm font-medium">{t.spoilerHandling}
         <ChoiceSelect label={t.spoilerHandling} value={current.spoilerPolicy} disabled={busy || preview}
           options={[{ value: 'hide-unread', label: t.spoilerHideUnread },
@@ -333,13 +349,16 @@ function Display({ locale, t, preview = false }: { locale: UiLocale; t: Settings
   </Section>;
 }
 
-export function SettingsSections({ agent, locale, accountOrigin, t, preview = false, children }: {
+export function SettingsSections({ agent, locale, accountOrigin, t, preview = false, previewLanguages, children }: {
   agent: string | null; locale: UiLocale; accountOrigin: string; t: SettingsMessages; preview?: boolean;
+  /** Story preview of a saved reading-language list. */
+  previewLanguages?: readonly string[];
   children?: ReactNode;
 }) {
   return <>
     <Notifications t={t} preview={preview} />
-    {agent ? <PersonControls agent={agent} t={t} preview={preview} /> : null}
+    {agent ? <PersonControls agent={agent} locale={locale} t={t} preview={preview}
+      previewLanguages={previewLanguages} /> : null}
     <Display locale={locale} t={t} preview={preview} />
     {children}
     <Section id="account" title={t.accountTitle} help={t.accountHelp}>

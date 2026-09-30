@@ -3,7 +3,7 @@ import type { MainApp } from '@rezics/main/app';
 import { cookies, headers } from 'next/headers';
 import { cache } from 'react';
 import { ACCESS_COOKIE, SESSION_KEY_COOKIE } from '../auth/cookies.ts';
-import { CONTENT_LANGUAGES_COOKIE, displayLanguages, storedContentLanguages }
+import { CONTENT_LANGUAGES_COOKIE, displayLanguageHeaders }
   from '../../i18n/display-languages.ts';
 import { serviceOrigin } from './origins.ts';
 
@@ -29,21 +29,18 @@ const profileContentLanguages = cache(async (token: string, sessionKey: string):
 /** Eden client for Main acting with an explicit bearer token, or anonymously. */
 export function mainApiWithToken(accessToken: string | undefined) {
   return treaty<MainApp>(serviceOrigin('MAIN_ORIGIN'), {
-    headers: async (path: string) => {
+    headers: async (_path: string) => {
       const result: Record<string, string> = {};
       if (accessToken) result.authorization = `Bearer ${accessToken}`;
       try {
         const [jar, incoming] = await Promise.all([cookies(), headers()]);
         const token = accessToken ?? jar.get(ACCESS_COOKIE)?.value;
-        const saved = storedContentLanguages(jar.get(CONTENT_LANGUAGES_COOKIE)?.value);
-        const content = saved.length || !token || path.startsWith('/v1/me/') ? saved
-          : await profileContentLanguages(token, jar.get(SESSION_KEY_COOKIE)?.value ?? '');
-        const languages = displayLanguages({ pageUrl: incoming.get('x-rezics-page-url'), content,
-          browser: incoming.get('accept-language') });
-        if (languages.length) {
-          result['accept-language'] = languages.join(',');
-          result['x-rezics-display-languages'] = languages.join(',');
-        }
+        const signedIn = Boolean(token);
+        const profile = signedIn
+          ? await profileContentLanguages(token!, jar.get(SESSION_KEY_COOKIE)?.value ?? '') : null;
+        Object.assign(result, displayLanguageHeaders({ signedIn, profile,
+          cookie: jar.get(CONTENT_LANGUAGES_COOKIE)?.value, pageUrl: incoming.get('x-rezics-page-url'),
+          browser: incoming.get('accept-language') }));
       } catch { /* API clients also run outside a page request. */ }
       return result;
     },
