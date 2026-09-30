@@ -18,6 +18,7 @@ test('G-539: summaries cannot bind an unrelated Work and semantic disclosure has
   expect(source('modules/access/admission.ts')).toContain('await publicSemantics(');
   expect(source('routes/resources.ts')).toContain('canReadSemantics(null, null, resources, fuseki)');
   expect(source('routes/media.ts')).toContain('canReadSemantics(null, null, resources, fuseki)');
+  expect(source('routes/search.ts')).toContain('canReadSemantics(null, null, resources, fuseki)');
 });
 
 test('G-539: an exact semantic export cannot substitute ordinary Work read authority for a history grant', async () => {

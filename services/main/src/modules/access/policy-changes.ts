@@ -1,4 +1,4 @@
-// Protected policy write template: publish a revision, admit or revoke a set
+// Protected policy write template: publish/end a policy, admit or revoke a set
 // reference. Each change, its scope epoch advance and its receipt commit together.
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -32,6 +32,7 @@ export interface PolicyChangeContext {
 export type PolicyChange =
   | { action: 'publish-revision'; policyId: string; scopeId: string; expectedHeadRevision: string;
       mandatory: RuleInput[]; ordered: RuleInput[]; limits?: Partial<PolicyLimits> }
+  | { action: 'end-policy'; policyId: string; scopeId: string; expectedHeadRevision: string }
   | { action: 'admit-set'; setAdmissionId: string; setKind: 'org' | 'realm';
       basis: MembershipBasis; referencingScopeId: string; purpose: SetAdmissionPurpose;
       validUntil: Date }
@@ -63,7 +64,7 @@ function limitsOf(requested: Partial<PolicyLimits> | undefined): PolicyLimits {
 }
 
 function scopeOf(change: PolicyChange): string | null {
-  if (change.action === 'publish-revision') return change.scopeId;
+  if (change.action === 'publish-revision' || change.action === 'end-policy') return change.scopeId;
   return change.action === 'admit-set' ? change.referencingScopeId : null;
 }
 
@@ -76,6 +77,12 @@ export class AccessPolicyChanges {
       || context.idempotencyKey.includes('\0') || !/^[0-9a-f]{64}$/.test(context.requestDigest)
       || (change.action !== 'revoke-set' && !(scopeOf(change) ?? '').length)) {
       throw new PolicyInvalid('invalid policy change');
+    }
+    // This operation lifts semantic disclosure restrictions. Other policy scope
+    // families need their owner's end semantics before exposing this command.
+    if (change.action === 'end-policy'
+      && !/^semantic:read:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(change.scopeId)) {
+      throw new PolicyInvalid('unsupported policy end scope');
     }
     return inAccessTransaction(this.pool, 'read committed', async client => {
       await requireRecoveryOpen(client, true);
@@ -90,13 +97,14 @@ export class AccessPolicyChanges {
         }
         scope = admission.referencing_scope_id;
       }
-      const editor = change.action === 'publish-revision'
+      const changesPolicy = change.action === 'publish-revision' || change.action === 'end-policy';
+      const editor = changesPolicy
         ? await semanticPolicyAuthority(client, principal.id, context.issuerSubject, scope!) : null;
       if (editor) await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
       const epoch = await lockOpenScope(client, scope!);
       const mandate = editor?.mandate ?? await requireMandate(client, principal.id, context.issuerSubject,
-        change.action === 'publish-revision' ? POLICY_MANAGE : POLICY_SET_ADMISSION);
-      const grant = change.action === 'publish-revision'
+        changesPolicy ? POLICY_MANAGE : POLICY_SET_ADMISSION);
+      const grant = changesPolicy
         ? editor?.grant ?? await requireGrant(client, context.issuerSubject, scope!, POLICY_MANAGE) : null;
       const prior = (await client.query<PolicyChangeReceiptRow>(`SELECT * FROM access.policy_change_receipt
         WHERE principal_id = $1 AND idempotency_key = $2`, [principal.id, context.idempotencyKey])).rows[0];
@@ -115,6 +123,21 @@ export class AccessPolicyChanges {
         authorityEpoch = await advanceScopeEpoch(client, scope!);
         result = await this.publish(client, context, { principalId: principal.id, mandate, grant: grant!, semanticEditor: !!editor },
           change, authorityEpoch);
+      } else if (change.action === 'end-policy') {
+        if (!uuidPattern.test(change.policyId) || !generationPattern.test(change.expectedHeadRevision)) {
+          throw new PolicyInvalid('invalid policy end');
+        }
+        const current = (await client.query<{ id: string; owner_subject: string;
+          head_revision: string; ended_at: Date | null }>(`SELECT id, owner_subject, head_revision, ended_at
+          FROM access.policy WHERE scope_id = $1 FOR UPDATE`, [scope])).rows[0];
+        if (current && current.owner_subject !== context.issuerSubject && !editor) {
+          throw new PolicyDenied('scope is governed by another owner');
+        }
+        if (!current || current.id !== change.policyId || current.head_revision !== change.expectedHeadRevision
+          || current.ended_at !== null) throw new PolicyStale('policy head changed');
+        await client.query('UPDATE access.policy SET ended_at = clock_timestamp() WHERE id = $1', [current.id]);
+        authorityEpoch = await advanceScopeEpoch(client, scope!);
+        result = { action: change.action, policyId: current.id, revision: current.head_revision, setAdmissionId: null };
       } else if (change.action === 'admit-set') {
         if (!uuidPattern.test(change.setAdmissionId) || !MEMBERSHIP_BASES.includes(change.basis)
           || !SET_ADMISSION_PURPOSES.includes(change.purpose) || !['org', 'realm'].includes(change.setKind)
@@ -206,7 +229,8 @@ export class AccessPolicyChanges {
         rule_id: reference.ruleId, admission: reference.admission, polarity: reference.polarity })))]);
     }
     if (current) {
-      await client.query('UPDATE access.policy SET head_revision = $2 WHERE id = $1', [change.policyId, revision]);
+      await client.query('UPDATE access.policy SET head_revision = $2, ended_at = NULL WHERE id = $1',
+        [change.policyId, revision]);
     }
     return { action: change.action, policyId: change.policyId, revision, setAdmissionId: null };
   }

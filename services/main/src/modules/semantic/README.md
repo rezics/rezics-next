@@ -24,7 +24,14 @@ Staging, unlinked resources and resources linked only to unpublished Works stay
 private. Anonymous readers use the same Access decision. Older exact revisions
 still require current read authority; public disclosure covers only the head.
 An explicit read grantee can read a restricted resource. Its semantic edit
-grantee can publish the existing Access policy on that resource's read scope.
+grantee can publish or end the Access policy on that resource's read scope.
+`POST /v1/access/policy-changes` with `action: "end-policy"` binds the policy ID,
+expected head revision and scope authority epoch. Ending sets `ended_at`, advances
+the epoch and records an idempotent receipt; all policy history and foreign keys
+remain intact. Only policies with no end timestamp govern disclosure. Publishing
+the next revision of that same policy reactivates the restriction. This end
+operation supports semantic read scopes; its cost is a fixed number of indexed
+authority/head/receipt reads and three row writes, independent of history size.
 
 The batch decision costs one bounded Jena query and one indexed policy/gate
 lookup for at most 65 identities; a signed-in batch adds one indexed grant

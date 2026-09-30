@@ -20,6 +20,7 @@ export type PolicyRuleEffect = 'require' | 'allow' | 'deny';
 
 export type PolicyRow = {
   id: string; scope_id: string; owner_subject: string; head_revision: string; created_at: Date;
+  ended_at: Date | null;
 };
 
 export type PolicyRevisionRow = {
@@ -53,7 +54,7 @@ export type PolicyRuleSetReferenceRow = {
 
 export type PolicyChangeReceiptRow = {
   principal_id: string; idempotency_key: string; request_digest: string;
-  action: 'publish-revision' | 'admit-set' | 'revoke-set';
+  action: 'publish-revision' | 'end-policy' | 'admit-set' | 'revoke-set';
   policy_id: string | null; policy_revision: string | null; set_admission_id: string | null;
   result_authority_epoch: string; created_at: Date;
 };

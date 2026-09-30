@@ -17,7 +17,7 @@ export interface SemanticDisclosure {
   granted: ReadonlySet<string>;
 }
 
-/** A semantic editor may restrict that same resource. Reuse the existing edit
+/** A semantic editor may restrict or unrestrict that same resource. Reuse the existing edit
  * mandate/grant as the policy revision's durable publication basis. */
 export async function semanticPolicyAuthority(client: PoolClient, principalId: string,
   actor: string, scope: string) {
@@ -86,7 +86,7 @@ async function publicInTransaction(access: PoolClient, graph: Pick<FusekiClient,
     WHERE NOT EXISTS (SELECT 1 FROM access.scope_gate
       WHERE id = 'semantic:read:' || wanted.resource AND NOT open)
       AND NOT EXISTS (SELECT 1 FROM access.policy
-        WHERE scope_id = 'semantic:read:' || wanted.resource)`, [candidates]);
+        WHERE scope_id = 'semantic:read:' || wanted.resource AND ended_at IS NULL)`, [candidates]);
   return new Set(allowed.rows.map(row => row.resource));
 }
 

@@ -4,8 +4,8 @@ import { startMediaStack, png } from './media-support.ts';
 import { publicSemantics, SEMANTIC_DISCLOSURE_LIMIT }
   from '../../../services/main/src/modules/access/semantic-disclosure.ts';
 import { SEMANTIC_TERMS } from '../../../services/main/src/modules/semantic/schema.ts';
-import { queryPublicDisclosedFields }
-  from '../../../services/main/src/modules/work/search-disclosed-fields.ts';
+import { searchRoutes, type SearchRouteDependencies }
+  from '../../../services/main/src/routes/search.ts';
 import { mainSelectionDigest, selectMainDefault }
   from '../../../services/main/src/modules/work/select-main.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../../../services/main/src/modules/media/store.ts';
@@ -92,7 +92,9 @@ test('G-539: current accepted semantic Resources follow live Work disclosure and
       .toMatchObject({ revision: '1', authorityEpoch: '1', replayed: true });
     await editor.grant(`semantic:edit:${restricted.component}`, 'semantic.change');
     expect((await editor.send('POST', '/v1/access/policy-changes',
-      policyBody(restricted.component, '1', restrictionId, '1', editor.actor))).status).toBe(200);
+      { ...policyBody(restricted.component, '1', restrictionId, '1', editor.actor),
+        ordered: [{ ruleId: randomUUID(), actions: ['work.read'], effect: 'allow',
+          condition: { op: 'authenticated' } }] })).status).toBe(200);
     // Any policy, including an empty revision, is the restriction mark.
     expect((await publicSemantics({ pool: f.accessPool, graph: f.fuseki }, [restricted.component])).size).toBe(0);
     expect((await owner.send('POST', '/v1/access/policy-changes',
@@ -146,14 +148,129 @@ test('G-539: current accepted semantic Resources follow live Work disclosure and
     expect((await anonymous(`/v1/media/avatars/${avatar}`)).status).toBe(200);
 
     // Public search uses the same batched Access reader before matching/counting.
-    // The route caller is owned by G-556 and still needs this final reader argument.
-    const search = () => queryPublicDisclosedFields(f.env, f.store, undefined, {
-      profile: 'public-disclosed-fields-phrase-v1', phrase: 'heroine', contexts: [], statements: [],
-      resources: refs, mediaContext: DEFAULT_MEDIA_CONTEXT, language: 'en',
-    }, undefined, { canReadSemantics: resources => f.mediaAccess.canReadSemantics(null, null, resources, f.fuseki) });
-    const searched = await search();
-    expect(searched.total).toBe(1);
-    expect(searched.results.map(row => row.owner)).toEqual([visible.component]);
+    const searchApp = searchRoutes(f.fuseki, { environment: f.env, access: f.access,
+      account: { verify: async (request: Request) => request.headers.get('authorization') === `Bearer ${owner.token}`
+        ? owner.principal : outsider.principal }, media: f.media, mediaAccess: f.mediaAccess,
+      governance: { store: { restrictedTitles: async () => new Set<string>() } },
+    } as unknown as SearchRouteDependencies);
+    const search = async (token?: string) => {
+      const response = await searchApp.handle(new Request('http://main.local/v1/queries', {
+        method: 'POST', headers: { 'content-type': 'application/json',
+          ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({
+          profile: 'public-disclosed-fields-phrase-v1', phrase: 'heroine', contexts: [], statements: [],
+          resources: refs, mediaContext: DEFAULT_MEDIA_CONTEXT, language: 'en',
+        }),
+      }));
+      if (response.status !== 200) throw new Error(`search: ${response.status} ${await response.text()}`);
+      return await response.json() as { total: number; results: { owner: string; score: number }[];
+        facets: { contexts: number; statements: number; names: number } };
+    };
+    for (const token of [undefined, outsider.token, owner.token]) {
+      expect(await search(token)).toMatchObject({ total: 1,
+        results: [{ owner: visible.component, score: 1 }],
+        facets: { contexts: 0, statements: 0, names: 1 } });
+    }
+
+    // Unrestriction ends the governing effect without deleting any audit basis.
+    await owner.grant(`media:avatar:${restricted.component}`, 'media.avatar');
+    const restrictedAvatarResponse = await owner.send('PUT', `/v1/resources/${local(restricted.component)}/avatar`, {
+      profile: 'resource-avatar-selection-v1', asset: asset.asset, expectedSelection: null, actingSubject: owner.actor });
+    expect(restrictedAvatarResponse.status).toBe(201);
+    const restrictedAvatar = (await restrictedAvatarResponse.json() as { selection: string }).selection;
+    expect((await anonymous(`/v1/media/avatars/${restrictedAvatar}`)).status).toBe(404);
+    const decisionRequest = { profile: 'access-policy-decision-v1', scopeId: restriction.scopeId,
+      action: 'work.read', actingSubject: owner.actor, reusable: true };
+    const decisionResponse = await owner.send('POST', '/v1/access/policy-decisions', decisionRequest);
+    expect(decisionResponse.status).toBe(200);
+    const decision = await decisionResponse.json() as { decisionId: string };
+    expect(decision).toMatchObject({ result: 'allow', policyRevision: '2', reusable: true });
+    const history = async () => ({
+      revisions: (await f.accessPool.query('SELECT * FROM access.policy_revision WHERE policy_id = $1 ORDER BY revision',
+        [restrictionId])).rows,
+      rules: (await f.accessPool.query('SELECT * FROM access.policy_rule WHERE policy_id = $1 ORDER BY revision, tier, position',
+        [restrictionId])).rows,
+      references: (await f.accessPool.query('SELECT * FROM access.policy_rule_set_reference WHERE policy_id = $1',
+        [restrictionId])).rows,
+      frames: (await f.accessPool.query('SELECT * FROM access.decision_snapshot WHERE policy_id = $1',
+        [restrictionId])).rows,
+      receipts: (await f.accessPool.query(`SELECT * FROM access.policy_change_receipt
+        WHERE policy_id = $1 AND action = 'publish-revision' ORDER BY policy_revision`, [restrictionId])).rows,
+    });
+    const retained = await history();
+    expect(retained.revisions).toHaveLength(2);
+    expect(retained.rules).toHaveLength(1);
+    expect(retained.frames).toHaveLength(1);
+    const end = { profile: 'access-policy-change-v1', action: 'end-policy', policyId: restrictionId,
+      scopeId: restriction.scopeId, expectedHeadRevision: '2', expectedAuthorityEpoch: '2',
+      issuerSubject: editor.actor };
+    await outsider.grant(restriction.scopeId, 'semantic.read');
+    expect((await outsider.send('POST', '/v1/access/policy-changes', { ...end, issuerSubject: outsider.actor })).status)
+      .toBe(403);
+    expect((await editor.send('POST', '/v1/access/policy-changes', { ...end, expectedAuthorityEpoch: '1' })).status)
+      .toBe(409);
+    expect((await editor.send('POST', '/v1/access/policy-changes', { ...end, expectedHeadRevision: '1' })).status)
+      .toBe(409);
+    await f.accessPool.query('UPDATE access.recovery_fence SET open = false');
+    expect((await editor.send('POST', '/v1/access/policy-changes', end)).status).toBe(503);
+    await f.accessPool.query('UPDATE access.recovery_fence SET open = true');
+    expect((await f.accessPool.query('SELECT ended_at, head_revision FROM access.policy WHERE id = $1',
+      [restrictionId])).rows[0]).toEqual({ ended_at: null, head_revision: '2' });
+    expect(await history()).toEqual(retained);
+    const endKeys = [randomUUID(), randomUUID()];
+    const concurrent = await Promise.all(endKeys.map(key => editor.send('POST', '/v1/access/policy-changes', end, key)));
+    expect(concurrent.map(response => response.status).sort()).toEqual([200, 409]);
+    const winner = concurrent.findIndex(response => response.status === 200);
+    expect(await concurrent[winner]!.json()).toMatchObject({ action: 'end-policy', policyId: restrictionId,
+      revision: '2', authorityEpoch: '3', replayed: false });
+    const ended = (await f.accessPool.query('SELECT ended_at, head_revision FROM access.policy WHERE id = $1',
+      [restrictionId])).rows[0];
+    expect(ended.ended_at).toBeInstanceOf(Date);
+    expect(ended.head_revision).toBe('2');
+    expect(await history()).toEqual(retained);
+    await expect(f.accessPool.query('UPDATE access.policy SET ended_at = NULL WHERE id = $1', [restrictionId]))
+      .rejects.toMatchObject({ code: '23514' });
+    await expect(f.accessPool.query('DELETE FROM access.policy WHERE id = $1', [restrictionId]))
+      .rejects.toMatchObject({ code: '23514' });
+    await owner.grant(restriction.scopeId, 'access.policy.manage');
+    for (const revision of ['1', '2']) {
+      const historical = await owner.send('GET', `/v1/access/policies/${restrictionId}/revisions/${revision}`
+        + `?issuerSubject=${encodeURIComponent(owner.actor)}`);
+      expect(historical.status).toBe(200);
+      expect(await historical.json()).toMatchObject({ policyId: restrictionId, headRevision: '2', revision });
+    }
+    expect(await (await editor.send('POST', '/v1/access/policy-changes', end, endKeys[winner])).json())
+      .toMatchObject({ revision: '2', authorityEpoch: '3', replayed: true });
+    expect((await editor.send('POST', '/v1/access/policy-changes', { ...end, expectedHeadRevision: '1' },
+      endKeys[winner])).status).toBe(409);
+    expect((await f.accessPool.query(`SELECT count(*) FROM access.policy_change_receipt
+      WHERE policy_id = $1 AND action = 'end-policy'`, [restrictionId])).rows[0].count).toBe('1');
+    expect((await owner.send('POST', '/v1/access/policy-decisions', decisionRequest)).status).toBe(404);
+    expect((await owner.send('POST', '/v1/access/policy-decision-revalidations', {
+      profile: 'access-policy-decision-revalidation-v1', decisionId: decision.decisionId,
+      scopeId: restriction.scopeId, action: 'work.read', actingSubject: owner.actor })).status).toBe(409);
+    for (const read of viewers) {
+      expect((await read(readPath(restricted.component))).status).toBe(200);
+      expect(await (await read(resourcePath(restricted.component))).json()).toMatchObject({ disclosure: 'public' });
+      expect((await read(`/v1/media/avatars/${restrictedAvatar}`)).status).toBe(200);
+    }
+    for (const token of [undefined, outsider.token, owner.token]) {
+      // Public previews accept a credential but have no actingSubject selector.
+      expect((await f.call('GET', previewPath(restricted.component), { token })).status).toBe(200);
+      const results = await search(token);
+      expect(results.total).toBe(2);
+      expect(results.facets.names).toBe(2);
+      expect(results.results.map(row => row.owner).sort()).toEqual([visible.component, restricted.component].sort());
+    }
+    // Retained identity and head support a new restriction revision after ending.
+    const restored = await owner.send('POST', '/v1/access/policy-changes',
+      policyBody(restricted.component, '3', restrictionId, '2', owner.actor));
+    expect(restored.status).toBe(200);
+    expect(await restored.json()).toMatchObject({ revision: '3', authorityEpoch: '4' });
+    expect((await f.accessPool.query('SELECT ended_at FROM access.policy WHERE id = $1',
+      [restrictionId])).rows[0].ended_at).toBeNull();
+    expect((await anonymous(readPath(restricted.component))).status).toBe(404);
+    expect((await anonymous(`/v1/media/avatars/${restrictedAvatar}`)).status).toBe(404);
+    expect((await search(owner.token)).total).toBe(1);
 
     // A private Work becoming public releases its linked Resource immediately.
     const published = await f.contribution(hidden.work, owner.actor, 'en', 'Newly published story');

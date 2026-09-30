@@ -33,6 +33,9 @@ const noStore = { headers: { 'cache-control': 'no-store' } };
 const changeCommon = { profile: t.Literal('access-policy-change-v1'), issuerSubject: groupAgent,
   expectedAuthorityEpoch: groupGeneration };
 const policyChangeBody = t.Union([
+  t.Object({ ...changeCommon, action: t.Literal('end-policy'), policyId: groupUuid,
+    scopeId: t.String({ pattern: '^semantic:read:https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+    expectedHeadRevision: groupGeneration }, { additionalProperties: false }),
   t.Object({ ...changeCommon, action: t.Literal('publish-revision'), policyId: groupUuid, scopeId,
     expectedHeadRevision: groupGeneration, mandatory: t.Array(mandatoryRule, { maxItems: 16 }),
     ordered: t.Array(orderedRule, { maxItems: 64 }),
@@ -47,7 +50,7 @@ const policyChangeBody = t.Union([
     expectedGeneration: groupGeneration }, { additionalProperties: false }),
 ]);
 const policyChangeResult = t.Object({ profile: t.Literal('access-policy-change-v1'),
-  action: t.Union([t.Literal('publish-revision'), t.Literal('admit-set'), t.Literal('revoke-set')]),
+  action: t.Union([t.Literal('publish-revision'), t.Literal('end-policy'), t.Literal('admit-set'), t.Literal('revoke-set')]),
   policyId: t.Nullable(groupUuid), revision: t.Nullable(groupGeneration),
   setAdmissionId: t.Nullable(groupUuid), authorityEpoch: groupGeneration, replayed: t.Boolean() });
 const policyRevisionResult = t.Object({ profile: t.Literal('access-policy-revision-v1'),
@@ -158,6 +161,9 @@ export function accessPolicyRoutes(work: MainWorkDependencies) {
           ? { action: body.action, policyId: body.policyId, scopeId: body.scopeId,
             expectedHeadRevision: body.expectedHeadRevision, mandatory: body.mandatory,
             ordered: body.ordered, ...(body.limits ? { limits: body.limits } : {}) }
+          : body.action === 'end-policy'
+            ? { action: body.action, policyId: body.policyId, scopeId: body.scopeId,
+              expectedHeadRevision: body.expectedHeadRevision }
           : body.action === 'admit-set'
             ? { action: body.action, setAdmissionId: body.setAdmissionId, setKind: body.setKind,
               basis: body.basis, referencingScopeId: body.referencingScopeId, purpose: body.purpose,

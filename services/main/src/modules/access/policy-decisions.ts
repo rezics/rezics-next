@@ -153,7 +153,7 @@ export class AccessPolicyDecisions {
       const policy = gate && (await client.query<{ id: string; head_revision: string; max_states: number;
         max_input_rows: number; deadline_ms: number }>(`SELECT p.id, p.head_revision, r.max_states,
           r.max_input_rows, r.deadline_ms FROM access.policy p JOIN access.policy_revision r
-          ON r.policy_id = p.id AND r.revision = p.head_revision WHERE p.scope_id = $1`,
+          ON r.policy_id = p.id AND r.revision = p.head_revision WHERE p.scope_id = $1 AND p.ended_at IS NULL`,
       [request.scopeId])).rows[0];
       if (!gate || !policy) throw new PolicyNotFound('scope has no policy');
       const base = { policyId: policy.id, policyRevision: policy.head_revision,
@@ -215,7 +215,7 @@ export class AccessPolicyDecisions {
       if (frame.expired) throw new ProofHandleStale('proof handle expired');
       const current = (await client.query<{ fresh: boolean }>(`SELECT
           g.open AND g.authority_epoch = $2 AND g.group_generation = $3
-          AND p.head_revision = $4 AND pr.active AND pr.enforcement_epoch = $5
+          AND p.ended_at IS NULL AND p.head_revision = $4 AND pr.active AND pr.enforcement_epoch = $5
           AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM access.authority_subject s
             WHERE s.id = $6 AND s.active AND s.generation = $7)) AS fresh
         FROM access.scope_gate g JOIN access.policy p ON p.scope_id = g.id

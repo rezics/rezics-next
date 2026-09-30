@@ -414,7 +414,9 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             return queryPublicDisclosedFields(work.environment, work.media?.store, work.judgments,
               body, work.governance?.store
                 ? (heads, context) => work.governance!.store.restrictedTitles(heads, context)
-                : undefined);
+                : undefined, { canReadSemantics: work.mediaAccess
+                ? resources => work.mediaAccess!.canReadSemantics(null, null, resources, fuseki)
+                : undefined });
           }
           if (body.profile === 'public-content-phrase-v1') {
             return queryPublicContentPhrase(work.environment, work.contentProjection!.content,
