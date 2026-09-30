@@ -108,7 +108,7 @@ test('Realm public profile: manager admission, CAS, media, moderator choice and 
       moderators: { kind: 'known', items: [moderator.actor] } });
     expect((await response<{ name: { value: string; language: string; basis: string } }>(
       await stack.call('GET', `${root}?language=zh-TW`), 200)).name)
-      .toMatchObject({ value: '讀者公會', language: 'zh-Hant', basis: 'requested' });
+      .toMatchObject({ value: '讀者公會', language: 'zh-Hant', basis: 'same-script' });
     expect((await response<{ name: { value: string; language: string; basis: string } }>(
       await stack.call('GET', `${root}?languages=de,ja`), 200)).name)
       .toMatchObject({ value: '読者の会', language: 'ja', basis: 'requested' });

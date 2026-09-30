@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { png, sha, startMediaStack, type MediaStack } from './media-support.ts';
 import { benign, clearQueued, flagged, realmMediaFixture, screening } from './g-571-screen-support.ts';
+import { GLOBAL_CONTEXT } from '../../../services/main/src/modules/governance/store.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../../../services/main/src/modules/media/store.ts';
 
 let started: Promise<MediaStack> | undefined;
@@ -21,8 +22,9 @@ test('G571: benign upload reports screening, clears once, and is then delivered;
   const target = work.work.slice('https://rezics.com/id/'.length);
   await owner.grant(`media:avatar:${work.work}`, 'media.avatar');
   const image = await owner.upload(png(40, 40));
+  expect(image).toMatchObject({ status: 'activated', clearance: 'screening', reason: null, clearanceReason: null });
   const uploadStatus = () => owner.read(`/v1/media/uploads/${image.upload}`);
-  expect(await (await uploadStatus()).json()).toMatchObject({ status: 'screening' });
+  expect(await (await uploadStatus()).json()).toMatchObject({ status: 'activated', clearance: 'screening' });
   expect((await outsider.read(`/v1/media/uploads/${image.upload}`)).status).toBe(404);
   const select = async (asset: string | null, expectedSelection: string | null) => {
     const response = await owner.send('PUT', `/v1/resources/${target}/avatar`, {
@@ -53,14 +55,14 @@ test('G571: benign upload reports screening, clears once, and is then delivered;
   const { worker } = screening(s, { classify: async () => { classifications++; return benign; } });
   await worker.tick();
   expect(classifications).toBe(1);
-  expect(await (await uploadStatus()).json()).toMatchObject({ status: 'cleared' });
+  expect(await (await uploadStatus()).json()).toMatchObject({ status: 'activated', clearance: 'cleared' });
   expect((await summary()).selection).toBe(first);
   const delivered = await s.call('GET', `/v1/media/avatars/${first}`);
   expect(delivered.status).toBe(200);
   expect(sha(new Uint8Array(await delivered.arrayBuffer()))).toBe(sha(await s.objects(`media/asset/${image.asset}/`).get((await s.store.readUpload(image.upload))!.sha256!)));
   const replay = await s.call('PUT', `/v1/media/uploads/${image.upload}/bytes`, { token: owner.token, raw: png(2, 2) });
   expect(replay.status).toBe(200);
-  expect(await replay.json()).toMatchObject({ status: 'cleared', representation: image.representation, replayed: true });
+  expect(await replay.json()).toMatchObject({ status: 'activated', clearance: 'cleared', representation: image.representation, replayed: true });
   await worker.tick();
   expect(classifications).toBe(1);
   const jobs = await s.contentPool.query('SELECT count(*)::int AS n FROM media.transform_job WHERE source_id = $1 AND profile = $2',
@@ -100,9 +102,15 @@ test('G571: class guard enumerates all byte delivery paths; held imagery has no 
   const realmURL = await realmMediaFixture(s, work, { ...basis[0]!, use });
   expect((await s.call('GET', realmURL)).status).toBe(404);
   const { store, cases, worker } = screening(s, { classify: async () => flagged });
+  // Likely explicit intake must also escalate an already open ordinary case.
+  const existingCase = randomUUID();
+  await s.accessPool.query(`INSERT INTO access.governance_case
+    (id, kind, authority_kind, authority_scope_id, context, target_owner, target_resource, target_component, disclosure)
+    VALUES ($1,'content_report','platform','governance:platform',$2,'media',$3,'record','private')`,
+  [existingCase, GLOBAL_CONTEXT, `https://rezics.com/id/${image.asset}`]);
   await worker.tick();
   const status = await (await owner.read(`/v1/media/uploads/${image.upload}`)).json();
-  expect(status).toMatchObject({ status: 'held', reason: 'likely-explicit' });
+  expect(status).toMatchObject({ status: 'activated', clearance: 'held', clearanceReason: 'likely-explicit' });
   expect(JSON.stringify(status)).not.toMatch(/scores|thresholds|weightsDigest|Porn/);
   const params = new URLSearchParams({ target: work.work, actingSubject: owner.actor });
   for (const url of [`/v1/media/avatars/${selection}`, `/v1/media/uses/${use}`,
@@ -123,8 +131,8 @@ test('G571: class guard enumerates all byte delivery paths; held imagery has no 
   const record = (await s.accessPool.query(`SELECT c.*, r.reason_code, r.declarations, e.provenance FROM access.governance_case c
     JOIN access.governance_report r ON r.case_id = c.id JOIN access.governance_evidence e ON e.report_id = r.id
     WHERE c.target_resource = $1`, [`https://rezics.com/id/${image.asset}`])).rows[0]!;
-  expect(record).toMatchObject({ authority_kind: 'platform', authority_scope_id: 'governance:platform',
-    target_owner: 'media', reason_code: 'prohibited_imagery', declarations: { automation: true },
+  expect(record).toMatchObject({ id: existingCase, authority_kind: 'platform', authority_scope_id: 'governance:platform',
+    target_owner: 'media', urgent: true, reason_code: 'explicit_imagery', declarations: { automation: true },
     provenance: { automation: 'local-image-screen', scores: flagged } });
   const reviews = await store.pendingReviews();
   expect(reviews).toHaveLength(0);
@@ -133,6 +141,12 @@ test('G571: class guard enumerates all byte delivery paths; held imagery has no 
   await cases.openScreeningCase({ job: settled.id, asset: image.asset, source: image.representation,
     digest: settled.input_digest, verdict: { clearance: 'held', reason: 'likely-explicit', evidence: settled.evidence } });
   expect((await s.accessPool.query('SELECT count(*)::int AS n FROM access.governance_report WHERE id = $1', [settled.id])).rows[0].n).toBe(1);
+
+  const ordinaryStaff = await s.member('ordinary-reviewer');
+  await ordinaryStaff.grant('governance:platform', 'governance.moderate');
+  await expect(cases.readReport(ordinaryStaff.principal, settled.id, ordinaryStaff.actor)).rejects.toThrow();
+  await ordinaryStaff.grant('governance:platform', 'governance.safety.evidence');
+  expect((await cases.readReport(ordinaryStaff.principal, settled.id, ordinaryStaff.actor)).evidence).toHaveLength(1);
 
   const staffDecision = randomUUID();
   expect(await store.reviewOriginal(image.representation, 'held', staffDecision, 'cleared')).toBe('applied');
@@ -170,7 +184,7 @@ test('G571: classifier timeout/error holds uploads for review while uploads rema
     } }, 20);
     await worker.tick();
     const status = await (await owner.read(`/v1/media/uploads/${image.upload}`)).json();
-    expect(status).toMatchObject({ status: 'held', reason: 'screen-unavailable' });
+    expect(status).toMatchObject({ status: 'activated', clearance: 'held', clearanceReason: 'screen-unavailable' });
     expect((await s.accessPool.query('SELECT count(*)::int AS n FROM access.governance_case WHERE target_resource = $1',
       [`https://rezics.com/id/${image.asset}`])).rows[0].n).toBe(1);
   }
@@ -199,9 +213,14 @@ test('G571: exact-byte copy suppression crosses owners, is bounded and idempoten
   for (const image of images) expect((await s.store.readAsset(image.asset))?.moderation).toBe('suppressed');
   expect(await s.store.suppressIdenticalCopies(sha(bytes))).toEqual({ suppressed: 0, continuation: null });
   const fourth = await owners[3]!.upload(bytes);
+  expect(fourth).toMatchObject({ status: 'activated', clearance: 'rejected', clearanceReason: 'restricted', reason: null });
+  const replay = await s.call('PUT', `/v1/media/uploads/${fourth.upload}/bytes`, { token: owners[3]!.token, raw: bytes });
+  const replayBody = await replay.json();
+  expect(replayBody).toMatchObject({ status: 'activated', clearance: 'rejected', clearanceReason: 'restricted', reason: null });
+  expect(JSON.stringify(replayBody)).not.toMatch(/identical|hash|match|digest/i);
   expect((await s.store.readAsset(fourth.asset))?.moderation).toBe('suppressed');
   expect(await (await owners[3]!.read(`/v1/media/uploads/${fourth.upload}`)).json()).toMatchObject({
-    transfer: 'activated', status: 'rejected', reason: 'identical-copy-suppressed' });
+    status: 'activated', clearance: 'rejected', reason: null, clearanceReason: 'restricted' });
   expect((await s.contentPool.query('SELECT count(*)::int AS n FROM media.transform_job WHERE source_id = $1',
     [fourth.representation])).rows[0].n).toBe(0);
 }, 180_000);

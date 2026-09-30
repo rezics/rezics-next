@@ -138,16 +138,19 @@ The current upload path accepts authenticated direct bytes only, with an 8 MiB
 cap, declared SHA-256, allowlisted raster MIME type and matching container header
 and dimensions. It stages and reads back exact bytes through RustFS before
 activation. The transfer path never fetches a caller URL or runs a transform.
-The separate [local screen](../media-screen/worker.ts) decodes with pinned sharp
-and classifies downscaled pixels with NSFWJS on CPU. Delivery uses the exact
+The separate [local screen](../media-screen/worker.ts) launches an OS child
+process to decode with pinned sharp and classify downscaled pixels with NSFWJS
+on CPU. Delivery uses the exact
 allowlisted image type and `X-Content-Type-Options: nosniff`.
 
 ## Clearance and identical copies
 
 Originals activate with `screening`. The existing upload resource gains a status read so polling does not retransmit up to 8 MiB of bytes; only the reserving principal can poll
 `GET /v1/media/uploads/{upload}`. Transfer and polling responses expose
-`screening|cleared|held|rejected`, with no scores. An uploader's previously
-admitted preview can show screening bytes; held/rejected originals are withheld
+`screening|cleared|held|rejected` in `clearance`, with `clearanceReason` and no scores.
+Transfer `status` remains `activated|rejected`; polling also reports `reserved|expired`.
+A rejected clearance has the generic reason `restricted`, including suppressed
+reuploads. An uploader's previously admitted preview can show screening bytes; held/rejected originals are withheld
 from all delivery. Private targets still require their ordinary Access lease.
 
 A complete finite score vector below the versioned thresholds reaches `cleared`
@@ -160,11 +163,13 @@ screening one frame cannot clear all their bytes. These initial thresholds have
 not been calibrated against a representative REZICS corpus.
 
 Activation atomically queues one screen. A single-flight Main loop leases one
-original at a time for 60 seconds, with a 30-second deadline. Tokens and erasure
+original at a time for 60 seconds, with a 30-second deadline. SIGKILL ends a
+stalled child, and Main waits for its exit before continuing. Tokens and erasure
 epochs fence settlement. Sixteen expired attempts reach a review hold; obsolete
 jobs are cancelled. Held results queue platform case creation in a durable
 Content retry table. Governance deduplicates by screen job, discloses automation
-and records category `prohibited-imagery`. An unavailable case owner leaves the
+and records the existing `explicit_imagery` category. Likely explicit results use
+G-564's urgent case flag and specialist evidence authority. An unavailable case owner leaves the
 image held and retries later. G-565 supplies staff authority and decisions;
 `MediaScreenStore.reviewOriginal` applies its exact original CAS and records the
 staff decision. It never grants that authority.

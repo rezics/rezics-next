@@ -140,12 +140,13 @@ async function finish(media: MediaDependencies, uploadId: string,
   if (!upload) throw new MediaMissing('media upload is unavailable');
   if (upload.status !== 'activated') {
     return { asset: upload.asset, upload: uploadId, status: 'rejected' as const,
-      reason: settled?.reason ?? upload.reason, representation: null, revision: null,
+      reason: settled?.reason ?? upload.reason, clearance: 'rejected' as const, clearanceReason: null,
+      representation: null, revision: null,
       replayed: settled?.replayed ?? true };
   }
   const recorded = await media.store.recordAssetRevision(uploadId);
-  return { asset: upload.asset, upload: uploadId, status: upload.clearance ?? 'screening',
-    reason: upload.clearanceReason,
+  return { asset: upload.asset, upload: uploadId, status: 'activated' as const, reason: null,
+    clearance: upload.clearance ?? 'screening', clearanceReason: upload.clearanceReason,
     representation: upload.representation, revision: recorded.revision,
     replayed: (settled?.replayed ?? true) && recorded.replayed };
 }

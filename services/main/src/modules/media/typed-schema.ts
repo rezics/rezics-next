@@ -75,7 +75,6 @@ const representation = media.table('representation', {
   createdAt: createdAt(),
   clearance: text('clearance').$type<'screening' | 'cleared' | 'held' | 'rejected'>().notNull().default('screening'),
   clearanceReason: text('clearance_reason'),
-  originalId: uuid('original_id').notNull(),
 });
 
 const transformJob = media.table('transform_job', {

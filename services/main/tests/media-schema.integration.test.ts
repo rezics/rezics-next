@@ -189,10 +189,10 @@ test('BOOK09/VIEW07/VIEW08: media owner schema installs empty and upgrades from 
     const retainedOriginal = await activateOriginal(upgraded, retained.asset, retained.uploadId, 'retained-original');
     await migrateContent(upgraded);
     await migrateContent(upgraded);
-    const original = (await upgraded.query(`SELECT p.clearance, p.original_id, j.status, j.profile
+    const original = (await upgraded.query(`SELECT p.clearance, j.status, j.profile
       FROM media.representation p JOIN media.transform_job j ON j.source_id = p.id
       WHERE p.id = $1`, [retainedOriginal])).rows[0];
-    expect(original).toEqual({ clearance: 'screening', original_id: retainedOriginal,
+    expect(original).toEqual({ clearance: 'screening',
       status: 'queued', profile: 'image-screen-v1' });
     const versions = await upgraded.query<{ version: number }>('SELECT version FROM content.schema_migration ORDER BY version');
     expect(versions.rows.map(row => row.version)).toEqual(files.map(file => file.version));

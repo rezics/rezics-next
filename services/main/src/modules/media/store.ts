@@ -288,8 +288,7 @@ export class MediaStore {
       u.declared_byte_length, u.declared_digest, u.quarantine_key, a.object_namespace, a.owner,
       u.expires_at <= clock_timestamp() AS expired, r.id AS representation, u.principal_id, u.reason,
       media.delivery_clearance(r) AS clearance, CASE
-        WHEN media.delivery_clearance(r) = 'rejected' AND r.clearance <> 'rejected'
-          THEN 'identical-copy-suppressed' ELSE r.clearance_reason END AS clearance_reason
+        WHEN media.delivery_clearance(r) = 'rejected' THEN 'restricted' ELSE r.clearance_reason END AS clearance_reason
       FROM media.upload u JOIN media.asset a ON a.id = u.asset_id
       LEFT JOIN media.representation r ON r.upload_id = u.id WHERE u.id = $1`, [upload]);
     const row = result.rows[0];
@@ -609,7 +608,8 @@ export class MediaStore {
       JOIN media.representation p ON p.id = u.representation_id
       JOIN media.asset a ON a.id = p.asset_id
       JOIN media.asset_state st ON st.id = a.state_head
-      JOIN media.representation original ON original.id = p.original_id
+      JOIN media.representation original ON original.id = CASE WHEN p.kind = 'original' THEN p.id ELSE p.source_id END
+        AND original.kind = 'original'
       JOIN media.upload uploader ON uploader.id = original.upload_id
       WHERE s.target = $2 AND s.context = $3 AND s.role = 'avatar' AND a.id = $1
       LIMIT 1`, [asset, target, context]);
@@ -729,18 +729,27 @@ export class MediaStore {
     return { rows, generation: { owner: 'content', dataEpoch: owner.owner_epoch, sequence: owner.owner_sequence } };
   }
 
-  /** Delivery basis for a selection: only the current head of its slot resolves. */
-  async avatarDelivery(selection: string): Promise<(AvatarRow & { objectNamespace: string }) | null> {
+  /** Public delivery follows the cleared head, retaining the previous cleared image during screening. */
+  avatarDelivery(selection: string): Promise<(AvatarRow & { objectNamespace: string }) | null> {
+    return this.avatarSelectionBasis(selection, false);
+  }
+
+  /** Profile writes bind the requested current head before its asynchronous screen completes. */
+  avatarSelection(selection: string): Promise<(AvatarRow & { objectNamespace: string }) | null> {
+    return this.avatarSelectionBasis(selection, true);
+  }
+
+  private async avatarSelectionBasis(selection: string, requested: boolean): Promise<(AvatarRow & { objectNamespace: string }) | null> {
     if (!uuid.test(selection)) return null;
     const result = await this.pool.query(`SELECT r.target, r.context, r.id AS selection, u.id AS use,
       u.asset_id, u.crop, p.id AS representation, p.byte_digest, p.media_type, p.byte_length,
       p.pixel_width, p.pixel_height, p.availability, media.delivery_clearance(p) AS clearance, st.disclosure, st.moderation, st.lifecycle,
       a.object_namespace FROM media.selection_revision r
       JOIN media.selection_slot s ON s.target = r.target AND s.context = r.context AND s.role = r.role
-        AND media.delivered_selection(s) = r.id
+        AND (CASE WHEN $2 THEN s.head ELSE media.delivered_selection(s) END) = r.id
       JOIN media.use u ON u.id = r.use_id JOIN media.asset a ON a.id = u.asset_id
       JOIN media.asset_state st ON st.id = a.state_head
-      JOIN media.representation p ON p.id = u.representation_id WHERE r.id = $1`, [selection]);
+      JOIN media.representation p ON p.id = u.representation_id WHERE r.id = $1`, [selection, requested]);
     const row = result.rows[0];
     return row ? { target: row.target, context: row.context, selection: row.selection,
       selectionPosition: null, use: row.use, asset: row.asset_id, crop: row.crop,
@@ -752,11 +761,22 @@ export class MediaStore {
 }
 
 /** A disclosable avatar image: public, unsuppressed, active, available and within rendition bounds. */
-export function avatarImageEligible(row: Pick<AvatarRow, 'use' | 'disclosure' | 'moderation' | 'lifecycle'
-  | 'availability' | 'clearance' | 'mediaType' | 'width' | 'height' | 'byteLength'>): boolean {
+function avatarEligible(row: Pick<AvatarRow, 'use' | 'disclosure' | 'moderation' | 'lifecycle'
+  | 'availability' | 'clearance' | 'mediaType' | 'width' | 'height' | 'byteLength'>, screening = false): boolean {
   return Boolean(row.use) && row.disclosure === 'public' && row.moderation === 'none'
-    && row.lifecycle === 'active' && row.availability === 'available' && row.clearance === 'cleared'
+    && row.lifecycle === 'active' && row.availability === 'available'
+    && (row.clearance === 'cleared' || (screening && row.clearance === 'screening'))
     && MEDIA_TYPES.includes(row.mediaType as MediaType)
     && (row.width ?? Infinity) <= AVATAR_LIMITS.maxPixels && (row.height ?? Infinity) <= AVATAR_LIMITS.maxPixels
     && (row.byteLength ?? Infinity) <= AVATAR_LIMITS.maxBytes;
+}
+
+/** Public image delivery always requires clearance. */
+export function avatarImageEligible(row: Parameters<typeof avatarEligible>[0]): boolean {
+  return avatarEligible(row);
+}
+
+/** Writes may reference a screening image; held and rejected images remain ineligible. */
+export function avatarSelectionEligible(row: Parameters<typeof avatarEligible>[0]): boolean {
+  return avatarEligible(row, true);
 }

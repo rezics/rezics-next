@@ -160,21 +160,24 @@ export class GovernanceStore {
       const gate = await client.query("SELECT 1 FROM access.scope_gate WHERE id = 'governance:platform' AND open FOR SHARE");
       if (!gate.rowCount) throw new GovernanceUnavailable('platform review intake is held');
       await client.query(`INSERT INTO access.governance_case (id, kind, authority_kind, authority_scope_id,
-        context, target_owner, target_resource, target_component, disclosure)
-        VALUES ($1,'content_report','platform','governance:platform',$2,'media',$3,'record','private')
-        ON CONFLICT DO NOTHING`, [randomUUID(), GLOBAL_CONTEXT, resource]);
+        context, target_owner, target_resource, target_component, disclosure, urgent)
+        VALUES ($1,'content_report','platform','governance:platform',$2,'media',$3,'record','private',$4)
+        ON CONFLICT DO NOTHING`, [randomUUID(), GLOBAL_CONTEXT, resource, input.verdict.reason === 'likely-explicit']);
       const caseRow = (await client.query<{ id: string }>(`SELECT id FROM access.governance_case
         WHERE target_owner = 'media' AND target_resource = $1 AND target_component = 'record'
           AND authority_scope_id = 'governance:platform' AND context = $2 AND kind = 'content_report'
-          AND state = 'open' FOR SHARE`, [resource, GLOBAL_CONTEXT])).rows[0];
+          AND state = 'open' FOR UPDATE`, [resource, GLOBAL_CONTEXT])).rows[0];
       if (!caseRow) throw new GovernanceStale('screen case closed concurrently');
+      if (input.verdict.reason === 'likely-explicit') {
+        await client.query('UPDATE access.governance_case SET urgent = true WHERE id = $1 AND NOT urgent', [caseRow.id]);
+      }
       const provenance = { automation: 'local-image-screen', reason: input.verdict.reason, ...input.verdict.evidence };
       const evidenceDigest = sha256(canonical({ representation: input.source, digest: input.digest, provenance }));
       await client.query(`INSERT INTO access.governance_report (id, case_id, idempotency_key, request_digest,
         reason_code, statement, evidence_count, evidence_digest, process, declarations)
-        VALUES ($1,$2,$3,$4,'prohibited_imagery','Automated local image screening; requires staff review.',
+        VALUES ($1,$2,$3,$4,'explicit_imagery','Automated local image screening; requires staff review.',
           1,$5,'platform_rules',$6)`, [input.job, caseRow.id, `media-screen:${input.job}`, request,
-        evidenceDigest, { automation: true, category: 'prohibited-imagery' }]);
+        evidenceDigest, { automation: true, category: 'explicit_imagery' }]);
       await client.query(`INSERT INTO access.governance_evidence (report_id, ordinal, owner, resource, component,
         locator, revision, representation, revision_digest, state, provenance)
         VALUES ($1,1,'media',$2,'record',$3,$3,$3,$4,'available',$5)`,

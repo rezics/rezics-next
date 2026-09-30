@@ -3,7 +3,7 @@ import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type RegisteredAdmission } from '../access/admission.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
+import { avatarSelectionEligible, DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
 import type { GovernanceRules } from '../governance/rules.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, IdempotencyConflict, PendingActivation,
@@ -164,8 +164,8 @@ async function imageSelection(media: MediaStore | undefined, selection: string |
   realm: string, context: string): Promise<void> {
   if (!selection) return;
   if (!media) throw new RealmProfileUnavailable('Media owner is unavailable');
-  const basis = await media.avatarDelivery(selection);
-  if (!basis || basis.target !== realm || basis.context !== context || !avatarImageEligible(basis)) {
+  const basis = await media.avatarSelection(selection);
+  if (!basis || basis.target !== realm || basis.context !== context || !avatarSelectionEligible(basis)) {
     throw new RealmProfileInvalid('Realm image selection is unavailable');
   }
 }

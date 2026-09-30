@@ -12,11 +12,20 @@ import { SCREEN_LIMITS, SCREEN_POLICY, type Scores } from './policy.ts';
 globalThis.fetch = (async () => { throw new Error('remote model loading is disabled'); }) as unknown as typeof fetch;
 sharp.cache(false);
 sharp.concurrency(1);
-self.onmessage = async (event: MessageEvent<{ bytes: Uint8Array; mediaType: string }>) => {
+// One bounded stdin transfer, one validated result over IPC, then process exit.
+async function classify(): Promise<void> {
   let model: Awaited<ReturnType<typeof load>> | undefined;
   let tensor: tf.Tensor3D | undefined;
   try {
-    const { bytes, mediaType } = event.data;
+    const chunks: Uint8Array[] = [];
+    let length = 0;
+    for await (const chunk of Bun.stdin.stream()) {
+      length += chunk.byteLength;
+      if (length > SCREEN_LIMITS.bytes) throw new Error('byte bound');
+      chunks.push(chunk);
+    }
+    const bytes = Buffer.concat(chunks, length);
+    const mediaType = process.argv[2]!;
     if (!bytes.length || bytes.length > SCREEN_LIMITS.bytes) throw new Error('byte bound');
     const header = verifyImage(bytes, mediaType);
     assertStillContainer(bytes, header.mediaType);
@@ -39,7 +48,10 @@ self.onmessage = async (event: MessageEvent<{ bytes: Uint8Array; mediaType: stri
     tensor = tf.tensor3d(new Uint8Array(data), [info.height, info.width, 3], 'int32');
     const scores = Object.fromEntries((await model.classify(tensor, 5)).map(item =>
       [item.className, item.probability])) as Scores;
-    self.postMessage({ scores });
-  } catch { self.postMessage({ error: 'screen-unavailable' }); }
+    if (!process.send) throw new Error('missing parent');
+    process.send(scores);
+  } catch { process.exitCode = 1; }
   finally { tensor?.dispose(); model?.dispose(); }
-};
+}
+await classify();
+process.disconnect?.();

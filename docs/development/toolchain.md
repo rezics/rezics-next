@@ -52,10 +52,10 @@ unrelated processes.
 ## Local image screening
 
 Main pins NSFWJS 4.4.0 (MIT), TensorFlow.js 4.22.0 (Apache-2.0), Buffer 6.0.3
-(MIT) and sharp 0.35.5 (Apache-2.0). NSFWJS's bundled MobileNetV2 weights keep
+(MIT) and sharp 0.35.5 (Apache-2.0). NSFWJS's bundled MobileNetV2 weights (MIT) keep
 inference local without a hosted model or native TensorFlow build. sharp uses
 its prebuilt libvips adapter for the admitted raster formats; its redistributed
-libvips is LGPL-2.1-or-later. The smoke test
+libvips is [LGPL-3.0-or-later](https://github.com/lovell/sharp-libvips/blob/main/npm/linux-x64/package.json). The smoke test
 [`g-571-screen.test.ts`](../../services/main/tests/g-571-screen.test.ts) loads
 and hashes the real weights, decodes a generated PNG and runs the CPU backend
 under Bun. No native install script is enabled.
@@ -65,8 +65,10 @@ supports bundled model definitions and tensor input. sharp's
 [constructor bounds](https://sharp.pixelplumbing.com/api-constructor/) and
 [processing timeout](https://sharp.pixelplumbing.com/api-operation/#timeout)
 supply decode limits. REZICS additionally bounds bytes, pixels and frames and
-terminates the classifier isolate at its deadline. These checks establish
-runtime compatibility and failure handling; they do not measure classifier
+runs decoding and inference in a child process, killed with SIGKILL at its deadline.
+The [Bun subprocess contract](https://bun.sh/docs/runtime/child-process) supplies
+process exit and termination; a native decoder crash cannot crash Main. These
+checks establish runtime compatibility and failure handling; they do not measure classifier
 accuracy on REZICS uploads. Thresholds and the weights digest live in
 [`policy.ts`](../../services/main/src/modules/media-screen/policy.ts).
 

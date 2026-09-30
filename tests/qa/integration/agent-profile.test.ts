@@ -11,6 +11,7 @@ import { PersonPreferencesStore } from '../../../services/main/src/modules/prefe
 import { currentNotificationAgentReader } from '../../../services/main/src/modules/notification/subjects.ts';
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { hash } from '../../../services/main/src/modules/work/activate.ts';
+import { clearQueued } from './g-571-screen-support.ts';
 import { png, sha, startMediaStack } from './media-support.ts';
 
 type Json = Record<string, unknown>;
@@ -78,7 +79,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
       .toEqual(new Set(['en', 'zh-Hans', 'ja']));
     expect(await json(await call('GET', orgPath, undefined, undefined, randomUUID(), 'zh-CN'), 200))
       .toMatchObject({ displayName: '北辰出版', originalDisplayName: 'North Star Editions',
-        displayNameInfo: { language: 'zh-Hans', direction: 'ltr', basis: 'requested' } });
+        displayNameInfo: { language: 'zh-Hans', direction: 'ltr', basis: 'same-script' } });
     expect(await json(await call('GET', orgPath, undefined, undefined, randomUUID(), 'de'), 200))
       .toMatchObject({ displayName: 'North Star Editions',
         displayNameInfo: { language: 'en', basis: 'fallback' } });
@@ -177,6 +178,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
         'content-type': 'application/octet-stream' }, body: new Blob([bytes]),
     }));
     expect(activated.status, await activated.text()).toBe(201);
+    await clearQueued(stack);
     const selection = await json(await call('PUT', `/v1/resources/${agent.slice(-36)}/avatar`, owner.token, {
       profile: 'resource-avatar-selection-v1', expectedSelection: null, asset: upload.asset,
       crop: null, actingSubject: agent,

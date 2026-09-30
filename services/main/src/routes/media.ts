@@ -30,11 +30,12 @@ const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const position = t.Object({ owner: t.Literal('content'), dataEpoch: t.String(), sequence: t.String() });
 const clearance = t.Union([t.Literal('screening'), t.Literal('cleared'), t.Literal('held'), t.Literal('rejected')]);
-const uploadResult = t.Object({ asset: uuid, upload: uuid, status: clearance, reason: t.Nullable(t.String()),
+const uploadResult = t.Object({ asset: uuid, upload: uuid, status: t.Union([t.Literal('activated'), t.Literal('rejected')]), reason: t.Nullable(t.String()),
+  clearance, clearanceReason: t.Nullable(t.String()),
   representation: t.Nullable(uuid), revision: t.Nullable(uuid), replayed: t.Boolean() }, { additionalProperties: false });
-const uploadStatus = t.Object({ upload: uuid, asset: uuid, status: clearance,
-  transfer: t.Union([t.Literal('reserved'), t.Literal('activated'), t.Literal('rejected'), t.Literal('expired')]),
-  reason: t.Nullable(t.String()), representation: t.Nullable(uuid) }, { additionalProperties: false });
+const uploadStatus = t.Object({ upload: uuid, asset: uuid, status: t.Union([t.Literal('reserved'), t.Literal('activated'), t.Literal('rejected'), t.Literal('expired')]),
+  reason: t.Nullable(t.String()), clearance, clearanceReason: t.Nullable(t.String()),
+  representation: t.Nullable(uuid) }, { additionalProperties: false });
 const commandResult = t.Object({ outcome: t.String(), id: t.Nullable(t.String()),
   predecessor: t.Nullable(t.String()), position, replayed: t.Boolean(), admission: t.String() });
 
@@ -153,7 +154,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const { profile: _profile, ...input } = body;
         const reserved = await reserveAdmittedUpload(work.environment, work.media, work.account, work.access,
           request, { ...input, idempotencyKey: key });
-        return Response.json({ ...reserved, status: 'screening', uploadUrl: `/v1/media/uploads/${reserved.upload}/bytes` },
+        return Response.json({ ...reserved, uploadUrl: `/v1/media/uploads/${reserved.upload}/bytes` },
           { status: reserved.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return mediaError(error); }
     })
@@ -168,9 +169,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const principalId = await work.access.activePrincipalId(principal);
         const row = await work.media.store.readUpload(params.upload);
         if (!row || !principalId || row.principal !== principalId) return unavailable();
-        return Response.json({ upload: row.id, asset: row.asset, transfer: row.status,
-          status: row.clearance ?? (row.status === 'rejected' || row.status === 'expired' ? 'rejected' : 'screening'),
-          reason: row.clearanceReason ?? row.reason, representation: row.representation },
+        return Response.json({ upload: row.id, asset: row.asset, status: row.status,
+          clearance: row.clearance ?? (row.status === 'rejected' || row.status === 'expired' ? 'rejected' : 'screening'),
+          reason: row.reason, clearanceReason: row.clearanceReason, representation: row.representation },
         { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return mediaError(error); }
     })

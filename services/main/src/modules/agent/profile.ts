@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { CommandOutcomeUnknown, type CommandResult } from '../../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
+import { avatarSelectionEligible, DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, type WorkActivationEnvironment }
   from '../work/activate.ts';
@@ -137,7 +137,7 @@ async function currentHead(env: WorkActivationEnvironment, agent: string) {
  * Access locks remain held until the graph command finishes, fencing concurrent revocation. */
 export class AgentPublicProfiles {
   constructor(private readonly pool: Pool, private readonly env: WorkActivationEnvironment,
-    private readonly media: Pick<MediaStore, 'avatarDelivery'>) {}
+    private readonly media: Pick<MediaStore, 'avatarSelection'>) {}
 
   async change(principal: VerifiedPrincipal, raw: AgentProfileInput): Promise<AgentProfileResult> {
     const input = checkedAgentProfile(raw);
@@ -190,9 +190,9 @@ export class AgentPublicProfiles {
         if (kind.boolean !== true) throw new AgentProfileInvalid('Only organizations have translated names');
       }
       if (input.avatarSelection) {
-        const image = await this.media.avatarDelivery(input.avatarSelection);
+        const image = await this.media.avatarSelection(input.avatarSelection);
         if (!image || image.target !== input.agent || image.context !== DEFAULT_MEDIA_CONTEXT
-          || !avatarImageEligible(image)) throw new AgentProfileInvalid('Avatar selection is unavailable');
+          || !avatarSelectionEligible(image)) throw new AgentProfileInvalid('Avatar selection is unavailable');
       }
       const revision = `${ID}${randomUUID()}`;
       const operation = `urn:rezics:operation:agent-profile:${hash(receipt)}`;
