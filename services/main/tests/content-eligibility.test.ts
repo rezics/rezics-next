@@ -117,8 +117,7 @@ test('G-538: original Content proof cannot waive another author’s translation 
     .rejects.toBeInstanceOf(TranslationBasisRequired);
   expect(graph.commands).toBe(0);
   const original = buildContentEligibilityUpdate(env, admission, input);
-  expect(original).toContain('FILTER NOT EXISTS {\n      {');
-  expect(original).toContain('rv:realizationOf ?basisSource');
+  expect(original).toContain('<https://schema.org/isPartOf>* ?basisTarget');
   const publicDomain: ContentSearchEligibilityInput = { ...input,
     profile: 'content-search-eligibility-v2', rightsBasis: 'public-domain', assessmentId: randomUUID() };
   expect(buildContentEligibilityUpdate(env, admission, publicDomain)).not.toContain('?basisLink');

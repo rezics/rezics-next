@@ -6,7 +6,8 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { RightsStore } from '../rights/store.ts';
-import { assertTranslationOriginalBasis, translationOriginalBasisConflictPattern }
+import { assertTranslationOriginalBasis, resolveTranslationOriginalPublicDomainBases,
+  translationOriginalBasisConflictPattern, type TranslationSourcePublicDomainBasis }
   from '../work/translation-links.ts';
 
 const PROFILE_ID = 'content-search-eligibility-v1';
@@ -308,7 +309,8 @@ function receiptTriples(env: WorkActivationEnvironment, admission: RegisteredAdm
 
 /** The update is guarded by the exact publication and expected eligibility head. */
 export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
-  admission: RegisteredAdmission, input: ContentSearchEligibilityInput): string {
+  admission: RegisteredAdmission, input: ContentSearchEligibilityInput,
+  translationBases: readonly TranslationSourcePublicDomainBasis[] = []): string {
   const digest = contentSearchEligibilityDigest(input);
   const receipt = contentSearchEligibilityReceiptIri(admission.id);
   const decision = contentSearchEligibilityDecisionIri(admission.id);
@@ -352,7 +354,7 @@ export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
       rv:modelRevision ${iri('https://rezics.com/definition/content-publication-v1')} . }
     FILTER(COALESCE(?prior, ${iri(NONE)}) = ${expected(input)})
     ${input.rightsBasis === 'original-contribution' ? `FILTER NOT EXISTS {
-      ${translationOriginalBasisConflictPattern(input.resourceId, input.actingSubject)}
+      ${translationOriginalBasisConflictPattern(input.resourceId, input.actingSubject, translationBases)}
     }` : ''}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
@@ -413,8 +415,10 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
     || Date.parse(admission.expiresAt) <= Date.now()) {
     throw new ContentEligibilityDenied('eligibility admission is ineligible or expired');
   }
+  const translationBases = input.rightsBasis === 'original-contribution'
+    ? await resolveTranslationOriginalPublicDomainBases(env, input.resourceId, input.actingSubject, rights) : [];
   if (input.rightsBasis === 'original-contribution') {
-    await assertTranslationOriginalBasis(env, input.resourceId, input.actingSubject);
+    await assertTranslationOriginalBasis(env, input.resourceId, input.actingSubject, translationBases);
   }
   const decision = contentSearchEligibilityDecisionIri(admission.id);
   const candidate = await validations(env, input, decision);
@@ -435,7 +439,7 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
   let commandStatus: string | undefined;
   try {
     const result = await env.fuseki.commandWithReceipt({ receipt, digest,
-      update: buildContentEligibilityUpdate(env, admission, input),
+      update: buildContentEligibilityUpdate(env, admission, input, translationBases),
       validations: candidate, deadlineMs: 10_000 });
     commandStatus = result.status;
   } catch { /* transport outcome is resolved only from this graph receipt */ }
@@ -447,7 +451,7 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
   }
   if (commandStatus === 'guard-unmatched') {
     if (input.rightsBasis === 'original-contribution') {
-      await assertTranslationOriginalBasis(env, input.resourceId, input.actingSubject);
+      await assertTranslationOriginalBasis(env, input.resourceId, input.actingSubject, translationBases);
     }
     const now = await currentHead(env, input);
     if (now !== input.expectedEligibilityHead) {

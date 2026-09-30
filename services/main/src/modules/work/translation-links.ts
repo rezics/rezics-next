@@ -40,44 +40,48 @@ function sourceAuthorPattern(source: string, actor: string): string {
     }`;
 }
 
-/** A Work-indexed existential probe, O(its translation relations), no history
- * or catalogue scan. Retained links remain provenance after a Main head moves.
- * Realization relations use the same source authorship rule during migration. */
-export function translationOriginalBasisConflictPattern(work: string, actor: string): string {
-  return `{
+/** Follow the published Work's ancestors, including itself, then their retained
+ * translation links. Cost is O(ancestor links), independent of the catalogue.
+ * A chapter cannot evade its translated book's source rights. */
+export function translationOriginalBasisConflictPattern(work: string, actor: string,
+  publicDomain: readonly TranslationSourcePublicDomainBasis[] = []): string {
+  return `GRAPH ${iri(GRAPHS.current)} {
+    ${iri(work)} <https://schema.org/isPartOf>* ?basisTarget . }
     GRAPH ${iri(GRAPHS.revisions)} {
-      ?basisLink a rv:TranslationLink ; rv:targetWork ${iri(work)} ; rv:sourceWork ?basisSource . }
-  } UNION {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:realizationOf ?basisSource . }
-  } UNION {
-    GRAPH ${iri(GRAPHS.current)} {
-      ?basisRealization rv:work ${iri(work)} ; rv:realizationOf ?basisSource . }
-  }
-  FILTER NOT EXISTS { ${sourceAuthorPattern('?basisSource', iri(actor))} }`;
+      ?basisLink a rv:TranslationLink ; rv:targetWork ?basisTarget ; rv:sourceWork ?basisSource . }
+    FILTER NOT EXISTS { ${sourceAuthorPattern('?basisSource', iri(actor))} }
+    ${publicDomain.length ? `FILTER NOT EXISTS {
+      ${publicDomain.map(basis => `{
+        FILTER(?basisSource = ${iri(basis.source)})
+        ${sourcePublicDomainPattern(basis.source, basis)}
+      }`).join(' UNION ')}
+    }` : ''}`;
 }
 
 export async function assertTranslationOriginalBasis(env: WorkActivationEnvironment,
-  work: string, actor: string): Promise<void> {
+  work: string, actor: string, publicDomain: readonly TranslationSourcePublicDomainBasis[] = []): Promise<void> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-    ${translationOriginalBasisConflictPattern(work, actor)}
+    ${translationOriginalBasisConflictPattern(work, actor, publicDomain)}
   }`);
   if (result.boolean === true) throw new TranslationBasisRequired();
 }
 
-/** Work-indexed existential join over active variants and exact source credits;
- * cost is O(target variants), independent of the catalogue and decision history. */
+/** Include Content on every part of the target, including the target itself.
+ * Cost is O(descendant variants), independent of unrelated catalogue content. */
 function publicOriginalContentPattern(target: string, source: string): string {
   return `GRAPH ${iri(GRAPHS.current)} {
-    ?basisVariant a rv:ContentVariant ; rv:resource ${iri(target)} ;
+    ?basisResource <https://schema.org/isPartOf>* ${iri(target)} .
+    ?basisVariant a rv:ContentVariant ; rv:resource ?basisResource ;
       rv:contentPublicationHead ?basisPublication ; rv:publicSearchEligibilityHead ?basisDecision . }
     GRAPH ${iri(GRAPHS.revisions)} {
-      ?basisDecision a rv:ContentSearchEligibilityDecision ; rv:resource ${iri(target)} ;
+      ?basisDecision a rv:ContentSearchEligibilityDecision ; rv:resource ?basisResource ;
         rv:variant ?basisVariant ; rv:publicationDecision ?basisPublication ;
         rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public ; rv:actingSubject ?basisActor . }
     FILTER NOT EXISTS { ${sourceAuthorPattern(iri(source), '?basisActor')} }`;
 }
 
 interface SourcePublicDomainBasis { variant: string; decision: string; assessment: string }
+export interface TranslationSourcePublicDomainBasis extends SourcePublicDomainBasis { source: string }
 
 function sourcePublicDomainPattern(source: string, basis: SourcePublicDomainBasis): string {
   return `GRAPH ${iri(GRAPHS.current)} {
@@ -108,6 +112,27 @@ async function sourcePublicDomainBasis(env: WorkActivationEnvironment, source: s
   if (!row?.variant || !row.decision || !row.assessment || !assessmentId
     || !await rights.currentPublicDomainAssessment(source, assessmentId)) return undefined;
   return { variant: row.variant.value, decision: row.decision.value, assessment: row.assessment.value };
+}
+
+/** Resolve every distinct non-author source before the eligibility graph command. One
+ * ancestor-link query and one source-head/rights-head probe per distinct source;
+ * no candidate limit turns a sampled set into permission for omitted sources. */
+export async function resolveTranslationOriginalPublicDomainBases(env: WorkActivationEnvironment,
+  work: string, actor: string, rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>,
+): Promise<TranslationSourcePublicDomainBasis[]> {
+  if (!rights) return [];
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?basisSource WHERE {
+    ${translationOriginalBasisConflictPattern(work, actor)}
+  }`)).results?.bindings ?? [];
+  const bases: TranslationSourcePublicDomainBasis[] = [];
+  for (const row of rows) {
+    const source = row.basisSource?.value;
+    if (!source) throw new TranslationBasisRequired();
+    const basis = await sourcePublicDomainBasis(env, source, rights);
+    if (!basis) throw new TranslationBasisRequired();
+    bases.push({ source, ...basis });
+  }
+  return bases;
 }
 
 async function linkPublicationBasisConflicts(env: WorkActivationEnvironment, input: TranslationLinkInput,
