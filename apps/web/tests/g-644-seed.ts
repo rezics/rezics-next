@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
-import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
+import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 
 if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '')) {
@@ -92,24 +92,14 @@ try {
   await editor.grant('space:create:root', 'space.create');
   const realm = await json<{ realm: string }>(await editor.send('POST', '/v1/spaces', { profile: 'space-realm-v1',
     name: 'Aincrad readers', capabilities: ['realm'], actingSubject: editor.actor }), 201);
-  // A new community reviews every post; this one takes them directly, as the composer needs.
-  for (const action of ['realm.settings.manage', 'governance.rule.publish']) {
-    await editor.grant(`governance:realm:${realm.realm}`, action);
-  }
-  const settingsRoot = `/v1/realms/${short(realm.realm)}/settings`;
-  // Access learns of the new community from its outbox; until it has, settings answer 503.
-  interface Settings { generation: string; ruleBasis: { revision: string | null } }
-  let found: Settings | null = null as Settings | null;
-  for (const deadline = Date.now() + 90_000; !found && Date.now() < deadline;) {
-    const response = await editor.send('GET', `${settingsRoot}?actingSubject=${encodeURIComponent(editor.actor)}`);
-    if (response.status === 200) found = await response.json() as Settings;
-    else await new Promise(done => setTimeout(done, 1000));
-  }
-  if (!found) throw new Error('The community’s settings never became readable');
-  const settings: Settings = found;
-  await json(await editor.send('PUT', settingsRoot, { actingSubject: editor.actor, expectedGeneration: settings.generation,
-    expectedRulesRevision: settings.ruleBasis.revision, reason: 'Allow direct public posts', settings: {
-      visibility: 'public', reviewRequired: false, reviewMode: 'open', whoMaySubmit: 'granted', rules: [] } }));
+  // A new community reviews every post; this one takes them directly, as the composer needs. The realm's review mode
+  // lives in the graph (what its page reads) and in Access (what admits a placement).
+  await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(realm.realm)} rv:reviewMode ?mode } } INSERT { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(realm.realm)} rv:reviewMode "open" } } WHERE { OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(realm.realm)} rv:reviewMode ?mode } } }`);
+  await stack.accessPool.query(`INSERT INTO access.realm_admin_settings (realm, who_may_submit, visibility, review_mode, self_join)
+    VALUES ($1, 'granted', 'public', 'open', false) ON CONFLICT (realm) DO UPDATE SET review_mode = 'open'`, [realm.realm]);
   await grantReader(`reply:place:${realm.realm}`, 'reply.place');
   for (const root of [occurrence, release, character, created.work]) await grantReader(`reply:create:${root}`, 'reply.create');
 
