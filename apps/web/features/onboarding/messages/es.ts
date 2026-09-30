@@ -13,6 +13,7 @@ export default {
   available: 'Este nombre de usuario está disponible.',
   current: 'Este es tu nombre de usuario actual.',
   taken: 'Este nombre de usuario ya está en uso. Prueba con otro.',
+  held: 'Reservado para su titular anterior. Si era tuyo, puedes recuperarlo.',
   reserved: 'No se puede usar este nombre de usuario. Prueba con otro.',
   invalid: 'Usa entre 3 y 30 letras, números o guiones bajos.',
   checkFailed: 'No se pudo comprobar este nombre de usuario. Inténtalo de nuevo.',

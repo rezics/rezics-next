@@ -5,7 +5,9 @@ import { useEffect, useId, useState } from 'react';
 import { currentVanityHandle, normalizedHandle, suggestedHandle } from './handle.ts';
 import type { OnboardingMessages } from './messages.ts';
 
-export type HandleAvailability = 'available' | 'taken' | 'reserved';
+/** `held`: kept for its previous owner (a retired handle or a lookalike of one).
+ * Only that owner can take it back, and Main decides; anyone else gets its 409. */
+export type HandleAvailability = 'available' | 'taken' | 'reserved' | 'held';
 
 async function checkHandle(handle: string, signal: AbortSignal): Promise<HandleAvailability> {
   const response = await fetch(`/api/main/v1/handles/${handle}/availability`, {
@@ -13,7 +15,8 @@ async function checkHandle(handle: string, signal: AbortSignal): Promise<HandleA
   if (!response.ok) throw new Error('Handle availability is unavailable');
   const answer = await response.json() as { available?: boolean; reason?: string };
   return answer.available ? 'available'
-    : answer.reason === 'reserved' || answer.reason === 'invalid' ? 'reserved' : 'taken';
+    : answer.reason === 'reserved' || answer.reason === 'invalid' ? 'reserved'
+      : answer.reason === 'retained' || answer.reason === 'confusable' ? 'held' : 'taken';
 }
 
 /** Asking for the public name too: an empty required field, no default, and a
@@ -28,11 +31,13 @@ export function HandleField({ action, initial, current = null, submit, messages,
   const [name, setName] = useState('');
   const [handleEdited, setHandleEdited] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const [availability, setAvailability] = useState<'checking' | 'available' | 'current' | 'taken' | 'reserved' | 'invalid' | 'failed'>('checking');
+  const [availability, setAvailability] = useState<'checking' | 'available' | 'current' | 'taken' | 'reserved' | 'held' | 'invalid' | 'failed'>('checking');
   useEffect(() => setHydrated(true), []);
   const hintId = useId();
   const nameId = useId();
   const handle = normalizedHandle(value);
+  // Onboarding has no handle of its own to take back; settings (a `current` handle) does.
+  const mayTake = availability === 'available' || availability === 'held' && current !== null;
   const unchanged = handle !== null && handle === currentVanityHandle(current);
   useEffect(() => {
     if (!handle) { setAvailability('invalid'); return; }
@@ -50,6 +55,7 @@ export function HandleField({ action, initial, current = null, submit, messages,
     : availability === 'available' ? messages.available
       : availability === 'current' ? messages.current
       : availability === 'taken' ? messages.taken
+        : availability === 'held' ? messages.held
         : availability === 'reserved' ? messages.reserved
           : availability === 'invalid' ? messages.invalid : messages.checkFailed;
   return <form method="post" action={action} className="grid gap-5">
@@ -80,7 +86,7 @@ export function HandleField({ action, initial, current = null, submit, messages,
       <p id={`${hintId}-rules`} className="text-muted-foreground text-sm">{messages.handleHelp}</p>
       <p id={`${hintId}-status`} role="status" aria-live="polite" className="text-sm">{text}</p>
     </div>
-    <Button type="submit" disabled={availability !== 'available' || unchanged || askName && !name.trim()} className="justify-self-start">
+    <Button type="submit" disabled={!mayTake || unchanged || askName && !name.trim()} className="justify-self-start">
       {submit}</Button>
   </form>;
 }

@@ -7,6 +7,7 @@ import { messages } from './messages.ts';
 
 const available = async (): Promise<HandleAvailability> => 'available';
 const taken = async (): Promise<HandleAvailability> => 'taken';
+const held = async (): Promise<HandleAvailability> => 'held';
 const meta = { title: 'Onboarding/Choose handle', component: HandleField,
   args: { action: '/en/onboarding/finish', initial: 'ada_lovelace', submit: messages.en.continue,
     messages: messages.en, checkAvailability: available,
@@ -111,5 +112,33 @@ export const CjkPublicName: Story = {
     // No Latin letters, so no handle is suggested: the person chooses.
     await expect(canvas.getByRole('textbox', { name: '您的使用者名稱' })).toHaveValue('');
     await expect(canvas.getByRole('button', { name: '繼續' })).toBeDisabled();
+  },
+};
+
+/** Settings: a retired handle, or a lookalike of one, may be the owner's own. Main decides on submit. */
+export const HeldInSettingsCanBeTakenBack: Story = {
+  args: { checkAvailability: held, current: 'ada_new', initial: 'ada_lovelace', submit: messages.en.continue },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('take it back'));
+    await expect(canvas.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  },
+};
+
+/** First-time onboarding has no earlier handle of its own to take back. */
+export const HeldInOnboardingStaysBlocked: Story = {
+  args: { checkAvailability: held },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('take it back'));
+    await expect(canvas.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  },
+};
+
+export const HeldJapanese: Story = {
+  args: { checkAvailability: held, current: 'ada_new', messages: messages.ja, submit: messages.ja.continue },
+  globals: { locale: 'ja' },
+  async play({ canvasElement }) {
+    await waitFor(() => expect(within(canvasElement).getByRole('status')).toHaveTextContent('取り戻せます'));
   },
 };

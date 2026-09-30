@@ -13,6 +13,7 @@ export default {
   available: 'Dieser Benutzername ist verfügbar.',
   current: 'Das ist dein aktueller Benutzername.',
   taken: 'Dieser Benutzername ist bereits vergeben. Versuche einen anderen.',
+  held: 'Für den bisherigen Inhaber reserviert. Wenn er dir gehörte, kannst du ihn zurückholen.',
   reserved: 'Dieser Benutzername kann nicht verwendet werden. Versuche einen anderen.',
   invalid: 'Verwende 3–30 Buchstaben, Ziffern oder Unterstriche.',
   checkFailed: 'Der Benutzername konnte nicht geprüft werden. Bitte versuche es erneut.',

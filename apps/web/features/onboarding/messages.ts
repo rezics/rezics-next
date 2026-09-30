@@ -21,6 +21,7 @@ const en = {
   available: 'This handle is available.',
   current: 'This is your current handle.',
   taken: 'This handle is already in use. Try another.',
+  held: 'Kept for its previous owner. If it was yours, you can take it back.',
   reserved: 'This handle cannot be used. Try another.',
   invalid: 'Use 3–30 letters, numbers or underscores.',
   checkFailed: 'Could not check this handle. Try again.',

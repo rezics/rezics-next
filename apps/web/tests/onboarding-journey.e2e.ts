@@ -278,6 +278,22 @@ test('new person picks a public name and handle, sets up Home, and the Account n
     expect(oldAddress.status()).toBe(200);
     expect(await oldAddress.json()).toMatchObject({ resolution: {
       requestedHandle: person.handle, state: 'retired', redirect: true, canonical: `/@${currentHandle}` } });
+    // Retired handles stay with their owner: settings offers the old one back and the owner takes it.
+    const aged2 = new Client({ connectionString: databaseUrl });
+    try {
+      await aged2.connect();
+      expect((await aged2.query(`UPDATE access.agent_handle
+        SET claimed_at = clock_timestamp() - interval '31 days'
+        WHERE handle = $1 AND agent_id = $2 AND state = 'current'`, [currentHandle, oldProfile.id])).rowCount).toBe(1);
+    } finally { await aged2.end(); }
+    await page.reload();
+    await expect(page.getByRole('textbox', { name: 'Your handle' })).toHaveAttribute('data-hydrated', 'true');
+    await page.getByRole('textbox', { name: 'Your handle' }).fill(person.handle);
+    await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'Kept for its previous owner' }))
+      .toBeVisible({ timeout: 20_000 });
+    await page.getByRole('button', { name: 'Change handle' }).click();
+    await expect(page.getByRole('main').getByRole('status').filter({ hasText: 'Your handle was changed.' })).toBeVisible();
+    currentHandle = person.handle;
   }
   const publicName = `Author ${suffix}`;
   await expect(page.locator('form[action="/en/settings/profile"]')).toHaveAttribute('data-hydrated', 'true');
