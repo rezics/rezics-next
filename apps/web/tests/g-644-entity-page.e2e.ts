@@ -61,6 +61,11 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   const { member } = JSON.parse(readFileSync(path, 'utf8')) as { member: { email: string; password: string } };
   const at = (resource: string, locale = 'en') => `/${locale}/e/${uuid(resource)}`;
   await page.setViewportSize(desktop);
+  page.on('response', async response => {
+    if (response.url().includes('/api/main/') && response.request().method() !== 'GET' && response.status() >= 400) {
+      console.log('[g-644] refused', response.request().method(), response.url().split('/api/main')[1], response.status(), (await response.text()).slice(0, 200));
+    }
+  });
 
   // Signed out: the page reads, relations ask for a sign-in and "Discuss" leads to sign-in rather than a dead end.
   // Access learns of the seeded records from its outbox; until it has, a public chapter answers 404 to everyone.
