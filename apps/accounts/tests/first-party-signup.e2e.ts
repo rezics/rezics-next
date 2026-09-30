@@ -51,9 +51,9 @@ test('joining from home verifies email, resumes REZICS authorization and keeps t
 
   await page.goto(`${accounts}/connected-apps`);
   await expect(page.getByRole('heading', { name: 'Connected apps' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'REZICS' })).toBeVisible();
-  await expect(page.getByText('Manage access, rights and moderation when you are authorized')).toBeVisible();
-  await page.goto(`${accounts}/security`);
-  await expect(page.getByRole('heading', { name: 'Security & sign-in' })).toBeVisible();
-  await expect(page.getByText(/REZICS on Chrome · (Windows|Linux|macOS)/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No apps have access' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'REZICS', exact: true })).toHaveCount(0);
+  await page.goto(`${accounts}/security/devices`);
+  await expect(page.getByRole('heading', { name: 'Devices and sessions', exact: true })).toBeVisible();
+  await expect(page.getByText(/REZICS · Chrome on (Windows|Linux|macOS)/)).toBeVisible();
 });

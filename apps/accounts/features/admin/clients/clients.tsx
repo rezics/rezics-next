@@ -63,7 +63,7 @@ export function ClientsPage({ clients, focus }: { clients: ClientPage; focus?: s
               {expanded ? <ChevronDownIcon aria-hidden="true" /> : <ChevronRightIcon aria-hidden="true" />}</Button></TableCell>
             <TableCell className={cell}><span className="flex flex-wrap items-center gap-1.5 font-medium">{name}
               <Badge variant="outline" size="sm">{t.clientType[client.type]}</Badge>
-              {client.skipConsent ? <Badge variant="soft" size="sm">{t.firstParty}</Badge> : null}</span>
+              {client.firstParty ? <Badge variant="soft" size="sm">{t.firstParty}</Badge> : null}</span>
               <span className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground">{client.clientId}
                 <CopyButton value={client.clientId} label={t.clientId} /></span></TableCell>
             <TableCell className={cell}>{client.disabled ? <Badge variant="destructive" size="sm">{t.clientState.disabled}</Badge>

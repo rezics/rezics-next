@@ -232,10 +232,11 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
         const cursor = decodeCursor(secret, scope, query.cursor);
         const limit = query.limit ?? 25;
         const result = await pool.query<{ clientId: string; name: string; disabled: boolean | null; scopes: string[] | null;
-          grantTypes: string[] | null; redirectUris: string[]; userId: string | null; skipConsent: boolean | null;
+          grantTypes: string[] | null; redirectUris: string[]; userId: string | null; skipConsent: boolean | null; firstParty: boolean;
           type: 'public' | 'confidential'; uri: string | null; createdAt: Date | null;
           installation: { id: string; state: string; scopes: string[]; installedAt: string } | null }>(`
           SELECT c."clientId", c.name, c.disabled, c.scopes, c."grantTypes", c."redirectUris", c."userId", c."skipConsent",
+            EXISTS (SELECT 1 FROM rezics_oauth_first_party_client fp WHERE fp.client_id = c."clientId") AS "firstParty",
             CASE WHEN c."tokenEndpointAuthMethod" = 'none' THEN 'public' ELSE 'confidential' END AS type, c.uri, c."createdAt",
             (SELECT jsonb_build_object('id', i.id, 'state', i.state, 'scopes', i.scopes, 'installedAt', i.installed_at)
               FROM rezics_oauth_installation i WHERE i.client_id = c."clientId"

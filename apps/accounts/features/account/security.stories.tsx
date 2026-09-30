@@ -79,6 +79,28 @@ export const SignOutADevice: Story = {
   },
 };
 
+export const ProductSessions: Story = {
+  render: () => <DevicesPage devices={{ status: 'ok', items: [devices[0]!, {
+    ...devices[1]!, browser: 'Chrome', platform: 'Linux',
+  }] }} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { name: 'Devices and sessions' })).toBeVisible();
+    await expect(canvas.getByText('REZICS · Chrome on Linux')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Sign out · REZICS · Chrome on Linux' })).toBeVisible();
+  },
+};
+export const ProductSessionsPhone: Story = { ...ProductSessions, globals: phone };
+export const ProductSessionsKorean: Story = {
+  render: ProductSessions.render, globals: { locale: 'ko' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { name: '기기 및 세션' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: /로그아웃.*Chrome.*REZICS/ })).toBeVisible();
+  },
+};
+export const ProductSessionsKoreanPhone: Story = { ...ProductSessionsKorean, globals: { ...phone, locale: 'ko' } };
+
 export const LimitedSessionList: Story = {
   render: () => <DevicesPage devices={{ status: 'ok', items: devices, limited: true, older: 'next-page' }} />,
   async play({ canvasElement }) {

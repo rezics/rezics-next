@@ -63,7 +63,7 @@ function DeviceRow({ item, detailed, action }: { item: DeviceView; detailed: boo
     <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
       <Icon className="size-5" aria-hidden="true" /></span>
     <div className="min-w-0 flex-1">
-      <p className="truncate font-medium">{title}</p>
+      <p className="break-words font-medium">{title}</p>
       {detail ? <p className="text-sm text-muted-foreground">{detail}</p> : null}
       <p className="text-sm text-muted-foreground">{item.thisDevice
         ? <span className="inline-flex items-center gap-1.5 font-medium text-success-foreground">

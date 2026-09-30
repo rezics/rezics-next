@@ -81,6 +81,37 @@ export async function readSessions(pool: Pool, secret: string, userId: string, c
   nextCursor: result.rows.length > limit && last ? encodeCursor(secret, scope, last.cursorKey, last.id) : null };
 }
 
+/** User-indexed session and refresh-token writes. Lock the selected sessions
+ * before touching tokens: the provider stores sessionId on issuance and rotation,
+ * and its FK cannot admit a replacement token after that session is deleted.
+ * Revoke before deletion, whose ON DELETE SET NULL otherwise loses the binding. */
+export async function revokeSessions(pool: Pool, userId: string, currentId: string,
+  selection: { sessionId: string } | { sessionIds: string[] } | { others: true }) {
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query('SELECT 1 FROM rezics_account_security WHERE user_id = $1 FOR SHARE', [userId]);
+    const selected = 'sessionId' in selection
+      ? await db.query<{ id: string }>('SELECT id FROM "session" WHERE "userId" = $1 AND id = $2 FOR UPDATE',
+        [userId, selection.sessionId])
+      : 'sessionIds' in selection
+        ? await db.query<{ id: string }>(`SELECT id FROM "session" WHERE "userId" = $1 AND id <> $2
+          AND id = ANY($3::text[]) ORDER BY id FOR UPDATE`, [userId, currentId, selection.sessionIds])
+        : await db.query<{ id: string }>('SELECT id FROM "session" WHERE "userId" = $1 AND id <> $2 ORDER BY id FOR UPDATE',
+          [userId, currentId]);
+    const ids = selected.rows.map(row => row.id);
+    // Delete the entire selected session's retained rotations. Marking them
+    // revoked would trigger the provider's user/client-wide reuse cleanup on
+    // the next refresh and sign out unrelated sessions for the same product.
+    await db.query(`DELETE FROM "oauthRefreshToken"
+      WHERE "userId" = $1 AND "sessionId" = ANY($2::text[])`, [userId, ids]);
+    const result = await db.query('DELETE FROM "session" WHERE "userId" = $1 AND id = ANY($2::text[])', [userId, ids]);
+    await db.query('COMMIT');
+    return { revoked: result.rowCount ?? 0 };
+  } catch (error) { await db.query('ROLLBACK'); throw error; }
+  finally { db.release(); }
+}
+
 export function securityActivityApi(auth: AccountAuth, pool: Pool) {
   const secret = String(auth.options.secret);
   return new Elysia()
@@ -102,13 +133,7 @@ export function securityActivityApi(auth: AccountAuth, pool: Pool) {
       try {
         const session = await accountSession(auth, request);
         await requireStepUp(pool, session);
-        const result = 'sessionId' in body
-          ? await pool.query('DELETE FROM "session" WHERE "userId" = $1 AND id = $2', [session.user.id, body.sessionId])
-          : 'sessionIds' in body
-            ? await pool.query('DELETE FROM "session" WHERE "userId" = $1 AND id <> $2 AND id = ANY($3::text[])',
-              [session.user.id, session.session.id, body.sessionIds])
-          : await pool.query('DELETE FROM "session" WHERE "userId" = $1 AND id <> $2', [session.user.id, session.session.id]);
-        return accountJson({ revoked: result.rowCount ?? 0 });
+        return accountJson(await revokeSessions(pool, session.user.id, session.session.id, body));
       } catch (error) { return accountFailure(error); }
     });
 }

@@ -40,7 +40,7 @@ export const auditView = t.Object({ id: t.String(), actorId: t.String(), targetI
   reason: t.String(), before: t.Unknown(), after: t.Unknown(), requestId: t.String(), outcome: t.String(), occurredAt: t.String() });
 export const clientView = t.Object({ clientId: t.String(), name: t.Nullable(t.String()), disabled: t.Nullable(t.Boolean()),
   scopes: t.Nullable(t.Array(t.String())), grantTypes: t.Nullable(t.Array(t.String())), redirectUris: t.Array(t.String()),
-  userId: t.Nullable(t.String()), skipConsent: t.Nullable(t.Boolean()) });
+  userId: t.Nullable(t.String()), skipConsent: t.Nullable(t.Boolean()), firstParty: t.Boolean() });
 
 /** A capped list; `truncated` says older rows exist beyond the cap. */
 const cappedList = <S extends ReturnType<typeof t.Object>>(item: S) =>

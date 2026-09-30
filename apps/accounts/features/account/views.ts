@@ -62,29 +62,10 @@ export function appNames(apps: { status: string; data?: { items: ConnectedApp[] 
 
 export function connectedAppViews(apps: ConnectedApp[], now: Date, locale: AccountLocale): ConnectedAppView[] {
   return apps.map(app => ({ clientId: app.clientId, name: app.name, uri: app.uri, icon: app.icon,
-    trusted: app.trusted, firstParty: app.firstParty === true, withdrawn: app.withdrawn,
-    permissionGroups: app.firstParty ? firstPartyPermissionGroups(app.scopes.map(scope => scope.scope)) : [],
+    withdrawn: app.withdrawn,
     permissions: [...new Set(app.scopes.map(scope => scope.description[locale] ?? scope.description.en))],
     granted: calendarDate(app.grantedAt, locale),
     lastUsed: app.lastUsedAt ? relativeTime(app.lastUsedAt, now, locale) : null }));
-}
-
-export type FirstPartyPermissionGroup = 'account' | 'read' | 'create' | 'participate' | 'manage';
-
-/** Every first-party scope has a visible summary; raw descriptions remain available below it. */
-export function firstPartyPermissionGroups(scopes: string[]): FirstPartyPermissionGroup[] {
-  const groups = new Set<FirstPartyPermissionGroup>();
-  for (const scope of scopes) {
-    const [subject, action] = scope.split(':');
-    if (subject === 'openid' || subject === 'offline_access' || subject === 'notification'
-      || subject === 'subscription' || subject === 'export' || subject === 'connected-app') groups.add('account');
-    else if (action === 'read' || action === 'select' || subject === 'semantic') groups.add('read');
-    else if (['work', 'content', 'source', 'address', 'collection', 'context', 'package', 'theme'].includes(subject!)) groups.add('create');
-    else if (['comment', 'rating', 'follow', 'feed', 'event', 'claim', 'realm', 'space',
-      'classification', 'judgment', 'statement', 'vote'].includes(subject!)) groups.add('participate');
-    else groups.add('manage');
-  }
-  return (['account', 'read', 'create', 'participate', 'manage'] as const).filter(group => groups.has(group));
 }
 
 /** The account's reads as the Security Checkup (and the home and security

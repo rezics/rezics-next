@@ -150,11 +150,11 @@ export const operators: Operators = {
 
 export const clients: ClientPage = { nextCursor: null, items: [
   { clientId: 'rezics-web', name: 'REZICS', disabled: false, scopes: ['openid', 'offline_access', 'work:read', 'work:create'],
-    grantTypes: ['authorization_code', 'refresh_token'], redirectUris: ['https://rezics.test/auth/callback'], userId: null, skipConsent: true,
+    grantTypes: ['authorization_code', 'refresh_token'], redirectUris: ['https://rezics.test/auth/callback'], userId: null, skipConsent: true, firstParty: true,
     type: 'public', uri: 'https://rezics.test', createdAt: ago(60 * 24 * 100),
     installation: { id: 'inst-web', state: 'active', scopes: ['openid', 'offline_access', 'work:read', 'work:create'], installedAt: ago(60 * 24 * 100) } },
   { clientId: 'notes-app', name: 'Notes', disabled: true, scopes: ['openid', 'work:read'], grantTypes: ['authorization_code'],
-    redirectUris: ['https://notes.example.test/callback'], userId: null, skipConsent: false, type: 'confidential', uri: null,
+    redirectUris: ['https://notes.example.test/callback'], userId: null, skipConsent: false, firstParty: false, type: 'confidential', uri: null,
     createdAt: ago(60 * 24 * 12), installation: { id: 'inst-notes', state: 'revoked', scopes: ['openid', 'work:read'], installedAt: ago(60 * 24 * 12) } },
 ] };
 

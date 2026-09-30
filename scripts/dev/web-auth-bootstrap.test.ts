@@ -48,13 +48,15 @@ test('IAM01: the local web client asks for the main site\'s scopes with PKCE and
   const registration = webClientRegistration(['http://localhost:3000/auth/callback']);
   expect(registration).toMatchObject({ client_name: 'REZICS', application_type: 'native', token_endpoint_auth_method: 'none',
     grant_types: ['authorization_code', 'refresh_token'], scope: MAIN_SITE_SCOPE,
-    require_pkce: true, redirect_uris: ['http://localhost:3000/auth/callback'] });
-  const current = { scope: MAIN_SITE_SCOPE, name: 'REZICS', firstParty: true, installationState: 'active',
+    require_pkce: true, skip_consent: true, redirect_uris: ['http://localhost:3000/auth/callback'] });
+  const current = { scope: MAIN_SITE_SCOPE, name: 'REZICS', firstParty: true, skipConsent: true, installationState: 'active',
     installationScopes: MAIN_SITE_SCOPE.split(' '), grantTypes: ['authorization_code', 'refresh_token'] };
   expect(webClientCurrent(current)).toBe(true);
   expect(webClientCurrent({ ...current, installationScopes: current.installationScopes.filter(scope => scope !== 'follow:read') })).toBe(false);
   expect(webClientCurrent({ ...current, installationState: 'revoked' })).toBe(false);
   expect(webClientCurrent({ ...current, name: 'QA-only loopback PKCE' })).toBe(false);
   expect(webClientCurrent({ ...current, firstParty: false })).toBe(false);
+  expect(webClientCurrent({ ...current, skipConsent: false })).toBe(false);
+  expect(webClientCurrent({ ...current, skipConsent: undefined })).toBe(false);
   expect(webClientCurrent({ ...current, grantTypes: ['authorization_code'] })).toBe(false);
 });

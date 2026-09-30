@@ -6,15 +6,10 @@ import { chinese, dark, phone } from '../../.storybook/variants.ts';
 import { ReadStatePanel } from '../shell/state-panel.tsx';
 
 const apps: ConnectedAppView[] = [
-  { clientId: 'reader', name: 'Reader', icon: null, uri: 'https://reader.example', trusted: false, firstParty: false,
-    permissionGroups: [], withdrawn: false,
+  { clientId: 'reader', name: 'Reader', icon: null, uri: 'https://reader.example', withdrawn: false,
     granted: 'Sep 27, 2026', lastUsed: '3 hours ago',
     permissions: ['Identify your REZICS account', 'Read works', 'Keep access while you are signed out, until you revoke it'] },
-  { clientId: 'rezics-web', name: 'REZICS', icon: null, uri: null, trusted: true, firstParty: true,
-    permissionGroups: ['account', 'read', 'create', 'participate', 'manage'], withdrawn: false,
-    granted: 'Aug 2, 2026', lastUsed: null, permissions: ['Identify your REZICS account', 'Create works'] },
-  { clientId: 'old-tool', name: 'Old tool', icon: null, uri: null, trusted: false, firstParty: false,
-    permissionGroups: [], withdrawn: true,
+  { clientId: 'old-tool', name: 'Old tool', icon: null, uri: null, withdrawn: true,
     granted: 'Jan 5, 2026', lastUsed: '8 months ago', permissions: ['Read works'] },
 ];
 
@@ -36,10 +31,7 @@ export const Apps: Story = {
     await expect(canvas.getByText('Access given Sep 27, 2026 · Last used 3 hours ago')).toBeVisible();
     await expect(canvas.getByText('Reader can:')).toBeVisible();
     await expect(canvas.getByText('Keep access while you are signed out, until you revoke it')).toBeVisible();
-    await expect(canvas.getByText('REZICS app')).toBeVisible();
-    await expect(canvas.getByText('Create and edit works, sources and collections')).toBeVisible();
-    await expect(canvas.getByText('Create works')).not.toBeVisible();
-    await expect(canvas.getByText(/REZICS apps don’t ask first/)).toBeVisible();
+    await expect(canvas.queryByRole('heading', { name: 'REZICS' })).not.toBeInTheDocument();
     await expect(canvas.getByText('No longer available')).toBeVisible();
     await userEvent.click(canvas.getAllByRole('button', { name: 'Remove access' })[0]!);
     const dialog = await screen.findByRole('alertdialog');
@@ -54,20 +46,6 @@ export const Apps: Story = {
     await expect(await canvas.findByText('Access removed')).toBeVisible();
   },
 };
-
-export const TrustedApp: Story = {
-  args: { apps: apps.slice(1, 2) },
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByText('See all permissions'));
-    await expect(canvas.getByText('Create works')).toBeVisible();
-    await userEvent.click((await canvas.findAllByRole('button', { name: 'Remove access' }))[0]!);
-    const dialog = await screen.findByRole('alertdialog');
-    await waitFor(() => expect(within(dialog).getByText(/gets access again the next time you sign in to it/)).toBeVisible());
-  },
-};
-
-export const FirstPartySummary: Story = { args: { apps: apps.slice(1, 2) } };
 
 export const Empty: Story = {
   args: { apps: [] },
@@ -85,8 +63,7 @@ export const Unavailable: Story = {
 };
 
 export const LongPermissions: Story = {
-  args: { apps: [{ clientId: 'reader', name: 'Reader', icon: null, uri: null, trusted: false, firstParty: false,
-    permissionGroups: [], withdrawn: false, granted: '27. Sept. 2026', lastUsed: 'vor 3 Stunden',
+  args: { apps: [{ clientId: 'reader', name: 'Reader', icon: null, uri: null, withdrawn: false, granted: '27. Sept. 2026', lastUsed: 'vor 3 Stunden',
     permissions: [
       'Community-Meldungen und Entscheidungen lesen und über Community-Beiträge entscheiden',
       'コミュニティの報告と決定を読み取り、コミュニティの投稿について決定する',
@@ -99,6 +76,14 @@ export const LongPermissions: Story = {
 };
 
 export const Dark: Story = { globals: dark };
+export const Korean: Story = { globals: { locale: 'ko' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { name: 'Reader' })).toBeVisible();
+    await expect(canvas.queryByRole('heading', { name: /^REZICS$/ })).not.toBeInTheDocument();
+  },
+};
+export const KoreanEmpty: Story = { args: { apps: [] }, globals: { locale: 'ko' } };
 export const Phone: Story = { globals: phone,
   async play({ canvasElement }) {
     await expect(await within(canvasElement).findByRole('heading', { level: 2, name: 'Reader' })).toBeVisible();
@@ -109,6 +94,6 @@ export const Chinese: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: '已关联的应用' })).toBeVisible();
-    await expect(canvas.getByText('REZICS 应用')).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: 'Reader' })).toBeVisible();
   },
 };

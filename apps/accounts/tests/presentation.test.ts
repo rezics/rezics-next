@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { presentActivity, securityCheckup } from '../features/account/activity.ts';
 import { calendarDate, relativeTime } from '../features/account/format.ts';
 import { manualKey } from '../features/account/two-step.tsx';
-import { activityPage, connectedAppViews, deviceViews, firstPartyPermissionGroups } from '../features/account/views.ts';
+import { activityPage, connectedAppViews, deviceViews } from '../features/account/views.ts';
 import type { SecurityEvent, SignInMethods } from '../features/api/account-data.ts';
 import { groupScopes } from '../features/consent/scopes.ts';
 
@@ -83,8 +83,6 @@ describe('view models', () => {
       scopes: [scope('openid', 'Identify your REZICS account', '识别你的 REZICS 账号'),
         scope('work:read', 'Read works', '读取作品')] }], now, 'zh-Hans');
     expect(app).toMatchObject({ permissions: ['识别你的 REZICS 账号', '读取作品'], lastUsed: '1小时前' });
-    expect(firstPartyPermissionGroups(['openid', 'work:read', 'work:create', 'follow:write', 'access:manage']))
-      .toEqual(['account', 'read', 'create', 'participate', 'manage']);
   });
 
   test('an authenticator key is grouped for typing', () => {

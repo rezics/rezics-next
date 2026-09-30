@@ -24,6 +24,25 @@ export const Clients: Story = {
   },
 };
 
+/** The registry identifies products; skipConsent is a separate OAuth setting. */
+export const FirstPartyMatrix: Story = {
+  args: { clients: { nextCursor: null, items: [false, true].flatMap(firstParty => [false, true].map(skipConsent => ({
+    ...clients.items[0]!, clientId: `matrix-${firstParty}-${skipConsent}`,
+    name: `Registry ${firstParty}, skip consent ${skipConsent}`, firstParty, skipConsent,
+  }))) } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const table = await canvas.findByRole('table', { name: 'OAuth clients' });
+    for (const firstParty of [false, true]) {
+      for (const skipConsent of [false, true]) {
+        const row = within(table).getAllByRole('row').find(item => item.textContent?.includes(`matrix-${firstParty}-${skipConsent}`))!;
+        if (firstParty) await expect(within(row).getByText('First-party')).toBeVisible();
+        else await expect(within(row).queryByText('First-party')).not.toBeInTheDocument();
+      }
+    }
+  },
+};
+
 const manyScopes = Array.from({ length: 76 }, (_, index) => `permission:${index}`);
 export const ManyScopes: Story = {
   args: { clients: { nextCursor: null, items: [{ ...clients.items[0]!, scopes: manyScopes }] } },

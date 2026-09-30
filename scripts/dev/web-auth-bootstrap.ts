@@ -324,11 +324,11 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
 
 /** Whether a stack's registered web client already has today's scopes and grants. */
 export function webClientCurrent(registered: { scope: string; grantTypes?: string[]; name?: string;
-  installationScopes?: string[]; installationState?: string; firstParty?: boolean }): boolean {
+  installationScopes?: string[]; installationState?: string; firstParty?: boolean; skipConsent?: boolean }): boolean {
   const requested = new Set(scope.split(' '));
   const declared = new Set(registered.scope.split(' '));
   return declared.size === requested.size && [...requested].every(grant => declared.has(grant))
-    && registered.name === 'REZICS' && registered.firstParty === true
+    && registered.name === 'REZICS' && registered.firstParty === true && registered.skipConsent === true
     && registered.installationState === 'active'
     && requested.size === registered.installationScopes?.length
     && registered.installationScopes.every(grant => requested.has(grant))
@@ -374,8 +374,8 @@ export async function upgradeWebClient(options: { runId: string; profile?: 'dev'
   const pool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
   try {
     const registered = await pool.query<{ name: string; scopes: string[]; grantTypes: string[];
-      installationScopes: string[] | null; installationState: string | null; firstParty: boolean }>(`
-      SELECT c.name, c.scopes, c."grantTypes", i.scopes AS "installationScopes",
+      installationScopes: string[] | null; installationState: string | null; firstParty: boolean; skipConsent: boolean }>(`
+      SELECT c.name, c.scopes, c."grantTypes", c."skipConsent", i.scopes AS "installationScopes",
         i.state AS "installationState", fp.client_id IS NOT NULL AS "firstParty"
       FROM "oauthClient" c
       LEFT JOIN rezics_oauth_installation i ON i.client_id = c."clientId" AND i.state = 'active'
@@ -384,7 +384,8 @@ export async function upgradeWebClient(options: { runId: string; profile?: 'dev'
     const installed = registered.rows[0];
     if (installed && webClientCurrent({ scope: installed.scopes.join(' '), name: installed.name,
       grantTypes: installed.grantTypes, installationScopes: installed.installationScopes ?? undefined,
-      installationState: installed.installationState ?? undefined, firstParty: installed.firstParty })) return false;
+      installationState: installed.installationState ?? undefined, firstParty: installed.firstParty,
+      skipConsent: installed.skipConsent })) return false;
     const auth = createAccountAuth({ baseURL: apps.ACCOUNT_BASE_URL!, secret: apps.ACCOUNT_SECRET!,
       resource: apps.ACCOUNT_MAIN_RESOURCE!, pool, operatorUserIds: new Set([operator.id]) });
     const signIn = await createAccountApp(auth, pool).handle(new Request(

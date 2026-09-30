@@ -63,10 +63,9 @@ test('G205 apps: described grants, actual last use, private revocation and stale
     expect(list.items[0]!.scopes.map(item => item.scope)).toContain('work:read');
     const marked = await (await f.request('/api/account/connected-apps?limit=25', undefined, member.cookie)).json() as {
       items: { clientId: string; trusted: boolean; firstParty: boolean }[] };
-    expect(marked.items.find(item => item.clientId === trusted.client_id)).toMatchObject({ trusted: true, firstParty: true });
+    expect(marked.items.find(item => item.clientId === trusted.client_id)).toBeUndefined();
     expect(marked.items.find(item => item.clientId === client.client_id)?.firstParty).toBe(false);
-    const second = await f.request(`/api/account/connected-apps?limit=1&cursor=${encodeURIComponent(list.nextCursor)}`, undefined, member.cookie);
-    expect(second.status).toBe(200);
+    expect(list.nextCursor).toBeNull();
     expect((await f.request(`/api/account/connected-apps/${client.client_id}/revoke`, {}, peer.cookie)).status).toBe(404);
     const held = await oauth.code(trusted.client_id, member.cookie);
     const revocations = await Promise.all([1, 2].map(() => f.request(`/api/account/connected-apps/${trusted.client_id}/revoke`, {}, member.cookie)));
@@ -85,19 +84,21 @@ test('G205 apps: described grants, actual last use, private revocation and stale
   } finally { await f.close(); }
 }, 60_000);
 
-test('G373 apps: consent and used first-party clients are private and paginated; unattended operator grants stay out', async () => {
+test('G522 apps: only explicit consents are private and paginated; product sessions and operator grants stay out', async () => {
   const f = await accountFixture();
   try {
     const oauth = await oauthFixture(f);
     const reader = await f.signup('reader@example.test');
     const peer = await f.signup('peer@example.test');
     const consented = await oauth.createClient();
+    const secondConsented = await oauth.createClient();
     const firstParty = await oauth.createClient(true);
     const unusedFirstParty = await oauth.createClient(true);
     const operator = await oauth.createClient(true);
     await f.pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1), ($2)',
       [firstParty.client_id, unusedFirstParty.client_id]);
     await oauth.issue(consented.client_id, reader.cookie);
+    await oauth.issue(secondConsented.client_id, reader.cookie);
     await oauth.issue(firstParty.client_id, reader.cookie);
     const unattended = await oauth.issue(operator.client_id, reader.cookie);
     await oauth.introspect(unattended.access_token);
@@ -108,7 +109,7 @@ test('G373 apps: consent and used first-party clients are private and paginated;
       return response.json() as Promise<{ items: { clientId: string }[]; nextCursor: string | null }>;
     };
     const first = await list(reader.cookie);
-    expect(first.items.map(app => app.clientId)).toEqual([firstParty.client_id]);
+    expect(first.items.map(app => app.clientId)).toEqual([secondConsented.client_id]);
     expect(first.nextCursor).toBeTruthy();
     const second = await list(reader.cookie, first.nextCursor!);
     expect(second.items.map(app => app.clientId)).toEqual([consented.client_id]);
@@ -120,7 +121,7 @@ test('G373 apps: consent and used first-party clients are private and paginated;
     await f.pool.query('UPDATE "oauthClient" SET "skipConsent" = true WHERE "clientId" = $1', [consented.client_id]);
     expect((await list(peer.cookie)).items.map(app => app.clientId)).toEqual([consented.client_id]);
     await f.request(`/api/account/connected-apps/${firstParty.client_id}/revoke`, {}, reader.cookie);
-    expect((await list(reader.cookie)).items.map(app => app.clientId)).toEqual([consented.client_id]);
+    expect((await list(reader.cookie)).items.map(app => app.clientId)).toEqual([secondConsented.client_id]);
   } finally { await f.close(); }
 }, 60_000);
 

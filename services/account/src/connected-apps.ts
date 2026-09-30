@@ -7,9 +7,8 @@ import { describeScope } from './scope-descriptions.ts';
 import { accountResponses, connectedAppView, pageView, statusView } from './views.ts';
 
 /** One indexed user-grant seek and bounded client/consent/installation probes;
- * no token scan or credential material. A consent or an issued first-party
- * grant represents the person's connection. Other skip-consent grants can be
- * issued by operator tooling on their behalf and are not connected apps. */
+ * no token scan or credential material. Only an explicit consent represents
+ * a connected app; signing into a REZICS product belongs in sessions. */
 export async function readConnectedApps(pool: Pool, secret: string, userId: string,
   query: { limit?: number; cursor?: string } = {}) {
   const scope = `apps:${userId}`;
@@ -27,8 +26,8 @@ export async function readConnectedApps(pool: Pool, secret: string, userId: stri
       ORDER BY installed_at DESC, id DESC LIMIT 1) i ON true
     LEFT JOIN rezics_oauth_first_party_client fp ON fp.client_id = g.client_id
     WHERE g.user_id = $1 AND g.revoked_at IS NULL
-      AND (fp.client_id IS NOT NULL OR EXISTS (SELECT 1 FROM "oauthConsent" consent
-        WHERE consent."userId" = g.user_id AND consent."clientId" = g.client_id))
+      AND EXISTS (SELECT 1 FROM "oauthConsent" consent
+        WHERE consent."userId" = g.user_id AND consent."clientId" = g.client_id)
       AND ($2::timestamptz IS NULL OR (g.granted_at, g.client_id) < ($2, $3))
     ORDER BY g.granted_at DESC, g.client_id DESC LIMIT $4`,
   [userId, cursor?.key ?? null, cursor?.id ?? null, limit + 1]);
