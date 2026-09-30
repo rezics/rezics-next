@@ -11,10 +11,10 @@ import type { UiLocale } from '../../i18n/define.ts';
 import type { ManageMessages } from './messages.ts';
 import { ruleLanguageName } from './rule-list.tsx';
 import { emptyRule, type LanguageStatus, languageStatus, RULE_LIMITS, ruleIdFrom, type RuleLanguage, ruleLanguages,
-  ruleLanguageTag, type RuleProblem } from './rules.ts';
+  type RuleProblem } from './rules.ts';
 import type { RealmRule } from './types.ts';
 
-/** A rule being edited. `key` is stable while an unpublished rule's identity follows its English title. */
+/** A rule being edited. `key` is stable while an unpublished rule's identity follows its original title. */
 export interface RuleDraft { key: string; rule: RealmRule; published: boolean }
 
 export const draftsOf = (rules: readonly RealmRule[]): RuleDraft[] =>
@@ -24,7 +24,7 @@ const statusBadge: Record<LanguageStatus, 'statusEdited' | 'statusMissing' | 'st
   unchanged: null, edited: 'statusEdited', missing: 'statusMissing', check: 'statusCheck', new: 'statusNew' };
 
 /**
- * Both languages of every rule side by side, each with its status against the
+ * The recorded languages of every rule side by side, each with its status against the
  * published revision: edited, missing, new, or unchanged while the other
  * language changed ("check wording").
  */
@@ -38,7 +38,7 @@ export function RulesEditor({ drafts, published, problems, onChange, locale, mes
     if (at !== index) return draft;
     if (draft.published) return { ...draft, rule };
     const taken = new Set(drafts.filter((_, other) => other !== index).map(item => item.rule.id));
-    return { ...draft, rule: { ...rule, id: ruleIdFrom(rule.title.en, taken) } };
+    return { ...draft, rule: { ...rule, id: ruleIdFrom(rule.title.labels[rule.title.original] ?? '', taken) } };
   }));
   const move = (index: number, delta: -1 | 1) => {
     const next = [...drafts];
@@ -49,7 +49,8 @@ export function RulesEditor({ drafts, published, problems, onChange, locale, mes
   const problemText = (problem: RuleProblem) => {
     if (problem.field === 'id') return t.problemId;
     const field = problem.field === 'title' ? t.fieldTitle : t.fieldBody;
-    const language = ruleLanguageName(problem.language, t);
+    const language = ruleLanguageName(problem.language, t, locale);
+    if (problem.problem === 'invalid') return t.settingsInvalid;
     return problem.problem === 'missing' ? t.problemMissing({ field, language }) : t.problemTooLong({ field, language });
   };
   return <div className="grid gap-4">
@@ -57,8 +58,9 @@ export function RulesEditor({ drafts, published, problems, onChange, locale, mes
       {drafts.map((draft, index) => {
         const status = languageStatus(draft.rule, before.get(draft.rule.id));
         const own = problems?.filter(problem => problem.index === index) ?? [];
-        const changed = ruleLanguages.filter(language => status[language] === 'edited');
-        const check = ruleLanguages.filter(language => status[language] === 'check');
+        const languages = ruleLanguages(draft.rule);
+        const changed = languages.filter(language => status[language] === 'edited');
+        const check = languages.filter(language => status[language] === 'check');
         const number = String(index + 1);
         return <li key={draft.key} className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -74,8 +76,8 @@ export function RulesEditor({ drafts, published, problems, onChange, locale, mes
             </div>
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            {ruleLanguages.map((language: RuleLanguage) => {
-              const name = ruleLanguageName(language, t);
+            {languages.map((language: RuleLanguage) => {
+              const name = ruleLanguageName(language, t, locale);
               const badge = statusBadge[status[language]];
               const error = (field: 'title' | 'body') => own.find(problem => problem.field === field
                 && problem.language === language);
@@ -88,25 +90,25 @@ export function RulesEditor({ drafts, published, problems, onChange, locale, mes
                   {badge ? <Badge variant={badge === 'statusMissing' ? 'destructive' : badge === 'statusCheck' ? 'warning'
                     : 'secondary'}>{t[badge]}</Badge> : null}
                 </div>
-                <Field invalid={titleError !== undefined}>
+                {language in draft.rule.title.labels || language === draft.rule.title.original ? <Field invalid={titleError !== undefined}>
                   <FieldLabel>{t.ruleTitleLabel({ language: name })}</FieldLabel>
-                  <Input lang={ruleLanguageTag[language]} value={draft.rule.title[language]} maxLength={RULE_LIMITS.title + 20}
+                  <Input lang={language} dir="auto" value={draft.rule.title.labels[language] ?? ''} maxLength={RULE_LIMITS.title + 20}
                     onChange={event => update(index, { ...draft.rule,
-                      title: { ...draft.rule.title, [language]: event.currentTarget.value } })} />
+                      title: { ...draft.rule.title, labels: { ...draft.rule.title.labels, [language]: event.currentTarget.value } } })} />
                   {titleError ? <FieldError>{problemText(titleError)}</FieldError> : null}
-                </Field>
-                <Field invalid={bodyError !== undefined}>
+                </Field> : null}
+                {language in draft.rule.body.labels || language === draft.rule.body.original ? <Field invalid={bodyError !== undefined}>
                   <FieldLabel>{t.ruleBodyLabel({ language: name })}</FieldLabel>
-                  <Textarea lang={ruleLanguageTag[language]} dir="auto" rows={3} value={draft.rule.body[language]}
+                  <Textarea lang={language} dir="auto" rows={3} value={draft.rule.body.labels[language] ?? ''}
                     maxLength={RULE_LIMITS.body + 50} onChange={event => update(index, { ...draft.rule,
-                      body: { ...draft.rule.body, [language]: event.currentTarget.value } })} />
+                      body: { ...draft.rule.body, labels: { ...draft.rule.body.labels, [language]: event.currentTarget.value } } })} />
                   {bodyError ? <FieldError>{problemText(bodyError)}</FieldError> : null}
-                </Field>
+                </Field> : null}
               </fieldset>;
             })}
           </div>
           {changed.length === 1 && check.length ? <p className="text-sm text-warning-foreground">
-            {t.checkHelp({ changed: ruleLanguageName(changed[0]!, t), other: ruleLanguageName(check[0]!, t) })}</p> : null}
+            {t.checkHelp({ changed: ruleLanguageName(changed[0]!, t, locale), other: ruleLanguageName(check[0]!, t, locale) })}</p> : null}
           {own.some(problem => problem.field === 'id') ? <p className="text-destructive-foreground text-sm">{t.problemId}</p>
             : null}
         </li>;

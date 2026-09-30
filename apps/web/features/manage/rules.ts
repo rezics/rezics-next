@@ -1,23 +1,16 @@
 import type { UiLocale } from '../../i18n/define.ts';
 import type { RealmRule, SettingsView } from './types.ts';
 
-// A Realm's rules have one approved meaning and several localized forms.
-//
-// - The meaning moderators cite is the exact published revision of the Realm's
-//   rules document (`ruleBasis`: ref, revision, digest). Reading the rules in
-//   another interface language never changes which revision applies.
-// - Each rule is written in English and Chinese. A language the rule is not
-//   written in falls back explicitly, and the page says which language it shows.
-// - Any edit, including a translation fix, publishes a new revision; earlier
-//   decisions keep citing the revision they were made under.
-// - Publishing is compare-and-set on the revision the editor started from, so a
-//   concurrent publication is a conflict that keeps the draft, never an overwrite.
+// Moderators cite one immutable rule revision. Each field keeps its authored
+// original and optional translations; an interface locale never supplies a tag.
+export type RuleLanguage = string;
+type RuleText = RealmRule['title'];
 
-/** Main's stored languages for rule text (`localizedRuleTitle` in `realm-profile/schema.ts`). */
-export type RuleLanguage = 'en' | 'zh-CN';
-export const ruleLanguages: readonly RuleLanguage[] = ['en', 'zh-CN'];
-/** The BCP 47 tag each stored language is written in, for `lang` attributes. */
-export const ruleLanguageTag: Record<RuleLanguage, string> = { en: 'en', 'zh-CN': 'zh-Hans' };
+/** Languages actually recorded in these independent title/body fields. */
+export function ruleLanguages(...rules: Pick<RealmRule, 'title' | 'body'>[]): RuleLanguage[] {
+  return [...new Set(rules.flatMap(rule => [rule.title.original, ...Object.keys(rule.title.labels),
+    rule.body.original, ...Object.keys(rule.body.labels)]))];
+}
 
 export const RULE_LIMITS = { rules: 12, title: 100, body: 1000, id: 64 } as const;
 const idPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -25,35 +18,22 @@ const idPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 /** The approved meaning a rule text belongs to. `revision` is null until rules are first published. */
 export type RuleMeaning = SettingsView['ruleBasis'];
 
-/**
- * The stored language an interface locale reads. Traditional Chinese readers
- * get the Simplified text, the closest written form; every other locale reads
- * English. Either way the page names the language it shows.
- */
-export function ruleLanguageFor(locale: UiLocale): { language: RuleLanguage; exact: boolean } {
-  if (locale === 'en') return { language: 'en', exact: true };
-  if (locale === 'zh-Hans') return { language: 'zh-CN', exact: true };
-  if (locale === 'zh-Hant') return { language: 'zh-CN', exact: false };
-  return { language: 'en', exact: false };
-}
-
 export interface ShownText {
   text: string;
-  /** BCP 47 tag of the text actually shown. */
+  /** Language recorded on the selected field, including und when not recorded. */
   lang: string;
-  /** The stored language shown instead of the reader's, or null when it is the reader's own. */
   fallback: RuleLanguage | null;
 }
 
-function shown(values: Record<RuleLanguage, string>, locale: UiLocale): ShownText {
-  const preferred = ruleLanguageFor(locale);
-  const order = [preferred.language, ...ruleLanguages.filter(language => language !== preferred.language)];
-  const language = order.find(item => values[item].trim()) ?? preferred.language;
-  return { text: values[language], lang: ruleLanguageTag[language],
-    fallback: preferred.exact && language === preferred.language ? null : language };
+function shown(field: RuleText, locale: UiLocale): ShownText {
+  const language = field.labels[locale]?.trim() ? locale
+    : field.labels[field.original]?.trim() ? field.original
+      : Object.keys(field.labels).find(tag => field.labels[tag]?.trim()) ?? field.original;
+  return { text: field.labels[language] ?? '', lang: language,
+    fallback: language === locale ? null : language };
 }
 
-/** A rule as a reader of `locale` sees it. The meaning it belongs to is the same in every locale. */
+/** Select each field independently without inventing a translation or crossing scripts. */
 export function shownRule(rule: Pick<RealmRule, 'title' | 'body'>, locale: UiLocale) {
   return { title: shown(rule.title, locale), body: shown(rule.body, locale) };
 }
@@ -63,7 +43,7 @@ export type LanguageStatus =
   | 'unchanged'
   /** Changed from the published rule. */
   | 'edited'
-  /** Not written yet; Main requires both languages before publishing. */
+  /** An authored field is empty or its original label is missing. */
   | 'missing'
   /** Unchanged while another language changed: check it still says the same thing. */
   | 'check'
@@ -72,11 +52,18 @@ export type LanguageStatus =
 
 export function languageStatus(draft: Pick<RealmRule, 'title' | 'body'>, published: RealmRule | undefined):
   Record<RuleLanguage, LanguageStatus> {
-  const missing = (language: RuleLanguage) => !draft.title[language].trim() || !draft.body[language].trim();
+  const languages = ruleLanguages(draft, ...published ? [published] : []);
+  const missing = (language: RuleLanguage) => [draft.title, draft.body].some(field =>
+    (language in field.labels || language === field.original) && !field.labels[language]?.trim());
   const edited = (language: RuleLanguage) => published !== undefined
-    && (draft.title[language] !== published.title[language] || draft.body[language] !== published.body[language]);
-  const anyEdited = ruleLanguages.some(edited);
-  return Object.fromEntries(ruleLanguages.map(language => [language,
+    && (draft.title.labels[language] !== published.title.labels[language]
+      || draft.body.labels[language] !== published.body.labels[language]
+      || (draft.title.original !== published.title.original
+        && [draft.title.original, published.title.original].includes(language))
+      || (draft.body.original !== published.body.original
+        && [draft.body.original, published.body.original].includes(language)));
+  const anyEdited = languages.some(edited);
+  return Object.fromEntries(languages.map(language => [language,
     missing(language) ? 'missing' : !published ? 'new' : edited(language) ? 'edited'
       : anyEdited ? 'check' : 'unchanged'])) as Record<RuleLanguage, LanguageStatus>;
 }
@@ -98,12 +85,12 @@ export function compareRules(published: readonly RealmRule[], draft: readonly Re
     const prior = before.get(rule.id);
     if (!prior) { changes.push({ kind: 'added', rule }); continue; }
     const status = languageStatus(rule, prior.rule);
-    const languages = ruleLanguages.filter(language => status[language] === 'edited'
-      || status[language] === 'missing' && (prior.rule.title[language] !== rule.title[language]
-        || prior.rule.body[language] !== rule.body[language]));
+    const languages = Object.keys(status).filter(language => status[language] === 'edited'
+      || status[language] === 'missing' && (prior.rule.title.labels[language] !== rule.title.labels[language]
+        || prior.rule.body.labels[language] !== rule.body.labels[language]));
     if (languages.length) {
       changes.push({ kind: 'edited', rule, languages,
-        check: ruleLanguages.filter(language => status[language] === 'check') });
+        check: Object.keys(status).filter(language => status[language] === 'check') });
     }
     const from = kept.indexOf(rule.id);
     const to = keptInDraft.indexOf(rule.id);
@@ -114,7 +101,7 @@ export function compareRules(published: readonly RealmRule[], draft: readonly Re
 }
 
 export type RuleProblem =
-  | { index: number; field: 'title' | 'body'; language: RuleLanguage; problem: 'missing' | 'too-long' }
+  | { index: number; field: 'title' | 'body'; language: RuleLanguage; problem: 'missing' | 'too-long' | 'invalid' }
   | { index: number; field: 'id'; problem: 'duplicate' | 'invalid' };
 
 /** Why Main would refuse the draft (`realmSettings` and `saveRealmSettings`), checked before sending. */
@@ -126,9 +113,20 @@ export function ruleProblems(draft: readonly RealmRule[]): RuleProblem[] {
     else if (seen.has(rule.id)) problems.push({ index, field: 'id', problem: 'duplicate' });
     seen.add(rule.id);
     for (const field of ['title', 'body'] as const) {
-      for (const language of ruleLanguages) {
-        const value = rule[field][language];
-        if (!value.trim()) problems.push({ index, field, language, problem: 'missing' });
+      const text = rule[field];
+      const entries = Object.entries(text.labels);
+      const canonical = (language: string) => {
+        try { return /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(language)
+          && Intl.getCanonicalLocales(language)[0] === language; } catch { return false; }
+      };
+      if (!canonical(text.original) || entries.length > 20) {
+        problems.push({ index, field, language: text.original, problem: 'invalid' });
+      }
+      if (!(text.original in text.labels)) problems.push({ index, field, language: text.original, problem: 'missing' });
+      for (const [language, value] of entries) {
+        if (!canonical(language) || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value)) {
+          problems.push({ index, field, language, problem: 'invalid' });
+        } else if (!value.trim()) problems.push({ index, field, language, problem: 'missing' });
         else if (value.length > RULE_LIMITS[field]) problems.push({ index, field, language, problem: 'too-long' });
       }
     }
@@ -136,7 +134,7 @@ export function ruleProblems(draft: readonly RealmRule[]): RuleProblem[] {
   return problems;
 }
 
-/** A stable rule identity from its English title ("No spoilers!" → "no-spoilers"), unique in the draft. */
+/** A stable rule identity from its original title ("No spoilers!" → "no-spoilers"), unique in the draft. */
 export function ruleIdFrom(title: string, taken: ReadonlySet<string>): string {
   const base = title.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '').slice(0, RULE_LIMITS.id - 4).replace(/-+$/, '') || 'rule';
@@ -144,8 +142,24 @@ export function ruleIdFrom(title: string, taken: ReadonlySet<string>): string {
   for (let suffix = 2; ; suffix++) if (!taken.has(`${base}-${suffix}`)) return `${base}-${suffix}`;
 }
 
-export const emptyRule = (id: string): RealmRule => ({ id, title: { en: '', 'zh-CN': '' },
-  body: { en: '', 'zh-CN': '' }, governanceRule: null });
+/** A simple authoring surface records unknown language until the author declares one. */
+export const ruleFromText = (id: string, title: string, body: string, language = 'und'): RealmRule => ({ id,
+  title: { original: language, labels: { [language]: title } },
+  body: { original: language, labels: { [language]: body } }, governanceRule: null });
+export const emptyRule = (id: string): RealmRule => ruleFromText(id, '', '');
+
+/** Previously saved local drafts use the same v1 compatibility rule as Main reads. */
+export function restoredRule(rule: RealmRule): RealmRule {
+  const restoredText = (field: RuleText): RuleText => {
+    if (field && typeof field.original === 'string' && field.labels && typeof field.labels === 'object'
+      && Object.values(field.labels).every(value => typeof value === 'string')) return field;
+    const legacy = field as unknown as { en?: unknown; 'zh-CN'?: unknown };
+    if (typeof legacy?.en !== 'string' || typeof legacy['zh-CN'] !== 'string') throw new Error('Invalid saved rule');
+    return legacy.en === legacy['zh-CN'] ? { original: 'und', labels: { und: legacy.en } }
+      : { original: 'en', labels: { en: legacy.en, 'zh-Hans': legacy['zh-CN'] } };
+  };
+  return { ...rule, title: restoredText(rule.title), body: restoredText(rule.body) };
+}
 
 /** The revision publishing would create, when the current one is known. */
 export const nextRevision = (meaning: RuleMeaning) => meaning.revision === null ? '1'

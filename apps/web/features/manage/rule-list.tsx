@@ -7,8 +7,12 @@ import type { ManageMessages } from './messages.ts';
 import { type RuleLanguage, type RuleMeaning, shownRule } from './rules.ts';
 import type { RealmRule } from './types.ts';
 
-export function ruleLanguageName(language: RuleLanguage, t: Pick<ManageMessages, 'languageEnglish' | 'languageChinese'>) {
-  return language === 'en' ? t.languageEnglish : t.languageChinese;
+export function ruleLanguageName(language: RuleLanguage, t: Pick<ManageMessages, 'languageEnglish' | 'languageChinese' | 'languageUnknown'>, locale: UiLocale = 'en') {
+  if (language === 'und') return t.languageUnknown;
+  if (language === 'en') return t.languageEnglish;
+  if (language === 'zh-Hans') return t.languageChinese;
+  try { return new Intl.DisplayNames([locale], { type: 'language' }).of(language) ?? language; }
+  catch { return language; }
 }
 
 /** The published revision the rules below belong to, whatever language they are read in. */
@@ -39,7 +43,7 @@ export function RuleList({ rules, locale, messages, className }: {
             leading-relaxed">{shown.body.text}</p>
           {shown.title.fallback ? <p className="flex items-center gap-1.5 text-muted-foreground text-xs">
             <LanguagesIcon aria-hidden="true" className="size-3.5" />
-            {t.shownInFallback({ requested: localeNames[locale], language: ruleLanguageName(shown.title.fallback, t) })}</p>
+            {t.shownInFallback({ requested: localeNames[locale], language: ruleLanguageName(shown.title.fallback, t, locale) })}</p>
             : null}
         </div>
       </li>;

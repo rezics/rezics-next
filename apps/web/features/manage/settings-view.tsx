@@ -17,7 +17,7 @@ import { newKey } from './commands.ts';
 import type { ManageMessages } from './messages.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
 import { RevisionBadge, RuleList, ruleLanguageName } from './rule-list.tsx';
-import { compareRules, nextRevision, type RuleChange, ruleProblems, type RuleProblem } from './rules.ts';
+import { compareRules, nextRevision, type RuleChange, ruleProblems, type RuleProblem, restoredRule, shownRule } from './rules.ts';
 import { draftsOf, type RuleDraft, RulesEditor } from './rules-editor.tsx';
 import type { RealmRule, SettingsView as Settings, WhoMaySubmit } from './types.ts';
 
@@ -28,7 +28,7 @@ const storageKey = (realm: string) => `rezics:manage:rules-draft:${realm}`;
 interface StoredDraft { base: string | null; drafts: RuleDraft[]; whoMaySubmit: WhoMaySubmit }
 
 /**
- * Realm settings and its rules. Rules are edited in both languages, compared
+ * Realm settings and its rules. Rules keep their recorded languages, compared
  * with the published revision, then published as the next revision; a
  * publication by someone else in the meantime keeps this draft for review.
  */
@@ -52,7 +52,8 @@ export function SettingsView({ realm, actingSubject, initial, locale, messages, 
     try {
       const stored = JSON.parse(localStorage.getItem(storageKey(realm)) ?? 'null') as StoredDraft | null;
       if (!stored) return;
-      setDrafts(stored.drafts);
+      const restored = stored.drafts.map(draft => ({ ...draft, rule: restoredRule(draft.rule) }));
+      setDrafts(restored);
       setWho(stored.whoMaySubmit);
       setEditing(true);
       if (stored.base !== initial.ruleBasis.revision) setConflict(initial);
@@ -144,13 +145,12 @@ export function SettingsView({ realm, actingSubject, initial, locale, messages, 
 }
 
 function changeText(change: RuleChange, t: ReturnType<typeof materializeData<ManageMessages>>, locale: UiLocale) {
-  const title = (change.rule.title[locale === 'zh-Hans' || locale === 'zh-Hant' ? 'zh-CN' : 'en'] || change.rule.title.en)
-    || change.rule.id;
+  const title = shownRule(change.rule, locale).title.text || change.rule.id;
   switch (change.kind) {
     case 'added': return t.changeAdded({ title });
     case 'removed': return t.changeRemoved({ title });
     case 'moved': return t.changeMoved({ title, position: String(change.to + 1) });
-    case 'edited': return t.changeEdited({ title, languages: change.languages.map(language => ruleLanguageName(language, t))
+    case 'edited': return t.changeEdited({ title, languages: change.languages.map(language => ruleLanguageName(language, t, locale))
       .join(', ') });
   }
 }
@@ -210,8 +210,8 @@ function PublishDialog({ open, current, changes, whoMaySubmit, whoChanged, rules
       {whoChanged ? <li>{t.changeSubmissions({ choice: t[choice[1]] })}</li> : null}
       {changes.map(change => <li key={`${change.kind}-${change.rule.id}`}>{changeText(change, t, locale)}
         {change.kind === 'edited' && change.check.length ? <span className="block text-warning-foreground text-xs">
-          {t.checkHelp({ changed: change.languages.map(language => ruleLanguageName(language, t)).join(', '),
-            other: change.check.map(language => ruleLanguageName(language, t)).join(', ') })}</span> : null}</li>)}
+          {t.checkHelp({ changed: change.languages.map(language => ruleLanguageName(language, t, locale)).join(', '),
+            other: change.check.map(language => ruleLanguageName(language, t, locale)).join(', ') })}</span> : null}</li>)}
     </ul> : <p className="text-sm">{t.noChanges}</p>}
     <p className="rounded-xl bg-muted/40 p-3 text-muted-foreground text-sm">
       {t.publishNote({ revision: nextRevision(current.ruleBasis) })}</p>

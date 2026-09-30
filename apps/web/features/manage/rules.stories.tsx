@@ -72,15 +72,15 @@ export const JapaneseReaderFallsBack: Story = {
   },
 };
 
-/** Traditional Chinese readers get the Simplified form, named as such, rather than English. */
-export const TraditionalReaderSeesSimplified: Story = {
+/** An unavailable script falls back to the recorded original. */
+export const TraditionalReaderSeesOriginal: Story = {
   args: { locale: 'zh-Hant' },
   globals: { locale: 'zh-Hant' },
   parameters: { route: { pathname: `/zh-Hant/manage/r/${realm}/settings` } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(firstRule(canvas)).toHaveAttribute('lang', 'zh-Hans');
-    await expect(canvas.getAllByText('No 繁體中文 version · shown in Simplified Chinese')).toHaveLength(rules.length);
+    await expect(firstRule(canvas)).toHaveAttribute('lang', 'en');
+    await expect(canvas.getAllByText('No 繁體中文 version · shown in English')).toHaveLength(rules.length);
   },
 };
 
@@ -106,34 +106,41 @@ export const EditOneLanguage: Story = {
     await expect(await canvas.findByText('Revision 4 is published.')).toBeVisible();
     await expect(record.settings).toEqual([expect.objectContaining({ expectedRulesRevision: '3', expectedGeneration: '12',
       reason: 'Cover lines count as titles.', settings: expect.objectContaining({ whoMaySubmit: 'members',
-        rules: [expect.objectContaining({ id: 'no-spoilers', title: { en: 'No spoilers in titles', 'zh-CN': '标题和封面语中不要剧透' } }),
+        rules: [expect.objectContaining({ id: 'no-spoilers', title: { original: 'en', labels: { en: 'No spoilers in titles', 'zh-Hans': '标题和封面语中不要剧透' } } }),
           rules[1], rules[2]] }) })]);
   },
 };
 
-/** Main needs both languages: a rule written only in English is marked, not sent. */
-export const MissingTranslationBlocksPublishing: Story = {
+/** New text has unknown language; it needs a title and body, not invented translations. */
+export const NewRuleWithoutInventedTranslations: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Edit rules' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Add a rule' }));
     const added = canvas.getByRole('heading', { name: 'Rule 4' }).closest('li')!;
-    await userEvent.type(within(added).getByRole('textbox', { name: 'Title in English' }), 'Credit the translator');
-    await userEvent.type(within(added).getByRole('textbox', { name: 'Explanation in English' }),
-      'Name who translated a text when it is known.');
-    await expect(within(added).getByText('Missing')).toBeInTheDocument();
+    const title = within(added).getByRole('textbox', { name: 'Title in Unknown language' });
+    await expect(title).toHaveAttribute('lang', 'und');
+    await userEvent.type(title, 'Credit the translator');
     await userEvent.click(canvas.getByRole('button', { name: 'Review changes' }));
-    await expect(canvas.getByRole('alert')).toHaveTextContent('Fix the marked rules before reviewing.');
-    await expect(within(added).getByText('Write the title in Simplified Chinese.')).toBeInTheDocument();
+    await expect(within(added).getByText('Write the explanation in Unknown language.')).toBeInTheDocument();
     await expect(body().queryByRole('dialog')).toBeNull();
-    await expect(record.settings).toEqual([]);
+    await userEvent.type(within(added).getByRole('textbox', { name: 'Explanation in Unknown language' }),
+      'Name who translated a text when it is known.');
+    await userEvent.click(canvas.getByRole('button', { name: 'Review changes' }));
+    const dialog = within(await body().findByRole('dialog', { name: 'Review before publishing' }));
+    await userEvent.type(dialog.getByRole('textbox', { name: 'What changed and why' }), 'Credit translators.');
+    await userEvent.click(dialog.getByRole('button', { name: 'Publish' }));
+    await expect(record.settings[0]).toMatchObject({ settings: { rules: [...rules,
+      { id: 'credit-the-translator', governanceRule: null,
+        title: { original: 'und', labels: { und: 'Credit the translator' } },
+        body: { original: 'und', labels: { und: 'Name who translated a text when it is known.' } } }] } });
   },
 };
 
 const theirs = { ...settings, generation: '14', ruleBasis: { ...settings.ruleBasis, revision: '4', digest: 'd'.repeat(64) },
   settings: { ...settings.settings, rules: [...rules.slice(0, 2), { ...rules[2]!,
-    body: { en: 'Criticise readings and translations, never the people who made them.',
-      'zh-CN': '批评解读和译文，不要针对做出它们的人。' } }] } };
+    body: { original: 'en', labels: { en: 'Criticise readings and translations, never the people who made them.',
+      'zh-Hans': '批评解读和译文，不要针对做出它们的人。' } } }] } };
 
 /** Someone published while this draft was open: the draft is kept and compared, never overwritten. */
 export const ConcurrentPublicationKeepsDraft: Story = {
@@ -153,7 +160,7 @@ export const ConcurrentPublicationKeepsDraft: Story = {
     await expect(canvas.getByRole('region', { name: 'Published now' })).toHaveTextContent('never the people who made them');
     await expect(canvas.getByRole('region', { name: 'Your draft' })).toHaveTextContent('Changes “Name the edition” in English');
     await expect(canvas.getAllByRole('textbox', { name: 'Explanation in English' })[1]).toHaveValue(
-      `${rules[1]!.body.en} Include the publisher.`);
+      `${rules[1]!.body.labels.en} Include the publisher.`);
     await userEvent.click(canvas.getByRole('button', { name: 'Publish my draft on top' }));
     const again = within(await body().findByRole('dialog', { name: 'Review before publishing' }, { timeout: 5000 }));
     await expect(again.getByText(/Publishing creates revision 5/)).toBeInTheDocument();
@@ -179,9 +186,14 @@ export const DraftSurvivesReload: Story = {
 /** Text in a right-to-left script keeps its own direction. */
 export const RightToLeftText: Story = {
   args: { initial: { ...settings, settings: { ...settings.settings, rules: [{ id: 'arabic-sources', governanceRule: null,
-    title: { en: 'اذكر المصدر', 'zh-CN': '注明来源' }, body: { en: 'اذكر الترجمة والطبعة.', 'zh-CN': '注明译本和版本。' } }] } } },
+    title: { original: 'ar', labels: { ar: 'اذكر المصدر', 'zh-Hans': '注明来源' } },
+    body: { original: 'ar', labels: { ar: 'اذكر الترجمة والطبعة.', 'zh-Hans': '注明译本和版本。' } } }] } } },
   async play({ canvasElement }) {
-    await expect(firstRule(within(canvasElement))).toHaveAttribute('dir', 'auto');
+    const canvas = within(canvasElement);
+    await expect(firstRule(canvas)).toHaveAttribute('lang', 'ar');
+    await expect(firstRule(canvas)).toHaveAttribute('dir', 'auto');
+    await userEvent.click(canvas.getByRole('button', { name: 'Edit rules' }));
+    await expect(canvas.getByRole('textbox', { name: 'Title in Arabic' })).toHaveAttribute('lang', 'ar');
   },
 };
 

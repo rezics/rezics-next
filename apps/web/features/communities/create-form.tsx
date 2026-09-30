@@ -14,6 +14,7 @@ import { browserMainApi } from '../api/browser.ts';
 import Link from '../shell/localized-link.tsx';
 import { uploadCommunityImage } from './images.ts';
 import { communityNames, type NameTranslation } from './name-fields.ts';
+import { ruleFromText } from '../manage/rules.ts';
 import { communityText as words } from './messages.ts';
 import { TopicPicker, type TopicChoice } from './topics.tsx';
 import { CommunityUploadField } from './upload-field.tsx';
@@ -73,9 +74,8 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
       const enrolled = await main.v1.realms({ realm: id }).management.post({ actingSubject },
         { headers: { 'idempotency-key': `${operation}:management` } });
       if (!enrolled.data) throw new Error('management-enrollment-failed');
-      const publishedRules = rules.map((rule, index) => ({ id: `rule-${index + 1}`,
-        title: { en: rule.title.trim(), 'zh-CN': rule.title.trim() },
-        body: { en: rule.body.trim(), 'zh-CN': rule.body.trim() }, governanceRule: null }));
+      const publishedRules = rules.map((rule, index) =>
+        ruleFromText(`rule-${index + 1}`, rule.title.trim(), rule.body.trim()));
       if (!configured) {
         const current = await main.v1.realms({ realm: id }).settings.get({ query: { actingSubject } });
         if (!current.data) throw new Error('settings-read-failed');
@@ -106,10 +106,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
       const publication = { ...names,
         iconSelection: selectedIcon, bannerSelection: selectedBanner,
         replyPolicy: visibility === 'public' ? 'members-direct' as const : 'moderated' as const,
-        rules: rules.map((rule, index) => ({ id: `rule-${index + 1}`,
-          title: { original: names.name.original, labels: { [names.name.original]: rule.title.trim() } },
-          body: { original: names.name.original, labels: { [names.name.original]: rule.body.trim() } },
-          governanceRule: null })),
+        rules: publishedRules,
         count: { kind: 'exact' as const, value: null }, moderators: [] };
       const saved = await main.v1.realms({ realm: id }).profile.put({ profile: 'realm-public-profile-v2',
         expectedHead: null, actingSubject, publication },

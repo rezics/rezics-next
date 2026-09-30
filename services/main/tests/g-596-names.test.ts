@@ -86,19 +86,23 @@ for (const kind of ['zone', 'collection', 'definition'] as const) {
       const replay = await createAdmittedOwner(db.env, db.account, db.access, request, input);
       expect(replay).toEqual({ ...created, replayed: true });
       expect(db.writes()).toBe(1);
-      expect(db.plain()).toEqual({ value: name, 'xml:lang': recordedLanguage });
-      expect(selectDisplayName(new Map([[db.plain()!['xml:lang'], db.plain()!.value]]), ['en']))
-        .toMatchObject({ value: name, language: recordedLanguage, direction: language === 'ar' ? 'rtl' : 'ltr' });
-      if (kind === 'collection') {
-        const current = await readCollectionName(db.env, owner);
-        expect(selectDisplayName(current.name, ['en']))
+      if (kind === 'zone') expect(db.plain()).toBeUndefined();
+      else {
+        expect(db.plain()).toEqual({ value: name, 'xml:lang': recordedLanguage });
+        expect(selectDisplayName(new Map([[db.plain()!['xml:lang'], db.plain()!.value]]), ['en']))
           .toMatchObject({ value: name, language: recordedLanguage, direction: language === 'ar' ? 'rtl' : 'ltr' });
+        if (kind === 'collection') {
+          const current = await readCollectionName(db.env, owner);
+          expect(selectDisplayName(current.name, ['en']))
+            .toMatchObject({ value: name, language: recordedLanguage, direction: language === 'ar' ? 'rtl' : 'ltr' });
+        }
       }
       const files = readdirSync(directory);
       const payloads = files.map(file => JSON.parse(readFileSync(`${directory}/${file}`, 'utf8')) as {
         format: string; state?: { name: string; language: string } });
       expect(payloads.find(payload => payload.format === 'rezics-component-v1')?.state)
         .toMatchObject({ name, language: recordedLanguage });
+      if (kind === 'zone') expect(db.envelopes[0]!.update).not.toContain('<https://schema.org/name>');
       expect(db.envelopes[0]!.validations.length).toBeLessThanOrEqual(2);
       await expect(createAdmittedOwner(db.env, db.account, db.access, request,
         { ...input, language: 'ja', requestDigest: 'b'.repeat(64) })).rejects.toBeInstanceOf(IdempotencyConflict);

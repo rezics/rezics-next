@@ -289,21 +289,21 @@ export const outgoingInvitations: InvitationPage = { items: [{ id: id(3020), rea
   policyRevision: '1', termsRevision: 'terms-1', membershipGeneration: '2' }], nextCursor: null };
 
 export const rules: RealmRule[] = [
-  { id: 'no-spoilers', governanceRule: null, title: { en: 'No spoilers in titles', 'zh-CN': '标题中不要剧透' },
-    body: { en: 'Put plot details in the text behind a spoiler mark, never in a title or cover line.',
-      'zh-CN': '情节细节请放在正文中并加上剧透标记，不要写在标题或封面语里。' } },
-  { id: 'credit-editions', governanceRule: null, title: { en: 'Name the edition', 'zh-CN': '注明版本' },
-    body: { en: 'Say which translation or edition a text comes from, with its year when known.',
-      'zh-CN': '说明文本来自哪个译本或版本，已知时注明年份。' } },
-  { id: 'be-kind', governanceRule: null, title: { en: 'Criticise works, not people', 'zh-CN': '批评作品，不针对人' },
-    body: { en: 'Disagree with readings and translations as sharply as you like; leave the people out of it.',
-      'zh-CN': '对解读和译文可以尖锐地表达不同意见，但不要针对人。' } },
+  { id: 'no-spoilers', governanceRule: null, title: { original: 'en', labels: { en: 'No spoilers in titles', 'zh-Hans': '标题中不要剧透' } },
+    body: { original: 'en', labels: { en: 'Put plot details in the text behind a spoiler mark, never in a title or cover line.',
+      'zh-Hans': '情节细节请放在正文中并加上剧透标记，不要写在标题或封面语里。' } } },
+  { id: 'credit-editions', governanceRule: null, title: { original: 'en', labels: { en: 'Name the edition', 'zh-Hans': '注明版本' } },
+    body: { original: 'en', labels: { en: 'Say which translation or edition a text comes from, with its year when known.',
+      'zh-Hans': '说明文本来自哪个译本或版本，已知时注明年份。' } } },
+  { id: 'be-kind', governanceRule: null, title: { original: 'en', labels: { en: 'Criticise works, not people', 'zh-Hans': '批评作品，不针对人' } },
+    body: { original: 'en', labels: { en: 'Disagree with readings and translations as sharply as you like; leave the people out of it.',
+      'zh-Hans': '对解读和译文可以尖锐地表达不同意见，但不要针对人。' } } },
 ];
 /** The rules as the Realm's public page reads them, in one language; moderators cite them by number. */
 export function publishedRules(language: 'en' | 'zh-CN' = 'en'): PublishedRule[] {
   const tag = language === 'en' ? 'en' : 'zh-Hans';
-  return rules.map(rule => ({ id: rule.id, governanceRule: null, title: name(rule.title[language], tag),
-    body: name(rule.body[language], tag) }));
+  return rules.map(rule => ({ id: rule.id, governanceRule: null, title: name(rule.title.labels[tag]!, tag),
+    body: name(rule.body.labels[tag]!, tag) }));
 }
 
 export const settings: SettingsView = { generation: '12',

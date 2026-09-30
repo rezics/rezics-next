@@ -348,12 +348,13 @@ export const messages = {
   submitMembers: 'Realm members', submitMembersHelp: 'Anyone who joined the Realm and has submission access.',
   submitClosed: 'No one', submitClosedHelp: 'Submissions are closed. Waiting items stay in the queue.',
   rulesTitle: 'Rules',
-  rulesHelp: 'Rules are written in English and Chinese. Moderators cite the published revision; readers see their own language.',
+  rulesHelp: 'Moderators cite the published revision. Each rule keeps its original language and any recorded translations.',
   rulesRevision: insert('Revision {{revision}}', { revision: String }),
   rulesUnpublished: 'Not published yet',
   noRulesTitle: 'No rules yet', noRulesHelp: 'Rules tell members what belongs here. Moderators cite them in decisions.',
   shownInFallback: insert('No {{requested}} version · shown in {{language}}', { requested: String, language: String }),
   languageEnglish: 'English', languageChinese: 'Simplified Chinese',
+  languageUnknown: 'Unknown language',
   editRules: 'Edit rules', addRule: 'Add a rule',
   ruleNumber: insert('Rule {{number}}', { number: String }),
   removeRule: 'Remove rule', moveUp: 'Move up', moveDown: 'Move down',
@@ -363,7 +364,7 @@ export const messages = {
   checkHelp: insert('Only {{changed}} changed. Check that {{other}} still says the same.', { changed: String, other: String }),
   problemMissing: insert('Write the {{field}} in {{language}}.', { field: String, language: String }),
   problemTooLong: insert('The {{field}} in {{language}} is too long.', { field: String, language: String }),
-  problemId: 'Two rules have the same name. Change one of the English titles.',
+  problemId: 'This draft contains a duplicate or invalid rule. Remove it and add it again.',
   fixProblems: 'Fix the marked rules before reviewing.',
   fieldTitle: 'title', fieldBody: 'explanation',
   rulesLimit: insert('A Realm can have up to {{count}} rules.', { count: String }),
@@ -386,7 +387,7 @@ export const messages = {
   theirVersion: 'Published now', yourDraft: 'Your draft',
   publishOnTop: 'Publish my draft on top', discardDraft: 'Discard my draft',
   settingsDenied: 'You can’t publish these changes. Changing rules needs both Change settings and Publish rules.',
-  settingsInvalid: 'Main refused these rules. Check each rule has both languages and try again.',
+  settingsInvalid: 'These rules could not be published. Check the text and recorded languages, then try again.',
 };
 
 export type ManageMessages = typeof messages;
