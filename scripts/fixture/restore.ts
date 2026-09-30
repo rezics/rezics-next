@@ -10,14 +10,16 @@ import { type FixtureManifest, type RestoreCompatibility, migrationInventory,
   restoreCompatibility } from './manifest.ts';
 import { migrateFixtureOwners } from './migrate.ts';
 import { fixtureOwners } from './owners/index.ts';
+import type { FixtureOwner } from './owners/types.ts';
 import { assertGraphReady, checkSamples } from './smoke.ts';
 import { VOLUME_KINDS, copyVolume, currentEngines, dockerEnvironment, fixtureDirectory, fixtureProject, fixtureRoot,
   freshPorts, projectRunning, root, volumeExists } from './stack.ts';
 
 export const RESTORE_DEADLINE_MS = 600_000;
 
-function currentInputs(docker: NodeJS.ProcessEnv): Parameters<typeof restoreCompatibility>[1] {
-  return { owners: Object.fromEntries(fixtureOwners.map(owner => [owner.name,
+function currentInputs(docker: NodeJS.ProcessEnv,
+  owners: readonly FixtureOwner[] = fixtureOwners): Parameters<typeof restoreCompatibility>[1] {
+  return { owners: Object.fromEntries(owners.map(owner => [owner.name,
     { generator: owner.generator, inputs: owner.compatibilityInputs(root) }])),
   migrations: migrationInventory(root), engines: currentEngines(docker) };
 }
@@ -46,7 +48,8 @@ export interface FixtureRestoreEvidence {
  * 600-second deadline: copy volumes, start services, apply only newer migrations,
  * check owner readiness and read the manifest's samples. No corpus rescan.
  */
-export async function restoreFixture(id: string, target: string): Promise<FixtureRestoreEvidence> {
+export async function restoreFixture(id: string, target: string,
+  owners: readonly FixtureOwner[] = fixtureOwners): Promise<FixtureRestoreEvidence> {
   const started = Date.now();
   const remaining = () => {
     const left = RESTORE_DEADLINE_MS - (Date.now() - started);
@@ -73,7 +76,7 @@ export async function restoreFixture(id: string, target: string): Promise<Fixtur
   let pools: { access: Pool; content: Pool } | undefined;
   try {
     const compatibility = await phase('compatibility', () => restoreCompatibility(manifest,
-      currentInputs(docker)));
+      currentInputs(docker, owners)));
     evidence.compatibility = compatibility;
     if (!compatibility.compatible) {
       throw new Error(`Fixture ${id} is stale; rebuild it: ${compatibility.reasons.join('; ')}`);

@@ -50,7 +50,7 @@ export async function checkSamples(apps: Record<string, string>, manifest: Fixtu
       async id => id === sample.work);
     same(`sample ${sample.index} MainVersion revision`, main, { revision: sample.mainRevision,
       mainVersion: sample.mainVersion, work: sample.work, operation: manifest.importOperation,
-      hostingPolicy: 'metadata-only', defaultSelection: null, sourcePosition: position });
+      hostingPolicy: 'metadata-only', defaultSelection: null, defaultSelections: {}, sourcePosition: position });
     const grant = await pools.access.query(`SELECT 1 FROM access.permission_grant
       WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'work.read' AND active
         AND valid_until > clock_timestamp()`, [sample.agent, `work:read:${sample.work}`]);

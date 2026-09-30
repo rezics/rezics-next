@@ -8,7 +8,7 @@ import { type Corpus, type FixtureProfile, fixtureCorpus, stable } from './corpu
 import { type FixtureManifest, type FixtureManifestCore, manifestCore, manifestIdentity } from './manifest.ts';
 import { migrateFixtureOwners } from './migrate.ts';
 import { fixtureOwners } from './owners/index.ts';
-import type { LoadTarget } from './owners/types.ts';
+import type { FixtureOwner, LoadTarget } from './owners/types.ts';
 import { assertGraphReady, checkSamples } from './smoke.ts';
 import { VOLUME_KINDS, composeArgs, currentEngines, dockerEnvironment, fixtureDirectory, fixtureProject,
   freshPorts, removeVolumes, root, run, stream, volumeBytes } from './stack.ts';
@@ -31,10 +31,16 @@ export function readManifest(id: string): FixtureManifest | undefined {
  * every service and keep the stopped named volumes as the fixture backup.
  */
 export async function buildFixture(profile: FixtureProfile, seed?: string): Promise<FixtureManifest> {
+  return buildFixtureCorpus(fixtureCorpus(profile, seed));
+}
+
+/** Acceptance fixtures can exceed a former product bound without changing the
+ * shared background profile or rebuilding its retained backup. */
+export async function buildFixtureCorpus(corpus: Corpus,
+  owners: readonly FixtureOwner[] = fixtureOwners): Promise<FixtureManifest> {
   const docker = dockerEnvironment();
   const planned = performance.now();
-  const corpus = fixtureCorpus(profile, seed);
-  const core = manifestCore(root, corpus, fixtureOwners, currentEngines(docker));
+  const core = manifestCore(root, corpus, owners, currentEngines(docker));
   const planMs = Math.round(performance.now() - planned);
   const { id } = manifestIdentity(core);
   return withBuildLock(id, async () => {
@@ -43,7 +49,7 @@ export async function buildFixture(profile: FixtureProfile, seed?: string): Prom
       console.log(`Fixture ${id} is already built; restore it with task fixture:restore -- --fixture ${id}`);
       return existing;
     }
-    return buildLocked(docker, corpus, core, planMs);
+    return buildLocked(docker, corpus, core, planMs, owners);
   });
 }
 
@@ -70,7 +76,7 @@ async function withBuildLock<T>(id: string, work: () => Promise<T>): Promise<T> 
 }
 
 async function buildLocked(docker: NodeJS.ProcessEnv, corpus: Corpus,
-  core: FixtureManifestCore, planMs: number): Promise<FixtureManifest> {
+  core: FixtureManifestCore, planMs: number, owners: readonly FixtureOwner[]): Promise<FixtureManifest> {
   // Planning summarizes every owner's records; lock waiting is excluded.
   const started = Date.now() - planMs;
   const { digest, id } = manifestIdentity(core);
@@ -126,17 +132,17 @@ async function buildLocked(docker: NodeJS.ProcessEnv, corpus: Corpus,
       await initializeFreshGraph(fuseki, corpus.lineage);
       compose(['stop', 'fuseki']);
     });
-    for (const owner of fixtureOwners.filter(item => item.phase === 'offline-graph')) {
+    for (const owner of owners.filter(item => item.phase === 'offline-graph')) {
       loads[owner.name] = await phase(`load:${owner.name}`, () => owner.load(corpus, target));
     }
     await phase('restart-graph', async () => { compose(['up', '-d', '--wait', 'fuseki']); });
     await phase('load:online', async () => {
-      const online = fixtureOwners.filter(item => item.phase === 'online');
+      const online = owners.filter(item => item.phase === 'online');
       const results = await Promise.all(online.map(owner => owner.load(corpus, target)));
       online.forEach((owner, index) => { loads[owner.name] = results[index]; });
     });
     const index = await phase('verify', async () => {
-      for (const owner of fixtureOwners) {
+      for (const owner of owners) {
         const actual = await owner.verify(corpus, target);
         const planned = core.owners[owner.name]!.counts;
         if (stable(actual) !== stable(planned)) {

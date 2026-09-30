@@ -24,7 +24,7 @@ function fixture(count = 2005) {
         expect(args).not.toBeNull();
         const size = Number(args[1]), cursor = JSON.parse(args[2]!) as string;
         const after = cursor ? JSON.parse(cursor) as { id: string } : null;
-        const offset = after ? hits.findIndex(hit => hit.key === after.id) + 1 : 0;
+        const offset = after ? hits.findIndex(hit => hit.id === after.id) + 1 : 0;
         const selected = hits.slice(offset, offset + size);
         return { results: { bindings: [{ epoch: b('epoch'), sequence: b('9'), generation: b(position.generation),
           page: b(JSON.stringify({ hits: selected, count: Math.min(count, 1000),

@@ -101,17 +101,17 @@ test('G-556: ranked catalogue HTTP pages keep identity, hydrate cards and restar
     // Two selected languages still represent one Main in a language-unfiltered
     // page. Its visibility join must not multiply the native group witness.
     await addWork(0, works[0], 'fr');
-    works.sort((a, b) => a.main.localeCompare(b.main));
     const first = await readPage();
     expect(first).toMatchObject({ profile: 'public-catalogue-ranked-v1', retrieval: 'ranked',
       count: { value: 2, precision: 'lower-bound' } });
     expect(first.population).toBeGreaterThanOrEqual(4);
     expect(first.next).toBeString();
-    expect(first.results.map(row => row.work)).toEqual(works.slice(0, 2).map(row => row.work));
     const second = await readPage(first.next!);
     expect(second.count).toEqual({ value: 4, precision: 'exact' });
     expect(second.next).toBeNull();
-    expect(second.results.map(row => row.work)).toEqual(works.slice(2).map(row => row.work));
+    const traversed = [...first.results, ...second.results].map(row => row.work);
+    expect([...traversed].sort()).toEqual(works.map(row => row.work).sort());
+    expect(new Set(traversed).size).toBe(4);
     for (const row of [...first.results, ...second.results]) {
       expect(row.title.value).toBe(works.find(work => work.work === row.work)!.title);
       expect(Number.isFinite(row.score)).toBe(true);

@@ -342,7 +342,8 @@ final class CommandService extends ActionService {
                             if (plan.bootstrap() || receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:"))
                                 SearchDeltaJournal.qualify(dataset);
                             else if (touchesPublicIndex && plan.rebuild()) SearchDeltaJournal.invalidate(dataset);
-                            else SearchDeltaJournal.qualifiedProof(dataset, -1, publicSearchWriteEpoch.get() + 1);
+                            else if (!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(dataset, -1,
+                                publicSearchWriteEpoch.get() + 1).get("available"))) SearchDeltaJournal.invalidate(dataset);
                         } catch (RuntimeException unavailable) {
                             // Close reads without changing an already committed result.
                             SearchDeltaJournal.invalidate(dataset);

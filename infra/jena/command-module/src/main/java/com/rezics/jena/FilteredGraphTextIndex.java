@@ -4,8 +4,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Comparator;
-import java.util.PriorityQueue;
 import org.apache.jena.datatypes.TypeMapper;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
@@ -28,10 +26,8 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.SimpleCollector;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorable;
-import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TotalHits;
 import org.apache.jena.atlas.json.JsonObject;
 import org.apache.jena.atlas.json.JsonArray;
 
@@ -50,16 +46,18 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
     public record RankAfter(String id, float score, long commit) {}
     public record RankPage(List<RankHit> hits, long count, String precision, long commit, boolean more) {}
-    private static final Comparator<RankHit> RANK = Comparator.comparingDouble(RankHit::score).reversed()
-        .thenComparing(RankHit::key).thenComparing(RankHit::id);
     public record RankScope(String realm, String language, String author) {}
+    static final class RankRestart extends TextIndexException {
+        RankRestart() { super("ranked continuation requires restart"); }
+    }
 
-    /** Page-sized top-k storage, score descending and exact IRI tie-break. This
-     * collector never materializes or sorts the whole candidate population.
-     * Jena's index has no IRI doc values; a bounded heap retains its existing
-     * writer/analyzers without requiring an index-format migration. A 1s native
-     * deadline bounds the extra stored-field reads. The caller debits the JSON
-     * bytes and every refill against the existing whole-request budget. */
+    /** Lucene top-k/searchAfter scores only: no stored fields or RDF in the
+     * collector. The stable unit ID resolves the cursor's doc in its pinned
+     * commit; ties follow Lucene doc order until that commit changes. Admission
+     * and canonical grouping examine only the returned page. A rejected hit
+     * retains its cursor identity with a null key, so bounded refills advance
+     * even through an entirely filtered page. Counts here are raw documents;
+     * the public reader counts only its disclosed, grouped results. */
     public RankPage ranked(Node property, String phrase, int size, RankAfter after) {
         return ranked(property, phrase, size, after, null, null);
     }
@@ -73,7 +71,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             long commit = reader.getIndexCommit().getGeneration();
             if (after != null && (after.commit() != commit || !Float.isFinite(after.score())
                 || after.id() == null || after.id().length() > 2048))
-                throw new TextIndexException("ranked continuation requires restart");
+                throw new RankRestart();
             QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
             // The API supplies a literal phrase, never Lucene operators.
             Query query = new BooleanQuery.Builder()
@@ -81,45 +79,52 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.PUBLIC_SEARCH)),
                     BooleanClause.Occur.FILTER).build();
             IndexSearcher searcher = new IndexSearcher(reader);
-            Map<String, RankUnit> units = scope == null ? null : SearchDeltaJournal.rankUnits(data, lucene, commit);
             long deadline = System.nanoTime() + 1_000_000_000L;
             searcher.setTimeout(() -> System.nanoTime() >= deadline);
-            PriorityQueue<RankHit> top = new PriorityQueue<>(size + 1, RANK.reversed());
-            long[] count = { 0 };
-            searcher.search(query, new SimpleCollector() {
-                private LeafReaderContext leaf;
-                private Scorable scorer;
-                @Override protected void doSetNextReader(LeafReaderContext context) { leaf = context; }
-                @Override public void setScorer(Scorable value) { scorer = value; }
-                @Override public ScoreMode scoreMode() { return ScoreMode.COMPLETE; }
-                @Override public void collect(int doc) throws IOException {
-                    if (System.nanoTime() >= deadline) throw new TextIndexException("ranked query deadline exceeded");
-                    float score = scorer.score();
-                    String entityField = lucene.getDocDef().getEntityField();
-                    String id = leaf.reader().storedFields().document(doc, java.util.Set.of(entityField)).get(entityField);
-                    if (id == null || !Float.isFinite(score)) throw new TextIndexException("ranked document is incomplete");
-                    String key = scope == null ? id : admittedMain(data, id, scope, units);
-                    if (key == null) return;
-                    RankHit hit = new RankHit(id, score, key);
-                    // Only the strongest current MatchUnit represents a Main.
-                    // Its group membership is an RDF object-index lookup, not
-                    // a collected inventory of phrase candidates.
-                    if (scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
-                        id, leaf.docBase + doc, lucene.getDocDef().getEntityField(), units)) return;
-                    count[0]++;
-                    if (after != null && (score > after.score() || score == after.score()
-                        && key.compareTo(after.id()) <= 0)) return;
-                    if (top.size() < size + 1) top.add(hit);
-                    else if (RANK.compare(hit, top.peek()) < 0) { top.poll(); top.add(hit); }
-                }
-            });
+            String entityField = lucene.getDocDef().getEntityField();
+            if (scope != null && scope.realm() != null) {
+                // RDF's context object index supplies Realm units, independent
+                // of the phrase match population. Actual current adoption is
+                // still checked on each returned candidate.
+                List<org.apache.lucene.util.BytesRef> ids = new ArrayList<>();
+                var members = data.find(PUBLIC_GRAPH, Node.ANY, property("context"), uri(scope.realm()));
+                try { while (members.hasNext()) {
+                    Node unit = members.next().getSubject();
+                    if (unit.isURI()) ids.add(new org.apache.lucene.util.BytesRef(unit.getURI()));
+                } } finally { org.apache.jena.atlas.iterator.Iter.close(members); }
+                query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+                    .add(new org.apache.lucene.search.TermInSetQuery(entityField, ids), BooleanClause.Occur.FILTER).build();
+            }
+            ScoreDoc cursor = null;
+            if (after != null) {
+                Query identity = new BooleanQuery.Builder()
+                    .add(query, BooleanClause.Occur.MUST)
+                    .add(new TermQuery(new Term(entityField, after.id())), BooleanClause.Occur.FILTER)
+                    .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.PUBLIC_SEARCH)),
+                        BooleanClause.Occur.FILTER).build();
+                var resolved = searcher.search(identity, 2);
+                if (resolved.scoreDocs.length != 1) throw new RankRestart();
+                cursor = new ScoreDoc(resolved.scoreDocs[0].doc, after.score());
+            }
+            // Lucene's default hit-count threshold is 1000. It can skip
+            // noncompetitive blocks instead of exhaustively scoring/counting.
+            var top = searcher.searchAfter(cursor, query, size + 1);
+            boolean more = top.scoreDocs.length > size;
+            List<RankHit> ordered = new ArrayList<>();
+            var stored = searcher.storedFields();
+            for (int n = 0; n < Math.min(size, top.scoreDocs.length); n++) {
+                if (System.nanoTime() >= deadline) throw new TextIndexException("ranked query deadline exceeded");
+                var hit = top.scoreDocs[n];
+                String id = stored.document(hit.doc, java.util.Set.of(entityField)).get(entityField);
+                if (id == null || !Float.isFinite(hit.score)) throw new TextIndexException("ranked document is incomplete");
+                String key = scope == null ? id : admittedMain(data, id, scope);
+                if (key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
+                    id, hit.doc, entityField)) key = null;
+                ordered.add(new RankHit(id, hit.score, key));
+            }
             if (searcher.timedOut()) throw new TextIndexException("ranked query deadline exceeded");
-            List<RankHit> ordered = new ArrayList<>(top);
-            ordered.sort(RANK);
-            boolean more = ordered.size() > size;
-            if (more) ordered.removeLast();
-            return new RankPage(List.copyOf(ordered), Math.min(count[0], 1000),
-                count[0] > 1000 ? "lower-bound" : "exact", commit, more);
+            return new RankPage(List.copyOf(ordered), top.totalHits.value(),
+                top.totalHits.relation() == TotalHits.Relation.EQUAL_TO ? "exact" : "lower-bound", commit, more);
         } catch (IOException | ParseException ex) { throw new TextIndexException("ranked query failed", ex); }
     }
 
@@ -142,9 +147,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
     record RankUnit(Node main, Node selection, Node context, Node language, Node contribution, String key) {}
 
-    /** Public MatchUnit facts are captured by generation qualification and
-     * refreshed for the journal's actual changed subjects. Current selection
-     * and author admission remain live RDF lookups, even with cached facts. */
+    /** Called only for the page's candidates and their grouping witnesses. */
     static RankUnit describeUnit(org.apache.jena.sparql.core.DatasetGraph data, String id) {
         Node publicGraph = PUBLIC_GRAPH, current = CURRENT_GRAPH, unit = uri(id);
         Node main = one(data, publicGraph, unit, "mainVersion"), selection = one(data, publicGraph, unit, "selection");
@@ -156,9 +159,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
         return new RankUnit(main, selection, context, language, one(data, publicGraph, unit, "contribution"),
             result != null && result.isURI() ? result.getURI() : main.getURI());
     }
-    private static String admittedMain(org.apache.jena.sparql.core.DatasetGraph data, String id, RankScope scope,
-                                       Map<String, RankUnit> units) {
-        RankUnit facts = units == null ? describeUnit(data, id) : units.get(id);
+    private static String admittedMain(org.apache.jena.sparql.core.DatasetGraph data, String id, RankScope scope) {
+        RankUnit facts = describeUnit(data, id);
         if (facts == null) return null;
         Node main = facts.main(), selection = facts.selection(), context = facts.context(), language = facts.language();
         Node current = CURRENT_GRAPH;
@@ -187,8 +189,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
         return facts.key();
     }
     private static boolean canonicalGroupHit(org.apache.jena.sparql.core.DatasetGraph data, RankScope scope,
-        IndexSearcher searcher, Query query, String key, String candidateId, int doc, String entityField,
-        Map<String, RankUnit> units) throws IOException {
+        IndexSearcher searcher, Query query, String key, String candidateId, int doc, String entityField) throws IOException {
         List<org.apache.lucene.util.BytesRef> ids = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         Map<String, String> selected = new java.util.HashMap<>();
@@ -202,7 +203,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     String id = unit.getURI();
                     // The collector already admitted this candidate. A singleton
                     // needs only membership lookup, not a second head read.
-                    if (seen.add(id) && (candidateId.equals(id) || key.equals(admittedMain(data, id, scope, units)))) {
+                    if (seen.add(id) && (candidateId.equals(id) || key.equals(admittedMain(data, id, scope)))) {
                         ids.add(new org.apache.lucene.util.BytesRef(id));
                     }
                 }
@@ -211,7 +212,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
         if (ids.size() == 1) return true;
         for (var id : ids) {
             Node unit = uri(id.utf8ToString());
-            RankUnit facts = units == null ? describeUnit(data, unit.getURI()) : units.get(unit.getURI());
+            RankUnit facts = describeUnit(data, unit.getURI());
             String identity = facts.main().getURI() + "\n"
                 + facts.language().getLiteralLexicalForm().toLowerCase(java.util.Locale.ROOT);
             if (selected.putIfAbsent(identity, id.utf8ToString()) != null)
@@ -263,13 +264,14 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 JsonArray hits = new JsonArray();
                 for (RankHit hit : page.hits()) {
                     JsonObject row = new JsonObject();
-                    row.put("id", hit.id()); row.put("key", hit.key()); row.put("score", Float.toString(hit.score())); hits.add(row);
+                    row.put("id", hit.id());
+                    if (hit.key() == null) row.put("key", org.apache.jena.atlas.json.JsonNull.instance);
+                    else row.put("key", hit.key());
+                    row.put("score", Float.toString(hit.score())); hits.add(row);
                 }
-                response.put("hits", hits); response.put("count", page.count());
-                response.put("precision", page.precision()); response.put("commit", Long.toString(page.commit()));
+                response.put("hits", hits); response.put("commit", Long.toString(page.commit()));
                 response.put("more", page.more());
-            } catch (TextIndexException ex) {
-                if (!ex.getMessage().contains("requires restart")) throw ex;
+            } catch (RankRestart ex) {
                 response.put("restart", true);
             }
             return org.apache.jena.sparql.expr.NodeValue.makeString(response.toString());

@@ -18,15 +18,16 @@ export const RANKED_CATALOGUE_COST = { pageSize: 64, candidates: MAX_PHRASE_CAND
 export interface RankedCatalogueRequest { phrase: string; language: string | null;
   author?: string; realm?: string; pageSize: number; continuation?: string }
 interface RankAfter { id: string; score: string; commit: string }
-interface RankHit { id: string; key: string; score: string }
-interface RankEnvelope { hits: RankHit[]; count: number; precision: 'exact' | 'lower-bound';
-  commit: string; more: boolean; restart?: boolean }
+interface RankHit { id: string; key: string | null; score: string }
+interface RankEnvelope { hits: RankHit[]; commit: string; more: boolean; restart?: boolean }
 export interface RankedCatalogueMatch { matchUnit: string; work: string; mainVersion: string;
   contribution: string; revision: string; selection: string; language: string; score: number; reason?: string }
 interface Cursor { after: RankAfter; visible: number; generation: string; instance: string;
   writeEpoch: string; presentation: string | null }
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const decimal = /^(0|[1-9][0-9]*)$/;
+const unitId = (value: unknown): value is string => typeof value === 'string' && value.length <= 2048
+  && /^[a-z][a-z0-9+.-]*:/iu.test(value) && !/[\s<>"{}|\\^`]/u.test(value);
 
 async function rankQuery(env: WorkActivationEnvironment, sparql: string): Promise<SparqlResult> {
   try { return await env.fuseki.query(sparql, RANKED_CATALOGUE_COST.responseBytes); }
@@ -64,7 +65,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     if (decoded) {
       prior = JSON.parse(decoded.after) as Cursor;
       expiresAt = decoded.expiresAt ?? expiresAt;
-      if (!prior.after || typeof prior.after.id !== 'string' || !native.test(prior.after.id)
+      if (!prior.after || !unitId(prior.after.id)
         || typeof prior.after.score !== 'string' || !Number.isFinite(Number(prior.after.score))
         || typeof prior.after.commit !== 'string' || !decimal.test(prior.after.commit)
         || !Number.isSafeInteger(prior.visible) || prior.visible < 0) throw new WorkReadInvalid('rank cursor');
@@ -81,7 +82,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
   const results: RankedCatalogueMatch[] = [];
   let after = prior?.after, scanned = 0, more = false;
   for (let read = 0; read < RANKED_CATALOGUE_COST.rankReads && results.length < input.pageSize; read++) {
-    const size = Math.min(input.pageSize - results.length + 1, RANKED_CATALOGUE_COST.pageSize,
+    const size = Math.min(RANKED_CATALOGUE_COST.pageSize,
       RANKED_CATALOGUE_COST.candidates - scanned);
     if (size < 1) break;
     const rows = (await rankQuery(env, `PREFIX rv: <${RV}>
@@ -104,18 +105,19 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     if (!Array.isArray(page.hits) || page.hits.length > size || typeof page.more !== 'boolean'
       || page.more && !page.hits.length
       || typeof page.commit !== 'string' || !decimal.test(page.commit)
-      || !Number.isSafeInteger(page.count) || page.count < 0
-      || !['exact', 'lower-bound'].includes(page.precision)
-      || page.hits.some(hit => !hit || typeof hit.id !== 'string' || hit.id.length > 2048
-        || !/^[a-z][a-z0-9+.-]*:/iu.test(hit.id) || /[\s<>"{}|\\^`]/u.test(hit.id)
-        || !native.test(hit.key) || typeof hit.score !== 'string' || !Number.isFinite(Number(hit.score)))
-      || new Set(page.hits.map(hit => hit.key)).size !== page.hits.length) {
+      || page.hits.some(hit => !hit || !unitId(hit.id)
+        || hit.key !== null && !native.test(hit.key)
+        || typeof hit.score !== 'string' || !Number.isFinite(Number(hit.score)))
+      || new Set(page.hits.map(hit => hit.id)).size !== page.hits.length
+      || new Set(page.hits.filter(hit => hit.key !== null).map(hit => hit.key)).size
+        !== page.hits.filter(hit => hit.key !== null).length) {
       throw new PublicQueryUnavailable('native rank envelope is invalid');
     }
     if (!page.hits.length) { more = false; break; }
-    const matched = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+    const candidates = page.hits.filter(hit => hit.key !== null);
+    const matched = candidates.length ? (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       SELECT ?unit ?work ?main ?contribution ?revision ?selection ?language WHERE {
-        VALUES ?unit { ${page.hits.map(hit => iri(hit.id)).join(' ')} }
+        VALUES ?unit { ${candidates.map(hit => iri(hit.id)).join(' ')} }
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
           rv:work ?sourceWork ; rv:mainVersion ?sourceMain ; rv:contribution ?contribution ;
           rv:revision ?revision ; rv:selection ?selection ; rv:language ?language .
@@ -132,7 +134,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
           : `FILTER EXISTS { ${publicWork('?work', '?main')} }`}
         FILTER(BOUND(?resultWork) || NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
           ?sourceWork schema:isPartOf ?parentWork } })
-      } LIMIT ${page.hits.length + 1}`, RANKED_CATALOGUE_COST.responseBytes)).results?.bindings ?? [];
+      } LIMIT ${candidates.length + 1}`, RANKED_CATALOGUE_COST.responseBytes)).results?.bindings ?? [] : [];
     if (matched.length > page.hits.length || new Set(matched.map(row => row.unit?.value)).size !== matched.length) {
       throw new PublicQueryUnavailable('ranked result identity is ambiguous');
     }
@@ -154,11 +156,16 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     }
     for (const [offset, hit] of page.hits.entries()) {
       const row = byUnit.get(hit.id);
-      if (row && allowed.has(hit.id)) results.push(row);
+      if (row && allowed.has(hit.id)) {
+        // Preserve the first visible probe. Trailing rejected candidates can
+        // still be consumed after filling the page, avoiding an empty terminal
+        // page merely because a second language loses its group witness.
+        if (results.length === input.pageSize) { more = true; break; }
+        results.push(row);
+      }
       scanned++;
-      after = { id: hit.key, score: hit.score, commit: page.commit };
+      after = { id: hit.id, score: hit.score, commit: page.commit };
       more = offset + 1 < page.hits.length || page.more;
-      if (results.length === input.pageSize) break;
     }
     if (!more) break;
   }

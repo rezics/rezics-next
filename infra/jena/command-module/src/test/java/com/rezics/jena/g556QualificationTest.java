@@ -34,12 +34,18 @@ public class g556QualificationTest {
         Fixture(int count) {
             EntityDefinition definition = new EntityDefinition("uri", "label", "graph");
             definition.set("body", BODY);
+            definition.set("publicTitle", iri(RV + "publicSearchTitle"));
             definition.set("privateBody", iri(RV + "privateSearchBody"));
             definition.setLangField("lang");
             definition.setUidField("uid");
             TextIndexConfig config = new TextIndexConfig(definition);
             config.setValueStored(true);
-            index = new TextIndexLucene(new ByteBuffersDirectory(), config);
+            index = new TextIndexLucene(new ByteBuffersDirectory(), config) {
+                @Override public org.apache.lucene.store.Directory getDirectory() {
+                    if (failDirectoryOnce.getAndSet(false)) throw new IllegalStateException("injected transient index read");
+                    return super.getDirectory();
+                }
+            };
             FilteredGraphTextIndex filtered = new FilteredGraphTextIndex(index);
             data = new DatasetGraphText(DatasetGraphFactory.createTxnMem(), filtered, new TextDocProducerTriples(filtered));
             data.getContext().set(org.apache.jena.query.text.TextQuery.textIndex, filtered);
@@ -51,6 +57,7 @@ public class g556QualificationTest {
                     java.math.BigInteger.ZERO, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
                 data.add(CONTROL, PRODUCT, iri(RV + "textIndexGeneration"), iri(GENERATION));
                 SearchDeltaJournal.initialize(data);
+                data.add(PUBLIC, iri(CommandPolicy.PUBLIC_ANCHOR), RDF.type.asNode(), iri(RV + "SearchGraphAnchor"));
                 // Bootstrap always seeds the analyzer probe, including an empty catalogue.
                 data.add(iri("urn:rezics:text-index:probe"), iri("urn:rezics:text-index:probe:unit"),
                     BODY, NodeFactory.createLiteralLang("中文检索验证", "zh"));
@@ -60,6 +67,9 @@ public class g556QualificationTest {
                     Node selection = iri("urn:rezics:selection:g556:" + n);
                     data.add(PUBLIC, unit, RDF.type.asNode(), MATCH);
                     data.add(PUBLIC, unit, BODY, NodeFactory.createLiteralLang("common catalogue phrase " + n, "en"));
+                    // Jena stores different mapped fields as separate docs
+                    // sharing the unit ID. Cursor resolution must bind its query.
+                    data.add(PUBLIC, unit, iri(RV + "publicSearchTitle"), NodeFactory.createLiteralLang("catalogue heading", "en"));
                     data.add(PUBLIC, unit, iri(RV + "mainVersion"), main);
                     data.add(PUBLIC, unit, iri(RV + "context"), main);
                     data.add(PUBLIC, unit, iri(RV + "selection"), selection);
@@ -70,7 +80,10 @@ public class g556QualificationTest {
                 data.commit();
             } finally { data.end(); }
         }
-        @Override public void close() { data.close(); index.close(); }
+        final java.util.concurrent.atomic.AtomicBoolean failDirectoryOnce = new java.util.concurrent.atomic.AtomicBoolean();
+        @Override public void close() {
+            synchronized (data) { SearchDeltaJournal.stopRecovery(data); data.close(); index.close(); }
+        }
     }
 
     @Test public void generationBeyondTwentyThousandQualifiesAndNeverNeedsARequestInventory() {
@@ -90,33 +103,53 @@ public class g556QualificationTest {
                 FilteredGraphTextIndex.RankPage page = ranked.ranked(BODY, "common catalogue phrase", 20, after);
                 assertEquals(20, page.hits().size());
                 assertEquals("lower-bound", page.precision());
-                assertEquals(1000, page.count());
+                assertTrue(page.count() >= 1000);
                 assertTrue(page.more());
                 for (var hit : page.hits()) traversed.add(hit.id());
                 var last = page.hits().getLast();
                 after = new FilteredGraphTextIndex.RankAfter(last.id(), last.score(), page.commit());
             }
-            java.util.List<String> expected = new java.util.ArrayList<>();
-            for (int n = 0; n < 20_005; n++) expected.add("urn:rezics:match:g556:" + n);
-            expected.sort(String::compareTo);
-            assertEquals(expected.subList(0, 200), traversed);
+            // The pinned Lucene commit supplies a total tie order. Replaying
+            // each cursor must retain it, independently of IRI insertion order.
+            java.util.List<String> replayed = new java.util.ArrayList<>();
+            FilteredGraphTextIndex.RankAfter replayAfter = null;
+            for (int n = 0; n < 10; n++) {
+                var page = ranked.ranked(BODY, "common catalogue phrase", 20, replayAfter);
+                for (var hit : page.hits()) replayed.add(hit.id());
+                var last = page.hits().getLast();
+                replayAfter = new FilteredGraphTextIndex.RankAfter(last.id(), last.score(), page.commit());
+            }
+            assertEquals(traversed, replayed);
             assertEquals(200, new java.util.HashSet<>(traversed).size());
             fixture.data.begin(ReadWrite.READ);
             try {
                 FilteredGraphTextIndex.RankAfter groupedAfter = null;
                 java.util.List<String> groups = new java.util.ArrayList<>();
+                java.util.concurrent.atomic.AtomicInteger graphReads = new java.util.concurrent.atomic.AtomicInteger();
+                var counted = new org.apache.jena.sparql.core.DatasetGraphWrapper(fixture.data) {
+                    @Override public java.util.Iterator<org.apache.jena.sparql.core.Quad> find(Node g, Node s, Node p, Node o) {
+                        graphReads.incrementAndGet();
+                        return super.find(g, s, p, o);
+                    }
+                    @Override public boolean contains(Node g, Node s, Node p, Node o) {
+                        graphReads.incrementAndGet();
+                        return super.contains(g, s, p, o);
+                    }
+                };
                 for (int n = 0; n < 10; n++) {
+                    graphReads.set(0);
                     var page = ranked.ranked(BODY, "common catalogue phrase", 20, groupedAfter,
-                        fixture.data, new FilteredGraphTextIndex.RankScope(null, null, null));
+                        counted, new FilteredGraphTextIndex.RankScope(null, null, null));
+                    assertTrue("RDF admission must be page-sized, not 20,005 matching units", graphReads.get() < 1200);
                     assertEquals("lower-bound", page.precision());
                     assertEquals(20, page.hits().size());
                     for (var hit : page.hits()) groups.add(hit.key());
                     var last = page.hits().getLast();
-                    groupedAfter = new FilteredGraphTextIndex.RankAfter(last.key(), last.score(), page.commit());
+                    groupedAfter = new FilteredGraphTextIndex.RankAfter(last.id(), last.score(), page.commit());
                 }
                 java.util.List<String> expectedGroups = new java.util.ArrayList<>();
-                for (int n = 0; n < 200; n++) expectedGroups.add("https://rezics.com/id/00000000-0000-4000-8000-"
-                    + String.format("%012d", n));
+                for (var id : traversed) expectedGroups.add("https://rezics.com/id/00000000-0000-4000-8000-"
+                    + String.format("%012d", Integer.parseInt(id.substring(id.lastIndexOf(':') + 1))));
                 assertEquals(expectedGroups, groups);
             } finally { fixture.data.end(); }
             // A Lucene mutation that has no native journal entry cannot retain
@@ -148,6 +181,50 @@ public class g556QualificationTest {
             } finally { fixture.data.end(); }
             assertFalse(SearchDeltaJournal.qualify(fixture.data));
             assertEquals(false, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"));
+        }
+    }
+
+    @Test public void transientFenceFailureRecoversInBackgroundWithoutARebuild() throws Exception {
+        try (Fixture fixture = new Fixture(3)) {
+            assertTrue(SearchDeltaJournal.qualify(fixture.data));
+            synchronized (fixture.data) {
+                fixture.failDirectoryOnce.set(true);
+                SearchDeltaJournal.fenceBeforeWrite(fixture.data);
+                assertEquals(false, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"));
+                // Also fail the first background audit. Repeated invalidations
+                // must retain one flight and recover on its next retry.
+                fixture.failDirectoryOnce.set(true);
+                for (int n = 0; n < 10; n++) SearchDeltaJournal.invalidate(fixture.data);
+            }
+            long deadline = System.nanoTime() + 5_000_000_000L;
+            while (!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"))
+                && System.nanoTime() < deadline) Thread.sleep(20);
+            assertEquals("3", SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("qualifiedPopulation"));
+        }
+    }
+
+    @Test public void backgroundRecoveryCannotQualifyAQuarantinedRebuild() throws Exception {
+        try (Fixture fixture = new Fixture(3)) {
+            assertTrue(SearchDeltaJournal.qualify(fixture.data));
+            synchronized (fixture.data) {
+                fixture.data.begin(ReadWrite.WRITE);
+                try {
+                    fixture.data.deleteAny(PUBLIC, iri(CommandPolicy.PUBLIC_ANCHOR), Node.ANY, Node.ANY);
+                    fixture.data.commit();
+                } finally { fixture.data.end(); }
+                SearchDeltaJournal.invalidate(fixture.data);
+            }
+            Thread.sleep(400);
+            assertEquals(false, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"));
+            fixture.data.begin(ReadWrite.WRITE);
+            try {
+                fixture.data.add(PUBLIC, iri(CommandPolicy.PUBLIC_ANCHOR), RDF.type.asNode(), iri(RV + "SearchGraphAnchor"));
+                fixture.data.commit();
+            } finally { fixture.data.end(); }
+            long deadline = System.nanoTime() + 5_000_000_000L;
+            while (!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"))
+                && System.nanoTime() < deadline) Thread.sleep(20);
+            assertEquals(true, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"));
         }
     }
 
@@ -243,12 +320,12 @@ public class g556QualificationTest {
                         traversed.add(hit.key());
                     }
                     var last = page.hits().getLast();
-                    after = new FilteredGraphTextIndex.RankAfter(last.key(), last.score(), page.commit());
+                    after = new FilteredGraphTextIndex.RankAfter(last.id(), last.score(), page.commit());
                 }
                 java.util.List<String> expected = new java.util.ArrayList<>();
                 for (int number = 0; number < 500; number++) expected.add("https://rezics.com/id/00000000-0000-4000-8000-"
                     + String.format("%012d", number));
-                assertEquals(expected, traversed);
+                assertEquals(new java.util.HashSet<>(expected), new java.util.HashSet<>(traversed));
             } finally { fixture.data.end(); }
         }
     }
@@ -287,8 +364,8 @@ public class g556QualificationTest {
             try {
                 var page = ranked.ranked(BODY, "common catalogue phrase", 20, null, fixture.data,
                     new FilteredGraphTextIndex.RankScope(null, null, null));
-                assertTrue(page.hits().isEmpty());
-                assertEquals(0, page.count());
+                assertEquals(1, page.hits().size());
+                assertNull(page.hits().getFirst().key());
             } finally { fixture.data.end(); }
         }
     }

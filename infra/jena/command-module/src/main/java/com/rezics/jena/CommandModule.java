@@ -67,4 +67,9 @@ public final class CommandModule implements FusekiAutoModule {
         if (CommandService.deltaExclusive(point.getDataService()))
             SearchDeltaJournal.qualifyAtStartup(point.getDataService().getDataset());
     }
+
+    @Override public void serverStopped(FusekiServer server) {
+        server.getDataAccessPointRegistry().accessPoints().forEach(point ->
+            SearchDeltaJournal.stopRecovery(point.getDataService().getDataset()));
+    }
 }
