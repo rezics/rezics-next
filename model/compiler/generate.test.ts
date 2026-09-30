@@ -313,7 +313,7 @@ test('G-071: the generated registry keeps the historical canonical routes and bi
   const manifest = manifestOf(buildArtifacts(repo));
   // Historical routes remain the fallbacks for subjects without the v2 discriminator.
   expect(manifest.canonical.slice(0, historicalCanonical.length).map(entry => [entry.type, ...entry.routes
-    .filter(route => route.profile !== 'classification-proposition-v2').map(route =>
+    .filter(route => route.profile !== 'classification-proposition-v2' && route.profile !== 'release-v2').map(route =>
     [`${route.profile}/${shapeRole(route.profile, route.shape)}`,
       ...route.when.map(condition => `${local(condition.path)}=${local(condition.value)}`)].join(' '))]))
     .toEqual(historicalCanonical.map(([type, ...routes]) => [vocabulary(type), ...routes]));
@@ -471,12 +471,12 @@ test('whitespace in an accepted definition still generates and leaves the lock u
   expect([...acceptedFiles(root)]).toEqual(lock);
 });
 
-test('release-v2 is refused until its lock entry is appended', async () => {
-  const { root, generate: copied } = await copiedProject(copy => writeFileSync(join(copy, 'model/definitions/release-v2.ts'),
+test('example-v2 is refused until its lock entry is appended', async () => {
+  const { root, generate: copied } = await copiedProject(copy => writeFileSync(join(copy, 'model/definitions/example-v2.ts'),
     `import type { ProfileDefinition } from '../compiler/ir.ts';
 
 export const releaseV2Profile = {
-  id: 'release-v2',
+  id: 'example-v2',
   comments: ['A new version is admitted only with its own lock entry.'],
   prefixes: [
     ['sh', 'http://www.w3.org/ns/shacl#'],
@@ -485,7 +485,7 @@ export const releaseV2Profile = {
   ],
   layout: 'compact',
   shapes: [{
-    iri: 'https://rezics.com/definition/release-v2/release-shape',
+    iri: 'https://rezics.com/definition/example-v2/release-shape',
     canonical: { types: ['rv:ReleaseNote'] },
     properties: [{ path: 'rdf:type', hasValue: 'rv:ReleaseNote', maxCount: 1 }],
   }],
@@ -493,8 +493,8 @@ export const releaseV2Profile = {
 `));
   let message = '';
   try { copied(root, false); } catch (error) { message = error instanceof Error ? error.message : String(error); }
-  const file = 'model/accepted/profiles/release-v2.json';
-  const marker = `Unaccepted profile release-v2: add ${file} with exactly:\n`;
+  const file = 'model/accepted/profiles/example-v2.json';
+  const marker = `Unaccepted profile example-v2: add ${file} with exactly:\n`;
   expect(message.startsWith(marker)).toBe(true);
   const content = message.slice(marker.length);
   expect(JSON.parse(content)).toEqual({ sha256: expect.any(String) });
@@ -577,7 +577,7 @@ test('rewriting an existing accepted lock entry fails the merge-base guard', () 
   expect(() => assertBaselineUnchanged(baseline, removed))
     .toThrow('Accepted profile work-metadata-v1 changed; the merge-base lock entry must stay unchanged');
   const appended = new Map(current);
-  appended.set('model/accepted/profiles/release-v2.json', JSON.stringify({ sha256: 'a'.repeat(64) }));
-  appended.set('model/accepted/facets/facet-release-v2.json', JSON.stringify('b'.repeat(64)));
+  appended.set('model/accepted/profiles/example-v2.json', JSON.stringify({ sha256: 'a'.repeat(64) }));
+  appended.set('model/accepted/facets/facet-example-v2.json', JSON.stringify('b'.repeat(64)));
   expect(() => assertBaselineUnchanged(baseline, appended)).not.toThrow();
 });

@@ -12,9 +12,10 @@ export const RELEASE_KINDS = ['formal', 'web', 'fixed', 'virtual'] as const;
 export const RELEASE_STATUSES = ['official', 'unofficial', 'virtual', 'withdrawn', 'cancelled'] as const;
 /** One release page, then at most this many snapshots on each web publication. */
 export const RELEASE_COST = { languages: 8, stateBytes: 8 * 1024, snapshots: 20, page: 20,
-  commandGraphCalls: 16, commandGraphBytes: 1024 * 1024, deadlineMs: 10_000 } as const;
+  commandGraphCalls: 18, commandGraphBytes: 1024 * 1024, deadlineMs: 10_000 } as const;
 export const RELEASE_V2_COST = { coverage: 64, identifiers: 16, stateBytes: 48 * 1024,
-  page: 20, lookupCoverage: 1280 } as const;
+  // Each distinct covered Work may require two bounded author-baseline graph reads.
+  commandGraphCalls: RELEASE_COST.commandGraphCalls + 2 * 64, page: 20 } as const;
 
 const closed = { additionalProperties: false } as const;
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });

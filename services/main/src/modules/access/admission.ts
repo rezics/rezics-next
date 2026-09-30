@@ -381,6 +381,17 @@ export class AccessAdmissionRegistry {
       `translation:link:${work}`, 'translation.link');
   }
 
+  /** Release coverage requires the same grant or author baseline as a Work edit. */
+  async canEditWork(principal: VerifiedPrincipal, actingSubject: string,
+    work: string): Promise<boolean> {
+    try {
+      return await this.withWorkEditAuthority(principal, actingSubject, work, async () => true);
+    } catch (error) {
+      if (error instanceof AdmissionDenied) return false;
+      throw error;
+    }
+  }
+
   /** Drafts require their own current grant, independent of Work or publication reads. */
   async canReadContributionDraft(
     principal: VerifiedPrincipal, actingSubject: string, contribution: string,

@@ -13,6 +13,7 @@ import org.junit.Test;
 public class HeadCasPolicyTest {
     private static final String RV = "https://rezics.com/vocab/";
     private static final String MAIN = "https://rezics.com/id/00000000-0000-4000-8000-000000000001";
+    private static final String COMPONENT = "https://rezics.com/id/00000000-0000-4000-8000-000000000007";
     private static final String OLD_MAIN = "https://rezics.com/id/00000000-0000-4000-8000-000000000002";
     private static final String NEW_MAIN = "https://rezics.com/id/00000000-0000-4000-8000-000000000003";
     private static final String PRIOR = "https://rezics.com/id/00000000-0000-4000-8000-000000000004";
@@ -113,43 +114,52 @@ public class HeadCasPolicyTest {
             result(false, MAIN, PRIOR, true));
     }
 
-    private static String component(boolean wrongScope, boolean wrongRevision, boolean changedOwner) {
+    private static String component(boolean wrongScope, boolean wrongRevision, boolean changedOwner,
+                                    boolean mainVersion, boolean removeMainOwnership) {
         DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
         data.begin(org.apache.jena.query.ReadWrite.WRITE);
         try {
             String work = "urn:test:work";
             UpdateAction.parseExecute("PREFIX rv: <" + RV + "> INSERT DATA { GRAPH " + iri(CommandPolicy.CURRENT)
-                + " { " + iri(MAIN) + " rv:head " + iri(OLD_MAIN) + " ; rv:work " + iri(work)
-                + " . " + iri(work) + " a <https://schema.org/CreativeWork> } }", DatasetFactory.wrap(data));
+                + " { " + iri(COMPONENT) + " rv:head " + iri(OLD_MAIN) + " ; rv:work " + iri(work)
+                + " . " + iri(work) + " a <https://schema.org/CreativeWork> "
+                + (mainVersion ? "; rv:mainVersion " + iri(COMPONENT) : "") + " } }", DatasetFactory.wrap(data));
             String text = "PREFIX rv: <" + RV + "> DELETE { GRAPH " + iri(CommandPolicy.CURRENT)
-                + " { " + iri(MAIN) + " rv:head " + iri(OLD_MAIN) + " } } INSERT { GRAPH "
-                + iri(CommandPolicy.CURRENT) + " { " + iri(MAIN) + " rv:head " + iri(NEW_MAIN)
+                + " { " + iri(COMPONENT) + " rv:head " + iri(OLD_MAIN) + " } } INSERT { GRAPH "
+                + iri(CommandPolicy.CURRENT) + " { " + iri(COMPONENT) + " rv:head " + iri(NEW_MAIN)
                 + " } GRAPH " + iri(CommandPolicy.REVISIONS) + " { " + iri(NEW_MAIN)
-                + " a rv:RevisionAnchor ; rv:component " + iri(MAIN) + " ; rv:predecessor " + iri(OLD_MAIN)
+                + " a rv:RevisionAnchor ; rv:component " + iri(COMPONENT) + " ; rv:predecessor " + iri(OLD_MAIN)
                 + " } GRAPH " + iri(CommandPolicy.RECEIPTS) + " { " + iri(RECEIPT)
                 + " rv:outcome rv:Succeeded ; rv:admissionId \"" + ADMISSION
                 + "\" ; rv:authorityEpoch \"0\" ; rv:admittedScope \"work:edit:" + (wrongScope ? MAIN : work)
-                + "\" ; rv:work " + iri(work) + " ; rv:component " + iri(MAIN)
+                + "\" ; rv:work " + iri(work) + " ; rv:component " + iri(COMPONENT)
                 + " ; rv:revision " + iri(wrongRevision ? OLD_MAIN : NEW_MAIN)
                 + " ; rv:expectedHead " + iri(OLD_MAIN) + " } } WHERE { GRAPH "
-                + iri(CommandPolicy.CURRENT) + " { " + iri(MAIN) + " rv:head " + iri(OLD_MAIN) + " } }";
+                + iri(CommandPolicy.CURRENT) + " { " + iri(COMPONENT) + " rv:head " + iri(OLD_MAIN) + " } }";
             CommandPolicy.Plan plan = CommandPolicy.parse(text, RECEIPT);
             HeadCasPolicy.Snapshot before = HeadCasPolicy.capture(data, plan, RECEIPT);
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(data));
             if (changedOwner) {
-                data.delete(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(MAIN),
+                data.delete(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(COMPONENT),
                     NodeFactory.createURI(RV + "work"), NodeFactory.createURI(work));
-                data.add(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(MAIN),
+                data.add(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(COMPONENT),
                     NodeFactory.createURI(RV + "work"), NodeFactory.createURI("urn:test:other-work"));
             }
+            if (removeMainOwnership) data.delete(NodeFactory.createURI(CommandPolicy.CURRENT),
+                NodeFactory.createURI(work), NodeFactory.createURI(RV + "mainVersion"), NodeFactory.createURI(COMPONENT));
             return HeadCasPolicy.check(data, RECEIPT, before);
         } finally { data.abort(); data.end(); data.close(); }
     }
 
     @Test public void workOwnedComponentsKeepTheirIdentityScopeAndOwnerAcrossHeadCas() {
-        assertNull(component(false, false, false));
-        assertEquals("head transition Access scope differs from target", component(true, false, false));
-        assertEquals("Work-owned component head differs from its receipt or owner", component(false, true, false));
-        assertEquals("Work-owned component head differs from its receipt or owner", component(false, false, true));
+        assertNull(component(false, false, false, false, false));
+        assertEquals("head transition Access scope differs from target", component(true, false, false, false, false));
+        assertEquals("Work-owned component head differs from its receipt or owner", component(false, true, false, false, false));
+        assertEquals("Work-owned component head differs from its receipt or owner", component(false, false, true, false, false));
+    }
+
+    @Test public void workEditCannotMoveAMainVersionHeadWithoutItsSelection() {
+        assertEquals("Main Version head moves only with its selection", component(false, false, false, true, false));
+        assertEquals("Main Version head moves only with its selection", component(false, false, false, true, true));
     }
 }

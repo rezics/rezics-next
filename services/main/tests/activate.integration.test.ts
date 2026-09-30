@@ -313,6 +313,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
         canReadContributionDraft: access.canReadContributionDraft.bind(access),
         canReadStandingRating: access.canReadStandingRating.bind(access),
         canLinkTranslation: access.canLinkTranslation.bind(access),
+        canEditWork: access.canEditWork.bind(access),
         activePrincipalId: access.activePrincipalId.bind(access),
         recordGraphOutcome: async (...args: Parameters<typeof access.recordGraphOutcome>) => {
           if (failOutcomeOnce) {

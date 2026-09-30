@@ -4,7 +4,7 @@ import { startMediaStack, type MediaStack } from './media-support.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import type { ReleaseView } from '../../../services/main/src/modules/release/read.ts';
 import type { RealizationWrite } from '../../../services/main/src/modules/realization/schema.ts';
-import type { ReleaseV2Write } from '../../../services/main/src/modules/release/schema.ts';
+import type { ReleaseV2Write, ReleaseWrite } from '../../../services/main/src/modules/release/schema.ts';
 import { readReleaseReceipt } from '../../../services/main/src/modules/release/command.ts';
 import { readRealizationReceipt } from '../../../services/main/src/modules/realization/command.ts';
 import { ownerOutboxEventHandler } from '../../../services/main/src/modules/outbox/event-handlers.ts';
@@ -100,6 +100,8 @@ test('G833: SAO translations share Works, exact releases cover several volumes a
       const omnibusView = page.items.find(item => item.id === omnibus.id)!;
       expect(omnibusView.coverage.map(item => item.work)).toEqual(expect.arrayContaining(volumes.map(item => item.work)));
       expect(omnibusView.coverage.map(item => item.mainVersion)).toEqual(expect.arrayContaining(volumes.map(item => item.mainVersion)));
+      expect(await json(await stack.call('GET', `${root(volume.work)}/releases/${omnibus.id.slice(-36)}`)))
+        .toMatchObject({ id: omnibus.id, revision: omnibusSaved.revision });
     }
     const found = await json<{ items: ReleaseView[] }>(await stack.call('GET', '/v1/releases?isbn13=9780316371247'));
     expect(found.items).toHaveLength(1);
@@ -155,12 +157,25 @@ test('G833: CAS, denied writes, concurrent corrections, exact sources and lost-r
     const another = text(editor, work.work, 'zh-Hant', { source: { kind: 'realization', work: work.work,
       realization: body.id, revision: first.revision } });
     const other = await json<WriteResult>(await saveText(editor, work.work, another));
+    const invalidTextKey = `invalid-text-${randomUUID()}`;
+    const invalidText = { ...body, expectedHead: first.revision, language: 'zh-Hans', evidence: id() };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect((await saveText(editor, work.work, invalidText, invalidTextKey)).status).toBe(400);
+    }
+    expect((await stack.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1',
+      [invalidTextKey])).rowCount).toBe(0);
     const pub = release(editor, [covered(body, first)]);
     expect((await saveRelease(stranger, work.work, { ...pub, actingSubject: stranger.actor,
       coverage: [{ realization: id(), revision: id(), completeness: 'unknown' }] })).status).toBe(403);
     const pubResult = await json<WriteResult>(await saveRelease(editor, work.work, pub));
-    expect((await saveRelease(editor, work.work, { ...pub, expectedHead: pubResult.revision, evidence: id(),
-      coverage: [...pub.coverage, covered(another, other)] })).status).toBe(400);
+    const invalidReleaseKey = `invalid-release-${randomUUID()}`;
+    const invalidRelease = { ...pub, expectedHead: pubResult.revision, evidence: id(),
+      coverage: [...pub.coverage, covered(another, other)] };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect((await saveRelease(editor, work.work, invalidRelease, invalidReleaseKey)).status).toBe(400);
+    }
+    expect((await stack.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1',
+      [invalidReleaseKey])).rowCount).toBe(0);
 
     const correction = { ...body, expectedHead: first.revision, publishers: [id()], evidence: id() };
     const key = `lost-response-${randomUUID()}`;
@@ -187,6 +202,10 @@ test('G833: CAS, denied writes, concurrent corrections, exact sources and lost-r
     expect(replay).toMatchObject({ revision: corrected.revision, receipt: corrected.receipt, replayed: true });
     expect((await saveText(editor, work.work, correction)).status).toBe(409);
     expect((await saveText(editor, work.work, { ...correction, publishers: [id()] }, key)).status).toBe(409);
+    await json(await saveText(editor, work.work,
+      { ...correction, expectedHead: corrected.revision, publishers: [id()], evidence: id() }));
+    expect(await json(await saveText(editor, work.work, correction, key)))
+      .toMatchObject({ revision: corrected.revision, receipt: corrected.receipt, replayed: true });
     const exact = await json<{ source: object }>(await stack.call('GET', `${root(work.work)}/realizations/${another.id.slice(-36)}`));
     expect(exact.source).toEqual({ kind: 'realization', work: work.work, realization: body.id, revision: first.revision });
     expect(await json(await stack.call('GET', `${root(work.work)}/realizations/${body.id.slice(-36)}?revision=${encodeURIComponent(first.revision)}`)))
@@ -202,6 +221,8 @@ test('G833: CAS, denied writes, concurrent corrections, exact sources and lost-r
     const racing = await Promise.all([1, 2].map(value => saveRelease(editor, work.work,
       { ...correctedPub, expectedHead: pubCorrected.revision, evidence: id(), publisher: `Racing ${value}` })));
     expect(racing.map(response => response.status).sort()).toEqual([200, 409]);
+    expect(await json(await saveRelease(editor, work.work, correctedPub, pubKey)))
+      .toMatchObject({ revision: pubCorrected.revision, receipt: pubCorrected.receipt, replayed: true });
 
     const event = ownerOutboxEventHandler(`${RV}RealizationChangedEvent`)!;
     const receiptRows = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?admission WHERE {
@@ -216,6 +237,47 @@ test('G833: CAS, denied writes, concurrent corrections, exact sources and lost-r
       value: name => values[name as keyof typeof values] });
     expect(cloud.data.receipt).toMatchObject({ realization: body.id, revision: corrected.revision });
     await expect(readReleaseReceipt(stack.env, admissionId)).rejects.toThrow('Release receipt is incomplete');
+  } finally { await stack.stop(); }
+}, 120_000);
+
+test('G833: attaching a release requires edit authority on every covered Work before admission', async () => {
+  const stack = await startMediaStack('g833-covered-authority');
+  try {
+    const owner = await stack.member('owner'), editor = await stack.member('editing-only');
+    const other = await stack.publicWork(owner.actor, ['ja'], 'Another editor owns this Work');
+    const own = await stack.publicWork(editor.actor, ['ja'], 'The editing Work');
+    await owner.grant(`work:edit:${other.work}`, 'work.edit');
+    await editor.grant(`work:edit:${own.work}`, 'work.edit');
+    const otherText = text(owner, other.work, 'en'), ownText = text(editor, own.work, 'en');
+    const otherSaved = await json<WriteResult>(await saveText(owner, other.work, otherText));
+    const ownSaved = await json<WriteResult>(await saveText(editor, own.work, ownText));
+    const body = release(editor, [covered(ownText, ownSaved), covered(otherText, otherSaved)],
+      { isbn13: '9780316371247' });
+    const key = `covered-denied-${randomUUID()}`;
+    const before = await json(await stack.call('GET', `${root(other.work)}/releases`));
+    const isbnBefore = (await json<{ items: ReleaseView[] }>(await stack.call('GET', '/v1/releases?isbn13=9780316371247')))
+      .items.map(item => item.id);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect((await saveRelease(editor, own.work, body, key)).status).toBe(403);
+    }
+    expect(await json(await stack.call('GET', `${root(other.work)}/releases`))).toEqual(before);
+    const isbnAfter = (await json<{ items: ReleaseView[] }>(await stack.call('GET', '/v1/releases?isbn13=9780316371247')))
+      .items.map(item => item.id);
+    expect(isbnAfter).toEqual(isbnBefore);
+    expect(isbnAfter).not.toContain(body.id);
+    expect((await stack.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1', [key])).rowCount).toBe(0);
+    expect((await stack.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} { ${iri(body.id)} ?p ?o } }`)).boolean).toBe(false);
+
+    await editor.grant(`work:edit:${other.work}`, 'work.edit');
+    await json(await saveRelease(editor, own.work, body, key));
+    expect((await json<{ items: ReleaseView[] }>(await stack.call('GET', `${root(other.work)}/releases`)))
+      .items.map(item => item.id)).toContain(body.id);
+    // A revoked covered-Work grant also refuses a correction, before it obtains an admission.
+    await stack.accessPool.query('UPDATE access.permission_grant SET active = false WHERE recipient_subject = $1 AND scope_id = $2',
+      [editor.actor, `work:edit:${other.work}`]);
+    const current = await json<ReleaseView>(await stack.call('GET', `${root(own.work)}/releases/${body.id.slice(-36)}`));
+    expect((await saveRelease(editor, own.work, { ...body, expectedHead: current.revision,
+      evidence: id(), publisher: 'Changed publisher' })).status).toBe(403);
   } finally { await stack.stop(); }
 }, 120_000);
 
@@ -287,12 +349,20 @@ test('G833: v1 reads as unknown realization coverage; legacy translations retain
     expect(new Set(pages)).toEqual(new Set([native.id, linked.link]));
 
     const oldRelease = id();
-    await json(await editor.send('PUT', `${root(work.work)}/releases/${oldRelease.slice(-36)}`, {
+    const oldBody: ReleaseWrite = {
       profile: 'release-v1', expectedHead: null, actingSubject: editor.actor, id: oldRelease,
       kind: 'formal', status: 'official', contentLanguages: ['ja'], isTranslation: false, originalLanguages: [],
       titleLanguage: 'ja', tracklistLanguage: null, title: { value: '旧刊', language: 'ja' }, editionStatement: null,
       publisher: null, publicationYear: null, isbn13: null, originalUrl: null, fixedRelease: null, coverage: null, evidence: null,
-    }));
+    };
+    const oldSaved = await json<WriteResult>(await editor.send('PUT', `${root(work.work)}/releases/${oldRelease.slice(-36)}`, oldBody));
+    const invalidV1Key = `invalid-v1-${randomUUID()}`;
+    const invalidV1 = { ...oldBody, expectedHead: oldSaved.revision, contentLanguages: ['ja', 'en'], evidence: id() };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect((await editor.send('PUT', `${root(work.work)}/releases/${oldRelease.slice(-36)}`,
+        invalidV1, invalidV1Key)).status).toBe(400);
+    }
+    expect((await stack.accessPool.query('SELECT id FROM access.admission WHERE idempotency_key = $1', [invalidV1Key])).rowCount).toBe(0);
     expect(await json(await stack.call('GET', `${root(work.work)}/releases/${oldRelease.slice(-36)}`)))
       .toMatchObject({ profile: 'release-v2', coverage: [{ work: work.work, mainVersion: work.mainVersion,
         realization: null, revision: null, completeness: 'unknown', language: null }] });
@@ -305,6 +375,23 @@ test('G833: v1 reads as unknown realization coverage; legacy translations retain
     const publicSaved = await json<WriteResult>(await saveText(editor, work.work, publicText));
     const mixed = release(editor, [covered(publicText, publicSaved), covered(secretText, saved)], { isbn13: '9780316371247' });
     await json(await saveRelease(editor, work.work, mixed));
+    const owners = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?work WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(mixed.id)} rv:work ?work } }`)).results!.bindings;
+    expect(owners.map(row => row.work!.value)).toEqual([work.work]);
+    expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(mixed.id)} rv:coverageWork ${iri(hidden.work)}, ${iri(work.work)} } }`)).boolean).toBe(true);
+    const observer = await stack.member('observer');
+    for (const response of [await stack.call('GET', `/v1/resources/${mixed.id.slice(-36)}`),
+      await observer.read(`/v1/resources/${mixed.id.slice(-36)}`),
+      await stack.call('GET', `/v1/public-previews/${mixed.id.slice(-36)}`),
+      await stack.call('POST', '/v1/resources/summaries', { body: { profile: 'resource-summary-batch-v1', resources: [mixed.id] } })]) {
+      // Unavailable is also a valid disclosure result; older readers do not yet
+      // recognize Releases. The merged resource reader must keep the same fence.
+      expect([200, 404]).toContain(response.status);
+      const summary = await json(response, response.status);
+      expect(JSON.stringify(summary)).not.toContain('Private covered Work');
+      expect(JSON.stringify(summary)).not.toContain(hidden.work);
+    }
     expect((await stack.call('GET', `${root(work.work)}/releases/${mixed.id.slice(-36)}`)).status).toBe(404);
     expect((await json<{ items: { id: string }[] }>(await stack.call('GET', '/v1/releases?isbn13=9780316371247')))
       .items.map(item => item.id)).not.toContain(mixed.id);

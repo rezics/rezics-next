@@ -19,8 +19,11 @@ test('G833: registry-only realizations and discriminated release-v2 coexist with
   expect(realized).toContain('rv:sourceRevision');
   expect(realized).toContain('"unresolved"');
   const released = renderProfile(releaseV2Profile);
-  for (const path of ['rv:work', 'rv:coverageRevision', 'rv:contentLanguage', 'rv:platform', 'rv:territory', 'rv:completeness', 'rv:identifier']) {
+  for (const path of ['rv:work', 'rv:coverageWork', 'rv:coverageRevision', 'rv:contentLanguage', 'rv:platform', 'rv:territory', 'rv:completeness', 'rv:identifier']) {
     expect(released).toContain(path);
   }
   expect(released).toContain('sh:maxCount 64');
+  const properties = releaseV2Profile.shapes[0].properties;
+  expect(properties.find(property => property.path === 'rv:work')).toMatchObject({ minCount: 1, maxCount: 1 });
+  expect(properties.find(property => property.path === 'rv:coverageWork')).toMatchObject({ minCount: 1, maxCount: 64 });
 });

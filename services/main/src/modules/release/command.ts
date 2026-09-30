@@ -81,11 +81,13 @@ async function sealRelease(env: WorkActivationEnvironment, admission: Registered
   if (!await readReleaseReceipt(env, admission.id)) throw new PendingAdmittedWork(admission.id, 'work-edit');
 }
 
-async function loadRelease(env: WorkActivationEnvironment, work: string, release: string):
+async function loadRelease(env: WorkActivationEnvironment, work: string, release: string, basis?: string):
   Promise<{ revision: string; record: AnyReleaseRecord } | null> {
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?revision ?state WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(release)} a rv:Release ; rv:work ${iri(work)} ; rv:releaseHead ?revision }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(release)} a rv:Release ; rv:work ${iri(work)} .
+        ${basis ? '' : `${iri(release)} rv:releaseHead ?revision`} }
+      ${basis ? `BIND(${iri(basis)} AS ?revision)` : ''}
       GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ${iri(release)} ; rv:releaseState ?state ;
         rv:modelRevision ?profile . VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} } }
     } LIMIT 2`, RELEASE_V2_COST.stateBytes * 2)).results?.bindings ?? [];
@@ -111,7 +113,7 @@ function projection(release: string, revision: string, record: AnyReleaseRecord)
   if (record.isbn13) lines.push(`${iri(release)} rv:isbn13 ${lit(record.isbn13)} .`);
   if (record.profile === 'release-v2') {
     lines.push(`${iri(release)} rv:definitionProfile ${iri(RELEASE_V2_PROFILE)} .`);
-    for (const entry of record.resolvedCoverage) lines.push(`${iri(release)} rv:work ${iri(entry.work)} ;
+    for (const entry of record.resolvedCoverage) lines.push(`${iri(release)} rv:coverageWork ${iri(entry.work)} ;
       rv:coverageRealization ${iri(entry.realization)} ; rv:coverageRevision ${iri(entry.revision)} ;
       rv:contentLanguage ${lit(entry.language)} .`);
     for (const entry of record.coverage) lines.push(`${iri(release)} rv:completeness ${lit(entry.completeness)} .`);
@@ -122,8 +124,7 @@ function projection(release: string, revision: string, record: AnyReleaseRecord)
   return lines.join('\n');
 }
 
-/** One release CAS. V2 adds one bounded join of at most 64 exact realization
- * states, inside the same command call, byte and deadline budgets as v1. */
+/** One release CAS. V2 adds one bounded join of at most 64 exact realization states. */
 export async function commitRelease(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   record: AnyReleaseRecord): Promise<boolean> {
   const release = record.id;
@@ -206,7 +207,7 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
           VALUES ?oldPredicate { rv:work rv:releaseHead rv:releaseKind rv:releaseStatus rv:contentLanguages
             rv:titleLanguage rv:tracklistLanguage rv:originalLanguages rv:isTranslation rv:originalUrl
             rv:fixedRelease rv:coverageScope rv:coverageComplete rv:isbn13 rv:definitionProfile
-            rv:coverageRealization rv:coverageRevision rv:contentLanguage rv:completeness rv:identifier rv:platform rv:territory }`
+            rv:coverageWork rv:coverageRealization rv:coverageRevision rv:contentLanguage rv:completeness rv:identifier rv:platform rv:territory }`
           : `FILTER NOT EXISTS { ${iri(release)} ?occupiedProperty ?occupiedValue }`} }
       ${record.profile === 'release-v2' ? record.resolvedCoverage.map(entry => `
         GRAPH ${iri(GRAPHS.current)} { ${iri(entry.realization)} a rv:Realization ; rv:work ${iri(entry.work)} }
@@ -233,11 +234,33 @@ export async function setRelease(deps: MainWorkDependencies, request: Request,
     ? checkedReleaseV2(body, workId) : checkedRelease(body, workId);
   const digest = releaseDigest(record);
   const signal = AbortSignal.timeout(RELEASE_COST.deadlineMs);
-  return fusekiReadBudget.run({ signal, callsLeft: RELEASE_COST.commandGraphCalls,
+  return fusekiReadBudget.run({ signal, callsLeft: record.profile === 'release-v2'
+    ? RELEASE_V2_COST.commandGraphCalls : RELEASE_COST.commandGraphCalls,
     bytesLeft: RELEASE_COST.commandGraphBytes }, async () => {
     const env = deps.environment;
     await assertGraphAdmissionOpen(env.fuseki, env.lineage);
     const principal = await deps.account.verify(request, ['work:edit']);
+    if (!await deps.access.canEditWork(principal, record.actingSubject, record.work)) {
+      throw new AdmissionDenied('Release Work edit is not admitted');
+    }
+    const resolved = record.profile === 'release-v2'
+      ? resolvedReleaseV2(record, await resolveReleaseCoverage(env, record.coverage)) : record;
+    if (resolved.profile === 'release-v2') {
+      for (const coveredWork of new Set(resolved.resolvedCoverage.map(entry => entry.work))) {
+        if (coveredWork !== record.work
+          && !await deps.access.canEditWork(principal, record.actingSubject, coveredWork)) {
+          throw new AdmissionDenied('Every covered Work requires Work edit authority');
+        }
+      }
+    }
+    if (record.expectedHead) {
+      // Validate the immutable request basis before admission, including on replay.
+      // The current-head CAS remains in commitRelease so successful retries resolve
+      // their original receipt after the head has advanced.
+      const basis = await loadRelease(env, record.work, record.id, record.expectedHead);
+      if (!basis) throw new StaleRelease('Release basis is unavailable');
+      assertReleaseCorrection(basis.record, resolved);
+    }
     const registered = await deps.access.register({ principal, actingSubject: record.actingSubject,
       action: 'work.edit', scope: `work:edit:${record.work}`, idempotencyKey,
       requestDigest: digest });
@@ -251,11 +274,7 @@ export async function setRelease(deps: MainWorkDependencies, request: Request,
       try {
         if (admission.state === 'sealed') { /* A retry resolves the exact receipt below. */ }
         else if (!admission.dispatchEligible || admission.state === 'registered') await sealRelease(env, admission);
-        else {
-          const resolved = record.profile === 'release-v2'
-            ? resolvedReleaseV2(record, await resolveReleaseCoverage(env, record.coverage)) : record;
-          committed = await commitRelease(env, admission, resolved);
-        }
+        else committed = await commitRelease(env, admission, resolved);
       } catch (error) {
         failure = error;
         if (error instanceof InvalidRelease) await sealRelease(env, admission);

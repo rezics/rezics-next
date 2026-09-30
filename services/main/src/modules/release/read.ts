@@ -106,8 +106,8 @@ export async function readWorkReleases(session: WorkReadSession, work: string, c
   }
   const binding = ['releases', work, listed];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  const rows = await session.query(`SELECT ?release ?revision WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ?release a rv:Release ; rv:work ${iri(work)} ; rv:releaseHead ?revision .
+  const rows = await session.query(`SELECT DISTINCT ?release ?revision WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ?release a rv:Release ; rv:work|rv:coverageWork ${iri(work)} ; rv:releaseHead ?revision .
       ${listed ? `?release rv:contentLanguages ?langs .
         FILTER(CONTAINS(CONCAT(" ", STR(?langs), " "), ${lit(` ${listed} `)}))` : ''}
     } ${cursor ? `FILTER(STR(?release) > ${lit(cursor.after)})` : ''}
@@ -158,8 +158,8 @@ export async function readWorkReleases(session: WorkReadSession, work: string, c
 
 export async function readWorkRelease(session: WorkReadSession, work: string, release: string) {
   const basis = await readWorkBasis(session, work);
-  const rows = await session.query(`SELECT ?revision ?state WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(release)} a rv:Release ; rv:work ${iri(work)} ; rv:releaseHead ?revision }
+  const rows = await session.query(`SELECT DISTINCT ?revision ?state WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(release)} a rv:Release ; rv:work|rv:coverageWork ${iri(work)} ; rv:releaseHead ?revision }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ReleaseRevision ; rv:component ${iri(release)} ;
       rv:modelRevision ?profile ; rv:releaseState ?state . VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} } }
   } LIMIT 2`, 2);

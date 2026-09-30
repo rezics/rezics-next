@@ -13,7 +13,8 @@ export const releaseV2Profile = {
   shapes: [
     { iri: `${profile}/release-shape`, canonical: { types: ['rv:Release'], when: [{ path: 'rv:definitionProfile', value: `<${profile}>` }] }, properties: [
       { path: 'rdf:type', hasValue: 'rv:Release', maxCount: 1 },
-      { path: 'rv:work', minCount: 1, maxCount: 64, class: 'schema:CreativeWork' },
+      { path: 'rv:work', minCount: 1, maxCount: 1, class: 'schema:CreativeWork' },
+      { path: 'rv:coverageWork', minCount: 1, maxCount: 64, class: 'schema:CreativeWork' },
       { path: 'rv:releaseKind', minCount: 1, maxCount: 1, in: ['"formal"', '"web"', '"fixed"', '"virtual"'] },
       { path: 'rv:releaseStatus', minCount: 1, maxCount: 1,
         in: ['"official"', '"unofficial"', '"virtual"', '"withdrawn"', '"cancelled"'] },

@@ -154,7 +154,7 @@ export interface MainWorkDependencies {
   backpressureProfile?: BackpressureProfile;
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
-    | 'canReadStandingRating' | 'canLinkTranslation' | 'activePrincipalId'>
+    | 'canReadStandingRating' | 'canLinkTranslation' | 'canEditWork' | 'activePrincipalId'>
     & Partial<Pick<AccessAdmissionRegistry, 'canReadAsBaselineMember'>>
     & Partial<Pick<AccessAdmissionRegistry, 'hasNonBaselineWorkCreateAuthority'>>
     & Partial<Pick<AccessAdmissionRegistry, 'realmReadProof' | 'withRealmPolicy'>>

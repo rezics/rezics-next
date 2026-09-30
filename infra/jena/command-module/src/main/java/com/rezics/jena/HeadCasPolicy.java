@@ -27,7 +27,7 @@ final class HeadCasPolicy {
 
     private record Key(Node subject, Node predicate) {}
     private record Transition(Key key, Node before, Node next, Node ownerType,
-                              List<Node> preserved, String language, Node work) {}
+                              List<Node> preserved, String language, Node work, boolean mainVersion) {}
     record Snapshot(List<Transition> transitions, String error) {}
 
     static Snapshot capture(DatasetGraph data, CommandPolicy.Plan plan, String receipt) {
@@ -89,7 +89,9 @@ final class HeadCasPolicy {
             if (statement && context) return new Snapshot(List.of(), "head target has ambiguous owner profile");
             transitions.add(new Transition(key, before, nextValues.getFirst(),
                 statement ? STATEMENT : context ? CONTEXT : null, preserved, language,
-                one(data, CURRENT, key.subject(), rv("work"))));
+                one(data, CURRENT, key.subject(), rv("work")),
+                data.contains(CURRENT, Node.ANY, rv("mainVersion"), key.subject())
+                    || data.contains(CURRENT, key.subject(), RDF.type.asNode(), rv("MainVersion"))));
         }
         if (transitions.size() > 2) return new Snapshot(List.of(), "one head transition required");
         Transition expected = transitions.isEmpty() ? null : transitions.getFirst();
@@ -174,6 +176,10 @@ final class HeadCasPolicy {
                 // Work-owned Versioned components use the same registry and Access
                 // scope. Their identities and exact revisions remain their own.
                 Node work = transition.work();
+                if (transition.mainVersion()
+                    || data.contains(CURRENT, work, rv("mainVersion"), subject)
+                    || data.contains(CURRENT, subject, RDF.type.asNode(), rv("MainVersion")))
+                    return "Main Version head moves only with its selection";
                 if (!work.isURI() || !same(data, CURRENT, subject, "work", work)
                     || !data.contains(CURRENT, work, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))
                     || !same(data, RECEIPTS, own, "work", work)

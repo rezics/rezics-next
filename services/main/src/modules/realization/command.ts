@@ -78,11 +78,13 @@ async function sealRealization(env: WorkActivationEnvironment, admission: Regist
   if (!await readRealizationReceipt(env, admission.id)) throw new PendingAdmittedWork(admission.id, 'work-edit');
 }
 
-async function loadRealization(env: WorkActivationEnvironment, work: string, realization: string):
+async function loadRealization(env: WorkActivationEnvironment, work: string, realization: string, basis?: string):
   Promise<{ revision: string; record: RealizationRecord } | null> {
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?revision ?state WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(realization)} a rv:Realization ; rv:work ${iri(work)} ; rv:head ?revision }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(realization)} a rv:Realization ; rv:work ${iri(work)} .
+        ${basis ? '' : `${iri(realization)} rv:head ?revision`} }
+      ${basis ? `BIND(${iri(basis)} AS ?revision)` : ''}
       GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ${iri(realization)} ; rv:realizationState ?state ;
         rv:modelRevision ${iri(REALIZATION_PROFILE)} }
     } LIMIT 2`, REALIZATION_COST.stateBytes * 2)).results?.bindings ?? [];
@@ -220,6 +222,16 @@ export async function setRealization(deps: MainWorkDependencies, request: Reques
     const env = deps.environment;
     await assertGraphAdmissionOpen(env.fuseki, env.lineage);
     const principal = await deps.account.verify(request, ['work:edit']);
+    if (!await deps.access.canEditWork(principal, record.actingSubject, record.work)) {
+      throw new AdmissionDenied('Realization Work edit is not admitted');
+    }
+    if (record.expectedHead) {
+      // Immutable-basis validation rejects invalid corrections before admission
+      // while preserving replay of a successful correction after later writes.
+      const basis = await loadRealization(env, record.work, record.id, record.expectedHead);
+      if (!basis) throw new StaleRealization('Realization basis is unavailable');
+      assertRealizationCorrection(basis.record, record);
+    }
     const registered = await deps.access.register({ principal, actingSubject: record.actingSubject,
       action: 'work.edit', scope: `work:edit:${record.work}`, idempotencyKey,
       requestDigest: digest });

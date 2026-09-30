@@ -8,7 +8,7 @@ import { canonicalRecord } from '../release/schema.ts';
 export const REALIZATION_PROFILE = 'https://rezics.com/definition/realization-v1';
 /** A single CAS, a bounded source check and a bounded page of retained texts. */
 export const REALIZATION_COST = { parties: 16, stateBytes: 8192, page: 20,
-  commandGraphCalls: 16, commandGraphBytes: 1024 * 1024, deadlineMs: 10_000 } as const;
+  commandGraphCalls: 19, commandGraphBytes: 1024 * 1024, deadlineMs: 10_000 } as const;
 const closed = { additionalProperties: false } as const;
 export const realizationId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 export const realizationSource = t.Union([
