@@ -58,10 +58,15 @@ async function device(browser: Browser, info: TestInfo, viewport: { width: numbe
 
 /** The status button's menu → Details, whatever shelf the Work is on. */
 async function openDetails(page: Page): Promise<Locator> {
-  const more = page.getByRole('button', { name: 'More shelves' });
-  if (await more.count()) await more.click();
-  else await page.getByRole('button', { name: /— Shelve/ }).click();
-  await page.getByRole('menuitem', { name: 'Details' }).click();
+  // A press before hydration opens nothing; try again until the menu is there.
+  await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
+  const details = page.getByRole('menuitem', { name: 'Details' });
+  await expect(async () => {
+    const more = page.getByRole('button', { name: 'More shelves' });
+    await (await more.count() ? more : page.getByRole('button', { name: /— Shelve/ })).click();
+    await expect(details).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
+  await details.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Reading details' })).toBeVisible();
   await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
