@@ -134,8 +134,8 @@ test('G-629: registry precedence and component types cannot retarget a Work or g
 test('G-629: read contracts expose optional bearer, fixed projection profile and bounded traversal cost', () => {
   expect(entityPage.properties.profile.const).toBe('entity-page-v1');
   expect(openApiOperations).toEqual({
-    '/v1/resources/{id}/page': { get: { bearer: false } },
-    '/v1/resources/{id}/statements': { get: { bearer: false } },
+    '/v1/resources/{resource}/page': { get: { bearer: false } },
+    '/v1/resources/{resource}/statements': { get: { bearer: false } },
   });
   expect(SUBJECT_STATEMENT_COST.inventoryQueriesPerBatch).toBe(2);
   expect(Number(SUBJECT_STATEMENT_COST.candidates)).toBe(SUBJECT_STATEMENT_COST.pageSize + 1);
@@ -180,7 +180,11 @@ test('G-629: every advertised section href matches a GET mounted by Main', () =>
       const sections = pageSections(target(base, [entry.type]), mounted);
       expect(sections.some((section) => section.id === 'statements')).toBe(true);
       for (const section of sections) {
-        expect(mounted.has(section.href.replace(id(1).slice(-36), ':id'))).toBe(true);
+        expect(
+          [...mounted].some(
+            path => path.replace(/:(?:resource|id)\b/, id(1).slice(-36)) === section.href,
+          ),
+        ).toBe(true);
         expect(section.id).not.toBe('lists');
       }
     }
@@ -190,11 +194,15 @@ test('G-629: every advertised section href matches a GET mounted by Main', () =>
     expect(work.find((item) => item.id === section)?.href).toBe(
       `/v1/works/${id(1).slice(-36)}/${section}`,
     );
+  for (const section of ['ratings', 'reviews', 'discussion'])
+    expect(work.find(item => item.id === section)?.href).toBe(
+      `/v1/resources/${id(1).slice(-36)}/${section}`,
+    );
   expect(
     pageSections(target('resource', ['https://example.org/Unknown']), mounted).map(
       (section) => section.id,
     ),
-  ).toEqual(['statements']);
+  ).toEqual(['statements', 'discussion']);
 });
 
 test('G-629: 500 native value/qualifier/source references use eight owner batches and withhold denied identities', async () => {

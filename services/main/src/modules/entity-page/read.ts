@@ -61,11 +61,14 @@ export function pageSections(
   // only for a Work. Pending owner inventories do not advertise dead links.
   const sections: Static<typeof entitySection>[] = baseSections[target.base].flatMap((id) => {
     const paths = [
+      `/v1/resources/:resource/${id}`,
       `/v1/resources/:id/${id}`,
       ...(target.base === 'work' ? [`/v1/works/:id/${id}`] : []),
     ];
     const path = paths.find((candidate) => mountedReads.has(candidate));
-    return path ? [{ id, href: path.replace(':id', target.resource.slice(-36)), actions: [] }] : [];
+    return path
+      ? [{ id, href: path.replace(/:(?:resource|id)\b/, target.resource.slice(-36)), actions: [] }]
+      : [];
   });
   const typePath = `/v1/${typeSection === 'recipe' ? 'recipes' : 'hub'}/works/:id`;
   if (typeSection && mountedReads.has(typePath))

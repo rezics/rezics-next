@@ -18,10 +18,10 @@ import { problem } from './problems.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/resources/{id}/page': { get: { bearer: false } },
-  '/v1/resources/{id}/statements': { get: { bearer: false } },
+  '/v1/resources/{resource}/page': { get: { bearer: false } },
+  '/v1/resources/{resource}/statements': { get: { bearer: false } },
 } as const;
-const params = t.Object({ id: readUuid });
+const params = t.Object({ resource: readUuid });
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 const headers = { 'cache-control': 'private, no-store' };
 function response(body: unknown) {
@@ -47,7 +47,7 @@ export function setMountedReads(read: () => ReadonlySet<string>): void { mounted
 export function entityPageRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get(
-      '/v1/resources/:id/page',
+      '/v1/resources/:resource/page',
       {
         params,
         detail,
@@ -58,7 +58,7 @@ export function entityPageRoutes(work: MainWorkDependencies) {
         try {
           return response(
             await workRead(work, request, query, (session) =>
-              readEntityPage(session, `https://rezics.com/id/${path.id}`, mountedReads()),
+              readEntityPage(session, `https://rezics.com/id/${path.resource}`, mountedReads()),
             ),
           );
         } catch (error) {
@@ -67,7 +67,7 @@ export function entityPageRoutes(work: MainWorkDependencies) {
       },
     )
     .get(
-      '/v1/resources/:id/statements',
+      '/v1/resources/:resource/statements',
       {
         params,
         detail,
@@ -81,7 +81,7 @@ export function entityPageRoutes(work: MainWorkDependencies) {
         try {
           return response(
             await workRead(work, request, query, (session) =>
-              readSubjectStatements(session, `https://rezics.com/id/${path.id}`, query.context),
+              readSubjectStatements(session, `https://rezics.com/id/${path.resource}`, query.context),
             ),
           );
         } catch (error) {

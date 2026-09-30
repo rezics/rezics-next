@@ -8,8 +8,8 @@ import { reviewTarget } from '../src/modules/review/read.ts';
 import { replyRoot, readReplyRoot, publicReplyRoot } from '../src/modules/realm-reply/root.ts';
 import { readWorkDiscussion, readWorkActivityHistory } from '../src/modules/work-activity/read.ts';
 import { readWorkRatingContexts, readWorkRating } from '../src/modules/work/read-rating.ts';
-import { WorkReadSession, WorkReadMoved, WorkReadMissing } from '../src/modules/work/read-session.ts';
-import { TargetNotBound, TargetUnavailable } from '../src/modules/target/resolve.ts';
+import { WorkReadSession, WorkReadMoved, WorkReadMissing, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { TargetNotBound, TargetUnavailable, resolveTargets, targetSummaryReader, type ReportTargets } from '../src/modules/target/resolve.ts';
 import { workReadError } from '../src/routes/work-reads.ts';
 import { prepareComponent, RV } from '../src/modules/work/activate.ts';
 import { PROFILES } from '../src/modules/semantic/schema.ts';
@@ -23,7 +23,7 @@ type Row = NonNullable<SparqlResult['results']>['bindings'][number];
 const directory = mkdtempSync('.temp/g-650-unit-');
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
-function fixture(type: 'work' | 'release' | 'occurrence' | 'character', options: {
+function fixture(type: 'work' | 'release' | 'occurrence' | 'character' | 'realization', options: {
   public?: boolean; allowed?: boolean; draft?: boolean; moved?: boolean; erasedRoot?: boolean } = {}) {
   const queries: string[] = [];
   const graph = new FusekiClient('http://graph.invalid');
@@ -152,4 +152,36 @@ test('G-650: Work history rejects readable non-Work targets', async () => {
     await expect(readWorkActivityHistory(fixture(type, { allowed: true }).session, id(1)))
       .rejects.toBeInstanceOf(WorkReadMissing);
   }
+});
+
+
+test('G-650: generalized sessions preserve report-owner resolution and duplicate order', async () => {
+  const f = fixture('work', { allowed: true });
+  const owned = { resource: id(5), base: 'resource' as const, work: null,
+    revision: id(6), types: [`${RV}Realm`], disclosure: 'public' as const };
+  const reportOwners: ReportTargets = async (session, resources) => {
+    expect(session).toBe(f.session);
+    expect(typeof session.realm).toBe('function');
+    expect(resources).toEqual([id(5), id(1)]);
+    return new Map([[id(5), owned]]);
+  };
+  const targets = await resolveTargets(f.session, [id(5), id(1), id(5)], 'report', undefined, reportOwners);
+  expect(targets.map(target => target.resource)).toEqual([id(5), id(1), id(5)]);
+  expect(targets[0]).toEqual(owned);
+  expect(targets[2]).toEqual(owned);
+  expect(targets[1]).toMatchObject({ base: 'work', revision: id(2) });
+  await expect(resolveTargets(f.session, [id(1)], 'report', undefined,
+    async () => new Map([[id(5), owned]]))).rejects.toBeInstanceOf(WorkReadUnavailable);
+  expect(await targetSummaryReader(f.session).canReadWork!(id(1))).toBe(true);
+});
+
+test('G-650: native realization and published-text revision paths remain available to discussions', async () => {
+  const f = fixture('realization', { allowed: true });
+  expect(await replyRoot(f.session, id(1), id(2))).toBe(true);
+  const revisionQuery = f.queries.find(query => query.includes('SELECT ?epoch ?sequence ?r ?revision'))!;
+  expect(revisionQuery).toContain('rv:Realization ; rv:head ?revision');
+  expect(revisionQuery).toContain('rv:RealizationRevision ; rv:component ?r');
+  expect(revisionQuery).toContain('rv:TextContribution ; rv:publicationHead ?publication');
+  expect(revisionQuery).toContain('rv:selectedDraft ?revision');
+  expect(await readReplyRoot(f.session, id(1), id(9))).toBe(true);
 });
