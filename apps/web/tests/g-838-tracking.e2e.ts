@@ -193,7 +193,7 @@ test('attempts on two devices, series progress and the offered correspondence', 
   await expect(a.getByRole('button', { name: 'Want to read' })).toBeVisible();
   await a.goto(at(spider.web));
   await a.getByRole('button', { name: 'More shelves' }).click();
-  await a.getByRole('menuitemradio', { name: 'Read' }).click();
+  await a.getByRole('menuitemradio', { name: 'Read', exact: true }).click();
   await expect(a.getByRole('button', { name: /^Read — Shelve/ })).toBeVisible();
   await a.goto(at(spider.web, '/connections'));
   const spiderPanel = a.getByRole('region', { name: 'Series progress' });
