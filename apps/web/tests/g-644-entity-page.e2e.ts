@@ -62,7 +62,7 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   const at = (resource: string, locale = 'en') => `/${locale}/e/${uuid(resource)}`;
   await page.setViewportSize(desktop);
   page.on('response', async response => {
-    if (response.url().includes('/api/main/') && response.request().method() !== 'GET' && response.status() >= 400) {
+    if (response.url().includes('/api/main/') && response.status() >= 400) {
       console.log('[g-644] refused', response.request().method(), response.url().split('/api/main')[1], response.status(), (await response.text()).slice(0, 200));
     }
   });
