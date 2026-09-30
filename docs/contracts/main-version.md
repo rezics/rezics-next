@@ -35,8 +35,9 @@ Decision 10, product manager under maintainer delegation, 2026-09-29.
 People must be able to recover what they authored and what they read. Existing
 immutable revision and release owners above supply the basis; the remaining
 custody work is stable block locators, historical dependency manifests,
-recoverable local pending writes, explicit conversion losses, saved empty drafts,
-private draft media, restore as a new revision and lossless export/re-import.
+recoverable local pending writes, explicit conversion losses, private draft media,
+restore as a new revision and lossless export/re-import. Clearing chapter or text
+draft content saves an exact empty revision; publishing it is refused.
 
 Keeping identity and exact historical selection prevents comments and evidence
 from moving when today's document changes. [W3C Annotation selectors and states](https://www.w3.org/TR/annotation-model/)
