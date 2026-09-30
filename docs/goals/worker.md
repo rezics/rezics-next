@@ -48,6 +48,10 @@ problems as blockers or proposed tasks instead of changing process.
 Parallel workers must not collide on derived or registry files. The backend
 conventions below come from the first backend Goal:
 
+- Do not start a Storybook or web dev server. Check UI with `task storybook:test`
+  and browser tests, run through `task goal -- slot -- <command>` so heavy
+  browser suites share the QA slots; use the shared stack's web app for manual
+  browser checks. Stop any browser or server you started before handoff.
 - Do not commit `generated/**`, `packages/model/src/generated/**` or the Fuseki
   image stamp in `infra/dev/compose.yaml`. Run `task gen` locally when your tests
   need them, then restore those paths with `git checkout --` before handoff. The
