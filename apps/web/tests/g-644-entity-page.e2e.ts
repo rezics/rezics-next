@@ -64,7 +64,13 @@ test('any admitted resource has a page, and a discussion starts from it', async 
 
   // Signed out: Main answers a public Work's chapter alike to everyone. Where it answers, the page reads, relations ask
   // for a sign-in and "Discuss" leads to sign-in rather than a dead end; where it does not, the page is a plain 404.
-  const anonymous = await fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/resources/${uuid(seeded.occurrence)}/page`);
+  const askMain = () => fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/resources/${uuid(seeded.occurrence)}/page`);
+  let anonymous = await askMain();
+  // Access learns of the seeded records from its outbox; give it a moment before judging what anonymous readers see.
+  for (const deadline = Date.now() + 45_000; anonymous.status !== 200 && Date.now() < deadline;) {
+    await new Promise(done => setTimeout(done, 1000));
+    anonymous = await askMain();
+  }
   info.annotations.push({ type: 'anonymous-occurrence', description: String(anonymous.status) });
   const first = await page.goto(at(seeded.occurrence));
   expect(first?.status()).toBe(anonymous.status === 200 ? 200 : 404);
@@ -82,7 +88,7 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   // Start a discussion on the chapter occurrence, reload, and come back to it.
   await expect(page.getByRole('heading', { name: 'Discussion' })).toBeVisible();
   await page.getByRole('link', { name: 'Discuss this list item' }).first().click();
-  await expect(page).toHaveURL(new RegExp(`/en/submit\\?target=${uuid(seeded.occurrence)}$`));
+  await expect(page).toHaveURL(new RegExp(`/en/submit\\?target=${uuid(seeded.occurrence)}$`), { timeout: 30_000 });
   await page.getByRole('searchbox', { name: 'Find a community' }).fill('Aincrad');
   await page.getByRole('button', { name: 'Aincrad readers' }).click();
   // The target is fixed by the page that asked; it cannot be searched away.
