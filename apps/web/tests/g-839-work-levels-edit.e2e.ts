@@ -178,10 +178,13 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   await shoot(page, 'editions-form', info);
   await release.getByRole('button', { name: 'Add release' }).click();
   await expect(receipt(page).last()).toBeVisible();
-  await expect(async () => {
-    await page.goto(at(volumeOne, 'editions'));
-    await expect(page.getByRole('region', { name: 'Releases' }).getByText('Covers 3 Works')).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 45_000 });
+  await eventually(page, at(volumeOne, 'editions'), async () => {
+    try { await expect(page.getByRole('region', { name: 'Releases' }).getByText('Covers 3 Works')).toBeVisible({ timeout: 2_000 }); }
+    catch (error) {
+      mark(info, `releases: ${(await page.locator('#main-content').innerText()).replace(/\s+/g, ' ').slice(0, 1500)}`);
+      throw error;
+    }
+  });
 
   mark(info, 'release added');
   // A reader: a Work the member may read but not edit shows no edit link and no control.
