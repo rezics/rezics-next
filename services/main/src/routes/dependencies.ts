@@ -1,4 +1,5 @@
 import type { FeedViewerStateReader } from '../modules/feed/viewer-state.ts';
+import type { QuotationReader } from '../modules/wiki/quotation.ts';
 import type { ContentCore } from '../../../content/src/core.ts';
 import type { ContentProtectionStore } from '../modules/protection/content-store.ts';
 import type { ProtectionAdmissionSigner } from '../modules/access/protection-admission.ts';
@@ -97,6 +98,7 @@ import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
 import type { ConsumptionSessionStore } from '../modules/session/store.ts';
 
 export interface MainWorkDependencies {
+  wikiQuotations?: QuotationReader;
   editionPreferences?: import('../modules/session/preference-store.ts').EditionPreferenceStore;
   seriesSessions?: import('../modules/session/series-store.ts').SeriesSessionReader;
   catalogueIntake?: import('../modules/catalogue-intake/store.ts').CatalogueIntakeStore;

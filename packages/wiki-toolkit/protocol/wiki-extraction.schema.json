@@ -1,0 +1,690 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rezics.com/protocol/wiki-extraction-v1.schema.json",
+  "type": "object",
+  "required": [
+    "profile",
+    "target",
+    "zone",
+    "continuity",
+    "source",
+    "units",
+    "entities",
+    "claims"
+  ],
+  "properties": {
+    "profile": {
+      "type": "string",
+      "const": "wiki-extraction-v1",
+      "maxLength": 18
+    },
+    "target": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "x-wiki-iri": true
+    },
+    "zone": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "x-wiki-iri": true
+    },
+    "continuity": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "x-wiki-iri": true
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "representationSha256",
+        "mediaType",
+        "language",
+        "rightsBasis",
+        "method"
+      ],
+      "properties": {
+        "representationSha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$"
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "rightsBasis": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "original_contribution",
+              "maxLength": 21
+            },
+            {
+              "type": "string",
+              "const": "unprotected_fact",
+              "maxLength": 16
+            },
+            {
+              "type": "string",
+              "const": "public_domain",
+              "maxLength": 13
+            },
+            {
+              "type": "string",
+              "const": "license",
+              "maxLength": 7
+            },
+            {
+              "type": "string",
+              "const": "permission",
+              "maxLength": 10
+            },
+            {
+              "type": "string",
+              "const": "statutory_exception",
+              "maxLength": 19
+            },
+            {
+              "type": "string",
+              "const": "service_terms",
+              "maxLength": 13
+            },
+            {
+              "type": "string",
+              "const": "unknown",
+              "maxLength": 7
+            }
+          ]
+        },
+        "method": {
+          "type": "object",
+          "required": [
+            "agent",
+            "model",
+            "inference"
+          ],
+          "properties": {
+            "agent": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "inference": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "local",
+                  "maxLength": 5
+                },
+                {
+                  "type": "string",
+                  "const": "provider",
+                  "maxLength": 8
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "ordinal",
+          "label",
+          "occurrence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "occurrence": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "x-wiki-iri": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 256
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "names"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^https?://[^\\s<>\"{}|\\\\^`]+$",
+            "x-wiki-iri": true
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "value",
+                "language",
+                "kind",
+                "revealedAt"
+              ],
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "language": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "primary",
+                      "maxLength": 7
+                    },
+                    {
+                      "type": "string",
+                      "const": "alias",
+                      "maxLength": 5
+                    },
+                    {
+                      "type": "string",
+                      "const": "title",
+                      "maxLength": 5
+                    }
+                  ]
+                },
+                "revealedAt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+                }
+              },
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 16
+          },
+          "match": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "x-wiki-iri": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "maxItems": 128
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "subject",
+          "predicate",
+          "object",
+          "modality",
+          "continuity",
+          "revealedAt",
+          "evidence"
+        ],
+        "properties": {
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+              },
+              {
+                "type": "string",
+                "maxLength": 128,
+                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "x-wiki-iri": true
+              }
+            ]
+          },
+          "predicate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^https?://[^\\s<>\"{}|\\\\^`]+$",
+            "x-wiki-iri": true
+          },
+          "object": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "ref"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "entity",
+                    "maxLength": 6
+                  },
+                  "ref": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+                      },
+                      {
+                        "type": "string",
+                        "maxLength": 128,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "x-wiki-iri": true
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "value"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "literal",
+                    "maxLength": 7
+                  },
+                  "value": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "language": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "modality": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "narrated",
+                "maxLength": 8
+              },
+              {
+                "type": "string",
+                "const": "said",
+                "maxLength": 4
+              },
+              {
+                "type": "string",
+                "const": "rumoured",
+                "maxLength": 8
+              },
+              {
+                "type": "string",
+                "const": "hypothetical",
+                "maxLength": 12
+              }
+            ]
+          },
+          "continuity": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "x-wiki-iri": true
+          },
+          "revealedAt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "locator",
+                "quote"
+              ],
+              "properties": {
+                "locator": {
+                  "type": "object",
+                  "required": [
+                    "version",
+                    "source",
+                    "selector"
+                  ],
+                  "properties": {
+                    "version": {
+                      "type": "string",
+                      "const": "rezics-locator-v1",
+                      "maxLength": 200
+                    },
+                    "source": {
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "representationSha256",
+                        "mediaType"
+                      ],
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "external",
+                          "maxLength": 200
+                        },
+                        "representationSha256": {
+                          "type": "string",
+                          "minLength": 64,
+                          "maxLength": 64,
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "mediaType": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "selector": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "type",
+                            "blockId"
+                          ],
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "BlockSelector",
+                              "maxLength": 200
+                            },
+                            "blockId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "cellId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "range": {
+                              "type": "object",
+                              "required": [
+                                "unit",
+                                "start",
+                                "end"
+                              ],
+                              "properties": {
+                                "unit": {
+                                  "type": "string",
+                                  "const": "code-point",
+                                  "maxLength": 200
+                                },
+                                "start": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "end": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "type",
+                            "unit",
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "ByteRangeSelector",
+                              "maxLength": 200
+                            },
+                            "unit": {
+                              "type": "string",
+                              "const": "byte",
+                              "maxLength": 200
+                            },
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "end": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "type",
+                            "cfi"
+                          ],
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "EpubCfiSelector",
+                              "maxLength": 200
+                            },
+                            "cfi": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "type",
+                            "label",
+                            "unit",
+                            "utterance"
+                          ],
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "ScriptSelector",
+                              "maxLength": 200
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "unit": {
+                              "type": "string",
+                              "const": "utterance",
+                              "maxLength": 200
+                            },
+                            "utterance": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "route": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "maxItems": 16
+                              },
+                              "minItems": 1,
+                              "uniqueItems": true,
+                              "maxItems": 16
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "type",
+                            "exact"
+                          ],
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "TextQuoteSelector",
+                              "maxLength": 200
+                            },
+                            "exact": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "prefix": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "suffix": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "quote": {
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "exact"
+                      ],
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "TextQuoteSelector",
+                          "maxLength": 200
+                        },
+                        "exact": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "prefix": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "suffix": {
+                          "type": "string",
+                          "maxLength": 200
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "quote": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 16
+          }
+        },
+        "additionalProperties": false
+      },
+      "maxItems": 256
+    }
+  },
+  "additionalProperties": false
+}

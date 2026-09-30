@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { CatalogueIntakeStore, unverifiedWorks } from './modules/catalogue-intake/store.ts';
+import { WikiQuotationStore } from './modules/wiki/quotation.ts';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { ContentComments, ContentCore, ContentProjectionCursor,
@@ -330,6 +331,7 @@ const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
 const libraryImport = new ReaderLibraryImportStore(contentPool);
 configureLibraryShelves(contentPool, pool, fuseki);
 const app = createMainApp(fuseki, {
+  wikiQuotations: new WikiQuotationStore(contentPool),
   suitability: new SuitabilityStore(pool, access),
   follows: new FollowsStore(pool),
   feed: new FeedStore(pool),

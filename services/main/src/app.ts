@@ -110,6 +110,7 @@ import { facetRoutes } from './routes/facets.ts';
 import { typeRoutes } from './routes/types.ts';
 import { queryRoutes } from './routes/query.ts';
 import { savedFilterRoutes } from './routes/saved-filters.ts';
+import { wikiRoutes, wikiSchemaError } from './routes/wiki.ts';
 
 export type { MainWorkDependencies } from './routes/dependencies.ts';
 
@@ -155,6 +156,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(catalogueCandidateRoutes(work))
+    .use(wikiRoutes(fuseki, work))
     .use(suitabilityRoutes(work))
     .use(sessionsRoutes(work))
     .use(publicReportRoutes(work))
@@ -273,6 +275,7 @@ function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
 export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependencies) {
   // Registered first so it also handles every plugin route mounted below.
   const app = new Elysia()
+    .error(({ error, request }) => wikiSchemaError(error, request))
     .error(({ error }) => {
       if (error instanceof ValidationError || error instanceof ParseError) {
         return problem(400, 'invalid_request', 'Request does not match the Work contract');

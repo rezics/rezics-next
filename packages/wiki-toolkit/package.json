@@ -1,0 +1,12 @@
+{
+  "name": "@rezics/wiki-toolkit",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "files": ["protocol", "LICENSE", "NOTICE"],
+  "exports": {
+    "./protocol/locator": "./protocol/locator.ts",
+    "./protocol/wiki-extraction": "./protocol/wiki-extraction.ts",
+    "./protocol/*.json": "./protocol/*.json"
+  }
+}

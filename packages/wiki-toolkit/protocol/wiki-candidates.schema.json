@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rezics.com/protocol/wiki-candidates-v1.schema.json",
+  "type": "object",
+  "required": [
+    "target",
+    "zone",
+    "names"
+  ],
+  "properties": {
+    "target": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "x-wiki-iri": true
+    },
+    "zone": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "x-wiki-iri": true
+    },
+    "names": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "value",
+          "language"
+        ],
+        "properties": {
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "language": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^https?://[^\\s<>\"{}|\\\\^`]+$",
+            "x-wiki-iri": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 64
+    }
+  },
+  "additionalProperties": false
+}
