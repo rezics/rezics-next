@@ -49,6 +49,17 @@ test('G-539: current accepted semantic Resources follow live Work disclosure and
       if (response.status !== 201) throw new Error(`create semantic: ${response.status} ${await response.text()}`);
       return await response.json() as Write;
     };
+    // A Work's attached description cannot borrow disclosure from another Work.
+    const hiddenHead = (await f.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?head WHERE { GRAPH <urn:rezics:graph:current> { <${hidden.work}> rv:head ?head } }`))
+      .results?.bindings[0]?.head?.value;
+    expect(hiddenHead).toBeString();
+    await owner.grant(`semantic:edit:${hidden.work}`, 'semantic.change');
+    const attached = await owner.send('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', target: hidden.work, expectedHead: hiddenHead,
+      state: { ...state('Private Work description', [shown.work]), types: [] }, actingSubject: owner.actor });
+    if (attached.status !== 200) throw new Error(`attach semantic: ${attached.status} ${await attached.text()}`);
+    expect(await attached.json()).toMatchObject({ component: hidden.work });
     const visible = await create('Public heroine', [shown.work]);
     const privateOnly = await create('Draft heroine', [hidden.work]);
     const unlinked = await create('Unlinked heroine', []);
@@ -105,6 +116,13 @@ test('G-539: current accepted semantic Resources follow live Work disclosure and
     const readPath = (ref: string) => `/v1/semantic/resources/${local(ref)}`;
     const resourcePath = (ref: string) => `/v1/resources/${local(ref)}`;
     const previewPath = (ref: string) => `/v1/public-previews/${local(ref)}`;
+    for (const path of [readPath, resourcePath, previewPath]) {
+      const absent = await anonymous(path(id()));
+      expect(absent.status).toBe(404);
+      const hiddenDescription = await anonymous(path(hidden.work));
+      expect(hiddenDescription.status).toBe(404);
+      expect(await hiddenDescription.text()).toBe(await absent.text());
+    }
     for (const read of viewers) {
       for (const ref of [visible.component, place.component, event.component]) {
         expect((await read(readPath(ref))).status).toBe(200);
