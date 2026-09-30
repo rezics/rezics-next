@@ -25,11 +25,10 @@ export function decodeSessionRecord(value: string | undefined): SessionRecord | 
   try {
     const parsed = JSON.parse(Buffer.from(value, 'base64url').toString()) as Partial<SessionRecord>;
     const user = parsed.user;
-    if (typeof user?.id !== 'string' || !user.id || typeof user.name !== 'string'
-      || typeof user.email !== 'string' || (user.image !== null && typeof user.image !== 'string')
+    if (typeof user?.id !== 'string' || !user.id
       || typeof parsed.expiresAt !== 'string' || Number.isNaN(Date.parse(parsed.expiresAt))) return null;
-    return { user: { id: user.id, name: user.name, email: user.email, image: user.image },
-      expiresAt: parsed.expiresAt };
+    // A cookie written before the Account's name and email were dropped keeps only the id.
+    return { user: { id: user.id }, expiresAt: parsed.expiresAt };
   } catch { return null; }
 }
 

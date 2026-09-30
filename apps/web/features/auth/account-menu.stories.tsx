@@ -12,7 +12,7 @@ const pen = 'https://rezics.com/id/1e1489d5-6994-402c-99f2-50547eeaef4d';
 const agents: Session['agents'] = [{ iri: ada, label: 'Aster', handle: 'aster',
   kind: 'pen-name', path: 'direct-principal' },
   { iri: pen, label: null, handle: null, kind: null, path: 'represented-agent' }];
-const session: Session = { user: { id: 'u1', name: 'Ada Lovelace', email: 'ada@example.test', image: null },
+const session: Session = { user: { id: 'u1' },
   agent: { status: 'selected', agent: agents[0]! }, agents, expiresAt: '2026-10-27T00:00:00.000Z' };
 
 const meta = { title: 'Auth/Account menu', component: AccountMenu,

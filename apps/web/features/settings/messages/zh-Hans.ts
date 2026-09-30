@@ -92,7 +92,7 @@ export default {
   bio: '简介',
   avatarHelp: '支持 PNG、JPEG、WebP 或 GIF，最大 4 MB。保存后图片将公开显示。',
   removeAvatar: '移除当前头像',
-  accountInfo: '此公开名称最初来自您的账户名称。此处的修改不会更改账户名称。',
+  accountInfo: '您的账户名称保持私密。此处的修改不会影响它。',
   otherInfo: '此处的修改会公开显示在此身份的资料中。',
   profileUnavailable: '暂时无法修改资料。请重新加载此页面。',
   saveProfile: '保存公开资料',

@@ -48,13 +48,18 @@ test('IAM03: Agents without a label show a short, stable name', () => {
 });
 
 test('IAM01: the session record round-trips and a tampered or partial one reads as signed out', () => {
-  const record = { user: { id: 'u1', name: 'Ada', email: 'ada@example.test', image: null },
+  const record = { user: { id: 'u1' },
     expiresAt: '2026-10-27T00:00:00.000Z' };
   expect(decodeSessionRecord(encodeSessionRecord(record))).toEqual(record);
   for (const value of [undefined, '', 'not-base64-json', Buffer.from('{"user":{"id":1}}').toString('base64url'),
     Buffer.from(JSON.stringify({ ...record, expiresAt: 'never' })).toString('base64url')]) {
     expect(decodeSessionRecord(value)).toBeNull();
   }
+  // A cookie from before the Account's name and email were dropped keeps only the id.
+  const old = Buffer.from(JSON.stringify({ user: { id: 'u1', name: 'PRIVATE-MARKER', email: 'a@example.test',
+    image: null }, expiresAt: record.expiresAt })).toString('base64url');
+  expect(decodeSessionRecord(old)).toEqual(record);
+  expect(JSON.stringify(decodeSessionRecord(old))).not.toContain('PRIVATE-MARKER');
   const claims = Buffer.from(JSON.stringify({ sub: 'u1' })).toString('base64url');
   expect(tokenSubject(`h.${claims}.s`)).toBe('u1');
   expect(tokenSubject('opaque')).toBeNull();

@@ -103,18 +103,18 @@ export async function revokeRefreshToken(client: AccountClient, refreshToken: st
   } catch { return false; }
 }
 
-export interface AccountUser { id: string; name: string; email: string; image: string | null }
+/** The signed-in Account, by id only. The Account's name, email and image are
+ * private: the site never asks for the `profile` or `email` scopes, never reads
+ * them from userinfo and never stores them in the session. */
+export interface AccountUser { id: string }
 
-/** Display identity from the bearer token, without an Accounts session cookie. */
+/** Confirms the issued token's Account, without an Accounts session cookie. */
 export async function readOAuthUser(client: AccountClient, accessToken: string): Promise<AccountUser | null> {
   try {
     const response = await (client.fetch ?? fetch)(new URL('/api/auth/oauth2/userinfo', client.accountOrigin), {
       headers: { authorization: `Bearer ${accessToken}` }, cache: 'no-store', signal: AbortSignal.timeout(10_000) });
-    const user = await response.json().catch(() => null) as {
-      sub?: unknown; name?: unknown; email?: unknown; picture?: unknown } | null;
+    const user = await response.json().catch(() => null) as { sub?: unknown } | null;
     if (!response.ok || typeof user?.sub !== 'string' || !user.sub) return null;
-    return { id: user.sub, name: typeof user.name === 'string' ? user.name : '',
-      email: typeof user.email === 'string' ? user.email : '',
-      image: typeof user.picture === 'string' && /^https?:\/\//.test(user.picture) ? user.picture : null };
+    return { id: user.sub };
   } catch { return null; }
 }

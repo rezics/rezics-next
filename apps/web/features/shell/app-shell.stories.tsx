@@ -17,15 +17,14 @@ const zhHansShellMessages = { ...messages, ...zhHans };
 
 const ada = { iri: 'https://rezics.com/id/57c86232-6db4-4b0d-aa56-e4ad584d07b4', label: 'Ada Lovelace',
   handle: 'ada', kind: 'person', path: 'direct-principal' } as const;
-const signedIn: Session = { user: { id: 'u1', name: 'Ada Lovelace', email: 'ada@example.test', image: null },
+const signedIn: Session = { user: { id: 'u1' },
   agent: { status: 'selected', agent: ada }, agents: [ada], expiresAt: '2026-10-27T00:00:00.000Z' };
 
 const society = { iri: 'https://rezics.com/id/07309b3b-c8f6-4211-bdb3-9aa486c1e4d5',
   label: 'Riverside Historical Society Translation Collective', handle: null,
   kind: 'organization', path: 'represented-agent' } as const;
 const longNames: Session = { ...signedIn,
-  user: { id: 'u2', name: 'Maximiliana Theodora Wilhelmina von Aschenbrenner-Kowalczyk',
-    email: 'maximiliana.theodora.von.aschenbrenner-kowalczyk@example-institution.test', image: null },
+  user: { id: 'u2' },
   agent: { status: 'selected', agent: society }, agents: [society] };
 
 const realm = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-aaaa-4a6f-8c2d-3e7b5c1a9f40`;

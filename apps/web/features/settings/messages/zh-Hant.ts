@@ -12,7 +12,7 @@ export default {
   bio: '自我介紹',
   avatarHelp: '支援 PNG、JPEG、WebP 或 GIF，最大 4 MB。儲存後，圖片會公開顯示。',
   removeAvatar: '移除目前的大頭貼',
-  accountInfo: '此公開名稱最初取自您的 REZICS 帳戶名稱。在此所做的變更不會改變帳戶名稱。',
+  accountInfo: '您的帳戶名稱維持私密。在此所做的變更不會影響它。',
   otherInfo: '此處的變更會公開顯示於此身分的個人檔案中。',
   profileUnavailable: '目前暫時無法編輯個人檔案，請重新載入此頁面。',
   saveProfile: '儲存公開個人檔案',

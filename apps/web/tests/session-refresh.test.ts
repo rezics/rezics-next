@@ -68,7 +68,7 @@ test('IAM01: two browser contexts with the same expired cookies receive one rota
   configure(fetcher);
   const stale = crypto.randomUUID();
   const sessionKey = crypto.randomUUID();
-  const record = encodeSessionRecord({ user: { id: 'user-1', name: 'Ada', email: '', image: null },
+  const record = encodeSessionRecord({ user: { id: 'user-1' },
     expiresAt: '2030-01-01T00:00:00Z' });
   const request = () => proxy(new NextRequest('http://web.test/en/w/book', { headers: {
     cookie: `rezics_refresh=${stale}; rezics_session=${record}; rezics_session_key=${sessionKey}` } }));
@@ -102,7 +102,7 @@ test('IAM01: an unavailable Account is retried by the next request; a refused gr
 
 test('IAM01: refresh runs only when the access cookie is gone and keeps the signed-in user', async () => {
   const { client, exchanges } = account(() => issued('user-1'));
-  const user = { id: 'user-1', name: 'Ada', email: 'ada@example.test', image: null };
+  const user = { id: 'user-1' };
   const record = encodeSessionRecord({ user, expiresAt: new Date().toISOString() });
   expect(await refreshSession(jar({ rezics_access: token('user-1'), rezics_refresh: 'r', rezics_session: record }), client))
     .toEqual({ kind: 'current' });
@@ -117,7 +117,7 @@ test('IAM01: refresh runs only when the access cookie is gone and keeps the sign
   // A record for someone else is display data only; the token decides who is signed in.
   const other = await refreshSession(jar({ rezics_refresh: crypto.randomUUID(),
     rezics_session: encodeSessionRecord({ user: { ...user, id: 'user-2' }, expiresAt: '2030-01-01T00:00:00Z' }) }), client);
-  expect(other.kind === 'refreshed' && other.user).toEqual({ id: 'user-1', name: '', email: '', image: null });
+  expect(other.kind === 'refreshed' && other.user).toEqual({ id: 'user-1' });
   const opaque = account(() => Response.json({ access_token: 'opaque', expires_in: 300 }));
   expect(await refreshSession(jar({ rezics_refresh: crypto.randomUUID() }), opaque.client)).toEqual({ kind: 'ended' });
 });
@@ -129,14 +129,14 @@ test('IAM01: session cookies are httpOnly and Lax, the access cookie lapses befo
   expect(accessMaxAge(Number.NaN)).toBe(270);
   const cookies = sessionCookies('https://web.rezics.test/studio',
     { accessToken: 'a', refreshToken: 'r', expiresIn: 300 },
-    { id: 'u', name: 'Ada', email: 'ada@example.test', image: null }, 0);
+    { id: 'u' }, 0);
   expect(cookies.map(cookie => [cookie.name, cookie.options.maxAge])).toEqual([
     ['rezics_access', 270], ['rezics_session', 2_592_000], ['rezics_refresh', 2_592_000]]);
   for (const { options } of cookies) {
     expect(options).toMatchObject({ httpOnly: true, sameSite: 'lax', secure: true, path: '/' });
   }
   const withoutRefresh = sessionCookies('http://127.0.0.1:3000/', { accessToken: 'a',
-    refreshToken: null, expiresIn: 300 }, { id: 'u', name: '', email: '', image: null }, 0);
+    refreshToken: null, expiresIn: 300 }, { id: 'u' }, 0);
   expect(withoutRefresh.map(cookie => cookie.name)).toEqual(['rezics_access', 'rezics_session']);
   expect(withoutRefresh[0]!.options.secure).toBe(false);
 });
@@ -214,7 +214,7 @@ test('IAM01: a refused refresh signs the browser out cleanly instead of failing 
   // Signed out or current: no Account call and no changes.
   let calls = 0;
   configure((async () => { calls += 1; return issued(); }) as unknown as typeof fetch);
-  const record = encodeSessionRecord({ user: { id: 'user-1', name: 'Ada', email: '', image: null },
+  const record = encodeSessionRecord({ user: { id: 'user-1' },
     expiresAt: '2030-01-01T00:00:00Z' });
   const untouched = await proxy(new NextRequest('http://web.test/en', { headers: {
     cookie: `rezics_access=${token('user-1')}; rezics_session=${record}; rezics_session_key=${crypto.randomUUID()}` } }));
@@ -235,7 +235,7 @@ test('IAM01: an unavailable refresh signs out this request and retries the next 
     ? issued() : new Response('Account unavailable', { status: 503 }));
   configure(fetcher);
   const stale = crypto.randomUUID();
-  const record = encodeSessionRecord({ user: { id: 'user-1', name: 'Ada', email: '', image: null },
+  const record = encodeSessionRecord({ user: { id: 'user-1' },
     expiresAt: '2030-01-01T00:00:00Z' });
   const request = () => proxy(new NextRequest('http://web.test/en/w/book', { headers: {
     cookie: `rezics_refresh=${stale}; rezics_session=${record}` } }));

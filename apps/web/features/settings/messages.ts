@@ -95,7 +95,7 @@ const en = {
   bio: 'Bio',
   avatarHelp: 'PNG, JPEG, WebP or GIF, up to 4 MB. The image becomes public when you save.',
   removeAvatar: 'Remove current avatar',
-  accountInfo: 'This public name began with your Account name. Changes here do not change your Account name.',
+  accountInfo: 'Your Account name stays private. Changes here do not affect it.',
   otherInfo: 'Changes here appear publicly for this Agent.',
   profileUnavailable: 'Profile editing is temporarily unavailable. Try reloading this page.',
   saveProfile: 'Save public profile',

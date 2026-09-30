@@ -26,8 +26,9 @@ async function postOnboarding(token: string, sessionKey: string, displayName?: s
     { headers: { 'x-session-key': sessionKey } });
   if (!response.error) return response.data;
   const code = (response.error.value as { code?: string } | undefined)?.code;
-  return code === 'public_name_required' ? 'name-required'
-    : code === 'invalid_public_name' ? 'invalid-name' : null;
+  // Main owns the name rules: its 400 or schema 422 for a typed name is the only "invalid".
+  if (displayName !== undefined && (response.status === 400 || response.status === 422)) return 'invalid-name';
+  return code === 'public_name_required' ? 'name-required' : null;
 }
 
 /** Main is idempotent per principal. A short 202 retry covers ordinary graph

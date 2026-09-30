@@ -31,6 +31,6 @@ export async function refreshSession(cookies: CookieReader, client: AccountClien
   const record = decodeSessionRecord(cookies.get(SESSION_COOKIE)?.value);
   // The record is display data; the token names who is signed in.
   const user = record && record.user.id === subject ? record.user
-    : subject ? { id: subject, name: '', email: '', image: null } : null;
+    : subject ? { id: subject } : null;
   return user ? { kind: 'refreshed', tokens: result.tokens, user } : { kind: 'ended' };
 }

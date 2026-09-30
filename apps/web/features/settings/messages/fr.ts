@@ -12,7 +12,7 @@ export default {
   bio: 'Présentation',
   avatarHelp: 'PNG, JPEG, WebP ou GIF, jusqu’à 4 Mo. L’image sera publique après son enregistrement.',
   removeAvatar: 'Supprimer l’avatar actuel',
-  accountInfo: 'Ce nom public reprend le nom de votre compte. Les changements effectués ici ne modifient pas le nom de votre compte.',
+  accountInfo: 'Le nom de votre compte reste privé. Les changements effectués ici ne l’affectent pas.',
   otherInfo: 'Ces changements seront visibles publiquement pour cette identité.',
   profileUnavailable: 'La modification du profil est temporairement indisponible. Rechargez cette page.',
   saveProfile: 'Enregistrer le profil public',

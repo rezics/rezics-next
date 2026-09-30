@@ -14,5 +14,7 @@ test('IAM01: the main site requests only declared Main resource scopes, and clas
   expect(requested.has('openid') && requested.has('offline_access')).toBe(true);
   // Acting-context discovery and Work creation, which every signed-in page uses.
   expect(requested.has('work:create') && requested.has('work:read')).toBe(true);
+  // The Account's name, email and image are private: the site never asks for the scopes that release them.
+  for (const scope of ['profile', 'email', 'address', 'phone']) expect(requested.has(scope), scope).toBe(false);
   expect(MAIN_SITE_SCOPE.split(' ')).toEqual([...MAIN_SITE_SCOPES]);
 });

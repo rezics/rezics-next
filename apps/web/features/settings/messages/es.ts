@@ -12,7 +12,7 @@ export default {
   bio: 'Biografía',
   avatarHelp: 'PNG, JPEG, WebP o GIF, hasta 4 MB. La imagen será pública cuando la guardes.',
   removeAvatar: 'Quitar el avatar actual',
-  accountInfo: 'Este nombre público se basó inicialmente en el nombre de tu cuenta. Los cambios aquí no modifican el nombre de tu cuenta.',
+  accountInfo: 'El nombre de tu cuenta sigue siendo privado. Los cambios aquí no lo afectan.',
   otherInfo: 'Los cambios serán públicos para esta identidad.',
   profileUnavailable: 'La edición del perfil no está disponible temporalmente. Recarga esta página.',
   saveProfile: 'Guardar perfil público',

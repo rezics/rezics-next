@@ -12,7 +12,7 @@ export default {
   bio: '自己紹介',
   avatarHelp: 'PNG、JPEG、WebP、GIF に対応しています（最大 4 MB）。保存すると画像が公開されます。',
   removeAvatar: '現在のプロフィール画像を削除',
-  accountInfo: 'この公開名は最初にアカウント名から設定されました。ここで変更してもアカウント名は変わりません。',
+  accountInfo: 'アカウント名は非公開のままです。ここでの変更はアカウント名に影響しません。',
   otherInfo: 'ここでの変更は、このエージェントのプロフィールに公開されます。',
   profileUnavailable: 'プロフィールを編集できません。ページを再読み込みしてください。',
   saveProfile: '公開プロフィールを保存',

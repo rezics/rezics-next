@@ -25,7 +25,7 @@ export const Person: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Profile settings' })).toBeVisible();
     await expect(canvas.getByText('@ada')).toBeVisible();
-    await expect(canvas.getByText(/This public name began with your Account name/)).toBeVisible();
+    await expect(canvas.getByText(/Your Account name stays private/)).toBeVisible();
     await expect(canvas.getByRole('textbox', { name: 'Display name' })).toHaveValue('Ada Lovelace');
     await expect(canvas.getByRole('textbox', { name: 'Bio' })).toHaveValue('Reader and writer');
     await expect(canvas.getByText('Choose image')).toBeVisible();

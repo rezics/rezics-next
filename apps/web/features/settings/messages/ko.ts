@@ -12,7 +12,7 @@ export default {
   bio: '소개',
   avatarHelp: 'PNG, JPEG, WebP, GIF 형식, 최대 4MB입니다. 저장하면 이미지가 공개됩니다.',
   removeAvatar: '현재 아바타 삭제',
-  accountInfo: '공개 이름은 처음에 계정 이름으로 설정되었습니다. 여기서 바꿔도 계정 이름은 변경되지 않습니다.',
+  accountInfo: '계정 이름은 비공개로 유지됩니다. 여기서 바꿔도 계정 이름에는 영향이 없습니다.',
   otherInfo: '여기서 변경한 내용은 이 프로필에 공개적으로 표시됩니다.',
   profileUnavailable: '프로필을 지금은 수정할 수 없습니다. 이 페이지를 새로고침해 주세요.',
   saveProfile: '공개 프로필 저장',
