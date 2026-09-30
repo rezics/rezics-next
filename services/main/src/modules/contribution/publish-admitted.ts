@@ -1,5 +1,6 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry } from '../access/admission.ts';
+import { RevisionNotFound } from '../work/history.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
@@ -12,13 +13,16 @@ import { assertTextPublicationBody, checkedTextPublicationReceipt, EmptyTextPubl
 export async function publishAdmittedTextContribution(
   env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
-  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
+  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'canReadContributionDraft'>,
   request: Request,
   input: PublishTextContributionInput & { idempotencyKey: string },
 ): Promise<TextPublicationReceipt & { replayed: boolean }> {
   const digest = textPublicationDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);
+  if (!await access.canReadContributionDraft(principal, input.actingSubject, input.contribution)) {
+    throw new RevisionNotFound('draft revision is unavailable');
+  }
   await assertTextPublicationBody(env, input);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope: `contribution:publish:${input.contribution}`, action: 'contribution.publish',

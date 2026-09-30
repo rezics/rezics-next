@@ -251,7 +251,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
       response: { 200: contentPublicationWriteResult, 201: contentPublicationWriteResult,
-        202: contentPublicationWriteResult, ...writeProblems },
+        202: contentPublicationWriteResult, ...writeProblems,
+        404: problemResult(404), 422: problemResult(422) },
     }, async ({ request, body }) => {
       if (!work.contentAuthoring) return problem(503, 'content_unavailable', 'Content owner is unavailable');
       const idempotencyKey = request.headers.get('idempotency-key');

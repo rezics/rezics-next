@@ -1,6 +1,7 @@
 import type { ContentCore } from '../../../../content/src/core.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { AccessAdmissionRegistry, GraphTerminalProof } from '../access/admission.ts';
+import { RevisionNotFound } from '../work/history.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { assertContentPublicationBody, ContentPublicationConflict, contentPublicationDigest,
@@ -11,7 +12,7 @@ import { assertContentPublicationBody, ContentPublicationConflict, contentPublic
 export async function publishAdmittedContent(
   env: WorkActivationEnvironment, content: ContentCore,
   account: Pick<AccountAssertionVerifier, 'verify'>,
-  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
+  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork'>,
   request: Request,
   input: PublishPinnedContentInput & { actingSubject: string; idempotencyKey: string },
 ): Promise<ContentPublicationResult> {
@@ -19,6 +20,11 @@ export async function publishAdmittedContent(
   const digest = contentPublicationDigest(publication);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);
+  // Reject undisclosed and foreign revisions before loading their private bytes.
+  if (!await access.canReadWork(principal, actingSubject, publication.resourceId)
+    || await content.owningResourceForRevision(publication.revisionId) !== publication.resourceId) {
+    throw new RevisionNotFound('Content revision is unavailable');
+  }
   await assertContentPublicationBody(content, publication);
   const registered = await access.register({ principal, actingSubject,
     scope: `content:publish:${publication.resourceId}`, action: 'content.publish',

@@ -1,6 +1,7 @@
 import type { ContentCore, ExactContentReference, PublicationPreparation } from '../../../../content/src/core.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
+import { RevisionNotFound } from '../work/history.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ContentEmbedDenied, assertPublicContentEmbeds, publicContentEmbedConditions,
@@ -75,10 +76,14 @@ function checkedInput(input: PublishPinnedContentInput): void {
 export async function assertContentPublicationBody(content: Pick<ContentCore, 'readExactBatch'>,
   input: PublishPinnedContentInput): Promise<void> {
   const exact = (await content.readExactBatch([input.revisionId], async ids => new Set(ids)))[0];
-  if (exact?.status !== 'available') {
+  if (!exact || exact.status === 'missing' || exact.status === 'denied' || exact.status === 'erased') {
+    throw new RevisionNotFound('Content revision is unavailable');
+  }
+  if (exact.status !== 'available') {
     throw new ContentPublicationConflict('Content revision is unavailable');
   }
-  if (exact.reference.resourceId !== input.resourceId || exact.reference.variantId !== input.variantId
+  if (exact.reference.revisionId !== input.revisionId
+    || exact.reference.resourceId !== input.resourceId || exact.reference.variantId !== input.variantId
     || exact.reference.byteDigest !== input.expectedDigest) {
     throw new ContentPublicationConflict('Content revision differs from publication intent');
   }

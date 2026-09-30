@@ -53,7 +53,7 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
       }, { additionalProperties: false }),
       response: { 200: contributionPublicationWriteResult,
         201: contributionPublicationWriteResult, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404) },
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {

@@ -81,6 +81,21 @@ test('G-526: empty Content and Contribution revisions persist, replay and reject
       .toMatchObject({ code: 'empty_body' });
     expect(await admissionsFor(emptyPublishKey)).toEqual([]);
     expect(await content.readPublicationPreparation(emptyPublication.preparationId)).toBeNull();
+    const missingPublication = { ...emptyPublication, revisionId: randomUUID(), preparationId: randomUUID() };
+    const missingContentProblem = await f.json(await call('/v1/content-publications', missingPublication), 404);
+    for (const input of [publication, emptyPublication, missingPublication]) {
+      const key = randomUUID();
+      expect(await f.json(await call('/v1/content-publications', input, key, f.account.tokenB), 404))
+        .toEqual(missingContentProblem);
+      expect(await admissionsFor(key)).toEqual([]);
+    }
+    // Chapter saves retain the existing character budget even when UTF-8 bytes exceed it.
+    const cjkBody = '字'.repeat(65_536);
+    const cjk = await f.json<{ revisionId: string }>(await call('/v1/content-drafts', {
+      ...draft, variantId: `urn:rezics:variant:${randomUUID()}`, body: cjkBody,
+    }), 201);
+    expect((await content.readExactBatch([cjk.revisionId], async ids => new Set(ids)))[0])
+      .toMatchObject({ status: 'available', body: { body: cjkBody } });
     expect((await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
       GRAPH <${GRAPHS.current}> { <${variantId}> rv:contentPublicationHead <${published.decision}> } }`)).boolean).toBe(true);
     await f.accessPool.query('UPDATE access.permission_grant SET active = false, generation = generation + 1 WHERE id = $1', [contentGrant]);
@@ -124,11 +139,21 @@ test('G-526: empty Content and Contribution revisions persist, replay and reject
       invalidBodyStatuses.push((await call('/v1/contribution-edits', { ...edit, body })).status);
       invalidBodyStatuses.push((await call('/v1/contributions', { ...create, body })).status);
     }
+    const emptyTextPublication = { ...textPublication, expectedDraftHead: textEmpty.draftRevision,
+      expectedPublicationHead: textPublished.publicationDecision };
     const emptyTextPublishKey = randomUUID();
-    expect(await f.json(await call('/v1/contribution-publications', { ...textPublication,
-      expectedDraftHead: textEmpty.draftRevision, expectedPublicationHead: textPublished.publicationDecision }, emptyTextPublishKey), 422))
+    expect(await f.json(await call('/v1/contribution-publications', emptyTextPublication, emptyTextPublishKey), 422))
       .toMatchObject({ code: 'empty_body' });
     expect(await admissionsFor(emptyTextPublishKey)).toEqual([]);
+    const missingTextPublication = { ...emptyTextPublication,
+      expectedDraftHead: `https://rezics.com/id/${randomUUID()}` };
+    const missingTextProblem = await f.json(await call('/v1/contribution-publications', missingTextPublication), 404);
+    for (const input of [textPublication, emptyTextPublication, missingTextPublication]) {
+      const key = randomUUID();
+      expect(await f.json(await call('/v1/contribution-publications', input, key, f.account.tokenB), 404))
+        .toEqual(missingTextProblem);
+      expect(await admissionsFor(key)).toEqual([]);
+    }
     const headPath = `/v1/contributions/${shortId(text.contribution)}?actingSubject=${encodeURIComponent(f.actor)}`;
     expect(await f.json(await call(headPath), 200)).toMatchObject({ draftHead: textEmpty.draftRevision,
       publicationHead: textPublished.publicationDecision });
@@ -137,7 +162,7 @@ test('G-526: empty Content and Contribution revisions persist, replay and reject
     expect(emptyCreated.draftRevision).toBeString();
     await f.accessPool.query('UPDATE access.permission_grant SET active = false, generation = generation + 1 WHERE id = $1', [editGrant]);
     expect((await call('/v1/contribution-edits', { ...edit, expectedHead: textEmpty.draftRevision })).status).toBe(403);
-    expect(invalidBodyStatuses).toEqual(Array.from({ length: 15 }, () => 422));
+    expect(invalidBodyStatuses).toEqual(Array.from({ length: 15 }, () => 400));
   } finally {
     await f.close();
     rmSync(directory, { recursive: true, force: true });
