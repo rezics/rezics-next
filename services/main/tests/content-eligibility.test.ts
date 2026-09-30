@@ -14,6 +14,7 @@ import { mapContentOutboxEvent, OutboxIncomplete,
   type MainOutboxBatch } from '../src/modules/outbox/relay.ts';
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
+import { TranslationBasisRequired } from '../src/modules/work/translation-links.ts';
 
 const literal = (value: string) => ({ type: 'literal', value });
 const uri = (value: string) => ({ type: 'uri', value });
@@ -22,8 +23,10 @@ class EligibilityGraph extends FusekiClient {
   rows: SparqlResult['results'] = { bindings: [] };
   sourceRows: SparqlResult['results'] = { bindings: [] };
   commands = 0;
+  translationConflict = false;
   constructor() { super('http://localhost:1/rezics'); }
   override async query(sparql: string): Promise<SparqlResult> {
+    if (sparql.includes('ASK') && sparql.includes('?basisLink')) return { boolean: this.translationConflict };
     return { results: sparql.includes('SELECT ?revision ?digest') ? this.sourceRows : this.rows };
   }
   override async commandHealth() { return { moduleVersion: COMMAND_MODULE_VERSION,
@@ -105,6 +108,20 @@ test('SEARCH19: public Content release requires a claimed admission and reviewed
   await expect(selectPublicContentSearch(env, content, access, admission, input))
     .rejects.toBeInstanceOf(ContentEligibilityProfileUnavailable);
   expect(graph.commands).toBe(0);
+});
+
+test('G-538: original Content proof cannot waive another author’s translation basis', async () => {
+  const { graph, input, admission, env, content, access } = fixture();
+  graph.translationConflict = true;
+  await expect(selectPublicContentSearch(env, content, access, admission, input))
+    .rejects.toBeInstanceOf(TranslationBasisRequired);
+  expect(graph.commands).toBe(0);
+  const original = buildContentEligibilityUpdate(env, admission, input);
+  expect(original).toContain('FILTER NOT EXISTS {\n      {');
+  expect(original).toContain('rv:realizationOf ?basisSource');
+  const publicDomain: ContentSearchEligibilityInput = { ...input,
+    profile: 'content-search-eligibility-v2', rightsBasis: 'public-domain', assessmentId: randomUUID() };
+  expect(buildContentEligibilityUpdate(env, admission, publicDomain)).not.toContain('?basisLink');
 });
 
 test('SEARCH19: public eligibility rejects forged author proof, missing source and unavailable bytes', async () => {

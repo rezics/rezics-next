@@ -144,7 +144,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           actingSubject: body.actingSubject, idempotencyKey };
         validateTranslationLink(input);
         const receipt = await createAdmittedTranslationLink(work.environment, work.account,
-          work.access, request, input);
+          work.access, request, input, work.rights?.store);
         const links = await readTranslationLinks(work.environment,
           input.targetMainVersion, input.targetMainRevision);
         const linked = links.find(item => item.link === receipt.link);

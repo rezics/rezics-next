@@ -8,6 +8,7 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, IdempotencyConflict,
   type WorkActivationEnvironment } from './activate.ts';
 import { PendingAdmittedWork } from './create-admitted.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
+import type { RightsStore } from '../rights/store.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 // Translation links currently use the installed native-text tag syntax;
@@ -21,6 +22,107 @@ export class InvalidTranslationLink extends Error {}
 export class TranslationSourceUnavailable extends Error {}
 export class TranslationTargetUnavailable extends Error {}
 export class TranslationLinkConflict extends Error {}
+export class TranslationBasisRequired extends Error {
+  readonly code = 'translation_basis_required';
+  constructor() { super('A translation of another author’s Work requires a recorded public rights basis'); }
+}
+
+/** Authorship is the native author credit, not custody, a translator credit or
+ * the Agent who certifies an official link. Pin the live credit to its revision. */
+function sourceAuthorPattern(source: string, actor: string): string {
+  return `GRAPH ${iri(GRAPHS.current)} {
+    ?basisCredit a rv:NativeAgentCredit ; rv:work ${source} ; rv:agent ${actor} ;
+      <https://schema.org/roleName> "author" ; rv:creditRevision ?basisCreditRevision . }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?basisCreditRevision a rv:NativeAgentCreditRevision ; rv:component ?basisCredit ;
+        rv:work ${source} ; rv:agent ${actor} ; <https://schema.org/roleName> "author" .
+      FILTER NOT EXISTS { ?basisCreditRevision a rv:ErasedRevision }
+    }`;
+}
+
+/** A Work-indexed existential probe, O(its translation relations), no history
+ * or catalogue scan. Retained links remain provenance after a Main head moves.
+ * Realization relations use the same source authorship rule during migration. */
+export function translationOriginalBasisConflictPattern(work: string, actor: string): string {
+  return `{
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?basisLink a rv:TranslationLink ; rv:targetWork ${iri(work)} ; rv:sourceWork ?basisSource . }
+  } UNION {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:realizationOf ?basisSource . }
+  } UNION {
+    GRAPH ${iri(GRAPHS.current)} {
+      ?basisRealization rv:work ${iri(work)} ; rv:realizationOf ?basisSource . }
+  }
+  FILTER NOT EXISTS { ${sourceAuthorPattern('?basisSource', iri(actor))} }`;
+}
+
+export async function assertTranslationOriginalBasis(env: WorkActivationEnvironment,
+  work: string, actor: string): Promise<void> {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    ${translationOriginalBasisConflictPattern(work, actor)}
+  }`);
+  if (result.boolean === true) throw new TranslationBasisRequired();
+}
+
+/** Work-indexed existential join over active variants and exact source credits;
+ * cost is O(target variants), independent of the catalogue and decision history. */
+function publicOriginalContentPattern(target: string, source: string): string {
+  return `GRAPH ${iri(GRAPHS.current)} {
+    ?basisVariant a rv:ContentVariant ; rv:resource ${iri(target)} ;
+      rv:contentPublicationHead ?basisPublication ; rv:publicSearchEligibilityHead ?basisDecision . }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?basisDecision a rv:ContentSearchEligibilityDecision ; rv:resource ${iri(target)} ;
+        rv:variant ?basisVariant ; rv:publicationDecision ?basisPublication ;
+        rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public ; rv:actingSubject ?basisActor . }
+    FILTER NOT EXISTS { ${sourceAuthorPattern(iri(source), '?basisActor')} }`;
+}
+
+interface SourcePublicDomainBasis { variant: string; decision: string; assessment: string }
+
+function sourcePublicDomainPattern(source: string, basis: SourcePublicDomainBasis): string {
+  return `GRAPH ${iri(GRAPHS.current)} {
+    ${iri(basis.variant)} rv:resource ${iri(source)} ; rv:contentPublicationHead ?basisSourcePublication ;
+      rv:publicSearchEligibilityHead ${iri(basis.decision)} . }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(basis.decision)} a rv:ContentSearchEligibilityDecision ; rv:resource ${iri(source)} ;
+        rv:publicationDecision ?basisSourcePublication ; rv:rightsBasis rv:PublicDomain ;
+        rv:disclosure rv:Public ; rv:rightsAssessment ${iri(basis.assessment)} . }`;
+}
+
+async function sourcePublicDomainBasis(env: WorkActivationEnvironment, source: string,
+  rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>): Promise<SourcePublicDomainBasis | undefined> {
+  if (!rights) return undefined;
+  // Choose the newest recorded basis, independent of the number of languages.
+  // The rights owner's current head must still support that exact assessment.
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?variant ?decision ?assessment WHERE {
+    GRAPH ${iri(GRAPHS.current)} {
+      ?variant rv:resource ${iri(source)} ; rv:contentPublicationHead ?publication ;
+        rv:publicSearchEligibilityHead ?decision . }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?decision a rv:ContentSearchEligibilityDecision ; rv:resource ${iri(source)} ;
+        rv:publicationDecision ?publication ; rv:rightsBasis rv:PublicDomain ;
+        rv:disclosure rv:Public ; rv:rightsAssessment ?assessment ; rv:sequence ?basisSequence . }
+  } ORDER BY DESC(?basisSequence) LIMIT 1`)).results?.bindings ?? [];
+  const row = rows.length === 1 ? rows[0] : undefined;
+  const assessmentId = /^urn:rezics:rights:assessment:([0-9a-f-]{36})$/i.exec(row?.assessment?.value ?? '')?.[1];
+  if (!row?.variant || !row.decision || !row.assessment || !assessmentId
+    || !await rights.currentPublicDomainAssessment(source, assessmentId)) return undefined;
+  return { variant: row.variant.value, decision: row.decision.value, assessment: row.assessment.value };
+}
+
+async function linkPublicationBasisConflicts(env: WorkActivationEnvironment, input: TranslationLinkInput,
+  publicDomain?: SourcePublicDomainBasis): Promise<boolean> {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    ${publicOriginalContentPattern(input.targetWork, input.sourceWork)}
+    ${publicDomain ? `FILTER NOT EXISTS { ${sourcePublicDomainPattern(input.sourceWork, publicDomain)} }` : ''}
+  }`);
+  return result.boolean === true;
+}
+
+async function assertLinkPublicationBasis(env: WorkActivationEnvironment, input: TranslationLinkInput,
+  publicDomain?: SourcePublicDomainBasis): Promise<void> {
+  if (await linkPublicationBasisConflicts(env, input, publicDomain)) throw new TranslationBasisRequired();
+}
 
 export interface TranslationLinkInput {
   targetWork: string;
@@ -134,18 +236,20 @@ export interface TerminalLink {
   dataEpoch: string;
   sequence: string;
   receipt: string;
+  rejectionKind?: string;
 }
 
 export async function readTranslationLinkTerminal(env: WorkActivationEnvironment,
   admissionId: string): Promise<TerminalLink | null> {
   const receipt = translationLinkReceiptIri(admissionId);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
-    ?outcome ?link ?digest ?admission ?scope ?authorityEpoch ?epoch ?sequence WHERE {
+    ?outcome ?link ?digest ?admission ?scope ?authorityEpoch ?epoch ?sequence ?rejectionKind WHERE {
     GRAPH ${iri(GRAPHS.receipts)} {
       ${iri(receipt)} rv:outcome ?outcome ; rv:requestDigest ?digest ;
         rv:admissionId ?admission ; rv:admittedScope ?scope ;
         rv:authorityEpoch ?authorityEpoch ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
       OPTIONAL { ${iri(receipt)} rv:translationLink ?link }
+      OPTIONAL { ${iri(receipt)} rv:rejectionKind ?rejectionKind }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -163,7 +267,8 @@ export async function readTranslationLinkTerminal(env: WorkActivationEnvironment
   return { outcome, link: row.link?.value ?? null, requestDigest: row.digest.value,
     admissionId: row.admission.value, scope: row.scope.value,
     authorityEpoch: row.authorityEpoch.value, dataEpoch: row.epoch.value,
-    sequence: row.sequence.value, receipt };
+    sequence: row.sequence.value, receipt,
+    ...(row.rejectionKind ? { rejectionKind: row.rejectionKind.value } : {}) };
 }
 
 function checkedTerminal(terminal: TerminalLink, registered: RegisteredAdmission,
@@ -173,13 +278,15 @@ function checkedTerminal(terminal: TerminalLink, registered: RegisteredAdmission
     throw new IdempotencyConflict('translation link receipt differs from admission');
   }
   if (terminal.outcome !== 'succeeded' || !terminal.link) {
+    if (terminal.rejectionKind === `${RV}TranslationBasisRequired`) throw new TranslationBasisRequired();
     throw new TranslationLinkConflict('translation link admission was cancelled');
   }
   return { link: terminal.link, receipt: terminal.receipt,
     dataEpoch: terminal.dataEpoch, sequence: terminal.sequence, replayed: registered.replayed };
 }
 
-async function sealCancelled(env: WorkActivationEnvironment, registered: RegisteredAdmission): Promise<void> {
+async function sealCancelled(env: WorkActivationEnvironment, registered: RegisteredAdmission,
+  translationBasisRequired = false): Promise<void> {
   const receipt = translationLinkReceiptIri(registered.id);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0cancel`)}`;
   const update = `PREFIX rv: <${RV}>
@@ -190,6 +297,7 @@ async function sealCancelled(env: WorkActivationEnvironment, registered: Registe
         ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(registered.requestDigest)} ;
           rv:admissionId ${lit(registered.id)} ; rv:authorityEpoch ${lit(registered.authorityEpoch)} ;
           rv:admittedScope ${lit(registered.scope)} ; rv:outcome rv:Cancelled ;
+          ${translationBasisRequired ? 'rv:rejectionKind rv:TranslationBasisRequired ;' : ''}
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:sequence ?next .
       }
@@ -223,7 +331,7 @@ export async function sealTranslationLinkAdmission(env: WorkActivationEnvironmen
 }
 
 async function activateLink(env: WorkActivationEnvironment, registered: RegisteredAdmission,
-  input: TranslationLinkInput, digest: string): Promise<void> {
+  input: TranslationLinkInput, digest: string, publicDomain?: SourcePublicDomainBasis): Promise<void> {
   const link = ID + Bun.randomUUIDv7();
   const receipt = translationLinkReceiptIri(registered.id);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
@@ -286,6 +394,10 @@ async function activateLink(env: WorkActivationEnvironment, registered: Register
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
         ?prior a rv:TranslationLink ; rv:targetMainRevision ${iri(input.targetMainRevision)} . } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      FILTER NOT EXISTS {
+        ${publicOriginalContentPattern(input.targetWork, input.sourceWork)}
+        ${publicDomain ? `FILTER NOT EXISTS { ${sourcePublicDomainPattern(input.sourceWork, publicDomain)} }` : ''}
+      }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       BIND(?n + 1 AS ?next)
     }`;
@@ -314,6 +426,7 @@ export async function createAdmittedTranslationLink(env: WorkActivationEnvironme
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'
     | 'canLinkTranslation'>,
   request: Request, input: TranslationLinkInput & { idempotencyKey: string },
+  rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>,
 ): Promise<TranslationLinkReceipt> {
   const digest = translationLinkDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
@@ -349,9 +462,26 @@ export async function createAdmittedTranslationLink(env: WorkActivationEnvironme
           if (!state.source) throw new TranslationSourceUnavailable('source Main Version revision is unavailable');
           throw new TranslationLinkConflict('target revision already has a translation link');
         }
-        try { await activateLink(env, admission, input, digest); }
+        try {
+          // Private links and the source author's own Content need no rights-owner probe.
+          const publicDomain = await linkPublicationBasisConflicts(env, input)
+            ? await sourcePublicDomainBasis(env, input.sourceWork, rights) : undefined;
+          await assertLinkPublicationBasis(env, input, publicDomain);
+          await activateLink(env, admission, input, digest, publicDomain);
+          // A concurrent eligibility command can win after the preflight.
+          if (!await readTranslationLinkTerminal(env, registered.id)) {
+            await assertLinkPublicationBasis(env, input, publicDomain);
+          }
+        }
         catch (error) {
           if (error instanceof IdempotencyConflict) throw error;
+          if (error instanceof TranslationBasisRequired) {
+            await sealCancelled(env, admission, true);
+            const terminal = await readTranslationLinkTerminal(env, registered.id);
+            if (!terminal) throw new PendingAdmittedWork(registered.id, 'translation-link');
+            await access.recordGraphOutcome(registered.id, terminal);
+            return checkedTerminal(terminal, registered, digest);
+          }
           const state = await sourceAndTargetExist(env, input);
           if (!state.target || !state.source || state.linked) {
             await sealTranslationLinkAdmission(env, admission);
@@ -365,6 +495,7 @@ export async function createAdmittedTranslationLink(env: WorkActivationEnvironme
     return checkedTerminal(terminal, registered, digest);
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof TranslationLinkConflict
+      || error instanceof TranslationBasisRequired
       || error instanceof TranslationSourceUnavailable || error instanceof TranslationTargetUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'translation-link');
   }

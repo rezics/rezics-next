@@ -6,6 +6,8 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { RightsStore } from '../rights/store.ts';
+import { assertTranslationOriginalBasis, translationOriginalBasisConflictPattern }
+  from '../work/translation-links.ts';
 
 const PROFILE_ID = 'content-search-eligibility-v1';
 const VARIANT_PROFILE_ID = 'content-publication-v1';
@@ -349,6 +351,9 @@ export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
       rv:component ${iri(input.variantId)} ; rv:resource ${iri(input.resourceId)} ;
       rv:modelRevision ${iri('https://rezics.com/definition/content-publication-v1')} . }
     FILTER(COALESCE(?prior, ${iri(NONE)}) = ${expected(input)})
+    ${input.rightsBasis === 'original-contribution' ? `FILTER NOT EXISTS {
+      ${translationOriginalBasisConflictPattern(input.resourceId, input.actingSubject)}
+    }` : ''}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?p ?o } }
@@ -408,6 +413,9 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
     || Date.parse(admission.expiresAt) <= Date.now()) {
     throw new ContentEligibilityDenied('eligibility admission is ineligible or expired');
   }
+  if (input.rightsBasis === 'original-contribution') {
+    await assertTranslationOriginalBasis(env, input.resourceId, input.actingSubject);
+  }
   const decision = contentSearchEligibilityDecisionIri(admission.id);
   const candidate = await validations(env, input, decision);
   const head = await currentHead(env, input);
@@ -438,6 +446,9 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
     return { ...checked, replayed: false };
   }
   if (commandStatus === 'guard-unmatched') {
+    if (input.rightsBasis === 'original-contribution') {
+      await assertTranslationOriginalBasis(env, input.resourceId, input.actingSubject);
+    }
     const now = await currentHead(env, input);
     if (now !== input.expectedEligibilityHead) {
       try { await env.fuseki.commandWithReceipt({ receipt, digest,

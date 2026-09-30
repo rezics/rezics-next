@@ -55,7 +55,7 @@ import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingCo
 import { AccountAssertionDenied, AccountAssertionUnavailable }
   from '../modules/account/verify-assertion.ts';
 import { PendingAdmittedWork } from '../modules/work/create-admitted.ts';
-import { InvalidTranslationLink, TranslationLinkConflict, TranslationSourceUnavailable,
+import { InvalidTranslationLink, TranslationBasisRequired, TranslationLinkConflict, TranslationSourceUnavailable,
   TranslationTargetUnavailable } from '../modules/work/translation-links.ts';
 import { InvalidWorkDerivation, WorkDerivationConflict, WorkDerivationStale,
   WorkDerivationUnavailable } from '../modules/work/derivations.ts';
@@ -129,6 +129,7 @@ export function problem(status: number, code: string, title: string, headers?: H
 }
 
 export function commandError(error: unknown): Response {
+  if (error instanceof TranslationBasisRequired) return problem(409, error.code, error.message);
   if (error instanceof SourceIntakeInvalid) {
     return problem(400, 'invalid_source_intake', 'Source intake does not match its profile');
   }
