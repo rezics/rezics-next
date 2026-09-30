@@ -408,6 +408,30 @@ export const G504UndeterminedRtlTitle: Story = {
   },
 };
 
+/** G-516: a Japanese title in a Korean interface, with a Hebrew author and an Arabic translator in the credits. */
+export const G516NonLatinNames: Story = {
+  args: { work: { ...fixture.work, title: { value: '吾輩は猫である', language: 'ja', direction: 'ltr', basis: 'fallback' },
+    originalTitle: { value: 'مكتبة الأدب', language: 'ar', direction: 'rtl' },
+    tagline: null, description: null, selectedLanguage: null },
+  agentCredits: fixture.agentCredits.ok ? fixture.ok({ ...fixture.agentCredits.data,
+    items: fixture.agentCredits.data.items.map((credit, index) =>
+      ({ ...credit, displayName: index ? 'ليلى' : 'עמוס עוז' })) }) : fixture.agentCredits,
+  credits: fixture.noCredits, locale: 'ko' },
+  globals: { locale: 'ko' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1 })).toHaveAttribute('lang', 'ja');
+    const author = canvas.getAllByText('עמוס עוז').find(node => node.tagName === 'BDI')!;
+    await expect(author).toBeVisible();
+    await expect(author).toHaveAttribute('dir', 'rtl');
+    await expect(author).not.toHaveAttribute('lang');
+    const original = canvas.getAllByText('مكتبة الأدب').find(node => node.tagName === 'BDI')!;
+    await expect(original).toHaveAttribute('lang', 'ar');
+    await expect(original).toHaveAttribute('dir', 'rtl');
+    await noOverflow();
+  },
+};
+
 /** A Chinese title an older record tags as English reads as Chinese already; no "shown in English" note. */
 export const TitleAlreadyInReadersLanguage: Story = {
   args: { work: fixture.mislabeledTitleWork, locale: 'zh-Hans' },

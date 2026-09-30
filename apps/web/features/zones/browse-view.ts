@@ -3,6 +3,7 @@ import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import { workTypeLabel } from '../catalogue/work.ts';
+import { zoneContentText } from '../language/untagged.ts';
 import { type BrowseFacet, browseFacets, browseHref, type BrowseSort, type BrowseState, chipHref, cleared,
   facetParams, lengthBands, toggled, toggledExcludedConcept, urlValue } from './browse-state.ts';
 import type { ZoneMessages } from './messages.ts';
@@ -40,7 +41,8 @@ export interface BrowseModel {
   first: string | null;
 }
 
-const plain = (value: string): ZoneText => ({ value, lang: '', dir: 'ltr' });
+/** `language` is the interface locale for the page's own words; a raw value (loader, version) has none. */
+const plain = (value: string, language?: string): ZoneText => zoneContentText(value, language);
 
 /** Facet labels: an admitted Facet's own (`GET /v1/facets`), else the page's words for Main's other Conditions. */
 export function facetLabel(facet: BrowseFacet, admitted: ReadonlyMap<string, string>, messages: ZoneMessages): string {
@@ -55,13 +57,16 @@ export function valueLabel(facet: BrowseFacet, value: string, name: ZoneText | n
     case 'concept': return name ?? null;
     case 'type': {
       const key = workTypeLabel([value]);
-      return key ? plain(catalogueMessages[locale][key]) : null;
+      return key ? plain(catalogueMessages[locale][key], locale) : null;
     }
-    case 'status': return plain({ ongoing: messages.statusOngoing, completed: messages.statusCompleted,
-      hiatus: messages.statusHiatus }[value as 'ongoing'] ?? value);
+    case 'status': {
+      const word = { ongoing: messages.statusOngoing, completed: messages.statusCompleted,
+        hiatus: messages.statusHiatus }[value as 'ongoing'];
+      return word ? plain(word, locale) : plain(value);
+    }
     case 'length': {
       const index = lengthBands.indexOf(value as never);
-      return index < 0 ? null : plain([messages.length0, messages.length1, messages.length2, messages.length3][index]!);
+      return index < 0 ? null : plain([messages.length0, messages.length1, messages.length2, messages.length3][index]!, locale);
     }
     default: return plain(value);
   }

@@ -3,6 +3,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { profileHref } from '../profile/route.ts';
 import { authorHref } from '../author/route.ts';
+import { zoneContentText } from '../language/untagged.ts';
 import { coverKindOf } from '../catalogue/work.ts';
 import { isoMoment, zoneWorkCards } from '../zones/adapt-cards.ts';
 import type { FallbackReason, MainExecution, PresentationBanner } from '../zones/presentation.ts';
@@ -55,7 +56,7 @@ export function zoneWork(card: WorkCard & { primaryCredits?: ModuleCredit[] }
       ? authorHref({ kind: 'external', key: credit.key }) : null;
   return { id: card.id, href: realmWorkHref(card.id, context.realm), title: zoneText(card.title),
     cover: zoneImage(card.cover, context.avatarQuery), kind: coverKindOf(card.types),
-    author: author ? { value: author, lang: '', dir: 'ltr' } : null,
+    author: author ? zoneContentText(author) : null,
     authorHref: href,
     tagline: zoneText(card.tagline),
     status: card.completionStatus, chapters: card.chapterCount, words: card.wordCount,
@@ -84,7 +85,7 @@ export function zonePeople(works: readonly { title: MainName; primaryCredits?: r
       const entry = found.get(id);
       if (entry) { if (!entry.titles.some(title => title.value === work.title.value)) entry.titles.push(work.title); continue; }
       if (found.size >= limit) continue;
-      found.set(id, { titles: [work.title], person: { id, name: { value: credit.displayName, lang: '', dir: 'ltr' },
+      found.set(id, { titles: [work.title], person: { id, name: zoneContentText(credit.displayName),
         href: credit.handle ? profileHref(credit.handle)
           : credit.provider === 'open-library' && credit.key
             ? authorHref({ kind: 'external', key: credit.key })
@@ -94,7 +95,8 @@ export function zonePeople(works: readonly { title: MainName; primaryCredits?: r
   }
   return [...found.values()].map(({ person, titles }) => {
     const lang = titles.every(title => title.language === titles[0]!.language) ? titles[0]!.language : '';
-    return { ...person, note: { value: titles.map(title => title.value).join(' · '), lang, dir: 'ltr' } };
+    const note = titles.map(title => title.value).join(' · ');
+    return { ...person, note: zoneContentText(note, lang) };
   });
 }
 

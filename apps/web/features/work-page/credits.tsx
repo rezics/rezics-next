@@ -1,3 +1,4 @@
+import { LocalizedText } from '@rezics/ui/localized-text';
 import { Skeleton } from '@rezics/ui/skeleton';
 import { cn } from '@rezics/ui/utils';
 import { TriangleAlertIcon } from 'lucide-react';
@@ -5,6 +6,7 @@ import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { authorHref } from '../author/route.ts';
 import { authorSeparator } from '../catalogue/work.ts';
+import { contentText } from '../language/untagged.ts';
 import Link from '../shell/localized-link.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { RetryButton } from './retry-button.tsx';
@@ -52,14 +54,14 @@ export function WorkCredits({ agentCredits, credits, locale, messages }: {
       {authors.map((credit, index) => <span key={credit.id} className="whitespace-nowrap">{index ? separator : null}
         <Link href={authorHref({ kind: 'agent', handle: credit.handle })}
         title={`@${credit.handle}`}
-        className={authorLink}>{credit.displayName}</Link></span>)}
+        className={authorLink}><LocalizedText text={contentText(credit.displayName)} /></Link></span>)}
       {external.map((credit, index) => {
         const key = openLibraryAuthorKey(credit.key);
         return <span key={credit.id} className="whitespace-nowrap">{authors.length + index ? separator : null}
           <Link href={authorHref({ kind: 'external', key: credit.key })}
           title={credit.displayName ? t.openLibraryListed : undefined}
           className={cn(authorLink, !credit.displayName && 'font-sans font-medium text-primary text-sm')}>
-          {credit.displayName ?? t.openLibraryAuthor({ key })}</Link></span>;
+          {credit.displayName ? <LocalizedText text={contentText(credit.displayName)} /> : t.openLibraryAuthor({ key })}</Link></span>;
       })}
     </p> : null}
     {others.length ? <p className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-muted-foreground text-sm
@@ -68,7 +70,8 @@ export function WorkCredits({ agentCredits, credits, locale, messages }: {
         {group.role === 'translator' ? t.translatedBy : t.editedBy}{' '}
         {group.people.map((credit, index) => <span key={credit.id}>{index ? ', ' : ''}
           <Link href={`/@${credit.handle}`} title={`@${credit.handle}`}
-            className={cn(authorLink, 'font-medium text-foreground')}>{credit.displayName}</Link></span>)}
+            className={cn(authorLink, 'font-medium text-foreground')}>
+            <LocalizedText text={contentText(credit.displayName)} /></Link></span>)}
       </span>)}
     </p> : null}
     {more ? <p className="text-muted-foreground text-xs">{t.moreCredits}</p> : null}

@@ -4,6 +4,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { feedOf, placedModule, type PresentationModule, type RealmFeed, type ZonePresentation }
   from '../zones/presentation.ts';
 import type { ModuleState, PlacedModule } from '../zones/zone-home.tsx';
+import { zoneContentText } from '../language/untagged.ts';
 import { isoMoment } from '../zones/adapt-cards.ts';
 import { chipHref } from '../zones/browse-state.ts';
 import { type AdaptContext, bannerImage, liveBanners, type ModuleCredit, zoneDecision, zonePeople, zoneText, zoneWork }
@@ -87,7 +88,7 @@ async function hero(module: PresentationModule, presentation: ZonePresentation, 
   bannerMedia: ZonePresentationRead['bannerMedia']):
   Promise<ModuleState<'hero-carousel'>> {
   const banners: ZoneBanner[] = liveBanners(presentation.banners, Date.now()).map(banner => ({ id: banner.id,
-    title: { value: banner.title, lang: '', dir: 'ltr' }, href: banner.href,
+    title: zoneContentText(banner.title), href: banner.href,
     image: bannerImage(banner, bannerMedia) }));
   if (banners.length) return { state: 'ready', data: { banners } };
   // Without art-directed banners the hero shows the newest picks, covers first.
@@ -98,7 +99,7 @@ async function hero(module: PresentationModule, presentation: ZonePresentation, 
   const picks = [...works.data].sort((a, b) => Number(Boolean(b.cover)) - Number(Boolean(a.cover)))
     .slice(0, module.options?.limit ?? 5);
   return picks.length ? { state: 'ready', data: { banners: picks.map(work => ({ id: work.id,
-    title: work.title ?? { value: '', lang: '', dir: 'ltr' }, href: work.href, image: null, work })) } } : empty;
+    title: work.title ?? zoneContentText(''), href: work.href, image: null, work })) } } : empty;
 }
 
 async function shelf(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'shelf'>> {
@@ -186,7 +187,7 @@ async function quotes(module: PresentationModule, context: AdaptContext): Promis
   const [page, cards] = await Promise.all([readZoneQuotes(context.realm, context.locale), realmCards(context)]);
   if (!page.ok) return failed;
   const items = page.data.items.slice(0, module.options?.limit ?? 6).map(item => ({
-    id: item.id, body: { value: item.excerpt, lang: '', dir: 'ltr' as const },
+    id: item.id, body: zoneContentText(item.excerpt),
     reader: item.authorName, work: withRealmCard(summaryWork(item.work, context), cards.get(item.work.id)),
     href: `${realmWorkHref(item.work.id, context.realm)}#work-discussion`,
   }));
@@ -199,7 +200,7 @@ async function discussions(module: PresentationModule, context: AdaptContext):
   const [page, cards] = await Promise.all([readZoneDiscussions(context.realm, context.locale), realmCards(context)]);
   if (!page.ok) return failed;
   const items = page.data.items.slice(0, module.options?.limit ?? 8).map(item => ({
-    id: item.id, title: { value: item.excerpt, lang: '', dir: 'ltr' as const },
+    id: item.id, title: zoneContentText(item.excerpt),
     href: `${realmWorkHref(item.work.id, context.realm)}#work-discussion`,
     replies: null, work: withRealmCard(summaryWork(item.work, context), cards.get(item.work.id)),
   }));
@@ -249,7 +250,7 @@ async function load(module: PresentationModule, presentation: ZonePresentation, 
     case 'rising': return rising(module, context);
     case 'people': return people(module, context);
     case 'announcement': return { state: 'ready',
-      data: { text: { value: module.title, lang: '', dir: 'ltr' }, href: null } satisfies ZoneModuleData['announcement'] };
+      data: { text: zoneContentText(module.title), href: null } satisfies ZoneModuleData['announcement'] };
     default: return unsupported;
   }
 }

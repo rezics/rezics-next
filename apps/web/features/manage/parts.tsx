@@ -1,5 +1,6 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { initials } from '@rezics/ui/avatar-initials';
+import { LocalizedText } from '@rezics/ui/localized-text';
 import { cn } from '@rezics/ui/utils';
 import { CloudOffIcon, LockIcon, LogInIcon, type LucideIcon, RefreshCwIcon, SearchXIcon, ShieldAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -8,6 +9,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
+import { untaggedName } from '../language/untagged.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import type { ManageMessages } from './messages.ts';
@@ -27,7 +29,7 @@ export function tintOf(key: string): string {
 
 /** Localized text from Main with the language it is actually in, for `lang`. */
 export function Named({ name, className }: { name: LocalizedName; className?: string }) {
-  return <span lang={name.language} dir={name.direction} className={className}>{name.value}</span>;
+  return <LocalizedText text={name} className={className} />;
 }
 
 /**
@@ -54,8 +56,8 @@ export function Thumb({ image, label, fallbackKey, className }: {
 export function WorkThumb({ iri, work, label, className }: {
   iri: string; work: WorkSummary | undefined; label: string; className?: string;
 }) {
-  return <CatalogueCover work={{ id: iri, title: work?.title ?? { value: label, language: 'und', direction: 'ltr',
-    basis: 'fallback' }, cover: work?.cover ?? null, kind: coverKindOf(work?.types ?? []), authors: [] }}
+  return <CatalogueCover work={{ id: iri, title: work?.title ?? untaggedName(label), cover: work?.cover ?? null,
+    kind: coverKindOf(work?.types ?? []), authors: [] }}
     className={cn('w-10', className)} />;
 }
 

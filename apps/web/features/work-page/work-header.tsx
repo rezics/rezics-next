@@ -1,4 +1,5 @@
 import { Badge } from '@rezics/ui/badge';
+import { LocalizedText } from '@rezics/ui/localized-text';
 import { cn } from '@rezics/ui/utils';
 import { LockIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -84,8 +85,7 @@ export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale
     </p> : null}
     {work.originalTitle && work.originalTitle.value !== work.title.value
       ? <p className="text-muted-foreground text-sm">{t.originalTitle}{': '}
-        <span lang={work.originalTitle.language} dir={work.originalTitle.direction}
-          className="font-work-title text-foreground">{work.originalTitle.value}</span></p> : null}
+        <LocalizedText text={work.originalTitle} className="font-work-title text-foreground" /></p> : null}
     {compact ? <div className="w-full [&_p]:justify-start">{credits}</div> : credits}
     {ratingLine}
     {facts.length ? <p className="text-muted-foreground text-sm">{facts.join(' · ')}</p> : null}

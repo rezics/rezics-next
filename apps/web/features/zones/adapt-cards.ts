@@ -1,4 +1,5 @@
 import type { ZoneHubItem, ZoneWork } from '@rezics/zone-sdk';
+import { zoneContentText } from '../language/untagged.ts';
 import type { ZoneWorkPage } from '../realm/types.ts';
 
 // Main's public Hub card (`hub-work-card-v1`) as the Zone SDK's. Only the
@@ -20,7 +21,7 @@ export function isoMoment(value: unknown): string | null {
 function zoneHub(card: MainCards['hub']): ZoneHubItem | null {
   // Main keys copyable text to one Content language it does not name; the page's language stands.
   return card ? { kind: card.kind === 'skill-package' ? 'skill' : 'prompt',
-    preview: { value: card.preview, lang: '', dir: 'ltr' }, copyText: card.copyText,
+    preview: zoneContentText(card.preview), copyText: card.copyText,
     testedModels: card.testedModels } : null;
 }
 

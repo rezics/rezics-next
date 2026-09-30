@@ -2,6 +2,7 @@
 
 import { Button } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
+import { LocalizedText } from '@rezics/ui/localized-text';
 import { ChoiceSelect } from '@rezics/ui/select';
 import { UploadCloudIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -9,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
+import { contentText, untaggedName } from '../language/untagged.ts';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { adoptOpenLibraryBook, REVIEWED_IMPORT_MAX_ROWS, submitReviewedBatch,
   type ImportBatchProgress, type ImportIssue, type ImportRowResult } from './import-api.ts';
@@ -196,13 +198,12 @@ export function LibraryImport({ agent, context, customShelves = [], locale, mess
           const candidates = match?.candidates ?? [];
           return <li key={`${book.row}:${book.sourceId}`} className="grid gap-3 py-4 first:pt-0 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)]">
             <div className="flex min-w-0 gap-3">
-              {candidates[0] ? <CatalogueCover work={{ id: candidates[0].work, title: { value: candidates[0].title,
-                language: locale, direction: 'ltr', basis: 'requested' }, authors: candidates[0].authors.map(name => ({ name, href: null })),
+              {candidates[0] ? <CatalogueCover work={{ id: candidates[0].work, title: untaggedName(candidates[0].title), authors: candidates[0].authors.map(name => ({ name, href: null })),
                 cover: candidates[0].cover ?? null, kind: candidates[0].kind ?? 'book' }}
                 size="xs" className="w-12 shrink-0" /> : null}
               <div className="grid min-w-0 content-start gap-1">
-              <p className="font-medium">{book.title}</p>
-              <p className="text-muted-foreground text-sm">{book.author}</p>
+              <p><LocalizedText text={contentText(book.title)} as="span" className="font-medium" /></p>
+              <p className="text-muted-foreground text-sm"><LocalizedText text={contentText(book.author)} as="span" /></p>
               {book.status ? <p className="text-muted-foreground text-xs">{book.status === 'read' ? t.read
                 : book.status === 'reading' ? t.reading : t.wantToRead}</p> : null}
               {book.rating !== null ? <p className="text-muted-foreground text-xs">
@@ -234,10 +235,10 @@ export function LibraryImport({ agent, context, customShelves = [], locale, mess
                 {candidates.map(candidate => <Button key={candidate.work} size="sm" variant="outline"
                   onClick={() => change(index, { selected: candidate.work, skipped: false })}
                   className="h-auto w-full justify-start gap-2 whitespace-normal p-2 text-left text-xs">
-                  <CatalogueCover work={{ id: candidate.work, title: { value: candidate.title, language: locale,
-                    direction: 'ltr', basis: 'requested' }, authors: candidate.authors.map(name => ({ name, href: null })),
+                  <CatalogueCover work={{ id: candidate.work, title: untaggedName(candidate.title), authors: candidate.authors.map(name => ({ name, href: null })),
                     cover: candidate.cover ?? null, kind: candidate.kind ?? 'book' }} size="xs" className="w-9 shrink-0" />
-                  <span>{candidate.title}<br />{candidate.authors.join(', ')}</span></Button>)}</div> : null}
+                  <span><LocalizedText text={contentText(candidate.title)} /><br />{candidate.authors.map((author, index) =>
+                    <span key={index}>{index ? ', ' : ''}<LocalizedText text={contentText(author)} /></span>)}</span></Button>)}</div> : null}
               {(!row.selected || row.manual) ? <div className="flex gap-2"><Input aria-label={t.importSearch} value={row.search}
                 onChange={event => change(index, { search: event.target.value })}
                 onKeyDown={event => { if (event.key === 'Enter') void search(index); }} />
@@ -255,11 +256,11 @@ export function LibraryImport({ agent, context, customShelves = [], locale, mess
                 {row.openLibrary?.map(candidate => <div key={candidate.workId}
                   className="flex items-center justify-between gap-2 rounded-lg border p-2 text-xs">
                   <div className="flex min-w-0 items-center gap-2">
-                    <CatalogueCover work={{ id: candidate.workId, title: { value: candidate.title,
-                      language: locale, direction: 'ltr', basis: 'requested' },
+                    <CatalogueCover work={{ id: candidate.workId, title: untaggedName(candidate.title),
                       authors: candidate.authors.map(name => ({ name, href: null })), cover: null, kind: 'book' }}
                       size="xs" className="w-9 shrink-0" />
-                    <span>{candidate.title}<br />{candidate.authors.join(', ')}</span>
+                    <span><LocalizedText text={contentText(candidate.title)} /><br />{candidate.authors.map((author, index) =>
+                      <span key={index}>{index ? ', ' : ''}<LocalizedText text={contentText(author)} /></span>)}</span>
                   </div>
                   <Button size="sm" variant="outline" disabled={row.openLibraryBusy}
                     onClick={() => void addSource(index, candidate.workId)}>{t.importAddOpenLibrary}</Button>
