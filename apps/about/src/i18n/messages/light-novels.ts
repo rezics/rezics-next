@@ -86,7 +86,6 @@ export const lightNovels = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Light novels on REZICS',
-      lede: 'Each capability shows where it stands today.',
     },
     cta: {
       title: 'Follow your first series on day one.',
@@ -177,7 +176,6 @@ export const lightNovels = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 輕小說',
-      lede: '每項功能都標明目前進度。',
     },
     cta: {
       title: '開放第一天，就追起第一個系列。',
@@ -268,7 +266,6 @@ export const lightNovels = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 轻小说',
-      lede: '每项功能都标明当前进度。',
     },
     cta: {
       title: '开放第一天，就追起第一个系列。',
@@ -359,7 +356,6 @@ export const lightNovels = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICSのライトノベル',
-      lede: '各機能に、現在の開発状況を表示しています。',
     },
     cta: {
       title: '初日から、好きなシリーズをフォロー。',
@@ -450,7 +446,6 @@ export const lightNovels = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 라이트 노벨',
-      lede: '각 기능에 현재 진행 상황을 표시합니다.',
     },
     cta: {
       title: '첫날부터 첫 시리즈를 팔로우하세요.',
@@ -541,7 +536,6 @@ export const lightNovels = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Light Novels auf REZICS',
-      lede: 'Jede Funktion zeigt ihren aktuellen Stand.',
     },
     cta: {
       title: 'Folge deiner ersten Reihe gleich zum Start.',
@@ -632,7 +626,6 @@ export const lightNovels = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Les light novels sur REZICS',
-      lede: 'Chaque fonctionnalité indique où elle en est.',
     },
     cta: {
       title: 'Suivez votre première série dès l’ouverture.',
@@ -723,7 +716,6 @@ export const lightNovels = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Novelas ligeras en REZICS',
-      lede: 'Cada función indica su estado actual.',
     },
     cta: {
       title: 'Sigue tu primera serie desde el primer día.',

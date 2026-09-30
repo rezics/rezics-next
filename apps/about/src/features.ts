@@ -1,20 +1,10 @@
 import type { PageId } from './pages.ts';
 
 /**
- * What a feature statement may claim. Every sentence that describes a REZICS
- * capability on the site is one entry here and renders its status beside it, so
- * the site can sell the direction without claiming what does not exist yet.
- *
- * Statuses follow the plan in `GOAL.md` instead of being chosen one by one: a
- * feature names the milestone that delivers it, and the milestone decides where
- * it sits. Only the site's own policies can be `available` before launch.
- *
- * - `available`: works today for anyone the site reaches.
- * - `in-development`: its milestone is the one being built now (the roadmap's Now).
- * - `planned`: decided and scheduled; `horizon` says whether it comes Next or Later.
+ * The site describes REZICS at launch, after GOAL.md's M4–M8. Only capabilities
+ * beyond launch get a label. Principles have no delivery stage and no label;
+ * milestones exist solely to show progress on the roadmap.
  */
-export const availabilities = ['available', 'in-development', 'planned'] as const;
-export type Availability = (typeof availabilities)[number];
 export const horizons = ['now', 'next', 'later'] as const;
 export type Horizon = (typeof horizons)[number];
 
@@ -35,14 +25,16 @@ export const milestoneHorizon: Record<Milestone, Horizon> = {
   M8: 'later',
 };
 
-/** The page whose statement it is and the milestone that delivers it. Text lives in `messages/features.ts`. */
+type Delivery = Milestone | 'principle' | { later: string };
+
+/** The page and launch stage, principle, or sourced post-launch decision. */
 const plan = {
   // Home: why REZICS
   'native-multilingual': ['home', 'M4'],
   'portable-data': ['home', 'M5'],
   'sourced-knowledge': ['home', 'M7'],
   'api-agent-first': ['home', 'M5'],
-  'open-source': ['home', 'M8'],
+  'open-source': ['home', 'principle'],
   // Home: every language, the whole community, fans together, every kind
   'names-every-script': ['home', 'M6'],
   'shared-tags': ['home', 'M7'],
@@ -86,7 +78,12 @@ const plan = {
   'spoiler-safe-wiki': ['wikis', 'M7'],
   'wiki-builder': ['wikis', 'M7'],
   'world-bible': ['wikis', 'M7'],
-  'world-visuals': ['wikis', 'M7'],
+  // Decision 28 includes selected private-world tools at launch. This bundled
+  // claim also promises family trees, deferred with the expanded wiki visuals.
+  'world-visuals': [
+    'wikis',
+    { later: 'docs/contracts/information-verification.md#a-big-franchise-wiki-for-every-work' },
+  ],
   'wiki-history': ['wikis', 'M7'],
   // Agents
   'contribution-protocol': ['agents', 'M7'],
@@ -96,7 +93,7 @@ const plan = {
   normalisation: ['agents', 'M7'],
   'migration-assistant': ['agents', 'M7'],
   'bring-your-own-agent': ['agents', 'M7'],
-  'agent-disclosure': ['agents', 'M7'],
+  'agent-disclosure': ['agents', 'principle'],
   // Communities
   realms: ['communities', 'M7'],
   'follow-join': ['communities', 'M7'],
@@ -106,7 +103,7 @@ const plan = {
   recognition: ['communities', 'M8'],
   // Distribution
   'sell-books-games': ['distribution', 'M7'],
-  'drm-free': ['distribution', 'M7'],
+  'drm-free': ['distribution', 'principle'],
   'clear-statements': ['distribution', 'M7'],
   'edition-storefront': ['distribution', 'M7'],
   'rights-declarations': ['distribution', 'M6'],
@@ -120,35 +117,27 @@ const plan = {
   'developer-portal': ['developers', 'M7'],
   // Trust
   'suitability-gates': ['trust', 'M4'],
-  'ai-disclosure': ['trust', 'M5'],
-  'no-training': ['trust', 'M5'],
-  'no-trackers': ['trust', 'available'],
+  'ai-disclosure': ['trust', 'principle'],
+  'no-training': ['trust', 'principle'],
+  'no-trackers': ['trust', 'principle'],
   'reporting-appeals': ['trust', 'M5'],
   'safety-response': ['trust', 'M5'],
-} as const satisfies Record<string, readonly [PageId, Milestone | 'available']>;
+} as const satisfies Record<string, readonly [PageId, Delivery]>;
 
 export type FeatureId = keyof typeof plan;
 export const featureIds = Object.keys(plan) as FeatureId[];
 
-export interface Feature {
+export type Feature = {
   line: PageId;
-  /** The milestone that delivers it; undefined when it is already available. */
-  milestone: Milestone | undefined;
-  status: Availability;
-  /** The roadmap column it sits in; available features are already shipped. */
-  horizon: Horizon | 'available';
-}
+} & (
+  | { status: 'launch'; milestone: Milestone | undefined; source?: never }
+  | { status: 'later'; milestone: undefined; source: string }
+);
 
-function feature([line, delivery]: readonly [PageId, Milestone | 'available']): Feature {
-  if (delivery === 'available')
-    return { line, milestone: undefined, status: 'available', horizon: 'available' };
-  const horizon = milestoneHorizon[delivery];
-  return {
-    line,
-    milestone: delivery,
-    status: horizon === 'now' ? 'in-development' : 'planned',
-    horizon,
-  };
+function feature([line, delivery]: readonly [PageId, Delivery]): Feature {
+  if (typeof delivery === 'object')
+    return { line, status: 'later', milestone: undefined, source: delivery.later };
+  return { line, status: 'launch', milestone: delivery === 'principle' ? undefined : delivery };
 }
 
 export const features = Object.fromEntries(

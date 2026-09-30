@@ -1,4 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { features, type FeatureId } from '../../src/features.ts';
 import { copyStatus } from '../../src/copy-status.ts';
 import { catalogs } from '../../src/i18n/messages/index.ts';
 import { localeNames, uiLocales } from '../../src/i18n/locales.ts';
@@ -129,6 +132,33 @@ for (const [viewportName, viewport] of Object.entries(viewports)) {
           await fitsWidth(page);
           await settled(page);
           await labelsFit(page);
+          const claims = await page.locator('main [data-feature]').evaluateAll((elements) =>
+            elements.map((element) => ({
+              id: element.getAttribute('data-feature')!,
+              labels: [...element.querySelectorAll('[data-status]')].map((label) => ({
+                status: label.getAttribute('data-status'),
+                text: label.textContent?.trim(),
+                help: label.getAttribute('title'),
+              })),
+            })),
+          );
+          let labelCount = 0;
+          for (const claim of claims) {
+            const later = features[claim.id as FeatureId].status === 'later';
+            expect(claim.labels, `${path} ${claim.id}`).toEqual(
+              later
+                ? [
+                    {
+                      status: 'later',
+                      text: catalogs.site[locale].status.later,
+                      help: catalogs.site[locale].status.laterHelp,
+                    },
+                  ]
+                : [],
+            );
+            labelCount += claim.labels.length;
+          }
+          await expect(page.locator('main [data-status]')).toHaveCount(labelCount);
           await translatedLabelsHaveTheirLanguage(page, locale);
           if (id === 'acgn' && viewportName === 'desktop') {
             await page.evaluate(() => document.fonts.ready);
@@ -142,6 +172,33 @@ for (const [viewportName, viewport] of Object.entries(viewports)) {
           const violations = await axeViolations(page);
           expect(violations, formatViolations(violations)).toEqual([]);
           if (id === 'home') await expect(page.locator('#notify')).toBeAttached();
+          // Optional rendered-review artifacts use the same Worker and journeys as acceptance.
+          const reviewDir = process.env.ABOUT_REVIEW_DIR;
+          if (
+            reviewDir &&
+            locale === 'en' &&
+            viewportName === 'desktop' &&
+            scheme === 'light' &&
+            ['home', 'wikis', 'distribution'].includes(id)
+          ) {
+            mkdirSync(reviewDir, { recursive: true });
+            await page.evaluate(() => document.fonts.ready);
+            await page.screenshot({
+              path: join(reviewDir, `${id}-1440.png`),
+              fullPage: true,
+              animations: 'disabled',
+            });
+            const section = page.locator(
+              id === 'home'
+                ? 'section[aria-labelledby="why"]'
+                : 'section[aria-labelledby="capabilities"]',
+            );
+            await section.scrollIntoViewIfNeeded();
+            await page.screenshot({
+              path: join(reviewDir, `${id}-labels-1440.png`),
+              animations: 'disabled',
+            });
+          }
         });
       }
     });

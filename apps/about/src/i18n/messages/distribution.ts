@@ -86,7 +86,6 @@ export const distribution = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Publishing on REZICS',
-      lede: 'Each capability shows where it stands today.',
     },
     cta: {
       title: 'Hear when publishing opens.',
@@ -177,7 +176,6 @@ export const distribution = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 出版',
-      lede: '每項功能都標明目前進度。',
     },
     cta: {
       title: '出版開放時，收到消息。',
@@ -268,7 +266,6 @@ export const distribution = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 出版',
-      lede: '每项功能都标明当前进度。',
     },
     cta: {
       title: '出版开放时，收到消息。',
@@ -359,7 +356,6 @@ export const distribution = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICSの出版',
-      lede: '各機能に、現在の開発状況を表示しています。',
     },
     cta: {
       title: '出版の開始を、お知らせします。',
@@ -450,7 +446,6 @@ export const distribution = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 출판',
-      lede: '각 기능에 현재 진행 상황을 표시합니다.',
     },
     cta: {
       title: '출판 시작 소식을 받아 보세요.',
@@ -541,7 +536,6 @@ export const distribution = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Veröffentlichen auf REZICS',
-      lede: 'Jede Funktion zeigt ihren aktuellen Stand.',
     },
     cta: {
       title: 'Vom Start des Vertriebs erfahren.',
@@ -632,7 +626,6 @@ export const distribution = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Publier sur REZICS',
-      lede: 'Chaque fonctionnalité indique où elle en est.',
     },
     cta: {
       title: 'Soyez informé de l’ouverture de l’édition.',
@@ -723,7 +716,6 @@ export const distribution = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Publicar en REZICS',
-      lede: 'Cada función indica su estado actual.',
     },
     cta: {
       title: 'Entérate cuando abra la publicación.',

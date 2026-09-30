@@ -40,8 +40,8 @@ statement, ledger, call to action. Pass pictures as named slots:
 Pages whose copy does not fit the order (home, roadmap) compose the section components
 directly, as `pages/[locale]/index.astro` does. The roadmap opens with a route to launch (the five
 stages as stops, the ribbon on the one being built), tells the stages as a pinned story whose
-frames show where each sits and a few of its capabilities, files every capability in Now, Next
-and Later columns, and ends on a statement about dates. The home page shows the whole product, not one
+frames show where each sits and a few of its capabilities, files launch capabilities in Now, Next
+and Later columns with post-launch capabilities in a separate section, and ends on a statement about dates. The home page shows the whole product, not one
 line: hero deck, word band, then its three messages (a work in your language, the whole
 community, fans from every platform), every kind of story, the product lines, why, the stages
 and the call to action. Each message is a heading, one interactive or arriving picture and
@@ -57,11 +57,11 @@ its claims in a `FeatureList`.
 | Pinned story   | `sections/ScrollStory.astro` + `StoryStep.astro` | Two to six steps whose frames share one sticky stage on desktop. Each frame is a whole picture; parts marked `data-arrive` (with `--at` in percent) appear as their step arrives. Set `number` only for real sequences. |
 | Showcase       | `sections/Showcase.astro` + `Tile.astro`         | A six-column grid. Rows must add up to six (`span` 2, 3, 4 or 6). A few tiles on cloth or band, the rest paper; a tile's `visual` slot holds a vignette.                                                                |
 | Statement      | `sections/Statement.astro`                       | One sentence on a band that inks in (muted to full) as it crosses the viewport.                                                                                                                                         |
-| Statements     | `sections/Statements.astro`                      | Several feature titles as big statements with bodies and statuses (home's "Why REZICS").                                                                                                                                |
+| Statements     | `sections/Statements.astro`                      | Several feature titles as big statements with bodies and labels only beyond launch (home's "Why REZICS").                                                                                                               |
 | Compare        | `sections/Compare.astro`                         | A two-column table, today's workaround beside the REZICS way; today's side is struck through as the row arrives. Four or five rows.                                                                                     |
-| Ledger         | `sections/Ledger.astro`                          | Every capability claim of the page, from `features.ts`, with its status. Dense and plain on purpose.                                                                                                                    |
-| Glance         | `sections/Glance.astro`                          | GOAL.md's five stages in order, the one in development marked by the ribbon.                                                                                                                                            |
-| Feature list   | `sections/FeatureList.astro`                     | Feature statements with their statuses as a grid, under a section's picture (home) or inside the ledger.                                                                                                                |
+| Ledger         | `sections/Ledger.astro`                          | Every capability claim of the page, from `features.ts`, with a “Later” label only beyond launch. Dense and plain on purpose.                                                                                            |
+| Glance         | `sections/Glance.astro`                          | GOAL.md's five launch stages in order, linking to the roadmap for progress.                                                                                                                                             |
+| Feature list   | `sections/FeatureList.astro`                     | Feature statements with labels only beyond launch as a grid, under a section's picture (home) or inside the ledger.                                                                                                     |
 | Call to action | `sections/CallToAction.astro`                    | Ends every page with the notify form island. Its id is `notify`.                                                                                                                                                        |
 
 `sections/SectionHeading.astro` is the one section heading; use it rather than styling h2s.
@@ -142,8 +142,9 @@ themes, once with reduced motion, and tab through it; drag and swipe what can be
 ## Copy
 
 - Every capability sentence is a feature in `src/features.ts` with its text in
-  `messages/features.ts`. Its status comes from the GOAL.md milestone that delivers it, so
-  the sentence itself describes the product as it will work and never hedges.
+  `messages/features.ts`. The sentence describes the product at launch without hedging.
+  Only post-launch capabilities get a “Later” label, sourced to an owner decision;
+  principles never get a label. Milestones belong to the roadmap, where progress is shown.
 - Write concrete scenes ("volume 7 in 繁體中文, out Friday"), plain verbs, sentence case.
 - Catalogs written in English only use `defineEnglishCopy`; pages reading them mark
   `<main lang="en">` through `pageLanguage`, and strings from the translated site catalog

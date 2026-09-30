@@ -4,8 +4,8 @@ import { defineCopy } from '../define.ts';
 export interface RoadmapCopy {
   meta: { title: string; description: string };
   hero: { title: string; lede: string };
-  availableTitle: string;
-  availableLede: string;
+  laterTitle: string;
+  laterLede: string;
   /** The three columns, headed by what they mean. */
   horizons: Record<Horizon, { title: string; body: string }>;
   /** GOAL.md's milestones as stages a reader can follow, in order. */
@@ -15,7 +15,7 @@ export interface RoadmapCopy {
   /** The caption of a stage's picture and how many capabilities it holds beyond those shown. */
   stageOf: string;
   more: string;
-  /** The columns that file every capability under the stage that builds it. */
+  /** The columns that file launch capabilities under the stage that builds them. */
   columns: { title: string; lede: string };
   /** Says what order and missing dates mean. */
   statement: { text: string; body: string };
@@ -27,14 +27,14 @@ export const roadmap = defineCopy<RoadmapCopy>({
     meta: {
       title: 'The REZICS roadmap: what is being built now, next and later',
       description:
-        'Five stages from foundations to launch. Every capability REZICS describes sits in one of them, so you can see what is being built now and what follows.',
+        'Five stages from foundations to launch. See what is being built now, what follows before launch and what comes after.',
     },
     hero: {
       title: 'Five stages to launch. The first is underway.',
-      lede: 'Everything this site describes sits in one of five stages, built in order. Foundations come first because every scenario stands on them; registration opens when the fifth is done.',
+      lede: 'Launch capabilities are built in five stages, in order. Foundations come first because every scenario stands on them; registration opens when the fifth is done.',
     },
-    availableTitle: 'Available today',
-    availableLede: 'What already works for everyone this site reaches.',
+    laterTitle: 'After launch',
+    laterLede: 'These capabilities follow the five launch stages.',
     horizons: {
       now: {
         title: 'In development',
@@ -78,7 +78,7 @@ export const roadmap = defineCopy<RoadmapCopy>({
     stageOf: 'Stage {n} of {total}',
     more: 'and {n} more',
     columns: {
-      title: 'Every capability, in its stage.',
+      title: 'Launch capabilities, in their stages.',
       lede: 'The same plan, filed by when each stage is built.',
     },
     statement: {
@@ -94,14 +94,14 @@ export const roadmap = defineCopy<RoadmapCopy>({
     meta: {
       title: 'REZICS 開發規劃：現在、接下來與之後',
       description:
-        '從基礎到上線，共五個階段。網站介紹的每項功能都有所屬階段，讓你看清楚現在在做什麼，接下來又是什麼。',
+        '從基礎到上線，共五個階段。看看目前在做什麼、上線前還有哪些階段，以及上線後的功能。',
     },
     hero: {
       title: '五個階段走向上線，第一步已開始。',
-      lede: '本站介紹的一切分屬五個階段，依序完成。每個使用情境都仰賴共同基礎，所以從基礎開始；第五階段完成後，才會開放註冊。',
+      lede: '上線功能分五個階段依序完成。每個使用情境都仰賴共同基礎，所以從基礎開始；第五階段完成後，才會開放註冊。',
     },
-    availableTitle: '現在已可使用',
-    availableLede: '現在已對所有本站訪客生效的內容。',
+    laterTitle: '上線後',
+    laterLede: '這些功能在五個上線階段完成後推出。',
     horizons: {
       now: {
         title: '開發中',
@@ -145,7 +145,7 @@ export const roadmap = defineCopy<RoadmapCopy>({
     stageOf: '第 {n} 階段，共 {total} 階段',
     more: '另有 {n} 項',
     columns: {
-      title: '每項能力，都有自己的階段。',
+      title: '上線功能，以及各自的階段。',
       lede: '同一份計畫，依各階段的開發順序排列。',
     },
     statement: {
@@ -161,14 +161,14 @@ export const roadmap = defineCopy<RoadmapCopy>({
     meta: {
       title: 'REZICS 开发计划：现在、接下来与之后',
       description:
-        '从基础到上线，共五个阶段。网站介绍的每项功能都有所属阶段，让你看清楚现在在做什么，接下来又是什么。',
+        '从基础到上线，共五个阶段。看看目前在做什么、上线前还有哪些阶段，以及上线后的功能。',
     },
     hero: {
       title: '五个阶段走向上线，第一步已开始。',
-      lede: '本站介绍的一切分属五个阶段，依次完成。每个使用场景都依赖共同基础，所以从基础开始；第五阶段完成后，才会开放注册。',
+      lede: '上线功能分五个阶段依次完成。每个使用场景都依赖共同基础，所以从基础开始；第五阶段完成后，才会开放注册。',
     },
-    availableTitle: '现在已可使用',
-    availableLede: '现在已对所有本站访客生效的内容。',
+    laterTitle: '上线后',
+    laterLede: '这些功能在五个上线阶段完成后推出。',
     horizons: {
       now: {
         title: '开发中',
@@ -212,7 +212,7 @@ export const roadmap = defineCopy<RoadmapCopy>({
     stageOf: '第 {n} 阶段，共 {total} 阶段',
     more: '另有 {n} 项',
     columns: {
-      title: '每项能力，都有自己的阶段。',
+      title: '上线功能，以及各自的阶段。',
       lede: '同一份计划，按各阶段的开发顺序排列。',
     },
     statement: {
@@ -228,14 +228,14 @@ export const roadmap = defineCopy<RoadmapCopy>({
     meta: {
       title: 'REZICSロードマップ：開発中、次、その先',
       description:
-        '基盤から公開までの5段階。紹介するすべての機能がどの段階にあるかを示し、今作っているものとその次がわかります。',
+        '基盤から公開までの5段階。今作っているもの、公開までの次の段階、公開後に追加する機能を紹介します。',
     },
     hero: {
       title: '公開まで5段階。最初の段階を進めています。',
-      lede: 'このサイトの内容はすべて5つの段階に分かれ、順番に作ります。どの利用シーンも土台が必要なので、基盤から。第5段階が終わったら登録を開始します。',
+      lede: '公開時の機能は5つの段階で順番に作ります。どの利用シーンも土台が必要なので、基盤から。第5段階が終わったら登録を開始します。',
     },
-    availableTitle: '今使えるもの',
-    availableLede: 'このサイトを訪れるすべての人に、すでに提供していること。',
+    laterTitle: '公開後',
+    laterLede: 'この機能は、公開までの5段階を終えた後に追加します。',
     horizons: {
       now: {
         title: '開発中',
@@ -279,7 +279,7 @@ export const roadmap = defineCopy<RoadmapCopy>({
     stageOf: '全{total}段階のうち第{n}段階',
     more: 'ほか{n}件',
     columns: {
-      title: 'すべての機能に、取り組む段階を。',
+      title: '公開時の機能を、段階ごとに。',
       lede: '同じ計画を、開発する段階の順に整理しました。',
     },
     statement: {
@@ -295,14 +295,14 @@ export const roadmap = defineCopy<RoadmapCopy>({
     meta: {
       title: 'REZICS 로드맵: 지금, 다음, 그 이후',
       description:
-        '기반 구축부터 출시까지 다섯 단계. 소개하는 모든 기능이 어느 단계에 속하는지 보여 주어 지금 만드는 것과 다음 순서를 확인할 수 있습니다.',
+        '기반 구축부터 출시까지 다섯 단계. 지금 만드는 것과 출시 전의 다음 단계, 출시 후에 추가할 기능을 확인하세요.',
     },
     hero: {
       title: '출시까지 다섯 단계. 첫 단계가 진행 중입니다.',
-      lede: '이 사이트의 모든 내용은 다섯 단계에 나뉘며 순서대로 만듭니다. 모든 사용 흐름이 기반 위에 서므로 기반부터 시작합니다. 다섯 번째 단계가 끝나면 가입을 엽니다.',
+      lede: '출시 기능은 다섯 단계에 걸쳐 순서대로 만듭니다. 모든 사용 흐름이 기반 위에 서므로 기반부터 시작합니다. 다섯 번째 단계가 끝나면 가입을 엽니다.',
     },
-    availableTitle: '지금 이용 가능',
-    availableLede: '이 사이트를 방문하는 누구에게나 이미 적용되는 것들.',
+    laterTitle: '출시 후',
+    laterLede: '이 기능들은 출시를 위한 다섯 단계 이후에 제공됩니다.',
     horizons: {
       now: {
         title: '개발 중',
@@ -346,7 +346,7 @@ export const roadmap = defineCopy<RoadmapCopy>({
     stageOf: '총 {total}단계 중 {n}단계',
     more: '외 {n}개',
     columns: {
-      title: '모든 기능에 해당 단계를.',
+      title: '출시 기능을 단계별로.',
       lede: '같은 계획을 단계별 개발 순서로 정리했습니다.',
     },
     statement: {
@@ -362,14 +362,14 @@ export const roadmap = defineCopy<RoadmapCopy>({
     meta: {
       title: 'Die REZICS-Roadmap: jetzt, als Nächstes und später',
       description:
-        'Fünf Etappen vom Fundament bis zum Start. Jede beschriebene Funktion gehört zu einer davon. So siehst du, woran wir jetzt arbeiten und was folgt.',
+        'Fünf Etappen vom Fundament bis zum Start. Sieh, woran wir jetzt arbeiten, was bis zum Start folgt und was danach kommt.',
     },
     hero: {
       title: 'Fünf Etappen bis zum Start. Die erste läuft.',
-      lede: 'Alles auf dieser Website gehört zu fünf Etappen, die wir nacheinander bauen. Zuerst das Fundament, auf dem alle Abläufe stehen. Nach der fünften Etappe öffnet die Registrierung.',
+      lede: 'Die Funktionen zum Start entstehen in fünf Etappen. Zuerst das Fundament, auf dem alle Abläufe stehen. Nach der fünften Etappe öffnet die Registrierung.',
     },
-    availableTitle: 'Heute verfügbar',
-    availableLede: 'Was für alle Besucher dieser Website bereits funktioniert.',
+    laterTitle: 'Nach dem Start',
+    laterLede: 'Diese Funktionen folgen auf die fünf Etappen bis zum Start.',
     horizons: {
       now: {
         title: 'In Entwicklung',
@@ -413,7 +413,7 @@ export const roadmap = defineCopy<RoadmapCopy>({
     stageOf: 'Etappe {n} von {total}',
     more: 'und {n} weitere',
     columns: {
-      title: 'Jede Funktion in ihrer Etappe.',
+      title: 'Funktionen zum Start, nach Etappen.',
       lede: 'Derselbe Plan, nach Reihenfolge der Etappen geordnet.',
     },
     statement: {
@@ -429,14 +429,14 @@ export const roadmap = defineCopy<RoadmapCopy>({
     meta: {
       title: 'La feuille de route REZICS : maintenant, ensuite, plus tard',
       description:
-        'Cinq étapes, des fondations au lancement. Chaque fonction présentée appartient à l’une d’elles : vous voyez ce qui se construit et ce qui suivra.',
+        'Cinq étapes, des fondations au lancement. Découvrez ce qui se construit, les étapes avant le lancement et les fonctions qui suivront.',
     },
     hero: {
       title: 'Cinq étapes avant le lancement. La première est en cours.',
-      lede: 'Tout ce site se répartit en cinq étapes réalisées dans l’ordre. Les fondations viennent d’abord, car chaque parcours en dépend. Les inscriptions ouvriront à la fin de la cinquième étape.',
+      lede: 'Les fonctions du lancement se construisent en cinq étapes, dans l’ordre. Les fondations viennent d’abord, car chaque parcours en dépend. Les inscriptions ouvriront à la fin de la cinquième étape.',
     },
-    availableTitle: 'Disponible aujourd’hui',
-    availableLede: 'Ce qui fonctionne déjà pour tous les visiteurs de ce site.',
+    laterTitle: 'Après le lancement',
+    laterLede: 'Ces fonctions suivront les cinq étapes du lancement.',
     horizons: {
       now: {
         title: 'En développement',
@@ -480,7 +480,7 @@ export const roadmap = defineCopy<RoadmapCopy>({
     stageOf: 'Étape {n} sur {total}',
     more: 'et {n} autres',
     columns: {
-      title: 'Chaque fonction à son étape.',
+      title: 'Les fonctions du lancement, par étape.',
       lede: 'Le même plan, classé par ordre de réalisation.',
     },
     statement: {
@@ -496,14 +496,14 @@ export const roadmap = defineCopy<RoadmapCopy>({
     meta: {
       title: 'La hoja de ruta de REZICS: ahora, después y más adelante',
       description:
-        'Cinco etapas, de las bases al lanzamiento. Cada función pertenece a una de ellas para que veas qué se construye ahora y qué viene después.',
+        'Cinco etapas, de las bases al lanzamiento. Consulta qué se construye ahora, qué sigue antes del lanzamiento y qué llegará después.',
     },
     hero: {
       title: 'Cinco etapas hasta el lanzamiento. La primera está en marcha.',
-      lede: 'Todo lo que describe este sitio pertenece a cinco etapas construidas en orden. Primero las bases, porque todos los recorridos dependen de ellas. El registro abre al terminar la quinta.',
+      lede: 'Las funciones del lanzamiento se construyen en cinco etapas, en orden. Primero las bases, porque todos los recorridos dependen de ellas. El registro abre al terminar la quinta.',
     },
-    availableTitle: 'Disponible hoy',
-    availableLede: 'Lo que ya funciona para todos los visitantes de este sitio.',
+    laterTitle: 'Después del lanzamiento',
+    laterLede: 'Estas funciones llegarán después de las cinco etapas del lanzamiento.',
     horizons: {
       now: {
         title: 'En desarrollo',
@@ -547,7 +547,7 @@ export const roadmap = defineCopy<RoadmapCopy>({
     stageOf: 'Etapa {n} de {total}',
     more: 'y {n} más',
     columns: {
-      title: 'Cada función en su etapa.',
+      title: 'Las funciones del lanzamiento, por etapa.',
       lede: 'El mismo plan, ordenado por su etapa de desarrollo.',
     },
     statement: {

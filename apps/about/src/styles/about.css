@@ -658,16 +658,6 @@
     padding-block-start: 1.75rem;
     border-block-start: 2px solid var(--border);
   }
-  .glance-stage[data-horizon='now'] {
-    border-block-start-color: var(--primary);
-  }
-  .glance-stage .ribbon {
-    position: absolute;
-    inset-block-start: -2px;
-    inset-inline-end: 0;
-    height: 3rem;
-    width: 0.75rem;
-  }
 }
 
 /* ---------- Motion ---------- */
@@ -819,13 +809,6 @@
       animation-timeline: view();
       animation-range: cover 30% cover 50%;
     }
-
-    /* The glance track: the stage in development pulses its ribbon once as it arrives. */
-    .glance-stage[data-horizon='now'] .ribbon {
-      animation: ribbon-drop linear both;
-      animation-timeline: view();
-      animation-range: entry 40% cover 40%;
-    }
   }
 }
 
@@ -905,13 +888,5 @@
 @keyframes strike {
   to {
     background-size: 100% 1px;
-  }
-}
-@keyframes ribbon-drop {
-  from {
-    transform: translateY(-60%);
-  }
-  to {
-    transform: none;
   }
 }

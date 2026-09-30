@@ -1,22 +1,19 @@
 ---
-import { copy } from '../../i18n/format.ts';
 import type { UiLocale } from '../../i18n/locales.ts';
 import type { FeatureId } from '../../features.ts';
 import FeatureList from './FeatureList.astro';
 import SectionHeading from './SectionHeading.astro';
 
 /**
- * The ledger: feature statements from `features.ts`, each with its status, in a dense
+ * The ledger: feature statements from `features.ts`, labelled only beyond launch, in a dense
  * three-column list after the page's spectacle. Every capability claim on a page lives here.
  */
 interface Props { locale: UiLocale; id: string; title: string; lede?: string; ids: readonly FeatureId[]; class?: string }
 const { locale, id, title, lede, ids, class: className = '' } = Astro.props;
-const site = copy('site', locale);
 ---
 <section aria-labelledby={id} class={`chapter ${className}`}>
   <div class="page-frame">
     <SectionHeading id={id} title={title} lede={lede} />
     <FeatureList locale={locale} ids={ids} class="mt-12 border-t border-border pt-10 sm:grid-cols-2 lg:grid-cols-3 md:mt-16" />
-    <p class="mt-12 text-sm text-muted-foreground" lang={locale}>{site.status.legend}</p>
   </div>
 </section>

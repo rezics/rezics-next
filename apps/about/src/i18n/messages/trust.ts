@@ -94,7 +94,6 @@ export const trust = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Trust on REZICS',
-      lede: 'Each commitment shows where it stands today.',
     },
     cta: {
       title: 'Hear when registration opens.',
@@ -193,7 +192,6 @@ export const trust = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: '信任 REZICS',
-      lede: '每項承諾都標明目前進度。',
     },
     cta: {
       title: '開放註冊時，收到通知。',
@@ -292,7 +290,6 @@ export const trust = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: '信任 REZICS',
-      lede: '每项承诺都标明当前进度。',
     },
     cta: {
       title: '开放注册时，收到通知。',
@@ -391,7 +388,6 @@ export const trust = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICSの信頼',
-      lede: '各約束に、現在の実現状況を表示しています。',
     },
     cta: {
       title: '登録開始のお知らせを受け取る。',
@@ -490,7 +486,6 @@ export const trust = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 신뢰',
-      lede: '각 약속에 현재 진행 상황을 표시합니다.',
     },
     cta: {
       title: '가입 시작 소식을 받아 보세요.',
@@ -589,7 +584,6 @@ export const trust = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Vertrauen auf REZICS',
-      lede: 'Jede Zusage zeigt ihren aktuellen Stand.',
     },
     cta: {
       title: 'Erfahre, wann die Registrierung öffnet.',
@@ -688,7 +682,6 @@ export const trust = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'La confiance sur REZICS',
-      lede: 'Chaque engagement indique où il en est.',
     },
     cta: {
       title: 'Soyez prévenu à l’ouverture des inscriptions.',
@@ -787,7 +780,6 @@ export const trust = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Confianza en REZICS',
-      lede: 'Cada compromiso indica su estado actual.',
     },
     cta: {
       title: 'Entérate cuando se abra el registro.',

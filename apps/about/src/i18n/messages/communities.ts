@@ -86,7 +86,6 @@ export const communities = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Realms on REZICS',
-      lede: 'Each capability shows where it stands today.',
     },
     cta: {
       title: 'Found your Realm when we open.',
@@ -177,7 +176,6 @@ export const communities = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 社群',
-      lede: '每項功能都標明目前進度。',
     },
     cta: {
       title: '開放時，建立你的社群。',
@@ -268,7 +266,6 @@ export const communities = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 社区',
-      lede: '每项功能都标明当前进度。',
     },
     cta: {
       title: '开放时，建立你的社区。',
@@ -359,7 +356,6 @@ export const communities = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICSのコミュニティ',
-      lede: '各機能に、現在の開発状況を表示しています。',
     },
     cta: {
       title: 'オープンしたら、あなたのコミュニティを。',
@@ -450,7 +446,6 @@ export const communities = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 커뮤니티',
-      lede: '각 기능에 현재 진행 상황을 표시합니다.',
     },
     cta: {
       title: '문을 열면 내 커뮤니티를 만드세요.',
@@ -541,7 +536,6 @@ export const communities = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Communitys auf REZICS',
-      lede: 'Jede Funktion zeigt ihren aktuellen Stand.',
     },
     cta: {
       title: 'Gründe deine Community zur Eröffnung.',
@@ -632,7 +626,6 @@ export const communities = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Les communautés sur REZICS',
-      lede: 'Chaque fonctionnalité indique où elle en est.',
     },
     cta: {
       title: 'Fondez votre communauté à l’ouverture.',
@@ -723,7 +716,6 @@ export const communities = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Comunidades en REZICS',
-      lede: 'Cada función indica su estado actual.',
     },
     cta: {
       title: 'Funda tu comunidad cuando abramos.',

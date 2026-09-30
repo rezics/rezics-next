@@ -90,7 +90,6 @@ export const serialFiction = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Serial fiction on REZICS',
-      lede: 'Each capability shows where it stands today.',
     },
     cta: {
       title: 'Publish your first chapter on day one.',
@@ -185,7 +184,6 @@ export const serialFiction = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 小說連載',
-      lede: '每項功能都標明目前進度。',
     },
     cta: {
       title: '開放第一天，發布你的第一章。',
@@ -280,7 +278,6 @@ export const serialFiction = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 小说连载',
-      lede: '每项功能都标明当前进度。',
     },
     cta: {
       title: '开放第一天，发布你的第一章。',
@@ -375,7 +372,6 @@ export const serialFiction = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICSの小説連載',
-      lede: '各機能に、現在の開発状況を表示しています。',
     },
     cta: {
       title: '初日から、最初の章を公開。',
@@ -470,7 +466,6 @@ export const serialFiction = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 웹소설',
-      lede: '각 기능에 현재 진행 상황을 표시합니다.',
     },
     cta: {
       title: '첫날에 첫 화를 발행하세요.',
@@ -565,7 +560,6 @@ export const serialFiction = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Fortsetzungsromane auf REZICS',
-      lede: 'Jede Funktion zeigt ihren aktuellen Stand.',
     },
     cta: {
       title: 'Veröffentliche dein erstes Kapitel zum Start.',
@@ -660,7 +654,6 @@ export const serialFiction = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Les feuilletons sur REZICS',
-      lede: 'Chaque fonctionnalité indique où elle en est.',
     },
     cta: {
       title: 'Publiez votre premier chapitre dès l’ouverture.',
@@ -755,7 +748,6 @@ export const serialFiction = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Ficción por entregas en REZICS',
-      lede: 'Cada función indica su estado actual.',
     },
     cta: {
       title: 'Publica tu primer capítulo desde el primer día.',

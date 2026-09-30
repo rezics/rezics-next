@@ -33,12 +33,15 @@ the background in an agent session; stop it with `astro dev stop` in `apps/about
   its translation, its catalog uses `defineEnglishCopy`: every locale renders the English text
   inside `<main lang="en">`, and the catalog test names each such catalog. The site is not
   deployed while that list is not empty (G-482 translates the copy G-481 wrote).
-- **One registry for feature claims.** `src/features.ts` lists every capability statement and
-  the `GOAL.md` milestone that delivers it; the milestone sets the status: M4 is in
-  development, M5 and M6 are up next, M7 and M8 come later. Pages render the status beside
-  each statement and the roadmap groups by it, so the copy describes the product as it will
-  work without hedging. Only "no trackers" is available, because nothing else is public yet.
-  The maintainer confirms the mapping when a milestone starts or ends.
+- **Only post-launch capabilities get a label.** `src/features.ts` describes the product
+  at launch, after the current Goal's M4–M8. Those capabilities carry no label; principles
+  and policies such as open source, no advertising trackers and no training on private
+  drafts never carry one either. Only capabilities beyond launch say “Later”, in all eight
+  locales, with their owner decision recorded in the registry. A milestone is retained
+  only for the roadmap's stages and launch inventory; post-launch capabilities have their
+  own section. The maintainer chose this because the site is published at launch: marking
+  every capability with today's development status adds noise, and calling a principle
+  “available” misrepresents what it is. Progress belongs on the roadmap.
 - **Copy status is marked.** `src/copy-status.ts` says whether a page's copy is final; it shows
   as `data-copy` on `<main>`. G-481 made every page's English copy final.
 - **JavaScript.** Pages ship a 0.5 kB boot script (saved theme before paint, remembers a

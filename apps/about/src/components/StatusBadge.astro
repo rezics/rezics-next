@@ -1,6 +1,6 @@
 ---
 import { badgeVariants } from '@rezics/ui/badge';
-import { ArrowRight, CircleCheck, CircleDashed, Hammer } from 'lucide-react';
+import { CircleDashed } from 'lucide-react';
 import { copy } from '../i18n/format.ts';
 import type { UiLocale } from '../i18n/locales.ts';
 import { features, type FeatureId } from '../features.ts';
@@ -8,17 +8,10 @@ import { features, type FeatureId } from '../features.ts';
 interface Props { id: FeatureId; locale: UiLocale; class?: string }
 const { id, locale, class: className } = Astro.props;
 const words = copy('site', locale).status;
-const { status, horizon } = features[id];
-// Each status has its own icon and word, so color is never the only cue. Planned features
-// say whether they come next or later, so the roadmap reads as an order, not a wish list.
-const shown = status === 'planned' ? horizon : status;
-const label = { available: words.available, 'in-development': words.inDevelopment, next: words.next, later: words.later, now: words.inDevelopment }[shown];
-const help = { available: words.availableHelp, 'in-development': words.inDevelopmentHelp, next: words.nextHelp, later: words.laterHelp, now: words.inDevelopmentHelp }[shown];
-const variant = { available: 'success', 'in-development': 'info', next: 'soft', later: 'outline', now: 'info' } as const;
-const Icon = { available: CircleCheck, 'in-development': Hammer, next: ArrowRight, later: CircleDashed, now: Hammer }[shown];
 ---
-<!-- Status words come from the translated site catalog, so they carry the locale even inside English page copy. -->
-<span class={badgeVariants({ variant: variant[shown], size: 'md', className })} data-status={status} data-horizon={horizon} title={help} lang={locale}>
-  <Icon aria-hidden className="rtl:-scale-x-100" />
-  {label}
-</span>
+{features[id].status === 'later' && (
+  <span class={badgeVariants({ variant: 'outline', size: 'md', className })} data-status="later" title={words.laterHelp} lang={locale}>
+    <CircleDashed aria-hidden />
+    {words.later}
+  </span>
+)}

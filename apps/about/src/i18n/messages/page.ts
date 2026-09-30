@@ -21,8 +21,8 @@ export interface LinePageCopy {
   };
   /** The big statement band. */
   statement: { text: string; body: string };
-  /** The ledger of feature statements with their status. */
-  ledger: { title: string; lede: string };
+  /** The ledger of feature statements with labels only for post-launch capabilities. */
+  ledger: { title: string; lede?: string };
   /** The notify call to action's heading and line for this page. */
   cta: { title: string; body: string };
 }

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { uiLocales as webLocales } from '../../web/i18n/define.ts';
-import { featureIds, features, milestoneHorizon } from '../src/features.ts';
+import { featureIds, features, milestones } from '../src/features.ts';
 import { awaitsTranslation } from '../src/i18n/define.ts';
 import { catalogs } from '../src/i18n/messages/index.ts';
 import { localeNames, uiLocales } from '../src/i18n/locales.ts';
@@ -95,17 +95,33 @@ test('every feature has a statement, and every page has a name, a summary and se
   }
 });
 
-test('every feature takes its status from the milestone that delivers it', () => {
+test('launch capabilities and principles are distinct from sourced post-launch claims', () => {
+  const principles = [
+    'open-source',
+    'agent-disclosure',
+    'drm-free',
+    'ai-disclosure',
+    'no-training',
+    'no-trackers',
+  ] as const;
+  for (const id of principles) {
+    expect(features[id], id).toMatchObject({ status: 'launch', milestone: undefined });
+    expect(features[id].source, id).toBeUndefined();
+  }
+  const later = featureIds.filter((id) => features[id].status === 'later');
+  expect(later).toEqual(['world-visuals']);
+  expect(features['world-visuals']).toMatchObject({
+    milestone: undefined,
+    source: 'docs/contracts/information-verification.md#a-big-franchise-wiki-for-every-work',
+  });
   for (const id of featureIds) {
-    const { status, horizon, milestone } = features[id];
-    if (!milestone) {
-      // Only the site's own policies can be available before launch.
-      expect(id).toBe('no-trackers');
-      expect([status, horizon]).toEqual(['available', 'available']);
-      continue;
+    const entry = features[id];
+    if (entry.milestone) {
+      expect(milestones, id).toContain(entry.milestone);
+      expect(entry.status, id).toBe('launch');
+    } else if (entry.status === 'launch') {
+      expect(principles as readonly string[], id).toContain(id);
     }
-    expect(horizon, id).toBe(milestoneHorizon[milestone]);
-    expect(status, id).toBe(horizon === 'now' ? 'in-development' : 'planned');
   }
 });
 

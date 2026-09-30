@@ -1,19 +1,17 @@
 ---
 import { copy } from '../../i18n/format.ts';
 import type { UiLocale } from '../../i18n/locales.ts';
-import { milestoneHorizon, milestones } from '../../features.ts';
+import { milestones } from '../../features.ts';
 import { pagePath } from '../../pages.ts';
 import SectionHeading from './SectionHeading.astro';
 
 /**
- * The direction at a glance: GOAL.md's five stages in order, with the one in development
- * marked by the ribbon. Stage names and summaries come from the roadmap catalog.
+ * GOAL.md's five launch stages in order. Progress belongs on the linked roadmap;
+ * the home page shows stage names and summaries without development labels.
  */
 interface Props { locale: UiLocale; id: string; title: string; lede?: string; link?: string; class?: string }
 const { locale, id, title, lede, link, class: className = '' } = Astro.props;
 const stages = copy('roadmap', locale).milestones;
-const status = copy('site', locale).status;
-const horizonName = { now: status.inDevelopment, next: status.next, later: status.later };
 ---
 <section aria-labelledby={id} class={`chapter ${className}`}>
   <div class="page-frame">
@@ -23,10 +21,8 @@ const horizonName = { now: status.inDevelopment, next: status.next, later: statu
     </div>
     <ol class="glance mt-12 md:mt-16">
       {milestones.map(milestone => (
-        <li class="glance-stage" data-horizon={milestoneHorizon[milestone]}>
-          {milestoneHorizon[milestone] === 'now' && <span class="ribbon" aria-hidden="true"></span>}
-          <p class="text-sm font-semibold text-muted-foreground" lang={locale}>{horizonName[milestoneHorizon[milestone]]}</p>
-          <h3 class="mt-2 text-xl font-bold tracking-[-0.01em]">{stages[milestone].name}</h3>
+        <li class="glance-stage">
+          <h3 class="text-xl font-bold tracking-[-0.01em]">{stages[milestone].name}</h3>
           <p class="type-body mt-3 text-muted-foreground">{stages[milestone].body}</p>
         </li>
       ))}

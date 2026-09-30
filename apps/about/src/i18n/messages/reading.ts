@@ -94,7 +94,6 @@ export const reading = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Reading on REZICS',
-      lede: 'Each capability shows where it stands today.',
     },
     cta: {
       title: 'Bring your library on day one.',
@@ -193,7 +192,6 @@ export const reading = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: '在 REZICS 閱讀',
-      lede: '每項功能都標明目前進度。',
     },
     cta: {
       title: '開放第一天，就帶著書庫加入。',
@@ -292,7 +290,6 @@ export const reading = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: '在 REZICS 阅读',
-      lede: '每项功能都标明当前进度。',
     },
     cta: {
       title: '开放第一天，就带着书库加入。',
@@ -391,7 +388,6 @@ export const reading = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICSで読む',
-      lede: '各機能に、現在の開発状況を表示しています。',
     },
     cta: {
       title: '初日から、あなたのライブラリと一緒に。',
@@ -490,7 +486,6 @@ export const reading = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS에서 읽기',
-      lede: '각 기능에 현재 진행 상황을 표시합니다.',
     },
     cta: {
       title: '첫날부터 내 서재와 함께.',
@@ -589,7 +584,6 @@ export const reading = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Lesen auf REZICS',
-      lede: 'Jede Funktion zeigt ihren aktuellen Stand.',
     },
     cta: {
       title: 'Bring deine Bibliothek zum Start mit.',
@@ -688,7 +682,6 @@ export const reading = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Lire sur REZICS',
-      lede: 'Chaque fonctionnalité indique où elle en est.',
     },
     cta: {
       title: 'Venez avec votre bibliothèque dès l’ouverture.',
@@ -787,7 +780,6 @@ export const reading = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Leer en REZICS',
-      lede: 'Cada función indica su estado actual.',
     },
     cta: {
       title: 'Trae tu biblioteca desde el primer día.',

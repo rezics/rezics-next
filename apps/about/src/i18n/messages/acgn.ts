@@ -86,7 +86,6 @@ export const acgn = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Visual novels, anime and manga on REZICS',
-      lede: 'Each capability shows where it stands today.',
     },
     cta: {
       title: 'Start your list on day one.',
@@ -177,7 +176,6 @@ export const acgn = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 視覺小說、動畫與漫畫',
-      lede: '每項功能都標明目前進度。',
     },
     cta: {
       title: '開放第一天，就建立你的清單。',
@@ -268,7 +266,6 @@ export const acgn = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 视觉小说、动画与漫画',
-      lede: '每项功能都标明当前进度。',
     },
     cta: {
       title: '开放第一天，就建立你的清单。',
@@ -359,7 +356,6 @@ export const acgn = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICSのビジュアルノベル・アニメ・マンガ',
-      lede: '各機能に、現在の開発状況を表示しています。',
     },
     cta: {
       title: '初日から、自分のリストを。',
@@ -450,7 +446,6 @@ export const acgn = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 비주얼 노벨·애니·만화',
-      lede: '각 기능에 현재 진행 상황을 표시합니다.',
     },
     cta: {
       title: '첫날부터 내 목록을 만들어 보세요.',
@@ -541,7 +536,6 @@ export const acgn = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Visual Novels, Anime und Manga auf REZICS',
-      lede: 'Jede Funktion zeigt ihren aktuellen Stand.',
     },
     cta: {
       title: 'Starte deine Liste gleich am ersten Tag.',
@@ -632,7 +626,6 @@ export const acgn = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Visual novels, anime et manga sur REZICS',
-      lede: 'Chaque fonctionnalité indique où elle en est.',
     },
     cta: {
       title: 'Créez votre liste dès l’ouverture.',
@@ -723,7 +716,6 @@ export const acgn = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Novelas visuales, anime y manga en REZICS',
-      lede: 'Cada función indica su estado actual.',
     },
     cta: {
       title: 'Empieza tu lista desde el primer día.',

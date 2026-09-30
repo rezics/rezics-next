@@ -86,7 +86,6 @@ export const developers = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Developers on REZICS',
-      lede: 'Each capability shows where it stands today.',
     },
     cta: {
       title: 'Get your first credential on day one.',
@@ -177,7 +176,6 @@ export const developers = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 開發者',
-      lede: '每項功能都標明目前進度。',
     },
     cta: {
       title: '開放第一天，就取得第一組憑證。',
@@ -268,7 +266,6 @@ export const developers = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 开发者',
-      lede: '每项功能都标明当前进度。',
     },
     cta: {
       title: '开放第一天，就获取第一组凭证。',
@@ -359,7 +356,6 @@ export const developers = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICSの開発者向け機能',
-      lede: '各機能に、現在の開発状況を表示しています。',
     },
     cta: {
       title: '初日から、最初の認証情報を。',
@@ -450,7 +446,6 @@ export const developers = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 개발자',
-      lede: '각 기능에 현재 진행 상황을 표시합니다.',
     },
     cta: {
       title: '첫날에 첫 인증 정보를 받아 보세요.',
@@ -541,7 +536,6 @@ export const developers = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Entwickeln auf REZICS',
-      lede: 'Jede Funktion zeigt ihren aktuellen Stand.',
     },
     cta: {
       title: 'Hol dir deine ersten Zugangsdaten zum Start.',
@@ -632,7 +626,6 @@ export const developers = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Développer sur REZICS',
-      lede: 'Chaque fonctionnalité indique où elle en est.',
     },
     cta: {
       title: 'Obtenez votre premier accès dès l’ouverture.',
@@ -723,7 +716,6 @@ export const developers = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Desarrollar en REZICS',
-      lede: 'Cada función indica su estado actual.',
     },
     cta: {
       title: 'Obtén tu primera credencial desde el primer día.',

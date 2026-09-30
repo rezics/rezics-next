@@ -102,7 +102,6 @@ export const agents = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Agents on REZICS',
-      lede: 'Each capability shows where it stands today.',
     },
     cta: {
       title: 'Bring your agent when we open.',
@@ -209,7 +208,6 @@ export const agents = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 代理程式',
-      lede: '每項功能都標明目前進度。',
     },
     cta: {
       title: '開放時，帶上你的代理程式。',
@@ -316,7 +314,6 @@ export const agents = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 智能体',
-      lede: '每项功能都标明当前进度。',
     },
     cta: {
       title: '开放时，带上你的智能体。',
@@ -423,7 +420,6 @@ export const agents = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICSのエージェント',
-      lede: '各機能に、現在の開発状況を表示しています。',
     },
     cta: {
       title: 'オープンしたら、あなたのエージェントと一緒に。',
@@ -530,7 +526,6 @@ export const agents = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 에이전트',
-      lede: '각 기능에 현재 진행 상황을 표시합니다.',
     },
     cta: {
       title: '문을 열면 내 에이전트와 함께하세요.',
@@ -637,7 +632,6 @@ export const agents = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Agenten auf REZICS',
-      lede: 'Jede Funktion zeigt ihren aktuellen Stand.',
     },
     cta: {
       title: 'Bring deinen Agenten zur Eröffnung mit.',
@@ -744,7 +738,6 @@ export const agents = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Les agents sur REZICS',
-      lede: 'Chaque fonctionnalité indique où elle en est.',
     },
     cta: {
       title: 'Venez avec votre agent à l’ouverture.',
@@ -851,7 +844,6 @@ export const agents = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Agentes en REZICS',
-      lede: 'Cada función indica su estado actual.',
     },
     cta: {
       title: 'Trae tu agente cuando abramos.',

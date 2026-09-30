@@ -26,17 +26,12 @@ export interface SiteCopy {
     cookies: string;
   };
   status: {
-    available: string;
     inDevelopment: string;
-    /** Planned for the stages that follow what is being built now. */
+    /** Roadmap progress only: stages following the current one. */
     next: string;
-    /** Planned for the stages after those. */
+    /** The only feature label: delivery after launch. */
     later: string;
-    availableHelp: string;
-    inDevelopmentHelp: string;
-    nextHelp: string;
     laterHelp: string;
-    legend: string;
   };
   /** The control that pauses the site's looping illustrations. */
   motion: { pause: string };
@@ -120,16 +115,10 @@ const en: SiteCopy = {
     cookies: 'This site sets two cookies: your language and your theme. It has no trackers.',
   },
   status: {
-    available: 'Available',
     inDevelopment: 'In development',
     next: 'Up next',
     later: 'Later',
-    availableHelp: 'Works today.',
-    inDevelopmentHelp: 'Being built now.',
-    nextHelp: 'Follows what is being built now.',
-    laterHelp: 'Comes after that.',
-    legend:
-      'Every capability on this site shows its status: available, in development, up next or later.',
+    laterHelp: 'Comes after launch.',
   },
   motion: { pause: 'Pause animation' },
   notify: {
@@ -199,15 +188,10 @@ export const site = defineCopy<SiteCopy>({
       cookies: '本網站只設定兩個 Cookie：語言與主題。沒有任何追蹤器。',
     },
     status: {
-      available: '已提供',
       inDevelopment: '開發中',
       next: '接下來',
       later: '之後',
-      availableHelp: '現在就能使用。',
-      inDevelopmentHelp: '正在打造。',
-      nextHelp: '緊接在目前的工作之後。',
-      laterHelp: '在那之後推出。',
-      legend: '本網站的每項功能都標示狀態：已提供、開發中、接下來或之後。',
+      laterHelp: '上線後推出。',
     },
     motion: { pause: '暫停動畫' },
     notify: {
@@ -271,15 +255,10 @@ export const site = defineCopy<SiteCopy>({
       cookies: '本网站只设置两个 Cookie：语言与主题。没有任何跟踪器。',
     },
     status: {
-      available: '已提供',
       inDevelopment: '开发中',
       next: '接下来',
       later: '之后',
-      availableHelp: '现在就能使用。',
-      inDevelopmentHelp: '正在打造。',
-      nextHelp: '紧接在当前工作之后。',
-      laterHelp: '在那之后推出。',
-      legend: '本网站的每项功能都标明状态：已提供、开发中、接下来或之后。',
+      laterHelp: '上线后推出。',
     },
     motion: { pause: '暂停动画' },
     notify: {
@@ -361,15 +340,10 @@ export const site = defineCopy<SiteCopy>({
       cookies: 'このサイトが設定する Cookie は言語とテーマの二つだけです。トラッカーはありません。',
     },
     status: {
-      available: '提供中',
       inDevelopment: '開発中',
       next: '次に取り組むこと',
       later: 'その先',
-      availableHelp: '今すぐ使えます。',
-      inDevelopmentHelp: 'いま開発しています。',
-      nextHelp: '現在の開発の次に取りかかります。',
-      laterHelp: 'その後に取りかかります。',
-      legend: '各機能に、提供中・開発中・次に取り組むこと・その先のいずれかを表示しています。',
+      laterHelp: '公開後に追加します。',
     },
     motion: { pause: 'アニメーションを一時停止' },
     notify: {
@@ -446,15 +420,10 @@ export const site = defineCopy<SiteCopy>({
       cookies: '이 사이트는 언어와 테마를 기억하는 쿠키 두 개만 사용합니다. 추적기는 없습니다.',
     },
     status: {
-      available: '제공 중',
       inDevelopment: '개발 중',
       next: '다음 단계',
       later: '이후',
-      availableHelp: '지금 사용할 수 있습니다.',
-      inDevelopmentHelp: '지금 만들고 있습니다.',
-      nextHelp: '지금 만드는 작업 바로 다음입니다.',
-      laterHelp: '그다음에 이어집니다.',
-      legend: '이 사이트의 모든 기능에는 상태가 표시됩니다: 제공 중, 개발 중, 다음 단계, 이후.',
+      laterHelp: '출시 후에 제공됩니다.',
     },
     motion: { pause: '애니메이션 일시 정지' },
     notify: {
@@ -552,16 +521,10 @@ export const site = defineCopy<SiteCopy>({
         'Diese Website setzt zwei Cookies: deine Sprache und deine Darstellung. Es gibt keine Tracker.',
     },
     status: {
-      available: 'Verfügbar',
       inDevelopment: 'In Entwicklung',
       next: 'Als Nächstes',
       later: 'Später',
-      availableHelp: 'Funktioniert schon heute.',
-      inDevelopmentHelp: 'Wird gerade entwickelt.',
-      nextHelp: 'Folgt auf die aktuelle Entwicklung.',
-      laterHelp: 'Kommt danach.',
-      legend:
-        'Jede Funktion auf dieser Website zeigt ihren Stand: verfügbar, in Entwicklung, als Nächstes oder später.',
+      laterHelp: 'Kommt nach dem Start.',
     },
     motion: { pause: 'Animation anhalten' },
     notify: {
@@ -665,16 +628,10 @@ export const site = defineCopy<SiteCopy>({
       cookies: 'Ce site dépose deux cookies : votre langue et votre thème. Il n’a aucun traceur.',
     },
     status: {
-      available: 'Disponible',
       inDevelopment: 'En développement',
       next: 'Ensuite',
       later: 'Plus tard',
-      availableHelp: 'Fonctionne dès aujourd’hui.',
-      inDevelopmentHelp: 'En cours de développement.',
-      nextHelp: 'Vient juste après le développement en cours.',
-      laterHelp: 'Vient après.',
-      legend:
-        'Chaque fonctionnalité de ce site affiche son état : disponible, en développement, ensuite ou plus tard.',
+      laterHelp: 'Prévu après le lancement.',
     },
     motion: { pause: 'Mettre l’animation en pause' },
     notify: {
@@ -769,16 +726,10 @@ export const site = defineCopy<SiteCopy>({
       cookies: 'Este sitio usa dos cookies: tu idioma y tu tema. No tiene rastreadores.',
     },
     status: {
-      available: 'Disponible',
       inDevelopment: 'En desarrollo',
       next: 'A continuación',
       later: 'Más adelante',
-      availableHelp: 'Ya funciona.',
-      inDevelopmentHelp: 'En desarrollo ahora.',
-      nextHelp: 'Sigue al desarrollo actual.',
-      laterHelp: 'Llega después.',
-      legend:
-        'Cada función de este sitio muestra su estado: disponible, en desarrollo, a continuación o más adelante.',
+      laterHelp: 'Llega después del lanzamiento.',
     },
     motion: { pause: 'Pausar la animación' },
     notify: {

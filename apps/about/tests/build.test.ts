@@ -2,7 +2,8 @@ import { beforeAll, expect, test } from 'bun:test';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { copyStatus } from '../src/copy-status.ts';
-import { features, featureIds } from '../src/features.ts';
+import { features, featureIds, milestoneHorizon } from '../src/features.ts';
+import { catalogs } from '../src/i18n/messages/index.ts';
 import { localeDirection, uiLocales } from '../src/i18n/locales.ts';
 import { pageIds, pagePath } from '../src/pages.ts';
 
@@ -156,35 +157,60 @@ test('JavaScript and CSS stay within budget', () => {
   expect(size('.css')).toBeLessThan(160_000);
 });
 
-test('every feature statement carries the status the registry gives it', () => {
-  for (const { path } of pages) {
-    for (const [, id, body] of html(path).matchAll(
+test('only post-launch statements carry one localized Later label on every surface', () => {
+  const seen = new Set<string>();
+  for (const { path, locale } of pages) {
+    const source = html(path);
+    if (!path.endsWith('/roadmap/')) expect(source, path).not.toContain('data-horizon=');
+    let labelCount = 0;
+    for (const [, id, body] of source.matchAll(
       /<li[^>]*data-feature="([^"]+)"[^>]*>([\s\S]*?)<\/li>/g,
     )) {
       expect(featureIds as string[], `${path} ${id}`).toContain(id!);
-      const status = body!.match(/data-status="([^"]+)"/)?.[1];
-      // The roadmap groups by column instead of showing a badge on each statement.
-      if (status)
-        expect(status, `${path} ${id}`).toBe(features[id as keyof typeof features].status);
-      else expect(path.endsWith('/roadmap/'), `${path} ${id} has no status`).toBe(true);
+      seen.add(id!);
+      const labels = [
+        ...body!.matchAll(/<span[^>]*data-status="([^"]+)"[^>]*>([\s\S]*?)<\/span>/g),
+      ];
+      const later = features[id as keyof typeof features].status === 'later';
+      expect(labels, `${path} ${id}`).toHaveLength(later ? 1 : 0);
+      if (later) {
+        labelCount++;
+        expect(labels[0]![1]).toBe('later');
+        expect(labels[0]![2]).toContain(catalogs.site[locale].status.later);
+        expect(body).toContain(`title="${catalogs.site[locale].status.laterHelp}"`);
+        expect(body).toContain(`lang="${locale}"`);
+      }
     }
+    // No stray labels may escape the feature components.
+    expect([...source.matchAll(/data-status=/g)], path).toHaveLength(labelCount);
   }
+  expect([...seen].sort()).toEqual([...featureIds].sort());
 });
 
-test('the roadmap files each planned or in-development statement under its column', () => {
+test('the roadmap groups launch stages separately from principles and post-launch claims', () => {
   for (const locale of uiLocales) {
     const source = html(pagePath(locale, 'roadmap'));
     const columns = new Map(
       [
         ...source.matchAll(
-          /data-roadmap-column="(\w+)">([\s\S]*?)(?=<div data-roadmap-column|<\/section>)/g,
+          /data-roadmap-column="(\w+)">([\s\S]*?)(?=<div data-roadmap-column|<div class="mt-20")/g,
         ),
       ].map(([, key, body]) => [key, body!]),
     );
+    const afterLaunch = source.split('data-after-launch')[1]!;
+    expect(afterLaunch, locale).toBeDefined();
     for (const id of featureIds) {
-      const { horizon } = features[id];
-      if (horizon === 'available') continue;
-      expect(columns.get(horizon), `${locale} ${horizon}`).toContain(`data-feature="${id}"`);
+      const entry = features[id];
+      if (entry.milestone) {
+        const horizon = milestoneHorizon[entry.milestone];
+        expect(columns.get(horizon), `${locale} ${horizon}`).toContain(`data-feature="${id}"`);
+        expect(afterLaunch).not.toContain(`data-feature="${id}"`);
+      } else if (entry.status === 'later') {
+        expect(afterLaunch).toContain(`data-feature="${id}"`);
+        for (const body of columns.values()) expect(body).not.toContain(`data-feature="${id}"`);
+      } else {
+        expect(source).not.toContain(`data-feature="${id}"`);
+      }
     }
   }
 });

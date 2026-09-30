@@ -98,7 +98,6 @@ export const wikis = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Wikis and worldbuilding on REZICS',
-      lede: 'Each capability shows where it stands today.',
     },
     cta: {
       title: 'Start your world’s wiki when we open.',
@@ -201,7 +200,6 @@ export const wikis = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS Wiki 與世界觀',
-      lede: '每項功能都標明目前進度。',
     },
     cta: {
       title: '開放時，為你的世界建立 Wiki。',
@@ -304,7 +302,6 @@ export const wikis = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS Wiki 与世界观',
-      lede: '每项功能都标明当前进度。',
     },
     cta: {
       title: '开放时，为你的世界建立 Wiki。',
@@ -407,7 +404,6 @@ export const wikis = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICSのWikiと世界づくり',
-      lede: '各機能に、現在の開発状況を表示しています。',
     },
     cta: {
       title: 'オープンしたら、あなたの世界にWikiを。',
@@ -510,7 +506,6 @@ export const wikis = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'REZICS 위키와 세계관',
-      lede: '각 기능에 현재 진행 상황을 표시합니다.',
     },
     cta: {
       title: '문을 열면 내 세계의 위키를 시작하세요.',
@@ -613,7 +608,6 @@ export const wikis = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Wikis und Weltenbau auf REZICS',
-      lede: 'Jede Funktion zeigt ihren aktuellen Stand.',
     },
     cta: {
       title: 'Starte das Wiki deiner Welt zur Eröffnung.',
@@ -716,7 +710,6 @@ export const wikis = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Wikis et création d’univers sur REZICS',
-      lede: 'Chaque fonctionnalité indique où elle en est.',
     },
     cta: {
       title: 'Créez le wiki de votre univers à l’ouverture.',
@@ -819,7 +812,6 @@ export const wikis = defineCopy<LinePageCopy>({
     },
     ledger: {
       title: 'Wikis y creación de mundos en REZICS',
-      lede: 'Cada función indica su estado actual.',
     },
     cta: {
       title: 'Crea el wiki de tu mundo cuando abramos.',

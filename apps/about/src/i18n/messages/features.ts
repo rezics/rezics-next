@@ -2,7 +2,7 @@ import type { FeatureId } from '../../features.ts';
 import { defineCopy } from '../define.ts';
 
 /**
- * One statement per feature in `features.ts`; its status renders beside it, so a
+ * One statement per feature in `features.ts`; only post-launch features get a label, so a
  * sentence describes the product as it will work and never hedges. A title is a
  * short claim that can stand alone as a big statement; a body is one or two
  * sentences with a concrete scene.
