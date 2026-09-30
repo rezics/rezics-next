@@ -145,6 +145,11 @@ export async function seedContent(env: WorkActivationEnvironment, pool: Pool, ac
   if (eligibility.outcome !== 'succeeded' || !eligibility.decision) {
     throw new Error('load Content eligibility failed');
   }
+  // The native eligibility receipt is also the terminal Access handoff; a
+  // command fixture must not leave a committed publication admission claimed.
+  await access.recordGraphOutcome(claimed.id, { outcome: 'succeeded', receipt: eligibility.receipt,
+    admissionId: claimed.id, requestDigest: eligibilityDigest, authorityEpoch: claimed.authorityEpoch,
+    scope: claimed.scope, dataEpoch: eligibility.graphDataEpoch, sequence: eligibility.graphSequence });
   return { variantId, revisionId: saved.revisionId, publicationDecision: published.decision,
     eligibilityDecision: eligibility.decision, actingSubject: actor, principal } satisfies ContentSeed;
 }
