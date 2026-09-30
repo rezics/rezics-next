@@ -20,7 +20,8 @@ function targets(input: Input, fields: Readonly<Record<string, string>>): Disclo
   const revision = input.revision?.replace(/^urn:rezics:content:revision:/, '') ?? null;
   const context = input.realm ?? undefined;
   return [{ owner: owner as DisclosureTarget['owner'], resource, component: 'body', revision, work, context },
-    { owner: 'graph', resource, component: 'name', revision: owner === 'graph' ? revision : null, context },
+    // Queued revisions pin the subject body, not today's displayed Work name.
+    { owner: 'graph', resource, component: 'name', context },
     ...(owner === 'graph' && revision ? [{ owner: 'content' as const, resource, component: 'body' as const,
       revision, work, context }] : []),
     ...(work && work !== resource ? [{ owner: 'graph' as const, resource: work, component: 'name' as const, context }] : [])];

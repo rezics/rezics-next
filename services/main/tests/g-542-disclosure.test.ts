@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { DISCLOSURE_CHANNELS, DisclosureStore, configureDisclosure, disclose,
+import { DISCLOSURE_CHANNELS, DisclosureStore, configureDisclosure, configureDisclosurePool, disclose,
   type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { readResourceSummaries } from '../src/modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
@@ -19,6 +19,7 @@ import { searchCardReadDependencies } from '../src/modules/search/card-reads.ts'
 import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
 import type { PublicTextPosition } from '../src/modules/work/search-readiness.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { discloseNotifications } from '../src/modules/disclosure/notifications.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const fixtures: DisclosureTarget[] = [
@@ -120,6 +121,38 @@ test('G-542: summary assembly keeps unavailable entries in position and never hy
   expect((await read()).summaries.every(summary => summary.status === 'available')).toBe(true);
 });
 
+test('G-542: queued notification revisions do not pin a past Work name fence', async () => {
+  const oldHead = id(11), newHead = id(12);
+  let current = oldHead;
+  const pool = { connect: async () => ({ release() {}, query: async (sql: string, args?: unknown[]) => {
+    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
+    if (sql.includes('WITH requested')) {
+      const targets = JSON.parse(String(args![0])) as (DisclosureTarget & { ordinal: number })[];
+      return { rows: targets.map(target => ({ ordinal: target.ordinal,
+        restricted: target.resource === id(1) && target.component === 'name' && target.revision === oldHead,
+        assessments: [] })) };
+    }
+    return { rows: [] };
+  } }) } as unknown as Pool;
+  const graph = new FusekiClient('http://graph.invalid');
+  graph.query = async () => ({ results: { bindings: [{ work: { type: 'uri', value: id(1) },
+    head: { type: 'uri', value: current } }] } });
+  const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
+  const reader = new DisclosureStore(pool);
+  configureDisclosure(env, reader);
+  configureDisclosurePool(pool, reader);
+  const subjects = [{ input: { principalId: id(2).slice(-36), owner: 'graph', ref: id(1), revision: oldHead,
+    disclosureBasis: 'g-542' }, result: { status: 'available' as const,
+    subject: { private: false, fields: { title: 'Current Work title' } } } }];
+  for (const channel of ['inbox', 'digest', 'email', 'push'] as const) {
+    expect((await discloseNotifications(pool, subjects, channel))[0]?.status).toBe('undisclosed');
+  }
+  current = newHead;
+  for (const channel of ['inbox', 'digest', 'email', 'push'] as const) {
+    expect((await discloseNotifications(pool, subjects, channel))[0]?.status).toBe('available');
+  }
+});
+
 test('G-542: asset adapters and export manifests discard all denied payload and notices', async () => {
   const s = storage(), graph = new FusekiClient('http://graph.invalid');
   graph.query = async () => ({ results: { bindings: [{ work: { type: 'uri', value: id(1) },
@@ -130,7 +163,8 @@ test('G-542: asset adapters and export manifests discard all denied payload and 
     selection: id(11).slice(-36), selectionPosition: null, use: id(12).slice(-36), crop: null,
     representation: id(13).slice(-36), sha256: 'b'.repeat(64), mediaType: 'image/png', byteLength: 100,
     width: 1, height: 1, availability: 'available', disclosure: 'public', moderation: 'none',
-    lifecycle: 'active', statePosition: null, objectNamespace: 'native' };
+    lifecycle: 'active', clearance: 'cleared' as const, owner: id(2), uploader: id(2),
+    statePosition: null, objectNamespace: 'native' };
   const store = disclosureMedia({ avatarDelivery: async () => asset,
     assetDelivery: async () => asset, itemDelivery: async () => asset } as unknown as MediaStore, env);
   const avatar = () => store.avatarDelivery(id(11).slice(-36));
