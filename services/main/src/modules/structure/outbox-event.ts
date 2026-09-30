@@ -100,10 +100,12 @@ export const outboxEventHandlers = [
       const action = rows[0]?.action?.value;
       const admissionId = value('admissionId');
       const profiles = await discoverStructureProfiles();
-      const matches = [...profiles.values()].filter(profile =>
+      // Several profiles may share the scope and terminal receipt family.
+      const families = new Set([...profiles.values()].filter(profile =>
         value('scope')?.startsWith(profile.editScopePrefix)
-        && receipt === `urn:rezics:receipt:${hash(`${admissionId}\0${profile.receiptFamily}`)}`);
-      if (rows.length !== 1 || !action || !admissionId || matches.length !== 1
+        && receipt === `urn:rezics:receipt:${hash(`${admissionId}\0${profile.receiptFamily}`)}`)
+        .map(profile => profile.receiptFamily));
+      if (rows.length !== 1 || !action || !admissionId || families.size !== 1
         || !!rows[0]?.chapterWork !== (batch.eventIds.length === 2)
         || (value('operation') && rows[0]?.operation?.value !== value('operation'))) {
         throw new Error('Structure command event has no matching terminal receipt');
