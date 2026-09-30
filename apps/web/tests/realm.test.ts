@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { bannerImage, liveBanners, mainExecution, zoneDecision, zoneImage, zonePeople, zoneText, zoneWork }
   from '../features/realm/adapt.ts';
 import { type JoinPolicy, offerOf } from '../features/realm/membership-state.ts';
@@ -7,6 +7,9 @@ import { decisionAnchor, decisionHref, idOf, parseCursor, parseRealmRef, realmHr
   from '../features/realm/route.ts';
 import type { RealmDecision, WorkCard, ZonePresentationRead } from '../features/realm/types.ts';
 import { isPublicPagePath, localizedPath } from '../i18n/locale.ts';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+
+beforeAll(seedServedTypes);
 
 const realm = '7c3e9a1d-2b4f-4d6e-8a0c-5e7f9b1d3c2a';
 const work = '5f7a2c1e-8d3b-4c6a-9e2f-1b4d6a8c0e3f';

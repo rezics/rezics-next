@@ -45,6 +45,7 @@ export default {
     { count: asValue(number()) }),
   topicsFull: 'Acht Themen füllen die Tabs deiner Startseite. Wähle eines ab, um ein anderes zu nehmen.',
   inTopic: insert('in {{topic}}', { topic: String }),
+  typeOther: 'Weitere Themen',
   noTopics: 'Noch keine Themen zur Auswahl. Du kannst später Themen auf der Startseite anheften.',
   communitiesTitle: 'Folge ein paar Communities',
   communitiesBody: 'Passend zu deiner Auswahl. Entferne das Häkchen bei allem, was du nicht möchtest.',

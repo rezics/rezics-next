@@ -1,9 +1,12 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { readDiscovery } from '../features/discover/read.ts';
 import { readQueryDiscovery } from '../features/discover/query-read.ts';
 import { neighbourScope, parseScope, workHref } from '../features/discover/scope.ts';
 import { discoverHref, discoveryQuery, genreTerms, parseDiscoverState, shelvesFor, termShelf } from '../features/discover/state.ts';
 import { failureOf, type MainClient } from '../features/discover/types.ts';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+
+beforeAll(seedServedTypes);
 
 const realm = '3f0e1c2d-4b5a-4c6d-8e7f-9a0b1c2d3e4f';
 const context = '5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d';

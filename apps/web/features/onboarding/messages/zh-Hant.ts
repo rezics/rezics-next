@@ -44,6 +44,7 @@ export default {
   topicsChosen: plural({ other: insert('已選 {{count}} 個，共 8 個') }, { count: asValue(number()) }),
   topicsFull: '八個主題已占滿首頁的分頁。取消一個才能再選。',
   inTopic: insert('屬於{{topic}}', { topic: String }),
+  typeOther: '其他主題',
   noTopics: '暫時沒有可選的主題。之後可以在首頁釘選主題。',
   communitiesTitle: '追蹤幾個社群',
   communitiesBody: '依你的選擇挑選。不想追蹤的可以取消。',

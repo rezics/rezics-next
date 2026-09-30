@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { materializeData } from 'native-i18n';
 import { decideSubmission } from '../features/manage/commands.ts';
 import { book, chapterOne, chapters, mod, names, occurrences, prompt, publishedRules, queue, records,
@@ -7,11 +7,14 @@ import { auditWorks, isSpoilerReason, reasonLabel, recordFacts, ruleFor, workTyp
 import { messages } from '../features/manage/messages.ts';
 import { mergeNames, noNames } from '../features/manage/queue-api.ts';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+
 import { reviewedAs, subjectOf, targetWork } from '../features/manage/queue-subject.ts';
 import { reasonsOf } from '../features/manage/queue-view.tsx';
 import { chapterExcerpt } from '../features/manage/read.ts';
 import { parseQueueView, queueHref } from '../features/manage/routes.ts';
 import type { MainClient, ModerationItem } from '../features/manage/types.ts';
+
+beforeAll(seedServedTypes);
 
 const t = materializeData(messages, { locale: 'en' });
 const uuid = (iri: string) => iri.slice(-36);

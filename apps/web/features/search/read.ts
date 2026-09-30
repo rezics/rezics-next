@@ -13,11 +13,13 @@ export const SEARCH_PAGE_SIZE = 10;
 export function searchRequest(state: SearchState, continuation?: SearchContinuation): ResourceQuery {
   const included = [...(state.term ? [state.term] : []), ...(state.concepts?.include ?? [])];
   const excluded = state.concepts?.exclude ?? [];
+  // Type filters name the registry's IRIs; without the registry they cannot be stated and are left out.
+  const typeIris = (keys: readonly string[] | undefined) => (keys ?? []).flatMap(key =>
+    workTypes().find(type => type.key === key)?.iri ?? []);
+  const includedTypes = typeIris(state.includeTypes), excludedTypes = typeIris(state.excludeTypes);
   const filter: NonNullable<ResourceQuery['filter']> = { all: [
-    ...(state.includeTypes?.length ? [{ facet: 'type', any: state.includeTypes.map(key =>
-      workTypes().find(type => type.key === key)!.iri) }] : []),
-    ...(state.excludeTypes?.length ? [{ facet: 'type', none: state.excludeTypes.map(key =>
-      workTypes().find(type => type.key === key)!.iri) }] : []),
+    ...(includedTypes.length ? [{ facet: 'type', any: includedTypes }] : []),
+    ...(excludedTypes.length ? [{ facet: 'type', none: excludedTypes }] : []),
     ...(state.language ? [{ facet: 'language', any: [state.language] }] : []),
     ...(included.length ? [{ facet: 'concept', [state.concepts?.match === 'any' ? 'any' : 'all']:
       included.map(iriOf) }] : []),

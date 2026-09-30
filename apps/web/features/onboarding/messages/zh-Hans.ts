@@ -44,6 +44,7 @@ export default {
   topicsChosen: plural({ other: insert('已选 {{count}} 个，共 8 个') }, { count: asValue(number()) }),
   topicsFull: '八个主题已占满首页的标签页。取消一个才能再选。',
   inTopic: insert('属于{{topic}}', { topic: String }),
+  typeOther: '其他主题',
   noTopics: '暂时没有可选的主题。之后可以在首页固定主题。',
   communitiesTitle: '关注几个社区',
   communitiesBody: '根据你的选择挑选。不想关注的可以取消。',

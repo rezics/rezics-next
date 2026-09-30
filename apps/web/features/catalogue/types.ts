@@ -72,16 +72,19 @@ export function labelOfType(type: string, locale: UiLocale, form: 'one' | 'other
 }
 
 /**
- * The generated cover a type draws: the registry's shape (portrait, landscape,
- * square, document) with its presentation choosing between a recipe card and a
- * package tile for squares. Before the registry is loaded a Work draws a book.
+ * The generated cover a type draws. The registry's presentation picks the
+ * design and its shape confirms it: a portrait book is a bound book, landscape
+ * game art is key art, a square is a recipe card or a package tile, and
+ * everything else (guides, prompts, media, the defaults) is a document poster.
+ * Before the registry is loaded nothing is known, so a Work draws the generic
+ * document cover rather than guessing a book.
  */
 export function coverOf(types: readonly string[]): WorkCoverKind {
   const entry = typeEntry(types);
-  if (!entry) return 'book';
+  if (!entry || entry.presentation === 'media') return 'document';
   switch (entry.cover) {
-    case 'portrait': return 'book';
-    case 'landscape': return 'game';
+    case 'portrait': return entry.presentation === 'book' ? 'book' : 'document';
+    case 'landscape': return entry.presentation === 'game' ? 'game' : 'document';
     case 'square': return entry.presentation === 'recipe' ? 'recipe' : 'package';
     default: return 'document';
   }

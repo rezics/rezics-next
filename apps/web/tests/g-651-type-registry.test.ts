@@ -5,7 +5,9 @@ import { forgetServedTypes, readTypes } from '../features/catalogue/types-read.t
 import { clearTypes, coverOf, creatableTypes, isUseAction, labelOfType, primaryActionOf, typeEntry, typeLabel }
   from '../features/catalogue/types.ts';
 import { coverKindOf, slotRatio } from '../features/catalogue/work.ts';
-import { workTypes } from '../features/discover/state.ts';
+import { discoveryQuery, parseDiscoverState, shelvesFor, workTypes } from '../features/discover/state.ts';
+import { topicGroups } from '../features/onboarding/topics.ts';
+import { searchRequest } from '../features/search/read.ts';
 import { valueLabel } from '../features/zones/browse-view.ts';
 import { typeNames } from '../features/work-page/format.ts';
 import { writableTypes, workKind } from '../features/studio/types.ts';
@@ -39,17 +41,28 @@ describe('G-651 the web reads types from the served registry', () => {
     expect(labelOfType(book, 'en', 'other')).toBe('Books');
   });
 
+  test('the presentation picks the design: only books are bound, only games are key art, media are posters', () => {
+    expect(coverOf([book])).toBe('book');
+    for (const media of ['Movie', 'TVSeries', 'VideoObject', 'AudioObject', 'MusicRecording', 'MusicAlbum']) {
+      expect(coverOf([`https://schema.org/${media}`]), media).toBe('document');
+    }
+    expect(coverOf(['https://rezics.com/vocab/PromptTemplate'])).toBe('document');
+    expect(coverOf(['https://schema.org/SoftwareApplication'])).toBe('package');
+    expect(coverOf(['https://rezics.com/vocab/SkillPackage'])).toBe('package');
+  });
+
   test('the most specific type wins, and squares split into recipe cards and package tiles', () => {
     expect(typeLabel(['https://schema.org/DigitalDocument', 'https://rezics.com/vocab/PromptTemplate'], 'en')).toBe('Prompt');
     expect(coverOf(['https://schema.org/Recipe'])).toBe('recipe');
     expect(coverOf(['https://rezics.com/vocab/ModPackage'])).toBe('package');
-    expect(coverOf(['https://schema.org/Movie'])).toBe('book');
     expect(typeNames([book, 'https://schema.org/BookSeries', 'https://example.com/Hologram'], 'en')).toEqual(['Book']);
   });
 
-  test('before the registry arrives a Work draws a book and has no label', () => {
+  test('before the registry arrives a Work draws the generic cover and has no label, never a book', () => {
     clearTypes();
-    expect(coverOf([game])).toBe('book');
+    expect(coverOf([game])).toBe('document');
+    expect(coverOf([book])).toBe('document');
+    expect(coverOf([])).toBe('document');
     expect(typeLabel([game], 'en')).toBeNull();
     expect(primaryActionOf([game])).toBe('read');
   });
@@ -83,6 +96,25 @@ describe('G-651 the web reads types from the served registry', () => {
     expect(label(game, 'ja')).toBe('ゲーム');
     expect(label('https://rezics.com/vocab/SkillPackage', 'zh-Hant')).toBe('技能');
     expect(label('https://example.com/Hologram', 'en')).toBeUndefined();
+  });
+
+  test('without the registry discovery, search and onboarding degrade instead of throwing', () => {
+    clearTypes();
+    expect(workTypes()).toEqual([]);
+    const state = parseDiscoverState({ type: 'book' })!;
+    const shelves = shelvesFor(state, true);
+    expect(shelves.map(shelf => shelf.type)).toEqual([null, null]);
+    for (const shelf of shelves) {
+      expect(discoveryQuery(state, shelf, { limit: 12, language: 'en', context: null })).not.toHaveProperty('type');
+    }
+    const typed = { ...state, type: 'book' as const };
+    expect(discoveryQuery(typed, { ...shelves[0]!, type: 'book' }, { limit: 12, language: 'en' })).not.toHaveProperty('type');
+    const request = searchRequest({ phrase: 'hades', scope: { kind: 'global' }, includeTypes: ['book'], excludeTypes: ['recipe'],
+      language: null, term: null } as never);
+    expect(JSON.stringify(request.filter)).not.toContain('"facet":"type"');
+    const heading = topicGroups([{ type: 'https://schema.org/Book', concepts: [] }], 'en')[0]!;
+    expect(heading.heading).toBeNull();
+    expect(heading.cover).toBe('document');
   });
 
   test('discovery filters take their IRI and label from the registry', () => {
@@ -147,9 +179,17 @@ describe('G-651 the web revalidates the registry by ETag', () => {
     expect(calls).toHaveLength(3);
   });
 
-  test('with nothing held and Main down there is no registry, and lookups stay safe', async () => {
-    const { fetcher } = recorder([() => { throw new Error('down'); }]);
-    expect(await readTypes(fetcher, () => 0)).toBeNull();
-    expect(coverKindOf([game])).toBe('book');
+  test('with nothing held and Main down there is no registry, lookups stay safe and renders do not each retry', async () => {
+    let clock = 0;
+    const { calls, fetcher } = recorder([() => { throw new Error('down'); }, () => reply(200, { etag: tag })]);
+    expect(await readTypes(fetcher, () => clock)).toBeNull();
+    expect(coverKindOf([game])).toBe('document');
+    clock = 5_000;
+    expect(await readTypes(fetcher, () => clock)).toBeNull();
+    expect(calls).toHaveLength(1);
+    clock = 11_000;
+    expect((await readTypes(fetcher, () => clock))?.digest).toBe(servedTypes.digest);
+    expect(calls).toHaveLength(2);
+    expect(coverKindOf([game])).toBe('game');
   });
 });

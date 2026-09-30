@@ -45,6 +45,7 @@ export default {
     { count: asValue(number()) }),
   topicsFull: 'Huit thèmes remplissent les onglets de votre accueil. Désélectionnez-en un pour en choisir un autre.',
   inTopic: insert('dans {{topic}}', { topic: String }),
+  typeOther: 'Autres thèmes',
   noTopics: 'Aucun thème à choisir pour l’instant. Vous pourrez épingler des thèmes depuis l’accueil plus tard.',
   communitiesTitle: 'Suivez quelques communautés',
   communitiesBody: 'Choisies d’après vos choix. Décochez celles que vous ne voulez pas.',

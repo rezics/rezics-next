@@ -45,6 +45,7 @@ export default {
     { count: asValue(number()) }),
   topicsFull: 'Ocho temas llenan las pestañas de tu inicio. Desmarca uno para elegir otro.',
   inTopic: insert('en {{topic}}', { topic: String }),
+  typeOther: 'Otros temas',
   noTopics: 'Aún no hay temas para elegir. Podrás fijar temas desde el inicio más adelante.',
   communitiesTitle: 'Sigue algunas comunidades',
   communitiesBody: 'Elegidas según lo que escogiste. Desmarca las que no quieras.',

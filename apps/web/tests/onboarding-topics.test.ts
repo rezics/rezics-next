@@ -1,8 +1,11 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { added, earlier, languageTag, matchingLanguages, MAX_LANGUAGES } from '../features/onboarding/languages.ts';
 import { broaderName, MAX_TOPICS, startingLanguages, toggled, topicGroups } from '../features/onboarding/topics.ts';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+
 import { choices } from '../features/onboarding/welcome-fixtures.ts';
+
+beforeAll(seedServedTypes);
 
 describe('G-431 the setup\'s topics', () => {
   test('types that read the same share one group, and a topic shows once in it', () => {

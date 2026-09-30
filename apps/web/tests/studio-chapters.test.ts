@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { chapterVariant, createChapter, moveChapter, publishChapter, settled } from '../features/studio/content-api.ts';
 import { lengthUnit, manuscriptLength } from '../features/studio/counts.ts';
 import { detailsInvalid, detailsValues } from '../features/studio/details-api.ts';
@@ -6,8 +6,11 @@ import { ids, storyMain } from '../features/studio/fixtures.ts';
 import { chapterMemoryKey, type DraftStorage, readChapterMemory, rememberChapter } from '../features/studio/local-draft.ts';
 import { readChapterFacts, readChapters } from '../features/studio/read.ts';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+
 import { typeLabel } from '../features/catalogue/types.ts';
 import { type MainClient, workKind, type WorkMetadata } from '../features/studio/types.ts';
+
+beforeAll(seedServedTypes);
 
 const agent = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 

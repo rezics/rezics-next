@@ -44,6 +44,7 @@ export default {
   topicsChosen: plural({ other: insert('{{count}}/8 選択中') }, { count: asValue(number()) }),
   topicsFull: 'ホームのタブは8つのトピックでいっぱいです。1つ外すと別のものを選べます。',
   inTopic: insert('{{topic}}の一部', { topic: String }),
+  typeOther: 'その他のトピック',
   noTopics: '選べるトピックはまだありません。あとでホームからトピックを固定できます。',
   communitiesTitle: 'コミュニティをいくつかフォロー',
   communitiesBody: 'あなたの選択に合わせて選びました。不要なものはチェックを外してください。',

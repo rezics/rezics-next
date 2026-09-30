@@ -6,6 +6,8 @@ import { seedTypes, type TypeRegistry } from './types.ts';
 interface Served { registry: TypeRegistry; tag: string | null; checkedAt: number; ttl: number }
 let served: Served | null = null;
 let inflight: Promise<TypeRegistry | null> | null = null;
+/** When the last read failed with nothing held, so the next renders do not each wait on a down Main. */
+let failedAt: number | null = null;
 const DEFAULT_TTL_MS = 300_000;
 const RETRY_MS = 10_000;
 
@@ -16,6 +18,7 @@ function ttlOf(header: string | null): number {
 
 /** Main could not answer: keep the last registry and look again shortly, rather than on every render. */
 function keep(now: () => number): TypeRegistry | null {
+  if (!served) failedAt = now();
   if (served) served = { ...served, checkedAt: now(), ttl: RETRY_MS };
   return served?.registry ?? null;
 }
@@ -32,6 +35,7 @@ async function revalidate(fetcher: typeof fetch, now: () => number): Promise<Typ
     const registry = await response.json() as TypeRegistry;
     served = { registry, tag: response.headers.get('etag'), checkedAt: now(),
       ttl: ttlOf(response.headers.get('cache-control')) };
+    failedAt = null;
     seedTypes(registry);
     return registry;
   } catch { return keep(now); }
@@ -45,6 +49,7 @@ async function revalidate(fetcher: typeof fetch, now: () => number): Promise<Typ
 export async function readTypes(fetcher: typeof fetch = fetch, now: () => number = Date.now):
   Promise<TypeRegistry | null> {
   if (served && now() - served.checkedAt < served.ttl) { seedTypes(served.registry); return served.registry; }
+  if (!served && failedAt !== null && now() - failedAt < RETRY_MS) return null;
   inflight ??= revalidate(fetcher, now).finally(() => { inflight = null; });
   return inflight;
 }
@@ -53,4 +58,5 @@ export async function readTypes(fetcher: typeof fetch = fetch, now: () => number
 export function forgetServedTypes(): void {
   served = null;
   inflight = null;
+  failedAt = null;
 }

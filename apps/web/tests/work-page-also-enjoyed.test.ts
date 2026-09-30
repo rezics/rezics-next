@@ -1,10 +1,13 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { pagingOf } from '../features/work-page/also-enjoyed-row.tsx';
 import { alsoEnjoyedGroups, alsoEnjoyedTitle, alsoEnjoyedWork } from '../features/work-page/also-enjoyed.tsx';
 import * as fixture from '../features/work-page/fixtures.ts';
 import { messages } from '../features/work-page/messages.ts';
 import { REVIEWS_ANCHOR } from '../features/work-page/ratings.tsx';
 import { REVIEWS_REGION } from '../features/work-page/reviews.tsx';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+
+beforeAll(seedServedTypes);
 
 describe('Readers also enjoyed', () => {
   test('each reason Main gives is its own row, in Main’s order', () => {

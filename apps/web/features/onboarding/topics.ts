@@ -12,8 +12,8 @@ export type Topic = Group['concepts'][number];
 export const MAX_TOPICS = 8;
 
 export interface TopicGroup {
-  /** The registry's plural word for the group's type ("Books", "Games"), in the reader's language. */
-  heading: string;
+  /** The registry's plural word for the group's type ("Books", "Games"), in the reader's language; null without the registry. */
+  heading: string | null;
   /** How this group's example covers are drawn. */
   cover: WorkCoverKind;
   topics: Topic[];
@@ -28,8 +28,9 @@ export function topicGroups(groups: readonly Group[], locale: UiLocale): TopicGr
   const merged = new Map<string, TopicGroup>();
   for (const group of groups) {
     const entry = typeEntry([group.type]);
-    const heading = entry ? entryLabel(entry, locale, 'other') : group.type;
-    const key = entry ? entry.labels.en.other : group.type;
+    // With no registry there is no word for a type, and an IRI is never a heading.
+    const heading = entry ? entryLabel(entry, locale, 'other') : null;
+    const key = entry ? entry.labels.en.other : '';
     const found = merged.get(key) ?? { heading, cover: coverOf([group.type]), topics: [] };
     for (const topic of group.concepts) {
       if (!found.topics.some(item => item.id === topic.id)) found.topics.push(topic);

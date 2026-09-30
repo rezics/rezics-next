@@ -44,6 +44,7 @@ export default {
   topicsChosen: plural({ other: insert('8개 중 {{count}}개 선택') }, { count: asValue(number()) }),
   topicsFull: '홈 탭이 주제 8개로 가득 찼어요. 하나를 빼야 다른 것을 고를 수 있어요.',
   inTopic: insert('{{topic}}의 하위 주제', { topic: String }),
+  typeOther: '기타 주제',
   noTopics: '아직 고를 수 있는 주제가 없어요. 나중에 홈에서 주제를 고정할 수 있어요.',
   communitiesTitle: '커뮤니티 몇 곳 팔로우하기',
   communitiesBody: '선택하신 내용에 맞춰 골랐어요. 원하지 않는 곳은 체크를 해제하세요.',

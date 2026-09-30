@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { creditedCard, creditLine, shelfCard, worksSummary } from '../features/profile/cards.ts';
 import { authorWorks, organizationWorks, storyProfile } from '../features/profile/fixtures.ts';
 import { followerLabel } from '../features/profile/followers.ts';
@@ -9,6 +9,9 @@ import { initials } from '../features/profile/profile-avatar.tsx';
 import { isNativeHandle, parseCursor, parseHandleSegment, parseShelfStatus, profileHref }
   from '../features/profile/route.ts';
 import { isPublicPagePath, localizedPath, pathLocale } from '../i18n/locale.ts';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+
+beforeAll(seedServedTypes);
 
 const zh = { ...messages, ...zhHans };
 const uuid = '0192e0aa-4b5a-7c6d-8e7f-9a0b1c2d3e4f';

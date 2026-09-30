@@ -56,7 +56,7 @@ export function valueLabel(facet: BrowseFacet, value: string, name: ZoneText | n
     case 'concept': return name ?? null;
     case 'type': {
       const label = labelOfType(value, locale);
-      return label ? plain(label) : null;
+      return label ? plain(label, locale) : null;
     }
     case 'status': {
       const word = { ongoing: messages.statusOngoing, completed: messages.statusCompleted,

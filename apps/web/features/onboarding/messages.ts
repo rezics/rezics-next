@@ -54,6 +54,7 @@ const en = {
     { count: asValue(number()) }),
   topicsFull: 'Eight topics fill your Home’s tabs. Unpick one to choose another.',
   inTopic: insert('in {{topic}}', { topic: String }),
+  typeOther: 'Other topics',
   noTopics: 'There are no topics to choose yet. You can pin topics from Home later.',
   communitiesTitle: 'Follow a few communities',
   communitiesBody: 'Picked for what you chose. Untick any you don’t want.',

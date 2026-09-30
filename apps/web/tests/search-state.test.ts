@@ -1,9 +1,12 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import type { MainClient } from '../features/discover/types.ts';
 import { readSearchPage, readSummaries, searchRequest } from '../features/search/read.ts';
 import { searchPagesOptions } from '../features/search/query.ts';
 import { normalizeLanguage, parseSearchState, phraseStatus, searchHref } from '../features/search/state.ts';
 import { searchFailureOf, type SearchResultPage } from '../features/search/types.ts';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+
+beforeAll(seedServedTypes);
 
 const realm = '3f0e1c2d-4b5a-4c6d-8e7f-9a0b1c2d3e4f';
 const term = '0b1c2d3e-4f5a-4b6c-8d7e-8f9a0b1c2d3e';

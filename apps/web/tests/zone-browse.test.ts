@@ -1,10 +1,13 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import type { ZoneWork } from '@rezics/zone-sdk';
 import { browseHref, chipHref, cleared, mainBrowseQuery, parseBrowseState, toggled }
   from '../features/zones/browse-state.ts';
 import { browseEntry, browseModel, type FacetCounts } from '../features/zones/browse-view.ts';
 import { messages } from '../features/zones/messages.ts';
 import zhHans from '../features/zones/messages/zh-Hans.ts';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+
+beforeAll(seedServedTypes);
 
 const base = '/en/r/mods/browse';
 const concept = '0192f3a4-5b6c-7d8e-9f01-23456789abcd';

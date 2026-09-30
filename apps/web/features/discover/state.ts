@@ -99,13 +99,16 @@ export function termShelf(term: string, type: WorkTypeKey | null, ranked: boolea
  * kind shows its favorites and newest; a genre its popular and newest. Top
  * rated needs a rating question (`ranked`); Mine is the reader's own ratings.
  */
-export function shelvesFor(state: DiscoverState, ranked = false): ShelfSpec[] {
+export function shelvesFor(input: DiscoverState, ranked = false): ShelfSpec[] {
+  // Without the registry no type has an IRI to filter by: show generic, unfiltered shelves.
+  const known = workTypes().length > 0;
+  const state = known || input.type === null ? input : { ...input, type: null };
   if (state.conditions?.include.length || state.conditions?.exclude.length) {
     if (state.scope.kind === 'mine') {
       return ranked ? [{ key: 'mine', topic: { kind: 'mine', type: state.type }, sort: 'top-rated', type: state.type,
         term: null }] : [];
     }
-    const types = state.type ? [state.type] : (['book', 'document', 'recipe'] as const);
+    const types = state.type ? [state.type] : known ? (['book', 'document', 'recipe'] as const) : [null];
     return types.flatMap(type => [...(ranked ? [favorites(type)] : []), recent(type)]);
   }
   if (state.scope.kind === 'mine') {
@@ -116,6 +119,7 @@ export function shelvesFor(state: DiscoverState, ranked = false): ShelfSpec[] {
     return [...(ranked ? [termShelf(state.term, state.type, true)] : []), termShelf(state.term, state.type, false)];
   }
   if (state.type) return [...(ranked ? [favorites(state.type)] : []), recent(state.type)];
+  if (!known) return [...(ranked ? [favorites(null)] : []), recent(null)];
   return [...(ranked ? [favorites('book')] : []), recent('book'), recent('document'), recent('recipe')];
 }
 
@@ -140,10 +144,12 @@ export function discoveryQuery(state: DiscoverState, shelf: ShelfSpec, options: 
   language: string; context?: string | null; actingSubject?: string; cursor?: string }): DiscoveryQuery {
   const { scope } = state;
   const ranked = shelf.sort === 'top-rated' || scope.kind === 'mine';
+  // A type the registry cannot name leaves the shelf unfiltered rather than failing the page.
+  const typeIri = shelf.type ? workTypes().find(type => type.key === shelf.type)?.iri : undefined;
   return { scope: scope.kind, ...(scope.kind === 'realm' ? { realm: iriOf(scope.realm) } : {}),
     sort: shelf.sort, limit: options.limit, language: options.language,
     ...(ranked && options.context ? { context: iriOf(options.context) } : {}),
-    ...(shelf.type ? { type: workTypes().find(type => type.key === shelf.type)!.iri as NonNullable<DiscoveryQuery['type']> } : {}),
+    ...(typeIri ? { type: typeIri as NonNullable<DiscoveryQuery['type']> } : {}),
     ...(shelf.term ? { term: iriOf(shelf.term) } : {}),
     ...(scope.kind === 'mine' && options.actingSubject ? { actingSubject: options.actingSubject } : {}),
     ...(options.cursor ? { cursor: options.cursor } : {}) };

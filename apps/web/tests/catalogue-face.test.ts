@@ -1,10 +1,12 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { initials } from '@rezics/ui/avatar-initials';
 import { coverDesign, coverSeed } from '@rezics/ui/work-cover';
 import { workKinds } from '../../../services/main/src/modules/work/work-kinds.ts';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
 import { typeLabel } from '../features/catalogue/types.ts';
 import { authorSeparator, coverKindOf, coverProps, otherLanguageTitle } from '../features/catalogue/work.ts';
+
+beforeAll(seedServedTypes);
 
 const uuid = '0192f3a4-5b6c-7d8e-9f01-23456789abcd';
 const name = (value: string, language: string, basis: 'requested' | 'fallback' = 'fallback') =>

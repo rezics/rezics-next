@@ -1,9 +1,12 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { offeredFilters } from '../features/search/search-page.tsx';
 import type { SearchState } from '../features/search/state.ts';
 import { closeness, editDistance, foldText, nearMatches, suggestionPrefixes, tolerance, type TypeaheadItem }
   from '../features/search/suggest.ts';
 import { suggestionHref, typeaheadPrefix } from '../features/search/typeahead.tsx';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+
+beforeAll(seedServedTypes);
 
 const work = (n: number) => `https://rezics.com/id/0000000${n}-4b5a-4c6d-8e7f-9a0b1c2d3e4f`;
 const item = (n: number, title: string, field: 'title' | 'credit' = 'title', matched = title): TypeaheadItem => ({
