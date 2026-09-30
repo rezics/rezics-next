@@ -6,6 +6,7 @@ import {
   artifactNames,
   assertCurrentFrontier,
   assertFreshTarget,
+  assertRestoredRuntime,
   assertSafeTar,
   assertSeparateCustody,
   fileDigest,
@@ -42,6 +43,24 @@ const manifest: RecoveryManifest = {
     digest: sha,
     inputs: {},
     engines: { postgres: engine, fuseki: engine, rustfs: engine },
+    graph: {
+      imageId: engine.id,
+      stateVolume: 'original-volume',
+      serverAssembler: '/fuseki/fuseki-text-qa.ttl',
+      serverAssemblerSha256: sha,
+      indexerAssemblerSha256: sha,
+      fusekiJarSha256: sha,
+      commandJarSha256: sha,
+      moduleVersion: 'pinned',
+      facts: {
+        tdb2Location: 'tdb2',
+        luceneDirectory: 'lucene',
+        analyzer: 'pinned',
+        textDatasets: 1,
+      },
+    },
+    javaBuild: 'OpenJDK pinned',
+    assemblers: { server: 'server assembler', indexer: 'indexer assembler' },
   },
   phases: {},
 };
@@ -147,4 +166,28 @@ test('G-727: archives reject traversal and links before extraction', async () =>
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('G-727: a restored runtime must match the captured JAR, assembler and Java pins', () => {
+  const restored = { ...manifest.release.graph, stateVolume: 'new-volume' };
+  expect(() =>
+    assertRestoredRuntime(manifest.release, restored, manifest.release.javaBuild),
+  ).not.toThrow();
+  expect(() =>
+    assertRestoredRuntime(
+      manifest.release,
+      { ...restored, commandJarSha256: 'b'.repeat(64) },
+      manifest.release.javaBuild,
+    ),
+  ).toThrow('pins differ');
+  expect(() =>
+    assertRestoredRuntime(
+      manifest.release,
+      { ...restored, serverAssemblerSha256: 'b'.repeat(64) },
+      manifest.release.javaBuild,
+    ),
+  ).toThrow('pins differ');
+  expect(() => assertRestoredRuntime(manifest.release, restored, 'another Java build')).toThrow(
+    'pins differ',
+  );
 });

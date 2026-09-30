@@ -12,6 +12,7 @@ import { join, resolve } from 'node:path';
 import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
 import type { Pool } from 'pg';
+import type { StatePins } from '../operations/search-state.ts';
 import {
   openRecoveryPayload,
   sealRecoveryPayload,
@@ -70,6 +71,28 @@ export const artifactNames = [
   'configuration.json.gpg',
   'manifest.json.gpg',
 ] as const;
+const graphPinsSchema = Type.Object(
+  {
+    imageId: Type.String({ pattern: '^sha256:[0-9a-f]{64}$' }),
+    stateVolume: nonempty,
+    serverAssembler: nonempty,
+    serverAssemblerSha256: digest,
+    indexerAssemblerSha256: digest,
+    fusekiJarSha256: digest,
+    commandJarSha256: digest,
+    moduleVersion: nonempty,
+    facts: Type.Object(
+      {
+        tdb2Location: nonempty,
+        luceneDirectory: nonempty,
+        analyzer: nonempty,
+        textDatasets: Type.Integer({ minimum: 1 }),
+      },
+      strict,
+    ),
+  },
+  strict,
+);
 export const recoveryManifestSchema = Type.Object(
   {
     version: Type.Literal(1),
@@ -98,6 +121,9 @@ export const recoveryManifestSchema = Type.Object(
         digest,
         inputs: Type.Record(Type.String(), digest),
         engines: Type.Object({ postgres: image, fuseki: image, rustfs: image }, strict),
+        graph: graphPinsSchema,
+        javaBuild: nonempty,
+        assemblers: Type.Object({ server: nonempty, indexer: nonempty }, strict),
       },
       strict,
     ),
@@ -258,6 +284,19 @@ export async function captureDatabaseRows(pool: Pool): Promise<Omit<DatabaseCove
   } finally {
     client.release();
   }
+}
+
+/** The restored volume identity is checked separately against its new project. */
+export function assertRestoredRuntime(
+  release: RecoveryManifest['release'],
+  actual: StatePins,
+  javaBuild: string,
+): void {
+  if (
+    valueDigest(actual) !== valueDigest({ ...release.graph, stateVolume: actual.stateVolume }) ||
+    javaBuild !== release.javaBuild
+  )
+    throw new Error('Restored running assembler, JAR or Java pins differ');
 }
 
 export function assertFreshTarget(

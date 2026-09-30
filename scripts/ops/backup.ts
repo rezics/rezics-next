@@ -2,6 +2,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   renameSync,
   rmSync,
   statSync,
@@ -25,6 +26,12 @@ import { releaseDigest } from '../dev/release-manifest.ts';
 import { migrationInventory } from '../fixture/manifest.ts';
 import { currentEngines, root } from '../fixture/stack.ts';
 import {
+  assertPinnedState,
+  inspectFusekiState,
+  repositoryPins,
+  type FusekiStateRunner,
+} from '../operations/search-state.ts';
+import {
   administratorUrl,
   artifactNames,
   assertRegularTree,
@@ -47,6 +54,7 @@ export async function releaseInputs(): Promise<Record<string, string>> {
     'infra/jena/Dockerfile',
     'infra/jena/fuseki-text.ttl',
     'infra/jena/fuseki-text-qa.ttl',
+    'infra/jena/fuseki-text-qa-raw.ttl',
     'services/account/src/auth.ts',
   ];
   return {
@@ -72,6 +80,31 @@ export function objectStore(apps: Record<string, string>) {
     directory: apps.MAIN_OBJECT_DIRECTORY!,
     workObjects: store('semantic/work/'),
     structureObjects: store('semantic/structure/'),
+  };
+}
+
+export function graphRunner(context: ReturnType<typeof stackContext>): FusekiStateRunner {
+  return {
+    exec: (script) => context.compose(['exec', '-T', 'fuseki', 'sh', '-ec', script]),
+    offline: (script) =>
+      context.compose([
+        'run',
+        '--rm',
+        '--no-deps',
+        '-T',
+        '--entrypoint',
+        'sh',
+        'fuseki',
+        '-ec',
+        script,
+      ]),
+    stop: () => {
+      context.compose(['stop', 'fuseki']);
+    },
+    start: () => {
+      context.compose(['up', '-d', '--wait', 'fuseki']);
+    },
+    container: () => context.compose(['ps', '-q', 'fuseki']),
   };
 }
 
@@ -173,6 +206,36 @@ export async function backupRecoverySet(
         throw new Error('Running recovery engine differs from pinned release');
       }
     }
+    const fuseki = new FusekiClient(
+      context.apps.FUSEKI_URL!,
+      context.apps.FUSEKI_MAINTENANCE_TOKEN,
+      context.apps.FUSEKI_COMMAND_TOKEN,
+    );
+    const runner = graphRunner(context);
+    const graph = await budget.phase('running-pins', async () => {
+      const pins = await inspectFusekiState(runner, context.environment, fuseki);
+      assertPinnedState(
+        pins,
+        repositoryPins(root, context.environment, `${context.project}_fuseki_data`),
+      );
+      return pins;
+    });
+    const javaBuild = runner.exec('java -version 2>&1');
+    for (const [name, path] of [
+      ['server', graph.serverAssembler],
+      ['indexer', '/fuseki/fuseki-text.ttl'],
+    ] as const) {
+      command(
+        'docker',
+        ['cp', `${runner.container()}:${path}`, join(staging, `${name}.ttl`)],
+        budget,
+        context.environment,
+      );
+    }
+    const assemblers = {
+      server: readFileSync(join(staging, 'server.ttl'), 'utf8'),
+      indexer: readFileSync(join(staging, 'indexer.ttl'), 'utf8'),
+    };
     const generation = await budget.phase('fence', async () => {
       const existing = (
         await pools.access.query<{ open: boolean }>(
@@ -213,11 +276,6 @@ export async function backupRecoverySet(
       }
       return generation;
     });
-    const fuseki = new FusekiClient(
-      context.apps.FUSEKI_URL!,
-      context.apps.FUSEKI_MAINTENANCE_TOKEN,
-      context.apps.FUSEKI_COMMAND_TOKEN,
-    );
     const coverage = await budget.phase('coverage', async () => {
       // PostgreSQL background WAL can advance once as sessions drain. Retry only
       // that diagnosed movement; owner/graph mismatches remain fatal.
@@ -387,7 +445,14 @@ export async function backupRecoverySet(
       sealedDeletionSets,
       owners,
       operations: 'relay',
-      release: { digest: releaseDigest(), inputs: await releaseInputs(), engines },
+      release: {
+        digest: releaseDigest(),
+        inputs: await releaseInputs(),
+        engines,
+        graph,
+        javaBuild,
+        assemblers,
+      },
       phases: budget.phases,
     };
     writeFileSync(

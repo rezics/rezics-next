@@ -33,7 +33,8 @@ configuration and signed manifest with
 The source may hold the recipient's public key only; its private key lives
 off-host. `RECOVERY_MANIFEST_HMAC_KEY` never belongs in stack configuration or
 the set. The authenticated `set.json` binds encrypted artifact checksums to the
-manifest. Release image identities, schema and assembler digests accompany it.
+manifest. Release image identities, schema digests, the running assembler bytes
+and checksums, JAR checksums, analyzer pins and the Java build accompany it.
 [PostgreSQL 18's streamed WAL backup](https://www.postgresql.org/docs/18/app-pgbasebackup.html)
 provides the complete physical replay boundary; `pg_verifybackup` checks it
 before packaging and restoration.
@@ -102,10 +103,12 @@ The [restore command](../../scripts/ops/restore.ts) checks authenticated invento
 all encrypted checksums, the independent frontier, release pins and safe archive
 paths before creating storage. It refuses the original project, existing
 configuration, existing containers and existing volumes. It restores one physical
-PostgreSQL cluster into new volumes, verifies WAL replay and every discovered
-owner's exact rows, checks graph Content references, immutable object hashes and
-required signed deletion sets, then allocates a fresh graph `dataEpoch` with
-sequence zero and `rv:restoreHold`. Existing receipts retain their old positions;
+PostgreSQL cluster into new volumes and verifies the running assembler, JAR and
+Java pins against the captured source and repository. It then allocates a fresh
+graph `dataEpoch` with sequence zero and `rv:restoreHold` before owner and sample
+verification. It verifies WAL replay and every discovered owner's exact rows,
+graph Content references, immutable object hashes and required signed deletion
+sets. Existing receipts retain their old positions;
 old cursors, handles, caches and workers cannot cross that boundary. Owner login
 roles and Access remain closed throughout. It rebuilds Lucene offline with the
 pinned assembler and erasure-aware indexer.
@@ -144,8 +147,8 @@ checks encryption with a public-only capture keyring, two-owner deletion,
 revocation, exact available/denied Content reads, search, Account archive and
 release ordering. Its test authentication adapter does not qualify deployment
 OAuth or library takeout.
-The small run `20260930t171746-a0c545` passed on 2026-10-01: the verified
-restore took 33.7 seconds and the complete harness took 113.3 seconds, including
+The small run `20260930t173941-d8493b` passed on 2026-10-01: the verified
+restore took 30.0 seconds and the complete harness took 133.9 seconds, including
 preparation, capture and a separate intentionally held restore. This one-Work
 command fixture is evidence of composition, not launch-data performance.
 

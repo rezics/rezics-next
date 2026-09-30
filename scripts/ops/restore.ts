@@ -19,13 +19,19 @@ import {
 import { appEnvironment, replacePrivate, savePrivate, stackDirectory } from '../dev/config.ts';
 import { releaseDigest } from '../dev/release-manifest.ts';
 import { currentEngines, freshPorts, root } from '../fixture/stack.ts';
-import { offlineTextIndex } from '../operations/search-state.ts';
-import { objectStore, releaseInputs } from './backup.ts';
+import {
+  assertPinnedState,
+  inspectFusekiState,
+  offlineTextIndex,
+  repositoryPins,
+} from '../operations/search-state.ts';
+import { graphRunner, objectStore, releaseInputs } from './backup.ts';
 import {
   administratorUrl,
   assertCurrentFrontier,
   assertFreshTarget,
   assertRegularTree,
+  assertRestoredRuntime,
   assertSafeTar,
   assertSeparateCustody,
   captureDatabaseRows,
@@ -293,6 +299,29 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
       context!.apps.FUSEKI_MAINTENANCE_TOKEN,
       context!.apps.FUSEKI_COMMAND_TOKEN,
     );
+    await budget.phase('running-pins', async () => {
+      const runner = graphRunner(context!);
+      const pins = await inspectFusekiState(runner, context!.environment, fuseki);
+      assertPinnedState(
+        pins,
+        repositoryPins(root, context!.environment, `${options.project}_fuseki_data`, [
+          `${manifest.source}_fuseki_data`,
+        ]),
+      );
+      assertRestoredRuntime(manifest.release, pins, runner.exec('java -version 2>&1'));
+    });
+    await budget.phase('lineage-hold', async () => {
+      const lineage = { dataEpoch: randomUUID(), routingEpoch: randomUUID() };
+      await cutoverRestoredGraphLineage(fuseki, { prior: manifest.lineage, next: lineage });
+      const saved = {
+        ...context!.saved,
+        MAIN_DATA_EPOCH: lineage.dataEpoch,
+        MAIN_ROUTING_EPOCH: lineage.routingEpoch,
+      };
+      replacePrivate(join(targetDirectory, 'compose.env'), saved);
+      replacePrivate(join(targetDirectory, 'apps.env'), appEnvironment(saved, targetDirectory));
+      context = stackContext(target, budget);
+    });
     await budget.phase('wal-and-owner-coverage', async () => {
       for (let attempt = 0; ; attempt++) {
         const recovering = (
@@ -330,41 +359,8 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
           openRecoveryPayload<DeletionRecoverySet>(sealedSet, options.key, 'deletion-recovery-set'),
         );
     });
-    await budget.phase('lineage-hold', async () => {
-      const lineage = { dataEpoch: randomUUID(), routingEpoch: randomUUID() };
-      await cutoverRestoredGraphLineage(fuseki, { prior: manifest.lineage, next: lineage });
-      const saved = {
-        ...context!.saved,
-        MAIN_DATA_EPOCH: lineage.dataEpoch,
-        MAIN_ROUTING_EPOCH: lineage.routingEpoch,
-      };
-      replacePrivate(join(targetDirectory, 'compose.env'), saved);
-      replacePrivate(join(targetDirectory, 'apps.env'), appEnvironment(saved, targetDirectory));
-      context = stackContext(target, budget);
-    });
     await budget.phase('text-rebuild', async () => {
-      const log = await offlineTextIndex({
-        exec: (script) => context!.compose(['exec', '-T', 'fuseki', 'sh', '-ec', script]),
-        offline: (script) =>
-          context!.compose([
-            'run',
-            '--rm',
-            '--no-deps',
-            '-T',
-            '--entrypoint',
-            'sh',
-            'fuseki',
-            '-ec',
-            script,
-          ]),
-        stop: () => {
-          context!.compose(['stop', 'fuseki']);
-        },
-        start: () => {
-          context!.compose(['up', '-d', '--wait', 'fuseki']);
-        },
-        container: () => context!.compose(['ps', '-q', 'fuseki']),
-      });
+      const log = await offlineTextIndex(graphRunner(context!));
       writeFileSync(join(targetDirectory, 'recovery-text-rebuild.log'), log, {
         mode: 0o600,
         flag: 'wx',
