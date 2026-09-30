@@ -88,7 +88,13 @@ export async function ReleasePage({ id, locale, pageMessages }: { id: string; lo
   const entries = release.data.coverage.filter(entry => entry.realization).slice(0, REALIZATIONS_SHOWN);
   const realizations = new Map(await Promise.all(entries.map(async entry => [entry.realization!,
     await readRealization(idOf(entry.work) ?? entry.work, idOf(entry.realization!) ?? entry.realization!)] as const)));
-  const parties = [...realizations.values()].flatMap(read => (read.ok ? [...read.data.translators, ...read.data.publishers] : []));
+  const loaded = [...realizations.values()].flatMap(read => (read.ok ? [read.data] : []));
+  // A translation names the language it follows, which may be a text this release does not carry.
+  const followed = new Map(loaded.flatMap(item => (item.source.kind === 'realization' && !realizations.has(item.source.realization)
+    ? [[item.source.realization, item.source.work] as const] : [])));
+  const sources = (await Promise.all([...followed].map(([realization, work]) =>
+    readRealization(idOf(work) ?? work, idOf(realization) ?? realization)))).flatMap(read => (read.ok ? [read.data] : []));
+  const parties = loaded.flatMap(item => [...item.translators, ...item.publishers]);
   const names = await namesOf([...release.data.coverage.flatMap(entry => [entry.work, entry.mainVersion]), ...parties]);
-  return <ReleaseView release={release.data} realizations={realizations} names={names} locale={locale} t={t} />;
+  return <ReleaseView release={release.data} realizations={realizations} sources={sources} names={names} locale={locale} t={t} />;
 }

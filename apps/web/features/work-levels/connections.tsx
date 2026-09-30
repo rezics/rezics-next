@@ -121,7 +121,8 @@ function Members({ franchise, current, names, workRef, query, t }: {
                 </li>)}
                 {parts.data.next ? <li>{t.morePartsExist}</li> : null}
               </ol>
-              : <span className="ms-4 text-muted-foreground text-sm">{t.partsUnavailable}</span>
+              : parts.failure === 'missing' ? null
+                : <span className="ms-4 text-muted-foreground text-sm">{t.partsUnavailable}</span>
             : null}
         </li>;
       })}

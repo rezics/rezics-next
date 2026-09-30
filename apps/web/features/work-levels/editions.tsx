@@ -123,10 +123,12 @@ function ReleaseHeading({ level, release }: { level: 2 | 3; release: Release }) 
 }
 
 /** A release: its format, identifiers, platform, territory and what it covers; an omnibus lists every volume. */
-export function ReleaseCard({ release, names, locale, t, headingLevel = 3, detailed = false }: {
+export function ReleaseCard({ release, names, locale, t, headingLevel = 3, detailed = false, coverage = true }: {
   release: Release; names: Names; locale: UiLocale; t: Copy;
   /** Null when the page names the release itself (its own page). */
   headingLevel?: 2 | 3 | null; detailed?: boolean;
+  /** False where the page lists what the release covers itself. */
+  coverage?: boolean;
 }) {
   const languages = release.contentLanguages.filter(language => language !== 'zxx');
   const identifiers = [...(release.isbn13 ? [{ provider: 'isbn', value: release.isbn13 }] : []),
@@ -165,7 +167,7 @@ export function ReleaseCard({ release, names, locale, t, headingLevel = 3, detai
         <dd className="min-w-0 text-sm"><a href={release.originalUrl} rel="noreferrer"
           className="break-all text-primary underline-offset-4 hover:underline">{release.originalUrl}</a></dd></div> : null}
     </dl>
-    {release.coverage.length ? <div className="grid gap-1">
+    {coverage && release.coverage.length ? <div className="grid gap-1">
       <CoverageHeading level={(headingLevel ?? 1) + 1 as 2 | 3 | 4}>{works.length > 1 ? t.coversWorks(works.length) : t.coverage}</CoverageHeading>
       <ul className="grid gap-1 text-sm">
         {release.coverage.map(entry => <li key={`${entry.work}-${entry.realization ?? ''}`}

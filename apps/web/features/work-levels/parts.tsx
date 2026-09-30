@@ -50,7 +50,7 @@ function PartRow({ part, names, workRef, query, t }: {
   const inclusion = part.inclusion === 'optional' ? t.inclusionOptional : part.inclusion === 'extra' ? t.inclusionExtra : null;
   return <li id={`part-${part.occurrence.slice(-12)}`}
     className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 py-3">
-    <span className="min-w-14 font-semibold tabular-nums"><PartLabel part={part} /></span>
+    <span className="w-28 shrink-0 break-words font-semibold tabular-nums"><PartLabel part={part} /></span>
     <span className="min-w-0 flex-1">
       {part.work ? <NameLink reference={part.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
         : <Link href={connectionsHref(workRef, { ...query, parent: part.occurrence.slice(-36), partsAfter: undefined },
@@ -70,23 +70,25 @@ export function PartsSection({ parts, wholes, names, workRef, query, locale: _lo
   query: ConnectionsQuery; locale: UiLocale; t: Copy; pageMessages: WorkPageMessages;
 }) {
   const first = connectionsHref(workRef, { ...query, partsAfter: undefined }, anchors.parts);
-  const body = !parts.ok
+  // Main answers 404 for a Work that has no composition: the page already showed the Work, so it has no parts.
+  const page = parts.ok ? parts.data : null;
+  const body = !parts.ok && parts.failure !== 'missing'
     ? <RegionFailure title={t.partsUnavailable} failure={parts.failure} messages={pageMessages} restartHref={first} />
     : <>
       <WholesLines wholes={wholes} names={names} t={t} />
-      <Completion completion={parts.data.completion} t={t} />
+      {page ? <Completion completion={page.completion} t={t} /> : null}
       {query.parent ? <Link href={connectionsHref(workRef, { ...query, parent: undefined, partsAfter: undefined },
         anchors.parts)} className={`${outline} w-fit`}>{t.allParts}</Link> : null}
-      {parts.data.parts.length
+      {page?.parts.length
         ? <ol aria-label={t.partsList} className="grid divide-y divide-border/60 border-border/60 border-y">
-          {parts.data.parts.map(part => <PartRow key={part.occurrence} part={part} names={names} workRef={workRef}
+          {page.parts.map(part => <PartRow key={part.occurrence} part={part} names={names} workRef={workRef}
             query={query} t={t} />)}
         </ol>
         : <EmptyState icon={LayersIcon} headingLevel={3} title={t.noParts} description={t.noPartsBody} />}
-      {query.partsAfter || parts.data.next
+      {query.partsAfter || page?.next
         ? <nav aria-label={t.partsPages} className="flex flex-wrap justify-between gap-2">
           {query.partsAfter ? <Link href={first} className={outline}>{t.firstPage}</Link> : <span />}
-          {parts.data.next ? <Link href={connectionsHref(workRef, { ...query, partsAfter: parts.data.next },
+          {page?.next ? <Link href={connectionsHref(workRef, { ...query, partsAfter: page.next },
             anchors.parts)} className={outline}>{t.showMore}</Link> : null}
         </nav> : null}
     </>;

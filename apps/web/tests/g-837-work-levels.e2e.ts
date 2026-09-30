@@ -58,6 +58,12 @@ test('parts, connections and editions read from Main for the franchise records',
   const { sao, index, railgun, volumeOne } = catalogue;
   const at = (work: { work: string }, tab: string) => `/en/w/${uuid(work.work)}/${tab}`;
   await page.setViewportSize(desktop);
+  // Main answers parts, relations and Collections only to a signed-in Agent; signed out, the page says so in place.
+  await page.goto(at(index.newTestament, 'connections'));
+  await expect(page.getByRole('heading', { level: 1, name: 'A Certain Magical Index: New Testament' })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(2);
+  await expect(page.getByRole('alert').first()).toContainText('Parts could not be loaded.');
+  await expect(page.getByRole('alert').first()).toContainText('Sign in with access to this Work');
   await signInAtAccounts(page, at(index.newTestament, 'connections'), member);
 
   // Index: New Testament lists "22" and "22 Reverse" as separate parts, in Main's order, and is concluded.
@@ -104,6 +110,9 @@ test('parts, connections and editions read from Main for the franchise records',
 
   // The Railgun anime traverses to the Index novel; the unresolved source is visible, not hidden.
   await page.goto(at(railgun.anime, 'connections'));
+  // The anime has no composition: no parts, and nothing failed.
+  await expect(page.getByRole('heading', { name: 'No parts' })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
   const adapted = page.locator('[data-relation-row]').filter({ hasText: 'Adapted from' });
   await expect(adapted.getByText('Source version unresolved')).toBeVisible();
   await adapted.getByRole('link', { name: 'A Certain Scientific Railgun (manga)' }).click();

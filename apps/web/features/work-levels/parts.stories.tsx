@@ -61,6 +61,14 @@ export const SignInNeeded: Story = { args: { parts: { ok: false, failure: 'sign-
     await expect(within(canvasElement).getByRole('alert')).toHaveTextContent('Parts could not be loaded.');
   } };
 
+/** A Work with no composition is answered 404; the page says it has no parts rather than that something failed. */
+export const NoParts: Story = { args: { parts: { ok: false, failure: 'missing' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: 'No parts' })).toBeVisible();
+    await expect(canvas.queryByRole('alert')).toBeNull();
+  } };
+
 export const Preview: Story = { args: { preview: true },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);

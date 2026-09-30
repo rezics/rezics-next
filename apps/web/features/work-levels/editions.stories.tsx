@@ -19,7 +19,8 @@ function Page({ locale, view = 'section' }: { locale: UiLocale; view?: 'section'
         locale={locale} pageMessages={pageMessages[locale]} t={t} />
       : view === 'release' && release
         ? <ReleaseView release={release} names={names} locale={locale} t={t}
-          realizations={new Map(fixture.realizations.ok ? [[fixture.iri('r1'), { ok: true as const, data: fixture.realizations.data.items[0]! }]] : [])} />
+          sources={fixture.realizations.ok ? [fixture.realizations.data.items[0]!] : []}
+          realizations={new Map(fixture.realizations.ok ? [[fixture.iri('r1'), { ok: true as const, data: fixture.realizations.data.items[1]! }]] : [])} />
         : <EditionsSection realizations={fixture.realizations} releases={fixture.releases} names={names} workRef={fixture.workRef}
           query={{}} locale={locale} t={t} pageMessages={pageMessages[locale]} />}
   </div>;
@@ -79,4 +80,9 @@ export const ReleasePage: Story = { args: { view: 'release' },
     await expect(canvas.getByRole('heading', { level: 1 })).toHaveTextContent('とある魔術の禁書目録 1〜3 合本');
     await expect(canvasElement.querySelectorAll('[data-coverage]')).toHaveLength(3);
     await expect(canvas.getAllByText('Main Version').length).toBe(3);
+    // The translation names the language it follows, though this release does not carry that text.
+    await expect(canvas.getAllByText(/Source text:/)[0]).toBeVisible();
+    await expect(canvas.getAllByText('Japanese')[0]).toBeVisible();
+    // The release page lists what it covers once.
+    await expect(canvas.queryByText('Covers 3 Works')).toBeNull();
   } };

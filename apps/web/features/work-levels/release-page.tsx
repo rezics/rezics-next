@@ -16,16 +16,18 @@ export const REALIZATIONS_SHOWN = 20;
  * the realization (who made that text) it carries. Everything comes from Main's release
  * coverage; nothing is matched by title.
  */
-export function ReleaseView({ release, realizations, names, locale, t }: {
-  release: Release; realizations: ReadonlyMap<string, Loaded<Realization>>; names: Names; locale: UiLocale; t: Copy;
+export function ReleaseView({ release, realizations, sources, names, locale, t }: {
+  release: Release; realizations: ReadonlyMap<string, Loaded<Realization>>;
+  /** The realizations those ones follow, so a translation can name the language it comes from. */
+  sources: readonly Realization[]; names: Names; locale: UiLocale; t: Copy;
 }) {
-  const loaded = [...realizations.values()].flatMap(item => (item.ok ? [item.data] : []));
+  const loaded = [...[...realizations.values()].flatMap(item => (item.ok ? [item.data] : [])), ...sources];
   return <div className="grid gap-8">
     <header className="grid gap-2">
       <h1 className="font-semibold text-3xl tracking-tight">
         <LocalizedText text={contentText(release.title.value, release.title.language)} as="span" /></h1>
     </header>
-    <ReleaseCard release={release} names={names} locale={locale} t={t} headingLevel={null} detailed />
+    <ReleaseCard release={release} names={names} locale={locale} t={t} headingLevel={null} detailed coverage={false} />
     <Region id="covers" title={t.coversHeading} className="scroll-mt-20">
       <ol className="grid gap-5">
         {release.coverage.map(entry => {
