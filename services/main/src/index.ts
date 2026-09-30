@@ -39,6 +39,7 @@ import { AgentVanityHandles } from './modules/agent/vanity.ts';
 import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
 import { StudioAccess } from './modules/studio/access.ts';
+import { prepareLibraryShelves } from './modules/library/backfill.ts';
 import { ReaderLibraryStatusStore } from './modules/library/status.ts';
 import { ConsumptionSessionStore } from './modules/session/store.ts';
 import { EditionPreferenceStore } from './modules/session/preference-store.ts';
@@ -324,6 +325,7 @@ const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
   ? openLibraryFixtureFetch(config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT) : fetch;
 const libraryImport = new ReaderLibraryImportStore(contentPool);
+await prepareLibraryShelves(contentPool, pool, fuseki);
 const app = createMainApp(fuseki, {
   suitability: new SuitabilityStore(pool, access),
   follows: new FollowsStore(pool),

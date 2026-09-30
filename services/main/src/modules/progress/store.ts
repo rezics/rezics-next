@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -29,6 +29,8 @@ export interface ProgressWrite {
   position: string | null;
   expectedVersion: number;
   idempotencyKey: string;
+  /** Authorized parent Work resolved by the route, updated in this transaction. */
+  library?: { agent: string; work: string };
 }
 
 function validIdentity(structure: string, occurrence: string, selectedRevision: string | null) {
@@ -60,6 +62,15 @@ export class StructureProgressStore {
     return state({ structure, occurrence, selectedRevision }, result.rows[0]);
   }
 
+  private async projectLibrary(client: PoolClient, input: ProgressWrite) {
+    if (!input.library) return;
+    await client.query(`UPDATE reader.library_status SET last_read_at = greatest(last_read_at,
+      (SELECT max(updated_at) FROM structure.progress WHERE principal_issuer = $3
+        AND principal_subject = $4 AND structure = $5))
+      WHERE agent = $1 AND work = $2`, [input.library.agent, input.library.work,
+      input.principal.issuer, input.principal.subject, input.structure]);
+  }
+
   async write(input: ProgressWrite): Promise<StructureProgress> {
     const selectedRevision = input.selectedRevision ?? null;
     validIdentity(input.structure, input.occurrence, selectedRevision);
@@ -70,6 +81,9 @@ export class StructureProgressStore {
         || /[\u0000-\u001f\u007f]/u.test(input.position))) {
       throw new InvalidStructureProgress('progress command is invalid');
     }
+    if (input.library && (!ID.test(input.library.agent) || !ID.test(input.library.work))) {
+      throw new InvalidStructureProgress('library identity is invalid');
+    }
     const identity = { structure: input.structure, occurrence: input.occurrence, selectedRevision };
     const selectionKey = selectedRevision ?? '';
     const digest = createHash('sha256').update(JSON.stringify([input.structure, input.occurrence,
@@ -77,6 +91,8 @@ export class StructureProgressStore {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      if (input.library) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+        [JSON.stringify(['library-status-work', input.library.agent, input.library.work])]);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         [JSON.stringify(['structure-progress', input.principal.issuer,
           input.principal.subject, input.idempotencyKey])]);
@@ -93,6 +109,7 @@ export class StructureProgressStore {
           || row.occurrence !== input.occurrence || row.selection_key !== selectionKey) {
           throw new StructureProgressConflict('progress idempotency key has another intent');
         }
+        await this.projectLibrary(client, input);
         await client.query('COMMIT');
         return { ...state(identity, { completed: row.result_completed,
           position: row.result_position, version: row.result_version }), replayed: true };
@@ -155,6 +172,7 @@ export class StructureProgressStore {
       [randomUUID(), owner.rows[0]!.data_epoch, owner.rows[0]!.sequence, operation,
         JSON.stringify({ structure: input.structure, occurrence: input.occurrence,
           read: first.rows[0]!.read, finished: input.completed && first.rows[0]!.finished })]);
+      await this.projectLibrary(client, input);
       await client.query('COMMIT');
       return { ...state(identity, { completed: input.completed,
         position: input.position, version: next }), replayed: false };

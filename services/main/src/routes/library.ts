@@ -3,11 +3,11 @@ import { pendingOperation, problemResult } from '../api-contract.ts';
 import { readMyShelves, readReaderStates, readStatusShelf, READER_LIBRARY_COST }
   from '../modules/library/read.ts';
 import { readPublicShelves, readPublicStatusShelf } from '../modules/library/public.ts';
-import { InvalidLibraryStatus, LibraryStatusConflict, READING_TOTALS_COST, StaleLibraryStatus }
+import { InvalidLibraryStatus, LibraryStatusConflict, StaleLibraryStatus }
   from '../modules/library/status.ts';
 import { readWorkBasis } from '../modules/work/read-header.ts';
 import { canonicalChapterWorks } from '../modules/structure/chapter-work.ts';
-import { workRead, WorkReadInvalid, WorkReadLimit } from '../modules/work/read-session.ts';
+import { workRead, WorkReadInvalid } from '../modules/work/read-session.ts';
 import { pageQuery, readId, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
 import { shelfWork } from '../modules/profiles/read-contract.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
@@ -21,6 +21,9 @@ import { ReaderImportBudgetExceeded, ReaderImportConflict, ReaderImportInvalid, 
 import { importReviewedBatch } from '../modules/library-import/batch.ts';
 import { readRichReadingYear } from '../modules/library/stats.ts';
 
+const shelfSort = t.Optional(t.Union([t.Literal('added'), t.Literal('title'), t.Literal('rating'),
+  t.Literal('last-read'), t.Literal('finished')]));
+const shelfOrder = t.Optional(t.Union([t.Literal('asc'), t.Literal('desc')]));
 const status = t.Union([t.Literal('want-to-read'), t.Literal('reading'), t.Literal('read'), t.Null()]);
 const statusState = t.Object({ work: readId, status,
   startedOn: t.Nullable(t.String({ format: 'date' })),
@@ -68,17 +71,13 @@ const yearlyGoal = t.Object({ year: t.Integer({ minimum: 1900, maximum: 2100 }),
   target: t.Nullable(t.Integer({ minimum: 1, maximum: 1000 })),
   completed: t.Integer({ minimum: 0 }), version: t.Integer({ minimum: 0 }),
   changedAt: t.Nullable(t.String()), replayed: t.Optional(t.Boolean()) });
-const readingTotals = t.Object({ year: t.Integer({ minimum: 1900, maximum: 2100 }),
-  books: t.Integer({ minimum: 0 }), chapters: t.Integer({ minimum: 0 }),
-  months: t.Array(t.Object({ month: t.Integer({ minimum: 1, maximum: 12 }),
-    books: t.Integer({ minimum: 0 }), chapters: t.Integer({ minimum: 0 }) }), { minItems: 12, maxItems: 12 }) });
-const readingStats = t.Object({ year: t.Integer({ minimum: 1900, maximum: 2100 }),
+const readingStats = t.Object({ detailsAvailability: t.Union([t.Literal('complete'), t.Literal('unavailable')]), year: t.Integer({ minimum: 1900, maximum: 2100 }),
   books: t.Integer({ minimum: 0 }), chapters: t.Integer({ minimum: 0 }),
   averageRating: t.Nullable(t.Number({ minimum: 1, maximum: 5 })),
-  ratedBooks: t.Integer({ minimum: 0 }), knownChapters: t.Integer({ minimum: 0 }),
-  booksWithChapters: t.Integer({ minimum: 0 }),
-  topConcepts: t.Array(t.Object({ name: t.String(), count: t.Integer({ minimum: 1 }) }), { maxItems: 5 }),
-  titleLanguages: t.Array(t.Object({ language: t.String(), count: t.Integer({ minimum: 1 }) })),
+  ratedBooks: t.Nullable(t.Integer({ minimum: 0 })), knownChapters: t.Nullable(t.Integer({ minimum: 0 })),
+  booksWithChapters: t.Nullable(t.Integer({ minimum: 0 })),
+  topConcepts: t.Nullable(t.Array(t.Object({ name: t.String(), count: t.Integer({ minimum: 1 }) }), { maxItems: 5 })),
+  titleLanguages: t.Nullable(t.Array(t.Object({ language: t.String(), count: t.Integer({ minimum: 1 }) }))),
   months: t.Array(t.Object({ month: t.Integer({ minimum: 1, maximum: 12 }),
     books: t.Integer({ minimum: 0 }), chapters: t.Integer({ minimum: 0 }) }), { minItems: 12, maxItems: 12 }) });
 const privateReview = t.Object({ work: readId, text: t.String({ minLength: 1, maxLength: 8000 }),
@@ -109,7 +108,6 @@ export const openApiOperations = {
   '/v1/agents/{id}/shelves': { get: { bearer: false } },
   '/v1/agents/{id}/shelves/status/{status}/works': { get: { bearer: false } },
   '/v1/me/reading-goal': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
-  '/v1/me/reading-stats/summary': { get: { bearer: true } },
   '/v1/me/reading-stats': { get: { bearer: true } },
   '/v1/me/import-reviews': { get: { bearer: true } },
   '/v1/me/import-reviews/{id}': { put: { bearer: true, idempotencyKey: true } },
@@ -201,14 +199,14 @@ export function libraryRoutes(work: MainWorkDependencies) {
       try {
         if (!await reader(request, body.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library is unavailable');
         const workId = `https://rezics.com/id/${params.id}`;
-        const parentWork = await workRead(work, request, { actingSubject: body.actingSubject },
+        const basis = await workRead(work, request, { actingSubject: body.actingSubject },
           async session => {
             const parent = (await canonicalChapterWorks(session, [workId])).get(workId) ?? workId;
-            await readWorkBasis(session, parent);
-            return parent;
+            const basis = await readWorkBasis(session, parent);
+            return { work: parent, title: basis.card.title.value };
           });
-        const result = await work.libraryStatus.write({ agent: body.actingSubject, work: parentWork,
-          status: body.status, startedOn: body.startedOn, finishedOn: body.finishedOn,
+        const result = await work.libraryStatus.write({ agent: body.actingSubject, work: basis.work,
+          status: body.status, titleKey: basis.title, startedOn: body.startedOn, finishedOn: body.finishedOn,
           expectedVersion: body.expectedVersion, idempotencyKey });
         return Response.json(result, { headers: privateHeaders });
       } catch (error) {
@@ -218,7 +216,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
       }
     })
     .get('/v1/me/shelves', { query: t.Object({ actingSubject: readId,
-      limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20 })),
+      limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
       cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) }, { additionalProperties: false }),
       response: { 200: shelves, ...workReadProblems },
     }, async ({ request, query }) => {
@@ -231,8 +229,8 @@ export function libraryRoutes(work: MainWorkDependencies) {
       } catch (error) { return failure(error); }
     })
     .get('/v1/me/shelves/status/:status/works', { params: t.Object({ status: t.Exclude(status, t.Null()) }),
-      query: t.Object({ actingSubject: readId,
-        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20 })),
+      query: t.Object({ actingSubject: readId, sort: shelfSort, order: shelfOrder,
+        limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
         cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) },
       { additionalProperties: false }), response: { 200: statusShelf, ...workReadProblems },
     }, async ({ request, params, query }) => {
@@ -240,7 +238,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
       try {
         if (!await reader(request, query.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library is unavailable');
         return Response.json(await workRead(work, request, query,
-          session => readStatusShelf(session, query.actingSubject, work.libraryStatus!, params.status)),
+          session => readStatusShelf(session, query.actingSubject, work.libraryStatus!, params.status, query)),
         { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -414,21 +412,6 @@ export function libraryRoutes(work: MainWorkDependencies) {
         return commandError(error);
       }
     })
-    .get('/v1/me/reading-stats/summary', {
-      query: t.Object({ actingSubject: readId, year: t.Numeric({ minimum: 1900, maximum: 2100 }) },
-        { additionalProperties: false }), response: { 200: readingTotals, ...errors },
-    }, async ({ request, query }) => {
-      if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
-      try {
-        const principal = await reader(request, query.actingSubject);
-        if (!principal) return problem(403, 'reader_library_denied', 'Reader library unavailable');
-        const result = await work.libraryStatus.readingYear(query.actingSubject, principal, query.year);
-        if (!await reader(request, query.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
-        const body = JSON.stringify(result);
-        if (Buffer.byteLength(body) > READING_TOTALS_COST.responseBytes) throw new WorkReadLimit('Reading totals response too large');
-        return new Response(body, { headers: { ...privateHeaders, 'content-type': 'application/json' } });
-      } catch (error) { return failure(error); }
-    })
     .get('/v1/me/reading-stats', {
       query: t.Object({ actingSubject: readId, year: t.Numeric({ minimum: 1900, maximum: 2100 }) },
         { additionalProperties: false }), response: { 200: readingStats, ...errors },
@@ -437,8 +420,9 @@ export function libraryRoutes(work: MainWorkDependencies) {
       try {
         const principal = await reader(request, query.actingSubject);
         if (!principal) return problem(403, 'reader_library_denied', 'Reader library unavailable');
-        return Response.json(await readRichReadingYear(work, request, principal, query.actingSubject, query.year),
-          { headers: privateHeaders });
+        const result = await readRichReadingYear(work, request, principal, query.actingSubject, query.year);
+        if (!await reader(request, query.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
+        return Response.json(result, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
     .get('/v1/me/reading-goal', {
@@ -472,14 +456,14 @@ export function libraryRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/agents/:id/shelves/status/:status/works', {
       params: t.Object({ id: readUuid, status: t.Exclude(status, t.Null()) }),
-      query: t.Object(pageQuery, { additionalProperties: false }),
+      query: t.Object({ ...pageQuery, sort: shelfSort, order: shelfOrder }, { additionalProperties: false }),
       response: { 200: publicStatusShelf, ...workReadProblems },
     }, async ({ request, params, query }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
       try {
         return Response.json(await workRead(work, request, query,
           session => readPublicStatusShelf(session, `https://rezics.com/id/${params.id}`,
-            work.libraryStatus!, params.status)), { headers: privateHeaders });
+            work.libraryStatus!, params.status, query)), { headers: privateHeaders });
       } catch (error) { return failure(error); }
     });
 }

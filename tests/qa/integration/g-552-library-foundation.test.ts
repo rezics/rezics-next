@@ -68,10 +68,10 @@ test('G-552: SQL totals cover 1,000 status rows and 2,601 completions; a Work ra
         expect(await new ReaderLibraryStatusStore(zoned).readingYear(seeded.reader, home.reader.principal, 2026))
           .toEqual(totals);
       } finally { await zoned.end(); }
-      const summary = await home.call('GET', seeded.signed('/v1/me/reading-stats/summary?year=2026'),
+      const summary = await home.call('GET', seeded.signed('/v1/me/reading-stats?year=2026'),
         undefined, home.reader.token);
       expect(summary.headers.get('cache-control')).toBe('private, no-store');
-      expect(await home.json<ReadingYear>(summary)).toEqual(totals);
+      expect(await home.json<ReadingYear>(summary)).toMatchObject(totals);
       expect(await home.deps.libraryStatus.readingYear(seeded.reader, home.author.principal, 2026))
         .toMatchObject({ books: 300, chapters: 0 });
       expect(await home.deps.libraryStatus.readingYear(seeded.reader, home.reader.principal, 2025))
@@ -143,7 +143,7 @@ test('G-552: SQL totals cover 1,000 status rows and 2,601 completions; a Work ra
       await home.stack.accessPool.query(`UPDATE access.representation SET active = false
         WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control'`, [home.reader.principalId, seeded.reader]);
       expect((await home.call('GET', path, undefined, home.reader.token)).status).toBe(503);
-      expect((await home.call('GET', seeded.signed('/v1/me/reading-stats/summary?year=2026'),
+      expect((await home.call('GET', seeded.signed('/v1/me/reading-stats?year=2026'),
         undefined, home.reader.token)).status).toBe(403);
       expect(meter.violations).toEqual([]);
     } finally { meter.restore(); }

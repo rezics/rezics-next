@@ -90,7 +90,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
             .some(variant => variant.revision === selectedRevision);
       if (!selected) throw new CompositionUnavailable('selected Content revision is unavailable');
     }
-    return principal;
+    return { principal, work: header.work };
   };
   return new Elysia()
     .get('/v1/compositions/:id/occurrences/:occurrence/progress', {
@@ -103,9 +103,9 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         const structure = `https://rezics.com/id/${params.id}`;
         const occurrence = `https://rezics.com/id/${params.occurrence}`;
-        const principal = await visibleOccurrence(request, structure, occurrence,
+        const visible = await visibleOccurrence(request, structure, occurrence,
           query.actingSubject, query.selectedRevision ?? null);
-        const value = await work.progress.read(principal, structure, occurrence,
+        const value = await work.progress.read(visible.principal, structure, occurrence,
           query.selectedRevision ?? null);
         return Response.json(value, { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return failure(error); }
@@ -128,9 +128,10 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         const structure = `https://rezics.com/id/${params.id}`;
         const occurrence = `https://rezics.com/id/${params.occurrence}`;
-        const principal = await visibleOccurrence(request, structure, occurrence,
+        const visible = await visibleOccurrence(request, structure, occurrence,
           body.actingSubject, body.selectedRevision ?? null);
-        const value = await work.progress.write({ principal, structure, occurrence,
+        const value = await work.progress.write({ principal: visible.principal, structure, occurrence,
+          library: { agent: body.actingSubject, work: visible.work },
           selectedRevision: body.selectedRevision ?? null, completed: body.completed,
           position: body.position, expectedVersion: body.expectedVersion, idempotencyKey });
         return Response.json(value, { headers: { 'cache-control': 'private, no-store' } });

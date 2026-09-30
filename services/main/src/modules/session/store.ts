@@ -147,11 +147,17 @@ export class ConsumptionSessionStore {
         ORDER BY attempt_order DESC LIMIT 1`, [...identity, target.work]);
       const projection = sessionLibraryProjection(result);
       const previousProjection = current && sessionLibraryProjection(current);
-      // Positions, selections and active/paused transitions cannot change shelf
-      // order, invalidate public cursors or supersede a manual Library statement.
+      // Selections and active/paused transitions do not replace a Library
+      // statement. Locator progress updates only the last-read sort below.
       if (latest.rows[0]?.id === result.id && (!previousProjection
         || projection.some((value, index) => value !== previousProjection[index]))) {
         await this.project(client, input, result);
+      }
+      if (input.changes.position) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+          [JSON.stringify(['library-status-work', input.agent, result.target.work])]);
+        await client.query(`UPDATE reader.library_status SET last_read_at = greatest(last_read_at,$3::timestamptz)
+          WHERE agent=$1 AND work=$2`, [input.agent, result.target.work, result.changedAt]);
       }
       const operation = `session:${hash([...identity.slice(0, 2), input.idempotencyKey])}`;
       const control = await client.query<{ data_epoch: string; sequence: string }>(

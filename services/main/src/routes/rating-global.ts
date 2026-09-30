@@ -69,6 +69,7 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
           context: body.context, work: body.work, mainVersion: body.mainVersion,
           expectedRevisionHead: body.expectedRevisionHead, value: body.value,
           actingSubject: body.actingSubject, idempotencyKey: key });
+        await work.libraryStatus?.projectRating(body.actingSubject, body.work, body.value);
         return Response.json({ observation: receipt.observation, observationRevision: receipt.revision,
           predecessor: receipt.predecessor, context: receipt.context, work: receipt.work,
           mainVersion: receipt.mainVersion, value: receipt.value, availability: receipt.availability,

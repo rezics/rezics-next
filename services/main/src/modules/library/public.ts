@@ -1,76 +1,66 @@
-import { iri } from '../work/activate.ts';
-import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadMoved,
-  WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
-import { readAgent, shelfWorks } from '../profiles/read.ts';
-import { canonicalStatusCandidates, CANONICAL_STATUS_COST } from './canonical.ts';
-import type { ReaderLibraryStatusStore, ReadingStatus, StatusState } from './status.ts';
+import { WorkReadMoved, WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { readAgent } from '../profiles/read.ts';
+import { publishedWorks, readShelfPage, type ShelfOptions } from './shelf-page.ts';
+import { STATUS_SHELF_COST, type ReaderLibraryStatusStore, type ReadingStatus, type ShelfSort } from './status.ts';
 
-export const PUBLIC_SHELF_COST = { ...CANONICAL_STATUS_COST, disclosureBatch: 24,
-  disclosureQueries: 10, summaryBatches: 2, pageSize: 20 } as const;
+export const PUBLIC_SHELF_COST = { candidateBatch: STATUS_SHELF_COST.candidateBatch,
+  pageSize: STATUS_SHELF_COST.pageSize, countScan: 'all candidates within the shared read deadline' } as const;
 
-async function projection(session: WorkReadSession, agent: string, store: ReaderLibraryStatusStore) {
+async function projection(session: WorkReadSession, agent: string, store: ReaderLibraryStatusStore, sort: ShelfSort = 'added') {
   await readAgent(session, agent);
   const owner = session.deps.profiles;
   if (!owner) throw new WorkReadUnavailable('Profile owner unavailable');
   const visibility = await owner.visibility.read(agent);
   if (visibility.visibility !== 'public') throw new WorkReadMissing('Shelf unavailable');
-  const agentFence = await owner.agentFence(agent);
-  const statusFence = await store.fence(agent);
-  const entries = await canonicalStatusCandidates(session, agent, store);
-  const published = new Set<string>();
-  for (let offset = 0; offset < entries.length; offset += PUBLIC_SHELF_COST.disclosureBatch) {
-    const batch = entries.slice(offset, offset + PUBLIC_SHELF_COST.disclosureBatch);
-    const rows = await session.query(`SELECT DISTINCT ?id WHERE {
-      VALUES ?id { ${batch.map(row => iri(row.work)).join(' ')} }
-      ${publicWork('?id', '?main')}
-    } LIMIT ${PUBLIC_SHELF_COST.disclosureBatch + 1}`, PUBLIC_SHELF_COST.disclosureBatch + 1);
-    for (const row of rows) if (row.id?.value) published.add(row.id.value);
-  }
-  const visible = entries.filter(row => published.has(row.work));
-  const counts = (['want-to-read', 'reading', 'read'] as const).map(status => {
-    const items = visible.filter(item => item.status === status);
-    return { status, count: items.length, changedAt: items[0]?.changedAt ?? null };
-  });
-  if (await store.fence(agent) !== statusFence || await owner.agentFence(agent) !== agentFence
-    || (await owner.visibility.read(agent)).version !== visibility.version) {
-    throw new WorkReadMoved('Public shelf changed');
-  }
-  return { visible, counts, fence: `${statusFence}:${visibility.version}`,
-    statusFence, visibilityVersion: visibility.version, agentFence };
+  return { sort, statusFence: await store.fence(agent, sort), visibilityVersion: visibility.version,
+    agentFence: await owner.agentFence(agent) };
 }
 
-/** Work publication is checked for every candidate before either IDs or counts leave the server.
- * A 240-row ceiling makes exact counts explicit; larger shelves fail closed. */
-export async function readPublicShelves(session: WorkReadSession, agent: string,
-  store: ReaderLibraryStatusStore) {
-  const result = await projection(session, agent, store);
-  return { profile: 'agent-status-shelves-v1' as const, agent,
-    statusShelves: result.counts, sourcePosition: session.position };
+async function fenceProjection(session: WorkReadSession, agent: string, store: ReaderLibraryStatusStore,
+  before: Awaited<ReturnType<typeof projection>>) {
+  const owner = session.deps.profiles;
+  const final = await owner?.visibility.read(agent);
+  if (final?.visibility !== 'public' || final.version !== before.visibilityVersion
+    || await store.fence(agent, before.sort) !== before.statusFence || await owner?.agentFence(agent) !== before.agentFence) {
+    throw new WorkReadMoved('Public shelf changed');
+  }
+}
+
+/** No SQL-only count may disclose unpublished Works. Scan bounded keyset batches
+ * to completion, or fail explicitly on the shared deadline; there is no row cap. */
+async function publishedCount(session: WorkReadSession, agent: string,
+  store: ReaderLibraryStatusStore, status: ReadingStatus) {
+  let after, count = 0, changedAt: string | null = null;
+  while (true) {
+    session.checkDeadline();
+    const rows = await store.sortedPage(agent, status, STATUS_SHELF_COST.candidateBatch, 'added', 'desc', after);
+    if (!rows.length) break;
+    const published = await publishedWorks(session, rows.map(row => row.work));
+    for (const row of rows) if (published.has(row.work)) { count++; changedAt ??= row.changedAt; }
+    if (rows.length < STATUS_SHELF_COST.candidateBatch) break;
+    const tail = rows.at(-1)!;
+    after = { work: tail.work, value: tail.sortValue };
+  }
+  return { status, count, changedAt };
+}
+
+export async function readPublicShelves(session: WorkReadSession, agent: string, store: ReaderLibraryStatusStore) {
+  const before = await projection(session, agent, store);
+  const statusShelves = [];
+  for (const status of ['want-to-read', 'reading', 'read'] as const) {
+    statusShelves.push(await publishedCount(session, agent, store, status));
+  }
+  await fenceProjection(session, agent, store, before);
+  return { profile: 'agent-status-shelves-v1' as const, agent, statusShelves, sourcePosition: session.position };
 }
 
 export async function readPublicStatusShelf(session: WorkReadSession, agent: string,
-  store: ReaderLibraryStatusStore, status: ReadingStatus) {
-  const result = await projection(session, agent, store);
-  const binding = ['agent-status-shelf-v1', agent, status];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  if (cursor && cursor.order !== result.fence) throw new WorkReadMoved('Public shelf changed');
-  const entries: StatusState[] = result.visible.filter(item => item.status === status);
-  const start = cursor ? entries.findIndex(item => item.work === cursor.after) + 1 : 0;
-  if (cursor && !start) throw new WorkReadMoved('Public shelf changed');
-  const limit = session.options.limit ?? 20;
-  const page = entries.slice(start, start + limit);
-  const cards = await shelfWorks(session, page.map(item => item.work));
-  if (cards.size !== page.length) throw new WorkReadMoved('Work disclosure changed');
-  const owner = session.deps.profiles;
-  const final = await owner?.visibility.read(agent);
-  if (final?.visibility !== 'public' || final.version !== result.visibilityVersion
-    || await store.fence(agent) !== result.statusFence
-    || await owner?.agentFence(agent) !== result.agentFence) {
-    throw new WorkReadMoved('Public shelf changed');
-  }
-  return { profile: 'agent-status-shelf-v1' as const, agent, status,
-    statusCount: entries.length,
-    ...pageResult(session, page.map(item => ({ work: item.work, card: cards.get(item.work)! })),
-      start + limit < entries.length
-        ? encodeReadCursor(binding, session.position, page.at(-1)!.work, result.fence) : null) };
+  store: ReaderLibraryStatusStore, status: ReadingStatus, options: ShelfOptions = {}) {
+  const before = await projection(session, agent, store, options.sort);
+  const statusCount = (await publishedCount(session, agent, store, status)).count;
+  const page = await readShelfPage(session, agent, store, status, options,
+    `${before.statusFence}:${before.visibilityVersion}`, true);
+  await fenceProjection(session, agent, store, before);
+  return { profile: 'agent-status-shelf-v1' as const, agent, status, statusCount,
+    ...page, items: page.items.map(item => ({ work: item.work, card: item.card })) };
 }

@@ -20,6 +20,7 @@ import { selectMainDefault, mainSelectionDigest }
   from '../../../services/main/src/modules/work/select-main.ts';
 import { InvalidLibraryStatus, LibraryStatusConflict, ReaderLibraryStatusStore,
   StaleLibraryStatus } from '../../../services/main/src/modules/library/status.ts';
+import { prepareLibraryShelves } from '../../../services/main/src/modules/library/backfill.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -409,6 +410,9 @@ test.each(['initial context', 'retained context'])(
       .toEqual([null, 'want-to-read']);
     await status.write({ agent: person.agent, work: chapter.work, status: 'reading',
       startedOn: null, finishedOn: null, expectedVersion: 0, idempotencyKey: randomUUID() });
+    await stack.contentPool.query("UPDATE reader.library_status SET title_key = '' WHERE agent = $1 AND work = $2",
+      [person.agent, chapter.work]);
+    await prepareLibraryShelves(stack.contentPool, stack.accessPool, stack.fuseki);
     const parentPrecedence = await app.handle(new Request(
       `http://main.local/v1/me/shelves?actingSubject=${actingSubject}`,
       { headers: { authorization: `Bearer ${a.token}` } }));
@@ -422,13 +426,13 @@ test.each(['initial context', 'retained context'])(
       { headers: { authorization: `Bearer ${a.token}` } }));
     expect(legacyState.status).toBe(200);
     expect(await legacyState.json()).toMatchObject({ work: book.work,
-      status: { work: book.work, status: 'reading', version: 4 } });
+      status: { work: book.work, status: null, version: 4 } });
     const legacyShelf = await app.handle(new Request(
       `http://main.local/v1/me/shelves/status/reading/works?actingSubject=${actingSubject}`,
       { headers: { authorization: `Bearer ${a.token}` } }));
     expect(legacyShelf.status).toBe(200);
-    expect(await legacyShelf.json()).toMatchObject({ items: expect.arrayContaining([
-      expect.objectContaining({ work: book.work, version: 4 })]) });
+    expect(await legacyShelf.json()).toMatchObject({ items: expect.not.arrayContaining([
+      expect.objectContaining({ work: book.work })]) });
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
     try {
       expect((await visibilityRequest(a.token, { visibility: 'public', expectedVersion: 3 })).status).toBe(503);
@@ -467,8 +471,9 @@ test.each(['initial context', 'retained context'])(
     expect((await visibilityRequest(a.token, { visibility: 'public', expectedVersion: 3 })).status).toBe(200);
     const legacyPublic = await app.handle(new Request(`http://main.local${publicShelfPath}`));
     expect(legacyPublic.status).toBe(200);
+    // Clearing the rewritten parent cannot resurrect the frozen chapter row.
     expect(await legacyPublic.json()).toMatchObject({ statusShelves: expect.arrayContaining([
-      expect.objectContaining({ status: 'reading', count: 2 })]) });
+      expect.objectContaining({ status: 'reading', count: 1 })]) });
 
     // G352: the same rated serial is a public discovery candidate; chapter Works
     // do not turn into separate cards or poison a first page with a 503.

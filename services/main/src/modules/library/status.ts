@@ -1,10 +1,21 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { WorkReadLimit } from '../work/read-session.ts';
 
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
+export type ShelfSort = 'added' | 'title' | 'rating' | 'last-read' | 'finished';
+export type ShelfOrder = 'asc' | 'desc';
+export interface ShelfAfter { work: string; value: string | null }
+export interface ShelfRow extends StatusState { sortValue: string | null }
+export const STATUS_SHELF_COST = { candidateBatch: 20, pageSize: 20, countStatements: 1,
+  // Candidate keysets are O(log N + P); the consistency fence is O(N) in SQL.
+  ordering: 'SQL keyset', fence: 'SQL aggregate O(N)', nulls: 'last' } as const;
+export type ShelfMetadata = { titleKey: string | null; ownRating: number | null; lastReadAt: string | null };
+const metadataReaders = new WeakMap<Pool, (agent: string, work: string, transaction: PoolClient) => Promise<ShelfMetadata>>();
+export function configureShelfMetadata(pool: Pool, read: (agent: string, work: string, transaction: PoolClient) => Promise<ShelfMetadata>) {
+  metadataReaders.set(pool, read);
+}
 export type ReadingStatus = 'want-to-read' | 'reading' | 'read';
 export interface StatusState { work: string; status: ReadingStatus | null;
   startedOn: string | null; finishedOn: string | null; version: number; changedAt: string | null }
@@ -12,7 +23,9 @@ export interface StatusCommand { agent: string; work: string; status: ReadingSta
   /** Omitted dates keep their saved value; null clears only the named field. */
   startedOn?: string | null; finishedOn?: string | null; expectedVersion: number; idempotencyKey: string;
   /** Internal session owner only, within the same Content transaction. */
-  sessionProjection?: string }
+  sessionProjection?: string;
+  /** Internal sort keys, excluded from user intent and receipts. */
+  shelfMetadata?: ShelfMetadata; titleKey?: string }
 export interface WorkProgress { structure: string; occurrence: string; selectedRevision: string | null;
   completed: boolean; position: string | null; version: number; changedAt: string }
 export class InvalidLibraryStatus extends Error {}
@@ -147,7 +160,7 @@ export class ReaderLibraryStatusStore {
   }
 
   /** Private, bounded Work IDs for the richer year summary. The route never returns them. */
-  async finishedWorks(agent: string, year: number): Promise<string[]> {
+  async finishedWorks(agent: string, year: number): Promise<string[] | null> {
     if (!ID.test(agent) || !Number.isInteger(year) || year < 1900 || year > 2100) {
       throw new InvalidLibraryStatus('invalid reading stats year');
     }
@@ -157,7 +170,7 @@ export class ReaderLibraryStatusStore {
         AND finished_on < make_date($2 + 1,1,1)
       ORDER BY finished_on, work LIMIT ${READING_STATS_COST.finishedWorks + 1}`, [agent, year]);
     if (rows.rows.length > READING_STATS_COST.finishedWorks) {
-      throw new WorkReadLimit('Reading stats exceed the yearly read budget');
+      return null;
     }
     return rows.rows.map(row => row.work);
   }
@@ -284,38 +297,87 @@ export class ReaderLibraryStatusStore {
       changedAt: row.changed_at }]));
   }
 
-  async fence(agent: string): Promise<string> {
+  async fence(agent: string, sort: ShelfSort = 'added'): Promise<string> {
     if (!ID.test(agent)) throw new InvalidLibraryStatus('invalid Agent');
-    const rows = await this.pool.query<{ count: string; versions: string }>(`
-      SELECT count(*)::text AS count, coalesce(sum(version), 0)::text AS versions
+    const keys = { added: 'NULL::text', finished: 'NULL::text', title: 'title_key',
+      rating: 'own_rating', 'last-read': 'last_read_at' };
+    if (!Object.hasOwn(keys, sort)) throw new InvalidLibraryStatus('invalid shelf sort');
+    const key = keys[sort];
+    const rows = await this.pool.query<{ count: string; versions: string; keys: string }>(`
+      SELECT count(*)::text AS count, coalesce(sum(version), 0)::text AS versions,
+        coalesce(sum(hashtextextended(jsonb_build_array(work, ${key})::text, 0)::numeric), 0)::text AS keys
       FROM reader.library_status WHERE agent = $1`, [agent]);
-    return `${rows.rows[0]!.count}:${rows.rows[0]!.versions}`;
+    return `${rows.rows[0]!.count}:${rows.rows[0]!.versions}:${rows.rows[0]!.keys}`;
   }
 
-  /** The public projection checks every candidate against current Work disclosure.
-   * Exceeding this ceiling fails closed rather than returning false counts. */
-  async publicCandidates(agent: string, ceiling = 240): Promise<StatusState[]> {
-    if (!ID.test(agent) || ceiling !== 240) throw new InvalidLibraryStatus('invalid public shelf budget');
-    const rows = await this.pool.query<Row>(`SELECT ${columns} FROM reader.library_status
-      WHERE agent = $1 AND status IS NOT NULL
-      ORDER BY changed_at DESC, work DESC LIMIT $2`, [agent, ceiling + 1]);
-    if (rows.rows.length > ceiling) throw new WorkReadLimit('Public shelf exceeds bounded scan');
-    return rows.rows.map(row => state(row.work, row));
-  }
-
-  async page(agent: string, status: ReadingStatus, limit: number,
-    after?: { work: string; changedAt: string }): Promise<StatusState[]> {
+  /** Every sort uses an explicit NULLS LAST and a unique Work tiebreaker.
+   * https://www.postgresql.org/docs/current/queries-order.html */
+  async sortedPage(agent: string, status: ReadingStatus, limit: number,
+    sort: ShelfSort = 'added', order: ShelfOrder = sort === 'title' ? 'asc' : 'desc',
+    after?: ShelfAfter): Promise<ShelfRow[]> {
+    const keys = { added: ['changed_at', 'timestamptz'], title: ['title_key COLLATE "C"', 'text'],
+      rating: ['own_rating', 'integer'], 'last-read': ['last_read_at', 'timestamptz'],
+      finished: ['finished_on', 'date'] } as const;
     if (!ID.test(agent) || !['want-to-read', 'reading', 'read'].includes(status)
-      || !Number.isInteger(limit) || limit < 1 || limit > 21
-      || after && (!ID.test(after.work) || !Number.isFinite(Date.parse(after.changedAt)))) {
+      || !Number.isInteger(limit) || limit < 1 || limit > 21 || !Object.hasOwn(keys, sort)
+      || !['asc', 'desc'].includes(order) || sort === 'finished' && status !== 'read'
+      || after && (!ID.test(after.work) || after.value !== null && typeof after.value !== 'string')) {
       throw new InvalidLibraryStatus('invalid status shelf page');
     }
-    const rows = await this.pool.query<Row>(`SELECT ${columns} FROM reader.library_status
-      WHERE agent = $1 AND status = $2
-        AND ($3::timestamptz IS NULL OR (changed_at, work) < ($3::timestamptz, $4::text))
-      ORDER BY changed_at DESC, work DESC LIMIT $5`,
-    [agent, status, after?.changedAt ?? null, after?.work ?? null, limit]);
-    return rows.rows.map(row => state(row.work, row));
+    const [key, type] = keys[sort], direction = order === 'asc' ? 'ASC' : 'DESC';
+    const compare = order === 'asc' ? '>' : '<';
+    // Restrict the first scan to nonnull values so either index direction can
+    // serve LIMIT without a sort over the whole shelf. Then enter the null tail.
+    // https://www.postgresql.org/docs/current/indexes-ordering.html
+    const found: Array<Row & { sort_value: string | null }> = [];
+    if (!after || after.value !== null) {
+      const boundary = after ? `AND (${key},work) ${compare} ($4::${type},$5::text)` : '';
+      const rows = await this.pool.query<Row & { sort_value: string | null }>(`
+        SELECT ${columns}, (${key})::text AS sort_value FROM reader.library_status
+        WHERE agent = $1 AND status = $2 AND ${key} IS NOT NULL ${boundary}
+        ORDER BY ${key} ${direction}, work ${direction} LIMIT $3`,
+      [agent, status, limit, ...(after ? [after.value, after.work] : [])]);
+      found.push(...rows.rows);
+    }
+    if (found.length < limit && sort !== 'added') {
+      const nullBoundary = after?.value === null ? `AND work ${compare} $4::text` : '';
+      const rows = await this.pool.query<Row & { sort_value: string | null }>(`
+        SELECT ${columns}, NULL::text AS sort_value FROM reader.library_status
+        WHERE agent = $1 AND status = $2 AND ${key} IS NULL ${nullBoundary}
+        ORDER BY work ${direction} LIMIT $3`,
+      [agent, status, limit - found.length, ...(after?.value === null ? [after.work] : [])]);
+      found.push(...rows.rows);
+    }
+    return found.map(row => ({ ...state(row.work, row), sortValue: row.sort_value }));
+  }
+
+  // Continue preview uses the same indexed added order, without a shelf cursor.
+  async page(agent: string, status: ReadingStatus, limit: number,
+    after?: { work: string; changedAt: string }): Promise<StatusState[]> {
+    return (await this.sortedPage(agent, status, limit, 'added', 'desc',
+      after ? { work: after.work, value: after.changedAt } : undefined))
+      .map(({ sortValue: _sortValue, ...row }) => row);
+  }
+
+  async projectRating(agent: string, work: string, value: number | null) {
+    if (!ID.test(agent) || !ID.test(work) || value !== null && (!Number.isInteger(value) || value < 1 || value > 5)) {
+      throw new InvalidLibraryStatus('invalid shelf rating');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+        [JSON.stringify(['library-status-work', agent, work])]);
+      // Replays and delayed completions must not project an older receipt's value.
+      const metadata = await metadataReaders.get(this.pool)?.(agent, work, client);
+      const current = metadata ? metadata.ownRating : value;
+      await client.query(`UPDATE reader.library_status SET own_rating = $3
+        WHERE agent = $1 AND work = $2 AND own_rating IS DISTINCT FROM $3`, [agent, work, current]);
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    finally { client.release(); }
   }
 
   /** An owner composing this command may supply its Content transaction. It
@@ -355,6 +417,7 @@ export class ReaderLibraryStatusStore {
         if (!transaction) await client.query('COMMIT');
         return { ...prior.rows[0].result, replayed: true };
       }
+      const metadata = input.shelfMetadata ?? await metadataReaders.get(this.pool)?.(input.agent, input.work, client);
       const current = await client.query<Row>(`SELECT ${columns} FROM reader.library_status
         WHERE agent = $1 AND work = $2 FOR UPDATE`, [input.agent, input.work]);
       const version = Number(current.rows[0]?.version ?? 0);
@@ -368,13 +431,17 @@ export class ReaderLibraryStatusStore {
       // A standalone statement detaches this slot from its attempt; the
       // attempt's history remains unchanged under its own version check.
       const written = await client.query<Row>(`INSERT INTO reader.library_status
-        (agent, work, status, started_on, finished_on, version, session_projection)
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        (agent, work, status, started_on, finished_on, version, session_projection, title_key, own_rating, last_read_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
         ON CONFLICT (agent, work) DO UPDATE SET status = EXCLUDED.status,
           started_on = EXCLUDED.started_on, finished_on = EXCLUDED.finished_on,
-          version = EXCLUDED.version, session_projection = EXCLUDED.session_projection, changed_at = clock_timestamp()
+          version = EXCLUDED.version, session_projection = EXCLUDED.session_projection, changed_at = clock_timestamp(),
+          title_key = CASE WHEN $11 OR $12 THEN EXCLUDED.title_key ELSE reader.library_status.title_key END,
+          own_rating = CASE WHEN $11 THEN EXCLUDED.own_rating ELSE reader.library_status.own_rating END,
+          last_read_at = CASE WHEN $11 THEN EXCLUDED.last_read_at ELSE reader.library_status.last_read_at END
         RETURNING ${columns}`, [input.agent, input.work, input.status, startedOn,
-        finishedOn, version + 1, input.sessionProjection ?? null]);
+        finishedOn, version + 1, input.sessionProjection ?? null, input.titleKey?.normalize('NFKC').toLowerCase() ?? metadata?.titleKey ?? null,
+        metadata?.ownRating ?? null, metadata?.lastReadAt ?? null, !!metadata, input.titleKey !== undefined]);
       const result = state(input.work, written.rows[0]);
       await client.query(`INSERT INTO reader.library_status_command
         (agent, idempotency_key, request_digest, result) VALUES ($1,$2,$3,$4)`,
