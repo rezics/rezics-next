@@ -62,7 +62,6 @@ export function pageSections(
   const sections: Static<typeof entitySection>[] = baseSections[target.base].flatMap((id) => {
     const paths = [
       `/v1/resources/:resource/${id}`,
-      `/v1/resources/:id/${id}`,
       ...(target.base === 'work' ? [`/v1/works/:id/${id}`] : []),
     ];
     const path = paths.find((candidate) => mountedReads.has(candidate));

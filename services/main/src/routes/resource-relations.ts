@@ -29,14 +29,14 @@ const entry = t.Object({ relation: native, kind: t.Union([t.Literal('occurrence'
   targetMainRevision: t.Optional(native), rendering: t.Nullable(relationRenderingSchema), counterparts: t.Array(resourceSummary) });
 
 export const openApiOperations = {
-  '/v1/resources/{id}/relations': { get: { bearer: true } },
-  '/v1/resources/{id}/derivations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/resources/{resource}/relations': { get: { bearer: true } },
+  '/v1/resources/{resource}/derivations': { post: { bearer: true, idempotencyKey: true } },
 } as const;
 
 export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
-    .post('/v1/resources/:id/derivations', {
-      params: t.Object({ id: groupUuid }),
+    .post('/v1/resources/:resource/derivations', {
+      params: t.Object({ resource: groupUuid }),
       body: t.Object({ profile: t.Literal('work-derivation-v2'), targetMainVersion: native, expectedTargetHead: native,
         sourceWork: native, sourceMainVersion: t.Nullable(native), sourceMainRevision: t.Nullable(native),
         kind: t.String({ maxLength: 128 }), evidence: t.String({ maxLength: 2048 }), actingSubject: native,
@@ -49,7 +49,7 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const principal = await work.account.verify(request, ['work:edit']);
-        const targetWork = `https://rezics.com/id/${params.id}`;
+        const targetWork = `https://rezics.com/id/${params.resource}`;
         const canRead = referenceReader(work.access, principal, body.actingSubject);
         if (!await work.access.canReadWork(principal, body.actingSubject, targetWork)
           || !await work.access.canReadWork(principal, body.actingSubject, body.sourceWork)) {
@@ -69,8 +69,8 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
         { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return semanticError(error); }
     })
-    .get('/v1/resources/:id/relations', {
-      params: t.Object({ id: groupUuid }),
+    .get('/v1/resources/:resource/relations', {
+      params: t.Object({ resource: groupUuid }),
       query: t.Object({ actingSubject: native, languages: t.Optional(t.String({ maxLength: 8192 })),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: RELATION_PAGE_COST.pageLimit })),
         after: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
@@ -86,7 +86,7 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
         const page = await fusekiReadBudget.run({ signal: AbortSignal.any([request.signal,
           AbortSignal.timeout(RELATION_PAGE_COST.deadlineMs)]), callsLeft: RELATION_PAGE_COST.graphCalls,
           bytesLeft: RELATION_PAGE_COST.graphBytes }, () => readResourceRelations(work.environment, {
-          resource: `https://rezics.com/id/${params.id}`, languages, limit: query.limit ?? 20, after: query.after, canRead,
+          resource: `https://rezics.com/id/${params.resource}`, languages, limit: query.limit ?? 20, after: query.after, canRead,
           canReadOccurrence: ref => canReadSemantic(work.access, principal, query.actingSubject, ref),
           summarize: async resources => (await readResourceSummaries(work.environment, work.media?.store, {
             canReadWork: ref => work.access.canReadWork(principal, query.actingSubject, ref),

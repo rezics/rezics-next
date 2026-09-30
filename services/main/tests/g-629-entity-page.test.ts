@@ -37,7 +37,7 @@ import { createMainApp } from '../src/app.ts';
 const futureReads = new Set(
   Object.values(baseSections)
     .flat()
-    .map((section) => `/v1/resources/:id/${section}`),
+    .map((section) => `/v1/resources/:resource/${section}`),
 );
 futureReads.add('/v1/recipes/works/:id');
 futureReads.add('/v1/hub/works/:id');
