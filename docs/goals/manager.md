@@ -51,7 +51,9 @@ bind until the maintainer changes them.
    rules, generators, stories, comments) whatever code can express, and delete
    the documents that code replaces. Keep documents only for what code cannot
    carry, such as intent, decisions with their reasons, and operating procedures.
-   The frontend follows the same principle.
+   The frontend follows the same principle. Fold documents into code as work
+   touches them, and make a final deletion pass at the end of the Goal
+   (maintainer, 2026-09-30).
 3. **Use at most half the Claude week, keep the manager alive** (2026-09-29).
    Opus 5.5 runs the manager and takes first-of-kind design and review; Sonnet
    5.5 is the main Claude worker. Leave at least 50% of each Claude week unused
@@ -61,11 +63,11 @@ bind until the maintainer changes them.
 4. **Other accounts run out within their cycle** (2026-09-30). The two Codex
    accounts (default and `codex-1`), the Grok CLI and Cursor Agent (Grok 4.7)
    have no reserve to protect. GPT-6.1 Sol replaces GPT-6 Sol and the retired
-   GPT-6 Astra on both Codex accounts. Usage-limit reset credits are no longer
-   used: spend each account within its weekly cycle so that it ends near zero
-   at its reset, and push the Goal as far toward completion as this cycle
-   allows, without burning usage on low-value work. The Grok CLI and Cursor are
-   two separate quotas and two full lanes of feature work, frontend included.
+   GPT-6 Astra on both Codex accounts. Usage-limit reset credits on both Codex
+   accounts may be used freely (maintainer, 2026-09-30, superseding the earlier
+   no-reset rule); token efficiency still matters: cheap models for mechanical
+   work, small briefs and no wasted runs. The Grok CLI and Cursor are two
+   separate quotas and two full lanes of feature work, frontend included.
 5. **Human-role agents.** Opus 5.5 and GPT-6.1 Sol can take the human role: they
    may challenge a brief, correct documentation and process in their area, and
    propose a re-plan. Sonnet 5.5, GPT-6 Luna and Grok 4.7 carry out briefs and
@@ -86,6 +88,13 @@ bind until the maintainer changes them.
 7. **Maintainer edits win.** The maintainer may change any document at any
    time. Detect such changes, adapt running work and never revert them silently
    (see [documentation changes](README.md#maintainer-documentation-changes)).
+8. **Efficiency first; 25 hours** (maintainer, 2026-09-30). Efficiency is a top
+   priority: the maintainer wants the project completed within 25 hours of the
+   restart (about 22:15 CST on 2026-09-30, so by about 23:15 CST on
+   2026-10-01). Plan against it: keep a critical path, state cut lines (what
+   must ship and what is deferred if time runs short), report a projected
+   completion at every checkpoint and run the maximum useful parallelism within
+   host memory.
 
 ## Resources
 
@@ -113,7 +122,8 @@ or a Grok X/web lookup from an empty temporary directory.
 The manager revises this strategy from measurements. As of 2026-09-30 13:00 CST:
 Claude 7d was 5% used and resets on 2026-10-05 at 23:00 CST (weekly at the same
 time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
-`codex-1` 45% used (reset about 2026-10-06 18:40). Reset credits are not used.
+`codex-1` 45% used (reset about 2026-10-06 18:40). Reset credits may be used
+(direction 4).
 
 - **Measured ratio (2026-09-28).** A full 5-hour window is about 15% of the
   Claude week: the first 96 minutes moved the 5-hour window 32 points and the
@@ -146,6 +156,10 @@ time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
   and `codex-1` by what each has left before its reset. When one reports
   exhaustion, move its queued work to another engine
   (`goalctl resume <id> --engine <e> --fresh`).
+- **Efficiency measures.** Per merged task, record usage, whether review
+  accepted the first handoff, rework (resumes after review) and diff size
+  against the brief's scope; a large diff on a Sol task is the first sign of
+  over-design.
 - **Survival.** If the manager could still be cut off, for example by a limit or
   a crash, consider a watchdog: a tmux session plus a scheduled check that
   resumes the manager after the reset. Workers already survive a manager restart.
