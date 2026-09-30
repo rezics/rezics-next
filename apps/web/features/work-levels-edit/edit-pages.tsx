@@ -26,8 +26,8 @@ import { editHref, type EditSection } from './route.ts';
 const PARTS_PAGE = 50;
 
 async function frame(workRef: string, id: string, section: EditSection, locale: UiLocale) {
-  const [allowed, header, { signedIn }] = await Promise.all([readAllowedActions(id), readWorkHeader(id, locale), reader()]);
-  return { allowed, header: header.ok ? header.data : null, signedIn, t: copyOf(locale),
+  const [allowed, header, { signedIn, actingSubject }] = await Promise.all([readAllowedActions(id), readWorkHeader(id, locale), reader()]);
+  return { allowed, header: header.ok ? header.data : null, signedIn, actingSubject, t: copyOf(locale),
     title: header.ok ? header.data.title.value : '', workRef, section };
 }
 
@@ -93,7 +93,7 @@ export async function EditionsEditPage({ workRef, id, locale, pageMessages }: {
       <h2 id="editions-heading" className="font-semibold text-xl">{f.t.editionsHeading}</h2>
       {f.header ? <RealizationEditor work={id} mainVersion={f.header.mainVersion} mainRevision={f.header.mainVersionRevision}
         existing={own} allowed={f.allowed} locale={locale} action={addRealization} messages={messages[locale]} /> : null}
-      <ReleaseEditor work={id} own={own} allowed={f.allowed} locale={locale} action={addRelease} messages={messages[locale]} />
+      <ReleaseEditor work={id} own={own} allowed={f.allowed} locale={locale} actingSubject={f.actingSubject} action={addRelease} messages={messages[locale]} />
     </section>
     <section className="grid gap-4" aria-labelledby="current-editions">
       <h2 id="current-editions" className="font-semibold text-xl">{f.t.currentEditions}</h2>

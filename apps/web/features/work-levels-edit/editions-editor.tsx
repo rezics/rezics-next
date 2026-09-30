@@ -24,8 +24,9 @@ export type RealizationLoader = (work: string) => Promise<CoverableRealization[]
 
 type Action = (previous: WriteState, form: FormData) => Promise<WriteState>;
 
-const browserRealizations: RealizationLoader = async work => {
-  const { data, error } = await browserMainApi().v1.works({ id: work }).realizations.get({ query: { limit: 20 } });
+/** Another Work's realizations, read as the editor's Agent: Main answers a signed-in read only for an acting Agent. */
+const browserRealizations = (actingSubject: string | undefined): RealizationLoader => async work => {
+  const { data, error } = await browserMainApi().v1.works({ id: work }).realizations.get({ query: { limit: 20, actingSubject } });
   if (error || !data) throw new Error('unavailable');
   return data.items.map(item => ({ id: item.id, revision: item.revision, work: item.work, language: item.language }));
 };
@@ -135,8 +136,10 @@ function CoverageLoad({ t, onLoad }: { t: Copy; onLoad: (text: string) => void }
 }
 
 /** The form that adds a release: identifiers, format, platform, territory and what it covers. */
-export function ReleaseEditor({ work, own, allowed, locale, action, messages, load = browserRealizations, loadWorks }: {
+export function ReleaseEditor({ work, own, allowed, locale, action, messages, actingSubject, load, loadWorks }: {
   work: string; own: readonly CoverableRealization[]; allowed: readonly string[]; locale: UiLocale; action: Action; messages: WorkLevelsEditMessages;
+  /** The session Agent other Works' realizations are read as. */
+  actingSubject?: string;
   load?: RealizationLoader; loadWorks?: WorkLoader;
 }) {
   const t = materializeData(messages, { locale });
@@ -188,7 +191,7 @@ export function ReleaseEditor({ work, own, allowed, locale, action, messages, lo
     <div className="grid gap-2" aria-invalid={invalid === 'coverage' || undefined}>
       <span className="font-medium text-sm">{t.coverage}</span>
       <p className="text-muted-foreground text-xs">{t.coverageHelp}</p>
-      <CoveragePicker work={work} own={own} locale={locale} t={t} load={load} loadWorks={loadWorks} chosen={chosen} />
+      <CoveragePicker work={work} own={own} locale={locale} t={t} load={load ?? browserRealizations(actingSubject)} loadWorks={loadWorks} chosen={chosen} />
     </div>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field><FieldLabel>{t.coverageCompleteness}</FieldLabel>
