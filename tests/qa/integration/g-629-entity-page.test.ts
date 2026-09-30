@@ -109,6 +109,7 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
               : []),
         'releases',
         'contents',
+        'relations',
         'credits',
         'ratings',
         'reviews',
@@ -163,7 +164,7 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
     expect(unknownPage.target).toMatchObject({ base: 'resource', work: null });
     expect(unknownPage.registry).toMatchObject({ default: true, presentation: 'default' });
     expect(unknownPage.work).toBeNull();
-    expect(unknownPage.sections.map((section) => section.id)).toEqual(['statements', 'discussion']);
+    expect(unknownPage.sections.map((section) => section.id)).toEqual(['statements', 'relations', 'discussion']);
     await f.grant(`semantic:edit:${unknown.component}`, 'semantic.change');
     expect((await change(unknown.component, unknown.revision, [])).status).toBe(400);
 

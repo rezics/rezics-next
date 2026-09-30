@@ -78,6 +78,7 @@ test('MODEL05/MODEL06: repeated participants keep two identified occurrences and
     expect(readFirst.participations.every(item => item.availability === 'available')).toBe(true);
 
     await f.grant(`semantic:edit:${definition.component}`, 'semantic.change');
+    await f.grant(`semantic:read:${definition.component}`, 'semantic.read');
     const retired = await f.json<Changed>(await semantic({ component: 'definition', kind: 'relation',
       lifecycle: 'retired', successor: null, roles: [
         { key: 'source', minParticipants: 1, maxParticipants: 1, ordered: false },

@@ -202,7 +202,7 @@ test('G-629: every advertised section href matches a GET mounted by Main', () =>
     pageSections(target('resource', ['https://example.org/Unknown']), mounted).map(
       (section) => section.id,
     ),
-  ).toEqual(['statements', 'discussion']);
+  ).toEqual(['statements', 'relations', 'discussion']);
 });
 
 test('G-629: 500 native value/qualifier/source references use eight owner batches and withhold denied identities', async () => {
