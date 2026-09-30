@@ -280,9 +280,13 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
   // Registered first so it also handles every plugin route mounted below.
   const app = new Elysia()
     .error(({ error, request }) => wikiSchemaError(error, request))
-    .request(async () => {
+    .request(async ({ request }) => {
+      if (new URL(request.url).pathname.startsWith('/health/')) return;
       try { await work?.types?.refresh(); }
-      catch { return problem(503, 'types_unavailable', 'Type registry is unavailable'); }
+      catch {
+        if (request.method !== 'GET' && request.method !== 'HEAD')
+          return problem(503, 'types_unavailable', 'Type registry is unavailable');
+      }
     })
     .error(({ error }) => {
       if (error instanceof ValidationError || error instanceof ParseError) {

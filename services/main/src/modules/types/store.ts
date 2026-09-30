@@ -9,7 +9,6 @@ import {
   ControlDenied,
   ControlInvalid,
   ControlStale,
-  ControlUnavailable,
   controlRead,
   controlTransaction,
   lockGate,
@@ -63,7 +62,7 @@ const fromRow = (row: TypeRow): RegisteredType => ({
     primaryAction: row.primary_action,
     priority: Number(row.priority),
     default: false,
-    creatable: row.base === 'work',
+    creatable: row.base === 'work' && row.lifecycle === 'active',
   },
   revision: row.revision,
   lifecycle: row.lifecycle,
@@ -74,6 +73,7 @@ const fromRow = (row: TypeRow): RegisteredType => ({
 export class AdmittedTypeStore {
   private expiresAt = 0;
   private refreshing?: Promise<void>;
+  private refreshFailure?: unknown;
   constructor(
     private readonly pool: Pool,
     private readonly now = Date.now,
@@ -95,10 +95,19 @@ export class AdmittedTypeStore {
       if (force) return this.refresh(true);
       return;
     }
-    if (!force && this.now() < this.expiresAt) return;
+    if (!force && this.now() < this.expiresAt) {
+      if (this.refreshFailure) throw this.refreshFailure;
+      return;
+    }
     this.refreshing = controlRead(this.pool, (client) => this.rows(client)).then((rows) => {
       installRegisteredTypes(rows);
       this.expiresAt = this.now() + TYPES_READ_COST.ttlMs;
+      this.refreshFailure = undefined;
+    }).catch((error: unknown) => {
+      // Retain the installed snapshot and bound retry work while the owner is held.
+      this.expiresAt = this.now() + TYPES_READ_COST.ttlMs;
+      this.refreshFailure = error;
+      throw error;
     });
     try {
       await this.refreshing;
@@ -142,7 +151,7 @@ export class AdmittedTypeStore {
       try {
         assertRegisteredTypeSnapshot([...rows, { definition, revision: '1', lifecycle: 'active' }]);
       } catch {
-        throw new ControlUnavailable('Type registry inventory or byte bound exceeded');
+        throw new ControlConflict('Type registry inventory or byte bound exceeded');
       }
       const row = (
         await client.query<TypeRow>(

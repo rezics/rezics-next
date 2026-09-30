@@ -3,7 +3,7 @@ import { pendingOperation, problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
 import { setWorkMetadata } from '../modules/work/metadata-command.ts';
 import { stateWorkType } from '../modules/work/type-command.ts';
-import { WorkTypeConflict, WORK_TYPE_OPTIONS, WORK_TYPE_OPTIONS_V1 } from '../modules/work/type-schema.ts';
+import { WorkTypeConflict, WORK_TYPE_OPTIONS_V2, WORK_TYPE_OPTIONS_V1 } from '../modules/work/type-schema.ts';
 import { InvalidWorkSemanticTypes, MAX_WORK_SEMANTIC_TYPES } from '../modules/work/activate.ts';
 import { readWorkEdition, readWorkEditions, readWorkMetadata } from '../modules/work/metadata-read.ts';
 import { metadataWrite, metadataEditionState, metadataEditionStateV2, metadataHeaderState, InvalidWorkMetadata,
@@ -40,7 +40,7 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
             { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true }),
           actingSubject: readId }, { additionalProperties: false }),
         t.Object({ profile: t.Literal('work-type-v2'), expectedHead: readId,
-          types: t.Array(t.String({ enum: WORK_TYPE_OPTIONS }),
+          types: t.Array(t.String({ enum: WORK_TYPE_OPTIONS_V2 }),
             { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true }),
           actingSubject: readId }, { additionalProperties: false }),
         t.Object({ profile: t.Literal('work-type-v3'), expectedHead: readId,

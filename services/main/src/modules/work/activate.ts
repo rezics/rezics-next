@@ -120,11 +120,11 @@ export function metadataWorkRequestDigest(title: string,
   semanticTypes?: readonly string[], language = 'und',
   details: { localizedTitle?: { value: string; language: string };
     description?: { value: string; language: string }; authorAgent?: string;
-    catalogue?: CreateMetadataWorkIntent['catalogue'] } = {}): string {
+    catalogue?: CreateMetadataWorkIntent['catalogue'] } = {}, retained = false): string {
   if (title.length < 1 || title.length > 200 || /[\u0000-\u001f\u007f]/.test(title)) {
     throw new Error('invalid title');
   }
-  const types = normalizeWorkSemanticTypes(semanticTypes);
+  const types = normalizeWorkSemanticTypes(semanticTypes, retained);
   assertNativeWorkTypeCombination(types);
   const canonical = canonicalLanguage(language);
   if (!canonical || canonical.length > 35) {
@@ -328,10 +328,10 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
     || admission.action !== 'work.create') {
     throw new Error('invalid Work admission');
   }
-  const semanticTypes = normalizeWorkSemanticTypes(intent.semanticTypes);
+  const semanticTypes = normalizeWorkSemanticTypes(intent.semanticTypes, true);
   // A missing declaration records an undetermined language; no interface locale
   // can supply the authored title's language.
-  const digest = metadataWorkRequestDigest(intent.title, semanticTypes, intent.language, intent);
+  const digest = metadataWorkRequestDigest(intent.title, semanticTypes, intent.language, intent, true);
   const language = canonicalLanguage(intent.language ?? 'und')!;
   const receipt = workReceiptIri(admission.id);
   await assertNotInvalidProfileReceipt(env.fuseki, workReceiptIri(admission.id));
@@ -340,7 +340,7 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
     // A language-omitting legacy admission meant English. Replay its recorded
     // receipt, while every new omitted-language activation still writes und.
     const replayDigest = intent.language === undefined && existing.requestDigest ===
-      metadataWorkRequestDigest(intent.title, semanticTypes, 'en', intent) ? existing.requestDigest : digest;
+      metadataWorkRequestDigest(intent.title, semanticTypes, 'en', intent, true) ? existing.requestDigest : digest;
     if (admission.requestDigest !== replayDigest || existing.requestDigest !== replayDigest || existing.admissionId !== admission.id
       || existing.authorityEpoch !== admission.authorityEpoch || existing.scope !== admission.scope) {
       throw new IdempotencyConflict('admission does not match stored receipt');
@@ -351,6 +351,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
       dataEpoch: existing.dataEpoch, sequence: existing.sequence, replayed: true };
   }
   if (admission.requestDigest !== digest) throw new IdempotencyConflict('admission digest does not match Work intent');
+  // Retained membership proves retries; only an active type can produce a new Work.
+  normalizeWorkSemanticTypes(semanticTypes);
   if (!Number.isFinite(Date.parse(admission.expiresAt)) || Date.parse(admission.expiresAt) <= Date.now()) {
     throw new PendingActivation('admission expired before dispatch');
   }

@@ -1,4 +1,5 @@
 import { creatableWorkTypeOptions } from '../types/registry.ts';
+import { creatableWorkTypeOrder } from '../../../../../packages/model/src/generated/types.ts';
 import {
   assertNativeWorkTypeCombination,
   InvalidWorkSemanticTypes,
@@ -9,7 +10,9 @@ export const WORK_TYPE_PROFILE = 'https://rezics.com/definition/work-type-v3';
 export class WorkTypeConflict extends Error {}
 /** Native type edits admit live descriptive registry entries. */
 export const WORK_TYPE_OPTIONS = creatableWorkTypeOptions;
-export const WORK_TYPE_OPTIONS_V1 = WORK_TYPE_OPTIONS.filter(
+/** Historical HTTP contracts use the reviewed compiled catalogue in every process. */
+export const WORK_TYPE_OPTIONS_V2 = [...creatableWorkTypeOrder];
+export const WORK_TYPE_OPTIONS_V1 = WORK_TYPE_OPTIONS_V2.filter(
   (type) => type !== 'https://schema.org/VideoGame',
 );
 export const WORK_TYPE_COST = {

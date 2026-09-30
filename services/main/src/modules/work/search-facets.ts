@@ -1,4 +1,4 @@
-import { DATASET, GRAPHS, RV, WORK_SEMANTIC_TYPES, iri,
+import { DATASET, GRAPHS, RV, WORK_SEMANTIC_TYPES, MAX_WORK_SEMANTIC_TYPES, iri,
   type WorkActivationEnvironment } from './activate.ts';
 import { PublicQueryUnavailable } from './search-budget.ts';
 import { InvalidPublicQuery } from './search-public.ts';
@@ -18,7 +18,7 @@ export interface PhraseFacetMatch {
 }
 
 const MAX_WORKS = 512;
-const MAX_ROWS = MAX_WORKS * WORK_SEMANTIC_TYPES.length;
+const MAX_ROWS = MAX_WORKS * MAX_WORK_SEMANTIC_TYPES;
 
 /** One bounded graph read for the complete phrase relation. Work type identity
  * comes from the current Work head; the control position fences the prior text read. */
@@ -96,7 +96,7 @@ export function facetPhraseResults<Row extends PhraseFacetMatch>(results: readon
   } };
 }
 
-/** Cost: one graph read, at most 512 Works, 512 × admitted types rows and 8 MiB
+/** Cost: one graph read, at most 512 Works, 512 × 3 semantic-type rows and 8 MiB
  * under the shared search read budget. Counting is O(results × admitted types). */
 export async function decoratePhraseRelation<Row extends PhraseFacetMatch,
   Relation extends { results: Row[]; total: number; sourcePosition: { dataEpoch: string; sequence: string } }>(

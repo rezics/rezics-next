@@ -5,16 +5,16 @@ import { interestKinds, interestSources, matchingWorkKinds } from '../work/work-
 import { type HomeInterestKind, INTEREST_MATCH_COST } from './contract.ts';
 
 // The feed's legacy `interests` filter (see contract.ts); onboarding reads Concepts instead.
-const workTypes = [...new Set(interestKinds.flatMap(kind => interestSources[kind].workTypes))];
 const terms = [...new Set(interestKinds.flatMap(kind => interestSources[kind].classificationTerms))];
-const workTypeSet = new Set<string>(workTypes);
 const termSet = new Set<string>(terms);
-const typeValues = workTypes.map(type => `<${type}>`).join(' ');
 const termValues = terms.map(lit).join(', ');
 
 export async function readWorkKindMatches(session: WorkReadSession, works: readonly string[]) {
   const matches = new Map<string, HomeInterestKind[]>();
   if (!works.length) return matches;
+  const workTypes = [...new Set(interestKinds.flatMap(kind => interestSources[kind].workTypes))];
+  const workTypeSet = new Set<string>(workTypes);
+  const typeValues = workTypes.map(type => `<${type}>`).join(' ');
   const rows = await session.query(`SELECT DISTINCT ?work ?type ?term WHERE {
     VALUES ?work { ${works.map(iri).join(' ')} }
     { GRAPH ${iri(GRAPHS.current)} { ?work a ?type }

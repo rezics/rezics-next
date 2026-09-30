@@ -31,9 +31,11 @@ import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
+import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
+import { readWorkKindMatches } from '../../../services/main/src/modules/onboarding-interests/read.ts';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 
-test('G653: HTTP admission and creation, native Java legacy retyping, facets, retirement and recovery', async () => {
+test('G653: HTTP admission and creation, v3 writes and legacy Work edits, facets, retirement and recovery', async () => {
   const directory = resolve('.temp', `g-653-${randomUUID()}`);
   const f = await authorCreditFixture(
     Bun.env as Record<string, string>,
@@ -139,6 +141,15 @@ test('G653: HTTP admission and creation, native Java legacy retyping, facets, re
     );
     expect(after.digest).not.toBe(before.digest);
     expect(after.types.filter((type) => type.type === webNovel)).toHaveLength(1);
+    const legacyRequest = {
+      profile: 'work-type-v2', expectedHead: f.actor, types: [webNovel], actingSubject: f.actor,
+    };
+    await json(await call('PUT', `/v1/works/${shortId(f.actor)}/type`, legacyRequest), 400);
+    const laterApp = createMainApp(f.env.fuseki, deps);
+    await json(await laterApp.handle(new Request(`http://main.local/v1/works/${shortId(f.actor)}/type`, {
+      method: 'PUT', headers: { authorization: `Bearer ${f.account.tokenA}`,
+        'content-type': 'application/json', 'idempotency-key': randomUUID() }, body: JSON.stringify(legacyRequest),
+    })), 400);
     // Another process refreshes only when its bounded TTL expires.
     const second = new AdmittedTypeStore(f.accessPool, () => time);
     await second.refresh();
@@ -210,6 +221,7 @@ test('G653: HTTP admission and creation, native Java legacy retyping, facets, re
     const creationKey = randomUUID();
     type Created = { work: string; workRevision: string; mainVersion: string; replayed: boolean };
     const created = await json<Created>(await call('POST', '/v1/works', creation, creationKey), 201);
+    const originalCreation = { ...created };
     expect(created.replayed).toBe(false);
     expect(await json<Created>(await call('POST', '/v1/works', creation, creationKey)))
       .toMatchObject({ work: created.work, replayed: true });
@@ -306,12 +318,17 @@ test('G653: HTTP admission and creation, native Java legacy retyping, facets, re
       expect(nativeRetypes.slice(before)).toMatchObject([{ status: 'committed' }]);
       return json<{ revision: string }>(response);
     };
-    // Retype the old anchors first: reintroducing a closed Java type list must reject this request.
+    // Native v3 writes keep v1/v2 Works editable. Their identical revision shapes
+    // are accepted by the v1 anchor check first; this does not isolate the v3 disjunct.
     for (const work of [...historicalWorks, created]) {
       await f.grant(`work:edit:${work.work}`, 'work.edit');
       await f.grant(`work:read:${work.work}`, 'work.read');
       const edited = await retype(work.work, work.workRevision, [webNovel]);
-      // A second retyping traverses the v3 historical anchor as well as the original one.
+      const matches = await workRead(deps, new Request('http://main.local', {
+        headers: { authorization: `Bearer ${f.account.tokenA}` },
+      }), { actingSubject: f.actor }, session => readWorkKindMatches(session, [work.work]));
+      expect(matches.get(work.work)).toEqual(['books']);
+      // Repeat retyping checks retained revisions under the shared anchor structure.
       const again = await retype(work.work, edited.revision, [webNovel, 'https://schema.org/Book']);
       work.workRevision = again.revision;
       const read = await json<{ types: string[] }>(
@@ -417,6 +434,17 @@ test('G653: HTTP admission and creation, native Java legacy retyping, facets, re
       ).replayed,
     ).toBe(true);
     expect(() => metadataWorkRequestDigest('Retired serial', [webNovel])).toThrow();
+    expect(await json<Created>(await call('POST', '/v1/works', creation, creationKey)))
+      .toMatchObject({ ...originalCreation, replayed: true });
+    const catalogue = { candidateReceipt: creation.candidateReceipt, grain: 'new-creative-scope' as const };
+    const creationDigest = metadataWorkRequestDigest(creation.title, creation.semanticTypes,
+      creation.language, { catalogue }, true);
+    const savedAdmission = await f.access.register({ principal, actingSubject: f.actor,
+      scope: 'work:create:root', action: 'work.create', idempotencyKey: creationKey,
+      requestDigest: creationDigest, workSemanticTypes: creation.semanticTypes });
+    expect(await activateMetadataWork(f.env, { admission: savedAdmission, title: creation.title,
+      language: creation.language, semanticTypes: creation.semanticTypes, catalogue }))
+      .toMatchObject({ work: originalCreation.work, workRevision: originalCreation.workRevision, replayed: true });
     await json(await call('POST', '/v1/works', creation), 400);
     await json(
       await call('PUT', `/v1/works/${shortId(target.work)}/type`, {
@@ -452,11 +480,20 @@ test('G653: HTTP admission and creation, native Java legacy retyping, facets, re
       ),
     );
     expect(retiredRead.types).toContain(webNovel);
+    const retiredTypes = await json<{ types: TypeDefinition[] }>(await call('GET', '/v1/types'));
+    expect(retiredTypes.types.find(type => type.type === webNovel)).toMatchObject({
+      type: webNovel, labels: input.labels, presentation: input.presentation, creatable: false,
+    });
+    const entityPage = await json<{ registry: TypeDefinition }>(await call('GET',
+      `/v1/resources/${shortId(target.work)}/page?actingSubject=${encodeURIComponent(f.actor)}`));
+    expect(entityPage.registry).toMatchObject({
+      type: webNovel, labels: input.labels, presentation: input.presentation, creatable: false,
+    });
     // A full but valid response must remain available when the next admission would exceed its bytes.
     const retained: RegisteredType[] = [
       { definition: outcomes[0].definition, revision: '2', lifecycle: 'retired' },
       ...admittedTypes
-        .filter((entry) => !compiledType(entry.type))
+        .filter((entry) => !compiledType(entry.type) && entry.type !== webNovel)
         .map((definition) => ({
           definition,
           revision: '1',
@@ -521,7 +558,7 @@ test('G653: HTTP admission and creation, native Java legacy retyping, facets, re
         },
         overflowKey,
       ),
-      503,
+      409,
     );
     expect(
       (
@@ -536,10 +573,14 @@ test('G653: HTTP admission and creation, native Java legacy retyping, facets, re
     await f.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
     try {
       time += 5_001;
-      await json(await call('GET', '/v1/types'), 503);
+      expect((await call('GET', '/health/live')).status).toBe(200);
+      expect((await json<{ digest: string }>(await call('GET', '/v1/types'))).digest).toBe(bounded.digest);
+      const unavailableKey = randomUUID();
+      await json(await call('POST', '/v1/types', { ...retryInput, idempotencyKey: unavailableKey }, unavailableKey), 503);
     } finally {
       await f.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
     }
+    time += 5_001;
     await json(await call('GET', '/v1/types'));
   } finally {
     installRegisteredTypes([]);

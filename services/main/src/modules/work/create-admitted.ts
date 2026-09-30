@@ -4,7 +4,7 @@ import { AdmissionDenied, AdmissionExpired, type RegisteredAdmission } from '../
 import { createHash } from 'node:crypto';
 import {
   activateMetadataWork, AuthorAgentUnavailable, CancelledActivation, IdempotencyConflict, metadataWorkRequestDigest,
-  PendingActivation, type WorkActivationEnvironment, type WorkActivationReceipt,
+  PendingActivation, normalizeWorkSemanticTypes, type WorkActivationEnvironment, type WorkActivationReceipt,
 } from './activate.ts';
 import { readWorkTerminalReceipt } from './receipt.ts';
 import { sealMetadataWorkAdmission } from './seal.ts';
@@ -77,7 +77,7 @@ export async function createAdmittedMetadataWork(
   catalogue?: Pick<CatalogueIntakeStore, 'reserve'>,
 ): Promise<WorkActivationReceipt> {
   const digest = metadataWorkRequestDigest(input.title, input.semanticTypes, input.language,
-    input);
+    input, true);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:create']);
   const registered = await access.register({
@@ -90,6 +90,12 @@ export async function createAdmittedMetadataWork(
     requestDigest: digest,
     workSemanticTypes: input.semanticTypes,
   });
+  // Access decides same-key replay first. Inactive types never reserve catalogue
+  // slots or dispatch unless this admission already has a terminal graph receipt.
+  if (registered.state !== 'sealed' && (!registered.replayed
+    || !await readWorkTerminalReceipt(env.fuseki, registered.id))) {
+    normalizeWorkSemanticTypes(input.semanticTypes);
+  }
   // Reserve before claim/dispatch. A 429 may leave an undispatched Access
   // admission; its normal expiry/sealer supplies the cancellation proof.
   if (input.catalogue) {
