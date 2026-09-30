@@ -156,7 +156,7 @@ export async function saveInvitedWorkProof(client: PoolClient, admissionId: stri
 export async function selectedRepresentedWorkProof(client: PoolClient,
   saved: SavedRepresentedWorkProof, principalEpoch: string,
   groupGeneration: string, graph?: Pick<FusekiClient, 'query'>): Promise<boolean> {
-  const edit = saved.action === 'work.edit' && saved.scope_id.startsWith('work:edit:');
+  const edit = ['work.edit', 'relation.change', 'work.derive'].includes(saved.action) && saved.scope_id.startsWith('work:edit:');
   if (!(saved.action === 'work.create' && saved.scope_id === 'work:create:root' || edit)
     || !saved.represented_representation_id
     || saved.represented_representation_generation === null
@@ -210,7 +210,7 @@ export async function selectedRepresentedWorkProof(client: PoolClient,
     FOR SHARE OF r, s`, [saved.represented_representation_id,
     saved.principal_id, saved.acting_subject,
     saved.represented_representation_generation,
-    saved.represented_subject_generation, saved.action]);
+    saved.represented_subject_generation, edit ? 'work.edit' : saved.action]);
   if (mandate.rowCount !== 1) return false;
   if (saved.represented_grant_id) {
     if (saved.group_grant_id || saved.role_binding_id
@@ -219,7 +219,7 @@ export async function selectedRepresentedWorkProof(client: PoolClient,
       WHERE id = $1 AND recipient_subject = $2 AND scope_id = $3
         AND action = $5 AND active AND valid_until > clock_timestamp()
         AND generation = $4 FOR SHARE`, [saved.represented_grant_id,
-      saved.acting_subject, saved.scope_id, saved.represented_grant_generation, saved.action]);
+      saved.acting_subject, saved.scope_id, saved.represented_grant_generation, edit ? 'work.edit' : saved.action]);
     return grant.rowCount === 1;
   }
   if (saved.role_binding_id) {

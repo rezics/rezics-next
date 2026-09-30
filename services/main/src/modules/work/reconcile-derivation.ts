@@ -38,8 +38,8 @@ export function parseRetainedWorkDerivation(eventId: string, envelope: MainCloud
     || receipt.id !== workDerivationReceiptIri(receipt.admissionId)
     || eventId !== `urn:rezics:event:${hash(`${receipt.id}\0work-derived`)}`
     || data.batchId !== `urn:rezics:outbox:${hash(receipt.id)}`
-    || !receipt.derivationKind || !Object.hasOwn(kinds, receipt.derivationKind)
-    || receipt.scope !== `derivation:link:${receipt.targetWork}`
+    || !receipt.derivationKind || !(Object.hasOwn(kinds, receipt.derivationKind) || nativeId.test(receipt.derivationKind))
+    || receipt.scope !== (nativeId.test(receipt.derivationKind ?? '') ? `work:edit:${receipt.targetWork}` : `derivation:link:${receipt.targetWork}`)
     // Envelopes retained before unresolved sources carry only an exact revision.
     || (receipt.sourceVersionStatus === 'unresolved' ? receipt.sourceMainRevision !== null
       : ![undefined, 'exact'].includes(receipt.sourceVersionStatus)
@@ -57,7 +57,7 @@ export function parseRetainedWorkDerivation(eventId: string, envelope: MainCloud
     sourceWork: receipt.sourceWork ?? '',
     sourceMainVersion: receipt.sourceMainVersion ?? null,
     sourceMainRevision: receipt.sourceMainRevision ?? null,
-    kind: receipt.derivationKind,
+    kind: receipt.derivationKind as WorkDerivationInput['kind'],
     evidence: receipt.evidence ?? '',
     actingSubject: receipt.linkedBy ?? '',
   };
@@ -230,7 +230,7 @@ export async function reconcileRetainedWorkDerivation(
       }
     }`);
     const relations = await readWorkDerivations(env, input.targetMainVersion,
-      input.expectedTargetHead);
+      input.expectedTargetHead, true);
     const relation = relations.find(item => item.derivation === derivation);
     if (!terminal || terminal.outcome !== 'succeeded' || terminal.derivation !== derivation
       || terminal.receipt !== receipt.id || terminal.requestDigest !== receipt.requestDigest

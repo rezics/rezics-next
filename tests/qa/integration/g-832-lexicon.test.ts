@@ -17,6 +17,8 @@ import {
   type SeedLexiconReceipt,
 } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { uiLocales } from '../../../apps/web/i18n/define.ts';
+import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
+import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
 
 type Write = SeedLexiconReceipt & {
   receipt: string;
@@ -489,11 +491,16 @@ test('G-832: public bootstrap and class guard cover every definition, direction 
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(
     Bun.env as Record<string, string>,
-    resolve('.temp', `g-832-seed-${randomUUID()}`),
+    // Definitions are canonical across files in this QA shard; their immutable
+    // bytes must be available when a later fixture reads the same registry.
+    resolve('.temp', 'relation-lexicon-qa', Bun.env.REZICS_QA_RUN_ID),
   );
   try {
     await f.grant('semantic:create:root', 'semantic.change');
-    const data = await seedRelationLexicon(
+    const shared = await Promise.all(relationLexiconSeed.map(item => readDefinitionByKey(f.env, item.key)));
+    const data = shared.every(item => item !== null) ? shared.map((item, index) => ({
+      key: relationLexiconSeed[index]!.key, component: item!.definition, revision: item!.revision,
+    })) : await seedRelationLexicon(
       {
         post: async <T>(path: string, body: object, key: string) =>
           f.json<T>(await f.call('POST', path, body, key), 201),
@@ -505,6 +512,9 @@ test('G-832: public bootstrap and class guard cover every definition, direction 
       f.actor,
       `g-832-${randomUUID()}`,
     );
+    if (shared.every(item => item !== null)) {
+      for (const receipt of data) await f.grant(`semantic:read:${receipt.component}`, 'semantic.read');
+    }
     expect(data).toHaveLength(15);
     for (const language of uiLocales) {
       const batch = await f.json<Batch>(

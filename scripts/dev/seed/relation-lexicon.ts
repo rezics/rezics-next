@@ -30,7 +30,9 @@ export async function seedRelationLexicon(
     throw new Error('lexicon seed namespace is invalid');
   const definitions: { key: string; component: string; revision: string }[] = [];
   for (const definition of data) {
-    const key = `${namespace}:lexicon:${definition.key}`;
+    // The keyed, singleton-authority meaning differs from G-832's original body.
+    // Keep old receipts replayable and bootstrap this revision under fresh keys.
+    const key = `${namespace}:lexicon:v2:${definition.key}`;
     const receipt = await client.post<SeedLexiconReceipt>(
       '/v1/semantic/changes',
       {
@@ -40,10 +42,12 @@ export async function seedRelationLexicon(
         state: {
           component: 'definition',
           kind: 'relation',
+          notation: definition.key,
+          workSubjectRole: definition.roles.includes('work') ? 'work' : definition.roles[1],
           roles: definition.roles.map((role) => ({
             key: role,
             minParticipants: 1,
-            maxParticipants: 64,
+            maxParticipants: 1,
             ordered: false,
           })),
         },

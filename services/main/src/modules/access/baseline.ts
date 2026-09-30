@@ -50,7 +50,7 @@ export type BaselineTarget = { kind: 'root' }
 export function baselineTarget(action: string, scope: string): BaselineTarget | null {
   // The tag proposal adapter records a personal Statement under the author's
   // Work fence. This grants neither definition administration nor acceptance.
-  if (action === 'statement.record' && scope.startsWith('work:edit:')) {
+  if (['statement.record', 'relation.change', 'work.derive'].includes(action) && scope.startsWith('work:edit:')) {
     const id = scope.slice('work:edit:'.length);
     return native.test(id) ? { kind: 'author-work', id } : null;
   }

@@ -325,7 +325,7 @@ export interface MainCloudEvent {
       translator?: string; publisher?: string; evidence?: string; linkedBy?: string;
       authorizingParty?: string | null; authorizationScope?: string | null;
       authorizationEpoch?: string | null;
-      workDerivation?: string; derivationKind?: 'adaptation' | 'new-recording' | 'software-fork';
+      workDerivation?: string; derivationKind?: string;
       corrects?: string | null;
       fixedRelease?: string; releaseManifest?: string; bodyDigest?: string; sealedBy?: string;
       routeBinding?: string; routeRevision?: string; normalizedSlug?: string;
@@ -668,7 +668,8 @@ async function workDerivedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
       FILTER(?class = rv:WorkDerivation
           && ?model = <https://rezics.com/definition/work-derivation-v1>
         || ?class = rv:UnresolvedWorkDerivation
-          && ?model = <https://rezics.com/definition/work-derivation-unresolved-v1>)
+          && ?model = <https://rezics.com/definition/work-derivation-unresolved-v1>
+        || ?class = rv:LexiconWorkDerivation && ?model = <https://rezics.com/definition/work-derivation-v2>)
       OPTIONAL { ${iri(derivation)} rv:sourceMainRevision ?sourceRevision }
       OPTIONAL { ${iri(derivation)} rv:sourceMainVersion ?sourceMain }
       OPTIONAL { ${iri(derivation)} rv:sourceVersionStatus ?sourceStatus }
@@ -681,16 +682,18 @@ async function workDerivedEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
   const value = (name: string) => row[name]?.value;
   const kind = value('kind') === `${RV}Adaptation` ? 'adaptation'
     : value('kind') === `${RV}NewRecording` ? 'new-recording'
-    : value('kind') === `${RV}SoftwareFork` ? 'software-fork' : null;
+    : value('kind') === `${RV}SoftwareFork` ? 'software-fork'
+      : /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(value('kind') ?? '') ? value('kind')! : null;
   const targetWork = value('targetWork');
-  const unresolved = value('class') === `${RV}UnresolvedWorkDerivation`;
+  const v2 = value('class') === `${RV}LexiconWorkDerivation`;
+  const unresolved = value('class') === `${RV}UnresolvedWorkDerivation` || v2 && value('sourceStatus') === `${RV}Unresolved`;
   const sourceRevision = value('sourceRevision') ?? null;
   if (!kind || !targetWork || !value('targetMain') || !value('targetRevision')
     || !value('sourceWork')
     || (unresolved ? sourceRevision !== null || value('sourceStatus') !== `${RV}Unresolved`
-      : !value('sourceMain') || sourceRevision === null || value('sourceStatus') !== undefined)
+      : !value('sourceMain') || sourceRevision === null || (v2 ? value('sourceStatus') !== `${RV}Exact` : value('sourceStatus') !== undefined))
     || !value('evidence') || !value('linkedBy')
-    || scope !== `derivation:link:${targetWork}`
+    || scope !== (v2 ? `work:edit:${targetWork}` : `derivation:link:${targetWork}`)
     || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence) {
     throw new OutboxIncomplete('work derivation differs from source position or authority');
   }

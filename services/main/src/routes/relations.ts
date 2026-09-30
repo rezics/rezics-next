@@ -9,6 +9,7 @@ import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { semanticError } from './semantic.ts';
+import { admittedWorkRelationChange } from '../modules/relation/work-authority.ts';
 import { groupUuid } from './shared.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
@@ -62,6 +63,7 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         expectedHead: t.Nullable(native), definition: native,
         participations: t.Array(t.Object({ role: t.String({ maxLength: 32 }), participant: t.Record(t.String(), t.Unknown()),
           position: t.Optional(t.Integer()) }, { additionalProperties: false }), { maxItems: 64 }),
+        evidence: t.Optional(t.String({ maxLength: 2048 })),
         applicability: t.Optional(t.Array(native, { maxItems: 8 })),
         lifecycle: t.Optional(t.Union([t.Literal('active'), t.Literal('retired')])), actingSubject: native },
       { additionalProperties: false }),
@@ -73,9 +75,11 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
-        const result = await admittedRelationChange(work.environment, work.account, work.access, request, {
+        const definition = await readExactDefinition(work.environment, body.definition);
+        const change = definition?.workSubjectRole ? admittedWorkRelationChange : admittedRelationChange;
+        const result = await change(work.environment, work.account, work.access, request, {
           ...(body.occurrence ? { occurrence: body.occurrence } : {}), expectedHead: body.expectedHead,
-          input: { definition: body.definition, participations: body.participations,
+          input: { ...(body.evidence === undefined ? {} : { evidence: body.evidence }), definition: body.definition, participations: body.participations,
             ...(body.applicability ? { applicability: body.applicability } : {}),
             ...(body.lifecycle ? { lifecycle: body.lifecycle } : {}) },
           actingSubject: body.actingSubject, idempotencyKey });

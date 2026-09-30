@@ -1,6 +1,7 @@
 import { GRAPHS, ID, IdempotencyConflict, PendingActivation, RV, hash, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
+import { KEY_NOTATION } from '../lexicon/definition-key.ts';
 import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGeneration, familyReceiptIri,
   readComponent, readSemanticTerminal, SemanticChangeRejected, SemanticTargetUnavailable, sealComponentState,
   sealSemanticRejection, sendSemanticWrite, validationsFor, type SemanticAdmission,
@@ -19,6 +20,7 @@ export interface RelationInput {
   participations: { role: string; participant: unknown; position?: number }[];
   applicability?: string[];
   lifecycle?: Lifecycle;
+  evidence?: string;
 }
 
 export interface RelationChangeIntent {
@@ -33,6 +35,7 @@ export interface OccurrenceState {
   definition: string;
   lifecycle: Lifecycle;
   applicability: string[];
+  evidence?: string;
   participations: (Participation & { iri: string; node?: string })[];
 }
 
@@ -42,12 +45,34 @@ export interface ExactDefinition {
   lifecycle: Lifecycle;
   roles: RelationRoleDefinition[];
   roleKeys: Record<string, string>;
+  notation?: string;
+  workSubjectRole?: string;
 }
 
 export const roleIri = (definition: string, key: string): string => `${definition}/role/${key}`;
 
+/** Resolve the unique stored key through graph state, never a machine-local seed map.
+ * SKOS notation is an identifier independent of a preferred language label:
+ * https://www.w3.org/TR/skos-reference/#notations */
+export async function readDefinitionByKey(env: WorkActivationEnvironment, key: string,
+  canRead?: (definition: string) => Promise<boolean>): Promise<ExactDefinition | null> {
+  if (!/^[a-z][a-z0-9-]{0,63}$/.test(key)) throw new SemanticChangeRejected('invalid', 'invalid definition key');
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?definition ?head WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ?key a rv:DefinitionKey ; rv:keyDefinition ?definition ;
+      <${KEY_NOTATION}> ${lit(key)} . ?definition a rv:SemanticDefinition ; rv:definitionHead ?head }
+  } LIMIT 2`);
+  const rows = result.results?.bindings ?? [];
+  if (!rows.length) return null;
+  if (rows.length !== 1) throw new RevisionCorrupt('definition key is ambiguous');
+  if (canRead && !await canRead(rows[0]!.definition!.value)) return null;
+  const definition = await readExactDefinition(env, rows[0]!.head!.value);
+  if (!definition || definition.notation !== key) throw new RevisionCorrupt('definition key differs from retained state');
+  return definition;
+}
+
 /** Resolve an exact relation DefinitionRef from its immutable revision, never the current head. */
-export async function readExactDefinition(env: WorkActivationEnvironment, revision: string): Promise<ExactDefinition | null> {
+export async function readExactDefinition(env: WorkActivationEnvironment, revision: string,
+  canRead?: (definition: string) => Promise<boolean>): Promise<ExactDefinition | null> {
   checkedNativeIri(revision);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?definition ?manifest WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:DefinitionRevision ; rv:component ?definition ;
@@ -56,10 +81,13 @@ export async function readExactDefinition(env: WorkActivationEnvironment, revisi
   if (!rows.length) return null;
   if (rows.length !== 1) throw new RevisionCorrupt('definition revision is ambiguous');
   const definition = rows[0]!.definition!.value;
+  if (canRead && !await canRead(definition)) return null;
   const state = checkedStoredState(await readComponent(env, rows[0]!.manifest!.value, definition, PROFILES.definition));
   if (state.component !== 'definition') throw new RevisionCorrupt('definition revision names another component');
   if (state.kind !== 'relation') return null;
   return { revision, definition, lifecycle: state.lifecycle,
+    ...(state.notation ? { notation: state.notation } : {}),
+    ...(state.workSubjectRole ? { workSubjectRole: state.workSubjectRole } : {}),
     roles: state.roles.map((role: RelationRole) => ({ role: roleIri(definition, role.key),
       minParticipants: role.minParticipants, maxParticipants: role.maxParticipants, ordered: role.ordered })),
     roleKeys: Object.fromEntries(state.roles.map(role => [roleIri(definition, role.key), role.key])) };
@@ -67,6 +95,9 @@ export async function readExactDefinition(env: WorkActivationEnvironment, revisi
 
 export function canonicalRelation(definition: ExactDefinition, input: RelationInput): OccurrenceState {
   try {
+    if (input.evidence !== undefined && !/^https:\/\/[^\s<>"{}|\\^`]{1,2040}$/.test(input.evidence)) {
+      throw new InvalidRelationOccurrence('invalid relation evidence');
+    }
     const participations = checkedParticipations(definition.roles, input.participations.map(item => ({
       ...item, role: typeof item.role === 'string' ? roleIri(definition.definition, item.role) : item.role })));
     const externals = participations.filter(item => item.participant.kind === 'external').length;
@@ -74,7 +105,7 @@ export function canonicalRelation(definition: ExactDefinition, input: RelationIn
       throw new InvalidRelationOccurrence('occurrence footprint exceeds the command bound');
     }
     const key = (item: Participation) => JSON.stringify([item.role, item.position ?? -1, item.participant]);
-    return { definition: definition.revision, lifecycle: input.lifecycle ?? 'active',
+    return { ...(input.evidence === undefined ? {} : { evidence: input.evidence }), definition: definition.revision, lifecycle: input.lifecycle ?? 'active',
       applicability: checkedApplicability(input.applicability ?? []),
       participations: participations.sort((a, b) => key(a).localeCompare(key(b))).map(item => ({ ...item, iri: '' })) };
   } catch (error) {
@@ -86,7 +117,7 @@ export function canonicalRelation(definition: ExactDefinition, input: RelationIn
 export function relationChangeDigest(occurrence: string | undefined, expectedHead: string | null,
   state: OccurrenceState): string {
   return hash(JSON.stringify({ family: 'relation-change-v1', occurrence: occurrence ?? null, expectedHead,
-    definition: state.definition, lifecycle: state.lifecycle, applicability: state.applicability,
+    ...(state.evidence === undefined ? {} : { evidence: state.evidence }), definition: state.definition, lifecycle: state.lifecycle, applicability: state.applicability,
     participations: state.participations.map(({ role, participant, position }) =>
       ({ role, participant, ...(position === undefined ? {} : { position }) })) }));
 }
@@ -206,6 +237,8 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
         : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(occurrence)} ?anyP ?anyO } }`}
       ${active ? `GRAPH ${iri(GRAPHS.current)} { ${iri(definition.definition)} rv:definitionHead ${iri(definition.revision)} }
         GRAPH ${iri(GRAPHS.revisions)} { ${iri(definition.revision)} rv:lifecycle rv:Active }` : ''}
+      ${intent.admission.scope.startsWith('work:edit:') ? `GRAPH ${iri(GRAPHS.current)} {
+        ${iri(intent.admission.scope.slice('work:edit:'.length))} a <https://schema.org/CreativeWork> }` : ''}
       ${resources.map(ref => `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a ?refType } }`).join('\n')}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?revP ?revO } }`,
     receiptFields: `rv:operation ${iri(operation)} ; rv:component ${iri(occurrence)} ; rv:revision ${iri(revision)} ;

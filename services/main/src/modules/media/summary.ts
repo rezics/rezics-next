@@ -77,6 +77,37 @@ export interface SummaryBatch {
   cost: { graphQueries: number; mediaQueries: number; accessChecks: number; accessQueries: number };
 }
 
+/** One owner batch for public or explicitly admitted Collection names, including retained multilingual payloads. */
+async function collectionSummaryNames(env: WorkActivationEnvironment, references: readonly string[]) {
+  const names = new Map<string, LocalizedText>();
+  if (!references.length) return names;
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+    SELECT ?collection ?plain ?head ?payload WHERE {
+      VALUES ?collection { ${references.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?collection a rv:Collection ; rv:collectionState rv:Active ; schema:name ?plain .
+        OPTIONAL { ?collection rv:collectionNameHead ?head }
+        FILTER NOT EXISTS { ?collection rv:protectionHead ?protection } }
+      OPTIONAL { FILTER(BOUND(?head)) GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:CollectionNameRevision ;
+        rv:component ?collection ; rv:profilePayload ?payload } }
+    } LIMIT ${MAX_SUMMARY_BATCH + 1}`)).results?.bindings ?? [];
+  if (rows.length > MAX_SUMMARY_BATCH) throw new MediaUnavailable('Collection name batch exceeds its bound');
+  for (const row of rows) {
+    if (!row.collection || !row.plain || names.has(row.collection.value) || row.head && !row.payload) {
+      throw new MediaUnavailable('Collection name batch is ambiguous');
+    }
+    try {
+      const language = row.plain['xml:lang'] || 'en';
+      const name = row.head ? checkedCollectionName(JSON.parse(row.payload!.value) as LocalizedText)
+        : checkedCollectionName({ original: language, labels: { [language]: row.plain.value } });
+      if (name.labels[name.original] !== row.plain.value || row.head && name.original.toLowerCase() !== language.toLowerCase()) {
+        throw new Error('Collection name projection differs');
+      }
+      names.set(row.collection.value, name);
+    } catch { throw new MediaUnavailable('Collection name revision is invalid'); }
+  }
+  return names;
+}
+
 interface GraphRow { type: ResourceType; work: string | null; head: string | null;
   public: boolean; labels: Map<string, string>; localizedName?: LocalizedText }
 
@@ -389,9 +420,9 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   const semanticRefs = new Map([...special].filter(([, row]) =>
     row.type === 'character' || row.type === 'role' || row.type === 'resource')
     .map(([reference, row]) => [reference, row.type as 'character' | 'role' | 'resource']));
-  const privateCollections = [...special].filter(([, row]) => row.type === 'collection' && !row.public)
-    .map(([reference]) => reference);
-  const semanticResources = [...new Set([...semanticRefs.keys(), ...relationRefs, ...privateCollections])];
+  const collectionRefs = [...special].filter(([, row]) => row.type === 'collection').map(([reference]) => reference);
+  const semanticResources = [...new Set([...semanticRefs.keys(), ...relationRefs,
+    ...collectionRefs.filter(ref => !special.get(ref)!.public)])];
   let admittedSemantics = new Set<string>();
   if (semanticResources.length && reader.canReadSemantics) {
     cost.accessChecks += semanticResources.length;
@@ -411,11 +442,15 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   const admittedResources = new Map([...semanticRefs].filter(([reference]) => admittedSemantics.has(reference)));
   const semanticNames = await readSemanticResourceNames(env, admittedResources);
   if (admittedResources.size) cost.graphQueries++;
+  const collections = await collectionSummaryNames(env, collectionRefs.filter(ref => special.get(ref)!.public || admittedSemantics.has(ref)));
+  if (collectionRefs.length) cost.graphQueries++;
   for (const [reference, row] of special) {
     if (row.type === 'collection') {
-      if ((row.public || admittedSemantics.has(reference)) && selectName(row.labels, null)) {
-        readable.set(reference, row);
-      }
+      const name = collections.get(reference);
+      if (!name) continue;
+      row.localizedName = name;
+      row.labels = new Map(Object.entries(name.labels));
+      readable.set(reference, row);
       continue;
     }
     if (row.type === 'realm') {

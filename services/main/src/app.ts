@@ -64,6 +64,7 @@ import { globalRatingRoutes } from './routes/rating-global.ts';
 import { searchRoutes, type SearchRouteDependencies } from './routes/search.ts';
 import { searchGenerationRoutes } from './routes/search-generations.ts';
 import { relationRoutes } from './routes/relations.ts';
+import { resourceRelationRoutes } from './routes/resource-relations.ts';
 import { semanticRoutes } from './routes/semantic.ts';
 import { lexiconRoutes } from './routes/lexicon.ts';
 import { sourceRoutes } from './routes/sources.ts';
@@ -161,6 +162,11 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(reviewRoutes(work))
     .use(managedRealmRoutes(work))
     .use(studioRoutes(work));
+    .use(studioRoutes(work))
+    .use(realmAdminRoutes(work));
+    .use(realmAdminRoutes(work))
+    .use(resourceRelationRoutes(fuseki, work))
+    .use(memberReplyRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

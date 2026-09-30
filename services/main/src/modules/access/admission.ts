@@ -864,7 +864,7 @@ export class AccessAdmissionRegistry {
       // saved proof, rather than a newly selected alternative, decides dispatch.
       if (existing && authorityPath === 'represented-agent'
         && (request.action === 'work.create' && request.scope === 'work:create:root'
-          || request.action === 'work.edit' && existing.represented_representation_id)) {
+          || ['work.edit', 'relation.change', 'work.derive'].includes(request.action) && existing.represented_representation_id)) {
         if (existing.request_digest !== request.requestDigest
           || existing.acting_subject !== request.actingSubject
           || existing.authority_path !== authorityPath
@@ -968,12 +968,13 @@ export class AccessAdmissionRegistry {
         // Recommendation edits have their own durable action and receipt, while
         // inheriting the exact Work editor mandate and grant boundary.
         const authorityAction = request.action === 'package.recommendation.set'
+          || ['relation.change', 'work.derive'].includes(request.action) && request.scope.startsWith('work:edit:')
           ? 'work.edit' : request.action;
         if (request.action === 'work.create' && request.scope === 'work:create:root'
-          || request.action === 'work.edit' && /^work:edit:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(request.scope)) {
+          || authorityAction === 'work.edit' && /^work:edit:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(request.scope)) {
           if (subject.rows[0]?.kind !== 'agent') throw new AdmissionDenied('acting subject is not an Agent');
           const proof = await representedWorkProof(client, principalId, request.actingSubject,
-            request.action as 'work.create' | 'work.edit', request.scope);
+            authorityAction as 'work.create' | 'work.edit', request.scope);
           if (!proof) throw new AdmissionDenied('representation is not admitted');
           // Publishing invitations do not delegate administrator-only creation
           // kinds or imports. Controller/grant/group/role paths retain G-508's policy.
@@ -995,8 +996,8 @@ export class AccessAdmissionRegistry {
             groupGeneration = group?.groupGeneration ?? null;
             if (!group) {
               const role = await roleWorkProof(client, request.actingSubject,
-                request.action as 'work.create' | 'work.edit');
-              if (role && request.action === 'work.edit'
+                authorityAction as 'work.create' | 'work.edit');
+              if (role && authorityAction === 'work.edit'
                 && !await publicCatalogueWork(this.baselineGraph, request.scope.slice('work:edit:'.length))) {
                 throw new AdmissionDenied('Catalogue edit roles require a publicly readable Work');
               }
@@ -1211,7 +1212,7 @@ export class AccessAdmissionRegistry {
       }
       if (!baseline && row.authority_path === 'represented-agent'
         && (row.action === 'work.create' && row.scope_id === 'work:create:root'
-          || row.action === 'work.edit' && row.represented_representation_id)
+          || ['work.edit', 'relation.change', 'work.derive'].includes(row.action) && row.represented_representation_id)
         && !await selectedRepresentedWorkProof(client, row,
           principal.rows[0]!.enforcement_epoch, gateResult.rows[0]!.group_generation, this.baselineGraph)) {
         throw new AdmissionDenied('represented authority changed before claim');

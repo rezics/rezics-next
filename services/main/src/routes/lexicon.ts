@@ -7,7 +7,7 @@ import { readPresentationCurrent, readPresentationRevision } from '../modules/le
 import { renderRelation, type RelationRendering } from '../modules/lexicon/render.ts';
 import { LEXICON_LIMITS, PRESENTATION_PROFILE } from '../modules/lexicon/schema.ts';
 import { readerLanguages } from '../modules/display-language/select.ts';
-import { readExactDefinition } from '../modules/relation/change.ts';
+import { readDefinitionByKey, readExactDefinition } from '../modules/relation/change.ts';
 import { readCurrentComponent } from '../modules/semantic/change.ts';
 import {
   canReadSemantic,
@@ -154,6 +154,7 @@ export const relationRenderingSchema = t.Object({
 });
 
 export const openApiOperations = {
+  '/v1/lexicon/definitions/{key}': { get: { bearer: true } },
   '/v1/lexicon/presentations': {
     get: { bearer: true },
     post: { bearer: true, idempotencyKey: true },
@@ -189,6 +190,26 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     );
   };
   return new Elysia()
+    .get('/v1/lexicon/definitions/:key', {
+      params: t.Object({ key: t.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }) }),
+      query: t.Object({ actingSubject: native }, { additionalProperties: false }),
+      response: { 200: t.Object({ profile: t.Literal('relation-definition-key-v1'), key: t.String(),
+        definition: native, revision: native, lifecycle: t.String(), roles: t.Array(t.Unknown()),
+        workSubjectRole: t.Nullable(t.String()) }), ...authorizedReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        const principal = await authenticate(request);
+        const meaning = await readDefinitionByKey(work.environment, params.key,
+          definition => canReadSemantic(work.access, principal, query.actingSubject, definition));
+        if (!meaning || !await canReadSemantic(work.access, principal, query.actingSubject, meaning.definition)) {
+          return problem(404, 'definition_unavailable', 'Definition is unavailable');
+        }
+        return Response.json({ profile: 'relation-definition-key-v1', key: params.key,
+          definition: meaning.definition, revision: meaning.revision, lifecycle: meaning.lifecycle,
+          roles: meaning.roles.map(role => ({ ...role, key: meaning.roleKeys[role.role] })),
+          workSubjectRole: meaning.workSubjectRole ?? null }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return semanticError(error); }
+    })
     .post(
       '/v1/lexicon/presentations',
       {

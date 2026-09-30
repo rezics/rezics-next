@@ -5,7 +5,7 @@ import { FALLBACK_POLICY, MAX_SUMMARY_BATCH } from './summary.ts';
 import { targetBase, targetRef } from '../target/contract.ts';
 
 const resourceType = t.Union(['work', 'main-version', 'space', 'realm', 'concept', 'character',
-  'context', 'role', 'relation-definition', 'release', 'occurrence', 'realization', 'resource']
+  'context', 'role', 'relation-definition', 'release', 'occurrence', 'realization', 'resource', 'collection']
   .map(value => t.Literal(value)));
 const name = t.Object({ value: t.String(), language: t.String(),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]),

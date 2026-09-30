@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { GRAPHS, ID, IdempotencyConflict, PendingActivation, RV, WORK_SEMANTIC_TYPES, hash, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
+import { checkedDefinitionKey, definitionKeyIri, definitionKeyTriples, KEY_NOTATION } from '../lexicon/definition-key.ts';
 import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGeneration,
   familyReceiptIri, readComponent, readSemanticTerminal, SemanticChangeRejected, SemanticTargetUnavailable,
   sealComponentState, sealSemanticRejection, sendSemanticWrite, StaleSemanticHead, validationsFor,
@@ -43,12 +44,22 @@ export interface ResourceState {
 
 export interface RelationRole { key: string; minParticipants: number; maxParticipants: number; ordered: boolean }
 
+function checkedSubjectRole(value: unknown, roles: RelationRole[]): string {
+  if (typeof value !== 'string' || !roles.some(role => role.key === value && role.minParticipants === 1 && role.maxParticipants === 1)) {
+    fail('invalid', 'Work authority needs one required singleton role');
+  }
+  return value as string;
+}
 export interface DefinitionState {
   component: 'definition';
   kind: DefinitionKind;
   lifecycle: Lifecycle;
   successor: string | null;
   roles: RelationRole[];
+  /** Stable registry key, independent of allocated identity and labels. */
+  notation?: string;
+  /** One role supplies the Work whose editor may assert this relation. */
+  workSubjectRole?: string;
 }
 
 export type ComponentState = ResourceState | DefinitionState;
@@ -130,7 +141,7 @@ export function checkedComponentState(input: unknown): ComponentInput {
       properties: checked.sort((a, b) => keyOf(a).localeCompare(keyOf(b))), lifecycle: lifecycle as Lifecycle };
   }
   if (row.component === 'definition') {
-    if (Object.keys(row).some(key => !['component', 'kind', 'lifecycle', 'successor', 'roles'].includes(key))) {
+    if (Object.keys(row).some(key => !['component', 'kind', 'lifecycle', 'successor', 'roles', 'notation', 'workSubjectRole'].includes(key))) {
       fail('invalid', 'definition state has unsupported fields');
     }
     if (!DEFINITION_KINDS.includes(row.kind as DefinitionKind)) fail('invalid', 'definition kind is invalid');
@@ -159,7 +170,9 @@ export function checkedComponentState(input: unknown): ComponentInput {
     }).sort((a, b) => a.key.localeCompare(b.key));
     if (new Set(checkedRoles.map(role => role.key)).size !== checkedRoles.length) fail('invalid', 'role repeats');
     return { component: 'definition', kind: row.kind as DefinitionKind, lifecycle: lifecycle as Lifecycle,
-      successor: successor as string | null, roles: checkedRoles };
+      successor: successor as string | null, roles: checkedRoles,
+      ...(row.notation === undefined ? {} : { notation: checkedDefinitionKey(row.notation) }),
+      ...(row.workSubjectRole === undefined ? {} : { workSubjectRole: checkedSubjectRole(row.workSubjectRole, checkedRoles) }) };
   }
   return fail('invalid', 'component is invalid');
 }
@@ -253,6 +266,10 @@ export async function readCurrentComponent(env: WorkActivationEnvironment, targe
     .map(row => `<${row.p!.value}> ${term(row.o!)}`));
   if (actual.size !== expected.size || [...expected].some(item => !actual.has(item))) {
     throw new RevisionCorrupt('semantic projection differs from its retained head');
+  }
+  if (state.component === 'definition' && state.notation) {
+    const key = await env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} { ${definitionKeyTriples(target, state.notation)} } }`);
+    if (!key.boolean) throw new RevisionCorrupt('lexicon key differs from retained definition state');
   }
   return { head: rows[0].head.value, manifest: rows[0].manifest.value, state };
 }
@@ -368,6 +385,14 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     } } LIMIT 1`);
     if (overlap.results?.bindings.length) fail('reserved-owner', 'semantic type already belongs to another component');
   }
+  if (current?.state.component === 'definition' && state.component === 'definition'
+    && current.state.notation !== undefined && current.state.notation !== state.notation) fail('invalid', 'a definition keeps its registry key');
+  if (state.component === 'definition' && state.notation) {
+    const occupied = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+      ?key a rv:DefinitionKey ; rv:keyDefinition ?other ; <${KEY_NOTATION}> ${lit(state.notation)} .
+      FILTER(?other != ${iri(target)}) } }`);
+    if (occupied.boolean) fail('invalid', 'definition key is already registered');
+  }
   const prior = current?.state.component === 'resource' ? current.state.properties : [];
   const addedPredicates = state.component === 'resource' ? [...new Set(state.properties
     .map(property => property.predicate).filter(predicate => !prior.some(property => property.predicate === predicate)))] : [];
@@ -401,16 +426,22 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
       { role: state.component === 'resource' ? 'resource' : 'definition', focus: [target] },
       { role: 'revision', focus: [revision] }]),
     ...await valueValidations(env, rdf),
+    ...(state.component === 'definition' && state.notation
+      ? await validationsFor(env, 'definition-key-v1', [{ role: 'key', focus: [definitionKeyIri(target)] }]) : []),
   ];
   await sendSemanticWrite(env, {
     receipt, digest, admission: intent.admission, validations,
     deletes: old.length ? `GRAPH ${iri(GRAPHS.current)} { ${old.map(triple => `${iri(target)} ${triple} .`).join('\n')} }` : '',
-    inserts: `GRAPH ${iri(GRAPHS.current)} { ${next.map(triple => `${iri(target)} ${triple} .`).join('\n')} }
+    inserts: `GRAPH ${iri(GRAPHS.current)} { ${next.map(triple => `${iri(target)} ${triple} .`).join('\n')}
+      ${state.component === 'definition' && state.notation ? definitionKeyTriples(target, state.notation) : ''} }
       GRAPH ${iri(GRAPHS.revisions)} { ${anchor}
         ${rdf.flatMap(item => item.node ? item.node.triples.map(triple => `${triple} .`) : []).join('\n')} }`,
     where: `${modelGenerationHeadGuard(generation)}
       ${intent.target ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(target)} rv:protectionHead ?protection } }` : ''}
+      ${state.component === 'definition' && state.notation ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ?key a rv:DefinitionKey ; rv:keyDefinition ?other ; <${KEY_NOTATION}> ${lit(state.notation)} .
+        FILTER(?other != ${iri(target)}) } }` : ''}
       ${current ? `GRAPH ${iri(GRAPHS.current)} { ${old.map(triple => `${iri(target)} ${triple} .`).join('\n')} }`
         : workHead ? `GRAPH ${iri(GRAPHS.current)} {
             ${iri(target)} a <https://schema.org/CreativeWork> ; rv:head ${iri(intent.expectedHead!)} . }
@@ -447,6 +478,13 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     const now = await readCurrentComponent(env, target, state.component).catch(() => null);
     if (now && now.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, target, state);
     await assertPredicatesUnowned(env, target, addedPredicates);
+  }
+  if (state.component === 'definition' && state.notation) {
+    const sealed = await sealSemanticRejection(env, receipt, digest, intent.admission, 'unavailable-reference',
+      `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ?key a rv:DefinitionKey ; rv:keyDefinition ?other ; <${KEY_NOTATION}> ${lit(state.notation)} .
+        FILTER(?other != ${iri(target)}) } }`);
+    if (sealed) return checkedResult(env, checkedSemanticTerminal(sealed, intent.admission, digest), intent, true);
   }
   if (references.length) {
     const sealed = await sealSemanticRejection(env, receipt, digest, intent.admission, 'unavailable-reference',
