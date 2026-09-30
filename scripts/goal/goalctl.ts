@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
-export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'luna' | 'astra' | 'astra-codex' | 'grok' | 'cursor';
+export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
 export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
@@ -48,42 +48,41 @@ export const FABLE_MODEL = 'claude-fable-5-1';
 // Sonnet runs through Claude Code on the same subscription, so the Claude usage gate applies to it too.
 // Claude Code 2.1.284 is the first release here that accepts claude-sonnet-5-5 (2.1.283 rejected it).
 export const SONNET_MODEL = process.env.GOAL_SONNET_MODEL ?? 'claude-sonnet-5-5';
-export const CODEX_MODEL = 'gpt-6-sol';
+// GPT-6.1 Sol replaced GPT-6 Sol and GPT-6 Astra on 2026-09-30 (maintainer).
+export const CODEX_MODEL = 'gpt-6.1-sol';
 export const LUNA_MODEL = 'gpt-6-luna';
-export const ASTRA_MODEL = 'gpt-6-astra';
 export const GROK_MODEL = 'grok-4.7';
 const ENGINE_EFFORTS: Record<Engine, string[]> = {
   claude: ['low', 'medium', 'high', 'xhigh', 'max'],
   sonnet: ['low', 'medium', 'high', 'xhigh', 'max'],
   fable: ['low', 'medium', 'high', 'xhigh', 'max'],
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  'codex-1': ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   luna: ['low', 'medium', 'high', 'xhigh', 'max'],
-  astra: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
-  'astra-codex': ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   grok: ['low', 'medium', 'high'],
   // Cursor Agent selects Grok 4.7 through per-effort model IDs (grok-4.7-<effort>).
   cursor: ['low', 'medium', 'high', 'xhigh'],
 };
 const ENGINES = Object.keys(ENGINE_EFFORTS) as Engine[];
 export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undefined) ?? 'claude';
-// GPT-6 Sol and Luna use the default Codex account; GPT-6 Astra has its own account in a separate
-// CODEX_HOME (the `codex-1` wrapper sets the same directory). `astra-codex` runs Astra on the default
-// account, so Astra work can continue on whichever account still has usage.
+// `codex` (Sol) and `luna` use the default Codex account; `codex-1` runs Sol on the second account in a
+// separate CODEX_HOME (the `codex-1` wrapper sets the same directory), so Sol work can continue on
+// whichever account still has usage.
 export const CODEX_HOME = process.env.GOAL_CODEX_HOME ?? join(homedir(), '.codex');
-export const ASTRA_HOME = process.env.GOAL_ASTRA_CODEX_HOME ?? join(homedir(), '.codex-1');
+export const CODEX_1_HOME = process.env.GOAL_CODEX_1_HOME ?? join(homedir(), '.codex-1');
 const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
-const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, fable: FABLE_MODEL, codex: CODEX_MODEL, luna: LUNA_MODEL, astra: ASTRA_MODEL, 'astra-codex': ASTRA_MODEL,
+const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, fable: FABLE_MODEL, codex: CODEX_MODEL, 'codex-1': CODEX_MODEL, luna: LUNA_MODEL,
   grok: GROK_MODEL, cursor: `${GROK_MODEL} (Cursor)` };
 const modelOf = (engine: Engine): string => MODELS[engine];
 const effortsOf = (engine: Engine): string[] => ENGINE_EFFORTS[engine] ?? [];
 const isCodex = (engine: Engine): boolean =>
-  engine === 'codex' || engine === 'luna' || engine === 'astra' || engine === 'astra-codex';
+  engine === 'codex' || engine === 'codex-1' || engine === 'luna';
 const isClaudeCode = (engine: Engine): boolean => engine === 'claude' || engine === 'sonnet' || engine === 'fable';
 // Process name that /proc/<pid>/cmdline carries for a live worker of each engine.
 const programOf = (engine: Engine): string =>
   isCodex(engine) ? 'codex' : engine === 'cursor' ? 'cursor-agent' : isClaudeCode(engine) ? 'claude' : engine;
 const engineEnv = (engine: Engine): Record<string, string> =>
-  engine === 'astra' ? { CODEX_HOME: ASTRA_HOME } : isCodex(engine) ? { CODEX_HOME } : {};
+  engine === 'codex-1' ? { CODEX_HOME: CODEX_1_HOME } : isCodex(engine) ? { CODEX_HOME } : {};
 const HOLDING: State[] = ['running', 'exited', 'conflict', 'merged', 'stopped'];
 
 export function parseBrief(text: string): Brief {
@@ -466,13 +465,15 @@ function currentUsage(): UsageReport {
 
 // Rollouts live under sessions/YYYY/MM/DD/; a resumed session keeps appending to its first day's file,
 // so look at the newest few days and take the most recently written rollout.
-function newestRollout(home: string): string | undefined {
+// Rollouts of the last three session days, newest first. A rollout records rate limits only after its
+// first model response, so the newest one may carry none (2026-09-30: an idle session hid 87% used).
+function recentRollouts(home: string): string[] {
   const children = (dir: string): string[] => {
     try { return readdirSync(dir).sort().reverse().map(name => join(dir, name)); } catch { return []; }
   };
   const days = children(join(home, 'sessions')).flatMap(children).flatMap(children).slice(0, 3);
   const files = days.flatMap(day => children(day).filter(file => file.endsWith('.jsonl')));
-  return files.map(file => ({ file, at: statSync(file).mtimeMs })).sort((a, b) => b.at - a.at)[0]?.file;
+  return files.map(file => ({ file, at: statSync(file).mtimeMs })).sort((a, b) => b.at - a.at).map(item => item.file);
 }
 
 function tail(file: string, bytes: number): string {
@@ -489,12 +490,15 @@ function tail(file: string, bytes: number): string {
 
 function codexAccounts(): AccountUsage[] {
   const accounts: AccountUsage[] = [
-    { account: 'codex', home: CODEX_HOME, engines: ['codex', 'luna', 'astra-codex'] },
-    { account: 'codex-1', home: ASTRA_HOME, engines: ['astra'] },
+    { account: 'codex', home: CODEX_HOME, engines: ['codex', 'luna'] },
+    { account: 'codex-1', home: CODEX_1_HOME, engines: ['codex-1'] },
   ];
   return accounts.map(account => {
-    const file = newestRollout(account.home);
-    return file ? { ...account, ...parseCodexUsage(tail(file, 512 * 1024), Date.now()) } : account;
+    for (const file of recentRollouts(account.home)) {
+      const usage = parseCodexUsage(tail(file, 512 * 1024), Date.now());
+      if (usage.used !== undefined) return { ...account, ...usage };
+    }
+    return account;
   });
 }
 

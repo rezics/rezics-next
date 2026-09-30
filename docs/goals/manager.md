@@ -36,8 +36,8 @@ third-party account, a payment or a product decision that changes the outcome.
 
 ## Standing directions
 
-Maintainer directions of 2026-09-27, revised 2026-09-29. They bind until the
-maintainer changes them.
+Maintainer directions of 2026-09-27, revised 2026-09-29 and 2026-09-30. They
+bind until the maintainer changes them.
 
 1. **Outcome.** Make REZICS production-ready as the [Goal](../../GOAL.md)
    describes, by best practice. The maintainer wants the manager's own judgment
@@ -58,20 +58,18 @@ maintainer changes them.
    (`goalctl` enforces it through `WEEK_CAP`). Never let the 5-hour window run
    out: the manager is also Claude, and if it hits the limit, the Goal stops
    until the window resets.
-4. **Other accounts run until exhausted.** The Codex account (GPT-6 Sol and Luna),
-   the Astra account (`codex-1`), the Grok CLI and Cursor Agent (Grok 4.7) have
-   no reserve to protect. Use them for whatever they do well until they run
-   out; the Grok CLI and Cursor are two separate quotas and two full lanes of
-   feature work, frontend included. On 2026-09-29 the maintainer asked for every
-   reset credit on both Codex accounts to be spent within 24 hours, at the best
-   value per unit: reset an account only when it hits its limit, never early,
-   and never burn usage on low-value work. GPT-6 Astra runs on both accounts. The Astra account has usage-limit reset
-   credits; use one when Astra is exhausted and still the best choice for the
-   remaining work.
-5. **Human-role agents.** Opus 5.5, GPT-6 Astra and GPT-6 Sol can take the human
-   role: they may challenge a brief, correct documentation and process in their
-   area, and propose a re-plan. Sonnet 5.5, GPT-6 Luna and Grok 4.7 carry out
-   briefs and report problems instead of changing process.
+4. **Other accounts run out within their cycle** (2026-09-30). The two Codex
+   accounts (default and `codex-1`), the Grok CLI and Cursor Agent (Grok 4.7)
+   have no reserve to protect. GPT-6.1 Sol replaces GPT-6 Sol and the retired
+   GPT-6 Astra on both Codex accounts. Usage-limit reset credits are no longer
+   used: spend each account within its weekly cycle so that it ends near zero
+   at its reset, and push the Goal as far toward completion as this cycle
+   allows, without burning usage on low-value work. The Grok CLI and Cursor are
+   two separate quotas and two full lanes of feature work, frontend included.
+5. **Human-role agents.** Opus 5.5 and GPT-6.1 Sol can take the human role: they
+   may challenge a brief, correct documentation and process in their area, and
+   propose a re-plan. Sonnet 5.5, GPT-6 Luna and Grok 4.7 carry out briefs and
+   report problems instead of changing process.
 6. **Boundaries.** Work locally and commit on `main`; do not push, deploy to
    production, provision paid services or send repository data to other services
    unless the maintainer asks. Deployment is the next phase: this Goal prepares
@@ -88,9 +86,8 @@ maintainer changes them.
 | `claude` | Claude Opus 5.5 | Claude subscription shared with the manager; 5-hour and 7-day windows from the status line (`goalctl usage`) | `low`–`max` |
 | `sonnet` | Claude Sonnet 5.5 | Same subscription and gate as `claude`; measure its draw on both windows in the first two hours | `low`–`max` |
 | `fable` | Claude Fable 5.1 | Not used (maintainer, 2026-09-28): it shares the Claude 5-hour session limit with Opus (both hit it together) and does less than Opus 5.5 | `low`–`max` |
-| `astra` | GPT-6 Astra | Codex account in `~/.codex-1` (the `codex-1` wrapper); weekly window from its session rollouts | `low`–`ultra` |
-| `astra-codex` | GPT-6 Astra | Default Codex account in `~/.codex`, shared with `codex` and `luna` | `low`–`ultra` |
-| `codex` | GPT-6 Sol | Default Codex account in `~/.codex`; weekly window | `low`–`ultra` |
+| `codex` | GPT-6.1 Sol | Default Codex account in `~/.codex`; weekly window from its session rollouts | `low`–`ultra` |
+| `codex-1` | GPT-6.1 Sol | Second Codex account in `~/.codex-1` (the `codex-1` wrapper); weekly window | `low`–`ultra` |
 | `luna` | GPT-6 Luna | Same account as `codex` | `low`–`max` |
 | `grok` | Grok 4.7 | Grok Build CLI; no readout, quota errors show exhaustion | `low`–`high` |
 | `cursor` | Grok 4.7 | Cursor Agent, a separate quota from the Grok CLI; no readout | `low`–`xhigh` |
@@ -100,17 +97,15 @@ maintainer changes them.
 Besides workers, the manager can use in-session subagents (the Agent tool) for
 research and reading that would otherwise fill its own context, and read-only
 headless calls for a second opinion, such as
-`codex-1 exec -m gpt-6-astra -c model_reasoning_effort=xhigh -s read-only -C <dir> "<question>"`
+`codex-1 exec -m gpt-6.1-sol -c model_reasoning_effort=xhigh -s read-only -C <dir> "<question>"`
 or a Grok X/web lookup from an empty temporary directory.
 
 ### Usage strategy
 
-The manager revises this strategy from measurements. As of 2026-09-29: Claude 7d
-was 2% used and resets on 2026-10-05 at 23:00 CST (weekly at the same time);
-Codex was 87% used (reset about 2026-10-04); `codex-1` was 97% used (reset about
-2026-10-05). Two Astra reset credits remain, expiring 2026-10-05 and 2026-10-23:
-spend the first at the start of this Goal, since it expires unused otherwise, on
-the import-pipeline and scale design review.
+The manager revises this strategy from measurements. As of 2026-09-30 13:00 CST:
+Claude 7d was 5% used and resets on 2026-10-05 at 23:00 CST (weekly at the same
+time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
+`codex-1` 45% used (reset about 2026-10-06 18:40). Reset credits are not used.
 
 - **Measured ratio (2026-09-28).** A full 5-hour window is about 15% of the
   Claude week: the first 96 minutes moved the 5-hour window 32 points and the
@@ -120,7 +115,7 @@ the import-pipeline and scale design review.
   three Opus workers, extra width goes to Sonnet, then to the other accounts.
 - **Model cost matches the task** (maintainer, 2026-09-29). Simple translation,
   catalog completion and mechanical edits go to cheap models (Luna at `max`,
-  Grok or Cursor); Astra, Opus and Sonnet are for design, copywriting,
+  Grok or Cursor); Sol, Opus and Sonnet are for design, copywriting,
   architecture, review and hard debugging.
 - **Host memory.** About seven workers exhausted this machine's memory on
   2026-09-28 (Docker, dev servers, Storybook, type checkers and Playwright);
@@ -139,11 +134,10 @@ the import-pipeline and scale design review.
   wide reading and research to subagents or scouts, keep checkpoints short and
   let compaction happen instead of rereading large files.
 - **Other accounts.** Spend them so that they end near zero at their resets;
-  work Claude cannot fit goes to them first. When one reports exhaustion,
-  move its queued work to another engine (`goalctl resume <id> --engine <e> --fresh`).
-- **Astra reset credits.** Run `codex-1` interactively (for example in a tmux
-  window), open `/usage` and choose the usage limit reset. The same menu shows
-  the remaining credits. Record each use in the plan.
+  work Claude cannot fit goes to them first. Balance Sol work between `codex`
+  and `codex-1` by what each has left before its reset. When one reports
+  exhaustion, move its queued work to another engine
+  (`goalctl resume <id> --engine <e> --fresh`).
 - **Survival.** If the manager could still be cut off, for example by a limit or
   a crash, consider a watchdog: a tmux session plus a scheduled check that
   resumes the manager after the reset. Workers already survive a manager restart.
@@ -155,12 +149,12 @@ Observations so far, to be revised with evidence:
 - **Opus 5.5.** Strongest here at frontend and UI judgment and whole-feature
   work; `xhigh` for architecture, first templates and hard design, `high` or
   `medium` for work that follows a verified template.
-- **GPT-6 Astra.** Frontier reasoning: architecture and code review, UX critique,
-  hard debugging, audits such as the documentation-to-code sweep, and hard
-  backend design.
-- **GPT-6 Sol.** Workhorse for backend changes, tests and repairs. The backend
-  phase used `high` for template-following work and `xhigh` for schemas,
-  authority, erasure and recovery.
+- **GPT-6.1 Sol.** Replaced GPT-6 Sol and GPT-6 Astra on 2026-09-30; its first
+  tasks are the ones the previous manager left unfinished (G-432, G-433, G-435,
+  G-486). Its predecessors: GPT-6 Sol was the workhorse for backend changes,
+  tests and repairs (`high` for template-following work, `xhigh` for schemas,
+  authority, erasure and recovery); GPT-6 Astra did architecture and code
+  review, UX critique, hard debugging and audits. Record where 6.1 matches them.
 - **GPT-6 Luna.** Bounded mechanical work. At `max` it gave complete handoffs; at
   `high` and `xhigh` it more often returned partial ones.
 - **Grok 4.7.** Eight tasks through the Grok CLI and Cursor in the frontend

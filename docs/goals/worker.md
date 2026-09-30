@@ -8,10 +8,10 @@ this page owns what a worker does between start and handoff.
 
 ## Judgment
 
-Opus 5.5, GPT-6 Astra and GPT-6 Sol workers may take the human role within
-their task: when the brief, a document or a practice is wrong for the need,
-say so, fix what lies in your claim (including documentation it covers) and
-propose the rest in the handoff. Documentation records practice to consult,
+Opus 5.5 and GPT-6.1 Sol workers may take the human role within their task:
+when the brief, a document or a practice is wrong for the need, say so, fix
+what lies in your claim (including documentation it covers) and propose the
+rest in the handoff. Documentation records practice to consult,
 not rules. GPT-6 Luna and Grok 4.7 workers follow the brief and report such
 problems as blockers or proposed tasks instead of changing process.
 

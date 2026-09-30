@@ -165,21 +165,21 @@ describe('goalctl runtime policy', () => {
       '--session-id', 's', '-n', 'g-042']));
   });
 
-  test('pins GPT-6 Sol and the reasoning effort for Codex workers in their worktree', () => {
+  test('pins GPT-6.1 Sol and the reasoning effort for Codex workers in their worktree', () => {
     const [program, args] = launchCommand({ id: 'G-081', effort: 'xhigh', session: '', prompt: 'p', resume: false,
       engine: 'codex', worktree: '/w', lastMessage: '/r/last.md' });
     expect(program).toBe('codex');
-    expect(args).toEqual(expect.arrayContaining(['exec', '-m', 'gpt-6-sol', '-c', 'model_reasoning_effort=xhigh',
+    expect(args).toEqual(expect.arrayContaining(['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=xhigh',
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', '/r/last.md', '-C', '/w']));
     expect(launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'codex' })[1]
       .slice(0, 3)).toEqual(['exec', 'resume', 't']);
   });
 
-  test('runs GPT-6 Astra through Codex with the same flags; its account is chosen by environment', () => {
+  test('runs Sol on the second Codex account with the same flags; its account is chosen by environment', () => {
     const [program, args] = launchCommand({ id: 'G-101', effort: 'max', session: '', prompt: 'p', resume: false,
-      engine: 'astra', worktree: '/w', lastMessage: '/r/a.md' });
+      engine: 'codex-1', worktree: '/w', lastMessage: '/r/a.md' });
     expect(program).toBe('codex');
-    expect(args).toEqual(expect.arrayContaining(['-m', 'gpt-6-astra', '-c', 'model_reasoning_effort=max', '-C', '/w']));
+    expect(args).toEqual(expect.arrayContaining(['-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=max', '-C', '/w']));
   });
 
   test('runs Grok 4.7 through Cursor Agent with the effort in the model ID', () => {
@@ -209,7 +209,8 @@ describe('goalctl runtime policy', () => {
     expect(validateBrief(brief('claude', 'max'))).toEqual([]);
     expect(validateBrief(brief('fable', 'max'))).toEqual([]);
     expect(validateBrief(brief('sonnet', 'max'))).toEqual([]);
-    expect(validateBrief(brief('astra-codex', 'ultra'))).toEqual([]);
+    expect(validateBrief(brief('codex-1', 'ultra'))).toEqual([]);
+    expect(validateBrief(brief('astra', 'high')).join()).toContain('engine must be one of');
     expect(validateBrief(brief('cursor', 'xhigh'))).toEqual([]);
     expect(validateBrief(brief('luna', 'ultra')).join()).toContain('luna effort');
     expect(validateBrief(brief('grok', 'xhigh')).join()).toContain('grok effort');

@@ -27,7 +27,7 @@ run by the manager from the main checkout:
 | `status` / `usage` | Live workers, elapsed time and the usage of every account. |
 | `test <task test args>` / `slot -- <cmd>` | Runs a check inside one of the shared QA slots. |
 
-Engines are `claude`, `astra`, `codex`, `luna`, `grok` and `cursor`; the
+Engines are `claude`, `sonnet`, `fable`, `codex`, `codex-1`, `luna`, `grok` and `cursor`; the
 [charter](manager.md#resources) lists their models and accounts; the
 [`goalctl` launcher](../../scripts/goal/goalctl.ts) owns their executable commands.
 A brief without `engine` runs on `claude` (`GOAL_ENGINE` changes the default).
@@ -48,7 +48,7 @@ machine-checked:
 ---
 id: G-101
 title: Accounts admin user search
-engine: claude                        # claude | astra | codex | luna | grok | cursor
+engine: claude                        # claude | sonnet | codex | codex-1 | luna | grok | cursor
 effort: xhigh
 cases: []                             # acceptance IDs such as IAM02, when the task has them
 paths: [apps/accounts/**, packages/ui/src/data-table/**]
@@ -90,7 +90,7 @@ review; workers propose out-of-scope work instead of doing it.
   advises widening Claude work. A snapshot older than 30 minutes is unknown;
   a manager turn refreshes it.
 - Codex accounts report their weekly window in their session rollouts, which
-  goalctl reads from `~/.codex` (`codex`, `luna`) and `~/.codex-1` (`astra`). An
+  goalctl reads from `~/.codex` (`codex`, `luna`) and `~/.codex-1` (`codex-1`). An
   exhausted account refuses dispatch for its engines.
 - Grok and Cursor have no readout; a quota error in a worker's output means that
   engine is exhausted for now.
