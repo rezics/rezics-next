@@ -22,7 +22,7 @@ for this system's jobs.
 - **Releases.** A stable tag sends one GitHub OIDC request to the gateway, which
   runs fixed, pre-registered Nomad jobs: image build, database release,
   maintenance cutover behind an HTTP 503 fallback, then API and worker rollout.
-  Web and Accounts are Cloudflare Workers released from GitHub's protected
+  Web, Accounts and about are Cloudflare Workers released from GitHub's protected
   `production` environment, outside the Nomad graph.
 
 Proposed placement, to confirm by measurement when deploying:
@@ -31,10 +31,10 @@ Proposed placement, to confirm by measurement when deploying:
 | --- | --- | --- |
 | Fuseki (TDB2, Lucene) and Main | B | Main is Fuseki's only client and issues several graph calls per request; keep them on one host. |
 | PostgreSQL for Content, Account, Access and operations | B | Separate databases and roles per owner, with continuous WAL archiving. |
-| Account and Content services | A or B | Decide from measured latency over WireGuard. |
+| Account service | A or B | Decide from measured latency over WireGuard; Content runs inside Main on B. |
 | Imports, index rebuilds, restore drills | B, as batch jobs | They read and write the data volumes. |
 | Media and snapshots | Cloudflare R2 | `MAIN_S3_*` already speaks S3. |
-| Web and Accounts | Cloudflare Workers | Authenticated private calls to Main and Account through the Tunnel. |
+| Web, Accounts and about | Cloudflare Workers | Web and Accounts make authenticated private calls through the Tunnel; about serves public pages and its notify form. |
 | Telemetry | SigNoz | Services export OTLP; no separate error tracker. |
 
 ## Open decision: NixOS and Nomad
@@ -62,8 +62,11 @@ Settle this when the deployment phase starts. Planning view of 2026-09-29:
 
 The production-readiness Goal leaves deployment as operations work:
 
-- OCI images with pinned digests for Main, Account, Content, the workers and the
-  Fuseki bundle; web and Accounts Worker builds with a production environment.
+- OCI images with pinned digests for Main, its relay and initialization job,
+  Account, the migration job and the Fuseki bundle; Content runs in Main, not
+  a separate HTTP service. Web, Accounts and about build as production Workers.
+  The [release runbook](release.md) covers local builds, schema checks, migration,
+  rollout, rollback and edge pauses; registry publication belongs to deployment.
 - Configuration only through the validated environment specs, with production
   examples and no development defaults that could reach production.
 - Migrations runnable as their own job before a rollout; readiness endpoints that

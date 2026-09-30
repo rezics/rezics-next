@@ -20,6 +20,7 @@ import { accountSettingsApi } from './account-settings.ts';
 import { displayPreferencesApi } from './display-preferences.ts';
 import { emailChangeApi } from './email-change.ts';
 import { notificationDigestApi } from './notification-digest.ts';
+import { accountSchemaReady } from './schema-ready.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
@@ -214,7 +215,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       () => ({ status: 'ok' as const }))
     .get('/health/ready', {
       response: {
-        200: t.Object({ status: t.Literal('ready') }),
+        200: t.Object({ status: t.Literal('ready'), storage: t.Literal('ready'), schemaHead: t.Optional(t.String()) }),
         503: t.Object({ status: t.Literal('unavailable') }),
       },
     }, async ({ status }) => {
@@ -222,10 +223,13 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       // readiness reports unavailable within two seconds instead of hanging.
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await Promise.race([pool.query('SELECT 1'), new Promise((_, reject) => {
+        const schema = await Promise.race([accountSchemaReady(pool).then(async schema => {
+          await pool.query('SELECT 1');
+          return schema;
+        }), new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error('readiness timeout')), 2_000);
         })]);
-        return { status: 'ready' as const };
+        return { status: 'ready' as const, ...schema };
       } catch {
         return status(503, { status: 'unavailable' as const });
       } finally { clearTimeout(timer); }

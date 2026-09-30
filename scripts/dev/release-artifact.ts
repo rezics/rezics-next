@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync,
   renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { Pool } from 'pg';
+import { migrateOwners } from '../ops/migrate.ts';
 import { parseOptions, type StackOptions } from './config.ts';
 import { installRelease } from './install.ts';
 import { assertReleasePins, releaseDigest, releaseManifest } from './release-manifest.ts';
@@ -11,11 +11,14 @@ import { assertReleasePins, releaseDigest, releaseManifest } from './release-man
 const root = resolve(import.meta.dir, '../..');
 const releaseHome = join(root, '.temp/releases');
 const migrationDirectories = ['services/main/migrations/access',
-  'services/main/migrations/relay', 'services/content/migrations'] as const;
+  'services/main/migrations/relay', 'services/content/migrations', 'services/account/migrations'] as const;
 const inputs = ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml', 'package.json',
+  'infra/release/Dockerfile',
   '.yarnrc.yml', 'yarn.lock',
   // Main imports this adapter even when local fixture fetching is disabled.
-  'scripts/dev/seed/open-library-fixtures.ts'] as const;
+  'scripts/dev/seed/open-library-fixtures.ts', 'scripts/ops/migrate.ts',
+  'scripts/ops/production-env.ts', 'apps/web/features/config/env.ts',
+  'apps/accounts/features/config/env.ts'] as const;
 
 interface ArtifactManifest {
   schema: 'rezics-release-artifact-v1';
@@ -152,79 +155,11 @@ export function verifyReleaseArtifact(path: string): { digest: string; manifest:
   return { digest, manifest };
 }
 
-async function migrateTracked(url: string, artifact: string, directory: string): Promise<string[]> {
-  const pool = new Pool({ connectionString: url, max: 1 });
-  const applied: string[] = [];
-  try {
-    for (const file of readdirSync(join(artifact, directory)).filter(name => name.endsWith('.sql')).sort()) {
-      const key = `${directory}/${file}`;
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query(`CREATE TABLE IF NOT EXISTS public.rezics_local_migration (
-          name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-        const done = await client.query('SELECT 1 FROM public.rezics_local_migration WHERE name = $1', [key]);
-        if (!done.rowCount) {
-          await client.query(readFileSync(join(artifact, key), 'utf8'));
-          await client.query('INSERT INTO public.rezics_local_migration (name) VALUES ($1)', [key]);
-          applied.push(key);
-        }
-        await client.query('COMMIT');
-      } catch (error) { await client.query('ROLLBACK'); throw error; }
-      finally { client.release(); }
-    }
-  } finally { await pool.end(); }
-  return applied;
-}
-
-async function migrateContentFromArtifact(url: string, artifact: string): Promise<string[]> {
-  const directory = join(artifact, 'services/content/migrations');
-  const files = readdirSync(directory).filter(name => name.endsWith('.sql')).sort();
-  const pool = new Pool({ connectionString: url, max: 1 });
-  const client = await pool.connect();
-  const applied: string[] = [];
-  try {
-    await client.query('BEGIN');
-    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-content-schema', 0))");
-    await client.query('CREATE SCHEMA IF NOT EXISTS content');
-    await client.query(`CREATE TABLE IF NOT EXISTS content.schema_migration (
-      version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-    const history = (await client.query<{ version: number }>(
-      'SELECT version FROM content.schema_migration ORDER BY version')).rows.map(row => row.version);
-    const versions = files.map(file => Number(file.slice(0, 3)));
-    if (files.some(file => !/^\d{3}_[a-z0-9_]+\.sql$/.test(file))
-      || versions.some((version, index) => version <= (versions[index - 1] ?? 0))
-      || history.some((version, index) => version !== versions[index])) {
-      throw new Error('Content artifact migration history differs');
-    }
-    for (const file of files.slice(history.length)) {
-      const version = Number(file.slice(0, 3));
-      await client.query(readFileSync(join(directory, file), 'utf8'));
-      await client.query('INSERT INTO content.schema_migration(version) VALUES ($1)', [version]);
-      applied.push(`content:${version}`);
-    }
-    await client.query('COMMIT');
-  } catch (error) { await client.query('ROLLBACK'); throw error; }
-  finally { client.release(); await pool.end(); }
-  return applied;
-}
-
-async function migrateArtifactOwners(apps: Record<string, string>, artifact: string): Promise<string[]> {
-  const applied = [
-    ...await migrateTracked(apps.ACCESS_DATABASE_URL!, artifact, 'services/main/migrations/access'),
-    ...await migrateTracked(apps.ACCOUNT_RELAY_DATABASE_URL!, artifact, 'services/main/migrations/relay'),
-    ...await migrateContentFromArtifact(apps.CONTENT_DATABASE_URL!, artifact),
-  ];
-  run(join(artifact, 'bin/bun'), ['services/account/src/migrate.ts'], 120_000,
-    { ...process.env, ...apps }, artifact);
-  return applied;
-}
-
 export async function installReleaseArtifact(artifact: string, options: StackOptions) {
   assertReleasePins();
   const { digest } = verifyReleaseArtifact(artifact);
   return installRelease(options, { digest,
-    migrate: apps => migrateArtifactOwners(apps, artifact) });
+    migrate: apps => migrateOwners({ ...apps, MAIN_RELAY_DATABASE_URL: apps.MAIN_RELAY_DATABASE_URL ?? apps.ACCOUNT_RELAY_DATABASE_URL }, artifact) });
 }
 
 if (import.meta.main) {

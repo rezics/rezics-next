@@ -6,5 +6,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": "dist/client", "binding": "ASSETS", "not_found_handling": "none" },
   "vars": { "MAIN_ORIGIN": "http://127.0.0.1:3001", "ACCOUNT_ORIGIN": "http://127.0.0.1:3002",
-    "MAIN_RESOURCE": "https://main.rezics.test" }
+    "MAIN_RESOURCE": "https://main.rezics.test" },
+  "env": { "production": {
+    "name": "rezics-web-production",
+    "vars": { "MAIN_ORIGIN": "https://main.rezics.com", "ACCOUNT_ORIGIN": "https://accounts.rezics.com",
+      "MAIN_RESOURCE": "https://main.rezics.com" }
+  } }
 }

@@ -24,6 +24,10 @@
       "/roadmap"
     ]
   },
+  "env": { "production": {
+    "name": "rezics-about-production",
+    "vars": { "ABOUT_SITE_URL": "https://rezics.com" }
+  } },
   "d1_databases": [
     {
       "binding": "DB",

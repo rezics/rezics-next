@@ -172,7 +172,8 @@ const recommendationRelayUrl = config.ACCOUNT_RELAY_DATABASE_URL ?? relayUrl;
 const recommendationRelayPool = recommendationRelayUrl ? new Pool({ connectionString: recommendationRelayUrl,
   max: 2, options: '-c default_transaction_read_only=on' }) : undefined;
 const contentPool = new Pool({ connectionString: config.CONTENT_DATABASE_URL });
-await migrateContent(contentPool);
+// Production schemas are applied by the locked release job before writers start.
+if (process.env.NODE_ENV !== 'production') await migrateContent(contentPool);
 const content = new ContentCore(contentPool);
 const readRankings = new ReadRankingProjection(pool, content, contentPool, {
   fuseki, lineage: { dataEpoch: config.MAIN_DATA_EPOCH, routingEpoch: config.MAIN_ROUTING_EPOCH },
@@ -460,7 +461,7 @@ const discoveryWorker = relayPool ? new DiscoveryRefreshWorker({ environment, ac
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) },
 new DiscoveryRefreshStore(pool), new DiscoveryProjection(pool)) : undefined;
-app.listen({ hostname: '127.0.0.1', port });
+app.listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });
 const feedWorker = relayPool ? new FeedRefreshWorker({ environment, account, access, content,
   // Without the review owner the worker never ingests review events, and Home reports catching-up for good.
   reviews: new ReaderReviews(pool),

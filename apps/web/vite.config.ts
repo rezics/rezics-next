@@ -5,6 +5,7 @@ import { defineConfig, type Plugin } from 'vite';
 import vinext from 'vinext';
 import { cloudflare } from '@cloudflare/vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
+import { checkProductionEnv } from '../../scripts/ops/production-env.ts';
 
 const app = fileURLToPath(new URL('.', import.meta.url));
 const components = fileURLToPath(new URL('../../packages/ui/src/components/', import.meta.url));
@@ -73,12 +74,19 @@ export default defineConfig({
     // Web, Accounts and every worktree's dev servers run at once; the default
     // inspector port 9229 made whichever started second crash. Opt in per run.
     inspectorPort: process.env.WORKER_INSPECTOR_PORT ? Number(process.env.WORKER_INSPECTOR_PORT) : false,
-    config: config => ({ ...config, vars: { ...config.vars,
+    config: config => {
+      const vars = { ...config.vars,
       MAIN_ORIGIN: process.env.MAIN_ORIGIN ?? config.vars?.MAIN_ORIGIN,
       ACCOUNT_ORIGIN: process.env.ACCOUNT_ORIGIN ?? config.vars?.ACCOUNT_ORIGIN,
       MAIN_RESOURCE: process.env.MAIN_RESOURCE ?? config.vars?.MAIN_RESOURCE,
       WEB_OAUTH_CLIENT_ID: process.env.WEB_OAUTH_CLIENT_ID ?? config.vars?.WEB_OAUTH_CLIENT_ID,
-    } }),
+      };
+      if (config.name === 'rezics-web-production' || process.env.CLOUDFLARE_ENV === 'production') {
+        checkProductionEnv(Object.fromEntries(Object.entries(vars).map(([name, value]) =>
+          [name, typeof value === 'string' ? value : value === undefined ? undefined : JSON.stringify(value)])), ['web']);
+      }
+      return { ...config, vars };
+    },
   }),
     tailwindcss()],
 });

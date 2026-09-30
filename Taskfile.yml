@@ -144,7 +144,7 @@ tasks:
     desc: Build the vinext Workers application.
     dir: apps/web
     cmds:
-      - ../../node_modules/.bin/vinext build
+      - ../../node_modules/.bin/vinext build {{.CLI_ARGS}}
 
   web:preview:
     desc: Build the web Worker for a running QA stack and serve it with wrangler on port 3003.
@@ -192,7 +192,7 @@ tasks:
     desc: Build the Accounts vinext Workers application.
     dir: apps/accounts
     cmds:
-      - ../../node_modules/.bin/vinext build
+      - ../../node_modules/.bin/vinext build {{.CLI_ARGS}}
 
   accounts:typecheck:
     desc: Type-check the Accounts workspace.
@@ -230,7 +230,8 @@ tasks:
     desc: Build the about site into apps/about/dist, the assets directory of its Worker.
     dir: apps/about
     cmds:
-      - ../../node_modules/.bin/astro build
+      - ../../node_modules/.bin/astro build {{.CLI_ARGS}}
+      - if [ "$CLOUDFLARE_ENV" = production ]; then ../../node_modules/.bin/wrangler deploy --dry-run --env production --outdir ../../.temp/worker-builds/about; fi
 
   about:check:
     desc: Check the about site's types (Astro, TypeScript), lint, format and unit tests.
@@ -361,6 +362,21 @@ tasks:
     desc: Package a content-addressed local release artifact.
     cmds:
       - bun scripts/dev/release-artifact.ts build {{.CLI_ARGS}}
+
+  release:images:
+    desc: Build local pinned OCI runtime images and record their release manifest; never push.
+    cmds:
+      - bun scripts/ops/release-images.ts {{.CLI_ARGS}}
+
+  ops:migrate:
+    desc: Apply the release's locked, idempotent owner migrations.
+    cmds:
+      - bun scripts/ops/migrate.ts {{.CLI_ARGS}}
+
+  ops:env-check:
+    desc: Validate a production environment file and refuse payment provider rows.
+    cmds:
+      - bun scripts/ops/production-env.ts {{.CLI_ARGS}}
 
   release:install:
     desc: Verify a release artifact and provision a project from it.

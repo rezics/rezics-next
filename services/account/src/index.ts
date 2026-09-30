@@ -47,4 +47,4 @@ createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUs
 }), pool, { operatorUserIds, displayPreferenceClientIds: new Set([config.WEB_OAUTH_CLIENT_ID].filter(Boolean)),
   notificationDigest: { accountSecret: secret, mainSecret: config.ACCOUNT_MAIN_CLIENT_SECRET } })
   .cleanup(() => { clearInterval(deliveryTimer); })
-  .listen({ hostname: '127.0.0.1', port });
+  .listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });

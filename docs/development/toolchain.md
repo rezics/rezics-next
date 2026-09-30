@@ -24,6 +24,12 @@ use exact direct pins; Compose and Dockerfiles pin external images by digest.
 The locally built Fuseki image has a content-addressed tag derived by
 `scripts/dev/fuseki-image.ts` and checked by `task gen:check`.
 
+Release application containers use Bun 1.4.2 from
+`oven/bun:1.4.2@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895`.
+The index digest was inspected with `task release:images -- --inspect-base`;
+`scripts/dev/release-manifest.ts` owns this pin. The build uses the installed
+Yarn 4.18.0 CLI to focus production dependencies in its builder stage.
+
 When adding or replacing a tool, update its owning manifest/configuration, the
 lockfile or image digest where applicable, and the reason and verification in
 the owning change. Regenerate this page with
@@ -277,6 +283,9 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task load:prepare` | Build a reusable command-created load baseline. |
 | `task load:clone-probe` | Probe a cloned load stack for isolation and fresh commands. |
 | `task release:build` | Package a content-addressed local release artifact. |
+| `task release:images` | Build local pinned OCI runtime images and record their release manifest; never push. |
+| `task ops:migrate` | Apply the release's locked, idempotent owner migrations. |
+| `task ops:env-check` | Validate a production environment file and refuse payment provider rows. |
 | `task release:install` | Verify a release artifact and provision a project from it. |
 | `task search:rebuild` | Rebuild the public search index on a stopped-writer stack. |
 | `task access:pending-search` | List unresolved private search deliveries (needs ACCESS_DATABASE_URL). |

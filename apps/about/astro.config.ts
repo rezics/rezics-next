@@ -2,9 +2,11 @@ import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'astro/config';
 import { aboutDevServer } from './dev-server.ts';
+import { checkProductionEnv } from '../../scripts/ops/production-env.ts';
 
 // The public origin canonical URLs, hreflang alternates and the sitemap use.
 const site = process.env.ABOUT_SITE_URL ?? 'https://rezics.com';
+if (process.env.CLOUDFLARE_ENV === 'production') checkProductionEnv({ ABOUT_SITE_URL: site }, ['about']);
 
 export default defineConfig({
   site,
