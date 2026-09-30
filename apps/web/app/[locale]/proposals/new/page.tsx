@@ -29,5 +29,6 @@ export default async function NewProposalRoute({ searchParams }: {
   return <PageContainer className="grid max-w-3xl gap-6">
     <PageHeader title={t.proposeTitle} description={t.proposeDescription} />
     <ProposeCorrectionPage basis={basis} actingSubject={reader.actingSubject ?? null}
+      signInHref={signInPath(localizedPath(path, locale))}
       languages={[locale]} locale={locale} messages={messages} /></PageContainer>;
 }

@@ -22,6 +22,8 @@ interface Props {
   /** The reader's content languages, best first: the editor starts in the first the Work has. */
   languages: readonly string[];
   create?: CreateApi;
+  /** Where a signed-out reader goes to sign in; the notice links to it when given. */
+  signInHref?: string;
   locale: UiLocale;
   messages: ProposalMessages;
 }
@@ -32,13 +34,14 @@ function useOpened(locale: UiLocale) {
   return (proposal: string) => router.push(localizedPath(`/proposals/${proposal}`, locale));
 }
 
-function Editor({ basis, actingSubject, languages, create: givenCreate, locale, messages, onCancel }:
+function Editor({ basis, actingSubject, languages, create: givenCreate, signInHref, locale, messages, onCancel }:
   Props & { onCancel?: () => void }) {
   const t = materializeData(messages, { locale });
   const opened = useOpened(locale);
   const create = useMemo(() => givenCreate ?? (actingSubject ? bffCreate(actingSubject) : null), [givenCreate, actingSubject]);
-  if (!actingSubject || !create) return <Alert variant="info"><AlertDescription className="text-foreground">{t.signInToPropose}
-  </AlertDescription></Alert>;
+  if (!actingSubject || !create) return <Alert variant="info"><AlertDescription className="text-foreground">
+    {t.signInToPropose}{signInHref ? <> <a href={signInHref} className="font-medium text-primary underline underline-offset-2">
+      {t.signInAction}</a></> : null}</AlertDescription></Alert>;
   if (!basis.ok) return <Alert variant="warning" role="alert"><AlertDescription className="text-foreground">
     {t.proposeUnavailable}</AlertDescription></Alert>;
   const { target, baseHeads, state, name } = basis.data;
