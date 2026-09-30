@@ -194,7 +194,7 @@ test('G630: continuous graph writes exhaust the bounded retries without returnin
     await expect(resolveZoneRoute(f.work, f.request, { zone: f.zone,
       path: `/picks/${f.resource.slice(-36)}` })).rejects.toBeInstanceOf(WorkReadUnavailable);
     expect(f.queries.filter(query => query.includes('rv:MemberRole'))).toHaveLength(WORK_READ_COST.attempts);
-    expect(ZONE_ROUTE_COST).toMatchObject({ pageSize: 24, maxNavigation: 50, membershipQueries: 1, maxPages: 8 });
+    expect(ZONE_ROUTE_COST).toMatchObject({ pageSize: 24, maxNavigation: 50, membershipQueries: 1, immutableRangeRows: 101 });
   } finally { f.close(); }
 });
 
