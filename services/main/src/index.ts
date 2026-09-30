@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import { CatalogueIntakeStore, unverifiedWorks } from './modules/catalogue-intake/store.ts';
 import { WikiQuotationStore } from './modules/wiki/quotation.ts';
+import { AdmittedTypeStore } from './modules/types/store.ts';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { ContentComments, ContentCore, ContentProjectionCursor,
@@ -164,6 +165,8 @@ const port = config.MAIN_PORT;
 
 const fuseki = new FusekiClient(fusekiUrl, config.FUSEKI_MAINTENANCE_TOKEN, config.FUSEKI_COMMAND_TOKEN);
 const pool = new Pool({ connectionString: config.ACCESS_DATABASE_URL });
+const types = new AdmittedTypeStore(pool);
+await types.refresh();
 // IAM35: every Main enforces the Access-active profile; this release requests its own.
 const bounds = await activateOperationalBounds(pool, ACCESS_OPERATIONAL_BOUNDS_V1);
 if (bounds.status === 'restricted') {
@@ -334,6 +337,7 @@ configureLibraryShelves(contentPool, pool, fuseki);
 const app = createMainApp(fuseki, {
   wikiQuotations: new WikiQuotationStore(contentPool),
   editorialReview: new EditorialReviewStore(pool),
+  types,
   suitability: new SuitabilityStore(pool, access),
   follows: new FollowsStore(pool),
   feed: new FeedStore(pool),

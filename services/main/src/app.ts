@@ -109,6 +109,7 @@ import { ratingContextReadRoutes } from './routes/rating-contexts.ts';
 import { managementReadRoutes } from './routes/management-reads.ts';
 import { facetRoutes } from './routes/facets.ts';
 import { typeRoutes } from './routes/types.ts';
+import { typeAdministrationRoutes } from './routes/types.ts';
 import { queryRoutes } from './routes/query.ts';
 import { savedFilterRoutes } from './routes/saved-filters.ts';
 import { wikiRoutes, wikiSchemaError } from './routes/wiki.ts';
@@ -270,6 +271,7 @@ function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(progressRoutes(fuseki, work))
     .use(workStatsRoutes(work))
     .use(facetRoutes())
+    .use(typeAdministrationRoutes(work))
     .use(typeRoutes());
 }
 
@@ -278,6 +280,10 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
   // Registered first so it also handles every plugin route mounted below.
   const app = new Elysia()
     .error(({ error, request }) => wikiSchemaError(error, request))
+    .request(async () => {
+      try { await work?.types?.refresh(); }
+      catch { return problem(503, 'types_unavailable', 'Type registry is unavailable'); }
+    })
     .error(({ error }) => {
       if (error instanceof ValidationError || error instanceof ParseError) {
         return problem(400, 'invalid_request', 'Request does not match the Work contract');

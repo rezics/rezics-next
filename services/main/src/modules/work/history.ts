@@ -207,7 +207,7 @@ function checkedWorkSemanticTypes(value: unknown): string[] {
     throw new RevisionCorrupt('Work semantic types are invalid');
   }
   let normalized: string[];
-  try { normalized = normalizeWorkSemanticTypes(value); }
+  try { normalized = normalizeWorkSemanticTypes(value, true); }
   catch { throw new RevisionCorrupt('Work semantic types are unsupported'); }
   if (normalized.some((type, index) => type !== value[index])) {
     throw new RevisionCorrupt('Work semantic types are not canonical');

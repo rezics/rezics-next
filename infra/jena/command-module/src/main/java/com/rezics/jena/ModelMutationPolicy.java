@@ -286,7 +286,8 @@ final class ModelMutationPolicy {
                         && data.contains(REVISIONS, parent, NodeFactory.createURI(RV + "shapeRevision"),
                             NodeFactory.createURI("https://rezics.com/definition/work-metadata-v1"))
                         && (validWorkTypeRevision(profiles, data, name, "work-type-v1")
-                            || validWorkTypeRevision(profiles, data, name, "work-type-v2"));
+                            || validWorkTypeRevision(profiles, data, name, "work-type-v2")
+                            || validWorkTypeRevision(profiles, data, name, "work-type-v3"));
                     if (typeChanged && !historicalAgentAnchor && !historicalWorkAnchor
                         && CanonicalPolicy.select(profiles, data, name, true) == null)
                         return "uncanonical reverse revision dependency requires staged lifecycle: " + name;

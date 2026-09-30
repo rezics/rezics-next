@@ -284,7 +284,7 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   }
   let semanticTypes: string[];
   try { semanticTypes = normalizeWorkSemanticTypes(
-    [...types].filter(type => type !== 'https://schema.org/CreativeWork')); }
+    [...types].filter(type => type !== 'https://schema.org/CreativeWork'), true); }
   catch { throw new WorkEditUnavailable('Work semantic types are unavailable'); }
   if (heads.values().next().value !== intent.expectedHead) {
     const stale = await sealStaleHead(env, intent, digest);
@@ -313,7 +313,7 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   }
   const revision = ID + Bun.randomUUIDv7();
   const validations = await workMetadataValidations(env, intent.work, main);
-  if (change.kind === 'types') validations.push(...await profileValidations(env.fuseki, 'work-type-v2', [
+  if (change.kind === 'types') validations.push(...await profileValidations(env.fuseki, 'work-type-v3', [
     { shape: `${WORK_TYPE_PROFILE}/work-shape`, focus: [intent.work], graphs: [GRAPHS.current] },
     { shape: `${WORK_TYPE_PROFILE}/work-revision-shape`, focus: [revision],
       graphs: [GRAPHS.current, GRAPHS.revisions] },

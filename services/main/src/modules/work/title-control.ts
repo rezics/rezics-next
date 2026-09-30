@@ -198,7 +198,7 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
   const rows = current.results?.bindings ?? [];
   const main = rows[0]?.main?.value;
   if (!main || rows.some(row => row.main?.value !== main)) throw new TitleControlUnavailable('Work is unavailable');
-  const semanticTypes = normalizeWorkSemanticTypes(rows.map(row => row.type!.value).filter(type => type !== 'https://schema.org/CreativeWork'));
+  const semanticTypes = normalizeWorkSemanticTypes(rows.map(row => row.type!.value).filter(type => type !== 'https://schema.org/CreativeWork'), true);
   const priorManifests = new Set(rows.map(row => row.workManifest?.value));
   const scalarBindings = rows.map(row => row.scalar).filter(binding => binding !== undefined);
   if (priorManifests.size !== 1 || !priorManifests.values().next().value

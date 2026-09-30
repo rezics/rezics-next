@@ -13,6 +13,7 @@ import { pageFields, pageQuery, readId, readLanguage, readPosition, readQuery, r
 import { workRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { typeIri } from '../modules/types/contract.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
 const params = t.Object({ id: readUuid });
@@ -42,10 +43,13 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
           types: t.Array(t.String({ enum: WORK_TYPE_OPTIONS }),
             { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true }),
           actingSubject: readId }, { additionalProperties: false }),
+        t.Object({ profile: t.Literal('work-type-v3'), expectedHead: readId,
+          types: t.Array(typeIri, { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true }),
+          actingSubject: readId }, { additionalProperties: false }),
       ]),
-      response: { 200: t.Object({ profile: t.Literal('work-type-v2'), work: readId,
+      response: { 200: t.Object({ profile: t.Union([t.Literal('work-type-v2'), t.Literal('work-type-v3')]), work: readId,
         revision: readId, predecessor: readId,
-        types: t.Array(t.String({ enum: WORK_TYPE_OPTIONS }),
+        types: t.Array(typeIri,
           { maxItems: MAX_WORK_SEMANTIC_TYPES }),
         receipt: t.String(), sourcePosition: readPosition, replayed: t.Boolean() }),
         202: pendingOperation, ...writeProblems },
@@ -58,7 +62,7 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
         const receipt = await stateWorkType(work.environment, work.account, work.access, request,
           { work: `https://rezics.com/id/${path.id}`, expectedHead: body.expectedHead,
             types: body.types, actingSubject: body.actingSubject, idempotencyKey });
-        return Response.json({ profile: 'work-type-v2', work: receipt.work,
+        return Response.json({ profile: body.profile === 'work-type-v3' ? 'work-type-v3' : 'work-type-v2', work: receipt.work,
           revision: receipt.revision, predecessor: receipt.predecessor,
           types: [...body.types].sort(), receipt: receipt.receipt,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,

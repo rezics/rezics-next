@@ -14,6 +14,7 @@ import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 import { workKinds, workSemanticTypes } from './work-kinds.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
 import { catalogueTitleKey } from '../catalogue-intake/title-keys.ts';
+import { workTypeAdmitted } from '../types/registry.ts';
 
 export const RV = 'https://rezics.com/vocab/';
 export const ID = 'https://rezics.com/id/';
@@ -99,9 +100,9 @@ export function hash(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-export function normalizeWorkSemanticTypes(types: readonly string[] = []): string[] {
+export function normalizeWorkSemanticTypes(types: readonly string[] = [], retained = false): string[] {
   if (types.length > MAX_WORK_SEMANTIC_TYPES || new Set(types).size !== types.length
-    || types.some(type => !WORK_SEMANTIC_TYPES.includes(type as typeof WORK_SEMANTIC_TYPES[number]))) {
+    || types.some(type => !WORK_SEMANTIC_TYPES.includes(type) || !retained && !workTypeAdmitted(type))) {
     throw new InvalidWorkSemanticTypes('invalid Work semantic types');
   }
   return [...types].sort();
@@ -371,8 +372,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const credit = authorReady && intent.authorAgent ? { id: ID + Bun.randomUUIDv7(),
     revision: ID + Bun.randomUUIDv7(), agent: intent.authorAgent } : undefined;
   const validations = [...await workMetadataValidations(env, work, main),
-    ...await profileValidations(env.fuseki, 'work-kind-v2', [
-      { shape: profileRegistry['work-kind-v2'].shapes[0]!, focus: [work], graphs: [GRAPHS.current] },
+    ...await profileValidations(env.fuseki, 'work-kind-v3', [
+      { shape: profileRegistry['work-kind-v3'].shapes[0]!, focus: [work], graphs: [GRAPHS.current] },
     ]), ...(credit ? await profileValidations(env.fuseki, 'native-agent-credit-v1', [
       { shape: 'https://rezics.com/definition/native-agent-credit-v1/credit-shape',
         focus: [credit.id], graphs: [GRAPHS.current, GRAPHS.revisions] },

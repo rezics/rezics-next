@@ -205,12 +205,12 @@ test('G-637: create, discovery and type-edit enums retain their complete origina
   }
 });
 
-test('G-637: generated public API consumes the registry for creation and both type-edit profiles', () => {
+test('G-637: generated public API retains old type-edit enums beside the open v3 request', () => {
   type BodySchema = {
     properties: {
       semanticTypes?: { items: { enum: string[] } };
       profile?: { const: string };
-      types?: { items: { enum: string[] } };
+      types?: { items: { enum?: string[]; type?: string; pattern?: string } };
     };
     anyOf?: BodySchema[];
   };
@@ -224,8 +224,14 @@ test('G-637: generated public API consumes the registry for creation and both ty
   expect(create.properties.semanticTypes!.items.enum).toEqual(historicalTypes);
   const edits =
     api.paths['/v1/works/{id}/type'].put.requestBody.content['application/json'].schema.anyOf!;
-  expect(edits).toHaveLength(2);
+  expect(edits).toHaveLength(3);
   for (const edit of edits) {
+    if (edit.properties.profile!.const === 'work-type-v3') {
+      expect(edit.properties.types!.items.type).toBe('string');
+      expect(edit.properties.types!.items.enum).toBeUndefined();
+      expect(edit.properties.types!.items.pattern).toBeDefined();
+      continue;
+    }
     const expected =
       edit.properties.profile!.const === 'work-type-v1'
         ? historicalEditTypes.filter((type) => type !== 'https://schema.org/VideoGame')

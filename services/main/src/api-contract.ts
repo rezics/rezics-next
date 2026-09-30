@@ -1,5 +1,6 @@
 import { t } from 'elysia';
-import { workSemanticTypeOptions } from './modules/types/registry.ts';
+import './modules/types/registry.ts';
+import { registryWorkType } from './modules/types/contract.ts';
 import { discoveryCredit, discoveryRating } from './modules/discovery/contract.ts';
 import { readAvatar, readName } from './modules/work/read-contract.ts';
 
@@ -107,7 +108,7 @@ const phraseFacets = t.Object({ populationBasis: t.Literal('all-filters'), resul
   terms: t.Object({ precision: t.Literal('lower-bound'), values: facetValues }),
   types: t.Object({ precision: t.Literal('exact'), values: facetValues }),
 });
-const workTypeFilter = t.Array(t.Union(workSemanticTypeOptions.map(type => t.Literal(type))),
+const workTypeFilter = t.Array(registryWorkType,
   { maxItems: 3, uniqueItems: true });
 export const workTypeFilters = {
   includeTypes: t.Optional(workTypeFilter),
