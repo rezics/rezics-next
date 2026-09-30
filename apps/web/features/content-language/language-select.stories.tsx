@@ -130,6 +130,8 @@ export const PrivateUseTag: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('button', { name: 'Language of your post: i-klingon' })).toBeVisible();
     await open(canvas, /^Language of your post: i-klingon/);
-    await expect(await body().findByRole('button', { name: /x-klingon/ })).toBeVisible();
+    const suggestion = await body().findByRole('button', { name: /x-klingon/ });
+    // The popover fades in; the tag is listed as itself.
+    await waitFor(() => expect(suggestion).toBeVisible());
   },
 };
