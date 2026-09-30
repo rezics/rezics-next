@@ -180,7 +180,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | Source | Image and digest |
 | --- | --- |
 | Compose | postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722 |
-| Compose | rezics/fuseki:6.2.0-cmd0.5.34-2f8b8b226fa7 |
+| Compose | rezics/fuseki:6.2.0-cmd0.5.34-e05175146cd6 |
 | Compose | rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff |
 | Compose | ghcr.io/shopify/toxiproxy:2.12.0@sha256:9378ed52a28bc50edc1350f936f518f31fa95f0d15917d6eb40b8e376d1a214e |
 | Compose | axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d |

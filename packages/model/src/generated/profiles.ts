@@ -366,6 +366,16 @@ export const profileRegistry = {
       "proposal"
     ]
   },
+  "definition-key-v1": {
+    "sha256": "156050d35d5a7723cd89361e3ae919b1b6ec4f2f19592a0782ad45816dc09e5f",
+    "file": "shapes/definition-key-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/definition-key-v1/key-shape"
+    ],
+    "focusRoles": [
+      "key"
+    ]
+  },
   "definition-presentation-v1": {
     "sha256": "e4aa036bbed4bb52762f8c0ec858120e86586d3d795cfd44fd21c6bd8fe6e3a7",
     "file": "shapes/definition-presentation-v1.ttl",
@@ -1277,6 +1287,16 @@ export const profileRegistry = {
     "file": "shapes/work-derivation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-derivation-v1/derivation-shape"
+    ],
+    "focusRoles": [
+      "derivation"
+    ]
+  },
+  "work-derivation-v2": {
+    "sha256": "629ed8a8a60013eecc334a84298687e02c57dbaf75d201f49bb9d3b597abd634",
+    "file": "shapes/work-derivation-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-derivation-v2/derivation-shape"
     ],
     "focusRoles": [
       "derivation"

@@ -286,6 +286,10 @@ export const CorrectionProposalV1ProposalShapeSchema = Type.Intersect([Type.Obje
 
 export type CorrectionProposalV1ProposalShape = Static<typeof CorrectionProposalV1ProposalShapeSchema>;
 
+export const DefinitionKeyV1KeyShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/DefinitionKey"), { minItems: 1, maxItems: 1 }), "rv:keyDefinition": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "skos:notation": Type.Array(Type.String({"pattern":"^[a-z][a-z0-9-]{0,63}$"}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type DefinitionKeyV1KeyShape = Static<typeof DefinitionKeyV1KeyShapeSchema>;
+
 export const DefinitionPresentationV1PresentationShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/DefinitionPresentation"), { maxItems: 1, minItems: 1 }), "rv:presentationHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:presentationDefinition": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:meaningRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:fromRole": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:toRole": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:presentationLanguage": Type.Array(Type.String({"maxLength":255}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type DefinitionPresentationV1PresentationShape = Static<typeof DefinitionPresentationV1PresentationShapeSchema>;
@@ -998,6 +1002,10 @@ export const WorkDerivationV1DerivationShapeSchema = Type.Object({ "@id": Type.S
 
 export type WorkDerivationV1DerivationShape = Static<typeof WorkDerivationV1DerivationShapeSchema>;
 
+export const WorkDerivationV2DerivationShapeSchema = Type.Intersect([Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/LexiconWorkDerivation"), { minItems: 1, maxItems: 1 }), "rv:targetWork": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:targetMainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:targetMainRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sourceWork": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sourceMainVersion": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:sourceMainRevision": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:sourceVersionStatus": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/Exact"), Type.Literal("https://rezics.com/vocab/Unresolved")]), { minItems: 1, maxItems: 1 }), "rv:derivationKind": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:evidence": Type.Array(Type.String({"pattern":"^https://[^\\s<>\"{}|\\^`]{1,2040}$"}), { minItems: 1, maxItems: 1 }), "rv:linkedBy": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:corrects": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-derivation-v2"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-derivation-v2"), { maxItems: 1, minItems: 1 }), "rv:datasetId": Type.Array(Type.Literal("urn:rezics:dataset:product"), { maxItems: 1, minItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true }), Type.Union([Type.Object({ "@id": Type.String({ minLength: 1 }), "rv:sourceVersionStatus": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Exact") }), "rv:sourceMainVersion": Type.Array(Type.String({}), { minItems: 1 }), "rv:sourceMainRevision": Type.Array(Type.String({}), { minItems: 1 }) }, { additionalProperties: true }), Type.Object({ "@id": Type.String({ minLength: 1 }), "rv:sourceVersionStatus": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Unresolved") }), "rv:sourceMainRevision": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })) }, { additionalProperties: true })])]);
+
+export type WorkDerivationV2DerivationShape = Static<typeof WorkDerivationV2DerivationShapeSchema>;
+
 export const WorkEditorialFieldV1SlotShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/EditorialFieldSlot") }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:fieldDefinition": Type.Array(Type.Literal("https://rezics.com/definition/work-synopsis-v1"), { maxItems: 1, minItems: 1 }), "rv:fieldValue": Type.Array(Type.String({"maxLength":8000}), { minItems: 1, maxItems: 1 }), "rv:fieldHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:fieldControlHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:protectionHead": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })) }, { additionalProperties: true });
 
 export type WorkEditorialFieldV1SlotShape = Static<typeof WorkEditorialFieldV1SlotShapeSchema>;
@@ -1178,6 +1186,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/correction-decision-v1/application-shape": CorrectionDecisionV1ApplicationShapeSchema,
   "https://rezics.com/definition/correction-proposal-v1/log-shape": CorrectionProposalV1LogShapeSchema,
   "https://rezics.com/definition/correction-proposal-v1/proposal-shape": CorrectionProposalV1ProposalShapeSchema,
+  "https://rezics.com/definition/definition-key-v1/key-shape": DefinitionKeyV1KeyShapeSchema,
   "https://rezics.com/definition/definition-presentation-v1/presentation-shape": DefinitionPresentationV1PresentationShapeSchema,
   "https://rezics.com/definition/definition-presentation-v1/revision-shape": DefinitionPresentationV1RevisionShapeSchema,
   "https://rezics.com/definition/erasure-graph-v1/tombstone-shape": ErasureGraphV1TombstoneShapeSchema,
@@ -1356,6 +1365,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/work-author-credit-v1/revision-shape": WorkAuthorCreditV1RevisionShapeSchema,
   "https://rezics.com/definition/work-derivation-unresolved-v1/derivation-shape": WorkDerivationUnresolvedV1DerivationShapeSchema,
   "https://rezics.com/definition/work-derivation-v1/derivation-shape": WorkDerivationV1DerivationShapeSchema,
+  "https://rezics.com/definition/work-derivation-v2/derivation-shape": WorkDerivationV2DerivationShapeSchema,
   "https://rezics.com/definition/work-editorial-field-v1/slot-shape": WorkEditorialFieldV1SlotShapeSchema,
   "https://rezics.com/definition/work-editorial-field-v1/value-shape": WorkEditorialFieldV1ValueShapeSchema,
   "https://rezics.com/definition/work-editorial-field-v1/control-shape": WorkEditorialFieldV1ControlShapeSchema,
