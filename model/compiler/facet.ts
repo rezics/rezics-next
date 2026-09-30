@@ -48,6 +48,8 @@ type FacetStep =
   /** Co-participants in active occurrences of the bound relation where the node reached, or its Main
    * Version, takes the bound role. A `where` group binds its Conditions to one such occurrence. */
   | { kind: 'occurrence' }
+  /** One related node reached along this fixed path. `where` binds every Condition to that node. */
+  | { kind: 'related'; path: readonly { predicate: Term; inverse?: true }[]; types: readonly Term[] }
   /** The node's aggregate in the bound rating Context, which must fix these policies and supplies the question. */
   | { kind: 'rating'; target: Term; cadence: Term; population: Term; aggregation: Term;
     scale: { min: number; max: number } };
@@ -64,7 +66,7 @@ interface FacetCost {
   maxValues: number;
   /** Graph reads one Condition may add to a Query, each batched over its bounded candidates. */
   graphReads: number;
-  /** Conditions one `where` group of an occurrence Facet may hold. */
+  /** Conditions one `where` group may hold, for an occurrence or a related node. */
   nested?: number;
 }
 
@@ -89,8 +91,10 @@ export interface FacetDefinition {
   parameters?: readonly FacetParameter[];
   /** Statement meaning qualifiers a Condition may add. */
   qualifiers?: readonly FacetQualifier[];
-  /** The path ends in an occurrence; Conditions may group Conditions bound to it under `where`. */
+  /** The path ends in an occurrence or related node; `where` binds Conditions to that one node. */
   occurrence?: true;
+  /** Exact group Facet in which this participant Facet is valid. */
+  within?: string;
   cost: FacetCost;
 }
 
@@ -167,6 +171,13 @@ function step(value: FacetStep, location: string): Record<string, unknown> {
     case 'occurrence':
       knownFields(value, ['kind'], location);
       return { kind: value.kind };
+    case 'related':
+      knownFields(value, ['kind', 'path', 'types'], location);
+      if (!value.path.length || !value.types.length) throw new Error(`${location} needs a related path and types`);
+      return { kind: 'related', path: value.path.map(item => {
+        knownFields(item, ['predicate', 'inverse'], location);
+        return { predicate: iri(item.predicate, location), ...(item.inverse ? { inverse: true } : {}) };
+      }), types: value.types.map(type => iri(type, location)) };
     case 'units':
       knownFields(value, ['kind', 'unit'], location);
       return { kind: 'units', unit: iri(value.unit, location) };
@@ -205,7 +216,7 @@ export function compileFacet(facet: FacetDefinition): Record<string, unknown> {
     ? facetId(facet) : null;
   if (!id) throw new Error(`Invalid Facet name or version: ${facet.name} v${facet.version}`);
   knownFields(facet, ['name', 'version', 'labels', 'appliesTo', 'subject', 'path', 'values', 'operators',
-    'source', 'parameters', 'qualifiers', 'occurrence', 'cost'], id);
+    'source', 'parameters', 'qualifiers', 'occurrence', 'within', 'cost'], id);
   knownFields(facet.labels, facetLocales, `${id} labels`);
   for (const locale of facetLocales) {
     const label = facet.labels[locale];
@@ -253,10 +264,15 @@ export function compileFacet(facet: FacetDefinition): Record<string, unknown> {
       || facet.values[0].min !== '0')) {
     throw new Error(`${id} units must count nonnegative integers over a Work's composition`);
   }
-  const occurrence = facet.path.at(-1)?.kind === 'occurrence';
-  if (!!facet.occurrence !== occurrence || facet.path.slice(0, -1).some(item => item.kind === 'occurrence')
+  const groups = (item: FacetStep) => item.kind === 'occurrence' || item.kind === 'related';
+  const occurrence = groups(facet.path.at(-1)!);
+  if (!!facet.occurrence !== occurrence || facet.path.slice(0, -1).some(groups)
     || (occurrence && facet.appliesTo !== 'resource')) {
     throw new Error(`${id} must end in its only occurrence step exactly when it groups occurrence Conditions`);
+  }
+  if (facet.within && (facet.appliesTo !== 'participant'
+    || !/^https:\/\/rezics\.com\/definition\/facet-[a-z-]+-v[1-9]\d*$/.test(facet.within))) {
+    throw new Error(`${id} within must name an exact group Facet for a participant`);
   }
   knownFields(facet.cost, ['maxValues', 'graphReads', 'nested'], `${id} cost`);
   const { maxValues, graphReads, nested } = facet.cost;
@@ -268,7 +284,7 @@ export function compileFacet(facet: FacetDefinition): Record<string, unknown> {
     subject: iri(facet.subject, `${id} subject`), path, values,
     operators: facetOperators.filter(operator => facet.operators.includes(operator)),
     source: facet.source, parameters, qualifiers: facetQualifiers.filter(item => qualifiers.includes(item)),
-    occurrence };
+    occurrence, ...(facet.within ? { within: facet.within } : {}) };
   return { id: facetRef(facet), ...meaning, labels: Object.fromEntries(facetLocales.map(locale =>
     [locale, facet.labels[locale]])), cost: { maxValues, graphReads, ...(occurrence ? { nested } : {}) },
   digest: createHash('sha256').update(JSON.stringify(meaning)).digest('hex') };
@@ -290,6 +306,15 @@ export function renderFacetRegistry(facets: readonly FacetDefinition[]): string 
   }
   const registry = Object.fromEntries(compiled.map(facet => [facet.id,
     { ...facet, current: current.includes(facet) }]));
+  for (const facet of compiled) {
+    if (!facet.within) continue;
+    const group = compiled.find(candidate => candidate.id === facet.within);
+    const target = (group?.path as Record<string, unknown>[] | undefined)?.at(-1);
+    if (!group?.occurrence || target?.kind !== 'related'
+      || !(target.types as string[]).includes(String(facet.subject))) {
+      throw new Error(`${facet.id} within must resolve to a related group of its subject`);
+    }
+  }
   const body = JSON.stringify(registry, null, 2);
   return '// Generated by task gen from authored TypeScript Facets. Do not edit.\n'
     + `export const facetLocales = ${JSON.stringify(facetLocales)} as const;\n`

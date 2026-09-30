@@ -26,6 +26,9 @@ const facetStep = t.Union([
   t.Object({ kind: t.Literal('credit'), role: t.String() }, closed),
   t.Object({ kind: t.Literal('statement'), predicate: t.Optional(iri), relation: t.Optional(iri) }, closed),
   t.Object({ kind: t.Literal('occurrence') }, closed),
+  t.Object({ kind: t.Literal('related'), path: t.Array(t.Object({ predicate: iri,
+    inverse: t.Optional(t.Literal(true)) }, closed), { minItems: 1 }),
+  types: t.Array(iri, { minItems: 1 }) }, closed),
   t.Object({ kind: t.Literal('rating'), target: iri, cadence: iri, population: iri, aggregation: iri,
     scale: t.Object({ min: t.Integer(), max: t.Integer() }, closed) }, closed),
 ]);
@@ -49,6 +52,7 @@ export const facetDefinition = t.Object({
   parameters: t.Array(t.Object({ key: t.String(), value: facetValueDomain }, closed)),
   qualifiers: t.Array(t.Union([t.Literal('interpretation'), t.Literal('applicability')])),
   occurrence: t.Boolean(),
+  within: t.Optional(iri),
   cost: t.Object({ maxValues: t.Integer({ minimum: 1 }), graphReads: t.Integer({ minimum: 0 }),
     nested: t.Optional(t.Integer({ minimum: 1 })) }, closed),
   /** SHA-256 of the Facet's meaning; labels and cost are refined without a new version. */

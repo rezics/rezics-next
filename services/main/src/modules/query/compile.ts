@@ -7,6 +7,7 @@ import { resolveFacet } from '../facets/registry.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { ZONE_BROWSE_COST } from '../zone-modules/contract.ts';
 import { CONCEPT_WORKS_COST, type ConceptWorksQuery, type FilteredWorksQuery } from '../concept-page/contract.ts';
+import { compileReleaseQuery, type ReleaseQuery } from '../facets/release-query.ts';
 
 export const QUERY_COST = {
   nodes: 32, depth: 4, graphReads: 7, candidateRows: 512,
@@ -33,6 +34,7 @@ type ZoneRequest = { q?: string; sort: 'relevance' | 'newest' | 'updated'; type?
 type ConceptSelection = { operator: 'include' | 'exclude'; value: string; revision?: string };
 
 export type CompiledQuery =
+  | { template: 'release-works'; request: ReleaseQuery; facets: string[]; graphReads: number }
   | { template: 'search'; request: SearchRequest; concept?: { value: string; revision?: string };
     facets: string[]; graphReads: number }
   | { template: 'search-concepts'; request: SearchRequest;
@@ -70,13 +72,15 @@ function admit(filter: FilterDocument | undefined, zone = false): { conditions: 
     throw error;
   }
   // Current templates evaluate conjunctions of resource Conditions. Retain
-  // meaningful multiplicity in occurrence groups, which remain refused here.
+  // meaningful multiplicity in related release groups; other occurrence templates remain refused.
   if (!('all' in filter)) fail('A template for top-level any is not admitted');
   const conditions: FilterCondition[] = [];
   for (const node of (filter as { all: FilterNode[] }).all) {
     if (!simple(node)) fail('A template for nested boolean groups is not admitted');
     const condition = node as FilterCondition;
-    if (condition.where) fail('No admitted template binds this occurrence group');
+    if (condition.where && resolveFacet(condition.facet)!.name !== 'release') {
+      fail('No admitted template binds this occurrence group');
+    }
     if (!conditions.some(existing => JSON.stringify(existing) === JSON.stringify(condition))) conditions.push(condition);
   }
   // Zone include/exclude Conditions share the same bounded batch for each Facet.
@@ -166,6 +170,7 @@ export type AdmittedQuery = ResourceQuery | ResourceQueryV2;
  * Unsupported shapes fail before a graph or index read, never as zero matches.
  * Search delegates its complete-result budget (512 Works and a stable graph/text
  * snapshot); Zone browse delegates its 60-candidate window and 20-item page.
+ * Release inventories filter before paging and continue over the complete graph population.
  */
 export function compileQuery(query: AdmittedQuery): CompiledQuery {
   if (query.sourcePolicy !== undefined || query.asOf !== undefined) {
@@ -175,6 +180,9 @@ export function compileQuery(query: AdmittedQuery): CompiledQuery {
   const { conditions, facets, graphReads } = admitted;
   if (!Number.isInteger(query.page?.size) || query.page.size < 1) {
     throw new QueryRejected('invalid_query', 'Page size must be positive');
+  }
+  if (conditions.some(condition => resolveFacet(condition.facet)!.name === 'release')) {
+    return { template: 'release-works', request: compileReleaseQuery(query, conditions), facets, graphReads };
   }
   if (query.scope.kind === 'realm') {
     if (typeof query.context === 'string' || query.context.realm !== query.scope.realm) {

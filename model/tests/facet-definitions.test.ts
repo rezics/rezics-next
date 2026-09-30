@@ -16,6 +16,12 @@ const facet = (name: string) => compiled.get(name) as ReturnType<typeof compileF
 // DefinitionRef must read the same path, values, operators and source forever. A new
 // meaning is a new `facet-<name>-v<n+1>.ts`; labels and cost are refined in place.
 const admittedMeanings: Record<string, string> = {
+  'facet-release-v1': 'c833e9fe649158088fd0a678e2d08d4dbb232f896ec02d104c2837a2a1e93329',
+  'facet-release-language-v1': '8961cd980c2d6831bac69fc275793b205f06aa298fc433d95b39ca2e865dd9dc',
+  'facet-release-platform-v1': '0e2b4b9a2905aeefe6e5123a6c97528b076d95e8484981c072948db25c251c2f',
+  'facet-release-territory-v1': 'ecfc69ba05556b2e65bf1cdc686e8bc7f9f682f01ff728ff369fa33d5e211971',
+  'facet-release-completeness-v1': 'b09b7d2e0d9d84614814eaae0ee7f81beb6671690655399aaeee8ce79fafbbfe',
+  'facet-release-status-v1': '541d9caf10ff71efcd74ebb9d71e4212142b586927f097f12fa9b9d9acc5f7b9',
   'facet-author-v1': '2c16a404d3c13f1161102c924763ef302e4695fca2f09965f96a2e4193d9b48b',
   'facet-concept-v1': '6a2438d45d2616af705374094389676616c09e0fbbc8eda2330754b4d325a5d5',
   'facet-contributor-v1': '93579a0f6b18f88af7560a8e0ca63bd8673cfcf0049690144b1d5e951564ea97',
@@ -79,7 +85,8 @@ test('Facets: the compiler refuses a Facet whose parts do not fit together', () 
 
 test('Facets: the admitted set covers what readers filter by today', () => {
   expect([...compiled.keys()].sort()).toEqual(['author', 'concept', 'contributor', 'language', 'length', 'rating', 'realm',
-    'relation', 'role', 'statement', 'status', 'type']);
+    'relation', 'release', 'releaseCompleteness', 'releaseLanguage', 'releasePlatform', 'releaseStatus', 'releaseTerritory',
+    'role', 'statement', 'status', 'type']);
   const rv = 'https://rezics.com/vocab/';
   expect(facet('type')).toMatchObject({ source: 'global', operators: ['any', 'all', 'none'],
     path: [{ kind: 'triple', predicate: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type' }],

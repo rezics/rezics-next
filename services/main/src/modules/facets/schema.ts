@@ -22,7 +22,7 @@ export interface Condition {
   interpretation?: { definition: string } | { context: string; semanticRevision: string };
   /** Exact release, canon and valid-time references; none means unqualified. */
   applicability?: string[];
-  /** Conditions bound to one occurrence of an occurrence Facet and its one co-participant. */
+  /** Conditions bound to one occurrence/co-participant, or one declared related node. */
   where?: FilterGroup;
 }
 
@@ -120,7 +120,7 @@ function checkQualifiers(facet: AdmittedFacet, condition: Record<string, unknown
 
 /**
  * Admit a Filter before execution. Top-level Conditions describe the queried Resource; an
- * occurrence Facet's `where` describes its one co-participant and that participant's role.
+ * grouping Facet's `where` describes its one co-participant/role or its declared related node.
  * Returns the exact DefinitionRefs used, which a Saved Filter retains.
  * Cost: O(nodes) with nodes ≤ 32 and no graph read.
  */
@@ -147,6 +147,12 @@ export function checkedFilter(filter: FilterGroup): string[] {
     const facet = resolveFacet(node.facet) ?? refuse('unknown_facet', `No admitted Facet ${node.facet}`);
     if (occurrence ? facet.appliesTo === 'resource' : facet.appliesTo !== 'resource') {
       refuse('misplaced_facet', `${facet.name} ${occurrence ? 'cannot describe a co-participant' : 'needs an occurrence'}`);
+    }
+    const related = occurrence?.facet.path.at(-1);
+    if (facet.within && facet.within !== occurrence?.facet.id
+      || related?.kind === 'related' && (facet.within !== occurrence!.facet.id
+        || !related.types.includes(facet.subject))) {
+      refuse('misplaced_facet', `${facet.name} needs its declared related-node group`);
     }
     if (occurrence && ++occurrence.conditions > occurrence.facet.cost.nested!) {
       refuse('filter_too_large', `${occurrence.facet.name} groups too many Conditions`);

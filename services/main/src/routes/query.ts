@@ -20,6 +20,8 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { searchRoutes } from './search.ts';
 import { commandError, problem } from './problems.ts';
 import { workReadError } from './work-reads.ts';
+import { releaseWorksPage } from '../modules/facets/release-contract.ts';
+import { readReleaseWorks, withReleaseQueryBudget } from '../modules/facets/release-read.ts';
 
 const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const closed = { additionalProperties: false } as const;
@@ -87,12 +89,22 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const search = searchRoutes(fuseki, work);
   return new Elysia().post('/v1/query', { body, response: {
     200: t.Object({ profile: t.Literal('query-v1'), template: t.String(), selection: querySelection,
-      result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage]) }),
+      result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage, releaseWorksPage]) }),
     400: problemResult(400), 404: problemResult(404), 409: problemResult(409),
     422: problemResult(422), 500: problemResult(500), 503: problemResult(503),
   } }, async ({ body: input, request }) => {
     try {
       const compiled = compileQuery(input as AdmittedQuery);
+      if (compiled.template === 'release-works') {
+        try {
+          const result = await withReleaseQueryBudget(() => workRead(work, publicLanguageRequest(request), {
+            limit: compiled.request.limit, cursor: compiled.request.cursor,
+          }, session => readReleaseWorks(session, compiled.request)));
+          return Response.json({ profile: 'query-v1', template: 'release-works-v1',
+            selection: selection(input as AdmittedQuery, compiled), result },
+            { headers: { 'cache-control': 'private, no-store' } });
+        } catch (error) { return workReadError(error); }
+      }
       if (compiled.template === 'concept-works') {
         try {
           if (!work.discovery) throw new WorkReadUnavailable('Discovery owner is unavailable');
