@@ -47,6 +47,7 @@ function fixture(type: 'work' | 'release' | 'occurrence' | 'character' | 'realiz
     else if (query.includes('SELECT ?decision WHERE')) rows = options.draft ? [{ decision: uri(id(4)) }] : [];
     else if (query.includes('SELECT ?root WHERE')) rows = options.erasedRoot ? [] : [{ root: uri(id(9)) }];
     else if (query.includes('SELECT ?context')) rows = [];
+    else if (query.includes('SELECT ?grain WHERE')) rows = [];
     else if (query.includes('SELECT ?resource ?manifest')) rows = [{ resource: uri(id(1)),
       manifest: uri(`urn:rezics:sha256:${semanticManifest}`) }];
     else throw new Error(`Unexpected query: ${query}`);
@@ -80,7 +81,7 @@ test('G-650: four resource reads replace Work aliases and review commands name t
 
 test('G-650: reviews and rating reads retain MainVersion grain without a published-text gate', async () => {
   const f = fixture('work');
-  expect(await reviewTarget(f.session, id(5), id(1))).toEqual({ mainVersion: id(3), realm: null });
+  expect(await reviewTarget(f.session, id(5), id(1))).toEqual({ mainVersion: id(3), realm: null, generic: false });
   expect((await readWorkRatingContexts(f.session, id(1))).items).toEqual([]);
   expect(await readWorkRating(f.session, id(1))).toMatchObject({ mainVersion: id(3), status: 'no-context' });
   expect(f.queries.filter(query => !query.includes('SELECT ?epoch ?sequence ?hold')).join('\n'))

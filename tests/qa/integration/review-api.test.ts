@@ -85,7 +85,7 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
 
     const body = { profile: 'reader-review-command-v1', actingSubject: author,
       context: context.context, target: work.work, expectedRevision: null,
-      language: 'en', text: 'A spoiler about the ending', spoiler: true };
+      language: 'en', text: 'A spoiler about the ending', spoiler: true, rating: 8 };
     const key = randomUUID();
     expect((await call('POST', '/v1/reviews', body, a.token, randomUUID(), true)).status).toBe(401);
     const first = await json<{ review: string; revision: string }>(await call('POST', '/v1/reviews', body, a.token, key), 201);
@@ -109,7 +109,7 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
       work: work.work, mainVersion: work.mainVersion, expectedRevisionHead: null,
       value: 6, actingSubject: voter }, b.token), 201);
     const second = await json<{ review: string; revision: string }>(await call('POST', '/v1/reviews', {
-      ...body, actingSubject: voter, text: 'A second perspective', spoiler: false }, b.token), 201);
+      ...body, actingSubject: voter, text: 'A second perspective', spoiler: false, rating: 6 }, b.token), 201);
     const firstPage = await json<{ items: Array<{ id: string }>; nextCursor: string | null }>(
       await call('GET', `${path}&actingSubject=${encodeURIComponent(author)}&limit=1`, undefined, a.token));
     expect(firstPage.items.map(item => item.id)).toEqual([first.review]);

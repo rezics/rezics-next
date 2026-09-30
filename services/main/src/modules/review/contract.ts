@@ -5,6 +5,7 @@ export const REVIEW_COST = { pageSize: 20, quoteSize: 12, textChars: 8000,
   excerptChars: 240, eventBatch: 100, responseBytes: 220_000 } as const;
 export const reviewCommand = t.Object({ profile: t.Literal('reader-review-command-v1'),
   actingSubject: readId, context: readId, target: readId,
+  rating: t.Optional(t.Nullable(t.Integer({ minimum: 1, maximum: 10 }))),
   expectedRevision: t.Nullable(readUuid), language: readLanguage,
   text: t.String({ minLength: 1, maxLength: REVIEW_COST.textChars }), spoiler: t.Boolean() },
 { additionalProperties: false });
@@ -14,8 +15,8 @@ export const helpfulCommand = t.Object({ profile: t.Literal('reader-review-helpf
   actingSubject: readId, helpful: t.Boolean(), expectedRevision: t.Nullable(readUuid) },
 { additionalProperties: false });
 export const reviewItem = t.Object({ id: readUuid, work: readId, context: readId,
-  realm: t.Nullable(readId), author: readId, rating: t.Integer({ minimum: 1, maximum: 10 }),
-  ratingObservation: readId, ratingRevision: readId, language: readLanguage,
+  realm: t.Nullable(readId), author: readId, rating: t.Nullable(t.Integer({ minimum: 1, maximum: 10 })),
+  ratingObservation: t.Nullable(readId), ratingRevision: t.Nullable(readId), language: readLanguage,
   text: t.Nullable(t.String({ maxLength: REVIEW_COST.textChars })), spoiler: t.Boolean(),
   spoilerWithheld: t.Boolean(), startedOn: t.Nullable(t.String({ format: 'date' })),
   finishedOn: t.Nullable(t.String({ format: 'date' })), helpfulCount: t.Integer({ minimum: 0 }),
@@ -34,7 +35,7 @@ export const reviewQuery = t.Object({ ...pageQuery, context: readId,
 export const reviewPage = t.Object({ profile: t.Literal('reader-review-page-v1'),
   items: t.Array(reviewItem, { maxItems: REVIEW_COST.pageSize }), ...pageFields });
 export const quote = t.Object({ review: readUuid, work: readId, context: readId,
-  author: readId, rating: t.Integer({ minimum: 1, maximum: 10 }),
+  author: readId, rating: t.Nullable(t.Integer({ minimum: 1, maximum: 10 })),
   language: readLanguage, excerpt: t.String({ maxLength: REVIEW_COST.excerptChars }) });
 export const quotePage = t.Object({ profile: t.Literal('realm-reader-quotes-v1'),
   realm: readId, items: t.Array(quote, { maxItems: REVIEW_COST.quoteSize }),

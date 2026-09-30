@@ -38,13 +38,14 @@ export class RatingTargetGrainMismatch extends Error {}
 
 /** Failure-path classification only: one exact-key read of the Context's fixed grain. */
 export async function ratingContextGrain(env: WorkActivationEnvironment,
-  context: string): Promise<'MainVersion' | 'FixedRelease' | null> {
+  context: string): Promise<'MainVersion' | 'FixedRelease' | 'Release' | 'Realization' | 'Occurrence' | 'Resource' | null> {
   if (!nativeId.test(context)) return null;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?grain WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:targetGrain ?grain } } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   const grain = rows.length === 1 ? rows[0]?.grain?.value : undefined;
-  return grain === `${RV}MainVersion` ? 'MainVersion' : grain === `${RV}FixedRelease` ? 'FixedRelease' : null;
+  const grains = ['MainVersion', 'FixedRelease', 'Release', 'Realization', 'Occurrence', 'Resource'] as const;
+  return grains.find(value => grain === `${RV}${value}`) ?? null;
 }
 
 /** Rethrows `error` as a grain mismatch when the Context fixes the other grain. */

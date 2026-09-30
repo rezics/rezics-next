@@ -35,7 +35,7 @@ async function withInventoryClient<T>(pool: Pool, signal: AbortSignal,
 interface RatingProof extends GraphTerminalProof {
   context?: string; realm?: string; revision?: string; work?: string;
   mainVersion?: string; slot?: string; observation?: string; predecessor?: string | null;
-  contextRevision?: string; policyRevision?: string; release?: string;
+  contextRevision?: string; policyRevision?: string; release?: string; target?: string;
 }
 interface SealingRatingAdmission { id: string; action: string; principal_id: string }
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -65,6 +65,30 @@ export async function recordRatingAggregateHead(client: PoolClient,
         AND policy_revision = $5`,
     [proof.policyRevision, proof.context, proof.realm, proof.contextRevision, proof.predecessor]);
     if (changed.rowCount !== 1) throw new RatingInventoryConflict('Rating policy predecessor seal is unavailable');
+    return;
+  }
+  if (proof.target !== undefined) {
+    if (![proof.target, proof.observation, proof.contextRevision].every(value => nativeId.test(value ?? ''))
+      || !/^urn:rezics:rating-slot:[0-9a-f]{64}$/.test(proof.slot ?? '')
+      || proof.predecessor !== null && !nativeId.test(proof.predecessor ?? '')
+      || proof.work !== undefined || proof.mainVersion !== undefined || proof.release !== undefined) {
+      throw new RatingInventoryConflict('Target rating receipt differs from its inventory');
+    }
+    const context = await client.query('SELECT 1 FROM access.rating_aggregate_context WHERE context = $1 AND realm = $2 AND revision = $3',
+      [proof.context, proof.realm, proof.contextRevision]);
+    if (context.rowCount !== 1) throw new RatingInventoryConflict('Target Context seal unavailable');
+    const values = [proof.context, proof.target, proof.slot, proof.observation, proof.revision,
+      admitted.principal_id, admitted.id];
+    if (proof.predecessor === null) {
+      await client.query(`INSERT INTO access.target_rating_head
+        (context,target,slot,observation,revision,principal_id,admission_id,original_admission_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$7)`, values);
+    } else {
+      const changed = await client.query(`UPDATE access.target_rating_head SET revision = $5, admission_id = $7
+        WHERE context = $1 AND target = $2 AND slot = $3 AND observation = $4 AND principal_id = $6 AND revision = $8`,
+      [...values, proof.predecessor]);
+      if (changed.rowCount !== 1) throw new RatingInventoryConflict('Target predecessor seal unavailable');
+    }
     return;
   }
   // One new observation cannot certify the earlier population of a legacy Context.
@@ -128,12 +152,12 @@ export async function readRatingContextPolicyWitness(pool: Pool, context: string
 
 // Leading-key equality plus index order stops at k+1 without scanning other
 // targets or admission history. Every admission join uses its primary key.
-function inventorySql(release: boolean): string { return `SELECT c.realm, c.revision AS context_revision,
+function inventorySql(release: boolean | 'target'): string { return `SELECT c.realm, c.revision AS context_revision,
     c.policy_revision,
     f.open, f.generation, ca.state AS context_state, ca.graph_outcome AS context_outcome,
     ca.graph_receipt AS context_receipt, ca.graph_data_epoch AS context_epoch,
     ca.graph_sequence AS context_sequence,
-    h.slot, h.work, h.main_version, h.target_release, h.observation, h.revision, h.principal_id,
+    h.slot, ${release === 'target' ? 'h.target AS work, NULL AS main_version, NULL AS target_release, h.target' : 'h.work, h.main_version, h.target_release'}, h.observation, h.revision, h.principal_id,
     a.registered_at AS submitted_at, a.acting_subject, a.request_digest,
     a.state, a.graph_outcome, a.graph_receipt, a.graph_data_epoch, a.graph_sequence,
     original.registered_at AS evaluated_at,
@@ -144,14 +168,15 @@ function inventorySql(release: boolean): string { return `SELECT c.realm, c.revi
   FROM access.rating_aggregate_context c
   JOIN access.admission ca ON ca.id = c.admission_id
   CROSS JOIN access.recovery_fence f
-  LEFT JOIN LATERAL (SELECT * FROM access.rating_aggregate_head
-    WHERE context = c.context AND ${release ? 'target_release = $2' : 'main_version = $2 AND target_release IS NULL'}
+  LEFT JOIN LATERAL (SELECT * FROM access.${release === 'target' ? 'target_rating_head' : 'rating_aggregate_head'}
+    WHERE context = c.context AND ${release === 'target' ? 'target = $2' : release ? 'target_release = $2' : 'main_version = $2 AND target_release IS NULL'}
     ORDER BY slot LIMIT 101) h ON true
   LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.admission_id LIMIT 1) a ON true
   LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.original_admission_id LIMIT 1) original ON true
   WHERE c.context = $1 AND f.id = true`; }
 export const RATING_INVENTORY_SQL = inventorySql(false);
 export const RELEASE_RATING_INVENTORY_SQL = inventorySql(true);
+export const TARGET_RATING_INVENTORY_SQL = inventorySql('target');
 
 /** One bounded owner snapshot; raw counting identities stay within Access. */
 export async function readRatingAggregateInventory(pool: Pool, context: string,
@@ -164,13 +189,19 @@ export async function readReleaseRatingAggregateInventory(pool: Pool, context: s
   return readInventory(pool, context, release, true, signal);
 }
 
+export async function readTargetRatingAggregateInventory(pool: Pool, context: string,
+  target: string, signal = AbortSignal.timeout(10_000)): Promise<RatingAggregateInventory> {
+  return readInventory(pool, context, target, 'target', signal);
+}
+
 async function readInventory(pool: Pool, context: string, target: string,
-  release: boolean, signal: AbortSignal): Promise<RatingAggregateInventory> {
+  release: boolean | 'target', signal: AbortSignal): Promise<RatingAggregateInventory> {
   if (![context, target].every(value => nativeId.test(value))) throw new RatingInventoryConflict('invalid Rating target');
   return withInventoryClient(pool, signal, async client => { try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const result = await client.query(release ? RELEASE_RATING_INVENTORY_SQL : RATING_INVENTORY_SQL, [context, target]);
+    const result = await client.query(release === 'target' ? TARGET_RATING_INVENTORY_SQL
+      : release ? RELEASE_RATING_INVENTORY_SQL : RATING_INVENTORY_SQL, [context, target]);
     const first = result.rows[0];
     if (!first || first.open !== true || first.context_state !== 'sealed' || first.context_outcome !== 'succeeded') {
       throw new RatingInventoryConflict('Rating inventory is unavailable');
@@ -180,7 +211,7 @@ async function readInventory(pool: Pool, context: string, target: string,
         || !(row.evaluated_at instanceof Date) || !(row.submitted_at instanceof Date)) {
         throw new RatingInventoryConflict('Rating inventory head is unavailable');
       }
-      if (release ? row.target_release !== target : row.target_release !== null) {
+      if (release === 'target' ? row.target !== target : release ? row.target_release !== target : row.target_release !== null) {
         throw new RatingInventoryConflict('Rating inventory target differs');
       }
       return { slot: row.slot, work: row.work, mainVersion: row.main_version,

@@ -23,7 +23,7 @@ export type Capability = 'review' | 'rating' | 'discussion' | 'collection-member
   | 'library-status' | 'progress' | 'continuity' | 'spoiler-boundary' | 'suitability' | 'session' | 'report';
 const allBases = ['work', 'realization', 'release', 'occurrence', 'resource'] as const;
 export const capabilityBases = {
-  report: allBases, review: ['work', 'release'], rating: ['work', 'release'], discussion: allBases,
+  report: allBases, review: allBases, rating: allBases, discussion: allBases,
   'collection-member': allBases, 'library-status': ['work'], progress: ['occurrence'],
   continuity: ['work', 'realization', 'occurrence'], 'spoiler-boundary': ['occurrence'],
   suitability: allBases,

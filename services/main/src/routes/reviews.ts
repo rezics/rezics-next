@@ -5,6 +5,7 @@ import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, ControlUn
 import { REVIEW_COST, helpfulCommand, helpfulResult, quotePage, reviewCommand, reviewDelete,
   reviewItem as reviewItemSchema, reviewPage, reviewQuery, reviewResult } from '../modules/review/contract.ts';
 import { proveReviewRating, reviewItem, reviewTarget } from '../modules/review/read.ts';
+import { RatingTargetGrainMismatch } from '../modules/rating/release.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit,
   WorkReadMissing, WorkReadMoved, WorkReadUnavailable, workRead } from '../modules/work/read-session.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
@@ -17,7 +18,7 @@ const optionalBearer: { security: Record<string, string[]>[] } =
   { security: [{}, { bearerAuth: [] }] };
 const param = t.Object({ id: readUuid });
 const reviewErrors = { ...workReadProblems, 400: problemResult(400), 403: problemResult(403),
-  409: problemResult(409), 503: problemResult(503) };
+  409: problemResult(409), 422: problemResult(422), 503: problemResult(503) };
 
 export const openApiOperations = {
   '/v1/reviews': { post: { bearer: true, idempotencyKey: true } },
@@ -28,6 +29,7 @@ export const openApiOperations = {
 } as const;
 
 function reviewError(error: unknown): Response {
+  if (error instanceof RatingTargetGrainMismatch) return problem(422, 'rating_target_grain_mismatch', 'Review target grain differs from the Context');
   if (error instanceof ControlInvalid) return problem(400, 'invalid_review_command', error.message);
   if (error instanceof ControlDenied) return problem(403, 'review_denied', error.message);
   if (error instanceof ControlConflict || error instanceof ControlStale) {
@@ -57,15 +59,15 @@ export function reviewRoutes(work: MainWorkDependencies) {
         const principal = await work.account.verify(request, ['rating:submit']);
         const key = request.headers.get('idempotency-key') ?? '';
         const result = await workRead(work, request, { actingSubject: body.actingSubject }, async session => {
-          await reviewTarget(session, body.context, body.target);
-          const shelf = work.libraryStatus
+          const proof = await reviewTarget(session, body.context, body.target);
+          const shelf = work.libraryStatus && !proof.generic
             ? (await work.libraryStatus.batch(body.actingSubject, [body.target]))[0] : null;
           const dates = shelf?.status === 'read'
             ? { startedOn: shelf.startedOn, finishedOn: shelf.finishedOn }
             : { startedOn: null, finishedOn: null };
           const { target, ...intent } = body;
           return work.reviews!.write(principal, { ...intent, work: target }, key,
-            (head, principalId) => proveReviewRating(session, principalId, body.context, target, head), dates);
+            (head, principalId) => proveReviewRating(session, principalId, body.context, target, head), dates, proof);
         });
         return Response.json(result, { status: !result.replayed && body.expectedRevision === null ? 201 : 200,
           headers });
@@ -172,7 +174,7 @@ export function reviewRoutes(work: MainWorkDependencies) {
           await session.realm(realm);
           const rows = await work.reviews!.quotes(realm, query.limit ?? REVIEW_COST.quoteSize);
           const items = [] as Array<{ review: string; work: string; context: string;
-            author: string; rating: number; language: string; excerpt: string }>;
+            author: string; rating: number | null; language: string; excerpt: string }>;
           for (const row of rows) {
             if (query.language && row.language !== query.language) continue;
             try {

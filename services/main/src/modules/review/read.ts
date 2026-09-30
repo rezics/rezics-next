@@ -5,14 +5,27 @@ import { resolveTargets, TargetNotBound } from '../target/resolve.ts';
 import { GLOBAL_RATING_POPULATION_OWNER, GLOBAL_RATING_POPULATION } from '../rating/global.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE } from '../rating/context.ts';
 import { standingRatingSlotIri } from '../rating/observation.ts';
+import { targetContextPattern, TARGET_CONTEXT_PROFILE, TARGET_GRAINS, targetRatingSlotIri } from '../rating/target.ts';
+import { RatingTargetGrainMismatch } from '../rating/release.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import type { RatingLink, ReviewRow } from './store.ts';
 
 export async function reviewTarget(session: TargetReadSession, context: string, work: string):
-  Promise<{ mainVersion: string; realm: string | null }> {
+  Promise<{ mainVersion: string | null; realm: string | null; generic: boolean }> {
   const [target] = await resolveTargets(session, [work], 'review');
-  // The existing review inventory is MainVersion-only until a new grain profile owns it.
-  if (target!.base !== 'work') throw new TargetNotBound();
+  if (target!.base !== 'work') {
+    const rows = await session.query(`SELECT ?grain WHERE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(context)} rv:targetGrain ?grain } } LIMIT 2`, 2);
+    if (rows.length !== 1) throw new TargetNotBound();
+    const expected = TARGET_GRAINS[target!.base];
+    if (rows[0]?.grain?.value !== `https://rezics.com/vocab/${expected}`) throw new RatingTargetGrainMismatch();
+    const contexts = await session.query(`SELECT ?realm WHERE { ${targetContextPattern(context)}
+      GRAPH ${iri(GRAPHS.revisions)} { ?contextRevision a rv:RevisionAnchor ; rv:component ${iri(context)} ;
+        rv:modelRevision ${iri(TARGET_CONTEXT_PROFILE)} . FILTER NOT EXISTS { ?contextRevision a rv:ErasedRevision } }
+    } LIMIT 2`, 2);
+    if (contexts.length !== 1 || !contexts[0]?.realm) throw new WorkReadMissing('Review Context unavailable');
+    return { mainVersion: null, realm: contexts[0].realm.value, generic: true };
+  }
   const rows = await session.query(`SELECT DISTINCT ?main ?realm WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(target!.resource)} rv:mainVersion ?main ;
       rv:head ${iri(target!.revision)} . ?main a rv:MainVersion ; rv:work ${iri(target!.resource)} . }
@@ -38,23 +51,30 @@ export async function reviewTarget(session: TargetReadSession, context: string, 
       }
     }
   } LIMIT 3`, 3);
-  if (rows.length === 0) throw new WorkReadMissing('Review Work or Context is unavailable');
+  if (rows.length === 0) {
+    const grain = await session.query(`SELECT ?grain WHERE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(context)} rv:targetGrain ?grain } } LIMIT 2`, 2);
+    if (grain.length === 1 && grain[0]?.grain?.value !== 'https://rezics.com/vocab/MainVersion') throw new RatingTargetGrainMismatch();
+    throw new WorkReadMissing('Review Work or Context is unavailable');
+  }
   if (rows.length !== 1 || !rows[0]?.main) throw new WorkReadUnavailable('Review target is ambiguous');
-  return { mainVersion: rows[0].main.value, realm: rows[0].realm?.value ?? null };
+  return { mainVersion: rows[0].main.value, realm: rows[0].realm?.value ?? null, generic: false };
 }
 
 export async function proveReviewRating(session: WorkReadSession, principalId: string,
   context: string, work: string,
-  head: { mainVersion: string; observation: string; revision: string }): Promise<RatingLink> {
+  head: { mainVersion: string | null; observation: string; revision: string }): Promise<RatingLink> {
   const target = await reviewTarget(session, context, work);
   if (target.mainVersion !== head.mainVersion) throw new WorkReadMoved('Rating Work selection changed');
-  const slot = standingRatingSlotIri(principalId, context, head.mainVersion);
-  const type = target.realm ? 'RatingObservation' : 'GlobalRatingObservation';
-  const revisionType = target.realm ? 'RatingObservationRevision' : 'GlobalRatingObservationRevision';
+  const slot = target.generic ? targetRatingSlotIri(principalId, context, work)
+    : standingRatingSlotIri(principalId, context, head.mainVersion!);
+  const type = target.generic ? 'TargetRatingObservation' : target.realm ? 'RatingObservation' : 'GlobalRatingObservation';
+  const revisionType = target.generic ? 'TargetRatingObservationRevision'
+    : target.realm ? 'RatingObservationRevision' : 'GlobalRatingObservationRevision';
   const rows = await session.query(`SELECT ?value WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ${iri(head.observation)} a rv:${type} ; rv:ratingSlot ${iri(slot)} ;
-        rv:ratingContext ${iri(context)} ; rv:targetMainVersion ${iri(head.mainVersion)} ;
+        rv:ratingContext ${iri(context)} ; ${target.generic ? `rv:target ${iri(work)}` : `rv:targetMainVersion ${iri(head.mainVersion!)}`} ;
         rv:observationHead ${iri(head.revision)} . }
     GRAPH ${iri(GRAPHS.revisions)} {
       ${iri(head.revision)} a rv:${revisionType} ; rv:component ${iri(head.observation)} ;

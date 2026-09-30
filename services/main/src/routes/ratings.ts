@@ -39,11 +39,22 @@ import { releaseAggregateInput, releaseAggregateResult, releaseRatingContextInpu
   releaseRatingContextReadResult, releaseRatingContextWriteResult, releaseRatingObservationInput,
   releaseRatingObservationReadResult, releaseRatingObservationWriteResult } from '../modules/rating/release-api.ts';
 import { RatingObservationUnavailable } from '../modules/rating/observation.ts';
+import { workRead, WorkReadMissing } from '../modules/work/read-session.ts';
+import { targetRead, TargetNotBound } from '../modules/target/resolve.ts';
+import { readId } from '../modules/work/read-contract.ts';
+import { createAdmittedTargetRatingContext, setAdmittedTargetRating, readTargetRatingContext,
+  resolveRatingTarget, readTargetRatingRevision, TARGET_CONTEXT_ID, TARGET_OBSERVATION_ID } from '../modules/rating/target.ts';
+import { queryTargetRatingAggregate, TARGET_AGGREGATE_PROFILE } from '../modules/rating/target-aggregate.ts';
+import { targetAggregateInput, targetAggregateResult, targetRatingContextInput,
+  targetRatingContextReadResult, targetRatingContextWriteResult, targetRatingObservationInput,
+  targetRatingObservationWriteResult, targetRatingObservationReadResult } from '../modules/rating/target-api.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 /** A MainVersion target and an exact FixedRelease target are never interchangeable. */
 function ratingError(error: unknown): Response {
+  if (error instanceof TargetNotBound) return problem(422, error.code, error.message);
+  if (error instanceof WorkReadMissing) return problem(404, 'resource_unavailable', error.message);
   if (error instanceof RatingTargetGrainMismatch) {
     return problem(422, 'rating_target_grain_mismatch', 'Rating target grain differs from the Context');
   }
@@ -58,11 +69,19 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }), experienceAggregateInput, experienceContextDefaultInput,
-      releaseAggregateInput]),
+      releaseAggregateInput, targetAggregateInput]),
       response: { 200: t.Union([ratingAggregateResult, experienceAggregateResult,
-        experienceContextDefaultResult, releaseAggregateResult]), ...readProblems, 422: problemResult(422) },
-    }, async ({ body }) => {
+        experienceContextDefaultResult, releaseAggregateResult, targetAggregateResult]), ...readProblems, 422: problemResult(422) },
+    }, async ({ body, request }) => {
       try {
+        if (body.profile === TARGET_AGGREGATE_PROFILE) {
+          if (!work.targetRatingInventory) throw new RatingAggregateUnavailable('Target inventory unavailable');
+          const result = await workRead(work, request, { actingSubject: body.actingSubject }, async session => {
+            await resolveRatingTarget(session, body.context, body.target);
+            return queryTargetRatingAggregate(work.environment, work.targetRatingInventory!, body);
+          });
+          return Response.json(result, { headers: { 'cache-control': 'no-store' } });
+        }
         if (body.profile === RELEASE_AGGREGATE_PROFILE) {
           if (!work.releaseRatingInventory) {
             throw new RatingAggregateUnavailable('Release Rating inventory is unavailable');
@@ -108,16 +127,31 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         value: t.Nullable(t.Integer({ minimum: 1, maximum: 10 })),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         occasion: t.String({ pattern: OCCASION_PATTERN }),
-      }, { additionalProperties: false }), releaseRatingObservationInput]),
+      }, { additionalProperties: false }), releaseRatingObservationInput, targetRatingObservationInput]),
       response: { 200: t.Union([ratingObservationWriteResult, dailyRatingObservationWriteResult, experienceRatingObservationWriteResult,
-        releaseRatingObservationWriteResult]),
+        releaseRatingObservationWriteResult, targetRatingObservationWriteResult]),
         201: t.Union([ratingObservationWriteResult, dailyRatingObservationWriteResult, experienceRatingObservationWriteResult,
-          releaseRatingObservationWriteResult]),
+          releaseRatingObservationWriteResult, targetRatingObservationWriteResult]),
         202: pendingOperation, ...writeProblems, 422: problemResult(422) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      if (body.profile === TARGET_OBSERVATION_ID) {
+        try {
+          const principal = await work.account.verify(request, ['rating:submit']);
+          const target = await targetRead(work.environment,
+            { access: work.access, principal, actingSubject: body.actingSubject },
+            session => resolveRatingTarget(session, body.context, body.target));
+          const receipt = await setAdmittedTargetRating(work.environment, work.account, work.access,
+            request, { ...body, idempotencyKey }, target);
+          return Response.json({ profile: TARGET_OBSERVATION_ID, context: receipt.context, target: receipt.target,
+            observation: receipt.observation, observationRevision: receipt.revision, predecessor: receipt.predecessor,
+            value: receipt.value, availability: receipt.availability, replayed: receipt.replayed,
+            sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence } },
+          { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+        } catch (error) { return ratingError(error); }
       }
       if (body.profile === RELEASE_OBSERVATION_ID) {
         try {
@@ -164,17 +198,38 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       params: t.Object({ observation: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object({ profile: t.Optional(t.Union([t.Literal('realm-daily-rating-observation-v1'),
-        t.Literal(EXPERIENCE_OBSERVATION_ID), t.Literal(RELEASE_OBSERVATION_ID)])),
+        t.Literal(EXPERIENCE_OBSERVATION_ID), t.Literal(RELEASE_OBSERVATION_ID), t.Literal(TARGET_OBSERVATION_ID)])),
         context: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         mainVersion: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
         release: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+        target: t.Optional(readId),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) }),
       response: { 200: t.Union([ratingObservationReadResult, dailyRatingObservationReadResult,
-        experienceRatingObservationReadResult, releaseRatingObservationReadResult]), ...authorizedReadProblems },
+        experienceRatingObservationReadResult, releaseRatingObservationReadResult, targetRatingObservationReadResult]), ...authorizedReadProblems,
+        422: problemResult(422) },
     }, async ({ params, query, request }) => {
+      if (query.profile === TARGET_OBSERVATION_ID) {
+        if (!query.target || query.mainVersion || query.release) return problem(400, 'invalid_request', 'Exact target required');
+        try {
+          const principal = await work.account.verify(request, ['rating:read']);
+          if (!await work.access.canReadStandingRating(principal, query.actingSubject, query.context)) {
+            return problem(403, 'authority_denied', 'Authority is not admitted');
+          }
+          const principalId = await work.access.activePrincipalId(principal);
+          if (!principalId) return problem(403, 'authority_denied', 'Authority is not admitted');
+          const found = await targetRead(work.environment, { access: work.access, principal, actingSubject: query.actingSubject },
+            async session => {
+              await resolveRatingTarget(session, query.context, query.target!);
+              return readTargetRatingRevision(work.environment, principalId, { context: query.context, target: query.target!,
+                observation: `https://rezics.com/id/${params.observation}`, revision: `https://rezics.com/id/${params.revision}` });
+            });
+          if (!found) return problem(404, 'rating_revision_unavailable', 'Rating revision unavailable');
+          return Response.json(found, { headers: { 'cache-control': 'no-store' } });
+        } catch (error) { return ratingError(error); }
+      }
       // A release revision names only its release; a MainVersion revision names only its MainVersion.
       const releaseRead = query.profile === RELEASE_OBSERVATION_ID;
-      if (releaseRead ? !query.release || query.mainVersion : !query.mainVersion || query.release) {
+      if (query.target || (releaseRead ? !query.release || query.mainVersion : !query.mainVersion || query.release)) {
         return problem(400, 'invalid_request', 'Rating revision target is invalid');
       }
       const mainVersion = query.mainVersion!;
@@ -292,16 +347,28 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         timeZone: t.String({ minLength: 1, maxLength: 100 }),
         question: t.String({ minLength: 3, maxLength: 120 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }), releaseRatingContextInput]),
+      }, { additionalProperties: false }), releaseRatingContextInput, targetRatingContextInput]),
       response: { 200: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult,
-        releaseRatingContextWriteResult]),
+        releaseRatingContextWriteResult, targetRatingContextWriteResult]),
         201: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult,
-          releaseRatingContextWriteResult]),
+          releaseRatingContextWriteResult, targetRatingContextWriteResult]),
         202: pendingOperation, ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      }
+      if (body.profile === TARGET_CONTEXT_ID) {
+        try {
+          const receipt = await createAdmittedTargetRatingContext(work.environment, work.account, work.access,
+            request, { ...body, idempotencyKey });
+          return Response.json({ context: receipt.context, realm: receipt.realm, question: body.question,
+            contextRevision: receipt.revision, targetGrain: body.targetGrain, profile: TARGET_CONTEXT_ID,
+            scale: { min: 1, max: 10, step: 1 }, cadence: 'standing', population: 'account-principal',
+            aggregation: 'latest-per-rater-mean', replayed: receipt.replayed,
+            sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence } },
+          { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+        } catch (error) { return ratingError(error); }
       }
       if (body.profile === RELEASE_CONTEXT_ID) {
         try {
@@ -399,11 +466,13 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/rating-contexts/:id', {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       response: { 200: t.Union([ratingContextReadResult, dailyRatingContextReadResult, experienceRatingContextReadResult,
-        releaseRatingContextReadResult]), ...readProblems },
+        releaseRatingContextReadResult, targetRatingContextReadResult]), ...readProblems },
     }, async ({ params }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const context = `https://rezics.com/id/${params.id}`;
+        const targetContext = await readTargetRatingContext(work.environment, context);
+        if (targetContext) return Response.json(targetContext, { headers: { 'cache-control': 'no-store' } });
         const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT ?realm ?question ?revision ?manifest ?profile ?cadence ?timeZone WHERE {
             GRAPH <urn:rezics:graph:current> {

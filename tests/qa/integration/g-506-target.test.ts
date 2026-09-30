@@ -195,9 +195,8 @@ test('G-506: API-seeded SAO targets preserve exact grain, owner disclosure and b
     await resolveBatch(webChapters.occurrences, 'progress');
     // Two graph-position fences + summary and revision query; no per-target probes.
     expect(graphQueries).toBe(4);
-    const mismatch = await resolveBatch([webChapters.occurrences[0]!], 'review').catch(error => error);
-    expect(mismatch).toBeInstanceOf(TargetNotBound);
-    expect(mismatch).toMatchObject({ status: 422, code: 'target_not_bound' });
+    expect(await resolveBatch([webChapters.occurrences[0]!], 'review'))
+      .toMatchObject([{ resource: webChapters.occurrences[0]!, base: 'occurrence' }]);
     expect(await json(await get(sao.web.mainVersion), 200)).toMatchObject({ base: null, work: sao.web.work });
     await expect(resolveBatch([sao.web.mainVersion])).rejects.toBeInstanceOf(TargetNotBound);
     const missing = nativeId();

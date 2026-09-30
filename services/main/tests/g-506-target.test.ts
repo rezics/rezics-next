@@ -64,7 +64,8 @@ test('G-506: shared schemas preserve exact grains and every capability has an ex
   const bases = { work: true, realization: true, release: true, occurrence: true, resource: true } satisfies Record<Base, boolean>;
   expect(Object.keys(bases).sort()).toEqual(['occurrence', 'realization', 'release', 'resource', 'work']);
   expect(capabilityBases).toEqual({ report: ['work', 'realization', 'release', 'occurrence', 'resource'],
-    review: ['work', 'release'], rating: ['work', 'release'],
+    review: ['work', 'realization', 'release', 'occurrence', 'resource'],
+    rating: ['work', 'realization', 'release', 'occurrence', 'resource'],
     discussion: ['work', 'realization', 'release', 'occurrence', 'resource'],
     'collection-member': ['work', 'realization', 'release', 'occurrence', 'resource'],
     'library-status': ['work'], progress: ['occurrence'], continuity: ['work', 'realization', 'occurrence'],
@@ -130,7 +131,7 @@ test('G-506: Main Version and grain mismatch are 422 only after target admission
   expect(error).toMatchObject({ status: 422, code: 'target_not_bound' });
   expect(main.queries).toHaveLength(1);
   const occurrence = fixture([{ resource: id(1), type: 'occurrence', work: id(2) }]);
-  await expect(resolveTargets(occurrence.session, [id(1)], 'rating')).rejects.toBeInstanceOf(TargetNotBound);
+  expect(await resolveTargets(occurrence.session, [id(1)], 'rating')).toMatchObject([{ base: 'occurrence' }]);
   const hiddenMismatch = fixture([{ resource: id(1), type: 'occurrence', work: id(2), public: false }],
     { hidden: [id(2)] });
   const unavailable = await resolveTargets(hiddenMismatch.session, [id(1)], 'rating').catch(error => error);

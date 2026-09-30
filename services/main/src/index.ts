@@ -53,6 +53,7 @@ import { ContentProtectionStore } from './modules/protection/content-store.ts';
 import { PrivateSearchSettlement } from './modules/contribution/private-search-settlement.ts';
 import { ContentSearchReadAccess } from './modules/search-disclosure/content-read-lease.ts';
 import { ReleaseRatingInventoryStore } from './modules/access/rating-aggregate-inventory.ts';
+import { TargetRatingInventoryStore } from './modules/rating/target-inventory.ts';
 import { AccessActingContexts } from './modules/access/contexts.ts';
 import { AccessSessionAgents } from './modules/access/session-agent.ts';
 import { AccessGroups } from './modules/access/groups.ts';
@@ -394,6 +395,7 @@ const app = createMainApp(fuseki, {
   media,
   mediaAccess: new MediaAccessBatchReader(pool, fuseki),
   releaseRatingInventory: new ReleaseRatingInventoryStore(pool),
+  targetRatingInventory: new TargetRatingInventoryStore(pool),
   votes: new AccessVotes(pool),
   proposalExecutions: new AccessProposalExecutions(pool),
   judgments: new AccessJudgments(pool),

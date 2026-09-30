@@ -234,7 +234,7 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
       context: context.context, work: sao.bunko.work, mainVersion: sao.bunko.mainVersion,
       expectedRevisionHead: null, value: 8, actingSubject: f.actor }), 201);
     await json(await call('POST', '/v1/reviews', { profile: 'reader-review-command-v1', actingSubject: reviewer.agent,
-      context: context.context, target: sao.bunko.work, expectedRevision: null, language: 'en', text: 'Still a Work review', spoiler: false }), 201);
+      context: context.context, target: sao.bunko.work, expectedRevision: null, language: 'en', text: 'Still a Work review', spoiler: false, rating: 8 }), 201);
     expect(await json(await call('GET', `/v1/resources/${shortId(sao.bunko.work)}/reviews?context=${encodeURIComponent(context.context)}`, undefined, false)))
       .toMatchObject({ items: [{ work: sao.bunko.work, rating: 8 }] });
     expect(await json(await call('GET', `/v1/resources/${shortId(sao.bunko.work)}/ratings?scope=realm&realm=${encodeURIComponent(realm.realm)}&context=${encodeURIComponent(context.context)}`, undefined, false)))

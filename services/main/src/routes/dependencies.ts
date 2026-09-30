@@ -9,6 +9,7 @@ import type { AccessAdmissionRegistry } from '../modules/access/admission.ts';
 import type { AgentProvisioning } from '../modules/agent/provision.ts';
 import type { AgentVanityHandles } from '../modules/agent/vanity.ts';
 import type { ReleaseRatingInventoryStore } from '../modules/access/rating-aggregate-inventory.ts';
+import type { TargetRatingInventoryStore } from '../modules/rating/target-inventory.ts';
 import type { AccessOrganizationModeration } from '../modules/access/organization-moderation.ts';
 import type { AccessGroups } from '../modules/access/groups.ts';
 import type { AccessGrants } from '../modules/access/grants.ts';
@@ -174,6 +175,7 @@ export interface MainWorkDependencies {
       | 'readRatingAggregateInventory' | 'checkRatingAggregateFence'
       | 'readRatingContextPolicyWitness' | 'issueTitleAdmission'>>;
   releaseRatingInventory?: ReleaseRatingInventoryStore;
+  targetRatingInventory?: TargetRatingInventoryStore;
   actingContexts?: AccessActingContexts;
   actingContextDiscovery?: AccessActingContexts;
   sessionAgents?: AccessSessionAgents;

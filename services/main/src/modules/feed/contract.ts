@@ -44,7 +44,7 @@ export const feedCard = t.Union([
       kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }),
     works: t.Array(t.Object({ id: readId, title: readName, cover: readAvatar,
       types: t.Array(t.String(), { maxItems: 3 }) }), { maxItems: 3 }) }),
-  t.Object({ kind: t.Literal('review'), review: readUuid, rating: t.Integer({ minimum: 1, maximum: 10 }),
+  t.Object({ kind: t.Literal('review'), review: readUuid, rating: t.Nullable(t.Integer({ minimum: 1, maximum: 10 })),
     scale: t.Union([t.Literal(5), t.Literal(10)]), spoiler: t.Boolean(),
     helpfulCount: t.Integer({ minimum: 0 }), opening: t.Nullable(t.String({ maxLength: 400 })) }),
 ]);

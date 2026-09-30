@@ -13,14 +13,14 @@ const LANGUAGE = /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/;
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 export interface ReviewRow { id: string; principal_id: string; acting_subject: string;
-  context: string; realm: string | null; work: string; main_version: string;
-  rating_observation: string; rating_revision: string; rating: number;
+  context: string; realm: string | null; work: string; main_version: string | null;
+  rating_observation: string | null; rating_revision: string | null; rating: number | null;
   language: string; body: string; spoiler: boolean; started_on: string | null;
   finished_on: string | null; revision: string; deleted: boolean; helpful_count: number;
   created_at: Date; updated_at: Date; viewer_helpful?: boolean; viewer_vote_revision?: string | null }
 export interface ReviewIntent { actingSubject: string; context: string; work: string;
-  expectedRevision: string | null; language: string; text: string; spoiler: boolean }
-export interface RatingLink { mainVersion: string; observation: string; revision: string;
+  expectedRevision: string | null; language: string; text: string; spoiler: boolean; rating?: number | null }
+export interface RatingLink { mainVersion: string | null; observation: string; revision: string;
   value: number; realm: string | null }
 export interface ReviewReceipt { profile: 'reader-review-receipt-v1'; review: string;
   revision: string; deleted: boolean; replayed: boolean }
@@ -37,6 +37,7 @@ export function validateReviewIntent(input: ReviewIntent, key: string) {
   if (![input.actingSubject, input.context, input.work].every(value => ID.test(value))
     || !KEY.test(key) || input.expectedRevision !== null && !UUID.test(input.expectedRevision)
     || !LANGUAGE.test(input.language) || input.language.length > 35
+    || input.rating != null && (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 10)
     || input.text.length < 1 || input.text.length > REVIEW_COST.textChars
     || input.text.trim().length === 0 || input.text !== input.text.normalize('NFC')
     || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(input.text)) {
@@ -82,9 +83,10 @@ export class ReaderReviews {
   constructor(private readonly pool: Pool) {}
 
   async write(principal: VerifiedPrincipal, input: ReviewIntent, key: string,
-    proveRating: (head: { mainVersion: string; observation: string; revision: string },
+    proveRating: (head: { mainVersion: string | null; observation: string; revision: string },
       principalId: string) => Promise<RatingLink>,
-    shelfDates: { startedOn: string | null; finishedOn: string | null }): Promise<ReviewReceipt> {
+    shelfDates: { startedOn: string | null; finishedOn: string | null },
+    target: { mainVersion: string | null; realm: string | null; generic: boolean }): Promise<ReviewReceipt> {
     validateReviewIntent(input, key);
     const intent = { kind: 'set', ...input };
     return controlTransaction(this.pool, async client => {
@@ -101,18 +103,32 @@ export class ReaderReviews {
         WHERE r.id = $1 AND ${reviewVisibleSql}`, [prior.id])).rowCount) {
         throw new ControlDenied('Review is restricted');
       }
-      const head = (await client.query<{ main_version: string; observation: string; revision: string }>(`
-        SELECT h.main_version, h.observation, h.revision
-        FROM access.rating_aggregate_head h JOIN access.admission a ON a.id = h.admission_id
-        WHERE h.principal_id = $1 AND h.context = $2 AND h.work = $3
-          AND h.target_release IS NULL AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
-        LIMIT 2 FOR SHARE OF h`, [owner, input.context, input.work])).rows;
-      if (head.length !== 1) throw new ControlDenied('An available standing rating is required');
-      const linked = await proveRating({ mainVersion: head[0]!.main_version,
-        observation: head[0]!.observation, revision: head[0]!.revision }, owner);
-      if (linked.mainVersion !== head[0]!.main_version || linked.observation !== head[0]!.observation
-        || linked.revision !== head[0]!.revision || !Number.isInteger(linked.value)
-        || linked.value < 1 || linked.value > 10) throw new ControlDenied('Rating link changed');
+      let linked: RatingLink | null = null;
+      // Omission preserves a live review's retained evidence; null clears it.
+      // A new or revived review with no supplied score remains unscored.
+      if (input.rating === undefined && prior && !prior.deleted && prior.rating !== null) {
+        linked = { mainVersion: prior.main_version, observation: prior.rating_observation!,
+          revision: prior.rating_revision!, value: prior.rating, realm: prior.realm };
+      }
+      if (input.rating != null) {
+        const head = (await client.query<{ main_version: string | null; observation: string; revision: string }>(target.generic ? `
+          SELECT NULL AS main_version, h.observation, h.revision
+          FROM access.target_rating_head h JOIN access.admission a ON a.id = h.admission_id
+          WHERE h.principal_id = $1 AND h.context = $2 AND h.target = $3
+            AND a.state = 'sealed' AND a.graph_outcome = 'succeeded' LIMIT 2 FOR SHARE OF h` : `
+          SELECT h.main_version, h.observation, h.revision
+          FROM access.rating_aggregate_head h JOIN access.admission a ON a.id = h.admission_id
+          WHERE h.principal_id = $1 AND h.context = $2 AND h.work = $3
+            AND h.target_release IS NULL AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
+          LIMIT 2 FOR SHARE OF h`, [owner, input.context, input.work])).rows;
+        if (head.length !== 1) throw new ControlDenied('An available standing rating is required');
+        linked = await proveRating({ mainVersion: head[0]!.main_version,
+          observation: head[0]!.observation, revision: head[0]!.revision }, owner);
+        if (linked.mainVersion !== head[0]!.main_version || linked.observation !== head[0]!.observation
+          || linked.revision !== head[0]!.revision || !Number.isInteger(linked.value)
+          || linked.value !== input.rating || linked.realm !== target.realm
+          || linked.value < 1 || linked.value > 10) throw new ControlDenied('Rating link changed');
+      }
       const revision = randomUUID();
       let id: string;
       if (prior) {
@@ -124,8 +140,8 @@ export class ReaderReviews {
           revision = $13, deleted = false, helpful_count = CASE WHEN deleted THEN 0 ELSE helpful_count END,
           created_at = CASE WHEN deleted THEN clock_timestamp() ELSE created_at END,
           updated_at = clock_timestamp() WHERE id = $1`,
-        [id, input.actingSubject, linked.mainVersion, linked.observation, linked.revision,
-          linked.value, linked.realm, input.language, input.text, input.spoiler,
+        [id, input.actingSubject, target.mainVersion, linked?.observation ?? null, linked?.revision ?? null,
+          linked?.value ?? null, target.realm, input.language, input.text, input.spoiler,
           shelfDates.startedOn, shelfDates.finishedOn, revision]);
       } else {
         id = randomUUID();
@@ -134,16 +150,16 @@ export class ReaderReviews {
            rating_observation, rating_revision, rating, language, body, spoiler,
            started_on, finished_on, revision)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-        [id, owner, input.actingSubject, input.context, linked.realm, input.work,
-          linked.mainVersion, linked.observation, linked.revision, linked.value,
+        [id, owner, input.actingSubject, input.context, target.realm, input.work,
+          target.mainVersion, linked?.observation ?? null, linked?.revision ?? null, linked?.value ?? null,
           input.language, input.text, input.spoiler, shelfDates.startedOn, shelfDates.finishedOn, revision]);
       }
       await client.query(`INSERT INTO access.reader_review_revision
         (review_id, revision, acting_subject, rating_observation, rating_revision,
          rating, language, body, spoiler, started_on, finished_on, deleted)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,false)`,
-      [id, revision, input.actingSubject, linked.observation, linked.revision,
-        linked.value, input.language, input.text, input.spoiler,
+      [id, revision, input.actingSubject, linked?.observation ?? null, linked?.revision ?? null,
+        linked?.value ?? null, input.language, input.text, input.spoiler,
         shelfDates.startedOn, shelfDates.finishedOn]);
       await bumpCollection(client, input.context, input.work);
       await client.query(`INSERT INTO access.reader_review_event (review_id, revision, kind)
