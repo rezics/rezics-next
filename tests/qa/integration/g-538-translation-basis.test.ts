@@ -92,7 +92,7 @@ test('G-538: translation publication basis guards Works and chapters in both ord
         GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:NativeAgentCreditRevision ;
           rv:component ${iri(credit)} ; rv:work ${iri(result.work)} ; rv:agent ${iri(actor)} ;
           schema:roleName "author" . } }`);
-      for (const [prefix, action] of [['content:draft', 'content.draft'], ['content:publish', 'content.publish'],
+      for (const [prefix, action] of [['work:read', 'work.read'], ['content:draft', 'content.draft'], ['content:publish', 'content.publish'],
         ['content:search-eligibility', 'content.search-eligibility'], ['translation:link', 'translation.link']]) {
         await grant(actor, `${prefix}:${result.work}`, action!);
       }
