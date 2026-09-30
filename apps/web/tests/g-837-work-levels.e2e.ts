@@ -138,7 +138,7 @@ test('parts, connections and editions read from Main for the franchise records',
   await page.goto(`/en/isbn/${volumeOne.isbn}`);
   await expect(page).toHaveURL(new RegExp(`/en/releases/${uuid(volumeOne.release)}$`));
   await expect(page.getByRole('heading', { level: 1, name: 'Sword Art Online 1: Aincrad' })).toBeVisible();
-  await expect(page.getByText('English')).toBeVisible();
+  await expect(page.getByText('English').first()).toBeVisible();
   await expect(page.getByText('Main Version').first()).toBeVisible();
   await page.getByRole('region', { name: 'What it covers' }).getByRole('link', { name: 'Sword Art Online, Vol. 1' }).click();
   await expect(page).toHaveURL(`/en/w/${uuid(volumeOne.work.work)}`);
