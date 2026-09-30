@@ -16,30 +16,47 @@ export async function publishedWorks(session: WorkReadSession, works: string[]) 
   return new Set(rows.map(row => row.id!.value));
 }
 
-/** SQL reads stay page-sized. A missing card advances the candidate keyset,
- * never ending traversal; exhausting the read budget fails the whole request.
- * Each continuation is fenced against every status/sort-key write. */
-export async function readShelfPage(session: WorkReadSession, agent: string,
-  store: ReaderLibraryStatusStore, status: ReadingStatus, options: ShelfOptions,
+/** The public total is authenticated with the keyset and its source fences;
+ * continuations reuse it rather than scanning the whole public shelf again. */
+export function shelfPageBasis(session: WorkReadSession, agent: string,
+  status: ReadingStatus, options: ShelfOptions,
   fence: string, publishedOnly: boolean) {
   const sort = options.sort ?? 'added', order = options.order ?? (sort === 'title' ? 'asc' : 'desc');
   if (sort === 'finished' && status !== 'read') throw new WorkReadInvalid('Finished sort requires the read shelf');
-  const binding = [publishedOnly ? 'agent-status-shelf-v2' : 'reader-status-shelf-v2', agent, status, sort, order];
+  const binding = [publishedOnly ? 'agent-status-shelf-v3' : 'reader-status-shelf-v2', agent, status, sort, order];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   let after: ShelfAfter | undefined;
+  let statusCount: number | undefined;
   if (cursor) {
     let value: unknown;
     try { value = JSON.parse(cursor.order); } catch { throw new WorkReadInvalid('Invalid shelf cursor'); }
-    if (!Array.isArray(value) || value.length !== 2 || typeof value[0] !== 'string'
-      || value[1] !== null && typeof value[1] !== 'string') throw new WorkReadInvalid('Invalid shelf cursor');
+    if (!Array.isArray(value) || value.length !== (publishedOnly ? 3 : 2) || typeof value[0] !== 'string'
+      || value[1] !== null && typeof value[1] !== 'string'
+      || publishedOnly && (!Number.isSafeInteger(value[2]) || value[2] < 0)) throw new WorkReadInvalid('Invalid shelf cursor');
     if (value[0] !== fence) throw new WorkReadMoved('Status shelf changed');
     after = { work: cursor.after, value: value[1] as string | null };
+    if (publishedOnly) statusCount = value[2] as number;
+  }
+  return { binding, sort, order, after, statusCount };
+}
+
+/** Owner pages retain every status row, using null cards as placeholders.
+ * Public pages skip unavailable cards while advancing the candidate keyset;
+ * exhausting the read budget fails the whole request. */
+export async function readShelfPage(session: WorkReadSession, agent: string,
+  store: ReaderLibraryStatusStore, status: ReadingStatus, options: ShelfOptions,
+  fence: string, publishedOnly: boolean, statusCount?: number) {
+  const basis = shelfPageBasis(session, agent, status, options, fence, publishedOnly);
+  const { binding, sort, order } = basis;
+  let after = basis.after;
+  if (publishedOnly && (!Number.isSafeInteger(statusCount) || statusCount! < 0)) {
+    throw new WorkReadInvalid('Invalid public shelf count');
   }
   const limit = session.options.limit ?? STATUS_SHELF_COST.pageSize;
   if (!Number.isInteger(limit) || limit < 1 || limit > STATUS_SHELF_COST.pageSize) {
     throw new WorkReadInvalid('Invalid shelf page size');
   }
-  const items: Array<Omit<ShelfRow, 'sortValue'> & { card: NonNullable<Awaited<ReturnType<typeof shelfWorks>> extends Map<string, infer T> ? T : never> }> = [];
+  const items: Array<Omit<ShelfRow, 'sortValue'> & { card: (Awaited<ReturnType<typeof shelfWorks>> extends Map<string, infer T> ? T : never) | null }> = [];
   let last: ShelfAfter | undefined;
   let hasMore = false;
   while (true) {
@@ -49,8 +66,8 @@ export async function readShelfPage(session: WorkReadSession, agent: string,
     const published = publishedOnly ? await publishedWorks(session, rows.map(row => row.work)) : null;
     const cards = await shelfWorks(session, rows.filter(row => !published || published.has(row.work)).map(row => row.work));
     for (const row of rows) {
-      const card = cards.get(row.work);
-      if (!card) continue;
+      const card = cards.get(row.work) ?? null;
+      if (publishedOnly && !card) continue;
       if (items.length === limit) { hasMore = true; break; }
       const { sortValue, ...state } = row;
       items.push({ ...state, card });
@@ -61,5 +78,6 @@ export async function readShelfPage(session: WorkReadSession, agent: string,
     after = { work: tail.work, value: tail.sortValue };
   }
   return pageResult(session, items, hasMore
-    ? encodeReadCursor(binding, session.position, last!.work, JSON.stringify([fence, last!.value])) : null);
+    ? encodeReadCursor(binding, session.position, last!.work,
+      JSON.stringify(publishedOnly ? [fence, last!.value, statusCount] : [fence, last!.value])) : null);
 }

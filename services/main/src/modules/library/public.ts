@@ -1,10 +1,11 @@
 import { WorkReadMoved, WorkReadMissing, WorkReadInvalid, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
-import { readAgent } from '../profiles/read.ts';
-import { publishedWorks, readShelfPage, type ShelfOptions } from './shelf-page.ts';
+import { readAgent, shelfWorks } from '../profiles/read.ts';
+import { publishedWorks, readShelfPage, shelfPageBasis, type ShelfOptions } from './shelf-page.ts';
 import { STATUS_SHELF_COST, type ReaderLibraryStatusStore, type ReadingStatus, type ShelfSort } from './status.ts';
 
 export const PUBLIC_SHELF_COST = { candidateBatch: STATUS_SHELF_COST.candidateBatch,
-  pageSize: STATUS_SHELF_COST.pageSize, countScan: 'all candidates within the shared read deadline' } as const;
+  countBatch: STATUS_SHELF_COST.countBatch, pageSize: STATUS_SHELF_COST.pageSize,
+  countScan: 'first page only, all candidates within the shared read deadline' } as const;
 
 async function projection(session: WorkReadSession, agent: string, store: ReaderLibraryStatusStore, sort: ShelfSort = 'added') {
   await readAgent(session, agent);
@@ -33,11 +34,12 @@ async function publishedCount(session: WorkReadSession, agent: string,
   let after, count = 0, changedAt: string | null = null;
   while (true) {
     session.checkDeadline();
-    const rows = await store.sortedPage(agent, status, STATUS_SHELF_COST.candidateBatch, 'added', 'desc', after);
+    const rows = await store.sortedPage(agent, status, PUBLIC_SHELF_COST.countBatch, 'added', 'desc', after);
     if (!rows.length) break;
     const published = await publishedWorks(session, rows.map(row => row.work));
-    for (const row of rows) if (published.has(row.work)) { count++; changedAt ??= row.changedAt; }
-    if (rows.length < STATUS_SHELF_COST.candidateBatch) break;
+    const cards = await shelfWorks(session, rows.filter(row => published.has(row.work)).map(row => row.work));
+    for (const row of rows) if (cards.has(row.work)) { count++; changedAt ??= row.changedAt; }
+    if (rows.length < PUBLIC_SHELF_COST.countBatch) break;
     const tail = rows.at(-1)!;
     after = { work: tail.work, value: tail.sortValue };
   }
@@ -61,10 +63,12 @@ export async function readPublicStatusShelf(session: WorkReadSession, agent: str
     throw new WorkReadInvalid('This sort is private to the reader');
   }
   const before = await projection(session, agent, store, options.sort);
-  const statusCount = (await publishedCount(session, agent, store, status)).count;
+  const fence = `${before.statusFence}:${before.visibilityVersion}:${before.agentFence}`;
+  const basis = shelfPageBasis(session, agent, status, options, fence, true);
+  const statusCount = basis.statusCount ?? (await publishedCount(session, agent, store, status)).count;
   const page = await readShelfPage(session, agent, store, status, options,
-    `${before.statusFence}:${before.visibilityVersion}`, true);
+    fence, true, statusCount);
   await fenceProjection(session, agent, store, before);
   return { profile: 'agent-status-shelf-v1' as const, agent, status, statusCount,
-    ...page, items: page.items.map(item => ({ work: item.work, card: item.card })) };
+    ...page, items: page.items.map(item => ({ work: item.work, card: item.card! })) };
 }

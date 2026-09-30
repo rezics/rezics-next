@@ -8,7 +8,7 @@ export type ShelfSort = 'added' | 'title' | 'rating' | 'last-read' | 'finished';
 export type ShelfOrder = 'asc' | 'desc';
 export interface ShelfAfter { work: string; value: string | null }
 export interface ShelfRow extends StatusState { sortValue: string | null }
-export const STATUS_SHELF_COST = { candidateBatch: 20, pageSize: 20, countStatements: 1,
+export const STATUS_SHELF_COST = { candidateBatch: 20, countBatch: 64, pageSize: 20, countStatements: 1,
   // Candidate keysets are O(log N + P); the consistency fence is O(N) in SQL.
   ordering: 'SQL keyset', fence: 'SQL aggregate O(N)', nulls: 'last' } as const;
 export type ShelfMetadata = { titleKey: string | null; ownRating: number | null; lastReadAt: string | null };
@@ -319,7 +319,7 @@ export class ReaderLibraryStatusStore {
       rating: ['own_rating', 'integer'], 'last-read': ['last_read_at', 'timestamptz'],
       finished: ['finished_on', 'date'] } as const;
     if (!ID.test(agent) || !['want-to-read', 'reading', 'read'].includes(status)
-      || !Number.isInteger(limit) || limit < 1 || limit > 21 || !Object.hasOwn(keys, sort)
+      || !Number.isInteger(limit) || limit < 1 || limit > STATUS_SHELF_COST.countBatch || !Object.hasOwn(keys, sort)
       || !['asc', 'desc'].includes(order) || sort === 'finished' && status !== 'read'
       || after && (!ID.test(after.work) || after.value !== null && typeof after.value !== 'string')) {
       throw new InvalidLibraryStatus('invalid status shelf page');

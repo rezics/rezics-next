@@ -4,6 +4,16 @@ ALTER TABLE reader.library_status
   ADD COLUMN title_key text,
   ADD COLUMN own_rating integer CHECK (own_rating BETWEEN 1 AND 5),
   ADD COLUMN last_read_at timestamptz;
+
+-- Co-reader membership depends only on identity and status. Metadata, rating,
+-- progress and date-only edits must not invalidate every reader's generation.
+CREATE OR REPLACE FUNCTION reader.advance_also_enjoyed_source_fence() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' AND (NEW.agent, NEW.work, NEW.status)
+    IS NOT DISTINCT FROM (OLD.agent, OLD.work, OLD.status) THEN RETURN NULL; END IF;
+  UPDATE reader.also_enjoyed_source_fence SET revision = revision + 1 WHERE id;
+  RETURN NULL;
+END $$;
 UPDATE reader.library_status SET title_key = '';
 
 -- Added order uses library_status_shelf; finished range reads retain
@@ -18,5 +28,5 @@ CREATE INDEX library_status_last_read_shelf ON reader.library_status (agent, sta
   WHERE status IS NOT NULL;
 -- Empty after the conversion; prevents repeatedly sorting the remaining frozen
 -- inventory while the restartable backfill drains bounded batches.
-CREATE INDEX library_status_backfill ON reader.library_status (changed_at DESC, work DESC)
+CREATE INDEX library_status_backfill ON reader.library_status (changed_at DESC, work DESC, agent DESC)
   WHERE title_key = '';

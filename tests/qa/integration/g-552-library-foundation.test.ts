@@ -140,6 +140,10 @@ test('G-552: SQL totals cover 1,000 status rows and 2,601 completions; a Work ra
       await home.stack.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [grantId]);
       expect((await home.call('GET', privatePath, undefined, home.reader.token)).status).toBe(404);
       expect((await home.call('GET', path)).status).toBe(401);
+      // Preserve the current controller floor while denying the old reader.
+      await home.stack.accessPool.query(`INSERT INTO access.representation
+        (id,principal_id,subject_id,action,valid_until) VALUES ($1,$2,$3,'agent.control','infinity')`,
+      [randomUUID(), home.author.principalId, seeded.reader]);
       await home.stack.accessPool.query(`UPDATE access.representation SET active = false
         WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control'`, [home.reader.principalId, seeded.reader]);
       expect((await home.call('GET', path, undefined, home.reader.token)).status).toBe(503);

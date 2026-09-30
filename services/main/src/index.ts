@@ -39,7 +39,7 @@ import { AgentVanityHandles } from './modules/agent/vanity.ts';
 import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
 import { StudioAccess } from './modules/studio/access.ts';
-import { prepareLibraryShelves } from './modules/library/backfill.ts';
+import { configureLibraryShelves, prepareLibraryShelves } from './modules/library/backfill.ts';
 import { ReaderLibraryStatusStore } from './modules/library/status.ts';
 import { ConsumptionSessionStore } from './modules/session/store.ts';
 import { EditionPreferenceStore } from './modules/session/preference-store.ts';
@@ -325,7 +325,7 @@ const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
   ? openLibraryFixtureFetch(config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT) : fetch;
 const libraryImport = new ReaderLibraryImportStore(contentPool);
-await prepareLibraryShelves(contentPool, pool, fuseki);
+configureLibraryShelves(contentPool, pool, fuseki);
 const app = createMainApp(fuseki, {
   suitability: new SuitabilityStore(pool, access),
   follows: new FollowsStore(pool),
@@ -479,6 +479,11 @@ const discoveryWorker = relayPool ? new DiscoveryRefreshWorker({ environment, ac
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) },
 new DiscoveryRefreshStore(pool), new DiscoveryProjection(pool)) : undefined;
 app.listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });
+const libraryBackfillController = new AbortController();
+const libraryBackfill = prepareLibraryShelves(contentPool, pool, fuseki,
+  { signal: libraryBackfillController.signal }).catch(error => {
+  if (!libraryBackfillController.signal.aborted) console.warn('Library shelf backfill paused; restart to resume', error);
+});
 const feedWorker = relayPool ? new FeedRefreshWorker({ environment, account, access, content,
   // Without the review owner the worker never ingests review events, and Home reports catching-up for good.
   reviews: new ReaderReviews(pool),
@@ -500,6 +505,8 @@ async function stop(): Promise<void> {
   await readRankings.stop();
   if (stopping) return;
   stopping = true;
+  libraryBackfillController.abort();
+  await libraryBackfill;
   await app.stop();
   await feedWorker?.stop();
   await discoveryWorker?.stop();

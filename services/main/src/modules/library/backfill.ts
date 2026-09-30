@@ -7,7 +7,7 @@ import { configureShelfMetadata, type ShelfMetadata } from './status.ts';
 export const SHELF_METADATA_COST = { graphCalls: 3, graphRows: 49, sqlReads: 4,
   // A write reads one Work, one standing slot and the latest indexed progress.
   history: 'only the frozen backfill scans session commands' } as const;
-export const LIBRARY_BACKFILL_COST = { batch: 24, graphRows: 49, deadlineMs: 600_000 } as const;
+export const LIBRARY_BACKFILL_COST = { batch: 24, parentRows: 3, graphCallsPerRow: 4, deadlineMs: 600_000 } as const;
 const titleKey = (value: string) => value.normalize('NFKC').toLowerCase();
 
 /** Canonical, language-independent ordering key. Cards still use live disclosure
@@ -85,75 +85,98 @@ export async function readShelfMetadata(content: Pool | PoolClient, access: Pool
   const saved = (await content.query<{ last_read_at: string | null }>(`SELECT last_read_at::text AS last_read_at
     FROM reader.library_status WHERE agent=$1 AND work=$2`, [agent, work])).rows[0]?.last_read_at;
   if (saved && (!lastReadAt || Date.parse(saved) > Date.parse(lastReadAt))) lastReadAt = saved;
-  return { titleKey: labels[0] ? titleKey(labels[0].value) : null, ownRating, lastReadAt };
+  return { titleKey: labels[0]?.value.trim() ? titleKey(labels[0].value) : null, ownRating, lastReadAt };
 }
 
-/** Run before listening. Only migration 602's frozen rows carry the empty marker.
+export function configureLibraryShelves(content: Pool, access: Pool, graph: FusekiClient) {
+  configureShelfMetadata(content, (agent, work, transaction) => readShelfMetadata(transaction, access, graph, agent, work));
+}
+
+export interface LibraryBackfillOptions {
+  signal?: AbortSignal;
+  onRowError?: (row: { agent: string; work: string }, error: unknown) => void;
+}
+
+/** Background job after listening. Only migration 602's frozen rows carry the empty marker.
  * Each row commits independently, so a crash resumes without reprocessing it.
+ * Failed rows retain the marker for repair/retry, but a keyset skips them this run.
  * Keep chapter tombstones and immutable command receipts; an existing nonempty
  * parent status wins, otherwise the newest chapter supplies the parent slot. */
-export async function prepareLibraryShelves(content: Pool, access: Pool, graph: FusekiClient) {
-  configureShelfMetadata(content, (agent, work, transaction) => readShelfMetadata(transaction, access, graph, agent, work));
+export async function prepareLibraryShelves(content: Pool, access: Pool, graph: FusekiClient,
+  options: LibraryBackfillOptions = {}) {
+  configureLibraryShelves(content, access, graph);
+  const onRowError = options.onRowError ?? ((row, error) => console.warn('Library shelf backfill skipped row', row, error));
   const deadline = Date.now() + LIBRARY_BACKFILL_COST.deadlineMs;
   const client = await content.connect();
   let locked = false;
   try {
     locked = (await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtextextended('library-shelves-602',0)) AS locked")).rows[0]!.locked;
-    if (!locked) throw new WorkReadUnavailable('Another instance is migrating library shelves');
+    if (!locked) return;
+    let after: { changed_at: string; work: string; agent: string } | undefined;
     while (true) {
+      options.signal?.throwIfAborted();
       if (Date.now() >= deadline) throw new WorkReadUnavailable('Library backfill reached its ten-minute budget; restart to resume');
-      const batch = (await client.query<{ agent: string; work: string }>(`
-        SELECT agent, work FROM reader.library_status WHERE title_key = ''
-        ORDER BY changed_at DESC, work DESC LIMIT 24`)).rows;
+      const batch = (await client.query<{ agent: string; work: string; changed_at: string }>(`
+        SELECT agent, work, changed_at::text FROM reader.library_status WHERE title_key = ''
+          AND ($1::timestamptz IS NULL OR (changed_at, work, agent) < ($1::timestamptz, $2, $3))
+        ORDER BY changed_at DESC, work DESC, agent DESC LIMIT ${LIBRARY_BACKFILL_COST.batch}`,
+      [after?.changed_at ?? null, after?.work ?? null, after?.agent ?? null])).rows;
       if (!batch.length) break;
-      const children = [...new Set(batch.map(row => row.work))];
-      const parents = (await graph.query(`${READ_PREFIX} SELECT DISTINCT ?child ?parent WHERE {
-        VALUES ?child { ${children.map(iri).join(' ')} }
-        { GRAPH ${iri(GRAPHS.current)} { ?child schema:isPartOf ?parent } }
-        UNION { GRAPH ${iri(GRAPHS.current)} {
-          ?structure a rv:Structure ; rv:structureProfile rv:BookComposition ;
-            rv:structureOf ?main ; rv:selectedGeneration ?generation . ?main rv:work ?parent .
-          ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
-            rv:occurrenceRole rv:ChapterRole ; schema:item ?child .
-          FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
-          FILTER NOT EXISTS { ?child schema:isPartOf ?directParent }
-        } } FILTER(?child != ?parent)
-      } LIMIT 49`, 64 * 1024)).results?.bindings ?? [];
-      if (parents.length === 49) throw new WorkReadUnavailable('Legacy chapter parents exceed budget');
-      const resolved = new Map<string, string>();
-      for (const row of parents) {
-        const child = row.child!.value, parent = row.parent!.value;
-        if (resolved.has(child) && resolved.get(child) !== parent) throw new WorkReadUnavailable('Legacy chapter parent is ambiguous');
-        resolved.set(child, parent);
-      }
       for (const row of batch) {
+        options.signal?.throwIfAborted();
         if (Date.now() >= deadline) throw new WorkReadUnavailable('Library backfill reached its ten-minute budget; restart to resume');
-        const parent = resolved.get(row.work) ?? row.work;
-        const keys = await readShelfMetadata(client, access, graph, row.agent, parent, true);
-        await client.query('BEGIN');
         try {
-          if (parent !== row.work) {
-            await client.query(`INSERT INTO reader.library_status
-              (agent, work, status, started_on, finished_on, version, changed_at, title_key, own_rating, last_read_at)
-              SELECT agent, $3, status, started_on, finished_on, 1, changed_at, $4, $5, $6
-              FROM reader.library_status WHERE agent = $1 AND work = $2 AND title_key = '' AND status IS NOT NULL
-              ON CONFLICT (agent,work) DO UPDATE SET status = EXCLUDED.status, started_on = EXCLUDED.started_on,
-                finished_on = EXCLUDED.finished_on, version = reader.library_status.version + 1,
-                changed_at = EXCLUDED.changed_at, title_key = EXCLUDED.title_key,
-                own_rating = EXCLUDED.own_rating, last_read_at = EXCLUDED.last_read_at
-              WHERE reader.library_status.status IS NULL`,
-            [row.agent, row.work, parent, keys.titleKey, keys.ownRating, keys.lastReadAt]);
-            await client.query(`UPDATE reader.library_status SET status = NULL, version = version + 1,
-              title_key = NULL, own_rating = NULL, last_read_at = NULL WHERE agent = $1 AND work = $2 AND title_key = ''`,
-            [row.agent, row.work]);
-          } else {
-            await client.query(`UPDATE reader.library_status SET title_key = $3, own_rating = $4, last_read_at = $5
-              WHERE agent = $1 AND work = $2 AND title_key = ''`,
-            [row.agent, row.work, keys.titleKey, keys.ownRating, keys.lastReadAt]);
-          }
-          await client.query('COMMIT');
-        } catch (error) { await client.query('ROLLBACK'); throw error; }
+          // Resolve one frozen identity so ambiguous parents cannot poison the
+          // entire batch or consume another row's parent result budget.
+          const parents = (await graph.query(`${READ_PREFIX} SELECT DISTINCT ?parent WHERE {
+          VALUES ?child { ${iri(row.work)} }
+          { GRAPH ${iri(GRAPHS.current)} { ?child schema:isPartOf ?parent } }
+          UNION { GRAPH ${iri(GRAPHS.current)} {
+            ?structure a rv:Structure ; rv:structureProfile rv:BookComposition ;
+              rv:structureOf ?main ; rv:selectedGeneration ?generation . ?main rv:work ?parent .
+            ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
+              rv:occurrenceRole rv:ChapterRole ; schema:item ?child .
+            FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
+            FILTER NOT EXISTS { ?child schema:isPartOf ?directParent }
+          } } FILTER(?child != ?parent)
+        } LIMIT ${LIBRARY_BACKFILL_COST.parentRows}`, 64 * 1024)).results?.bindings ?? [];
+          if (parents.length > 1) throw new WorkReadUnavailable('Legacy chapter parent is ambiguous');
+          const parent = parents[0]?.parent?.value ?? row.work;
+          await client.query('BEGIN');
+          try {
+            await client.query("SET LOCAL lock_timeout = '2s'");
+            await client.query("SET LOCAL statement_timeout = '5s'");
+            // Startup no longer excludes live writers. Share their slot locks
+            // before reading metadata so progress/rating writes cannot be lost.
+            for (const work of [...new Set([row.work, parent])].sort()) {
+              await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+                [JSON.stringify(['library-status-work', row.agent, work])]);
+            }
+            const keys = await readShelfMetadata(client, access, graph, row.agent, parent, true);
+            if (parent !== row.work) {
+              await client.query(`INSERT INTO reader.library_status
+                (agent, work, status, started_on, finished_on, version, changed_at, title_key, own_rating, last_read_at)
+                SELECT agent, $3, status, started_on, finished_on, 1, changed_at, $4, $5, $6
+                FROM reader.library_status WHERE agent = $1 AND work = $2 AND title_key = '' AND status IS NOT NULL
+                ON CONFLICT (agent,work) DO UPDATE SET status = EXCLUDED.status, started_on = EXCLUDED.started_on,
+                  finished_on = EXCLUDED.finished_on, version = reader.library_status.version + 1,
+                  changed_at = EXCLUDED.changed_at, title_key = EXCLUDED.title_key,
+                  own_rating = EXCLUDED.own_rating, last_read_at = EXCLUDED.last_read_at
+                WHERE reader.library_status.status IS NULL`,
+              [row.agent, row.work, parent, keys.titleKey, keys.ownRating, keys.lastReadAt]);
+              await client.query(`UPDATE reader.library_status SET status = NULL, version = version + 1,
+                title_key = NULL, own_rating = NULL, last_read_at = NULL WHERE agent = $1 AND work = $2 AND title_key = ''`,
+              [row.agent, row.work]);
+            } else {
+              await client.query(`UPDATE reader.library_status SET title_key = $3, own_rating = $4, last_read_at = $5
+                WHERE agent = $1 AND work = $2 AND title_key = ''`,
+              [row.agent, row.work, keys.titleKey, keys.ownRating, keys.lastReadAt]);
+            }
+            await client.query('COMMIT');
+          } catch (error) { await client.query('ROLLBACK'); throw error; }
+        } catch (error) { onRowError(row, error); }
       }
+      after = batch.at(-1)!;
     }
   } finally {
     if (locked) await client.query("SELECT pg_advisory_unlock(hashtextextended('library-shelves-602',0))");

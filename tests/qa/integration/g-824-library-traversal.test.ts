@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { GRAPHS, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
@@ -11,9 +11,11 @@ import { meterStatements, startHomeStack } from './feed-read-support.ts';
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const statuses: ReadingStatus[] = ['want-to-read', 'reading', 'read'];
 const sorts: ShelfSort[] = ['added', 'title', 'rating', 'last-read', 'finished'];
+const alsoEnjoyedFence = async (pool: Pool) => (await pool.query<{ revision: string }>(
+  'SELECT revision::text FROM reader.also_enjoyed_source_fence WHERE id')).rows[0]!.revision;
 const keys = { added: 'changed_at', title: 'title_key COLLATE "C"', rating: 'own_rating',
   'last-read': 'last_read_at', finished: 'finished_on' };
-type Page = { items: { work: string; card: { id: string } }[]; nextCursor: string | null };
+type Page = { items: { work: string; card: { id: string } | null }[]; nextCursor: string | null };
 
 /** Large owner fixture, intentionally made in bounded batches. Publication
  * pointers have the same read shape as a command-created metadata Work; the
@@ -89,7 +91,7 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
             const page = await home.json<Page>(await home.call('GET', signed(path), undefined, home.reader.token));
             expect(page.items.length).toBeGreaterThan(0);
             expect(page.items.length).toBeLessThanOrEqual(20);
-            expect(page.items.every(item => item.card.id === item.work)).toBe(true);
+            expect(page.items.every(item => item.card?.id === item.work)).toBe(true);
             actual.push(...page.items.map(item => item.work));
             cursor = page.nextCursor;
           } while (cursor);
@@ -111,6 +113,29 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
           .toBe(400);
       }
       expect(publicPage.statusCount).toBe(counts.find(shelf => shelf.status === 'read')!.count);
+      const sharedBase = `/v1/agents/${agent.slice(-36)}/shelves/status/read/works?sort=title&order=asc&limit=20`;
+      const scans = spyOn(home.deps.libraryStatus, 'sortedPage');
+      try {
+        const sharedWorks = publicPage.items.map(item => item.work);
+        let sharedCursor = publicPage.nextCursor;
+        while (sharedCursor) {
+          scans.mockClear();
+          const graphBefore = home.stack.fuseki.queries;
+          const page = await home.json<Page & { statusCount: number }>(await home.call('GET',
+            `${sharedBase}&cursor=${encodeURIComponent(sharedCursor)}`));
+          expect(page.statusCount).toBe(publicPage.statusCount);
+          // Two candidate batches at most (including lookahead); no count scan.
+          expect(scans.mock.calls.length).toBeLessThanOrEqual(2);
+          expect(scans.mock.calls.every(call => call[2] === STATUS_SHELF_COST.candidateBatch)).toBe(true);
+          expect(home.stack.fuseki.queries - graphBefore).toBeLessThan(25);
+          sharedWorks.push(...page.items.map(item => item.work));
+          sharedCursor = page.nextCursor;
+        }
+        expect(new Set(sharedWorks).size).toBe(publicPage.statusCount);
+        expect(sharedWorks).toHaveLength(publicPage.statusCount);
+      } finally { scans.mockRestore(); }
+      const tampered = `${publicPage.nextCursor!.startsWith('A') ? 'B' : 'A'}${publicPage.nextCursor!.slice(1)}`;
+      expect((await home.call('GET', `${sharedBase}&cursor=${tampered}`)).status).toBe(400);
       const base = '/v1/me/shelves/status/read/works?sort=rating&order=desc&limit=3';
       const first = await home.json<Page>(await home.call('GET', signed(base), undefined, home.reader.token));
       expect(first.nextCursor).not.toBeNull();
@@ -125,6 +150,7 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
       await home.deps.libraryStatus.write({ agent, work, status: 'read', expectedVersion: 2,
         idempotencyKey: randomUUID() });
       expect((await home.call('GET', continuation, undefined, home.reader.token)).status).toBe(409);
+      expect((await home.call('GET', `${sharedBase}&cursor=${encodeURIComponent(publicPage.nextCursor!)}`)).status).toBe(409);
       const next = await home.json<Page>(await home.call('GET', signed(base), undefined, home.reader.token));
       await home.deps.libraryStatus.projectRating(agent, next.items[0]!.work, 1);
       expect((await home.call('GET', signed(`${base}&cursor=${encodeURIComponent(next.nextCursor!)}`),
@@ -142,7 +168,7 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
   } finally { await home.stop(); }
 }, 600_000);
 
-test('G-824: frozen chapter rows backfill once; missing cards never truncate the keyset', async () => {
+test('G-824: frozen chapter rows backfill once; owner placeholders match counts and public shelves skip them', async () => {
   const home = await startHomeStack('g-824-backfill');
   try {
     const agent = await home.provision('Backfill reader', home.reader.token);
@@ -158,16 +184,43 @@ test('G-824: frozen chapter rows backfill once; missing cards never truncate the
     const snapshot = await home.deps.libraryStatus.fence(agent);
     await prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, home.stack.fuseki);
     expect(await home.deps.libraryStatus.fence(agent)).toBe(snapshot);
-    // An unavailable prefix larger than the old 240 candidate bound is skipped
-    // within one read budget. The published parent still fills the next page.
+    // Owners retain unavailable identities, including a prefix beyond the old
+    // 240-row bound. Public counts/page membership exclude these placeholders.
+    const unavailable = Array.from({ length: 245 }, id);
     await home.stack.contentPool.query(`INSERT INTO reader.library_status
       (agent,work,status,version,changed_at) SELECT $1,work,'reading',1,'2099-01-01'
-      FROM unnest($2::text[]) fixture(work)`, [agent, Array.from({ length: 245 }, id)]);
-    const page = await home.json<Page>(await home.call('GET',
-      `/v1/me/shelves/status/reading/works?actingSubject=${encodeURIComponent(agent)}&limit=1`,
-      undefined, home.reader.token));
-    expect(page.items.map(item => item.work)).toEqual([parent.work]);
-    expect(page.nextCursor).toBeNull();
+      FROM unnest($2::text[]) fixture(work)`, [agent, unavailable]);
+    const ownBase = `/v1/me/shelves/status/reading/works?actingSubject=${encodeURIComponent(agent)}&limit=20`;
+    const owned: Page['items'] = [];
+    let cursor: string | null = null;
+    do {
+      const page = await home.json<Page>(await home.call('GET', ownBase
+        + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''), undefined, home.reader.token));
+      owned.push(...page.items);
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(owned).toHaveLength(246);
+    expect(new Set(owned.map(item => item.work)).size).toBe(246);
+    expect(owned.filter(item => !item.card).map(item => item.work).sort()).toEqual(unavailable.sort());
+    expect(owned.at(-1)?.card?.id).toBe(parent.work);
+    expect((await home.deps.libraryStatus.shelves(agent)).find(row => row.status === 'reading')?.count).toBe(owned.length);
+    await home.json(await home.call('PUT', `/v1/agents/${agent.slice(-36)}/library-visibility`,
+      { visibility: 'public', expectedVersion: 0 }, home.reader.token));
+    const publicBase = `/v1/agents/${agent.slice(-36)}/shelves/status/reading/works?limit=1`;
+    const shared = await home.json<Page & { statusCount: number }>(await home.call('GET', publicBase));
+    expect(shared.items.map(item => item.work)).toEqual([parent.work]);
+    expect(shared).toMatchObject({ statusCount: 1, nextCursor: null });
+    // A publication pointer alone is insufficient: a missing display name also
+    // makes the card unavailable, and the public total must agree with its page.
+    await home.stack.fuseki.update(`PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      DELETE WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(parent.work)} rdfs:label ?label } }`);
+    const nameless = await home.json<Page & { statusCount: number }>(await home.call('GET', publicBase));
+    expect(nameless).toMatchObject({ items: [], statusCount: 0, nextCursor: null });
+    const namelessCounts = await home.json<{ statusShelves: { status: string; count: number }[] }>(
+      await home.call('GET', `/v1/agents/${agent.slice(-36)}/shelves`));
+    expect(namelessCounts.statusShelves.find(row => row.status === 'reading')?.count).toBe(0);
+    await home.stack.fuseki.update(`PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(parent.work)} rdfs:label "Backfill parent"@en } }`);
     const empty = await home.json<Page>(await home.call('GET',
       `/v1/me/shelves/status/read/works?actingSubject=${encodeURIComponent(agent)}`, undefined, home.reader.token));
     expect(empty).toMatchObject({ items: [], nextCursor: null });
@@ -183,6 +236,16 @@ test('G-824: frozen chapter rows backfill once; missing cards never truncate the
       expect(home.stack.fuseki.queries - graphCalls).toBeLessThanOrEqual(SHELF_METADATA_COST.graphCalls);
       expect(meter.count() - sqlReads).toBeLessThanOrEqual(SHELF_METADATA_COST.sqlReads);
     } finally { meter.restore(); }
+    const coReaderFence = await alsoEnjoyedFence(home.stack.contentPool);
+    await home.stack.contentPool.query(`UPDATE reader.library_status SET own_rating=5,
+      title_key='new key' WHERE agent=$1 AND work=$2`, [agent, parent.work]);
+    expect(await alsoEnjoyedFence(home.stack.contentPool)).toBe(coReaderFence);
+    await home.deps.libraryStatus.projectRating(agent, parent.work, null);
+    expect(await alsoEnjoyedFence(home.stack.contentPool)).toBe(coReaderFence);
+    const current = (await home.deps.libraryStatus.batch(agent, [parent.work]))[0]!;
+    await home.deps.libraryStatus.write({ agent, work: parent.work, status: 'read',
+      finishedOn: '2026-05-01', expectedVersion: current.version, idempotencyKey: randomUUID() });
+    expect(await alsoEnjoyedFence(home.stack.contentPool)).toBe(coReaderFence);
     const progress = new StructureProgressStore(home.stack.contentPool);
     const statusFence = await home.deps.libraryStatus.fence(agent);
     const progressFence = await home.deps.libraryStatus.fence(agent, 'last-read');
@@ -191,6 +254,7 @@ test('G-824: frozen chapter rows backfill once; missing cards never truncate the
     const saved = await progress.write(input);
     expect(await home.deps.libraryStatus.fence(agent)).toBe(statusFence);
     expect(await home.deps.libraryStatus.fence(agent, 'last-read')).not.toBe(progressFence);
+    expect(await alsoEnjoyedFence(home.stack.contentPool)).toBe(coReaderFence);
     const lastReadFence = await home.deps.libraryStatus.fence(agent, 'last-read');
     expect(await progress.write(input)).toEqual({ ...saved, replayed: true });
     expect(await home.deps.libraryStatus.fence(agent, 'last-read')).toBe(lastReadFence);
@@ -210,5 +274,97 @@ test('G-824: frozen chapter rows backfill once; missing cards never truncate the
       expect(results.every(result => result.version === 1)).toBe(true);
     } finally { await single.end(); }
 
+  } finally { await home.stop(); }
+}, 600_000);
+
+
+test('G-824: background backfill isolates graph and SQL failures, serves reads, and retries only pending rows', async () => {
+  const home = await startHomeStack('g-824-backfill-recovery');
+  try {
+    const agent = await home.provision('Backfill recovery reader', home.reader.token);
+    const healthy = Array.from({ length: 30 }, id).sort(), badWrite = id(), badMetadata = id(), badParent = id();
+    await publishFixture(home, [...healthy, badWrite]);
+    const extraMain = id(), retainedMain = id();
+    await home.stack.fuseki.update(`PREFIX schema: <https://schema.org/> PREFIX rv: <https://rezics.com/vocab/>
+      INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(badParent)} schema:isPartOf ${iri(healthy[0]!)}, ${iri(healthy[1]!)} .
+        ${iri(badMetadata)} rv:mainVersion ${iri(retainedMain)}, ${iri(extraMain)} . } }`);
+    await home.stack.contentPool.query(`INSERT INTO reader.library_status
+      (agent,work,status,version,title_key,changed_at) SELECT $1,work,'reading',1,'','2026-01-01'
+      FROM unnest($2::text[]) fixture(work)`, [agent, [...healthy, badWrite, badMetadata, badParent]]);
+    // Equal timestamps/work keys on different agents still drain across batches.
+    await home.stack.contentPool.query(`INSERT INTO reader.library_status
+      (agent,work,status,version,title_key,changed_at) VALUES ($1,$2,'reading',1,'','2026-01-01')`, [id(), healthy[0]]);
+    await home.stack.contentPool.query(`CREATE FUNCTION reader.g824_reject_backfill() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.work = '${badWrite}' THEN RAISE EXCEPTION 'G-824 injected row failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER g824_reject_backfill BEFORE UPDATE ON reader.library_status
+      FOR EACH ROW EXECUTE FUNCTION reader.g824_reject_backfill()`);
+    const errors: string[] = [];
+    const onRowError = (row: { work: string }) => { errors.push(row.work); };
+    let entered!: () => void, resume!: () => void;
+    const enteredGraph = new Promise<void>(resolve => { entered = resolve; });
+    const gate = new Promise<void>(resolve => { resume = resolve; });
+    const graph = home.stack.fuseki;
+    const original = graph.query.bind(graph);
+    let first = true;
+    let pendingWork = '';
+    const paused = spyOn(graph, 'query').mockImplementation(async (...args) => {
+      if (first && args[0].includes('SELECT ?main ?label ?structure')) {
+        first = false;
+        pendingWork = [...healthy, badWrite, badMetadata].find(work => args[0].includes(iri(work)))!;
+        entered(); await gate;
+      }
+      return original(...args);
+    });
+    const before = await alsoEnjoyedFence(home.stack.contentPool);
+    const pending = prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, graph, { onRowError });
+    try {
+      await enteredGraph;
+      // A blocked migration read cannot hold Main's reader endpoints hostage.
+      expect((await home.call('GET', `/v1/me/shelves?actingSubject=${encodeURIComponent(agent)}`,
+        undefined, home.reader.token)).status).toBe(200);
+      // The backfill holds the same per-Work lock as live rating/progress
+      // writers throughout metadata read and commit, preventing lost updates.
+      expect((await home.stack.contentPool.query<{ locked: boolean }>(
+        'SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS locked',
+        [JSON.stringify(['library-status-work', agent, pendingWork])])).rows[0]!.locked).toBe(false);
+    } finally { resume(); await pending; paused.mockRestore(); }
+    expect(errors.sort()).toEqual([badWrite, badMetadata, badParent].sort());
+    expect((await home.stack.contentPool.query<{ count: string }>(`SELECT count(*)::text FROM reader.library_status
+      WHERE title_key=''`)).rows[0]!.count).toBe('3');
+    expect(await alsoEnjoyedFence(home.stack.contentPool)).toBe(before);
+    const snapshot = await home.deps.libraryStatus.fence(agent);
+    errors.length = 0;
+    await prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, graph, { onRowError });
+    expect(errors.sort()).toEqual([badWrite, badMetadata, badParent].sort());
+    expect(await home.deps.libraryStatus.fence(agent)).toBe(snapshot);
+    await home.stack.contentPool.query('DROP TRIGGER g824_reject_backfill ON reader.library_status; DROP FUNCTION reader.g824_reject_backfill()');
+    await graph.update(`PREFIX schema: <https://schema.org/> PREFIX rv: <https://rezics.com/vocab/>
+      DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(badParent)} schema:isPartOf ${iri(healthy[1]!)} .
+        ${iri(badMetadata)} rv:mainVersion ${iri(extraMain)} . } }`);
+    errors.length = 0;
+    await prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, graph, { onRowError });
+    expect(errors).toEqual([]);
+    expect((await home.stack.contentPool.query<{ count: string }>(`SELECT count(*)::text FROM reader.library_status
+      WHERE title_key=''`)).rows[0]!.count).toBe('0');
+    expect((await home.deps.libraryStatus.batch(agent, [badParent]))[0]).toMatchObject({ status: null, version: 2 });
+    expect([...(await home.deps.libraryStatus.batch(agent, healthy.slice(0, 20))),
+      ...(await home.deps.libraryStatus.batch(agent, healthy.slice(20)))]
+      .every(row => row.status === 'reading' && row.version === 1)).toBe(true);
+    // Only the recovered chapter's membership change advances the shared fence.
+    expect(BigInt(await alsoEnjoyedFence(home.stack.contentPool))).toBe(BigInt(before) + 1n);
+    const final = await home.deps.libraryStatus.fence(agent);
+    await prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, graph, { onRowError });
+    expect(await home.deps.libraryStatus.fence(agent)).toBe(final);
+    const lock = await home.stack.contentPool.connect();
+    try {
+      await lock.query("SELECT pg_advisory_lock(hashtextextended('library-shelves-602',0))");
+      await prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, graph, { onRowError });
+      expect(await home.deps.libraryStatus.fence(agent)).toBe(final);
+    } finally {
+      await lock.query("SELECT pg_advisory_unlock(hashtextextended('library-shelves-602',0))");
+      lock.release();
+    }
   } finally { await home.stop(); }
 }, 600_000);
