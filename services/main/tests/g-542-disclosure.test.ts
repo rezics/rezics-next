@@ -15,6 +15,10 @@ import { planExport } from '../src/modules/export/planner.ts';
 import { feedTombstone } from '../src/modules/feed/read.ts';
 import { feedItem, type FeedItem } from '../src/modules/feed/contract.ts';
 import { Value } from 'typebox/value';
+import { searchCardReadDependencies } from '../src/modules/search/card-reads.ts';
+import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
+import type { PublicTextPosition } from '../src/modules/work/search-readiness.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const fixtures: DisclosureTarget[] = [
@@ -77,6 +81,22 @@ test('G-542: held recovery, incomplete results and missing owner fail closed', a
   const env = { fuseki: new FusekiClient('http://graph.invalid'), objectDirectory: '.temp/g-542',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   expect(() => disclose(env, fixtures)).toThrow('Disclosure owner is required');
+});
+
+test('G-542: the search graph adapter retains the live required owner across graph-client identities', async () => {
+  const s = storage(), graph = new FusekiClient('http://graph.invalid');
+  const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
+  const position = { dataEpoch: 'epoch', sequence: '1', generation: 'generation' } as PublicTextPosition;
+  configureDisclosure(env, new DisclosureStore(s.pool));
+  const adapt = () => searchGraphSnapshot.run({ clients: new Set([graph]), lineage: env.lineage, position },
+    () => searchCardReadDependencies({ environment: env } as MainWorkDependencies));
+  const deps = adapt();
+  expect(deps.environment.fuseki).not.toBe(graph);
+  expect(await disclose(deps.environment, fixtures)).toEqual(fixtures.map(() => 'visible'));
+  s.set({ restricted: true });
+  expect((await disclose(deps.environment, fixtures)).every(decision => decision !== 'visible')).toBe(true);
+  configureDisclosure(env, null);
+  expect(() => disclose(adapt().environment, fixtures)).toThrow('Disclosure owner is required');
 });
 
 test('G-542: summary assembly keeps unavailable entries in position and never hydrates a restricted name', async () => {
@@ -175,6 +195,7 @@ test('G-542: each composed channel has a final shared gate; optional legacy fenc
     ['modules/realm-reply/store.ts', 'await discloseInventory('],
     ['modules/realm-reply/thread-store.ts', 'await reader.read('],
     ['modules/search/fields.ts', 'await discloseSearchMatches('],
+    ['modules/search/card-reads.ts', 'inheritDisclosure(deps.environment, environment)'],
     ['modules/work/search-public.ts', 'await discloseSearchMatches('],
     ['modules/work/search-multifield.ts', 'await discloseSearchMatches('],
     ['modules/search-disclosure/public-fields.ts', 'await discloseInventory('],

@@ -117,6 +117,10 @@ export function configureDisclosure(env: WorkActivationEnvironment, reader: Disc
   if (reader) readers.set(env.fuseki, reader);
   else readers.delete(env.fuseki);
 }
+/** Request-local graph adapters inherit the same live owner, never an allow result. */
+export function inheritDisclosure(env: WorkActivationEnvironment, adapted: WorkActivationEnvironment): void {
+  configureDisclosure(adapted, readers.get(env.fuseki) ?? null);
+}
 export function disclose(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer = ANONYMOUS_VIEWER, channel: DisclosureChannel = 'read') {
   const reader = readers.get(env.fuseki);

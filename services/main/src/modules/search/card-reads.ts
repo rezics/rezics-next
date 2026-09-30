@@ -4,6 +4,7 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { MAX_SEARCH_RESPONSE_BYTES } from '../work/search-readiness.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
 import { knownSearchPosition, searchGraphSnapshot } from './snapshot-state.ts';
+import { inheritDisclosure } from '../disclosure/read.ts';
 
 interface PendingRead { query: string; resolve: (result: SparqlResult) => void; reject: (error: unknown) => void }
 
@@ -81,5 +82,7 @@ export function searchCardReadDependencies(deps: MainWorkDependencies): MainWork
     return typeof value === 'function' ? value.bind(target) : value;
   } }) as FusekiClient;
   snapshot.clients.add(client);
-  return { ...deps, environment: { ...deps.environment, fuseki: client } };
+  const environment = { ...deps.environment, fuseki: client };
+  inheritDisclosure(deps.environment, environment);
+  return { ...deps, environment };
 }
