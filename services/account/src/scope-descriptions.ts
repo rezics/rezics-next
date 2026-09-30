@@ -92,6 +92,13 @@ const actions: Record<string, Phrase> = {
 };
 
 const fixed: Record<string, Description> = {
+  'wiki:propose': { en: 'Match wiki names and validate proposed facts with short source quotations',
+    'zh-Hans': '匹配百科名称，并用简短来源引文验证拟议事实', 'zh-Hant': '比對百科名稱，並以簡短來源引文驗證擬議事實',
+    ja: 'ウィキの名称を照合し、短い出典引用を添えた事実の提案を検証する',
+    ko: '위키 이름을 대조하고 짧은 출처 인용이 포함된 사실 제안을 검증',
+    de: 'Wiki-Namen abgleichen und vorgeschlagene Fakten mit kurzen Quellenzitaten prüfen',
+    fr: 'Rapprocher les noms du wiki et vérifier les faits proposés avec de courtes citations des sources',
+    es: 'Relacionar nombres del wiki y validar hechos propuestos con citas breves de las fuentes' },
   openid: { en: 'Identify your REZICS account', 'zh-Hans': '识别你的 REZICS 账号', 'zh-Hant': '識別你的 REZICS 帳戶', ja: 'REZICS アカウントを識別する', ko: '내 REZICS 계정을 식별', de: 'Ihr REZICS-Konto erkennen', fr: 'Identifier votre compte REZICS', es: 'Identificar tu cuenta de REZICS' },
   profile: { en: 'Read your name and profile image', 'zh-Hans': '读取你的姓名和头像', 'zh-Hant': '讀取你的姓名和頭像', ja: '名前とプロフィール画像を読み取る', ko: '이름과 프로필 사진 읽기', de: 'Ihren Namen und Ihr Profilbild lesen', fr: 'Lire votre nom et votre image de profil', es: 'Leer tu nombre y tu imagen de perfil' },
   email: { en: 'Read your email address and verification status', 'zh-Hans': '读取你的邮箱地址与验证状态', 'zh-Hant': '讀取你的電子郵件地址與驗證狀態', ja: 'メールアドレスと確認状態を読み取る', ko: '이메일 주소와 인증 상태 읽기', de: 'Ihre E-Mail-Adresse und den Bestätigungsstatus lesen', fr: 'Lire votre adresse e-mail et son état de confirmation', es: 'Leer tu correo y si está verificado' },
