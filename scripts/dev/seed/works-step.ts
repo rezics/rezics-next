@@ -3,6 +3,7 @@ import { grantHomeSeedAuthority, grantImportedWorkSeedAuthority } from './operat
 import { firstSeedTypes, seedKey, semanticTypes, works, type DemoWork } from './plan.ts';
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
 import { afterCatchUp, type SeedState, type WorkReceipt } from './state.ts';
+import { refreshMetadataBasis } from './metadata.ts';
 
 export async function seedWorks(state: SeedState) {
   const { api, created } = state;
@@ -51,7 +52,7 @@ export async function seedWorks(state: SeedState) {
       } else receipt.workRevision = current.revision;
     }
     created.set(work.id, receipt);
-    if (work.tagline) await state.optional('Work serial summary', async () => {
+    if (work.tagline) await state.optional('Work serial summary', () => refreshMetadataBasis(async attempt => {
       const path = `/v1/works/${receipt.work.slice(-36)}/metadata`;
       const current = await api.get<{ revision: string | null;
         originalTitle: { value: string; language: string } | null;
@@ -69,28 +70,30 @@ export async function seedWorks(state: SeedState) {
         state: { kind: 'header', originalTitle: current.originalTitle,
           completionStatus: work.completionStatus ?? current.completionStatus, localized },
         actingSubject: author ?? owner.actingSubject }, session.token,
-      seedKey('serial-metadata-v2', `${work.id}:${current.revision?.slice(-12) ?? 'first'}`));
-    });
+      seedKey('serial-metadata-v2', `${work.id}:${current.revision?.slice(-12) ?? 'first'}${attempt ? `:${attempt}` : ''}`));
+    }));
     if (work.seedTitle && state.operatorInput) {
-      const path = `/v1/works/${receipt.work.slice(-36)}/metadata`;
-      const current = await api.get<{ revision: string | null; originalTitle: { value: string; language: string } | null;
-        completionStatus: DemoWork['completionStatus'] | null;
-        localized: { language: string; title: string | null; description: string | null;
-          mainVersionLabel: string | null; tagline?: string | null }[] }>(
-        `${path}?actingSubject=${encodeURIComponent(author ?? owner.actingSubject)}`, session.token);
-      if (!current.localized.some(row => row.language.toLowerCase() === work.language.toLowerCase()
-        && row.title === work.title)) {
-        const localized = current.localized.filter(row => row.language.toLowerCase() !== work.language.toLowerCase());
-        const previous = current.localized.find(row => row.language.toLowerCase() === work.language.toLowerCase());
-        localized.push({ language: work.language, title: work.title,
-          description: previous?.description ?? null, mainVersionLabel: previous?.mainVersionLabel ?? null,
-          tagline: previous?.tagline ?? null });
-        await api.put(path, { profile: 'work-metadata-details-v1', expectedHead: current.revision,
-          state: { kind: 'header', originalTitle: { value: work.title, language: work.language },
-            completionStatus: current.completionStatus, localized },
-          actingSubject: author ?? owner.actingSubject }, session.token,
-        seedKey('clean-title-v2', `${work.id}:${current.revision?.slice(-12) ?? 'first'}`));
-      }
+      await refreshMetadataBasis(async attempt => {
+        const path = `/v1/works/${receipt.work.slice(-36)}/metadata`;
+        const current = await api.get<{ revision: string | null; originalTitle: { value: string; language: string } | null;
+          completionStatus: DemoWork['completionStatus'] | null;
+          localized: { language: string; title: string | null; description: string | null;
+            mainVersionLabel: string | null; tagline?: string | null }[] }>(
+          `${path}?actingSubject=${encodeURIComponent(author ?? owner.actingSubject)}`, session.token);
+        if (!current.localized.some(row => row.language.toLowerCase() === work.language.toLowerCase()
+          && row.title === work.title)) {
+          const localized = current.localized.filter(row => row.language.toLowerCase() !== work.language.toLowerCase());
+          const previous = current.localized.find(row => row.language.toLowerCase() === work.language.toLowerCase());
+          localized.push({ language: work.language, title: work.title,
+            description: previous?.description ?? null, mainVersionLabel: previous?.mainVersionLabel ?? null,
+            tagline: previous?.tagline ?? null });
+          await api.put(path, { profile: 'work-metadata-details-v1', expectedHead: current.revision,
+            state: { kind: 'header', originalTitle: { value: work.title, language: work.language },
+              completionStatus: current.completionStatus, localized },
+            actingSubject: author ?? owner.actingSubject }, session.token,
+          seedKey('clean-title-v2', `${work.id}:${current.revision?.slice(-12) ?? 'first'}${attempt ? `:${attempt}` : ''}`));
+        }
+      });
     }
     if (work.seedTitle && !state.operatorInput) {
       state.findings?.add(`Work ${work.id} needs the seed operator to replace its old title`);
