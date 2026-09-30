@@ -1,7 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { type Browser, expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
-import { signInAtAccounts } from './account-sign-in.ts';
 import type { Catalogue } from './g-838-catalogue.ts';
 
 // Two browser contexts are two devices of one reader: a desktop and a phone, each signed in on its own.
@@ -47,12 +46,35 @@ function credentials() {
   return JSON.parse(readFileSync(path, 'utf8')) as { actingSubject: string; member: { email: string; password: string } };
 }
 
+/**
+ * The sign-in journey of `account-sign-in.ts`, bounded and retried: on a loaded host the Accounts site is
+ * sometimes slow to answer, and the QA run gives this whole file five minutes. The Accounts origin is
+ * whatever the web app redirects to, so it is not compared with the environment.
+ */
+async function signIn(page: Page, next: string, member: { email: string; password: string }): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await page.goto(`/auth/start?next=${encodeURIComponent(next)}`);
+      await page.waitForURL(url => url.pathname === '/sign-in', { timeout: 40_000 });
+      await page.locator('html[data-hydrated]').waitFor({ timeout: 40_000 });
+      await page.getByRole('textbox', { name: 'Email' }).fill(member.email);
+      await page.getByRole('button', { name: 'Next' }).click();
+      await page.getByLabel('Enter your password').fill(member.password);
+      await page.getByRole('button', { name: 'Next' }).click();
+      await expect(page).toHaveURL(next, { timeout: 40_000 });
+      return;
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+  }
+}
+
 /** A device: its own browser context, signed in as the reader, at the first page it is asked for. */
 async function device(browser: Browser, info: TestInfo, viewport: { width: number; height: number }, first: string): Promise<Page> {
   const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport, hasTouch: viewport.width < 600,
     isMobile: viewport.width < 600 });
   const page = await context.newPage();
-  await signInAtAccounts(page, first, credentials().member);
+  await signIn(page, first, credentials().member);
   return page;
 }
 
