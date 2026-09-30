@@ -12,7 +12,6 @@ import {
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { releaseManifest, releaseDigest } from '../dev/release-manifest.ts';
-import { expectedSchemaHead, migrationDirectories } from './migrate.ts';
 
 const root = resolve(import.meta.dir, '../..');
 export const runtimeRoles = ['main', 'relay', 'relay-init', 'account', 'migrate'] as const;
@@ -92,15 +91,6 @@ export function prepareImageContext(destination: string) {
   const metadata = {
     base: releaseManifest.applicationBase,
     release: releaseDigest(),
-    builder: createHash('sha256')
-      .update(readFileSync(import.meta.filename))
-      .digest('hex'),
-    schemas: Object.fromEntries(
-      Object.keys(migrationDirectories).map((owner) => [
-        owner,
-        expectedSchemaHead(root, owner as keyof typeof migrationDirectories),
-      ]),
-    ),
   };
   writeFileSync(join(destination, 'release.json'), `${JSON.stringify(metadata)}\n`);
 }

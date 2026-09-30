@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync, rmSync, cpSync, symlinkSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, rmSync, cpSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
 import {
@@ -12,7 +12,7 @@ import {
   repositoryRoot,
 } from '../migrate.ts';
 import { assertNoPaymentProvider } from '../production-env.ts';
-import { readSchemaHead } from '../../../services/main/src/schema-ready.ts';
+import { assertSchemaReady } from '../../../services/main/src/schema-ready.ts';
 
 function docker(args: string[]) {
   const result = spawnSync('docker', args, { encoding: 'utf8', timeout: 60_000 });
@@ -21,7 +21,7 @@ function docker(args: string[]) {
   return result.stdout.trim();
 }
 
-test('G-722 actual owner migrations serialize, rerun empty, seal schemas and forbid providers', async () => {
+test('G-722 actual owner migrations serialize, rerun empty, check migration records and forbid providers', async () => {
   const name = `g722-${randomUUID()}`;
   const dir = join(repositoryRoot, '.temp', name);
   mkdirSync(dir, { recursive: true });
@@ -71,7 +71,7 @@ test('G-722 actual owner migrations serialize, rerun empty, seal schemas and for
     for (const owner of ['access', 'relay', 'content', 'account'] as const) {
       const pool = new Pool({ connectionString: url(owner) });
       pools.push(pool);
-      expect(await readSchemaHead(pool, owner)).toMatch(/^[a-f0-9]{64}$/);
+      await expect(assertSchemaReady(pool, owner)).resolves.toBeUndefined();
     }
     await assertNoPaymentProvider(url('access'));
     await pools[0]!.query(
@@ -112,9 +112,7 @@ test('G-722 actual owner migrations serialize, rerun empty, seal schemas and for
     ]);
     expect(await migrateTracked(url('lockproof'), dir, migrationDirectories.access)).toEqual([]);
     writeFileSync(join(migrationDir, '001_lock.sql'), 'CREATE TABLE changed(id integer);');
-    await expect(
-      migrateTracked(url('lockproof'), dir, migrationDirectories.access),
-    ).rejects.toThrow('history differs');
+    expect(await migrateTracked(url('lockproof'), dir, migrationDirectories.access)).toEqual([]);
     // A release artifact must use its own provider definition, not the invoking
     // checkout's auth options. Add a harmless field only in the artifact copy.
     await admin.query('CREATE DATABASE artifactaccount');
@@ -129,6 +127,15 @@ test('G-722 actual owner migrations serialize, rerun empty, seal schemas and for
       join(repositoryRoot, 'services/account/package.json'),
       join(artifact, 'services/account/package.json'),
     );
+    // The copied fence resolves SQL relative to the artifact, and its supporting imports use this checkout.
+    const fence = readFileSync(
+      join(repositoryRoot, 'services/account/src/consent-fence.ts'),
+      'utf8',
+    ).replace(
+      "'./installations.ts'",
+      JSON.stringify(join(repositoryRoot, 'services/account/src/installations.ts')),
+    );
+    writeFileSync(join(artifact, 'services/account/src/consent-fence.ts'), fence);
     symlinkSync(join(repositoryRoot, 'node_modules'), join(artifact, 'node_modules'));
     writeFileSync(
       join(artifact, 'services/account/src/auth.ts'),
@@ -144,6 +151,26 @@ test('G-722 actual owner migrations serialize, rerun empty, seal schemas and for
       (
         await artifactPool.query(
           "SELECT 1 FROM information_schema.columns WHERE table_name = 'user' AND column_name = 'g722ArtifactField'",
+        )
+      ).rowCount,
+    ).toBe(1);
+    // Account reruns an edited idempotent migration even after its name was recorded.
+    writeFileSync(
+      join(artifact, 'services/account/migrations/999_edit_proof.sql'),
+      'CREATE TABLE IF NOT EXISTS edit_proof (id integer);',
+    );
+    await migrateAccount({ ...env, ACCOUNT_DATABASE_URL: url('artifactaccount') }, artifact);
+    writeFileSync(
+      join(artifact, 'services/account/migrations/999_edit_proof.sql'),
+      'CREATE TABLE IF NOT EXISTS edit_proof (id integer); ALTER TABLE edit_proof ADD COLUMN IF NOT EXISTS updated integer;',
+    );
+    expect(
+      await migrateAccount({ ...env, ACCOUNT_DATABASE_URL: url('artifactaccount') }, artifact),
+    ).toEqual([]);
+    expect(
+      (
+        await artifactPool.query(
+          "SELECT 1 FROM information_schema.columns WHERE table_name = 'edit_proof' AND column_name = 'updated'",
         )
       ).rowCount,
     ).toBe(1);

@@ -24,10 +24,17 @@ deployment repository owns those actions and the host placement described in
    `CLOUDFLARE_ENV=production task accounts:build` and
    `CLOUDFLARE_ENV=production task about:build`. Supply the registered
    `WEB_OAUTH_CLIENT_ID` to the web build. Production vars in each
-   `wrangler.jsonc` supply the intended public origins; process overrides are
-   validated too, and loopback origins fail the build. The about site's D1 binding
-   is not inherited by Wrangler environments: supply its real production DB
-   binding in the deployment repository before deployment.
+   `wrangler.jsonc` contain `<VARIABLE_NAME>` placeholders: replace them with the
+   deployment's configured origins, or supply the corresponding process variables
+   to the Vite builds. Unresolved placeholders and loopback origins fail validation.
+   Set `MAIN_ORIGIN`, `ACCOUNT_ORIGIN` and `MAIN_RESOURCE` for web;
+   `ACCOUNT_SERVICE_ORIGIN`, `ACCOUNT_BASE_URL` and `WEB_ORIGIN` for Accounts;
+   and `ABOUT_SITE_URL` in the about build environment (Astro uses it for canonical
+   URLs). These are deployment inputs; this repository assigns no production
+   hostnames. Retain the effective Worker vars with the release output so publishing
+   uses the same configuration as the build.
+   The about site's D1 binding is not inherited by Wrangler environments: supply
+   its real production DB binding in the deployment repository before deployment.
    The production about command also bundles its Worker with Wrangler's dry run;
    the output is under `.temp/worker-builds/about` and no Worker is deployed.
 
@@ -61,20 +68,32 @@ or run the `migrate` image with the environment injected by the secret manager.
 The job applies Access, relay, Content and Account. A session advisory lock per
 database serializes concurrent release jobs across each owner's DDL. Content
 also takes its existing transaction lock. Each SQL migration commits with its
-history record; a failed job can be retried, already committed files are not
-reapplied, and changed recorded SQL bytes fail. Account's provider migration is
-inspected for unsafe changes, followed by its tracked SQL migrations. No job
-silently reverses a schema migration.
+history record; a failed job can be retried and already committed Access, relay
+and Content files are not reapplied. Tracking uses names or Content versions,
+with no checksums, so recorded SQL can be edited in place. Account runs the same
+Better Auth provider migration and idempotent `installConsentRefreshFence` steps
+as development and QA, under the release lock. Its SQL is reapplied on every run;
+the existing `public.rezics_local_migration` table records completed Account files.
+A rerun reports only newly recorded files. No job silently reverses a migration.
 
-Successful owner migrations seal their expected schema head in
-`public.rezics_release_schema`. Readiness in production compares that seal to
-the release's SQL; Account also binds its provider schema to its source and
-package pin. Main `/health/ready` reports storage, schema heads, graph data epoch
-and index generation, and refuses a payment provider. Account reports storage
-and its schema head. Neither probe repairs a schema. `/health/live` proves HTTP
-process liveness. Relay initialization and migration are batch commands: their
-health signal is a successful exit, not an HTTP listener. The relay is a
-long-running consumer whose process exit must be monitored by its scheduler.
+Production `/health/ready` additionally requires this release's migrations to be
+recorded in `public.rezics_local_migration` (Access, relay and Account) and
+`content.schema_migration` (Content). Additional history is allowed. The checks
+neither hash sources nor create a schema-seal table. Main also refuses a payment
+provider row. Development readiness keeps its existing probes. Both APIs return
+`{ "status": "ready" }`; Main's existing `/health/search-ready` reports graph data
+epoch, sequence and index generation. Projection lag after a write affects search
+readiness without making API readiness flap. Neither probe repairs a schema.
+`/health/live` proves HTTP process liveness. Relay initialization and migration
+are batch commands: their health signal is a successful exit, not an HTTP listener.
+The relay is a long-running consumer whose process exit must be monitored by its
+scheduler.
+
+Fast configuration and schema-record tests run with
+`task test -- scripts/ops/tests/g-722.test.ts`. The Docker image build and runtime
+smoke test is an explicit live check:
+`task test -- tests/live/g-722-images.test.ts`. It is deferred from affected plans
+and stays outside unit selection.
 
 ## Roll out
 
@@ -93,8 +112,8 @@ set. Bootstrap and graph/index initialization are separate owner operations.
 
 Pause new writes and stop the candidate. Reuse the previous recorded registry
 digests and Worker versions only if they accept the current schema and graph
-format. Production schema seals fail closed for a different release; changing a
-seal by hand does not establish compatibility. A schema rollback requires the
+format. Migration records establish completion, not backward compatibility.
+A schema rollback requires the
 previous complete recovery cut restored into isolated volumes, its matching
 release, owner/readiness checks and manual routing promotion as
 [recovery](recovery.md) describes. Do not run an older migration job against a

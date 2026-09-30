@@ -3,10 +3,10 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { expectedSchemaHead, repositoryRoot } from '../migrate.ts';
-import { prepareImageContext, runtimeRoles } from '../release-images.ts';
-import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
+import { repositoryRoot } from '../../scripts/ops/migrate.ts';
+import { prepareImageContext, runtimeRoles } from '../../scripts/ops/release-images.ts';
+import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
+import { initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
 
 test('G-722 image context excludes development data and credentials', () => {
   const directory = join(repositoryRoot, '.temp/g722-context-test');
@@ -182,8 +182,6 @@ async function accountSmoke(images: Record<string, { reference: string; digest: 
     expect((await fetch(`${origin}/health/live`)).status).toBe(200);
     expect(await (await fetch(`${origin}/health/ready`)).json()).toEqual({
       status: 'ready',
-      storage: 'ready',
-      schemaHead: expectedSchemaHead(repositoryRoot, 'account'),
     });
     docker([
       'exec',
@@ -194,7 +192,7 @@ async function accountSmoke(images: Record<string, { reference: string; digest: 
       '-d',
       'account',
       '-c',
-      "UPDATE public.rezics_release_schema SET head = 'stale' WHERE owner = 'account'",
+      'DELETE FROM public.rezics_local_migration WHERE name = (SELECT name FROM public.rezics_local_migration LIMIT 1)',
     ]);
     expect((await fetch(`${origin}/health/ready`)).status).toBe(503);
     expect((await fetch(`${origin}/health/live`)).status).toBe(200);
@@ -367,14 +365,13 @@ async function mainSmoke(
     await Bun.sleep(250);
   }
   expect((await fetch(`${origin}/health/live`)).status).toBe(200);
-  const ready = (await (await fetch(`${origin}/health/ready`)).json()) as {
+  expect(await (await fetch(`${origin}/health/ready`)).json()).toEqual({ status: 'ready' });
+  const searchReady = (await (await fetch(`${origin}/health/search-ready`)).json()) as {
     dataEpoch: string;
     indexGeneration: string;
-    schemaHeads: Record<string, string>;
   };
-  expect(ready.dataEpoch).toBe('1');
-  expect(ready.indexGeneration).toMatch(/^urn:rezics:text-index-generation:/);
-  expect(Object.keys(ready.schemaHeads).sort()).toEqual(['access', 'content', 'relay']);
+  expect(searchReady.dataEpoch).toBe('1');
+  expect(searchReady.indexGeneration).toMatch(/^urn:rezics:text-index-generation:/);
   expect(docker(['inspect', relay, '--format', '{{.State.Running}}'])).toBe('true');
   docker([
     'exec',

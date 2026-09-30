@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { productionExample } from './g-722-fixture.ts';
 import { repositoryRoot } from '../migrate.ts';
 
 for (const [app, variable] of [
@@ -14,6 +15,7 @@ for (const [app, variable] of [
       timeout: 60_000,
       env: {
         ...process.env,
+        ...productionExample(),
         CLOUDFLARE_ENV: 'production',
         WEB_OAUTH_CLIENT_ID: 'release-client',
         [variable!]: 'http://127.0.0.1:3000',

@@ -9,7 +9,7 @@
     "WEB_ORIGIN": "http://127.0.0.1:3000" },
   "env": { "production": {
     "name": "rezics-accounts-production",
-    "vars": { "ACCOUNT_SERVICE_ORIGIN": "https://account.rezics.com", "ACCOUNT_BASE_URL": "https://accounts.rezics.com",
-      "WEB_ORIGIN": "https://app.rezics.com" }
+    "vars": { "ACCOUNT_SERVICE_ORIGIN": "<ACCOUNT_SERVICE_ORIGIN>", "ACCOUNT_BASE_URL": "<ACCOUNT_BASE_URL>",
+      "WEB_ORIGIN": "<WEB_ORIGIN>" }
   } }
 }

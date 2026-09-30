@@ -9,7 +9,7 @@
     "MAIN_RESOURCE": "https://main.rezics.test" },
   "env": { "production": {
     "name": "rezics-web-production",
-    "vars": { "MAIN_ORIGIN": "https://main.rezics.com", "ACCOUNT_ORIGIN": "https://accounts.rezics.com",
-      "MAIN_RESOURCE": "https://main.rezics.com" }
+    "vars": { "MAIN_ORIGIN": "<MAIN_ORIGIN>", "ACCOUNT_ORIGIN": "<ACCOUNT_ORIGIN>",
+      "MAIN_RESOURCE": "<MAIN_ORIGIN>" }
   } }
 }

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
@@ -11,9 +10,8 @@ export const migrationDirectories = {
 } as const;
 export type SchemaOwner = keyof typeof migrationDirectories;
 export const repositoryRoot = resolve(import.meta.dir, '../..');
-const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 
-export function migrationFiles(root: string, owner: SchemaOwner) {
+export function migrationRecords(root: string, owner: SchemaOwner) {
   const directory = migrationDirectories[owner];
   const files = readdirSync(join(root, directory))
     .filter((name) => name.endsWith('.sql'))
@@ -25,30 +23,15 @@ export function migrationFiles(root: string, owner: SchemaOwner) {
       throw new Error(`Invalid ${owner} migration: ${name}`);
     }
     versions.add(version);
-    const sql = readFileSync(join(root, directory, name), 'utf8');
-    return { name: `${directory}/${name}`, version, sql, digest: sha(sql) };
+    return { name: `${directory}/${name}`, version };
   });
 }
 
-/** Account's provider schema is generated from its installed plugins, rather
- * than SQL alone. Bind its seal to the complete Account source and package pin. */
-export function expectedSchemaHead(root: string, owner: SchemaOwner): string {
-  const inputs: Array<[string, string]> = migrationFiles(root, owner).map((file) => [
-    file.name,
-    file.digest,
-  ]);
-  if (owner === 'account') {
-    for (const name of readdirSync(join(root, 'services/account/src'))
-      .filter((name) => name.endsWith('.ts'))
-      .sort()) {
-      inputs.push([name, sha(readFileSync(join(root, 'services/account/src', name), 'utf8'))]);
-    }
-    inputs.push([
-      'package.json',
-      sha(readFileSync(join(root, 'services/account/package.json'), 'utf8')),
-    ]);
-  }
-  return sha(JSON.stringify(inputs));
+function migrationFiles(root: string, owner: SchemaOwner) {
+  return migrationRecords(root, owner).map((file) => ({
+    ...file,
+    sql: readFileSync(join(root, file.name), 'utf8'),
+  }));
 }
 
 async function withDatabaseLock<T>(
@@ -80,16 +63,6 @@ async function withDatabaseLock<T>(
   }
 }
 
-async function seal(client: PoolClient, root: string, owner: SchemaOwner) {
-  await client.query(`CREATE TABLE IF NOT EXISTS public.rezics_release_schema (
-    owner text PRIMARY KEY, head text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())`);
-  await client.query(
-    `INSERT INTO public.rezics_release_schema(owner, head) VALUES ($1, $2)
-    ON CONFLICT(owner) DO UPDATE SET head = excluded.head, applied_at = now()`,
-    [owner, expectedSchemaHead(root, owner)],
-  );
-}
-
 async function trackedIn(
   client: PoolClient,
   root: string,
@@ -98,42 +71,19 @@ async function trackedIn(
   const files = migrationFiles(root, owner);
   await client.query(`CREATE TABLE IF NOT EXISTS public.rezics_local_migration (
     name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-  await client.query(
-    'ALTER TABLE public.rezics_local_migration ADD COLUMN IF NOT EXISTS digest text',
-  );
   const history = (
-    await client.query<{ name: string; digest: string | null }>(
-      'SELECT name, digest FROM public.rezics_local_migration WHERE name LIKE $1',
-      [`${migrationDirectories[owner]}/%`],
-    )
+    await client.query<{ name: string }>('SELECT name FROM public.rezics_local_migration')
   ).rows;
-  if (
-    history.some(
-      (row) =>
-        !files.some(
-          (file) => file.name === row.name && (!row.digest || row.digest === file.digest),
-        ),
-    )
-  ) {
-    throw new Error(`${owner} migration history differs from release`);
-  }
   const applied: string[] = [];
   for (const file of files) {
     await client.query('BEGIN');
     try {
       if (!history.some((row) => row.name === file.name)) {
         await client.query(file.sql);
-        await client.query(
-          'INSERT INTO public.rezics_local_migration(name, digest) VALUES ($1, $2)',
-          [file.name, file.digest],
-        );
+        await client.query('INSERT INTO public.rezics_local_migration(name) VALUES ($1)', [
+          file.name,
+        ]);
         applied.push(file.name);
-      } else {
-        // Upgrade the existing local tracker once; later changes to these bytes fail.
-        await client.query(
-          'UPDATE public.rezics_local_migration SET digest = $2 WHERE name = $1 AND digest IS NULL',
-          [file.name, file.digest],
-        );
       }
       await client.query('COMMIT');
     } catch (error) {
@@ -141,7 +91,6 @@ async function trackedIn(
       throw error;
     }
   }
-  await seal(client, root, owner);
   return applied;
 }
 
@@ -171,39 +120,18 @@ export async function migrateContentFromArtifact(url: string, root: string): Pro
       await client.query('CREATE SCHEMA IF NOT EXISTS content');
       await client.query(`CREATE TABLE IF NOT EXISTS content.schema_migration (
         version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-      await client.query(
-        'ALTER TABLE content.schema_migration ADD COLUMN IF NOT EXISTS digest text',
-      );
       const history = (
-        await client.query<{ version: number; digest: string | null }>(
-          'SELECT version, digest FROM content.schema_migration',
-        )
+        await client.query<{ version: number }>('SELECT version FROM content.schema_migration')
       ).rows;
-      if (
-        history.some(
-          (row) =>
-            !files.some(
-              (file) => file.version === row.version && (!row.digest || row.digest === file.digest),
-            ),
-        )
-      ) {
-        throw new Error('Content migration history differs from release');
-      }
       for (const file of files) {
         if (!history.some((row) => row.version === file.version)) {
           await client.query(file.sql);
-          await client.query(
-            'INSERT INTO content.schema_migration(version, digest) VALUES ($1, $2)',
-            [file.version, file.digest],
-          );
+          await client.query('INSERT INTO content.schema_migration(version) VALUES ($1)', [
+            file.version,
+          ]);
           applied.push(file.name);
-        } else
-          await client.query(
-            'UPDATE content.schema_migration SET digest = $2 WHERE version = $1 AND digest IS NULL',
-            [file.version, file.digest],
-          );
+        }
       }
-      await seal(client, root, 'content');
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -241,7 +169,30 @@ export async function migrateAccount(
     if (plan.unsafeChanges.length || plan.schemaProblems.length)
       throw new Error('Unsafe Account migration');
     await plan.runMigrations();
-    return trackedIn(client, root, 'account');
+    const { installConsentRefreshFence } = (await import(
+      join(root, 'services/account/src/consent-fence.ts')
+    )) as typeof import('../../services/account/src/consent-fence.ts');
+    // Account SQL is deliberately idempotent and reapplied, including in-place
+    // edits. Record completion in the existing tracker without skipping it.
+    await installConsentRefreshFence(pool);
+    await client.query(`CREATE TABLE IF NOT EXISTS public.rezics_local_migration (
+      name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
+    const applied: string[] = [];
+    await client.query('BEGIN');
+    try {
+      for (const file of migrationRecords(root, 'account')) {
+        const result = await client.query(
+          'INSERT INTO public.rezics_local_migration(name) VALUES ($1) ON CONFLICT DO NOTHING',
+          [file.name],
+        );
+        if (result.rowCount) applied.push(file.name);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+    return applied;
   });
 }
 

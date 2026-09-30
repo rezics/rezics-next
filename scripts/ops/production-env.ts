@@ -20,7 +20,7 @@ export const productionSpecs = {
   web: webSpec,
   accounts: accountsSpec,
   about: {
-    ABOUT_SITE_URL: url({ default: 'https://rezics.com', desc: 'Canonical public about origin.' }),
+    ABOUT_SITE_URL: url({ desc: 'Canonical public about origin.' }),
   },
 };
 export type ProductionRole = keyof typeof productionSpecs;

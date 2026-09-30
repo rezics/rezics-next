@@ -1,3 +1,12 @@
+import { healthRoutes } from '../../../services/main/src/routes/health.ts';
+import {
+  FusekiClient,
+  type SparqlResult,
+} from '../../../services/main/src/infrastructure/fuseki.ts';
+import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
+import { productionExample } from './g-722-fixture.ts';
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { str } from 'envalid';
@@ -7,40 +16,10 @@ import {
   productionSpecs,
   type ProductionRole,
 } from '../production-env.ts';
-import { expectedSchemaHead, repositoryRoot } from '../migrate.ts';
+import { migrationRecords, repositoryRoot } from '../migrate.ts';
 import { accountSchemaReady } from '../../../services/account/src/schema-ready.ts';
-import { mainSchemaReady, readSchemaHead } from '../../../services/main/src/schema-ready.ts';
+import { mainSchemaReady, assertSchemaReady } from '../../../services/main/src/schema-ready.ts';
 import type { Pool } from 'pg';
-
-/** Synthetic complete deployment input; no real credential or development fixture. */
-export function productionExample(): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const spec of Object.values(productionSpecs))
-    for (const [name, validator] of Object.entries(spec)) {
-      if (validator.default !== undefined) result[name] = String(validator.default);
-      else if (name.endsWith('_DATABASE_URL') || name === 'OWNER_RELOCATION_TARGET_URL')
-        result[name] = 'postgres://owner:8d4cb67658b2d230@postgres.internal/owner';
-      else if (/URL|ORIGIN|RESOURCE|ENDPOINT|ISSUER/.test(name))
-        result[name] = 'https://service.rezics.com';
-      else if (/PORT$/.test(name)) result[name] = '3001';
-      else if (/DIRECTORY/.test(name)) result[name] = '/var/lib/rezics/objects';
-      else if (/EPOCH/.test(name)) result[name] = '1';
-      else result[name] = '8d4cb67658b2d230c437b8a97c2757e18d4cb67658b2d230c437b8a97c2757e1';
-    }
-  delete result.MAIN_OPEN_LIBRARY_FIXTURE_ROOT;
-  result.ACCOUNT_SMTP_HOST = 'smtp.rezics.com';
-  result.ACCOUNT_EMAIL_FROM = 'REZICS <accounts@rezics.com>';
-  result.ACCOUNT_SMTP_REQUIRE_TLS = 'true';
-  result.MAIN_ORIGIN = 'https://main.rezics.com';
-  result.ACCOUNT_ORIGIN = 'https://accounts.rezics.com';
-  result.ACCOUNT_SERVICE_ORIGIN = 'https://account.rezics.com';
-  result.ACCOUNT_BASE_URL = 'https://accounts.rezics.com';
-  result.WEB_ORIGIN = 'https://rezics.com';
-  result.MAIN_RESOURCE = result.ACCOUNT_MAIN_RESOURCE = 'https://main.rezics.com';
-  result.FUSEKI_TITLE_ADMISSION_KEY =
-    '5db75dc8f93220c9a68776fc8b1f3c3c5db75dc8f93220c9a68776fc8b1f3c3c';
-  return result;
-}
 
 describe('G-722 production configuration', () => {
   test('complete production input validates against every existing role spec', () => {
@@ -109,40 +88,91 @@ describe('G-722 production configuration', () => {
         readFileSync(`${repositoryRoot}/apps/${app}/wrangler.jsonc`, 'utf8'),
       );
       expect(config.env.production.name).toBe(`rezics-${app}-production`);
-      if (app !== 'about')
-        expect(() =>
-          checkProductionEnv(
-            {
-              ...config.env.production.vars,
-              WEB_OAUTH_CLIENT_ID: productionExample().WEB_OAUTH_CLIENT_ID,
-            },
-            [app],
-          ),
-        ).not.toThrow();
+      expect(
+        Object.values(config.env.production.vars).every(
+          (value) => typeof value === 'string' && /^<[A-Z_]+>$/.test(value),
+        ),
+      ).toBe(true);
+      expect(() => checkProductionEnv(config.env.production.vars, [app])).toThrow();
+      const configured = Object.fromEntries(
+        Object.keys(config.env.production.vars).map((name) => [name, productionExample()[name]]),
+      );
+      expect(() =>
+        checkProductionEnv(
+          { ...configured, WEB_OAUTH_CLIENT_ID: productionExample().WEB_OAUTH_CLIENT_ID },
+          [app],
+        ),
+      ).not.toThrow();
     }
   });
 });
 
 describe('G-722 release readiness', () => {
-  const poolFor = (head?: string) =>
-    ({ query: async () => ({ rows: head ? [{ head }] : [] }) }) as unknown as Pick<Pool, 'query'>;
-  test('missing, stale and current schema heads', async () => {
-    await expect(readSchemaHead(poolFor(), 'access')).rejects.toThrow('differs');
-    await expect(readSchemaHead(poolFor('stale'), 'access')).rejects.toThrow('differs');
-    const head = expectedSchemaHead(repositoryRoot, 'access');
-    expect(await readSchemaHead(poolFor(head), 'access')).toBe(head);
-  });
-  test('production cannot omit storage or Account schema', async () => {
+  const poolFor = (rows: unknown[] = []) =>
+    ({ query: async () => ({ rows }) }) as unknown as Pick<Pool, 'query'>;
+  for (const owner of ['access', 'relay', 'content', 'account'] as const) {
+    test(`${owner} requires all release migration records and permits extra history`, async () => {
+      const records = migrationRecords(repositoryRoot, owner);
+      await expect(assertSchemaReady(poolFor(), owner)).rejects.toThrow('incomplete');
+      await expect(assertSchemaReady(poolFor(records.slice(1)), owner)).rejects.toThrow(
+        'incomplete',
+      );
+      await expect(
+        assertSchemaReady(poolFor([...records, { name: 'future', version: 999 }]), owner),
+      ).resolves.toBeUndefined();
+    });
+  }
+  test('production cannot omit storage or Account migrations', async () => {
     await expect(mainSchemaReady({ NODE_ENV: 'production' })).rejects.toThrow(
       'ACCESS_DATABASE_URL',
     );
     await expect(accountSchemaReady(poolFor(), { NODE_ENV: 'production' })).rejects.toThrow(
-      'differs',
+      'incomplete',
     );
-    const head = expectedSchemaHead(repositoryRoot, 'account');
-    expect(await accountSchemaReady(poolFor(head), { NODE_ENV: 'production' })).toEqual({
-      storage: 'ready',
-      schemaHead: head,
-    });
+    await expect(
+      accountSchemaReady(poolFor(migrationRecords(repositoryRoot, 'account')), {
+        NODE_ENV: 'production',
+      }),
+    ).resolves.toBeUndefined();
+  });
+  test('a graph write ahead of the text projection does not flap API readiness', async () => {
+    class AheadOfProjection extends FusekiClient {
+      constructor() {
+        super('http://localhost:1/rezics');
+      }
+      override async query(query: string): Promise<SparqlResult> {
+        // Admission is open, while the newly advanced graph has no current index proof.
+        return query.includes('ASK') ? { boolean: true } : { results: { bindings: [] } };
+      }
+      override async commandHealth() {
+        return {
+          moduleVersion: COMMAND_MODULE_VERSION,
+          instanceId: '11111111-1111-4111-8111-111111111111',
+          publicSearchWriteEpoch: '2',
+          publicSearchWriteActive: false,
+          profiles: Object.fromEntries(
+            Object.entries(profileRegistry).map(([id, profile]) => [id, profile.sha256]),
+          ),
+        };
+      }
+    }
+    const work = {
+      environment: { lineage: { dataEpoch: 'epoch-a', routingEpoch: 'routing-a' } },
+    } as unknown as MainWorkDependencies;
+    const app = healthRoutes(new AheadOfProjection(), work);
+    const request = (path: string) => app.handle(new Request(`http://localhost${path}`));
+    expect((await request('/health/search-ready')).status).toBe(503);
+    expect(await (await request('/health/ready')).json()).toEqual({ status: 'ready' });
+  });
+  test('development does not introduce storage or schema probes', async () => {
+    const pool = {
+      query: async () => {
+        throw new Error('unexpected probe');
+      },
+    } as unknown as Pick<Pool, 'query'>;
+    await expect(
+      mainSchemaReady({ NODE_ENV: 'development', ACCESS_DATABASE_URL: 'invalid' }),
+    ).resolves.toBeUndefined();
+    await expect(accountSchemaReady(pool, { NODE_ENV: 'development' })).resolves.toBeUndefined();
   });
 });
