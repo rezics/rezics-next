@@ -50,6 +50,14 @@ async function shoot(page: Page, name: string, info: TestInfo) {
   await page.setViewportSize(desktop);
 }
 
+/** Main applies a write to its graph a moment after the receipt: read the page again until the record shows. */
+async function eventually(page: Page, path: string, check: () => Promise<void>) {
+  await expect(async () => {
+    await page.goto(path);
+    await check();
+  }).toPass({ timeout: 45_000 });
+}
+
 const receipt = (page: Page) => page.getByText(/Main’s receipt:/);
 
 test('an editor maintains parts, relations, realizations and releases; a reader sees no controls', async ({ page, context }, info) => {
@@ -129,10 +137,10 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   await shoot(page, 'relations-form', info);
   await relation.getByRole('button', { name: 'Record relation' }).click();
   await expect(receipt(page)).toBeVisible();
-  await page.goto(at(index.genesisTestament, 'connections'));
-  await expect(page.locator('[data-relation-row]').filter({ hasText: 'Sequel to' })).toContainText('A Certain Magical Index: New Testament');
-  await page.goto(at(index.newTestament, 'connections'));
-  await expect(page.locator('[data-relation-row]').filter({ hasText: 'Sequel' })).toContainText('Genesis Testament');
+  await eventually(page, at(index.genesisTestament, 'connections'), () => expect(page.locator('[data-relation-row]')
+    .filter({ hasText: 'Sequel to' })).toContainText('A Certain Magical Index: New Testament', { timeout: 2_000 }));
+  await eventually(page, at(index.newTestament, 'connections'), () => expect(page.locator('[data-relation-row]')
+    .filter({ hasText: 'Sequel' })).toContainText('Genesis Testament', { timeout: 2_000 }));
 
   mark(info, 'relation recorded');
   // Editions: a zh-Hans realization of volume 1, then an omnibus release covering volumes 1-3.
