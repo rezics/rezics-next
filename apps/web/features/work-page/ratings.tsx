@@ -29,7 +29,7 @@ function counted(count: StatCount, exact: (value: number) => string, atLeast: (v
 }
 
 /** Goodreads' distribution: "5 stars", a bar in the star color, the count and its share. */
-function Distribution({ summary, locale, messages }: { summary: RatingSummary; locale: UiLocale; messages: WorkPageMessages }) {
+export function Distribution({ summary, locale, messages }: { summary: RatingSummary; locale: UiLocale; messages: WorkPageMessages }) {
   const t = materializeData(messages, { locale });
   const { scale } = summary;
   if (!scale) return null;
@@ -64,7 +64,7 @@ const countLink = cn('rounded-sm underline-offset-4 outline-none hover:text-fore
  * The mean as Goodreads sets it: stars, the number large in the Work-title
  * face, then the counts ("1,287 ratings · 214 reviews").
  */
-function Mean({ summary, locale, messages, size = 'lg', href, reviews, className }: {
+export function Mean({ summary, locale, messages, size = 'lg', href, reviews, className }: {
   summary: RatingSummary; locale: UiLocale; messages: WorkPageMessages; size?: 'md' | 'lg'; href?: string;
   /** The reviews answering the same question, beside the ratings count. */
   reviews?: ReactNode;
@@ -198,5 +198,31 @@ export function RatingSummaryRegion({ ratings, view, scopeBar, locale, messages 
   return <Region id={RATINGS_REGION} title={t.ratings} aside={scopeBar}>
     {body}
     {questions}
+  </Region>;
+}
+
+/**
+ * The ratings of any one resource (a release, a character, a Work) in the shape
+ * the Work page gives a scope: the mean, the count and the distribution of the
+ * first question Main lists. `subject` says what was rated ("Ratings for this
+ * release"); it is the caller's words, from the registry. Reading only: the
+ * stars a reader writes belong to the Work's own page.
+ */
+export function TargetRatingsRegion({ ratings, subject, none, locale, messages }: {
+  ratings: Loaded<RatingRead>; subject: string; none: string; locale: UiLocale; messages: WorkPageMessages;
+}) {
+  const t = materializeData(messages, { locale });
+  if (!ratings.ok) {
+    return <Region id={RATINGS_REGION} title={t.ratings}>
+      <RegionFailure title={t.ratingsUnavailable} failure={ratings.failure} messages={messages} /></Region>;
+  }
+  const { summary } = ratings.data;
+  return <Region id={RATINGS_REGION} title={t.ratings}>
+    <p className="text-muted-foreground text-sm">{subject}</p>
+    {summary.status !== 'available' || !summary.scale || !summary.count ? <EmptyScope title={none} />
+      : <div className="grid gap-6 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:items-center">
+        <Mean summary={summary} locale={locale} messages={messages} />
+        <Distribution summary={summary} locale={locale} messages={messages} />
+      </div>}
   </Region>;
 }

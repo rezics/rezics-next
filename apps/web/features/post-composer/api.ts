@@ -1,7 +1,9 @@
 import { direction } from '@rezics/main/language';
 import { browserMainApi } from '../api/browser.ts';
 
-export interface PostIntent { realm: string; work: string; mainVersion: string;
+/** `work` is the resource the post is about: a Work (named with its `mainVersion`, whose selected draft roots the
+ *  post) or any other target (named with the `revision` its page gave, which roots the post itself). */
+export interface PostIntent { realm: string; work: string; mainVersion: string | null; revision?: string;
   title: string; body: string; spoiler: boolean;
   /** The language the writer chose; never the interface locale. */
   language: string; actingSubject: string }
@@ -24,11 +26,14 @@ export async function submitPost(intent: PostIntent, original: PostProgress,
   const text = `${intent.spoiler ? 'Spoilers: ' : ''}${intent.title.trim()}\n${intent.body.trim()}`.trim();
   try {
     if (!step.rootRevision) {
-      // The post's root is the Work's own default revision; the language written in has no say in which.
-      const { data } = await main.v1['main-versions']({ mainVersion: intent.mainVersion.slice(-36) })
-        .selection.get({ query: {} });
-      if (!data || data.work !== intent.work) return { kind: 'failed', progress: step };
-      step.rootRevision = data.selectedDraft;
+      if (intent.revision) step.rootRevision = intent.revision;
+      else if (intent.mainVersion) {
+        // The post's root is the Work's own default revision; the language written in has no say in which.
+        const { data } = await main.v1['main-versions']({ mainVersion: intent.mainVersion.slice(-36) })
+          .selection.get({ query: {} });
+        if (!data || data.work !== intent.work) return { kind: 'failed', progress: step };
+        step.rootRevision = data.selectedDraft;
+      } else return { kind: 'failed', progress: step };
       onProgress({ ...step });
     }
     const draft = (body: string | null, expectedHead: string | null, suffix: string) =>

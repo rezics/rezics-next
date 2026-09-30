@@ -10,7 +10,7 @@ import { languageName } from '../work-page/format.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import type { Copy } from './messages.ts';
-import { NameLink, SummaryLink } from './names.tsx';
+import { NameLink, SummaryLink, type SummaryHref } from './names.tsx';
 import { labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
 import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains, workLinkHref } from './route.ts';
 import type { CollectionMembers, Loaded, Names, PartsPage, RelationsPage, Summary } from './types.ts';
@@ -25,11 +25,11 @@ export interface Franchise {
   parts: ReadonlyMap<string, Loaded<PartsPage>>;
 }
 
-function Target({ item, t }: { item: RelationItem; t: Copy }) {
+function Target({ item, t, hrefFor }: { item: RelationItem; t: Copy; hrefFor?: SummaryHref }) {
   const target = item.target;
   if (target.kind === 'withheld') return <span className="text-muted-foreground">{t.unavailable}</span>;
   if (target.kind === 'external') return <bdi className="font-mono text-sm">{target.label}</bdi>;
-  return <SummaryLink summary={target.summary} unavailable={t.unavailable} unnamed={t.unnamed} />;
+  return <SummaryLink summary={target.summary} unavailable={t.unavailable} unnamed={t.unnamed} hrefFor={hrefFor} />;
 }
 
 /** The mark a derivation carries when its source's Main Version is not pinned: the link is known, its version is not. */
@@ -53,7 +53,9 @@ function RowLabel({ label, locale, t }: { label: RelationRow['label']; locale: U
  * direction. Relations to Works read as rows, relations to people or
  * characters as role chips; neither is built by joining words around a name.
  */
-export function RelationRows({ rows, locale, t }: { rows: readonly RelationRow[]; locale: UiLocale; t: Copy }) {
+export function RelationRows({ rows, locale, t, hrefFor }: { rows: readonly RelationRow[]; locale: UiLocale; t: Copy;
+  /** Where a counterpart's page is, for a surface that hosts resources itself (a Zone). */
+  hrefFor?: SummaryHref }) {
   const listed = rows.filter(row => row.style === 'row');
   const chips = rows.filter(row => row.style === 'chips');
   return <div className="grid gap-5">
@@ -64,7 +66,7 @@ export function RelationRows({ rows, locale, t }: { rows: readonly RelationRow[]
           <ul className="grid gap-1">
             {row.items.map((item, index) => <li key={`${item.relation}-${index}`}
               className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <Target item={item} t={t} /><Unresolved item={item} t={t} />
+              <Target item={item} t={t} hrefFor={hrefFor} /><Unresolved item={item} t={t} />
             </li>)}
           </ul>
         </dd>
@@ -74,7 +76,7 @@ export function RelationRows({ rows, locale, t }: { rows: readonly RelationRow[]
       {chips.flatMap(row => row.items.map((item, index) => <li key={`${row.key}-${item.relation}-${index}`} data-role-chip
         className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-border/70 px-3 py-1 text-sm">
         <span className="text-muted-foreground"><RowLabel label={labelFor(row.projection, 1)} locale={locale} t={t} /></span>
-        <Target item={item} t={t} />
+        <Target item={item} t={t} hrefFor={hrefFor} />
       </li>))}
     </ul> : null}
   </div>;

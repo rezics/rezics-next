@@ -6,7 +6,7 @@ import { CopyTextButton } from '../../catalogue/copy-button.tsx';
 import { ShelfButton } from '../../catalogue/reader-actions.tsx';
 import type { UiLocale } from '../../../i18n/define.ts';
 import type { WorkPageMessages } from '../messages.ts';
-import type { WorkPageKind } from './kind.ts';
+import type { ExperienceKind } from '../../entity-page/experience.ts';
 
 /** Opens cooking mode on the recipe already on this page. */
 export function CookThisButton({ label }: { label: string }) {
@@ -21,7 +21,7 @@ export function CookThisButton({ label }: { label: string }) {
  * copy a prompt, or install a skill. A book keeps Read, drawn by the frame.
  */
 export function WorkKindActions({ kind, workId, title, locale, messages: t, hubText }: {
-  kind: WorkPageKind; workId: string; title: string; locale: UiLocale; messages: WorkPageMessages;
+  kind: ExperienceKind; workId: string; title: string; locale: UiLocale; messages: WorkPageMessages;
   /** Published prompt or SKILL.md, when the header can copy it. */
   hubText?: string | null;
 }) {

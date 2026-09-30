@@ -29,11 +29,17 @@ export type ReviewViewer =
   | { kind: 'signed-out'; signInHref: string }
   | { kind: 'no-identity' }
   /** `canWrite` when this list's rating Context is the one the page's stars rate. */
-  | { kind: 'reader'; actingSubject: string; canWrite: boolean };
+  | { kind: 'reader'; actingSubject: string; canWrite: boolean }
+  /** A target whose rating question is not open to readers yet (a release before G-652): the reviews read, nothing writes. */
+  | { kind: 'read-only' };
 
 export interface ReviewsProps {
-  /** The Work IRI the reviews are of, and the rating Context (question) they answer, with its scale. */
-  work: string; context: string; scale: number;
+  /** The resource IRI the reviews are of, and the rating Context (question) they answer, with its scale. */
+  target: string; context: string; scale: number;
+  /** The projection's link to the reviews; the target's own `/reviews` read when left out. */
+  href?: string;
+  /** What was reviewed ("Reviews of this release"); the heading alone when left out. */
+  subject?: string;
   /** The server's first page, most helpful first, and the names of its reviewers. */
   initial: Loaded<ReviewPage>;
   reviewers: Record<string, Reviewer>;
@@ -140,13 +146,13 @@ function ReviewCard({ review, reviewer, own, highlighted, viewer, api, scale, on
  * on a rating, which Main proves), the text, its language and whether it
  * gives the story away. Deleting keeps the rating.
  */
-function ReviewEditor({ work, own, actingSubject, api, onSaved, onCancel, locale, t }: {
-  work: string; own: Review | null; actingSubject: string; api: ReviewApi; onSaved: () => void; onCancel: () => void; locale: UiLocale;
+function ReviewEditor({ target, own, actingSubject, api, onSaved, onCancel, locale, t }: {
+  target: string; own: Review | null; actingSubject: string; api: ReviewApi; onSaved: () => void; onCancel: () => void; locale: UiLocale;
   t: Translation;
 }) {
   const id = useId();
   const actions = useReaderActions();
-  const rated = actions.kind === 'ready' ? actions.stateOf(work).rating !== null : false;
+  const rated = actions.kind === 'ready' ? actions.stateOf(target).rating !== null : false;
   const [text, setText] = useState(own?.text ?? '');
   // The writer's choice; until then the review's own language, their first reading language, or none.
   const [chosen, setChosen] = useState<string | null>(null);
@@ -174,7 +180,7 @@ function ReviewEditor({ work, own, actingSubject, api, onSaved, onCancel, locale
   return <form onSubmit={event => void submit(event)} aria-labelledby={`${id}-title`}
     className="grid gap-4 rounded-2xl bg-card/60 p-4 ring-1 ring-border/60 sm:p-5">
     <h3 id={`${id}-title`} className="font-semibold">{own ? t.editReview : t.writeReview}</h3>
-    <RateWork work={work} locale={locale} className="justify-items-start" />
+    <RateWork work={target} locale={locale} className="justify-items-start" />
     <label htmlFor={`${id}-text`} className="sr-only">{t.reviewText}</label>
     <Textarea id={`${id}-text`} value={text} onChange={event => setText(event.target.value)} required maxLength={8000}
       placeholder={t.reviewPlaceholder} lang={written.lang} dir={written.dir}
@@ -215,11 +221,11 @@ function ReviewEditor({ work, own, actingSubject, api, onSaved, onCancel, locale
  * `#review-{id}` link (the home feed's review cards) scrolls to that review,
  * reading it on its own when it is not on the first page.
  */
-export function ReviewsSection({ work, context, scale, initial, reviewers: named, viewer, api: given, locale,
+export function ReviewsSection({ target, href, subject, context, scale, initial, reviewers: named, viewer, api: given, locale,
   messages }: ReviewsProps) {
   const t = materializeData(messages, { locale });
-  const api = useMemo(() => given ?? mainReviewApi({ work, context,
-    actingSubject: viewer.kind === 'reader' ? viewer.actingSubject : null }), [given, work, context, viewer]);
+  const api = useMemo(() => given ?? mainReviewApi({ target, href, context,
+    actingSubject: viewer.kind === 'reader' ? viewer.actingSubject : null }), [given, target, href, context, viewer]);
   const [filter, setFilter] = useState<ReviewFilter>({ sort: 'helpful' });
   const [page, setPage] = useState(initial);
   const [items, setItems] = useState<Review[]>(initial.ok ? initial.data.items : []);
@@ -296,14 +302,17 @@ export function ReviewsSection({ work, context, scale, initial, reviewers: named
   return <section aria-labelledby={REVIEWS_REGION} aria-busy={loading === 'first' || undefined}
     className="grid min-w-0 content-start gap-5">
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-      <h2 id={REVIEWS_REGION} className="font-semibold text-xl tracking-tight">{t.reviews}</h2>
+      <div className="grid gap-1">
+        <h2 id={REVIEWS_REGION} className="font-semibold text-xl tracking-tight">{t.reviews}</h2>
+        {subject ? <p className="text-muted-foreground text-sm">{subject}</p> : null}
+      </div>
       {viewer.kind === 'reader' && viewer.canWrite && !own && !editing
         ? <Button pill onClick={() => setEditing(true)}><PencilIcon aria-hidden="true" />{t.writeReview}</Button>
         : viewer.kind === 'signed-out' ? <Link href={viewer.signInHref} className={buttonVariants({ pill: true,
           variant: 'outline' })}><PencilIcon aria-hidden="true" />{t.writeReview}
           <span className="sr-only"> — {t.signInToReview}</span></Link> : null}
     </div>
-    {editing ? <ReviewEditor work={work} own={own} actingSubject={viewer.kind === 'reader' ? viewer.actingSubject : ''} api={api} locale={locale} t={t} onCancel={() => setEditing(false)}
+    {editing ? <ReviewEditor target={target} own={own} actingSubject={viewer.kind === 'reader' ? viewer.actingSubject : ''} api={api} locale={locale} t={t} onCancel={() => setEditing(false)}
       onSaved={() => { setEditing(false); void load(filter); }} /> : null}
     {/* Sorting and filtering help once there is something to sort. */}
     {listed.length || filtered || filter.sort !== 'helpful' ? <div className="flex flex-wrap items-center gap-x-4 gap-y-2

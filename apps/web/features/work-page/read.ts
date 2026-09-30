@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { notFound, permanentRedirect, redirect } from 'next/navigation';
 import { cache } from 'react';
+import { followHref } from '../entity-page/href.ts';
 import { failureOf } from './failure.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
@@ -43,14 +44,14 @@ export async function readingAgent(): Promise<{ signedIn: boolean; actingSubject
 
 export { failureOf };
 
-type Answer<T> = { data: T | null; error: { status: number } | null };
+export type Answer<T> = { data: T | null; error: { status: number } | null };
 
 /**
  * One Main read as a `Loaded` result. Main answers 409 when the graph moved
  * during the read; a read that is not continuing a cursor simply starts
  * again, once, as Main asks. A moved cursor is the reader's to restart.
  */
-async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promise<Loaded<T>> {
+export async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promise<Loaded<T>> {
   try {
     let { data, error } = await call();
     if (error?.status === 409 && !cursor) ({ data, error } = await call());
@@ -62,7 +63,7 @@ async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promi
 }
 
 /** These two type pages use JSON null for a visible Work without an owner-specific publication. */
-async function settleNullable<T>(call: () => Promise<Answer<T>>): Promise<Loaded<T | null>> {
+export async function settleNullable<T>(call: () => Promise<Answer<T>>): Promise<Loaded<T | null>> {
   try {
     const { data, error } = await call();
     return error ? { ok: false, failure: failureOf(error.status) } : { ok: true, data };
@@ -96,15 +97,17 @@ export const readWorkHeader = cache(async (id: string, _locale: UiLocale): Promi
   return settle(() => main.v1.works({ id }).get({ query: { actingSubject } }));
 });
 
-export async function readRecipeWorkPage(id: string, servings?: number): Promise<Loaded<RecipeWorkPage | null>> {
+/** A Work's recipe section, read from the link its `entity-page-v1` projection gave. */
+export async function readRecipeWorkPage(href: string, servings?: number): Promise<Loaded<RecipeWorkPage | null>> {
   const { main, actingSubject } = await reader();
-  return settleNullable(() => main.v1.recipes.works({ id }).get({ query: { actingSubject,
-    ...(servings === undefined ? {} : { servings }) } }));
+  return settleNullable(followHref<RecipeWorkPage | null>(main, href, { actingSubject,
+    ...(servings === undefined ? {} : { servings }) }));
 }
 
-export async function readHubWorkPage(id: string): Promise<Loaded<HubWorkPage | null>> {
+/** A Work's prompt or skill section, read from the link its projection gave. */
+export async function readHubWorkPage(href: string): Promise<Loaded<HubWorkPage | null>> {
   const { main, actingSubject } = await reader();
-  return settleNullable(() => main.v1.hub.works({ id }).get({ query: { actingSubject } }));
+  return settleNullable(followHref<HubWorkPage | null>(main, href, { actingSubject }));
 }
 
 export type WorkResolution =

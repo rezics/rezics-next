@@ -7,10 +7,11 @@ import { signInPath } from '../auth/paths.ts';
 import { sessionAgentState } from '../auth/session.ts';
 import { PageContainer, PageHeader } from '../shell/page.tsx';
 import Link from '../shell/localized-link.tsx';
-import { PostComposer, type CommunityChoice } from './composer.tsx';
+import { PostComposer, type CommunityChoice, type WorkChoice } from './composer.tsx';
 import { postText as words } from './messages.ts';
 
-export async function PostComposePage({ locale, initial }: { locale: UiLocale; initial?: CommunityChoice | null }) {
+export async function PostComposePage({ locale, initial, target }: { locale: UiLocale; initial?: CommunityChoice | null;
+  target?: WorkChoice | null }) {
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
   const state = token ? await sessionAgentState() : null;
   const actingSubject = state?.sessionAgent.eligible ? state.sessionAgent.actingSubject : null;
@@ -18,7 +19,7 @@ export async function PostComposePage({ locale, initial }: { locale: UiLocale; i
     <PageHeader title={words.title[locale]} description={words.intro[locale]}
       actions={<Link href="/studio" className={buttonVariants({ variant: 'outline' })}>
         {words.createWork[locale]}</Link>} />
-    {actingSubject ? <PostComposer locale={locale} actingSubject={actingSubject} initial={initial} />
+    {actingSubject ? <PostComposer locale={locale} actingSubject={actingSubject} initial={initial} target={target} />
       : token ? <p role="status">{words.agentNeeded[locale]}</p>
         : <Link href={signInPath(localizedPath('/submit', locale))} className={buttonVariants()}>
           {words.signIn[locale]}</Link>}

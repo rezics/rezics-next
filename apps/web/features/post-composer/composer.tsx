@@ -20,21 +20,24 @@ import { postText as words } from './messages.ts';
 import { MarkdownEditor } from './markdown-editor.tsx';
 
 export interface CommunityChoice { id: string; name: string }
-interface WorkChoice { id: string; mainVersion: string; title: string }
+/** What a post is about: a Work found by search (with its Main Version), or a target a page named (with its revision). */
+export interface WorkChoice { id: string; mainVersion: string | null; revision?: string; title: string }
 interface Draft { community: CommunityChoice | null; work: WorkChoice | null;
   title: string; body: string; spoiler: boolean; progress: PostProgress | null;
   /** The language the writer chose for the post; null until they do, then the first reading language. */
   language: string | null }
-const blank = (community: CommunityChoice | null): Draft => ({ community, work: null,
+const blank = (community: CommunityChoice | null, work: WorkChoice | null = null): Draft => ({ community, work,
   title: '', body: '', spoiler: false, progress: null, language: null });
 const draftKey = (actor: string) => `rezics:post-draft:${actor}`;
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
 /** The post draft survives navigation and reload; a started publication retains its operation keys. */
-export function PostComposer({ locale, actingSubject, initial = null }: { locale: UiLocale;
-  actingSubject: string; initial?: CommunityChoice | null }) {
+export function PostComposer({ locale, actingSubject, initial = null, target = null }: { locale: UiLocale;
+  actingSubject: string; initial?: CommunityChoice | null;
+  /** The resource a page asked to discuss; it replaces any stored choice and cannot be searched away. */
+  target?: WorkChoice | null }) {
   const router = useRouter();
-  const [draft, setDraft] = useState<Draft>(() => blank(initial));
+  const [draft, setDraft] = useState<Draft>(() => blank(initial, target));
   const [hydrated, setHydrated] = useState(false);
   const [communityQuery, setCommunityQuery] = useState('');
   const [communities, setCommunities] = useState<CommunityChoice[]>([]);
@@ -58,12 +61,14 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
       if (stored && typeof stored.title === 'string' && typeof stored.body === 'string'
         && (!stored.community || native.test(stored.community.id))
         && (!stored.work || native.test(stored.work.id))) {
+        const asked = target && !stored.progress ? target : null;
         setDraft({ ...stored, language: typeof stored.language === 'string' ? stored.language : null,
+          work: asked ?? stored.work,
           community: stored.progress ? stored.community : initial ?? stored.community });
       }
     } catch { /* An invalid local draft is ignored. */ }
     setHydrated(true);
-  }, [actingSubject, initial]);
+  }, [actingSubject, initial, target]);
   useEffect(() => {
     if (!hydrated) return;
     try { localStorage.setItem(draftKey(actingSubject), JSON.stringify(draft)); }
@@ -150,7 +155,7 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
     const progress = draft.progress ?? newPostProgress();
     saveProgress(progress);
     const result = await submitPost({ realm: draft.community.id, work: draft.work.id,
-      mainVersion: draft.work.mainVersion, title: draft.title, body: draft.body,
+      mainVersion: draft.work.mainVersion, revision: draft.work.revision, title: draft.title, body: draft.body,
       spoiler: draft.spoiler, language, actingSubject }, progress, saveProgress);
     setBusy(false);
     if (result.kind === 'posted') {
@@ -172,7 +177,7 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
       {draft.community ? <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3">
         <span className="font-semibold">{draft.community.name}</span>
         {!locked ? <Button type="button" size="sm" variant="ghost" onClick={() => change({ community: null,
-          work: null })}>{words.communityChange[locale]}</Button> : null}
+          work: target })}>{words.communityChange[locale]}</Button> : null}
       </div> : <>
         <div className="relative"><SearchIcon aria-hidden="true" className="absolute start-3 top-3 size-4
           text-muted-foreground" /><Input type="search" value={communityQuery}
@@ -205,7 +210,7 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
         <h2 className="font-semibold text-sm">{words.work[locale]}</h2>
         {draft.work ? <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3">
           <span className="font-medium">{draft.work.title}</span>
-          {!locked ? <Button type="button" size="sm" variant="ghost" onClick={() => change({ work: null })}>
+          {!locked && !target ? <Button type="button" size="sm" variant="ghost" onClick={() => change({ work: null })}>
             {words.workChange[locale]}</Button> : null}
         </div> : <>
           <Input type="search" value={workQuery} onChange={event => setWorkQuery(event.currentTarget.value)}

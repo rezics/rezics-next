@@ -18,15 +18,20 @@ import { WorkKindActions } from './types/actions.tsx';
 import { RecipeExperience } from './types/recipe.tsx';
 import { HubExperience } from './types/hub.tsx';
 import { GuideExperience } from './types/guide.tsx';
-import { workPageKind } from './types/kind.ts';
+import { projectionFor } from '../entity-page/fixtures.ts';
+import { workExperience } from '../entity-page/experience.ts';
 import type { RecipeWorkPage, HubWorkPage } from './types.ts';
 
 /** A Work view inside the header and tabs, as the `/w/[ref]` layout renders it. */
 function Framed({ work = fixture.work, locale = 'en', hubText, children }: {
   work?: WorkHeader; locale?: UiLocale; hubText?: string | null; children: ReactNode;
 }) {
-  const kind = workPageKind(work.types);
-  return <WorkFrame workRef={fixture.workRef} work={work} locale={locale} messages={messages[locale]}
+  // The page a Work gets comes from its projection, as the route reads it.
+  const experience = workExperience(projectionFor({ id: work.id.slice(-36), base: 'work', types: work.types,
+    name: work.title.value }), work.types);
+  const { kind } = experience;
+  return <WorkFrame workRef={fixture.workRef} work={work} experience={experience} locale={locale}
+    messages={messages[locale]}
     readAction={kind === 'book' ? undefined : <WorkKindActions kind={kind} workId={work.id} title={work.title.value}
       locale={locale} messages={messages[locale]} hubText={hubText} />}
     credits={kind === 'book' ? <WorkCredits agentCredits={fixture.agentCredits} credits={fixture.credits}
@@ -85,7 +90,7 @@ export const RecipeCooking: Story = { parameters: at('overview'),
   render: (_args, context) => {
     const locale = context.globals.locale as UiLocale;
     return <Framed work={typedWork('https://schema.org/Recipe', 'Weekend pancakes')} locale={locale}>
-    <RecipeExperience initial={recipeStory} workId={fixture.workRef} actingSubject={null}
+    <RecipeExperience initial={recipeStory} href={`/v1/recipes/works/${fixture.workRef}`} actingSubject={null}
       text="Rest the batter before cooking." locale={locale} messages={messages[locale]} /></Framed>;
   },
   async play({ canvasElement }) {
@@ -119,7 +124,7 @@ const scaledRecipe: RecipeWorkPage = { ...recipeStory,
 
 export const ScaledIngredients: Story = { parameters: at('overview'),
   render: () => <Framed work={typedWork('https://schema.org/Recipe', 'Weekend pancakes')}>
-    <RecipeExperience initial={scaledRecipe} workId={fixture.workRef} actingSubject={null}
+    <RecipeExperience initial={scaledRecipe} href={`/v1/recipes/works/${fixture.workRef}`} actingSubject={null}
       text="Rest the batter overnight. If the middle is wet when the top is brown, lower the heat."
       locale="en" messages={messages.en} /></Framed>,
   async play({ canvasElement }) {

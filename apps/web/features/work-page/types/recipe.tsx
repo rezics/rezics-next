@@ -7,6 +7,7 @@ import { Clock3Icon, CookingPotIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
 import { browserMainApi } from '../../api/browser.ts';
+import { followHref } from '../../entity-page/href.ts';
 import type { WorkPageMessages } from '../messages.ts';
 import { Region } from '../region.tsx';
 import type { RecipeWorkPage } from '../types.ts';
@@ -154,8 +155,9 @@ function CookMode({ page, messages: t, system, written, onClose }: {
   </div>;
 }
 
-export function RecipeExperience({ initial, workId, actingSubject, text, messages: t }: {
-  initial: RecipeWorkPage | null; workId: string; actingSubject: string | null;
+export function RecipeExperience({ initial, href, actingSubject, text, messages: t }: {
+  initial: RecipeWorkPage | null; /** The recipe section's link in the Work's page projection. */ href: string;
+  actingSubject: string | null;
   text: string | null; locale: UiLocale; messages: WorkPageMessages;
 }) {
   const [page, setPage] = useState(initial);
@@ -187,8 +189,8 @@ export function RecipeExperience({ initial, workId, actingSubject, text, message
     if (!Number.isInteger(servings) || servings < 1 || servings > 100) return;
     setBusy(true); setError(false);
     try {
-      const answer = await browserMainApi().v1.recipes.works({ id: workId }).get({ query: {
-        actingSubject: actingSubject ?? undefined, servings } });
+      const answer = await followHref<RecipeWorkPage | null>(browserMainApi(), href, {
+        actingSubject: actingSubject ?? undefined, servings })();
       if (answer.error || !answer.data) throw new Error('scale');
       setPage(answer.data);
     } catch { setError(true); }

@@ -1,4 +1,5 @@
 import { browserMainApi } from '../api/browser.ts';
+import { followHref } from '../entity-page/href.ts';
 import { failureOf } from './failure.ts';
 import type { Loaded, Review, Reviewer, ReviewPage } from './types.ts';
 
@@ -26,17 +27,20 @@ export interface ReviewApi {
 
 const key = () => ({ headers: { 'idempotency-key': crypto.randomUUID() } });
 
-/** Main's reviews for one Work and rating Context, read and written as `actingSubject` when there is one. */
-export function mainReviewApi({ work, context, actingSubject }: {
-  work: string; context: string; actingSubject: string | null;
+/**
+ * Main's reviews for one resource and rating Context, read and written as `actingSubject` when there is one.
+ * The list is read from `href`, the link the resource's page projection gave, else the resource's own reviews read.
+ */
+export function mainReviewApi({ target, href, context, actingSubject }: {
+  target: string; href?: string; context: string; actingSubject: string | null;
 }): ReviewApi {
   const main = () => browserMainApi();
   const reader = actingSubject ? { actingSubject } : {};
   return {
     async page(filter, cursor) {
       try {
-        const { data, error } = await main().v1.resources({ resource: work.slice(-36) }).reviews.get({ query: { context,
-          sort: filter.sort, language: filter.language, rating: filter.rating, cursor, limit: 10, ...reader } });
+        const { data, error } = await followHref<ReviewPage>(main(), href ?? `/v1/resources/${target.slice(-36)}/reviews`,
+          { context, sort: filter.sort, language: filter.language, rating: filter.rating, cursor, limit: 10, ...reader })();
         if (error) return { ok: false, failure: failureOf(error.status) };
         return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
       } catch {
@@ -65,7 +69,7 @@ export function mainReviewApi({ work, context, actingSubject }: {
       if (!actingSubject) return 'denied';
       try {
         const { error } = await main().v1.reviews.post({ profile: 'reader-review-command-v1', actingSubject, context,
-          target: work, ...input }, key());
+          target, ...input }, key());
         if (!error) return 'saved';
         // Main proves the reader's rating in this Context before it keeps a review.
         if (error.status === 404) return 'rate-first';

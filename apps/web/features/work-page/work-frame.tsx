@@ -16,7 +16,7 @@ import { type WorkAt, workHref } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { WorkHeader } from './work-header.tsx';
 import { WorkTabs } from './work-tabs.tsx';
-import { workPageKind } from './types/kind.ts';
+import { type WorkExperience, showsBookControls, workExperience } from '../entity-page/experience.ts';
 
 /**
  * Header and tabs around every Work view. Books use the Goodreads layout:
@@ -35,10 +35,13 @@ export function WorkPageCover({ work, authors = [], avatarQuery }: {
     className="w-40 sm:w-48 lg:w-full xl:w-60" />;
 }
 
-export function WorkFrame({ workRef, work, credits, authors = [], cover, ratingLine, readAction,
+export function WorkFrame({ workRef, work, experience = workExperience(null, work.types), credits, authors = [], cover,
+  ratingLine, readAction,
   signedIn = false, signInHref, actingSubject,
   readerSeed, ratingTarget, readerActions, avatarQuery, locale, messages, children }: {
   workRef: WorkAt; work: Header; credits: ReactNode; authors?: readonly CatalogueAuthor[];
+  /** The page the Work's projection names; the registry's entry for its types when left out. */
+  experience?: WorkExperience;
   /** A credited cover streamed separately from the rest of the frame. */
   cover?: ReactNode;
   /** Where "Read" leads, streamed on its own; a link to Contents when left out. */
@@ -55,7 +58,7 @@ export function WorkFrame({ workRef, work, credits, authors = [], cover, ratingL
   avatarQuery?: string;
   locale: UiLocale; messages: WorkPageMessages; children: ReactNode;
 }) {
-  if (workPageKind(work.types) !== 'book') {
+  if (!showsBookControls(experience)) {
     return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'}
       actingSubject={actingSubject} seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
       <PageContainer className="grid gap-7 [text-autospace:normal]">

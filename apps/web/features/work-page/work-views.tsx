@@ -41,8 +41,9 @@ import { VersionsRegion } from './versions.tsx';
 import { InvalidScope, OverviewLayout, ReadButton, WorkFrame, WorkPageCover } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 import { WorkTypeSections } from '../zones/work-sections.tsx';
+import { readEntityProjection } from '../entity-page/read.ts';
+import { type WorkExperience, workExperience } from '../entity-page/experience.ts';
 import { WorkKindActions } from './types/actions.tsx';
-import { workPageKind } from './types/kind.ts';
 import { RecipeExperience } from './types/recipe.tsx';
 import { HubExperience } from './types/hub.tsx';
 import { GuideExperience } from './types/guide.tsx';
@@ -99,30 +100,41 @@ async function RatingLineSlot({ id, locale, messages }: Common & { id: string })
   return <RatingLine ratings={ratings} stats={stats} locale={locale} messages={messages} />;
 }
 
+/**
+ * The page a Work gets: its registry presentation and type section, from its
+ * `entity-page-v1` projection (read once per request). When Main cannot serve
+ * the projection the registry's entry for the Work's types stands in and the
+ * type section is left out.
+ */
+export const readExperience = async (id: string, types: readonly string[]): Promise<WorkExperience> => {
+  const page = await readEntityProjection(id);
+  return workExperience(page.ok ? page.data : null, types);
+};
+
 /** A type's primary action, or the next readable chapter for books. */
-async function ReadSlot({ workRef, id, work, locale, messages }: Common & { workRef: WorkAt; id: string;
-  work: Header }) {
-  const kind = workPageKind(work.types);
-  if (kind !== 'book') {
-    const hub = kind === 'prompt' || kind === 'skill' ? await readHubWorkPage(id) : null;
-    return <WorkKindActions kind={kind} workId={work.id} title={work.title.value} locale={locale}
-      messages={messages} hubText={hub?.ok ? hub.data?.content ?? null : null} />;
+async function ReadSlot({ workRef, id, work, experience, locale, messages }: Common & { workRef: WorkAt; id: string;
+  work: Header; experience: WorkExperience }) {
+  if (experience.kind === 'book') {
+    return <ReadButton workRef={workRef} start={await readStart(id, work.id, locale, work.selectedLanguage)}
+      messages={messages} />;
   }
-  return <ReadButton workRef={workRef} start={await readStart(id, work.id, locale, work.selectedLanguage)}
-    messages={messages} />;
+  const hub = experience.typeSection && experience.kind !== 'recipe' ? await readHubWorkPage(experience.typeSection.href)
+    : null;
+  return <WorkKindActions kind={experience.kind} workId={work.id} title={work.title.value} locale={locale}
+    messages={messages} hubText={hub?.ok ? hub.data?.content ?? null : null} />;
 }
 
 /** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
 export async function WorkFrameView({ workRef, id, work, locale, messages, children }: Common & {
   workRef: WorkAt; id: string; work: Header; children: ReactNode;
 }) {
-  const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings] = await Promise.all([readingAgent(), browseReader(),
-    readReaderState(id), readRatings(id, EVERYONE, undefined)]);
+  const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, experience] = await Promise.all([readingAgent(),
+    browseReader(), readReaderState(id), readRatings(id, EVERYONE, undefined), readExperience(id, work.types)]);
   // The stars answer everyone's first rating question for the Main Version shown, as the summary above them does.
   const context = ratings.ok ? ratings.data.context : null;
   const ratingTarget = context ? { work: work.id, context: context.context, mainVersion: work.mainVersion,
     max: context.scale.max } : null;
-  return <WorkFrame workRef={workRef} work={work} locale={locale} messages={messages} signedIn={signedIn}
+  return <WorkFrame workRef={workRef} work={work} experience={experience} locale={locale} messages={messages} signedIn={signedIn}
     actingSubject={seed ? actingSubject : null} readerSeed={seed ?? undefined} ratingTarget={ratingTarget}
     signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
     cover={<Suspense fallback={<WorkPageCover work={work} avatarQuery={avatarQuery} />}>
@@ -130,9 +142,10 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, child
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       <Credits id={id} locale={locale} messages={messages} /></Suspense>}
     ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} locale={locale} messages={messages} /></Suspense>}
-    readAction={<Suspense fallback={workPageKind(work.types) === 'book'
+    readAction={<Suspense fallback={experience.kind === 'book'
       ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} /> : null}>
-      <ReadSlot workRef={workRef} id={id} work={work} locale={locale} messages={messages} /></Suspense>}>
+      <ReadSlot workRef={workRef} id={id} work={work} experience={experience} locale={locale} messages={messages} />
+    </Suspense>}>
     {children}</WorkFrame>;
 }
 
@@ -210,7 +223,7 @@ async function Reviews({ workRef, id, work, scope, context: chosen, locale, mess
   const authors = initial.ok ? [...new Set(initial.data.items.map(review => review.author))] : [];
   const named = await Promise.all(authors.map(async author => [author, await readReviewer(author)] as const));
   const writable = everyone.ok && everyone.data.context?.context === question.context;
-  return <ReviewsSection work={work.id} context={question.context} scale={question.scale.max} initial={initial}
+  return <ReviewsSection target={work.id} context={question.context} scale={question.scale.max} initial={initial}
     reviewers={Object.fromEntries(named.filter((entry): entry is [string, Reviewer] => entry[1] !== null))}
     viewer={actingSubject ? { kind: 'reader', actingSubject, canWrite: writable }
       : signedIn ? { kind: 'no-identity' }
@@ -252,22 +265,24 @@ async function Adoption(props: ScopedProps) {
   return <AdoptionRegion adoptions={adoptions} view={scopeView} locale={props.locale} messages={props.messages} />;
 }
 
-async function TypeExperience({ id, work, locale, messages }: Common & { id: string; work: Header }) {
-  const kind = workPageKind(work.types);
-  if (kind === 'book') return null;
-  if (kind === 'recipe') {
-    const [recipe, text, agent] = await Promise.all([readRecipeWorkPage(id),
+/** The Work's recipe, prompt, skill or guide, laid out from the section its projection listed. */
+async function TypeExperience({ id, work, experience, locale, messages }: Common & { id: string; work: Header;
+  experience: WorkExperience }) {
+  const section = experience.typeSection;
+  if (experience.kind === 'recipe' && section) {
+    const [recipe, text, agent] = await Promise.all([readRecipeWorkPage(section.href),
       readText(work.mainVersion, work.selectedLanguage ?? undefined), readingAgent()]);
     if (!recipe.ok) return <RegionFailure title={messages.recipeMethod} failure={recipe.failure} messages={messages} />;
-    return <RecipeExperience initial={recipe.data} workId={id} actingSubject={agent.actingSubject}
+    return <RecipeExperience initial={recipe.data} href={section.href} actingSubject={agent.actingSubject}
       text={text.ok ? text.data.body : null} locale={locale} messages={messages} />;
   }
-  if (kind === 'prompt' || kind === 'skill') {
-    const hub = await readHubWorkPage(id);
+  if ((experience.kind === 'prompt' || experience.kind === 'skill') && section) {
+    const hub = await readHubWorkPage(section.href);
     if (!hub.ok) return <RegionFailure title={messages.hubUnavailable} failure={hub.failure} messages={messages} />;
     return hub.data ? <HubExperience page={hub.data} locale={locale} messages={messages} />
       : <Region id="hub-experience" title={messages.hubNotPublished}><p>{messages.hubNotPublished}</p></Region>;
   }
+  if (experience.kind !== 'guide') return null;
   const text = await readText(work.mainVersion, work.selectedLanguage ?? undefined);
   if (!text.ok) return <RegionFailure title={messages.guideUnavailable} failure={text.failure} messages={messages} />;
   return <GuideExperience body={text.data.body} title={work.title.value} updatedAt={work.lastUpdatedAt}
@@ -275,16 +290,17 @@ async function TypeExperience({ id, work, locale, messages }: Common & { id: str
 }
 
 /** Overview: each region reads in parallel under its own Suspense boundary. */
-export function WorkOverview({ workRef, id, work, scope, context, locale, messages }: Common & {
+export async function WorkOverview({ workRef, id, work, scope, context, locale, messages }: Common & {
   workRef: WorkAt; id: string; work: Header; scope: WorkScope | null; context: string | undefined;
 }) {
+  const experience = await readExperience(id, work.types);
   const t = messages;
   const loading = t.loadingRegion;
   // Specialist reading or cooking leads; shared type sections follow the description.
   return <OverviewLayout messages={messages} about={<div className="grid gap-8">
-    {workPageKind(work.types) === 'book' ? null : <Suspense fallback={<RegionSkeleton
+    {experience.kind === 'book' || experience.kind === 'plain' ? null : <Suspense fallback={<RegionSkeleton
       id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
-      <TypeExperience id={id} work={work} locale={locale} messages={messages} /></Suspense>}
+      <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense>}
     <WorkAbout work={work} messages={messages} />
     <Suspense fallback={<RegionSkeleton id="work-editions-loading" title={editionMessages[locale].editions}
       label={loading} lines={4} />}>

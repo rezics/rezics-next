@@ -12,7 +12,7 @@ const reader = { kind: 'reader' as const, actingSubject: fixture.reviewReader, c
 const meta = {
   title: 'Work page/Reviews',
   component: ReviewsSection,
-  args: { work: fixture.work.id, context: fixture.reviewContext, scale: 5, initial: fixture.reviewPage(fixture.reviews),
+  args: { target: fixture.work.id, context: fixture.reviewContext, scale: 5, initial: fixture.reviewPage(fixture.reviews),
     reviewers: fixture.reviewers, viewer: signedOut, locale: 'en', messages: messages.en },
   decorators: [(Story, { args }) => <ReaderActionsProvider signedIn={args.viewer.kind !== 'signed-out'}
     signInHref={signedOut.signInHref} actions={args.viewer.kind === 'reader'
