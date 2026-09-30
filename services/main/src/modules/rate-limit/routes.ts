@@ -90,6 +90,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/classification-vocabulary', 'read'],
   ['GET', '/v1/collection-definitions/{id}', 'read'],
   ['GET', '/v1/collections/{id}', 'read'],
+  ['GET', '/v1/reading-positions/{work}', 'read'],
   ['GET', '/v1/collections/{id}/works', 'read'],
   ['GET', '/v1/media/uploads/{upload}', 'read'],
   ['GET', '/v1/search/catalogue', 'search'],
