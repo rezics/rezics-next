@@ -3,6 +3,7 @@ import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastr
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { AdmissionDenied, AdmissionExpired, type RegisteredAdmission } from '../access/admission.ts';
+import { term } from '../context/command.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent, prepareWorkComponent,
   IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
@@ -167,10 +168,10 @@ export async function commitRealization(env: WorkActivationEnvironment, admissio
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RealizationRevision, rv:RevisionAnchor ;
         rv:sourceWork ${iri(record.source.work)} ; rv:sourceStatus ${lit(record.source.kind)} ;
         ${record.source.kind !== 'unresolved' ? `rv:sourceRevision ${iri(record.source.revision)} ;` : ''}
-        ${record.evidence ? `rv:evidence ${iri(record.evidence)} ;` : ''}
+        ${record.evidence ? `rv:evidence ${term(record.evidence)} ;` : ''}
         rv:component ${iri(realization)} ; rv:realizationState ${lit(JSON.stringify(record))} ;
         ${prior ? `rv:predecessor ${iri(prior)} ;` : ''}
-        ${record.evidence ? `rv:correctionEvidence ${iri(record.evidence)} ;` : ''}
+        ${record.evidence ? `rv:correctionEvidence ${term(record.evidence)} ;` : ''}
         rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ; rv:modelRevision ${iri(REALIZATION_PROFILE)} ;
         rv:shapeRevision ${iri(REALIZATION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
@@ -180,7 +181,7 @@ export async function commitRealization(env: WorkActivationEnvironment, admissio
         rv:work ${iri(record.work)} ; rv:realization ${iri(realization)} ; rv:realizationRevision ${iri(revision)} ;
         rv:component ${iri(realization)} ; rv:revision ${iri(revision)} ;
         rv:expectedHead ${iri(prior ?? realization)} ; rv:action "work.edit" ; rv:commandFamily "realization-v1" ;
-        ${record.evidence ? `rv:correctionEvidence ${iri(record.evidence)} ;` : ''}
+        ${record.evidence ? `rv:correctionEvidence ${term(record.evidence)} ;` : ''}
         rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
