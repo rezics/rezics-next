@@ -60,7 +60,7 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   // Signed out, an edit page offers no control, only the way to sign in.
   await page.goto(at(index.newTestament, 'edit/parts'));
   await expect(page.getByRole('heading', { name: 'Sign in to edit' })).toBeVisible();
-  await expect(page.locator('form, input, select, textarea')).toHaveCount(0);
+  await expect(page.locator('#main-content').locator('form, input, select, textarea, button')).toHaveCount(0);
   await signInAtAccounts(page, at(index.newTestament, 'edit/parts'), member);
 
   // Parts: add "22 Reverse" after "22".
@@ -162,7 +162,7 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   for (const section of ['parts', 'relations', 'editions']) {
     await page.goto(at(readOnly, `edit/${section}`));
     await expect(page.getByRole('heading', { name: 'You can’t edit this Work' })).toBeVisible();
-    await expect(page.locator('form, input, select, textarea')).toHaveCount(0);
+    await expect(page.locator('#main-content').locator('form, input, select, textarea, button')).toHaveCount(0);
   }
   await shoot(page, 'reader', info);
 });
