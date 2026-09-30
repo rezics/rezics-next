@@ -17,7 +17,7 @@ const suggestion = cn('flex min-h-12 w-full items-center gap-3 rounded-2xl borde
   'focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60');
 
 /** A language as its readers write it, with its name in the page's language beneath. */
-function LanguageName({ tag, names }: { tag: string; names: Intl.DisplayNames }) {
+export function LanguageName({ tag, names }: { tag: string; names: Intl.DisplayNames }) {
   const own = new Intl.DisplayNames([tag], { type: 'language', fallback: 'code' }).of(tag) ?? tag;
   const local = names.of(tag);
   return <span className="grid min-w-0 flex-1">

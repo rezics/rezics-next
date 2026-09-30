@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { acting, adminApi, type AdminRecord, header, realm, rules, settings } from './fixtures.ts';
 import { messages } from './messages.ts';
+import ko from './messages/ko.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { RealmFrame } from './realm-frame.tsx';
 import { SettingsView } from './settings-view.tsx';
@@ -15,6 +16,7 @@ import { SettingsView } from './settings-view.tsx';
 
 const record: AdminRecord = { members: [], roles: [], settings: [] };
 const chinese = { ...messages, ...zhHans };
+const korean = { ...messages, ...ko };
 
 const meta = {
   title: 'Manage/Settings and rules',
@@ -119,7 +121,7 @@ export const NewRuleWithoutInventedTranslations: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Add a rule' }));
     const added = canvas.getByRole('heading', { name: 'Rule 4' }).closest('li')!;
     const title = within(added).getByRole('textbox', { name: 'Title in Unknown language' });
-    await expect(title).toHaveAttribute('lang', 'und');
+    await expect(title).not.toHaveAttribute('lang');
     await userEvent.type(title, 'Credit the translator');
     await userEvent.click(canvas.getByRole('button', { name: 'Review changes' }));
     await expect(within(added).getByText('Write the explanation in Unknown language.')).toBeInTheDocument();
@@ -193,7 +195,43 @@ export const RightToLeftText: Story = {
     await expect(firstRule(canvas)).toHaveAttribute('lang', 'ar');
     await expect(firstRule(canvas)).toHaveAttribute('dir', 'auto');
     await userEvent.click(canvas.getByRole('button', { name: 'Edit rules' }));
-    await expect(canvas.getByRole('textbox', { name: 'Title in Arabic' })).toHaveAttribute('lang', 'ar');
+    const title = canvas.getByRole('textbox', { name: 'Title in Arabic' });
+    await expect(title).toHaveAttribute('lang', 'ar');
+    await expect(title).toHaveAttribute('dir', 'rtl');
+    await expect(canvas.getByRole('textbox', { name: 'Title in Simplified Chinese' })).toHaveAttribute('dir', 'ltr');
+  },
+};
+
+/** The author states the rule's language and adds a translation; nothing comes from the interface language. */
+export const RuleWrittenInJapanese: Story = {
+  args: { locale: 'ko', messages: korean },
+  globals: { locale: 'ko' },
+  parameters: { route: { pathname: `/ko/manage/r/${realm}/settings` } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: '규칙 편집' }));
+    await userEvent.click(canvas.getByRole('button', { name: '규칙 추가' }));
+    const added = canvas.getByRole('heading', { name: '규칙 4' }).closest('li')!;
+    const pick = async (opener: RegExp, query: string, option: RegExp) => {
+      await userEvent.click(within(added).getByRole('button', { name: opener }));
+      await userEvent.type(await body().findByRole('searchbox'), query);
+      await userEvent.click(await body().findByRole('button', { name: option }));
+    };
+    await pick(/^작성 언어 — 규칙 4/, '일본어', /日本語/);
+    await userEvent.type(within(added).getByRole('textbox', { name: '일본어 제목' }), '親切に');
+    await userEvent.type(within(added).getByRole('textbox', { name: '일본어 설명' }), '読者を尊重する');
+    await expect(within(added).getByRole('textbox', { name: '일본어 제목' })).toHaveAttribute('lang', 'ja');
+    await pick(/^번역 추가 — 규칙 4/, 'ko', /한국어/);
+    await userEvent.type(within(added).getByRole('textbox', { name: '한국어 제목' }), '친절하게');
+    await userEvent.type(within(added).getByRole('textbox', { name: '한국어 설명' }), '독자를 존중하세요');
+    await userEvent.click(canvas.getByRole('button', { name: '변경 사항 검토' }));
+    const dialog = within(await body().findByRole('dialog', {}, { timeout: 5000 }));
+    await userEvent.type(dialog.getByRole('textbox'), '일본어 규칙');
+    await userEvent.click(dialog.getByRole('button', { name: '게시' }));
+    await waitFor(() => expect(record.settings).toHaveLength(1));
+    await expect(record.settings[0]).toMatchObject({ settings: { rules: [...rules, { id: 'rule', governanceRule: null,
+      title: { original: 'ja', labels: { ja: '親切に', ko: '친절하게' } },
+      body: { original: 'ja', labels: { ja: '読者を尊重する', ko: '독자를 존중하세요' } } }] } });
   },
 };
 

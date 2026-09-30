@@ -10,6 +10,7 @@ export default {
   chooseAvatar: 'Bild auswählen',
   noAvatarSelected: 'Kein Bild ausgewählt',
   bio: 'Kurzbeschreibung',
+  bioLanguage: 'Sprache der Kurzbeschreibung',
   avatarHelp: 'PNG, JPEG, WebP oder GIF, bis zu 4 MB. Nach dem Speichern ist das Bild öffentlich sichtbar.',
   removeAvatar: 'Aktuelles Profilbild entfernen',
   accountInfo: 'Dein Kontoname bleibt privat. Änderungen hier wirken sich nicht auf ihn aus.',

@@ -4,7 +4,7 @@ export default {
   title: '投稿を作成', intro: 'コミュニティで会話を始めましょう。', community: 'コミュニティ',
   communitySearch: 'コミュニティを探す', communityChange: 'コミュニティを変更', work: '作品',
   workSearch: '作品を検索', workChange: '作品を変更', titleLabel: 'タイトル', body: '投稿内容',
-  edit: '書く', preview: 'プレビュー', showSpoiler: 'ネタバレを表示',
+  postLanguage: '投稿の言語', edit: '書く', preview: 'プレビュー', showSpoiler: 'ネタバレを表示',
   bodyHelp: '話し合いたい詳細、質問、アイデアを書いてください。', spoiler: 'ネタバレとしてマーク',
   spoilerHelp: '本文を表示する前に、ネタバレが含まれることを読者に知らせます。', rules: 'コミュニティのルール',
   noRules: 'このコミュニティではルールがまだ公開されていません。',

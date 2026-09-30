@@ -146,7 +146,37 @@ export function ruleIdFrom(title: string, taken: ReadonlySet<string>): string {
 export const ruleFromText = (id: string, title: string, body: string, language = 'und'): RealmRule => ({ id,
   title: { original: language, labels: { [language]: title } },
   body: { original: language, labels: { [language]: body } }, governanceRule: null });
-export const emptyRule = (id: string): RealmRule => ruleFromText(id, '', '');
+export const emptyRule = (id: string, language = 'und'): RealmRule => ruleFromText(id, '', '', language);
+
+function reoriginated(field: RuleText, language: string): RuleText {
+  if (field.original === language) return field;
+  // The language of a translation already written becomes the original; nothing typed is lost.
+  if (language in field.labels) return { ...field, original: language };
+  const { [field.original]: text, ...translations } = field.labels;
+  return { original: language, labels: { [language]: text ?? '', ...translations } };
+}
+
+/** The rule written in another language than the one recorded: a correction, so the authored text stays. */
+export function setRuleOriginal(rule: RealmRule, language: RuleLanguage): RealmRule {
+  return { ...rule, title: reoriginated(rule.title, language), body: reoriginated(rule.body, language) };
+}
+
+/** A translation slot for the title and the explanation, empty until written; an existing one is kept. */
+export function addRuleTranslation(rule: RealmRule, language: RuleLanguage): RealmRule {
+  const added = (field: RuleText): RuleText => language in field.labels ? field
+    : { ...field, labels: { ...field.labels, [language]: '' } };
+  return { ...rule, title: added(rule.title), body: added(rule.body) };
+}
+
+/** The rule without one translation; the original language cannot be removed. */
+export function removeRuleTranslation(rule: RealmRule, language: RuleLanguage): RealmRule {
+  const removed = (field: RuleText): RuleText => {
+    if (language === field.original) return field;
+    const { [language]: _dropped, ...labels } = field.labels;
+    return { ...field, labels };
+  };
+  return { ...rule, title: removed(rule.title), body: removed(rule.body) };
+}
 
 /** Previously saved local drafts use the same v1 compatibility rule as Main reads. */
 export function restoredRule(rule: RealmRule): RealmRule {

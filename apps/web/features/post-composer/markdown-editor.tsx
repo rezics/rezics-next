@@ -7,11 +7,13 @@ import { MarkdownBody } from './markdown.tsx';
 
 export function MarkdownEditor({ label, value, onChange, maxLength, rows, readOnly = false,
   autoFocus = false, onFocus, onKeyDown, className, placeholder, disabled = false,
-  editLabel, previewLabel, showSpoiler }: {
+  editLabel, previewLabel, showSpoiler, lang, dir }: {
   label: string; value: string; onChange: (value: string) => void; maxLength: number; rows: number;
   readOnly?: boolean; autoFocus?: boolean; onFocus?: () => void; placeholder?: string; disabled?: boolean;
   onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void; className?: string;
   editLabel: string; previewLabel: string; showSpoiler: string;
+  /** The language the writer chose for this text, and the direction its script gives. */
+  lang?: string; dir?: 'ltr' | 'rtl';
 }) {
   const id = useId();
   const [preview, setPreview] = useState(false);
@@ -25,11 +27,11 @@ export function MarkdownEditor({ label, value, onChange, maxLength, rows, readOn
         {show ? previewLabel : editLabel}</button>)}
     </div>
     <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${preview ? 'preview' : 'edit'}`}>
-      {preview ? <div className="min-h-28 rounded-xl border border-border bg-card p-3">
+      {preview ? <div lang={lang} dir={dir} className="min-h-28 rounded-xl border border-border bg-card p-3">
         <MarkdownBody text={value} showSpoiler={showSpoiler} className="grid gap-3 text-sm/relaxed
           [overflow-wrap:anywhere]" /></div>
         : <Textarea aria-label={label} value={value} maxLength={maxLength} rows={rows}
-          readOnly={readOnly} disabled={disabled} autoFocus={autoFocus} onFocus={onFocus}
+          readOnly={readOnly} disabled={disabled} lang={lang} dir={dir} autoFocus={autoFocus} onFocus={onFocus}
           onKeyDown={onKeyDown} placeholder={placeholder}
           onChange={event => onChange(event.currentTarget.value)} className={className} />}
     </div>

@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ loc
   const file = form.get('avatar');
   const result = await saveAgentProfile(profileSaveInput(profile, {
     token, agent, displayName: String(form.get('displayName') ?? ''),
-    bioText: String(form.get('bio') ?? ''), locale, avatar: file instanceof File && file.size ? file : undefined,
+    bioText: String(form.get('bio') ?? ''), bioLanguage: String(form.get('bioLanguage') ?? ''), avatar: file instanceof File && file.size ? file : undefined,
     removeAvatar: form.get('removeAvatar') === 'on', key: String(form.get('key') ?? ''),
   }));
   if (result !== 'saved') return NextResponse.redirect(back(result), 303);

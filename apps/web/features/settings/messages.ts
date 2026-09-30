@@ -98,6 +98,7 @@ const en = {
   chooseAvatar: 'Choose image',
   noAvatarSelected: 'No image selected',
   bio: 'Bio',
+  bioLanguage: 'Language of your bio',
   avatarHelp: 'PNG, JPEG, WebP or GIF, up to 4 MB. The image becomes public when you save.',
   removeAvatar: 'Remove current avatar',
   accountInfo: 'Your Account name stays private. Changes here do not affect it.',

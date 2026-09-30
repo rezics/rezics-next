@@ -10,6 +10,7 @@ export default {
   chooseAvatar: '이미지 선택',
   noAvatarSelected: '선택한 이미지 없음',
   bio: '소개',
+  bioLanguage: '소개 언어',
   avatarHelp: 'PNG, JPEG, WebP, GIF 형식, 최대 4MB입니다. 저장하면 이미지가 공개됩니다.',
   removeAvatar: '현재 아바타 삭제',
   accountInfo: '계정 이름은 비공개로 유지됩니다. 여기서 바꿔도 계정 이름에는 영향이 없습니다.',

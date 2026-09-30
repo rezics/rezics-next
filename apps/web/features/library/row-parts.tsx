@@ -14,6 +14,9 @@ import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import { workTitle } from '../catalogue/work-tile.tsx';
+import { LanguageSelect } from '../content-language/language-select.tsx';
+import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
+import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
 import type { ReviewDraft } from './api.ts';
 import { formatDayRange, today } from './format.ts';
 import { isUseWork } from './labels.ts';
@@ -167,14 +170,15 @@ const prose = (language: string | undefined) => /^(?:zh|ja|ko)(?:-|$)/.test(lang
  */
 export function ReviewCell({ row, locale, messages }: { row: LibraryRow; locale: UiLocale; messages: LibraryMessages }) {
   const t = materializeData(messages, { locale });
-  const { api, ratingContext, refresh } = useLibrary();
+  const { actingSubject, api, ratingContext, refresh } = useLibrary();
+  const reading = useReadingLanguages(actingSubject);
   const title = workTitle(row.work, locale);
   const known = row.review?.ok ? row.review.data : null;
   const [review, setReview] = useState<Pick<Review, 'id' | 'revision' | 'text' | 'spoiler' | 'language'> | null>(known);
   const [basis, setBasis] = useState(known?.revision ?? null);
   if ((known?.revision ?? null) !== basis) { setBasis(known?.revision ?? null); setReview(known); }
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<ReviewDraft>({ text: '', spoiler: false, language: locale });
+  const [draft, setDraft] = useState<Omit<ReviewDraft, 'language'> & { language: string | null }>({ text: '', spoiler: false, language: null });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<'save' | 'delete' | null>(null);
   if (!ratingContext || row.review === undefined) return null;
@@ -182,7 +186,7 @@ export function ReviewCell({ row, locale, messages }: { row: LibraryRow; locale:
   const context = ratingContext;
 
   function edit() {
-    setDraft({ text: review?.text ?? '', spoiler: review?.spoiler ?? false, language: review?.language ?? locale });
+    setDraft({ text: review?.text ?? '', spoiler: review?.spoiler ?? false, language: review?.language ?? null });
     setError(null);
     setEditing(true);
   }
@@ -190,11 +194,11 @@ export function ReviewCell({ row, locale, messages }: { row: LibraryRow; locale:
     const text = draft.text.trim();
     if (!text) return;
     setSaving('save');
-    const written = await api.saveReview(row.work.id, context, { ...draft, text }, review?.revision ?? null);
+    const language = writingLanguage({ chosen: draft.language, reading });
+    const written = await api.saveReview(row.work.id, context, { ...draft, language, text }, review?.revision ?? null);
     setSaving(null);
     if (!written.ok) { setError(written.failure === 'moved' ? t.reviewMoved : t.reviewFailed); return; }
-    setReview({ id: written.data.review, revision: written.data.revision, text, spoiler: draft.spoiler,
-      language: draft.language });
+    setReview({ id: written.data.review, revision: written.data.revision, text, spoiler: draft.spoiler, language });
     setEditing(false);
     refresh();
   }
@@ -212,12 +216,14 @@ export function ReviewCell({ row, locale, messages }: { row: LibraryRow; locale:
   if (editing) {
     // Only a Work Main says is unrated asks for stars first; when Main could not say, Main decides on save.
     const unrated = row.stateRead === true && row.rating === null;
+    const language = writingLanguage({ chosen: draft.language, reading });
+    const written = textAttributes(language, draft.text);
     return <form noValidate onSubmit={event => { event.preventDefault(); void save(); }}
       className="grid max-w-2xl gap-3 rounded-2xl bg-muted/50 p-4">
       <Field invalid={error !== null}>
         <FieldLabel>{t.reviewOf({ title })}</FieldLabel>
-        <Textarea value={draft.text} rows={4} maxLength={8000} lang={draft.language}
-          placeholder={t.reviewPlaceholder} className={prose(draft.language)}
+        <Textarea value={draft.text} rows={4} maxLength={8000} lang={written.lang} dir={written.dir}
+          placeholder={t.reviewPlaceholder} className={prose(language)}
           onChange={event => { setDraft({ ...draft, text: event.currentTarget.value }); setError(null); }}
           onKeyDown={event => {
             if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.nativeEvent.isComposing) {
@@ -227,6 +233,8 @@ export function ReviewCell({ row, locale, messages }: { row: LibraryRow; locale:
           }} />
         {error ? <FieldError>{error}</FieldError> : unrated ? <FieldHelper>{t.reviewNeedsRating}</FieldHelper> : null}
       </Field>
+      <LanguageSelect value={language} onChange={chosen => setDraft({ ...draft, language: chosen })} locale={locale}
+        reading={reading} className="w-fit" />
       <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
         <input type="checkbox" checked={draft.spoiler} className="size-4 accent-primary"
           onChange={event => setDraft({ ...draft, spoiler: event.currentTarget.checked })} />{t.spoiler}</label>
@@ -251,8 +259,8 @@ export function ReviewCell({ row, locale, messages }: { row: LibraryRow; locale:
         <PencilLineIcon aria-hidden="true" />{t.editReview}<span className="sr-only"> — {t.reviewOf({ title })}</span>
       </Button>
     </figcaption>
-    <blockquote lang={review.language} className={cn('line-clamp-4 whitespace-pre-line text-pretty text-sm',
-      prose(review.language))}>{review.text ?? ''}</blockquote>
+    <blockquote lang={review.language} dir={textAttributes(review.language, review.text ?? '').dir}
+      className={cn('line-clamp-4 whitespace-pre-line text-pretty text-sm', prose(review.language))}>{review.text ?? ''}</blockquote>
   </figure>;
 }
 

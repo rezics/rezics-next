@@ -29,7 +29,7 @@ export default {
   createIntro: 'Gib deiner Community ein Zuhause. Die Angaben kannst du später in der Verwaltung ändern.',
   name: 'Name der Community',
   nameLanguage: 'Sprache des Namens',
-  languageHelp: 'Verwende ein Sprachkürzel wie en, zh-Hans oder ja.',
+  languageHelp: 'Die Sprache, in der Name, Beschreibung und Regeln geschrieben sind. Übersetzungen des Namens kannst du unten ergänzen.',
   translation: 'Übersetzung',
   translationLanguage: 'Sprache der Übersetzung',
   translationName: 'Übersetzter Name',

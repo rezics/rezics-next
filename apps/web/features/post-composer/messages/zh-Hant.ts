@@ -4,7 +4,7 @@ export default {
   title: '建立貼文', intro: '在社群中開啟一場對話。', community: '社群',
   communitySearch: '尋找社群', communityChange: '更換社群', work: '作品',
   workSearch: '搜尋作品', workChange: '更換作品', titleLabel: '標題', body: '你的貼文',
-  edit: '撰寫', preview: '預覽', showSpoiler: '顯示劇透',
+  postLanguage: '貼文使用的語言', edit: '撰寫', preview: '預覽', showSpoiler: '顯示劇透',
   bodyHelp: '寫下你想討論的細節、問題或想法。', spoiler: '標記為劇透',
   spoilerHelp: '貼文會在顯示內容前提醒讀者這是劇透。', rules: '社群規則',
   noRules: '此社群尚未發布規則。',

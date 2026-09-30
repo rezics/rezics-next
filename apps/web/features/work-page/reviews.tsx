@@ -7,9 +7,12 @@ import { cn } from '@rezics/ui/utils';
 import { EyeIcon, MessageSquareTextIcon, PencilIcon, ThumbsUpIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { type UiLocale, uiLocales } from '../../i18n/define.ts';
+import type { UiLocale } from '../../i18n/define.ts';
 import { StarMeter } from '../catalogue/rating.tsx';
 import { RateWork, useReaderActions } from '../catalogue/reader-actions.tsx';
+import { LanguageSelect } from '../content-language/language-select.tsx';
+import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
+import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
 import Link from '../shell/localized-link.tsx';
 import { Expandable } from './expandable.tsx';
 import { formatDate, isoTime, languageName, paragraphs } from './format.ts';
@@ -109,7 +112,8 @@ function ReviewCard({ review, reviewer, own, highlighted, viewer, api, scale, on
         <Button size="sm" variant="outline" isLoading={revealing} onClick={() => void reveal()}>{t.showSpoilers}</Button>
       </div>
       : <Expandable more={t.showMore} less={t.showLess}>
-        <div lang={review.language} className="grid gap-3 text-pretty break-words text-base/7">
+        <div lang={review.language} dir={textAttributes(review.language, review.text).dir}
+          className="grid gap-3 text-pretty break-words text-base/7">
           {review.spoiler ? <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
             {t.spoilerLabel}</p> : null}
           {paragraphs(review.text).map((line, index) => <p key={index}>{line}</p>)}
@@ -136,18 +140,21 @@ function ReviewCard({ review, reviewer, own, highlighted, viewer, api, scale, on
  * on a rating, which Main proves), the text, its language and whether it
  * gives the story away. Deleting keeps the rating.
  */
-function ReviewEditor({ work, own, api, onSaved, onCancel, locale, t }: {
-  work: string; own: Review | null; api: ReviewApi; onSaved: () => void; onCancel: () => void; locale: UiLocale;
+function ReviewEditor({ work, own, actingSubject, api, onSaved, onCancel, locale, t }: {
+  work: string; own: Review | null; actingSubject: string; api: ReviewApi; onSaved: () => void; onCancel: () => void; locale: UiLocale;
   t: Translation;
 }) {
   const id = useId();
   const actions = useReaderActions();
   const rated = actions.kind === 'ready' ? actions.stateOf(work).rating !== null : false;
   const [text, setText] = useState(own?.text ?? '');
-  const [language, setLanguage] = useState(own?.language ?? locale);
+  // The writer's choice; until then the review's own language, their first reading language, or none.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const reading = useReadingLanguages(actingSubject);
+  const language = writingLanguage({ chosen, existing: own?.language, reading });
+  const written = textAttributes(language, text);
   const [spoiler, setSpoiler] = useState(own?.spoiler ?? false);
   const [state, setState] = useState<'idle' | 'saving' | 'confirm-delete' | ReviewWrite>('idle');
-  const languages = [...new Set([language, ...uiLocales])];
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!text.trim()) return;
@@ -170,12 +177,13 @@ function ReviewEditor({ work, own, api, onSaved, onCancel, locale, t }: {
     <RateWork work={work} locale={locale} className="justify-items-start" />
     <label htmlFor={`${id}-text`} className="sr-only">{t.reviewText}</label>
     <Textarea id={`${id}-text`} value={text} onChange={event => setText(event.target.value)} required maxLength={8000}
-      placeholder={t.reviewPlaceholder} lang={language} className="min-h-36 text-base" />
+      placeholder={t.reviewPlaceholder} lang={written.lang} dir={written.dir}
+      className="min-h-36 text-base" />
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
       <div className="flex items-center gap-2">
         <span>{t.reviewLanguage}</span>
-        <ChoiceSelect size="sm" value={language} onValueChange={setLanguage} className="w-40" label={t.reviewLanguage}
-          options={languages.map(tag => ({ value: tag, label: languageName(tag, locale) }))} />
+        <LanguageSelect value={language} onChange={setChosen} locale={locale} reading={reading}
+          label={t.reviewLanguage} className="w-48" />
       </div>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={spoiler} onChange={event => setSpoiler(event.target.checked)}
@@ -295,7 +303,7 @@ export function ReviewsSection({ work, context, scale, initial, reviewers: named
           variant: 'outline' })}><PencilIcon aria-hidden="true" />{t.writeReview}
           <span className="sr-only"> — {t.signInToReview}</span></Link> : null}
     </div>
-    {editing ? <ReviewEditor work={work} own={own} api={api} locale={locale} t={t} onCancel={() => setEditing(false)}
+    {editing ? <ReviewEditor work={work} own={own} actingSubject={viewer.kind === 'reader' ? viewer.actingSubject : ''} api={api} locale={locale} t={t} onCancel={() => setEditing(false)}
       onSaved={() => { setEditing(false); void load(filter); }} /> : null}
     {/* Sorting and filtering help once there is something to sort. */}
     {listed.length || filtered || filter.sort !== 'helpful' ? <div className="flex flex-wrap items-center gap-x-4 gap-y-2

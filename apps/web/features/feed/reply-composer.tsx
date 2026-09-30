@@ -5,6 +5,9 @@ import { cn } from '@rezics/ui/utils';
 import { CircleAlertIcon, LockIcon, LogInIcon, UsersRoundIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
+import { LanguageSelect } from '../content-language/language-select.tsx';
+import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
+import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
 import { useFeed } from './feed-context.tsx';
 import { type ReplyInput, type ReplyProgress, replyProgress, type ThreadApi } from './thread-api.ts';
 import { MarkdownEditor } from '../post-composer/markdown-editor.tsx';
@@ -23,8 +26,6 @@ export type ReplyMode = 'open' | 'sign-in' | 'join' | 'reviewed' | 'unavailable'
 
 export interface ReplyTarget extends Omit<ReplyInput, 'parent' | 'body' | 'language' | 'actingSubject'> {
   mode: ReplyMode;
-  /** The UI language the reply is written in. */
-  language: string;
   api: () => ThreadApi;
 }
 
@@ -42,13 +43,18 @@ export function ReplyComposer({ target, parent, parentAuthor, inline = false, au
   /** The anchor `#reply` links jump to. */
   id?: string;
 }) {
-  const { t, actingSubject, signInHref } = useFeed();
+  const { t, locale, actingSubject, signInHref } = useFeed();
   const router = useRouter();
   const [text, setText] = useState('');
   const [open, setOpen] = useState(inline);
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState<'idle' | 'failed' | 'refused' | 'posted'>('idle');
   const progress = useRef<ReplyProgress | null>(null);
+  // The writer's choice, or their first reading language; the interface language is never the answer.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const reading = useReadingLanguages(actingSubject);
+  const language = writingLanguage({ chosen, reading });
+  const written = textAttributes(language, text);
   const label = parentAuthor ? t.replyTo({ name: parentAuthor }) : t.addComment;
 
   if (target.mode !== 'open' || !actingSubject) {
@@ -68,7 +74,7 @@ export function ReplyComposer({ target, parent, parentAuthor, inline = false, au
   }
 
   const input = (body: string): ReplyInput => ({ realm: target.realm, work: target.work,
-    rootRevision: target.rootRevision, parent, body, language: target.language, actingSubject: actingSubject! });
+    rootRevision: target.rootRevision, parent, body, language, actingSubject: actingSubject! });
   // Once Main holds the words, they stay as sent until the reply is placed or taken back.
   const saved = Boolean(progress.current?.revisionId);
 
@@ -84,6 +90,7 @@ export function ReplyComposer({ target, parent, parentAuthor, inline = false, au
     progress.current = null;
     if (outcome.kind === 'refused') { setState('refused'); return; }
     setText('');
+    setChosen(null);
     setState('posted');
     if (!inline) setOpen(false);
     onDone?.();
@@ -96,15 +103,17 @@ export function ReplyComposer({ target, parent, parentAuthor, inline = false, au
     <MarkdownEditor label={label} value={text} onChange={setText} maxLength={MAX_REPLY}
       autoFocus={autoFocus} disabled={busy} placeholder={inline ? label : t.joinConversation}
       rows={expanded ? 4 : 1} readOnly={saved} onFocus={() => setOpen(true)}
-      editLabel={t.write} previewLabel={t.preview} showSpoiler={t.showSpoiler}
+      editLabel={t.write} previewLabel={t.preview} showSpoiler={t.showSpoiler} lang={written.lang} dir={written.dir}
       onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) void send(); }}
       className={cn('bg-background', !expanded && 'min-h-11 py-2.5')} />
     {expanded ? <div className="flex flex-wrap items-center justify-end gap-2">
-      {text.length > MAX_REPLY - 500 ? <span className="me-auto text-muted-foreground text-xs tabular-nums">
+      <LanguageSelect value={language} onChange={setChosen} locale={locale} reading={reading} disabled={busy || saved}
+        className="me-auto" />
+      {text.length > MAX_REPLY - 500 ? <span className="text-muted-foreground text-xs tabular-nums">
         {t.charactersLeft(MAX_REPLY - text.length)}</span> : null}
       <Button type="button" variant="ghost" size="sm" pill disabled={busy} onClick={() => {
         if (progress.current) void target.api().withdraw(input(text.trim()), progress.current);
-        setText(''); setOpen(false); setState('idle'); progress.current = null; onDone?.();
+        setText(''); setChosen(null); setOpen(false); setState('idle'); progress.current = null; onDone?.();
       }}>{t.cancel}</Button>
       <Button type="submit" size="sm" pill isLoading={busy} disabled={!text.trim()}>
         {inline ? t.replyAction : t.comment}</Button>

@@ -11,7 +11,7 @@ export default {
   workChange: 'Cambiar de obra',
   titleLabel: 'Título',
   body: 'Tu publicación',
-  edit: 'Escribir',
+  postLanguage: 'Idioma de tu publicación', edit: 'Escribir',
   preview: 'Vista previa',
   showSpoiler: 'Mostrar spoiler',
   bodyHelp: 'Escribe los detalles, las preguntas o las ideas que quieres comentar.',

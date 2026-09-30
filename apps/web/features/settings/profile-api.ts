@@ -1,5 +1,6 @@
 import { serviceOrigin } from '../api/origins.ts';
 import type { PublicAgentProfile } from '../auth/agent-profile.ts';
+import { isWritingLanguage, UNSPECIFIED } from '../content-language/writing-language.ts';
 
 export type ProfileSaveResult = 'saved' | 'invalid' | 'conflict' | 'denied' | 'unavailable'
   | 'avatar-denied' | 'avatar-unavailable';
@@ -34,7 +35,7 @@ export async function saveAgentProfile(input: SaveInput, send: ProfileSender = f
   const bio = input.bio && { text: input.bio.text.trim(), language: input.bio.language };
   if (!id || !/^[0-9a-f-]{36}$/.test(input.key) || !input.expectedHead
     || !name || name.length > 200 || /\p{Cc}/u.test(name)
-    || bio && (!bio.text || bio.text.length > 500 || /\p{Cc}/u.test(bio.text))
+    || bio && (!bio.text || bio.text.length > 500 || /\p{Cc}/u.test(bio.text) || !isWritingLanguage(bio.language))
     || input.avatar && (input.avatar.size > avatarMaxBytes || !avatarTypes.has(input.avatar.type))
     || input.avatar && input.removeAvatar) return 'invalid';
   const origin = serviceOrigin('MAIN_ORIGIN');
@@ -89,14 +90,19 @@ export async function saveAgentProfile(input: SaveInput, send: ProfileSender = f
   } catch { return mediaStage ? 'avatar-unavailable' : 'unavailable'; }
 }
 
+/**
+ * The bio is in the language its writer chose (`bioLanguage`, empty when the
+ * form did not say). Without a choice an unchanged bio keeps its recorded
+ * language and a new one is unspecified; the interface locale is never used.
+ */
 export function profileSaveInput(profile: PublicAgentProfile, values: {
-  token: string; agent: string; displayName: string; bioText: string; locale: string;
+  token: string; agent: string; displayName: string; bioText: string; bioLanguage: string;
   avatar?: File; removeAvatar: boolean; key: string;
 }): SaveInput {
   const text = values.bioText.trim();
   return { token: values.token, agent: values.agent, expectedHead: profile.revision,
     displayName: values.displayName, bio: text ? { text,
-      language: profile.bio?.text === text ? profile.bio.language : values.locale } : null,
+      language: values.bioLanguage.trim() || (profile.bio?.text === text ? profile.bio.language : UNSPECIFIED) } : null,
     avatarSelection: profile.avatarSelection, expectedAvatarSelection: profile.avatarSelection,
     avatar: values.avatar, removeAvatar: values.removeAvatar, key: values.key };
 }

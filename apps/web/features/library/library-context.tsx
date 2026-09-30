@@ -15,6 +15,8 @@ type ReadyActions = Extract<ReaderActions, { kind: 'ready' }>;
 export interface LibraryNotice { tone: 'default' | 'destructive'; text: string }
 
 interface LibraryContextValue {
+  /** The Agent the reader acts as. */
+  actingSubject: string;
   api: LibraryApi;
   /** The catalogue's reader actions, so row and bulk moves share one status store with every shelf button. */
   reader: ReadyActions;
@@ -80,8 +82,8 @@ export function LibraryProvider({ actingSubject, seed, ratingContext, titles, ap
       refresh();
       return refused;
     }
-    return { api: library, reader, ratingContext, refresh, moveWorks, notice, announce };
-  }, [library, store, ratingContext, router, notice, titles, locale, messages]);
+    return { actingSubject, api: library, reader, ratingContext, refresh, moveWorks, notice, announce };
+  }, [actingSubject, library, store, ratingContext, router, notice, titles, locale, messages]);
   return <LibraryContext value={value}>
     <ReaderActionsProvider signedIn signInHref="/" actions={value.reader}>{children}</ReaderActionsProvider>
   </LibraryContext>;

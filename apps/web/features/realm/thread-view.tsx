@@ -30,8 +30,6 @@ export interface ThreadViewProps {
   /** Each sort's address, which keeps the reader on this thread. */
   sortHrefs: Record<ThreadSort, string>;
   replyMode: ReplyMode;
-  /** The language a new reply is written in: the reader's interface language. */
-  language: string;
   /** Stories: an in-memory Main. */
   threadApi?: ThreadApi;
 }
@@ -126,7 +124,7 @@ function ReplyContext({ read, realm }: { read: ThreadRead; realm: ThreadViewProp
  * fold lines, sorted by Best, Top or New, each with votes and an inline
  * reply. A reply's own page shows its place in the discussion first.
  */
-export function ThreadView({ read, realm, sort, sortHrefs, replyMode, language, threadApi }: ThreadViewProps) {
+export function ThreadView({ read, realm, sort, sortHrefs, replyMode, threadApi }: ThreadViewProps) {
   const { t } = useFeed();
   useReplyAnchor();
   const tree = useMemo(() => replyTree(read.items), [read.items]);
@@ -136,7 +134,7 @@ export function ThreadView({ read, realm, sort, sortHrefs, replyMode, language, 
   const opening = read.focus === read.thread;
   const opener = opening ? focus.author?.id ?? null : read.ancestors[0]?.author?.id ?? null;
   const target: ReplyTarget = { mode: replyMode, realm: read.realm, work: read.work.id, rootRevision: read.rootRevision,
-    language, api: () => api.current ??= mainThreadApi() };
+    api: () => api.current ??= mainThreadApi() };
   const context: ThreadContext = { target, opener, replyHref: reply => threadPath(realm.path, reply) };
   const replies = opening ? tree.children : [tree];
   const SortIcon = sortIcons[sort];

@@ -36,7 +36,7 @@ const en = {
   createIntro: 'Give your community a home. You can change its details in Manage later.',
   name: 'Community name',
   nameLanguage: 'Name language',
-  languageHelp: 'Use a language tag such as en, zh-Hans or ja.',
+  languageHelp: 'The language the name, description and rules are written in. Add translations of the name below.',
   translation: 'Translation',
   translationLanguage: 'Translation language',
   translationName: 'Translated name',

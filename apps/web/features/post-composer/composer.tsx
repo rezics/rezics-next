@@ -10,6 +10,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
+import { LanguageSelect } from '../content-language/language-select.tsx';
+import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
+import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
 import type { RealmHeader } from '../realm/types.ts';
 import Link from '../shell/localized-link.tsx';
 import { newPostProgress, submitPost, type PostProgress } from './api.ts';
@@ -19,9 +22,11 @@ import { MarkdownEditor } from './markdown-editor.tsx';
 export interface CommunityChoice { id: string; name: string }
 interface WorkChoice { id: string; mainVersion: string; title: string }
 interface Draft { community: CommunityChoice | null; work: WorkChoice | null;
-  title: string; body: string; spoiler: boolean; progress: PostProgress | null }
+  title: string; body: string; spoiler: boolean; progress: PostProgress | null;
+  /** The language the writer chose for the post; null until they do, then the first reading language. */
+  language: string | null }
 const blank = (community: CommunityChoice | null): Draft => ({ community, work: null,
-  title: '', body: '', spoiler: false, progress: null });
+  title: '', body: '', spoiler: false, progress: null, language: null });
 const draftKey = (actor: string) => `rezics:post-draft:${actor}`;
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
@@ -43,6 +48,9 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<'failed' | 'refused' | null>(null);
   const locked = Boolean(draft.progress);
+  const reading = useReadingLanguages(actingSubject);
+  const language = writingLanguage({ chosen: draft.language, reading });
+  const bodyText = textAttributes(language, draft.body);
 
   useEffect(() => {
     try {
@@ -50,7 +58,8 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
       if (stored && typeof stored.title === 'string' && typeof stored.body === 'string'
         && (!stored.community || native.test(stored.community.id))
         && (!stored.work || native.test(stored.work.id))) {
-        setDraft({ ...stored, community: stored.progress ? stored.community : initial ?? stored.community });
+        setDraft({ ...stored, language: typeof stored.language === 'string' ? stored.language : null,
+          community: stored.progress ? stored.community : initial ?? stored.community });
       }
     } catch { /* An invalid local draft is ignored. */ }
     setHydrated(true);
@@ -142,7 +151,7 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
     saveProgress(progress);
     const result = await submitPost({ realm: draft.community.id, work: draft.work.id,
       mainVersion: draft.work.mainVersion, title: draft.title, body: draft.body,
-      spoiler: draft.spoiler, language: locale, actingSubject }, progress, saveProgress);
+      spoiler: draft.spoiler, language, actingSubject }, progress, saveProgress);
     setBusy(false);
     if (result.kind === 'posted') {
       try { localStorage.removeItem(draftKey(actingSubject)); } catch { /* optional */ }
@@ -214,10 +223,16 @@ export function PostComposer({ locale, actingSubject, initial = null }: { locale
       <div className="grid gap-1.5 text-sm font-semibold"><label htmlFor="post-title">{words.titleLabel[locale]}</label>
         <Input id="post-title" required maxLength={280} value={draft.title} readOnly={locked}
           onChange={event => change({ title: event.currentTarget.value })} /></div>
-      <section className="grid gap-1.5"><h2 className="text-sm font-semibold">{words.body[locale]}</h2>
+      <section className="grid gap-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">{words.body[locale]}</h2>
+          <LanguageSelect value={language} onChange={chosen => change({ language: chosen })} locale={locale}
+            reading={reading} disabled={locked} label={words.postLanguage[locale]} />
+        </div>
         <MarkdownEditor label={words.body[locale]} rows={9} maxLength={7800} value={draft.body}
           readOnly={locked} onChange={body => change({ body })} editLabel={words.edit[locale]}
-          previewLabel={words.preview[locale]} showSpoiler={words.showSpoiler[locale]} />
+          previewLabel={words.preview[locale]} showSpoiler={words.showSpoiler[locale]}
+          lang={bodyText.lang} dir={bodyText.dir} />
         <span className="text-muted-foreground text-xs">{words.bodyHelp[locale]}</span></section>
       <div className="flex items-start gap-3 text-sm">
         <Checkbox id="post-spoiler" checked={draft.spoiler} disabled={locked}

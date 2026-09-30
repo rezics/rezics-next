@@ -11,7 +11,7 @@ export default {
   workChange: '更换作品',
   titleLabel: '标题',
   body: '帖子内容',
-  edit: '编写',
+  postLanguage: '帖子使用的语言', edit: '编写',
   preview: '预览',
   showSpoiler: '显示剧透内容',
   bodyHelp: '写下你想讨论的细节、问题或想法。',

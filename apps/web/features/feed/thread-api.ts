@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from './types.ts';
 
@@ -11,6 +12,7 @@ export interface ReplyInput {
   realm: string; work: string; rootRevision: string;
   /** The reply answered, and the exact revision of it the reader saw. */
   parent: { reply: string; revisionId: string };
+  /** The language the writer chose for the reply; never the interface locale. */
   body: string; language: string; actingSubject: string;
 }
 
@@ -42,7 +44,7 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
   const draft = (input: ReplyInput, step: ReplyProgress, body: string | null, expectedHead: string | null,
     name: string) => main().v1['member-reply-drafts'].post({
     profile: 'member-reply-draft-v1', reply: step.reply, variantId: step.variantId, rootTarget: input.work,
-    rootRevision: input.rootRevision, language: input.language, direction: 'ltr', expectedHead, body,
+    rootRevision: input.rootRevision, language: input.language, direction: direction(input.language, body ?? input.body), expectedHead, body,
     actingSubject: input.actingSubject }, headers(step.key, name));
   const withdraw = async (input: ReplyInput, step: ReplyProgress) => {
     if (step.revisionId) await draft(input, step, null, step.revisionId, 'withdraw').catch(() => undefined);

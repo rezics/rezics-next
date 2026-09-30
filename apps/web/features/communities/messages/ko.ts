@@ -12,7 +12,7 @@ export default {
   next: '다음 페이지', first: '첫 페이지', createTitle: '커뮤니티 만들기',
   createIntro: '커뮤니티를 위한 공간을 만들어 보세요. 자세한 내용은 나중에 관리에서 변경할 수 있습니다.',
   name: '커뮤니티 이름', nameLanguage: '이름 언어',
-  languageHelp: 'en, zh-Hans, ja와 같은 언어 태그를 사용하세요.', translation: '번역',
+  languageHelp: '이름, 설명, 규칙을 작성하는 언어입니다. 이름의 번역은 아래에서 추가할 수 있습니다.', translation: '번역',
   translationLanguage: '번역 언어', translationName: '번역된 이름',
   translationDescription: '번역된 설명(선택 사항)', addTranslation: '번역 추가', removeTranslation: '번역 삭제',
   translationError: '서로 다른 유효한 언어 태그를 사용하고 언어별 번역 이름을 입력하세요.',

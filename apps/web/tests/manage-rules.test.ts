@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import { settingsCommand } from '../../../services/main/src/modules/realm-admin/contract.ts';
 import { uiLocales } from '../i18n/define.ts';
-import { compareRules, emptyRule, languageStatus, nextRevision, restoredRule, ruleFromText, ruleIdFrom, ruleProblems,
-  shownRule } from '../features/manage/rules.ts';
+import { addRuleTranslation, compareRules, emptyRule, languageStatus, nextRevision, removeRuleTranslation, restoredRule,
+  ruleFromText, ruleIdFrom, ruleProblems, setRuleOriginal, shownRule } from '../features/manage/rules.ts';
 import type { RealmRule } from '../features/manage/types.ts';
 
 const spoilers: RealmRule = { id: 'no-spoilers', governanceRule: null,
@@ -118,5 +118,50 @@ describe('authoring: edit, compare, publish', () => {
   test('publishing advances the revision without rewriting an earlier basis', () => {
     expect(nextRevision({ ref: 'urn:rezics:realm-rules:x', revision: null, digest: null })).toBe('1');
     expect(nextRevision({ ref: 'urn:rezics:realm-rules:x', revision: '41', digest: 'a'.repeat(64) })).toBe('42');
+  });
+});
+
+describe('authoring in the author\u2019s language (G-515)', () => {
+  const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const command = (rules: RealmRule[]) => ({ actingSubject: actor, expectedGeneration: '0', expectedRulesRevision: null,
+    reason: 'Set up the community', settings: { visibility: 'public', reviewRequired: false, whoMaySubmit: 'members', rules } });
+
+  test('a new rule starts in the language given, not in the interface locale', () => {
+    const rule = emptyRule('rule', 'ja');
+    expect(rule.title).toEqual({ original: 'ja', labels: { ja: '' } });
+    expect(emptyRule('rule').title.original).toBe('und');
+  });
+
+  test('a rule written in Japanese is sent as Japanese with its translations as added', () => {
+    const japanese = { ...ruleFromText('be-kind', '親切に', '読者を尊重する', 'ja') };
+    const translated = addRuleTranslation(japanese, 'ko');
+    expect(translated.title).toEqual({ original: 'ja', labels: { ja: '親切に', ko: '' } });
+    expect(ruleProblems([translated])).toContainEqual({ index: 0, field: 'title', language: 'ko', problem: 'missing' });
+    const filled = { ...translated, title: { ...translated.title, labels: { ja: '親切に', ko: '친절하게' } },
+      body: { ...translated.body, labels: { ja: '読者を尊重する', ko: '독자를 존중하세요' } } };
+    expect(ruleProblems([filled])).toEqual([]);
+    expect(Value.Check(settingsCommand, command([filled]))).toBe(true);
+    expect(removeRuleTranslation(filled, 'ko')).toEqual(japanese);
+    expect(removeRuleTranslation(japanese, 'ja')).toEqual(japanese);
+    expect(addRuleTranslation(filled, 'ko')).toEqual(filled);
+  });
+
+  test('correcting the original language moves the text and never loses a translation', () => {
+    const unspecified = ruleFromText('be-kind', '親切に', '読者を尊重する');
+    expect(setRuleOriginal(unspecified, 'ja')).toEqual(ruleFromText('be-kind', '親切に', '読者を尊重する', 'ja'));
+    const withKorean = addRuleTranslation(ruleFromText('be-kind', '親切に', '読者を尊重する', 'ja'), 'ko');
+    const swapped = setRuleOriginal({ ...withKorean, title: { ...withKorean.title, labels: { ja: '親切に', ko: '친절하게' } },
+      body: { ...withKorean.body, labels: { ja: '読者を尊重する', ko: '독자를 존중하세요' } } }, 'ko');
+    expect(swapped.title).toEqual({ original: 'ko', labels: { ja: '親切に', ko: '친절하게' } });
+    expect(swapped.body.original).toBe('ko');
+    expect(setRuleOriginal(unspecified, 'und')).toEqual(unspecified);
+  });
+
+  test('every authored rule payload names its original and keeps only what was written', () => {
+    for (const rule of [ruleFromText('a', 'Title', 'Body', 'ko'), ruleFromText('b', 'عنوان', 'نص', 'ar')]) {
+      expect(Object.keys(rule.title.labels)).toEqual([rule.title.original]);
+      expect(uiLocales as readonly string[]).not.toContain(rule.title.original === 'ko' ? 'de' : 'de');
+      expect(Value.Check(settingsCommand, command([rule]))).toBe(true);
+    }
   });
 });

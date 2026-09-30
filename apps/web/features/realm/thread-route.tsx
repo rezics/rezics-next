@@ -84,7 +84,7 @@ async function ThreadContent({ view, thread, sort, here, feed }: { view: RealmVi
         <RotateCwIcon aria-hidden="true" />{t.retry}</LocalizedLink>
     </EmptyState>;
   }
-  return <ThreadView read={read.data} sort={sort} sortHrefs={sortHrefs} replyMode={replyModeOf(view)} language={locale}
+  return <ThreadView read={read.data} sort={sort} sortHrefs={sortHrefs} replyMode={replyModeOf(view)}
     realm={{ id: view.realm.header.id, name: view.zone.name.value, path: realmPathOf(view) }} />;
 }
 

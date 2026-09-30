@@ -11,6 +11,9 @@ import { useRef, useState, type FormEvent } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
+import { LanguageSelect } from '../content-language/language-select.tsx';
+import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
+import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
 import Link from '../shell/localized-link.tsx';
 import { uploadCommunityImage } from './images.ts';
 import { communityNames, type NameTranslation } from './name-fields.ts';
@@ -28,7 +31,10 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
   const router = useRouter();
   const key = useRef<string | null>(null);
   const [name, setName] = useState('');
-  const [nameLanguage, setNameLanguage] = useState<string>(locale);
+  // The language the writer chose for the name, description and rules; never the interface locale.
+  const [chosenLanguage, setChosenLanguage] = useState<string | null>(null);
+  const reading = useReadingLanguages(actingSubject);
+  const nameLanguage = writingLanguage({ chosen: chosenLanguage, reading });
   const [translations, setTranslations] = useState<Translation[]>([]);
   const [handle, setHandle] = useState('');
   const [description, setDescription] = useState('');
@@ -75,7 +81,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
         { headers: { 'idempotency-key': `${operation}:management` } });
       if (!enrolled.data) throw new Error('management-enrollment-failed');
       const publishedRules = rules.map((rule, index) =>
-        ruleFromText(`rule-${index + 1}`, rule.title.trim(), rule.body.trim()));
+        ruleFromText(`rule-${index + 1}`, rule.title.trim(), rule.body.trim(), nameLanguage));
       if (!configured) {
         const current = await main.v1.realms({ realm: id }).settings.get({ query: { actingSubject } });
         if (!current.data) throw new Error('settings-read-failed');
@@ -122,7 +128,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
   return <form className="grid max-w-2xl gap-7" onSubmit={event => void submit(event)}>
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-1.5 text-sm font-medium"><label htmlFor="community-name">{words.name[locale]}</label>
-        <Input id="community-name" required maxLength={120} value={name} onChange={event => setName(event.currentTarget.value)}
+        <Input id="community-name" required maxLength={120} value={name} {...textAttributes(nameLanguage, name)} onChange={event => setName(event.currentTarget.value)}
           disabled={Boolean(createdRealm)} /></div>
       <div className="grid gap-1.5 text-sm font-medium"><label htmlFor="community-handle">{words.handle[locale]}</label>
         <Input id="community-handle" required pattern="[a-z][a-z0-9-]{2,29}" minLength={3} maxLength={30} value={handle}
@@ -131,10 +137,12 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
     </div>
     <div className="grid gap-1.5 text-sm font-medium"><label htmlFor="community-description">{words.description[locale]}</label>
       <Textarea id="community-description" required maxLength={2000} rows={3} value={description}
+        {...textAttributes(nameLanguage, description)}
         onChange={event => setDescription(event.currentTarget.value)} /></div>
-    <div className="grid gap-1.5 text-sm font-medium"><label htmlFor="community-name-language">{words.nameLanguage[locale]}</label>
-      <Input id="community-name-language" required maxLength={35} value={nameLanguage}
-        onChange={event => setNameLanguage(event.currentTarget.value)} disabled={Boolean(createdRealm)} />
+    <div className="grid justify-items-start gap-1.5 text-sm font-medium">
+      <label htmlFor="community-name-language">{words.nameLanguage[locale]}</label>
+      <LanguageSelect id="community-name-language" value={nameLanguage} onChange={setChosenLanguage} locale={locale}
+        reading={reading} label={words.nameLanguage[locale]} disabled={Boolean(createdRealm)} />
       <span className="text-muted-foreground text-xs font-normal">{words.languageHelp[locale]}</span></div>
     {translations.map((translation, index) => <fieldset key={translation.key}
       className="grid gap-3 rounded-xl border border-border p-4">
@@ -189,12 +197,14 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
           <Button type="button" size="sm" variant="ghost" onClick={() => setRules(before => before.filter(item =>
             item.key !== rule.key))}><Trash2Icon aria-hidden="true" />{words.removeRule[locale]}</Button></div>
         <div className="grid gap-1 text-sm"><label htmlFor={`rule-title-${rule.key}`}>{words.ruleTitle[locale]}</label>
-          <Input id={`rule-title-${rule.key}`} required maxLength={100} value={rule.title} onChange={event => {
+          <Input id={`rule-title-${rule.key}`} required maxLength={100} value={rule.title}
+            {...textAttributes(nameLanguage, rule.title)} onChange={event => {
             const value = event.currentTarget.value;
             setRules(before => before.map(item => item.key === rule.key ? { ...item, title: value } : item));
           }} /></div>
         <div className="grid gap-1 text-sm"><label htmlFor={`rule-body-${rule.key}`}>{words.ruleBody[locale]}</label>
           <Textarea id={`rule-body-${rule.key}`} required maxLength={1000} rows={2} value={rule.body}
+            {...textAttributes(nameLanguage, rule.body)}
             onChange={event => { const value = event.currentTarget.value;
               setRules(before => before.map(item => item.key === rule.key ? { ...item, body: value } : item)); }} />
         </div>

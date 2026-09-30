@@ -15,6 +15,7 @@ import { type AdminApi, bffAdminApi } from './admin-api.ts';
 import { CommandDialog } from './command-dialog.tsx';
 import { newKey } from './commands.ts';
 import type { ManageMessages } from './messages.ts';
+import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
 import { RevisionBadge, RuleList, ruleLanguageName } from './rule-list.tsx';
 import { compareRules, nextRevision, type RuleChange, ruleProblems, type RuleProblem, restoredRule, shownRule } from './rules.ts';
@@ -38,6 +39,7 @@ export function SettingsView({ realm, actingSubject, initial, locale, messages, 
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const api = useMemo(() => givenApi ?? bffAdminApi(realm, actingSubject), [givenApi, realm, actingSubject]);
   const router = useRouter();
+  const reading = useReadingLanguages(actingSubject);
   const [current, setCurrent] = useState(initial);
   const [editing, setEditing] = useState(false);
   const [drafts, setDrafts] = useState<RuleDraft[]>(() => draftsOf(initial.settings.rules));
@@ -126,7 +128,7 @@ export function SettingsView({ realm, actingSubject, initial, locale, messages, 
         onDiscard={() => discard(conflict)}
         onKeep={() => { setCurrent(conflict); setConflict(null); review(); }} /> : null}
       {editing ? <RulesEditor drafts={drafts} published={current.settings.rules} problems={problems} locale={locale}
-        messages={messages} onChange={next => { setDrafts(next); if (problems) setProblems(ruleProblems(next.map(item => item.rule))); }} />
+        messages={messages} reading={reading} onChange={next => { setDrafts(next); if (problems) setProblems(ruleProblems(next.map(item => item.rule))); }} />
         : current.settings.rules.length ? <RuleList rules={current.settings.rules} locale={locale} messages={messages} />
           : <EmptyState icon={ScaleIcon} title={t.noRulesTitle} description={t.noRulesHelp}>
             <Button size="sm" onClick={() => setEditing(true)}>{t.addRule}</Button></EmptyState>}

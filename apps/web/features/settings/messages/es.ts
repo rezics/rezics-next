@@ -10,6 +10,7 @@ export default {
   chooseAvatar: 'Elegir imagen',
   noAvatarSelected: 'No hay ninguna imagen seleccionada',
   bio: 'Biografía',
+  bioLanguage: 'Idioma de la biografía',
   avatarHelp: 'PNG, JPEG, WebP o GIF, hasta 4 MB. La imagen será pública cuando la guardes.',
   removeAvatar: 'Quitar el avatar actual',
   accountInfo: 'El nombre de tu cuenta sigue siendo privado. Los cambios aquí no lo afectan.',

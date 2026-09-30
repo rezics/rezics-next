@@ -4,7 +4,7 @@ export default {
   title: '게시글 작성', intro: '커뮤니티에서 대화를 시작하세요.', community: '커뮤니티',
   communitySearch: '커뮤니티 찾기', communityChange: '커뮤니티 변경', work: '작품',
   workSearch: '작품 검색', workChange: '작품 변경', titleLabel: '제목', body: '게시글 내용',
-  edit: '작성', preview: '미리보기', showSpoiler: '스포일러 표시',
+  postLanguage: '게시물 언어', edit: '작성', preview: '미리보기', showSpoiler: '스포일러 표시',
   bodyHelp: '이야기하고 싶은 세부 내용, 질문 또는 생각을 작성하세요.', spoiler: '스포일러로 표시',
   spoilerHelp: '본문을 보여 주기 전에 독자에게 스포일러가 있음을 알립니다.', rules: '커뮤니티 규칙',
   noRules: '이 커뮤니티에는 아직 게시된 규칙이 없습니다.',

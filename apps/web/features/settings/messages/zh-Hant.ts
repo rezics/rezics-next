@@ -10,6 +10,7 @@ export default {
   chooseAvatar: '選擇圖片',
   noAvatarSelected: '尚未選擇圖片',
   bio: '自我介紹',
+  bioLanguage: '自我介紹的語言',
   avatarHelp: '支援 PNG、JPEG、WebP 或 GIF，最大 4 MB。儲存後，圖片會公開顯示。',
   removeAvatar: '移除目前的大頭貼',
   accountInfo: '您的帳戶名稱維持私密。在此所做的變更不會影響它。',

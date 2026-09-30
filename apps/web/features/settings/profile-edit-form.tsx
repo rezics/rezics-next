@@ -6,6 +6,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { PublicAgentProfile } from '../auth/agent-profile.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
+import { LanguageSelect } from '../content-language/language-select.tsx';
+import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
+import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
 import { AvatarFileField } from './avatar-file-field.tsx';
 import type { SettingsMessages } from './messages.ts';
 
@@ -20,6 +23,11 @@ export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operatio
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string>();
   const [hydrated, setHydrated] = useState(false);
+  const [bio, setBio] = useState(profile?.bio?.text ?? '');
+  const [chosen, setChosen] = useState<string | null>(null);
+  const reading = useReadingLanguages(agent);
+  const bioLanguage = writingLanguage({ chosen, existing: profile?.bio?.language, reading });
+  const written = textAttributes(bioLanguage, bio);
   useEffect(() => setHydrated(true), []);
   const action = localizedPath('/settings/profile', locale);
   const errors: Record<string, string> = { conflict: t.conflict, denied: t.denied,
@@ -56,9 +64,17 @@ export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operatio
     <label className="grid gap-1 text-sm font-medium">{t.displayName}
       <input name="displayName" type="text" required maxLength={200} defaultValue={profile?.displayName ?? ''}
         disabled={!profile || busy} className="h-10 rounded-md border border-input bg-background px-3" /></label>
-    <label className="grid gap-1 text-sm font-medium">{t.bio}
-      <textarea name="bio" rows={3} maxLength={500} defaultValue={profile?.bio?.text ?? ''}
-        disabled={!profile || busy} className="rounded-md border border-input bg-background p-3" /></label>
+    <div className="grid gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label htmlFor="profile-bio" className="font-medium text-sm">{t.bio}</label>
+        <LanguageSelect value={bioLanguage} onChange={setChosen} locale={locale} reading={reading}
+          disabled={!profile || busy} label={t.bioLanguage} />
+      </div>
+      <textarea id="profile-bio" name="bio" rows={3} maxLength={500} value={bio} lang={written.lang} dir={written.dir}
+        onChange={event => setBio(event.currentTarget.value)}
+        disabled={!profile || busy} className="rounded-md border border-input bg-background p-3" />
+      <input type="hidden" name="bioLanguage" value={bioLanguage} />
+    </div>
     <AvatarFileField label={t.avatar} choose={t.chooseAvatar} none={t.noAvatarSelected}
       disabled={!profile || busy} />
     <p className="text-muted-foreground text-sm">{t.avatarHelp}</p>

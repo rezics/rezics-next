@@ -13,7 +13,7 @@ export default {
   createTitle: 'コミュニティを作成',
   createIntro: 'コミュニティの居場所を作りましょう。詳細はあとで「管理」から変更できます。',
   name: 'コミュニティ名', nameLanguage: '名前の言語',
-  languageHelp: 'en、zh-Hans、ja などの言語タグを使用してください。',
+  languageHelp: '名前・説明・ルールを書く言語です。名前の翻訳は下で追加できます。',
   translation: '翻訳', translationLanguage: '翻訳の言語', translationName: '翻訳した名前',
   translationDescription: '翻訳した説明（任意）', addTranslation: '翻訳を追加', removeTranslation: '翻訳を削除',
   translationError: '異なる有効な言語タグを使い、それぞれの翻訳名を入力してください。',

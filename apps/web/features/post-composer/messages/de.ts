@@ -11,7 +11,7 @@ export default {
   workChange: 'Werk wechseln',
   titleLabel: 'Titel',
   body: 'Dein Beitrag',
-  edit: 'Schreiben',
+  postLanguage: 'Sprache deines Beitrags', edit: 'Schreiben',
   preview: 'Vorschau',
   showSpoiler: 'Spoiler anzeigen',
   bodyHelp: 'Schreib die Einzelheiten, Fragen oder Ideen, die du besprechen willst.',

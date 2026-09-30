@@ -90,6 +90,7 @@ export default {
   chooseAvatar: '选择图片',
   noAvatarSelected: '未选择图片',
   bio: '简介',
+  bioLanguage: '简介使用的语言',
   avatarHelp: '支持 PNG、JPEG、WebP 或 GIF，最大 4 MB。保存后图片将公开显示。',
   removeAvatar: '移除当前头像',
   accountInfo: '您的账户名称保持私密。此处的修改不会影响它。',

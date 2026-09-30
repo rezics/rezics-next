@@ -18,6 +18,7 @@ const en = {
   workChange: 'Change Work',
   titleLabel: 'Title',
   body: 'Your post',
+  postLanguage: 'Language of your post',
   edit: 'Write',
   preview: 'Preview',
   showSpoiler: 'Show spoiler',

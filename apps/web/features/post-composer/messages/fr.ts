@@ -11,7 +11,7 @@ export default {
   workChange: 'Changer d’œuvre',
   titleLabel: 'Titre',
   body: 'Votre publication',
-  edit: 'Écrire',
+  postLanguage: 'Langue de votre publication', edit: 'Écrire',
   preview: 'Aperçu',
   showSpoiler: 'Afficher le spoiler',
   bodyHelp: 'Écrivez les détails, les questions ou les idées que vous voulez discuter.',

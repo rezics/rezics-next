@@ -29,7 +29,7 @@ export default {
   createIntro: 'Dale un sitio a tu comunidad. Podrás cambiar sus datos más tarde en Administración.',
   name: 'Nombre de la comunidad',
   nameLanguage: 'Idioma del nombre',
-  languageHelp: 'Usa una etiqueta de idioma, como en, zh-Hans o ja.',
+  languageHelp: 'El idioma en que se escriben el nombre, la descripción y las reglas. Puedes añadir traducciones del nombre más abajo.',
   translation: 'Traducción',
   translationLanguage: 'Idioma de la traducción',
   translationName: 'Nombre traducido',

@@ -29,7 +29,7 @@ export default {
   createIntro: '为社区建立家园。创建后可以在管理页面修改详情。',
   name: '社区名称',
   nameLanguage: '名称语言',
-  languageHelp: '使用 en、zh-Hans 或 ja 等语言标签。',
+  languageHelp: '名称、描述和规则所使用的语言。可在下方添加名称的翻译。',
   translation: '翻译',
   translationLanguage: '翻译语言',
   translationName: '翻译后的名称',

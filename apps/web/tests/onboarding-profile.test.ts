@@ -15,7 +15,7 @@ test('profile save preserves the read revision and trims public text', async () 
     return Response.json({ revision: 'new' }, { status: 201 });
   });
   const input = profileSaveInput(profile, { token: 'token', agent, displayName: '  Ada Writer  ',
-    bioText: '  A new bio  ', locale: 'zh-Hans', removeAvatar: false, key });
+    bioText: '  A new bio  ', bioLanguage: 'zh-Hans', removeAvatar: false, key });
   expect(await saveAgentProfile(input, send)).toBe('saved');
   expect(request?.url).toBe('http://127.0.0.1:3001/v1/agents/00000000-0000-4000-8000-000000000001/profile');
   expect(request?.headers.get('idempotency-key')).toBe(key);
@@ -35,7 +35,7 @@ test('avatar upload, selection and profile CAS use the same Agent in order', asy
   });
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'portrait.png', { type: 'image/png' });
   const input = profileSaveInput(profile, { token: 'token', agent, displayName: 'Ada',
-    bioText: 'Old bio', locale: 'zh-Hans', avatar: image, removeAvatar: false, key });
+    bioText: 'Old bio', bioLanguage: 'zh-Hans', avatar: image, removeAvatar: false, key });
   expect(await saveAgentProfile(input, send)).toBe('saved');
   expect(calls.map(call => `${call.method} ${new URL(call.url).pathname}`)).toEqual([
     'POST /v1/media/uploads', 'PUT /v1/media/uploads/upload-id/bytes',
@@ -53,7 +53,7 @@ test('avatar upload, selection and profile CAS use the same Agent in order', asy
 test('stale profile is a conflict; oversized avatar never reaches Main', async () => {
   const stale = async () => Response.json({ code: 'stale_agent_profile' }, { status: 409 });
   const input = profileSaveInput(profile, { token: 'token', agent, displayName: 'Ada',
-    bioText: '', locale: 'en', removeAvatar: false, key });
+    bioText: '', bioLanguage: 'en', removeAvatar: false, key });
   expect(await saveAgentProfile(input, stale)).toBe('conflict');
   const tooLarge = new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'huge.png', { type: 'image/png' });
   const never = async () => { throw new Error('should not send'); };
@@ -68,7 +68,7 @@ test('unavailable media stops before the profile CAS', async () => {
   };
   const avatar = new File([new Uint8Array([137, 80, 78, 71])], 'portrait.png', { type: 'image/png' });
   const input = profileSaveInput(profile, { token: 'token', agent, displayName: 'Ada',
-    bioText: 'Old bio', locale: 'en', avatar, removeAvatar: false, key });
+    bioText: 'Old bio', bioLanguage: 'en', avatar, removeAvatar: false, key });
   expect(await saveAgentProfile(input, unavailable)).toBe('avatar-unavailable');
   expect(calls).toBe(1);
   const denied = async () => Response.json({ code: 'authority_denied' }, { status: 403 });

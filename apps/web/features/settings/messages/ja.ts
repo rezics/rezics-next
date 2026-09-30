@@ -10,6 +10,7 @@ export default {
   chooseAvatar: '画像を選択',
   noAvatarSelected: '画像が選択されていません',
   bio: '自己紹介',
+  bioLanguage: '自己紹介の言語',
   avatarHelp: 'PNG、JPEG、WebP、GIF に対応しています（最大 4 MB）。保存すると画像が公開されます。',
   removeAvatar: '現在のプロフィール画像を削除',
   accountInfo: 'アカウント名は非公開のままです。ここでの変更はアカウント名に影響しません。',

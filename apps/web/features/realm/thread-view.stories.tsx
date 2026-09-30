@@ -42,7 +42,7 @@ function ThreadPage({ read, mode, signedIn, locale, api = memoryThreads() }: Arg
         labels={{ about: locale === 'zh-Hans' ? zhHans.aboutCommunity : messages.aboutCommunity,
           rules: locale === 'zh-Hans' ? zhHans.communityRules : messages.communityRules,
           more: locale === 'zh-Hans' ? zhHans.moreAboutCommunity : messages.moreAboutCommunity }} />}>
-        <ThreadView read={read} sort="best" replyMode={mode} language={locale} threadApi={api}
+        <ThreadView read={read} sort="best" replyMode={mode} threadApi={api}
           realm={storyRealm} sortHrefs={{ best: here, top: `${here}?sort=top`, new: `${here}?sort=new` }} />
       </DiscussionColumns>
     </FeedProvider>

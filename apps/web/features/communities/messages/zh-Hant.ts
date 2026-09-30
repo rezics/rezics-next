@@ -9,7 +9,7 @@ export default {
   unavailable: '無法載入社群', unavailableBody: '請稍後再試。', members: '位成員', review: '貼文會經過審核',
   next: '下一頁', first: '第一頁', createTitle: '建立社群',
   createIntro: '為你的社群建立一個據點。之後可以在「管理」中修改詳細資料。',
-  name: '社群名稱', nameLanguage: '名稱語言', languageHelp: '使用 en、zh-Hans 或 ja 等語言標籤。',
+  name: '社群名稱', nameLanguage: '名稱語言', languageHelp: '名稱、說明與規則所使用的語言。可在下方新增名稱的翻譯。',
   translation: '翻譯', translationLanguage: '翻譯語言', translationName: '翻譯後的名稱',
   translationDescription: '翻譯後的說明（選填）', addTranslation: '新增翻譯', removeTranslation: '移除翻譯',
   translationError: '請使用不同且有效的語言標籤，並填寫各語言的翻譯名稱。',
