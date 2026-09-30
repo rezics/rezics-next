@@ -156,12 +156,12 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(studioRoutes(work))
     .use(realmAdminRoutes(work))
     .use(memberReplyRoutes(work))
-    .use(workMaintainerRoutes(work))
-    .use(lexiconRoutes(fuseki, work));
+    .use(workMaintainerRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(lexiconRoutes(fuseki, work))
     .use(compositionReadRoutes(work))
     .use(workReadRoutes(work))
     .use(alsoEnjoyedRoutes(work))
@@ -169,12 +169,12 @@ function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(realizationRoutes(work))
     .use(webPublicationRoutes(work))
     .use(realmReadRoutes(work))
-    .use(preferencesRoutes(work))
-    .use(realmReplyThreadRoutes(work));
+    .use(preferencesRoutes(work));
 }
 
 function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(realmReplyThreadRoutes(work))
     .use(zoneModuleRoutes(work))
     .use(rankingRoutes(work))
     .use(realmDirectoryRoutes(work))
@@ -182,12 +182,12 @@ function extraRoutes2(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(onboardingInterestsRoutes(work))
     .use(workContentsRoutes(work))
     .use(workActivityRoutes(work))
-    .use(followsRoutes(work))
-    .use(feedRoutes(work));
+    .use(followsRoutes(work));
 }
 
 function extraRoutes3(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(feedRoutes(work))
     .use(profileRoutes(work))
     .use(readingSettingsRoutes(work))
     .use(onboardingRoutes(work))
@@ -195,12 +195,12 @@ function extraRoutes3(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(realmProfileRoutes(work))
     .use(workMetadataRoutes(work))
     .use(discoveryRoutes(work))
-    .use(ratingContextReadRoutes(work))
-    .use(managementReadRoutes(work));
+    .use(ratingContextReadRoutes(work));
 }
 
 function extraRoutes4(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(managementReadRoutes(work))
     .use(conceptRoutes(work))
     .use(realmSubmissionRoutes(work))
     .use(collectionRoutes(fuseki, work))
@@ -208,12 +208,12 @@ function extraRoutes4(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(hubDependencyRoutes(work))
     .use(packageInstallRequestRoutes(work))
     .use(agentRoutes(work))
-    .use(catalogRoutes(work))
-    .use(erasureRoutes(work));
+    .use(catalogRoutes(work));
 }
 
 function extraRoutes5(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(erasureRoutes(work))
     .use(eventRoutes(work))
     .use(exportRoutes(work))
     .use(notificationRoutes(work))
@@ -221,12 +221,12 @@ function extraRoutes5(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(rightsRoutes(work))
     .use(recommendationRoutes(work))
     .use(contentPrivateSearchRoutes(work))
-    .use(graphLayoutRoutes(work))
-    .use(graphQueryRoutes(work));
+    .use(graphLayoutRoutes(work));
 }
 
 function extraRoutes6(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(graphQueryRoutes(work))
     .use(workRoutes(fuseki, work))
     .use(judgmentRoutes(work))
     .use(proposalRoutes(work))
@@ -234,12 +234,12 @@ function extraRoutes6(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(themeRoutes(work))
     .use(packageNixRoutes(work))
     .use(compositionRoutes(fuseki, work))
-    .use(connectedAppRoutes(work))
-    .use(ownerRoutes(work));
+    .use(connectedAppRoutes(work));
 }
 
 function extraRoutes7(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(ownerRoutes(work))
     .use(packageModRoutes(work))
     .use(realmReplyRoutes(work))
     .use(pollRoutes(work))
@@ -247,12 +247,12 @@ function extraRoutes7(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(relationRoutes(fuseki, work))
     .use(hubRoutes(work))
     .use(authorRoutes(work))
-    .use(progressRoutes(fuseki, work))
-    .use(workStatsRoutes(work));
+    .use(progressRoutes(fuseki, work));
 }
 
 function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(workStatsRoutes(work))
     .use(facetRoutes())
     .use(typeRoutes());
 }
