@@ -175,7 +175,7 @@ export class ManagementReadStore {
           to_char(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS opened_key,
           target_owner, target_resource, target_component, context
           FROM access.governance_case WHERE authority_scope_id = $1 AND authority_kind = 'realm'
-            AND $8 AND context = $2
+            AND $8 AND context = $2 AND NOT urgent
             AND (CASE WHEN decision_head IS NULL AND state = 'open' THEN 'open' ELSE 'closed' END) = $3
             AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
             AND ($10::text IS NULL OR EXISTS (SELECT 1 FROM access.governance_report reason

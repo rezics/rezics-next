@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { ContentComments, ContentCore, ContentProjectionCursor,
   migrateContent } from '../../content/src/index.ts';
 import { createMainApp } from './app.ts';
+import type { MainWorkDependencies } from './routes/dependencies.ts';
 import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { AuthorReaders } from './modules/author-page/readers.ts';
@@ -117,6 +118,8 @@ import { DATASET } from './modules/work/activate.ts';
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
 import { OwnerOperations } from './modules/owner/operations.ts';
 import { governanceServices } from './modules/governance/composition.ts';
+import { PublicReports } from './modules/public-report/store.ts';
+import { publicReportOwners } from './modules/public-report/owners.ts';
 import { AccessRealmManagement } from './modules/access/realm-management.ts';
 import { ManagementReadStore } from './modules/management-reads/read-store.ts';
 import { ManagementDecisionBasis } from './modules/management-reads/decision-basis.ts';
@@ -360,6 +363,11 @@ const app = createMainApp(fuseki, {
   erasures: erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool) : undefined,
   recommendations,
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
+  publicReports: new PublicReports(pool, publicReportOwners({ environment, account, access, media,
+    contextSelections: rankingContextSelections, mediaAccess: new MediaAccessBatchReader(pool, fuseki),
+    governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment) } as MainWorkDependencies,
+    contentPool, content)),
+  preservationAccess: pool,
   managementReads: new ManagementReadStore(pool, environment),
   managementDecisionBasis: new ManagementDecisionBasis(pool, environment, ownerTargetHeads({ graph: environment, content: contentPool })),
   realmJoining: new AccessRealmJoining(pool, environment),

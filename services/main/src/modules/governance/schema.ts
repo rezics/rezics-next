@@ -1,4 +1,4 @@
-import { bigint, jsonb, pgSchema, primaryKey, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, jsonb, pgSchema, primaryKey, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 // Access-owned governance tables (migrations 060-061). The SQL migrations stay
 // the DDL owner; these declarations type bounded owner queries and are checked
@@ -19,7 +19,8 @@ export const decisionOutcomes = ['reject', 'restrict', 'interim_restrict', 'fina
 export const enforcementEffects = ['disclosure', 'publication', 'participation', 'capability', 'search',
   'raw_delivery', 'media_delivery', 'export', 'source_apply'] as const;
 export const processSteps = ['appeal', 'uploader_notice', 'counter_notice', 'claimant_notice',
-  'restoration_window', 'claimant_action'] as const;
+  'restoration_window', 'claimant_action', 'intake', 'message', 'removal_deadline',
+  'restoration_not_before', 'restoration_not_after'] as const;
 export const GLOBAL_CONTEXT = 'urn:rezics:context:global';
 
 export const governanceRuleHead = access.table('governance_rule_head', {
@@ -57,14 +58,15 @@ export const governanceCase = access.table('governance_case', {
   decisionHead: uuid('decision_head'),
   openedAt: at('opened_at').notNull(),
   closedAt: at('closed_at'),
+  urgent: boolean('urgent').notNull(),
 });
 
 export const governanceReport = access.table('governance_report', {
   id: uuid('id').primaryKey(),
   caseId: uuid('case_id').notNull(),
-  principalId: uuid('principal_id').notNull(),
-  actingSubject: text('acting_subject').notNull(),
-  principalEpoch: bigint('principal_epoch', { mode: 'bigint' }).notNull(),
+  principalId: uuid('principal_id'),
+  actingSubject: text('acting_subject'),
+  principalEpoch: bigint('principal_epoch', { mode: 'bigint' }),
   idempotencyKey: text('idempotency_key').notNull(),
   requestDigest: text('request_digest').notNull(),
   reasonCode: text('reason_code').notNull(),
@@ -72,6 +74,11 @@ export const governanceReport = access.table('governance_report', {
   evidenceCount: smallint('evidence_count').notNull(),
   evidenceDigest: text('evidence_digest').notNull(),
   receivedAt: at('received_at').notNull(),
+  contentLanguage: text('content_language'),
+  contactEmail: text('contact_email'),
+  declarations: jsonb('declarations'),
+  publicReceiptHash: text('public_receipt_hash'),
+  process: text('process'),
 });
 
 export const governanceEvidence = access.table('governance_evidence', {
@@ -146,10 +153,11 @@ export const moderationDecisionTarget = access.table('moderation_decision_target
 export const governanceProcessStep = access.table('governance_process_step', {
   id: uuid('id').primaryKey(),
   caseId: uuid('case_id').notNull(),
-  decisionId: uuid('decision_id').notNull(),
-  process: text('process', { enum: ['platform_appeal', 'dmca_512', 'ordinary_dispute'] }).notNull(),
+  decisionId: uuid('decision_id'),
+  process: text('process', { enum: ['platform_appeal', 'dmca_512', 'ordinary_dispute', 'child_safety',
+    'ncii', 'credible_threat', 'platform_rules', 'realm_rules', 'privacy'] }).notNull(),
   step: text('step', { enum: processSteps }).notNull(),
-  principalId: uuid('principal_id').notNull(),
+  principalId: uuid('principal_id'),
   partySubject: text('party_subject'),
   idempotencyKey: text('idempotency_key').notNull(),
   requestDigest: text('request_digest').notNull(),
@@ -158,7 +166,33 @@ export const governanceProcessStep = access.table('governance_process_step', {
   occurredAt: at('occurred_at').notNull(),
   dueAt: at('due_at'),
   recordedAt: at('recorded_at').notNull(),
+  reportId: uuid('report_id'),
+  party: text('party', { enum: ['reporter', 'affected'] }),
+  contentLanguage: text('content_language'),
+  declarations: jsonb('declarations'),
 });
+
+export const governanceRole = access.table('governance_role', {
+  name: text('name').primaryKey(), scopeId: text('scope_id').notNull(), permissions: jsonb('permissions').$type<string[]>().notNull(),
+});
+export const governanceCaseCredential = access.table('governance_case_credential', {
+  id: uuid('id').primaryKey(), caseId: uuid('case_id').notNull(), reportId: uuid('report_id').notNull(),
+  party: text('party', { enum: ['reporter', 'affected'] }).notNull(), secretHash: text('secret_hash').notNull(),
+  createdAt: at('created_at').notNull(),
+});
+export const governanceCorrespondenceReceipt = access.table('governance_correspondence_receipt', {
+  credentialId: uuid('credential_id').notNull(), keyHash: text('key_hash').notNull(),
+  requestDigest: text('request_digest').notNull(), stepId: uuid('step_id').notNull(),
+}, table => [primaryKey({ columns: [table.credentialId, table.keyHash] })]);
+export const governancePreservationHold = access.table('governance_preservation_hold', {
+  id: uuid('id').primaryKey(), caseId: uuid('case_id').notNull(), targetResource: text('target_resource').notNull(),
+  authorSubject: text('author_subject'), accountIssuer: text('account_issuer'), accountSubject: text('account_subject'),
+  reason: text('reason').notNull(), createdAt: at('created_at').notNull(), releasedAt: at('released_at'),
+});
+export const governanceErasurePostponement = access.table('governance_erasure_postponement', {
+  holdId: uuid('hold_id').notNull(), operationId: text('operation_id').notNull(), materialRef: text('material_ref').notNull(),
+  reason: text('reason').notNull(), recordedAt: at('recorded_at').notNull(),
+}, table => [primaryKey({ columns: [table.holdId, table.operationId, table.materialRef] })]);
 
 export const governanceEnforcement = access.table('governance_enforcement', {
   id: uuid('id').primaryKey(),
@@ -178,7 +212,9 @@ export const governanceEnforcement = access.table('governance_enforcement', {
 
 export const governanceTables = [governanceRuleHead, governanceRuleRevision,
   governanceCase, governanceReport, governanceEvidence, rightsComplaint,
-  moderationDecision, moderationDecisionTarget, governanceProcessStep, governanceEnforcement] as const;
+  moderationDecision, moderationDecisionTarget, governanceProcessStep, governanceEnforcement,
+  governanceRole, governanceCaseCredential, governanceCorrespondenceReceipt, governancePreservationHold,
+  governanceErasurePostponement] as const;
 
 export type GovernanceCaseRow = typeof governanceCase.$inferSelect;
 export type GovernanceReportRow = typeof governanceReport.$inferSelect;

@@ -63,7 +63,8 @@ function fixture(records: Array<{ resource: string; type: ResourceType; work?: s
 test('G-506: shared schemas preserve exact grains and every capability has an explicit binding', () => {
   const bases = { work: true, realization: true, release: true, occurrence: true, resource: true } satisfies Record<Base, boolean>;
   expect(Object.keys(bases).sort()).toEqual(['occurrence', 'realization', 'release', 'resource', 'work']);
-  expect(capabilityBases).toEqual({ review: ['work', 'release'], rating: ['work', 'release'],
+  expect(capabilityBases).toEqual({ report: ['work', 'realization', 'release', 'occurrence', 'resource'],
+    review: ['work', 'release'], rating: ['work', 'release'],
     discussion: ['work', 'realization', 'release', 'occurrence', 'resource'],
     'collection-member': ['work', 'realization', 'release', 'occurrence', 'resource'],
     'library-status': ['work'], progress: ['occurrence'], continuity: ['work', 'realization', 'occurrence'],

@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { recordAccountPreservation } from '../public-report/preservation.ts';
 import { ensureRetentionDomain, markErasureSuppressed, recordErasureInventory,
   relayTransaction } from './journal.ts';
 
@@ -36,6 +37,7 @@ export async function settleAccountErasures(relay: Pool, access: Pool, account: 
     [Math.min(Math.max(limit, 1), 100)])).rows;
   let settled = 0;
   for (const entry of pending) {
+    await recordAccountPreservation(access, entry.account_issuer, entry.account_subject, entry.id);
     if ((await accountCredentialsPresent(account, [entry.account_subject])).size) continue;
     const principal = (await access.query<{ id: string; active: boolean }>(
       `SELECT id, active FROM access.principal WHERE account_issuer = $1 AND account_subject = $2`,

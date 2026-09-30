@@ -17,14 +17,14 @@ export const DECISION_BASIS_COST = { reports: 4, evidence: 64, graphCalls: 66, g
 export const decisionBasisPage = t.Object({ caseId: readUuid,generation: t.String(),decisionHead: t.Nullable(readUuid),
   state: t.String(),target: t.Object({ owner: t.String(),resource: t.String(),component: t.String() }),
   ruleBasis: t.Nullable(t.Object({ ref: t.String(),revision: t.String(),digest: t.String(),document: t.Record(t.String(),t.Unknown()) })),
-  reports: t.Array(t.Object({ id: readUuid,actingSubject: readId,reasonCode: t.String(),statement: t.Nullable(t.String()),
+  reports: t.Array(t.Object({ id: readUuid,actingSubject: t.Nullable(readId),reasonCode: t.String(),statement: t.Nullable(t.String()),
     evidenceDigest: t.String(),receivedAt: t.String(),evidence: t.Array(t.Object({ ordinal: t.Integer(),
       owner: t.String(),resource: t.String(),component: t.String(),revision: t.Nullable(t.String()),locator: t.Nullable(t.String()),
       state: t.String(),representation: t.Nullable(t.String()),revisionDigest: t.Nullable(t.String()),
       expectedHead: t.Nullable(t.String()),provenance: t.Record(t.String(),t.String()) }),{ maxItems: 16 }) }),{ maxItems: 4 }),
   nextCursor: t.Nullable(t.String()),sourcePosition: t.Object({ dataEpoch: t.String(),sequence: t.String() }) });
 
-interface Report { id: string; acting_subject: string; reason_code: string; statement: string | null;
+interface Report { id: string; acting_subject: string | null; reason_code: string; statement: string | null;
   evidence_digest: string; received_at: Date; received_key: string }
 interface Evidence extends CapturedEvidence { report_id: string; ordinal: number }
 
@@ -51,7 +51,7 @@ export class ManagementDecisionBasis {
       const row = (await client.query<{ generation: string; decision_head: string | null; state: string;
         target_owner: string; target_resource: string; target_component: string }>(`SELECT generation::text,decision_head,state,
         target_owner,target_resource,target_component FROM access.governance_case WHERE id = $1
-          AND authority_kind = 'realm' AND authority_scope_id = $2 AND context = $3 FOR SHARE`,
+          AND authority_kind = 'realm' AND authority_scope_id = $2 AND context = $3 AND NOT urgent FOR SHARE`,
       [caseId,`governance:realm:${realm}`,realm])).rows[0];
       if (!row) throw new RealmAdminDenied('Case is unavailable');
       const graphSequence = await this.position();

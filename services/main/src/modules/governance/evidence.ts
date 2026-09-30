@@ -10,6 +10,7 @@ import { type CapturedEvidence, type EvidenceCapture, type EvidenceTarget, Gover
   GovernanceUnavailable, sha256, type TargetHeads } from './store.ts';
 
 const agent = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+const graphAnchor = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}(?:-agent-revision)?$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const sourceId = (value: string): string | null => {
   const id = value.startsWith('https://rezics.com/id/') ? value.slice('https://rezics.com/id/'.length) : value;
@@ -42,8 +43,42 @@ const result = (target: EvidenceTarget, state: CapturedEvidence['state'], revisi
  * admitted exact reader is `unsupported`; no body is fabricated for
  * metadata-only objects and no current head replaces a named revision.
  */
-export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture {
+export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & {
+  /** Internal intake only, after resolveTargets has admitted this exact target. */
+  admitted(target: EvidenceTarget): Promise<CapturedEvidence>;
+} {
   return {
+    async admitted(target) {
+      if (target.owner === 'graph' && owners.graph && target.revision && graphAnchor.test(target.revision)) {
+        if (target.component === 'title') {
+          try {
+            const exact = await readExactWorkRevision(owners.graph.env, target.revision,
+              async work => work === target.resource);
+            return result(target, 'available', sha256(JSON.stringify([exact.revision, exact.work, exact.title,
+              exact.language])), 'work-title-en', 'graph-exact-work-revision-v1');
+          } catch (error) {
+            if (error instanceof RevisionNotFound) return result(target, 'unavailable', null, null, 'graph-exact-work-revision-v1');
+            throw error;
+          }
+        }
+        const rows = (await owners.graph.env.fuseki.query(`SELECT ?p ?o WHERE {
+          GRAPH ${iri(GRAPHS.revisions)} { ${iri(target.revision)} ?p ?o }
+        } ORDER BY ?p ?o LIMIT 129`)).results?.bindings ?? [];
+        if (rows.length > 128) throw new GovernanceUnavailable('Evidence anchor exceeds its bound');
+        if (!rows.length) return result(target, 'unavailable', null, null, 'graph-exact-anchor-v1');
+        return result(target, 'available', sha256(JSON.stringify(rows)), 'graph-anchor-v1', 'graph-exact-anchor-v1');
+      }
+      if (target.owner === 'content' && owners.content && target.revision) {
+        const [read] = await owners.content.core.readExactBatch([target.revision], async ids => new Set(ids));
+        if (!read || read.status === 'denied') throw new GovernanceUnavailable('Evidence owner is unavailable');
+        if (read.status === 'available') {
+          if (read.reference.resourceId !== target.resource) throw new GovernanceInvalid('Evidence revision belongs to another target');
+          return result(target, 'available', read.reference.byteDigest, read.reference.format, 'content-exact-read-v1');
+        }
+        return result(target, read.status === 'erased' ? 'erased' : 'unavailable', null, null, 'content-exact-read-v1');
+      }
+      return result({ ...target, revision: null }, 'unsupported', null, null, 'no-admitted-exact-reader');
+    },
     async capture(principal, actingSubject, target) {
       if (target.owner === 'content' && target.component === 'body' && owners.content) {
         if (!target.revision || !uuid.test(target.revision)) throw new GovernanceInvalid('content evidence needs a revision');

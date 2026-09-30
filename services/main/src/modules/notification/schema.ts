@@ -7,8 +7,9 @@ import { bigint, boolean, pgSchema, primaryKey, smallint, text, timestamp, uuid 
 const access = pgSchema('access');
 const at = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 
-export const optionalPurposes = ['social', 'subscription', 'governance'] as const;
-export const notificationPurposes = ['security', 'account', ...optionalPurposes] as const;
+export const optionalPurposes = ['social', 'subscription'] as const;
+export const mandatoryPurposes = ['security', 'account', 'governance'] as const;
+export const notificationPurposes = [...mandatoryPurposes, ...optionalPurposes] as const;
 export const preferenceChannels = ['inbox', 'email', 'push'] as const;
 export const deliveryChannels = ['email', 'push'] as const;
 export const deliveryStates = ['pending', 'sending', 'uncertain', 'delivered', 'failed', 'cancelled'] as const;

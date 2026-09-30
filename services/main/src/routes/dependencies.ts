@@ -78,6 +78,7 @@ import type { ExportStore } from '../modules/export/store.ts';
 import type { LicenseScopeHook } from '../modules/export/planner.ts';
 import type { GovernanceStore } from '../modules/governance/store.ts';
 import type { GovernanceRules } from '../modules/governance/rules.ts';
+import type { PublicReports } from '../modules/public-report/store.ts';
 import type { ManagementReadStore } from '../modules/management-reads/read-store.ts';
 import type { RealmSubmissionStore } from '../modules/realm-submission/store.ts';
 import type { RealmSubmissionReads } from '../modules/realm-submission/reads.ts';
@@ -124,6 +125,8 @@ export interface MainWorkDependencies {
   agentHandles?: AgentVanityHandles;
   agentProfiles?: import('../modules/agent/profile.ts').AgentPublicProfiles;
   governance?: { store: GovernanceStore; rules?: GovernanceRules };
+  publicReports?: PublicReports;
+  preservationAccess?: import('pg').Pool;
   managementReads?: ManagementReadStore;
   managementDecisionBasis?: import('../modules/management-reads/decision-basis.ts').ManagementDecisionBasis;
   realmJoining?: import('../modules/access/realm-management-joining.ts').AccessRealmJoining;

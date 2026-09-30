@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { withPreservationFence } from '../public-report/preservation.ts';
 import { graphErasureReceipt } from './graph.ts';
 
 export class ContentErasureInvalid extends Error {}
@@ -73,6 +74,7 @@ export interface ContentErasureGraphProof {
 }
 
 export interface ContentErasureCommand {
+  preservationAccess?: Pool;
   erasureId: string;
   erasureEpoch: string;
   resourceId: string;
@@ -95,6 +97,12 @@ export async function applyContentErasure(content: Pool, command: ContentErasure
   if (command.graphProof && (command.graphProof.receipt !== graphErasureReceipt(command.erasureId)
     || !command.graphProof.dataEpoch || !/^[1-9][0-9]*$/.test(command.graphProof.sequence))) {
     throw new ContentErasureInvalid('Content graph suppression proof is invalid');
+  }
+  if (command.preservationAccess) {
+    const guarded = await withPreservationFence(command.preservationAccess, command.resourceId, command.erasureId,
+      () => applyContentErasure(content, { ...command, preservationAccess: undefined }));
+    if (guarded.held) throw new ContentErasureStale('Governance preservation hold: material retained');
+    return guarded.value;
   }
   const client = await content.connect();
   try {

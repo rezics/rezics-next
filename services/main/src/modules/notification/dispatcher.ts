@@ -166,7 +166,7 @@ export class NotificationDispatcher {
     if (facts.endpoint_state !== 'active' || facts.endpoint_generation !== row.endpoint_generation) {
       return 'endpoint_invalid';
     }
-    if (facts.disabled && !['security', 'account'].includes(facts.purpose)) return 'unsubscribed';
+    if (facts.disabled && !['security', 'account', 'governance'].includes(facts.purpose)) return 'unsubscribed';
     return null;
   }
 

@@ -251,7 +251,7 @@ test('GOV01-GOV03 schema foundation: upgrade generalizes 027 and enforces exact 
   await pool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
     [principal, 'https://account.schema.test', 'reviewer']);
   await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [subject]);
-  await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1), ($2)', [scope, 'governance:other']);
+  await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1), ($2) ON CONFLICT DO NOTHING', [scope, 'governance:other']);
   const openCase = (caseId: string, kind = 'content_report') => pool.query(`INSERT INTO access.governance_case
     (id, kind, authority_kind, authority_scope_id, context, target_owner, target_resource, target_component,
      disclosure) VALUES ($1, $2, 'platform', $3, 'urn:rezics:context:global', 'graph', $4, 'title', 'parties')`,

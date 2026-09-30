@@ -285,11 +285,12 @@ export class GovernanceStore {
     });
   }
 
-  private async reportResult(client: PoolClient, reportId: string, replayed: boolean): Promise<ReportResult> {
-    const report = (await client.query<{ case_id: string; generation: string; evidence_digest: string }>(
-      `SELECT r.case_id, c.generation::text, r.evidence_digest FROM access.governance_report r
-       JOIN access.governance_case c ON c.id = r.case_id WHERE r.id = $1`, [reportId])).rows[0]!;
-    const evidence = (await client.query<{ ordinal: number; owner: string; resource: string; component: string;
+  private async reportResult(client: PoolClient, reportId: string, replayed: boolean,
+    specialistRead = false): Promise<ReportResult> {
+    const report = (await client.query<{ case_id: string; generation: string; evidence_digest: string; urgent: boolean }>(
+      `SELECT r.case_id, c.generation::text, r.evidence_digest, c.urgent FROM access.governance_report r
+       JOIN access.governance_case c ON c.id = r.case_id WHERE r.id = $1 FOR SHARE OF c`, [reportId])).rows[0]!;
+    const evidence = report.urgent && !specialistRead ? [] : (await client.query<{ ordinal: number; owner: string; resource: string; component: string;
       revision: string | null; revision_digest: string | null; state: EvidenceState }>(`SELECT ordinal, owner,
         resource, component, revision, revision_digest, state FROM access.governance_evidence
       WHERE report_id = $1 ORDER BY ordinal`, [reportId])).rows;
@@ -311,21 +312,22 @@ export class GovernanceStore {
     return this.transaction(async client => {
       const row = (await client.query<{ reporter_issuer: string; reporter_subject: string;
         reporter_active: boolean; scope: string;
-        kind: 'content_report' | 'rights_complaint'; state: string; decision_head: string | null }>(`SELECT
+        kind: 'content_report' | 'rights_complaint'; state: string; decision_head: string | null; urgent: boolean }>(`SELECT
           p.account_issuer AS reporter_issuer, p.account_subject AS reporter_subject, p.active AS reporter_active,
           c.authority_scope_id AS scope,
-          c.kind, c.state, c.decision_head FROM access.governance_report r
-        JOIN access.principal p ON p.id = r.principal_id JOIN access.governance_case c ON c.id = r.case_id
-        WHERE r.id = $1`, [reportId])).rows[0];
+          c.kind, c.state, c.decision_head, c.urgent FROM access.governance_report r
+        LEFT JOIN access.principal p ON p.id = r.principal_id JOIN access.governance_case c ON c.id = r.case_id
+        WHERE r.id = $1 FOR SHARE OF c`, [reportId])).rows[0];
       if (!row) throw new GovernanceDenied('report is unavailable');
       const own = row.reporter_active && row.reporter_issuer === principal.issuer
         && row.reporter_subject === principal.subject;
-      if (!own) {
+      if (!own || row.urgent) {
         if (!actingSubject) throw new GovernanceDenied('report is unavailable');
-        await this.decider(client, principal, actingSubject, row.scope, DECIDE_ACTION[row.kind])
+        await this.decider(client, principal, actingSubject, row.scope,
+          row.urgent ? 'governance.safety.evidence' : DECIDE_ACTION[row.kind])
           .catch(() => { throw new GovernanceDenied('report is unavailable'); });
       }
-      return { ...await this.reportResult(client, reportId, false), caseState: row.state,
+      return { ...await this.reportResult(client, reportId, false, row.urgent), caseState: row.state,
         decisionHead: row.decision_head };
     });
   }

@@ -234,7 +234,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
     })
     .put('/v1/me/notification-preferences', {
       body: t.Object({ profile: t.Literal('notification-preference-v1'),
-        purpose: t.Union([t.Literal('social'), t.Literal('subscription'), t.Literal('governance')]),
+        purpose: t.Union([t.Literal('social'), t.Literal('subscription')]),
         topic: t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' }),
         channel: t.Union([t.Literal('inbox'), t.Literal('email'), t.Literal('push')]),
         state: t.Union([t.Literal('enabled'), t.Literal('disabled')]),

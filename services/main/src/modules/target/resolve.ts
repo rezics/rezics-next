@@ -4,7 +4,7 @@ import { MAX_SUMMARY_BATCH, readResourceSummaries, type SummaryReader } from '..
 import { DATASET, GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
-import { capabilityBases, MAX_TARGET_TYPES, targetRef, type Base, type Capability, type ResolvedTarget } from './contract.ts';
+import { capabilityBases, MAX_TARGET_TYPES, resolvedTarget, targetRef, type Base, type Capability, type ResolvedTarget } from './contract.ts';
 
 /** One summary batch and one exact-head query, independent of target count.
  * Owner-specific summary probes remain in the summary's reported cost. */
@@ -22,6 +22,10 @@ export class TargetUnavailable extends WorkReadMissing {
   constructor() { super('Resource is unavailable'); }
 }
 export type RedirectOf = (resource: string) => string | null | Promise<string | null>;
+/** Report owners cover admitted grains such as Realm profiles and standalone
+ * media that do not yet participate in the other capability summaries. */
+export type ReportTargets = (session: WorkReadSession, resources: readonly string[]) =>
+  Promise<ReadonlyMap<string, ResolvedTarget>>;
 
 /** Ownership, never descriptive type, chooses the exact revision path. */
 const revisionPatterns = {
@@ -85,7 +89,7 @@ async function redirected(resource: string, redirectOf: RedirectOf): Promise<str
  * duplicates; a failed batch exposes no partial target metadata. Call inside
  * workRead so its graph-position and current-principal fences cover hydration. */
 export async function resolveTargets(session: WorkReadSession, iris: readonly string[],
-  capability: Capability, redirectOf?: RedirectOf): Promise<ResolvedTarget[]> {
+  capability: Capability, redirectOf?: RedirectOf, reportOwners?: ReportTargets): Promise<ResolvedTarget[]> {
   session.checkDeadline();
   if (!iris.length || iris.length > TARGET_RESOLVE_COST.batch
     || iris.some(resource => !Value.Check(targetRef, resource))) {
@@ -96,6 +100,18 @@ export async function resolveTargets(session: WorkReadSession, iris: readonly st
     canonical.set(resource, redirectOf ? await redirected(resource, redirectOf) : resource);
   }
   const resources = [...new Set(canonical.values())];
+  if (capability === 'report' && reportOwners) {
+    const owned = await reportOwners(session, resources);
+    if ([...owned].some(([resource, target]) => !resources.includes(resource)
+      || target.resource !== resource || !Value.Check(resolvedTarget, target)
+      || !capabilityBases.report.includes(target.base))) throw new WorkReadUnavailable('Report owner returned an invalid target');
+    if (owned.size) {
+      const remaining = resources.filter(resource => !owned.has(resource));
+      const resolved = remaining.length ? await resolveTargets(session, remaining, capability) : [];
+      const all = new Map([...owned, ...resolved.map(target => [target.resource, target] as const)]);
+      return iris.map(resource => all.get(canonical.get(resource)!)!);
+    }
+  }
   const summaries = await readResourceSummaries(session.deps.environment, session.deps.media?.store,
     readerFor(session), { resources, context: DEFAULT_MEDIA_CONTEXT,
       language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages });

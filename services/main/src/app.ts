@@ -26,6 +26,7 @@ import { contentRoutes } from './routes/content.ts';
 import { contextRoutes } from './routes/contexts.ts';
 import { contributionRoutes } from './routes/contributions.ts';
 import { erasureRoutes } from './routes/erasures.ts';
+import { publicReportRoutes } from './routes/public-reports.ts';
 import { eventRoutes } from './routes/events.ts';
 import { exportRoutes } from './routes/exports.ts';
 import { healthRoutes } from './routes/health.ts';
@@ -151,6 +152,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(suitabilityRoutes(work))
     .use(sessionsRoutes(work))
+    .use(publicReportRoutes(work))
     .use(queryRoutes(fuseki, work))
     .use(savedFilterRoutes(work))
     .use(reviewRoutes(work))

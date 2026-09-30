@@ -77,12 +77,6 @@ export const SETTINGS_NOTIFICATION_TOPICS = [
   { purpose: 'subscription', topic: 'followed-chapter' },
   { purpose: 'social', topic: 'review-helpful' },
   { purpose: 'social', topic: 'review' },
-  { purpose: 'governance', topic: 'submission-decision' },
-  { purpose: 'governance', topic: 'moderation-outcome' },
-  { purpose: 'governance', topic: 'realm-role-change' },
-  { purpose: 'governance', topic: 'realm-membership-change' },
-  { purpose: 'governance', topic: 'realm-invitation' },
-  { purpose: 'governance', topic: 'claim-correction' },
 ] as const;
 /** One recovery check, one principal read, one indexed preference read; 3 purposes × 12 topics × 2 channels. */
 export const NOTIFICATION_SETTINGS_COST = { readStatements: 3, maxRows: 72,
@@ -267,9 +261,9 @@ export class NotificationStore {
           continue;
         }
         const active = await client.query<{ inbox: boolean; email: boolean }>(
-          `SELECT p.active AND NOT EXISTS (SELECT 1 FROM access.notification_preference n
+          `SELECT p.active AND ($2 = 'governance' OR NOT EXISTS (SELECT 1 FROM access.notification_preference n
              WHERE n.principal_id = p.id AND n.purpose = $2 AND n.topic = $3
-               AND n.channel = 'inbox' AND n.state = 'disabled') AS inbox,
+               AND n.channel = 'inbox' AND n.state = 'disabled')) AS inbox,
            p.active AND EXISTS (SELECT 1 FROM access.notification_preference n
              WHERE n.principal_id = p.id AND n.purpose = $2 AND n.topic = $3
                AND n.channel = 'email' AND n.state = 'enabled') AS email
@@ -323,7 +317,7 @@ export class NotificationStore {
             clock_timestamp() + ($5::bigint * interval '1 millisecond')
           FROM (SELECT * FROM access.notification_endpoint
             WHERE principal_id = $2 AND state = 'active' ORDER BY id LIMIT $6) e
-          WHERE $3 IN ('security', 'account') OR NOT EXISTS (
+          WHERE $3 IN ('security', 'account', 'governance') OR NOT EXISTS (
             SELECT 1 FROM access.notification_preference p
             WHERE p.principal_id = e.principal_id AND p.purpose = $3 AND p.topic = $4
               AND p.channel = e.channel

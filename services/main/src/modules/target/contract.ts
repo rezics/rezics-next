@@ -10,18 +10,20 @@ export type Base = Static<typeof targetBase>;
 
 /** Includes structural owner types alongside up to 32 semantic component types. */
 export const MAX_TARGET_TYPES = 64;
+// Provisioning's immutable Agent anchor predates UUID-only revision addresses.
+export const targetRevision = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}(?:-agent-revision)?$' });
 
 export const resolvedTarget = t.Object({ resource: targetRef, base: targetBase,
   types: t.Array(t.String(), { maxItems: MAX_TARGET_TYPES, uniqueItems: true }), work: t.Nullable(readId),
-  revision: readId, disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]) },
+  revision: targetRevision, disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]) },
 { additionalProperties: false });
 export type ResolvedTarget = Static<typeof resolvedTarget>;
 
 export type Capability = 'review' | 'rating' | 'discussion' | 'collection-member'
-  | 'library-status' | 'progress' | 'continuity' | 'spoiler-boundary' | 'suitability' | 'session';
+  | 'library-status' | 'progress' | 'continuity' | 'spoiler-boundary' | 'suitability' | 'session' | 'report';
 const allBases = ['work', 'realization', 'release', 'occurrence', 'resource'] as const;
 export const capabilityBases = {
-  review: ['work', 'release'], rating: ['work', 'release'], discussion: allBases,
+  report: allBases, review: ['work', 'release'], rating: ['work', 'release'], discussion: allBases,
   'collection-member': allBases, 'library-status': ['work'], progress: ['occurrence'],
   continuity: ['work', 'realization', 'occurrence'], 'spoiler-boundary': ['occurrence'],
   suitability: allBases,

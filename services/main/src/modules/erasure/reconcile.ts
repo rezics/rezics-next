@@ -8,6 +8,7 @@ import { AccountDeletionJournalConflict, assertAccountDeletionJournalCoverage } 
   '../outbox/account-deletion-journal.ts';
 import type { OwnerReconciliationItemRow, OwnerReconciliationCutRow } from '../owner/schema.ts';
 import { accountCredentialsPresent } from './account.ts';
+import { postponeHeldMaterial } from '../public-report/preservation.ts';
 import { assertRetainedAuthorityCoverage, type RetainedAuthorityCoverage } from './authority.ts';
 import { applyContentErasure, ContentErasureGraphRequired, contentErasureResource,
   ContentErasureStale, probeContentErasure } from './content.ts';
@@ -236,6 +237,13 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
       }
       const probes = await probeContentErasure(restored.content, entry.id, entry.refs);
       const available = entry.refs.filter(ref => probes.get(ref) === 'available');
+      if (available.length && await postponeHeldMaterial(restored.access,
+        await contentErasureResource(restored.content, available), entry.id)) {
+        for (const ref of entry.refs) content.push({ owner: 'content', kind: 'revision', ref,
+          disposition: ['erased', 'absent'].includes(probes.get(ref) ?? '') ? 'erased' : 'conflict' });
+        if (restored.graph) graph.push({ owner: 'graph', kind: 'erasure', ref: entry.id, disposition: 'conflict' });
+        continue;
+      }
       let graphProof: GraphSuppressionProof | null = null;
       if (restored.graph) {
         let disposition: Item['disposition'] = entry.refs.length > 64 ? 'conflict'
@@ -253,7 +261,7 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
         try {
           await applyContentErasure(restored.content, { erasureId: entry.id, erasureEpoch: entry.epoch,
             resourceId: await contentErasureResource(restored.content, available),
-            revisionIds: available, ...(graphProof ? { graphProof } : {}) });
+            revisionIds: available, preservationAccess: restored.access, ...(graphProof ? { graphProof } : {}) });
           replayed = true;
         } catch (error) {
           if (!(error instanceof ContentErasureGraphRequired || error instanceof ContentErasureStale)) throw error;

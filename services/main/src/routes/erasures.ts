@@ -85,6 +85,7 @@ export function erasureRoutes(work: MainWorkDependencies) {
     }, async ({ request, body }) => {
       try {
         if (!work.erasures) return problem(503, 'erasure_unavailable', 'Erasure owner is unavailable');
+        if (work.preservationAccess) work.erasures.preservationAccess = work.preservationAccess;
         const key = request.headers.get('idempotency-key');
         if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
           return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');

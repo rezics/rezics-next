@@ -22,13 +22,15 @@ async function freePort(): Promise<number> {
 
 /** Real Better Auth owner and OAuth clients on the fixture's isolated database. */
 export async function ratingAccount(apps: Record<string, string>,
-  scopes = 'openid work:create work:edit work:read space:create rating:configure rating:submit rating:read') {
+  scopes = 'openid work:create work:edit work:read space:create rating:configure rating:submit rating:read',
+  deletionFence?: (issuer: string, subject: string) => Promise<void>) {
   const pool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
   const operators = new Set<string>();
   const config = { baseURL: base, secret: apps.ACCOUNT_SECRET!,
-    resource: apps.ACCOUNT_MAIN_RESOURCE!, pool, operatorUserIds: operators };
+    resource: apps.ACCOUNT_MAIN_RESOURCE!, pool, operatorUserIds: operators,
+    ...(deletionFence ? { accessDeletionFence: (subject: string) => deletionFence(`${base}/api/auth`, subject) } : {}) };
   await (await getMigrations(accountAuthOptions(config))).runMigrations();
   await installConsentRefreshFence(pool);
   const auth = createAccountAuth(config);
