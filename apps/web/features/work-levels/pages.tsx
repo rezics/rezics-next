@@ -12,7 +12,7 @@ import { franchisesOf } from './relation-rows.ts';
 import { namesOf, readCollectionMembers, readParts, readRealization, readRealizations, readRelease, readReleases,
   readReleaseWork, readRelations, readWholes } from './read.ts';
 import type { ConnectionsQuery, EditionsQuery } from './route.ts';
-import type { CollectionMembers, Loaded, PartsPage, Realization, ReleasePage, Summary } from './types.ts';
+import type { Loaded, PartsPage, Realization, ReleasePage, Summary } from './types.ts';
 
 const outline = buttonVariants({ variant: 'outline', size: 'sm' });
 
