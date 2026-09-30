@@ -286,12 +286,24 @@ test('G-835: Index reference API, distinct omnibus coverage, preference races, p
     finally { preferences.write = originalWrite; }
     expect((await summary()).headers.get('cache-control')).toBe('private, no-store');
     const originalBatch = preferences.batch.bind(preferences);
+    const originalOwn = stack.access.canReadAsBaselineMember.bind(stack.access);
+    let authorityRevoked = false;
+    // The Person's last controller cannot be revoked in SQL (continuity guard).
+    // Inject a changed owner proof at the read boundary to exercise the response fence.
+    stack.access.canReadAsBaselineMember = async (...args) => !authorityRevoked && await originalOwn(...args);
     preferences.batch = async (...args) => {
       const result = await originalBatch(...args);
-      await stack.accessPool.query(`UPDATE access.representation SET active = false
-        WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control'`, [a.principalId, person]);
+      authorityRevoked = true;
       return result;
     };
-    expect((await summary()).status).toBe(403);
+    try {
+      const revoked = await summary();
+      expect({ status: revoked.status, body: await revoked.json() }).toMatchObject({
+        status: 403, body: { code: 'progress_denied' },
+      });
+    } finally {
+      preferences.batch = originalBatch;
+      stack.access.canReadAsBaselineMember = originalOwn;
+    }
   } finally { await stack.stop(); }
 }, 600_000);
