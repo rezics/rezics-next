@@ -87,8 +87,10 @@ export async function assertContentPublicationBody(content: Pick<ContentCore, 'r
     || exact.reference.byteDigest !== input.expectedDigest) {
     throw new ContentPublicationConflict('Content revision differs from publication intent');
   }
-  if (typeof exact.body.body !== 'string') throw new InvalidContentPublication('invalid Content body');
-  if (!exact.body.body.trim()) throw new EmptyContentPublicationBody('Cannot publish an empty draft');
+  // Structured Content has owner-defined fields rather than a text body.
+  if (typeof exact.body.body === 'string' && !exact.body.body.trim()) {
+    throw new EmptyContentPublicationBody('Cannot publish an empty draft');
+  }
 }
 
 export function contentPublicationDigest(input: PublishPinnedContentInput): string {
