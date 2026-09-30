@@ -72,6 +72,8 @@ async function publicInTransaction(access: PoolClient, graph: Pick<FusekiClient,
       ${revision ? `FILTER(?head = ${iri(revision)})` : ''}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:ErasedRevision } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?resource rv:protectionHead ?protection } }
+      # A Work's own description never discloses the Work: Work disclosure has its own owner.
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?resource a schema:CreativeWork } }
       FILTER EXISTS {
         GRAPH ${iri(GRAPHS.current)} { ?resource <${SEMANTIC_TERMS.semanticWork}> ?work . }
         ${publicWork('?work', '?main')}
