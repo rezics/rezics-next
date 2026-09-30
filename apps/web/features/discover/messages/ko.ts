@@ -10,7 +10,7 @@ export default {
   descriptionMine: '내가 평점을 남긴 공개 작품을 보여줍니다. 즐겨찾기한 작품이 먼저 나옵니다.',
   community: '표시할 목록', everyone: '모두', mine: '내 평점',
   realmFallback: insert('커뮤니티 {{id}}', { id: String }),
-  typeFilter: '작품 종류', allTypes: '전체', book: '책', document: '가이드', recipe: '레시피',
+  typeFilter: '작품 종류', allTypes: '전체',
   favoritesAll: '독자들이 좋아하는 작품', favoritesBook: '독자들이 좋아하는 작품', favoritesDocument: '평점이 높은 가이드',
   favoritesRecipe: '평점이 높은 레시피',
   recentAll: '최근 추가된 작품', recentBook: '최근 추가된 작품', recentDocument: '가이드와 참고 자료',

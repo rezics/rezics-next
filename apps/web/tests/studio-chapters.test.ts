@@ -5,7 +5,9 @@ import { detailsInvalid, detailsValues } from '../features/studio/details-api.ts
 import { ids, storyMain } from '../features/studio/fixtures.ts';
 import { chapterMemoryKey, type DraftStorage, readChapterMemory, rememberChapter } from '../features/studio/local-draft.ts';
 import { readChapterFacts, readChapters } from '../features/studio/read.ts';
-import { type MainClient, workKind, workLabel, type WorkMetadata } from '../features/studio/types.ts';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+import { typeLabel } from '../features/catalogue/types.ts';
+import { type MainClient, workKind, type WorkMetadata } from '../features/studio/types.ts';
 
 const agent = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 
@@ -138,6 +140,7 @@ describe('Studio Work details', () => {
 });
 
 describe('Studio Work kinds', () => {
+  seedServedTypes();
   test('a Book is a Book even with other types; a Work without a type is a chapter', () => {
     expect(workKind(['https://schema.org/DigitalDocument', 'https://schema.org/Book'])).toBe('book');
     expect(workKind(['https://schema.org/Recipe'])).toBe('recipe');
@@ -146,14 +149,14 @@ describe('Studio Work kinds', () => {
     expect(workKind(['https://rezics.com/vocab/PromptTemplate'])).toBe('document');
   });
 
-  test('a Work is labelled as the catalogue labels it, the more specific type first', () => {
-    expect(workLabel(['https://schema.org/DigitalDocument'])).toBe('guide');
-    expect(workLabel(['https://schema.org/DigitalDocument', 'https://rezics.com/vocab/PromptTemplate'])).toBe('prompt');
-    expect(workLabel(['https://rezics.com/vocab/SkillPackage'])).toBe('skill');
-    expect(workLabel(['https://rezics.com/vocab/ModPackage', 'https://schema.org/SoftwareApplication'])).toBe('mod');
-    expect(workLabel(['https://schema.org/Recipe', 'https://schema.org/DigitalDocument'])).toBe('recipe');
-    expect(workLabel(['https://schema.org/BookSeries'])).toBe('book');
-    expect(workLabel([])).toBe('chapter');
+  test('a Work is labelled by the registry, the more specific type first', () => {
+    expect(typeLabel(['https://schema.org/DigitalDocument'], 'en')).toBe('Guide');
+    expect(typeLabel(['https://schema.org/DigitalDocument', 'https://rezics.com/vocab/PromptTemplate'], 'en')).toBe('Prompt');
+    expect(typeLabel(['https://rezics.com/vocab/SkillPackage'], 'en')).toBe('Skill');
+    expect(typeLabel(['https://rezics.com/vocab/ModPackage', 'https://schema.org/SoftwareApplication'], 'en')).toBe('Mod');
+    expect(typeLabel(['https://schema.org/Recipe', 'https://schema.org/DigitalDocument'], 'en')).toBe('Recipe');
+    expect(typeLabel(['https://schema.org/BookSeries'], 'ja')).toBe('本');
+    expect(typeLabel([], 'en')).toBeNull();
   });
 });
 

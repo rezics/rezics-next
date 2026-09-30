@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { TypeRegistryProvider } from '../../features/catalogue/type-registry.tsx';
+import { readTypes } from '../../features/catalogue/types-read.ts';
 import { localeAlternates, pageUrl } from '../../features/seo/address.ts';
 import { isUiLocale } from '../../i18n/define.ts';
 
@@ -18,5 +20,7 @@ export default async function LocaleLayout({ children, params }: {
 }) {
   const { locale } = await params;
   if (!isUiLocale(locale)) notFound();
-  return children;
+  // Pages below look types up synchronously; the registry is read here, once, before they render.
+  const registry = await readTypes();
+  return <TypeRegistryProvider registry={registry}>{children}</TypeRegistryProvider>;
 }

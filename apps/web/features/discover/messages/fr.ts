@@ -10,7 +10,7 @@ export default {
   descriptionMine: 'Les œuvres publiques que vous avez notées, avec vos préférées en tête.',
   community: 'Sélections de', everyone: 'Tout le monde', mine: 'Vos notes',
   realmFallback: insert('Communauté {{id}}', { id: String }),
-  typeFilter: 'Type d’œuvre', allTypes: 'Tout', book: 'Livres', document: 'Guides', recipe: 'Recettes',
+  typeFilter: 'Type d’œuvre', allTypes: 'Tout',
   favoritesAll: 'Coups de cœur des lecteurs', favoritesBook: 'Coups de cœur des lecteurs', favoritesDocument: 'Guides les mieux notés',
   favoritesRecipe: 'Recettes les mieux notées',
   recentAll: 'Ajouts récents', recentBook: 'Ajouts récents', recentDocument: 'Guides et références',

@@ -12,7 +12,7 @@ export default {
   filters: '搜索筛选', filterResults: '筛选结果',
   language: '文本语言', anyLanguage: '不限语言',
   languageHelp: '只匹配以此语言发布的文本。',
-  workType: '作品种类', bookType: '图书', documentType: '指南', recipeType: '食谱',
+  workType: '作品种类',
   include: '包含', exclude: '排除',
   includeType: insert('包含{{type}}', { type: String }),
   excludeType: insert('排除{{type}}', { type: String }),

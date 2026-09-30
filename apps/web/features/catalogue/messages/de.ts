@@ -23,6 +23,4 @@ export default {
   ongoing: 'Laufend', hiatus: 'Pausiert',
   whyItsHere: 'Warum es hier steht', openRecipe: 'Rezept öffnen', install: 'Installieren', copyPrompt: 'Prompt kopieren',
   promptCopied: 'Prompt kopiert', copyFailed: 'Kopieren fehlgeschlagen. Bitte versuche es erneut.',
-  typeBook: 'Buch', typeGuide: 'Anleitung', typeRecipe: 'Rezept', typePrompt: 'Prompt', typeSkill: 'Skill', typeMod: 'Mod',
-  typeSoftware: 'Software', typeFilm: 'Film', typeSeries: 'Fernsehserie', typeVideo: 'Video', typeAudio: 'Audio', typeMusic: 'Musik',
 } satisfies Partial<CatalogueMessages>;

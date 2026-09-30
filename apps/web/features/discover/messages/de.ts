@@ -10,7 +10,7 @@ export default {
   descriptionMine: 'Öffentliche Werke, die du bewertet hast – deine Favoriten zuerst.',
   community: 'Listenansicht', everyone: 'Alle', mine: 'Deine Bewertungen',
   realmFallback: insert('Community {{id}}', { id: String }),
-  typeFilter: 'Art des Werks', allTypes: 'Alle', book: 'Bücher', document: 'Ratgeber', recipe: 'Rezepte',
+  typeFilter: 'Art des Werks', allTypes: 'Alle',
   favoritesAll: 'Leserfavoriten', favoritesBook: 'Leserfavoriten', favoritesDocument: 'Gut bewertete Ratgeber',
   favoritesRecipe: 'Am besten bewertete Rezepte',
   recentAll: 'Kürzlich hinzugefügt', recentBook: 'Kürzlich hinzugefügt', recentDocument: 'Ratgeber und Nachschlagewerke',

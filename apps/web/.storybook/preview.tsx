@@ -1,11 +1,15 @@
 import type { Decorator, Preview } from '@storybook/react-vite';
 import { useLayoutEffect } from 'react';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
 import { messages as shell } from '../features/shell/messages.ts';
 import shellZhHans from '../features/shell/messages/zh-Hans.ts';
 import { ShellProvider } from '../features/shell/shell-provider.tsx';
 import type { UiLocale } from '../i18n/define.ts';
 import '../app/styles.css';
 import { type StoryRoute, StoryRouteContext } from './next-navigation.ts';
+
+// Stories read types from the registry Main serves, as the locale layout seeds it in the app.
+seedServedTypes();
 
 type Globals = { theme?: 'light' | 'dark'; locale?: UiLocale };
 

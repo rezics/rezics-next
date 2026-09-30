@@ -10,7 +10,7 @@ export default {
   descriptionMine: '你评过分的公开作品，最喜欢的排在前面。',
   community: '谁的推荐', everyone: '所有人', mine: '我的评分',
   realmFallback: insert('社区 {{id}}', { id: String }),
-  typeFilter: '作品种类', allTypes: '全部', book: '图书', document: '指南', recipe: '食谱',
+  typeFilter: '作品种类', allTypes: '全部',
   favoritesAll: '读者最爱', favoritesBook: '读者最爱', favoritesDocument: '好评指南', favoritesRecipe: '高分食谱',
   recentAll: '最新上架', recentBook: '最新上架', recentDocument: '指南与参考', recentRecipe: '试试这些食谱',
   popularIn: insert('{{genre}}热门', { genre: String }),

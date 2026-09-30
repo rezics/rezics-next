@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { initials } from '@rezics/ui/avatar-initials';
 import { coverDesign, coverSeed } from '@rezics/ui/work-cover';
 import { workKinds } from '../../../services/main/src/modules/work/work-kinds.ts';
-import { messages } from '../features/catalogue/messages.ts';
-import { authorSeparator, coverKindOf, coverProps, otherLanguageTitle, workTypeLabel }
-  from '../features/catalogue/work.ts';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+import { typeLabel } from '../features/catalogue/types.ts';
+import { authorSeparator, coverKindOf, coverProps, otherLanguageTitle } from '../features/catalogue/work.ts';
 
 const uuid = '0192f3a4-5b6c-7d8e-9f01-23456789abcd';
 const name = (value: string, language: string, basis: 'requested' | 'fallback' = 'fallback') =>
@@ -26,22 +26,21 @@ describe('one face per Work', () => {
   });
 
   test('every Work type Main knows draws one cover kind and has a name', () => {
-    const catalogue = messages.en;
+    seedServedTypes();
     for (const type of Object.keys(workKinds)) {
       expect(coverKindOf([type]), type).not.toBeUndefined();
-      const label = workTypeLabel([type]);
-      expect(label, type).not.toBeNull();
-      expect(catalogue[label!], type).toBeString();
+      expect(typeLabel([type], 'en'), type).toBeString();
     }
     expect(coverKindOf(['https://schema.org/Recipe'])).toBe('recipe');
     expect(coverKindOf(['https://rezics.com/vocab/ModPackage'])).toBe('package');
     expect(coverKindOf(['https://rezics.com/vocab/PromptTemplate'])).toBe('document');
-    // A Work that is also a Book is drawn as one; an untyped read draws a book.
+    // A Work that is also a Book is drawn as one.
     expect(coverKindOf(['https://schema.org/DigitalDocument', 'https://schema.org/Book'])).toBe('book');
-    expect(coverKindOf([])).toBe('book');
-    expect(workTypeLabel(['https://schema.org/DigitalDocument', 'https://rezics.com/vocab/PromptTemplate']))
-      .toBe('typePrompt');
-    expect(workTypeLabel([])).toBeNull();
+    // An untyped read draws its base's default, and names nothing.
+    expect(coverKindOf([])).toBe('document');
+    expect(typeLabel(['https://schema.org/DigitalDocument', 'https://rezics.com/vocab/PromptTemplate'], 'en'))
+      .toBe('Prompt');
+    expect(typeLabel([], 'en')).toBeNull();
   });
 
   test('a title is “shown in another language” only when its language differs from the interface’s', () => {

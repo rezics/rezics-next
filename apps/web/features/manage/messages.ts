@@ -173,9 +173,7 @@ export const messages = {
   undoHint: 'You can undo for a few seconds after deciding.',
 
   // What an item is about
-  typeChapter: 'Chapter', typeBook: 'Book', typePrompt: 'Prompt', typeSkill: 'Skill', typeMod: 'Mod',
-  typeRecipe: 'Recipe', typeSoftware: 'Software', typeFilm: 'Film', typeSeries: 'Series', typeVideo: 'Video',
-  typeAudio: 'Audio', typeMusic: 'Music', typeGuide: 'Guide',
+  typeChapter: 'Chapter',
   byAuthors: insert('by {{authors}}', { authors: String }),
   statusOngoing: 'Ongoing', statusCompleted: 'Completed', statusHiatus: 'On hiatus',
   chapterCount: plural({ one: insert('{{count}} chapter'), other: insert('{{count}} chapters') },

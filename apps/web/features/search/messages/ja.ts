@@ -12,7 +12,7 @@ export default {
   filters: '検索条件', filterResults: '結果を絞り込む',
   language: '言語', anyLanguage: 'すべての言語',
   languageHelp: 'この言語で公開されたテキストだけが検索対象になります。',
-  workType: '作品の種類', bookType: '本', documentType: 'ガイド', recipeType: 'レシピ',
+  workType: '作品の種類',
   include: '含める', exclude: '除外する',
   includeType: insert('{{type}}を含める', { type: String }),
   excludeType: insert('{{type}}を除外する', { type: String }),

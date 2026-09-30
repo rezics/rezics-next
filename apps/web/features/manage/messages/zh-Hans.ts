@@ -151,9 +151,7 @@ export default {
   reasonTooLong: '请控制在 2,000 字以内。',
   undoHint: '处理后的几秒内可以撤销。',
 
-  typeChapter: '章节', typeBook: '书', typePrompt: '提示词', typeSkill: '技能', typeMod: '模组',
-  typeRecipe: '食谱', typeSoftware: '软件', typeFilm: '电影', typeSeries: '剧集', typeVideo: '视频',
-  typeAudio: '音频', typeMusic: '音乐', typeGuide: '指南',
+  typeChapter: '章节',
   byAuthors: insert('{{authors}} 著', { authors: String }),
   statusOngoing: '连载中', statusCompleted: '已完结', statusHiatus: '暂停更新',
   chapterCount: plural({ other: insert('{{count}} 章') }, { count: asValue(number()) }),

@@ -62,7 +62,7 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
   const offered = choices?.languages ?? [locale];
   const initialLanguages = useMemo(() => startingLanguages(savedLanguages, offered, locale),
     [savedLanguages, offered, locale]);
-  const groups = useMemo(() => topicGroups(choices?.groups ?? []), [choices]);
+  const groups = useMemo(() => topicGroups(choices?.groups ?? [], locale), [choices, locale]);
   const [step, setStep] = useState<1 | 2 | 3>(initialStep);
   const [languages, setLanguages] = useState<string[]>(initialLanguages);
   /** The reader confirmed languages with Next; skipping the step changes no setting. */
@@ -137,8 +137,8 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
     {step === 2 ? groups.length ? <div className="grid gap-6">
       <p role="status" className="font-medium text-muted-foreground text-sm">
         {topics.length >= MAX_TOPICS ? t.topicsFull : t.topicsChosen(topics.length)}</p>
-      {groups.map(group => <section key={group.heading} aria-label={t[group.heading] as string} className="grid gap-3">
-        <h3 className="font-semibold text-lg">{t[group.heading] as string}</h3>
+      {groups.map(group => <section key={group.heading} aria-label={group.heading} className="grid gap-3">
+        <h3 className="font-semibold text-lg">{group.heading}</h3>
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {group.topics.map(topic => {
             const on = topics.includes(topic.id);

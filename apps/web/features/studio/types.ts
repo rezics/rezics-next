@@ -1,4 +1,5 @@
 import type { browserMainApi } from '../api/browser.ts';
+import { creatableTypes, typeEntry } from '../catalogue/types.ts';
 
 // Main's responses Studio reads, taken from the typed API client so a
 // contract change breaks this build.
@@ -49,43 +50,21 @@ export function failureOf(status: number): ReadFailure {
   return 'unavailable';
 }
 
-/** Main's Work types Studio offers (`WORK_SEMANTIC_TYPES` in services/main/src/modules/work/activate.ts). */
-export const workTypes = {
-  book: 'https://schema.org/Book',
-  document: 'https://schema.org/DigitalDocument',
-  recipe: 'https://schema.org/Recipe',
-} as const;
-export type WorkType = keyof typeof workTypes;
+/** How Studio writes a Work: a Book in chapters, a recipe on its own, anything else as one text. */
+export type WorkKind = 'book' | 'recipe' | 'document' | 'chapter';
 
 /**
- * What a Work is called, from its semantic types (`workKinds` in
- * services/main/src/modules/work/work-kinds.ts), in the catalogue's words: a
- * bare DigitalDocument is a Guide, as the Work page and search name it. The
- * more specific type wins, so a prompt that is also a document is a Prompt.
+ * How Studio writes a Work, from the registry's presentation for its types. A
+ * Work without a type is a chapter, which only a Book's contents name.
  */
-const labelledTypes = [
-  ['book', ['https://schema.org/Book', 'https://schema.org/BookSeries']],
-  ['recipe', [workTypes.recipe]],
-  ['prompt', ['https://rezics.com/vocab/PromptTemplate']],
-  ['skill', ['https://rezics.com/vocab/SkillPackage']],
-  ['mod', ['https://rezics.com/vocab/ModPackage']],
-  ['software', ['https://schema.org/SoftwareApplication', 'https://schema.org/SoftwareSourceCode']],
-  ['media', ['https://schema.org/Movie', 'https://schema.org/TVSeries', 'https://schema.org/VideoObject',
-    'https://schema.org/AudioObject', 'https://schema.org/MusicRecording', 'https://schema.org/MusicAlbum']],
-  ['guide', [workTypes.document]],
-] as const;
-export type WorkLabel = (typeof labelledTypes)[number][0] | 'chapter';
-
-/** The label a Work's types call for; a Work without a type is a chapter, which only a Book's contents name. */
-export function workLabel(types: readonly string[]): WorkLabel {
-  return labelledTypes.find(([, known]) => known.some(type => types.includes(type)))?.[0] ?? 'chapter';
+export function workKind(types: readonly string[]): WorkKind {
+  if (!types.length) return 'chapter';
+  const presentation = typeEntry(types)?.presentation;
+  return presentation === 'book' || presentation === 'recipe' ? presentation : 'document';
 }
 
-/** How Studio writes a Work: a Book in chapters, anything else as one text; a chapter has no type of its own. */
-export function workKind(types: readonly string[]): WorkType | 'chapter' {
-  const label = workLabel(types);
-  return label === 'book' || label === 'recipe' ? label : label === 'chapter' ? 'chapter' : 'document';
-}
+/** The types Studio offers a new Work: those the registry lets a contributor create and readers read as text. */
+export const writableTypes = () => creatableTypes().filter(entry => entry.primaryAction === 'read');
 
 /** Languages Studio offers first; the list is a convenience, not a limit Main imposes. */
 export const writingLanguages = ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es', 'it', 'pt', 'ru', 'ar'] as const;

@@ -1,17 +1,27 @@
 import { type BrowseScope, iriOf, isUuid, parseScope, scopeQuery, type SearchParams, single,
   withQuery } from './scope.ts';
+import { creatableTypes, type TypeEntry } from '../catalogue/types.ts';
 import type { DiscoveryItem, DiscoveryQuery } from './types.ts';
 
-/** The Work types discovery can filter by, in shelf order; Main's `discoveryType` literals. */
-export const workTypes = [
-  { key: 'book', iri: 'https://schema.org/Book' },
-  { key: 'document', iri: 'https://schema.org/DigitalDocument' },
-  { key: 'recipe', iri: 'https://schema.org/Recipe' },
-] as const satisfies readonly { key: string; iri: NonNullable<DiscoveryQuery['type']> }[];
-export type WorkTypeKey = (typeof workTypes)[number]['key'];
+/**
+ * The filters discovery has shelf wording for, as they appear in a URL, each
+ * the registry's presentation of the type it filters by (a guide is a
+ * DigitalDocument). The registry supplies the type IRI and its label.
+ */
+const shelfPresentations = { book: 'book', document: 'guide', recipe: 'recipe' } as const;
+export const workTypeKeys = Object.keys(shelfPresentations) as WorkTypeKey[];
+export type WorkTypeKey = keyof typeof shelfPresentations;
 
-export const workTypeOf = (iri: string): WorkTypeKey | null =>
-  workTypes.find(type => type.iri === iri)?.key ?? null;
+export interface WorkTypeChoice { key: WorkTypeKey; iri: string; entry: TypeEntry }
+
+/** The types discovery can filter by, in shelf order: the registry's creatable Work type of each presentation. */
+export function workTypes(): readonly WorkTypeChoice[] {
+  const creatable = creatableTypes();
+  return workTypeKeys.flatMap(key => {
+    const entry = creatable.find(candidate => candidate.presentation === shelfPresentations[key]);
+    return entry ? [{ key, iri: entry.type, entry }] : [];
+  });
+}
 
 /**
  * `/discover` as the URL gives it. `context` pins a standing rating Context
@@ -39,7 +49,7 @@ export function parseDiscoverState(params: SearchParams): DiscoverState | null {
   if (!scope || (context !== null && !isUuid(context)) || (term !== null && !isUuid(term))
     || ![...include, ...exclude].every(isUuid) || new Set([...include, ...exclude]).size
       !== include.length + exclude.length || (match !== 'all' && match !== 'any')) return null;
-  if (type !== null && !workTypes.some(item => item.key === type)) return null;
+  if (type !== null && !workTypeKeys.some(key => key === type)) return null;
   // Main defines no personal classification, so Mine never filters by term.
   if (scope.kind === 'mine' && term !== null) return null;
   return { scope, context, type: type as WorkTypeKey | null, term,
@@ -133,7 +143,7 @@ export function discoveryQuery(state: DiscoverState, shelf: ShelfSpec, options: 
   return { scope: scope.kind, ...(scope.kind === 'realm' ? { realm: iriOf(scope.realm) } : {}),
     sort: shelf.sort, limit: options.limit, language: options.language,
     ...(ranked && options.context ? { context: iriOf(options.context) } : {}),
-    ...(shelf.type ? { type: workTypes.find(type => type.key === shelf.type)!.iri } : {}),
+    ...(shelf.type ? { type: workTypes().find(type => type.key === shelf.type)!.iri as NonNullable<DiscoveryQuery['type']> } : {}),
     ...(shelf.term ? { term: iriOf(shelf.term) } : {}),
     ...(scope.kind === 'mine' && options.actingSubject ? { actingSubject: options.actingSubject } : {}),
     ...(options.cursor ? { cursor: options.cursor } : {}) };

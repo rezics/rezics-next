@@ -353,9 +353,8 @@ export default {
   ruleRemembered: '前回の選択を使用しました。', showText: '本文を表示', skillInstructions: '手順', skillSummary: '内容',
   spoilerBadge: 'ネタバレ', spoilerWarning: insert('{{book}}のネタバレを含む可能性があります。', { book: String }),
   statusCompleted: '完結', statusHiatus: '休載中', statusOngoing: '連載中', submissionsHere: '投稿',
-  typeAudio: '音声', typeBook: '本', typeChapter: '章', typeFilm: '映画', typeGuide: 'ガイド', typeMod: 'Mod',
-  typeMusic: '音楽', typePrompt: 'プロンプト', typeRecipe: 'レシピ', typeSeries: 'シリーズ', typeSkill: 'スキル',
-  typeSoftware: 'ソフトウェア', typeVideo: '動画', whichRule: 'どのルールに違反していますか？',
+  typeChapter: '章',
+  whichRule: 'どのルールに違反していますか？',
   wholeBookSubmission: 'この本全体をコミュニティに追加します。以後、公開された章も追加されます。',
   wholeWorkSubmission: '作品全体をこのコミュニティに追加します。', writtenFor: insert('{{models}}向け', { models: String }),
 } satisfies ManageMessages;

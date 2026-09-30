@@ -12,7 +12,7 @@ export default {
   filters: '搜尋篩選條件', filterResults: '篩選結果',
   language: '語言', anyLanguage: '不限語言',
   languageHelp: '只會比對以此語言發布的文字。',
-  workType: '作品類型', bookType: '書籍', documentType: '指南', recipeType: '食譜',
+  workType: '作品類型',
   include: '包含', exclude: '排除',
   includeType: insert('包含{{type}}', { type: String }),
   excludeType: insert('排除{{type}}', { type: String }),

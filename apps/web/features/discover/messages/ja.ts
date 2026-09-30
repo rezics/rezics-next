@@ -10,7 +10,7 @@ export default {
   descriptionMine: 'あなたが評価した公開作品を、お気に入り順に表示します。',
   community: 'おすすめの対象', everyone: 'すべて', mine: 'あなたの評価',
   realmFallback: insert('コミュニティ {{id}}', { id: String }),
-  typeFilter: '作品の種類', allTypes: 'すべて', book: '本', document: 'ガイド', recipe: 'レシピ',
+  typeFilter: '作品の種類', allTypes: 'すべて',
   favoritesAll: '読者のお気に入り', favoritesBook: '読者のお気に入り', favoritesDocument: '高評価のガイド',
   favoritesRecipe: '高評価のレシピ',
   recentAll: '最近追加された作品', recentBook: '最近追加された作品', recentDocument: 'ガイドと参考資料',

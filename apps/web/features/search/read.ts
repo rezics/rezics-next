@@ -15,9 +15,9 @@ export function searchRequest(state: SearchState, continuation?: SearchContinuat
   const excluded = state.concepts?.exclude ?? [];
   const filter: NonNullable<ResourceQuery['filter']> = { all: [
     ...(state.includeTypes?.length ? [{ facet: 'type', any: state.includeTypes.map(key =>
-      workTypes.find(type => type.key === key)!.iri) }] : []),
+      workTypes().find(type => type.key === key)!.iri) }] : []),
     ...(state.excludeTypes?.length ? [{ facet: 'type', none: state.excludeTypes.map(key =>
-      workTypes.find(type => type.key === key)!.iri) }] : []),
+      workTypes().find(type => type.key === key)!.iri) }] : []),
     ...(state.language ? [{ facet: 'language', any: [state.language] }] : []),
     ...(included.length ? [{ facet: 'concept', [state.concepts?.match === 'any' ? 'any' : 'all']:
       included.map(iriOf) }] : []),

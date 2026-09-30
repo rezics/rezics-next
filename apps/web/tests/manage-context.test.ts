@@ -6,6 +6,7 @@ import { book, chapterOne, chapters, mod, names, occurrences, prompt, publishedR
 import { auditWorks, isSpoilerReason, reasonLabel, recordFacts, ruleFor, workTypeText } from '../features/manage/labels.ts';
 import { messages } from '../features/manage/messages.ts';
 import { mergeNames, noNames } from '../features/manage/queue-api.ts';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
 import { reviewedAs, subjectOf, targetWork } from '../features/manage/queue-subject.ts';
 import { reasonsOf } from '../features/manage/queue-view.tsx';
 import { chapterExcerpt } from '../features/manage/read.ts';
@@ -55,11 +56,13 @@ describe('G-395 what a queue item is about', () => {
   });
 
   test('a Work says what it is, and mods, prompts and skills have their own facts to review', () => {
-    expect(workTypeText(works[chapterOne], t)).toBe('Chapter');
-    expect(workTypeText(works[book], t)).toBe('Book');
-    expect(workTypeText(works[prompt], t)).toBe('Prompt');
-    expect(workTypeText(works[mod], t)).toBe('Mod');
-    expect([reviewedAs(works[mod]), reviewedAs(works[prompt]), reviewedAs(works[book])]).toEqual(['mod', 'prompt', null]);
+    seedServedTypes();
+    expect(workTypeText(works[chapterOne], 'en', t)).toBe('Chapter');
+    expect(workTypeText(works[book], 'en', t)).toBe('Book');
+    expect(workTypeText(works[prompt], 'ja', t)).toBe('プロンプト');
+    expect(workTypeText(works[mod], 'en', t)).toBe('Mod');
+    expect([reviewedAs(works[mod], names.facts?.[mod]), reviewedAs(works[prompt], undefined),
+      reviewedAs(works[book], undefined)]).toEqual(['mod', 'prompt', null]);
   });
 
   test('a chapter\'s opening drops the heading its text repeats and stops at a paragraph', () => {

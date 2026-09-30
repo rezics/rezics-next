@@ -1,3 +1,4 @@
+import { typeEntry } from '../catalogue/types.ts';
 import { chapterPlaceHref } from '../work-page/route.ts';
 import type { ChapterSummary, WorkFacts, WorkSummary } from './types.ts';
 import { uuidOf } from './types.ts';
@@ -62,16 +63,14 @@ export function subjectOf(iri: string, names: { works: Record<string, WorkSummar
     href: (partOf && chapterPlaceHref(partOf)) || `/w/${uuidOf(iri)}`, chapter };
 }
 
-const vocabulary = 'https://rezics.com/vocab/';
-
 /** Whether a Work has its own facts to review: a mod's compatibility, a prompt's or a skill's text. */
-export function reviewedAs(work: WorkSummary | undefined): 'mod' | 'prompt' | 'skill' | null {
-  const types = work?.types ?? [];
-  if (types.includes(`${vocabulary}PromptTemplate`)) return 'prompt';
-  if (types.includes(`${vocabulary}SkillPackage`)) return 'skill';
-  return types.includes(`${vocabulary}ModPackage`) ? 'mod' : null;
+export function reviewedAs(work: WorkSummary | undefined, facts: WorkFacts | undefined): 'mod' | 'prompt' | 'skill' | null {
+  const presentation = work?.types.length ? typeEntry(work.types)?.presentation : undefined;
+  if (presentation === 'prompt' || presentation === 'skill') return presentation;
+  // The registry does not tell a mod from other installable software; Main's facts carry a mod's compatibility.
+  return facts?.mod ? 'mod' : null;
 }
 
 /** Whether a Work is read in chapters, so accepting it whole also takes the chapters still to come. */
-export const inChapters = (work: WorkSummary | undefined) => !!work && (work.types.includes('https://schema.org/Book')
-  || work.types.includes('https://schema.org/BookSeries') || !!work.chapterCount);
+export const inChapters = (work: WorkSummary | undefined) => !!work && (!!work.chapterCount
+  || (work.types.length > 0 && typeEntry(work.types)?.presentation === 'book'));

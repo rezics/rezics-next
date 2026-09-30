@@ -9,6 +9,7 @@ import { signInPath } from '../auth/paths.ts';
 import { type ReaderActions, ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import type { DiscoverMessages } from '../discover/messages.ts';
 import { Notice } from '../discover/notice.tsx';
+import { entryLabel } from '../catalogue/types.ts';
 import { workTypes } from '../discover/state.ts';
 import { PageContainer } from '../shell/page.tsx';
 import { SearchConditionBar } from '../query/condition-bar.tsx';
@@ -56,7 +57,7 @@ function languageName(tag: string, locale: UiLocale): string {
 export function offeredFilters(state: SearchState, facets: SearchResultPage['facets'] | undefined) {
   const counted = (facets?.languages.values ?? []).filter(item => item.count > 0).map(item => item.value);
   const languages = [...new Set([...counted, ...(state.language ? [state.language] : [])])];
-  const types = workTypes.filter(type => state.includeTypes?.includes(type.key) || state.excludeTypes?.includes(type.key)
+  const types = workTypes().filter(type => state.includeTypes?.includes(type.key) || state.excludeTypes?.includes(type.key)
     || (facets?.types.values.find(item => item.value === type.iri)?.count ?? 0) > 0);
   return { languages, types };
 }
@@ -94,7 +95,7 @@ function Filters({ state, facets, idPrefix, locale, t }: { state: SearchState;
         {offered.types.map(type => {
           const included = state.includeTypes?.includes(type.key) ?? false;
           const excluded = state.excludeTypes?.includes(type.key) ?? false;
-          const label = t[`${type.key}Type`];
+          const label = entryLabel(type.entry, locale, 'other');
           const count = facets?.types.values.find(item => item.value === type.iri)?.count;
           return <li key={type.key} className="grid gap-1 rounded-xl border border-border/60 p-2 text-sm">
             <span>{label}{count !== undefined ? <span className="ms-2 text-muted-foreground tabular-nums">

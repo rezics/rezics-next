@@ -13,7 +13,8 @@ import type { AgentOption } from '../auth/acting-identity.ts';
 import type { StudioMessages } from './messages.ts';
 import { AgentIdentity, studioAgentName } from './studio-frame.tsx';
 import { languageName } from './parts.tsx';
-import { type WorkType, writingLanguages } from './types.ts';
+import { entryLabel, type Presentation } from '../catalogue/types.ts';
+import { writableTypes, writingLanguages } from './types.ts';
 
 interface Values { title: string; type: string; language: string }
 
@@ -23,12 +24,14 @@ export type NewWorkState =
   /** Main is still activating the Work; a retry sends the same key and gets the same Work. */
   | { status: 'pending'; message: string; key: string; values: Values };
 
-const types: Array<{ value: WorkType; icon: typeof BookOpenIcon; label: 'typeBook' | 'typeDocument' | 'typeRecipe';
-  help: 'typeBookHelp' | 'typeDocumentHelp' | 'typeRecipeHelp' }> = [
-  { value: 'book', icon: BookOpenIcon, label: 'typeBook', help: 'typeBookHelp' },
-  { value: 'document', icon: FileTextIcon, label: 'typeDocument', help: 'typeDocumentHelp' },
-  { value: 'recipe', icon: CookingPotIcon, label: 'typeRecipe', help: 'typeRecipeHelp' },
-];
+// The registry names each type and says how it is presented; the picker adds only an icon and a
+// line of help per presentation, never per type.
+const presentations: Partial<Record<Presentation, { icon: typeof BookOpenIcon;
+  help: 'typeBookHelp' | 'typeDocumentHelp' | 'typeRecipeHelp' }>> = {
+  book: { icon: BookOpenIcon, help: 'typeBookHelp' },
+  recipe: { icon: CookingPotIcon, help: 'typeRecipeHelp' },
+};
+const documentPresentation = { icon: FileTextIcon, help: 'typeDocumentHelp' } as const;
 
 /**
  * Starts a Work: a title, what kind of Work it is and the language of its text.
@@ -42,7 +45,8 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
   const [state, action, pending] = useActionState(create, initialState);
   const errorId = useId();
   // A person writing in this interface most likely writes in its language.
-  const values = state.values ?? { title: '', type: 'book', language: '' };
+  const choices = writableTypes();
+  const values = state.values ?? { title: '', type: choices[0]?.type ?? '', language: '' };
   const languages: readonly string[] = !values.language || values.language === 'und'
     || writingLanguages.includes(values.language as never)
     ? writingLanguages : [values.language, ...writingLanguages];
@@ -58,12 +62,14 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
     <fieldset className="grid min-w-0 gap-2">
       <legend className="mb-2 font-medium text-sm">{t.workType}</legend>
       <div className="grid gap-2 sm:grid-cols-3">
-        {types.map(({ value, icon: Icon, label, help }) => <label key={value} className="flex cursor-pointer items-start
+        {choices.map(entry => ({ entry, ...presentations[entry.presentation] ?? documentPresentation }))
+          .map(({ entry, icon: Icon, help }) => <label key={entry.type} className="flex cursor-pointer items-start
           gap-3 rounded-2xl border border-border p-3 hover:bg-accent/60 has-checked:border-primary has-checked:bg-primary/5
           has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32">
-          <input type="radio" name="type" value={value} defaultChecked={values.type === value} className="sr-only" />
+          <input type="radio" name="type" value={entry.type} defaultChecked={values.type === entry.type}
+            className="sr-only" />
           <Icon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" />
-          <span className="grid gap-0.5"><span className="font-medium text-sm">{t[label]}</span>
+          <span className="grid gap-0.5"><span className="font-medium text-sm">{entryLabel(entry, locale)}</span>
             <span className="text-muted-foreground text-xs">{t[help]}</span></span>
         </label>)}
       </div>

@@ -12,7 +12,7 @@ export default {
   filters: 'Filtres de recherche', filterResults: 'Filtrer les résultats',
   language: 'Langue', anyLanguage: 'Toutes les langues',
   languageHelp: 'Seuls les textes publiés dans cette langue correspondent.',
-  workType: 'Type d’œuvre', bookType: 'Livres', documentType: 'Guides', recipeType: 'Recettes',
+  workType: 'Type d’œuvre',
   include: 'Inclure', exclude: 'Exclure',
   includeType: insert('Inclure {{type}}', { type: String }),
   excludeType: insert('Exclure {{type}}', { type: String }),

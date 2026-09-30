@@ -17,7 +17,7 @@ const en = {
   descriptionMine: 'Public works you rated, your favorites first.',
   community: 'Whose picks', everyone: 'Everyone', mine: 'Your ratings',
   realmFallback: insert('Community {{id}}', { id: String }),
-  typeFilter: 'Kind of work', allTypes: 'All', book: 'Books', document: 'Guides', recipe: 'Recipes',
+  typeFilter: 'Kind of work', allTypes: 'All',
   favoritesAll: 'Readers’ favorites', favoritesBook: 'Readers’ favorites', favoritesDocument: 'Highly rated guides',
   favoritesRecipe: 'Top-rated recipes',
   recentAll: 'Recently added', recentBook: 'Recently added', recentDocument: 'Guides and references',

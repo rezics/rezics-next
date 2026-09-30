@@ -12,7 +12,7 @@ export default {
   filters: 'Filtros de búsqueda', filterResults: 'Filtrar resultados',
   language: 'Idioma', anyLanguage: 'Cualquier idioma',
   languageHelp: 'Solo aparecen coincidencias en textos publicados en este idioma.',
-  workType: 'Tipo de obra', bookType: 'Libros', documentType: 'Guías', recipeType: 'Recetas',
+  workType: 'Tipo de obra',
   include: 'Incluir', exclude: 'Excluir',
   includeType: insert('Incluir {{type}}', { type: String }),
   excludeType: insert('Excluir {{type}}', { type: String }),

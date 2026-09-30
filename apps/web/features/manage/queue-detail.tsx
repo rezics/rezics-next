@@ -107,7 +107,7 @@ export function QueueDetail({ item, names, draft, basis, allowed, authority, rul
   const cited = report ? ruleFor(item.reasonCode, realmRules) : null;
   const decidable = actionOrder.filter(action => allowed.has(action));
   const spoils = subject.book?.value ?? null;
-  const kind = reviewedAs(subject.work);
+  const kind = reviewedAs(subject.work, facts);
   return <section aria-labelledby={`queue-detail-${item.id}`} className={cn('grid gap-5 rounded-2xl border border-border/60 bg-card p-5',
     className)}>
     <header className="flex flex-wrap items-center gap-2 text-sm">
@@ -117,7 +117,7 @@ export function QueueDetail({ item, names, draft, basis, allowed, authority, rul
       {item.escalation ? <Badge variant="outline" className="gap-1"><SirenIcon aria-hidden="true" />{t.escalatedBadge}</Badge>
         : null}
     </header>
-    <SubjectHeader subject={subject} facts={facts} headingId={`queue-detail-${item.id}`} fallback={t.workFallback} t={t} />
+    <SubjectHeader subject={subject} facts={facts} headingId={`queue-detail-${item.id}`} fallback={t.workFallback} locale={locale} t={t} />
     {report || reason ? <dl className="grid gap-3 text-sm sm:grid-cols-2">
       {report ? <div><dt className="text-muted-foreground text-xs">{t.reportedPart}</dt>
         <dd className="font-medium">{componentLabel(item.target.component, t)}</dd></div> : null}

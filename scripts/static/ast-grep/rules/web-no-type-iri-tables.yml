@@ -1,0 +1,49 @@
+# One rule per parser: ast-grep reads .ts files as TypeScript and .tsx files as Tsx, and a rule
+# applies only to files of its own language.
+id: web-no-type-iri-tables
+language: TypeScript
+severity: error
+message: The web keeps no type tables; read labels, covers and actions from the served type registry.
+note: >-
+  `GET /v1/types` is the one source of type labels, cover shapes and primary actions
+  (apps/web/features/catalogue/types.ts). A `https://schema.org/<Type>` or
+  `https://rezics.com/vocab/<Type>` literal in a feature is a table the registry already holds.
+  Stories, tests and fixtures may name types.
+files:
+  - apps/web/features/**/*.ts
+ignores:
+  - "**/*.stories.ts"
+  - "**/*.test.ts"
+  - "**/*.e2e.ts"
+  - "**/tests/**"
+  - "**/fixtures.ts"
+  - "**/*-fixtures.ts"
+  - "**/story-support.tsx"
+  # Type-driven page dispatch, which the entity page (G-644) replaces with the registry's presentation.
+  - "apps/web/features/work-page/types/kind.ts"
+  # JSON-LD interaction types (schema:FollowAction), not Work types.
+  - "apps/web/features/profile/metadata.ts"
+rule:
+  any:
+    - kind: string
+    - kind: template_string
+  regex: '(?:schema\.org|rezics\.com/vocab)/[A-Z]'
+---
+id: web-no-type-iri-tables-tsx
+language: Tsx
+severity: error
+message: The web keeps no type tables; read labels, covers and actions from the served type registry.
+files:
+  - apps/web/features/**/*.tsx
+ignores:
+  - "**/*.stories.tsx"
+  - "**/*.test.tsx"
+  - "**/tests/**"
+  - "**/story-support.tsx"
+  # A mod's releases section, chosen by type until G-644's entity page takes over.
+  - "apps/web/features/zones/work-sections.tsx"
+rule:
+  any:
+    - kind: string
+    - kind: template_string
+  regex: '(?:schema\.org|rezics\.com/vocab)/[A-Z]'

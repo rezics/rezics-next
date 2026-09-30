@@ -10,7 +10,7 @@ export default {
   descriptionMine: '你評過分的公開作品，最愛的會排在前面。',
   community: '推薦來源', everyone: '所有人', mine: '你的評分',
   realmFallback: insert('社群 {{id}}', { id: String }),
-  typeFilter: '作品類型', allTypes: '全部', book: '書籍', document: '指南', recipe: '食譜',
+  typeFilter: '作品類型', allTypes: '全部',
   favoritesAll: '讀者最愛', favoritesBook: '讀者最愛', favoritesDocument: '高評價指南',
   favoritesRecipe: '高評價食譜',
   recentAll: '最近新增', recentBook: '最近新增', recentDocument: '指南與參考資料',

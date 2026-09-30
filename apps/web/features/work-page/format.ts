@@ -1,6 +1,7 @@
 import { languageSatisfies, type DisplayName } from '@rezics/main/language';
 import type { UiLocale } from '../../i18n/define.ts';
-import { messages, type WorkPageMessages } from './messages.ts';
+import { labelOfType } from '../catalogue/types.ts';
+import { messages } from './messages.ts';
 
 /** Content text keeps one paragraph per line; blank lines separate nothing. */
 export const paragraphs = (text: string) => text.split('\n').filter(line => line.trim());
@@ -25,16 +26,12 @@ export const formatNumber = (value: number, locale: UiLocale, digits = 0) =>
 export const formatShare = (part: number, whole: number, locale: UiLocale) =>
   new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(whole ? part / whole : 0);
 
-// Main's Work semantic types (`WORK_SEMANTIC_TYPES` in services/main/src/modules/work/activate.ts).
-const typeLabels = {
-  'https://schema.org/Book': 'book',
-  'https://schema.org/DigitalDocument': 'digitalDocument',
-  'https://schema.org/Recipe': 'recipe',
-} as const satisfies Record<string, keyof WorkPageMessages>;
-
-/** Labels for the types the interface knows; an unknown type is left out rather than shown as an IRI. */
-export function typeNames(types: readonly string[], t: Pick<WorkPageMessages, (typeof typeLabels)[keyof typeof typeLabels]>) {
-  return types.flatMap(type => type in typeLabels ? [t[typeLabels[type as keyof typeof typeLabels]]] : []);
+/**
+ * The registry's words for the types a Work has, each once (a Book that is also a BookSeries is one Book). A
+ * type the registry does not know is left out rather than shown as an IRI.
+ */
+export function typeNames(types: readonly string[], locale: UiLocale): string[] {
+  return [...new Set(types.flatMap(type => labelOfType(type, locale) ?? []))];
 }
 
 const uuidV7 = /([0-9a-f]{8})-([0-9a-f]{4})-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

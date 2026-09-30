@@ -352,9 +352,8 @@ export default {
   ruleRemembered: '已沿用上次的選擇。', showText: '顯示內容', skillInstructions: '使用說明', skillSummary: '功能說明',
   spoilerBadge: '劇透', spoilerWarning: insert('可能會劇透 {{book}}。', { book: String }),
   statusCompleted: '已完結', statusHiatus: '暫停更新', statusOngoing: '連載中', submissionsHere: '此處的投稿',
-  typeAudio: '音訊', typeBook: '書籍', typeChapter: '章節', typeFilm: '電影', typeGuide: '指南', typeMod: '模組',
-  typeMusic: '音樂', typePrompt: '提示詞', typeRecipe: '食譜', typeSeries: '系列', typeSkill: '技能',
-  typeSoftware: '軟體', typeVideo: '影片', whichRule: '違反了哪一條規則？',
+  typeChapter: '章節',
+  whichRule: '違反了哪一條規則？',
   wholeBookSubmission: '將整本書加入此社群。後續發布的章節也會加入。',
   wholeWorkSubmission: '將整部作品加入此社群。', writtenFor: insert('適用於 {{models}}', { models: String }),
 } satisfies ManageMessages;

@@ -1,7 +1,7 @@
 import type { WorkCoverKind } from '@rezics/ui/work-cover';
-import { coverKindOf } from '../catalogue/work.ts';
+import type { UiLocale } from '../../i18n/define.ts';
+import { coverOf, entryLabel, typeEntry } from '../catalogue/types.ts';
 import type { OnboardingChoices } from '../feed/types.ts';
-import type { OnboardingMessages } from './messages.ts';
 
 // The setup's topic step, shared by the flow, its stories and tests.
 
@@ -11,43 +11,30 @@ export type Topic = Group['concepts'][number];
 /** At most as many topics as Home has tabs, so every chosen topic is pinned. */
 export const MAX_TOPICS = 8;
 
-/**
- * The heading for Main's type groups. Main names the group by its Work type
- * and serves no label for types yet, so these follow the catalogue's own type
- * words; a type Home does not know reads as a general heading.
- */
-const headings: Record<string, keyof OnboardingMessages> = {
-  'https://schema.org/Book': 'typeBooks', 'https://schema.org/BookSeries': 'typeBooks',
-  'https://schema.org/VideoGame': 'typeGames',
-  'https://schema.org/SoftwareApplication': 'typeSoftware', 'https://schema.org/SoftwareSourceCode': 'typeSoftware',
-  'https://rezics.com/vocab/ModPackage': 'typeMods', 'https://schema.org/Recipe': 'typeRecipes',
-  'https://rezics.com/vocab/PromptTemplate': 'typePrompts', 'https://rezics.com/vocab/SkillPackage': 'typeSkills',
-  'https://schema.org/Movie': 'typeScreen', 'https://schema.org/TVSeries': 'typeScreen',
-  'https://schema.org/VideoObject': 'typeVideo', 'https://schema.org/MusicAlbum': 'typeMusic',
-  'https://schema.org/MusicRecording': 'typeMusic', 'https://schema.org/AudioObject': 'typeMusic',
-  'https://schema.org/DigitalDocument': 'typeGuides',
-};
-
 export interface TopicGroup {
-  heading: keyof OnboardingMessages;
+  /** The registry's plural word for the group's type ("Books", "Games"), in the reader's language. */
+  heading: string;
   /** How this group's example covers are drawn. */
   cover: WorkCoverKind;
   topics: Topic[];
 }
 
 /**
- * Main's groups under the reader's headings: types that read the same (a Book
- * and a book series) share one group, and a topic appears once per group.
+ * Main's groups under the registry's headings: types the registry words the
+ * same (a Book and a book series) share one group, a type it does not know
+ * reads as its base's default ("Works"), and a topic appears once per group.
  */
-export function topicGroups(groups: readonly Group[]): TopicGroup[] {
-  const merged = new Map<keyof OnboardingMessages, TopicGroup>();
+export function topicGroups(groups: readonly Group[], locale: UiLocale): TopicGroup[] {
+  const merged = new Map<string, TopicGroup>();
   for (const group of groups) {
-    const heading = headings[group.type] ?? 'typeGuides';
-    const entry = merged.get(heading) ?? { heading, cover: coverKindOf([group.type]), topics: [] };
+    const entry = typeEntry([group.type]);
+    const heading = entry ? entryLabel(entry, locale, 'other') : group.type;
+    const key = entry ? entry.labels.en.other : group.type;
+    const found = merged.get(key) ?? { heading, cover: coverOf([group.type]), topics: [] };
     for (const topic of group.concepts) {
-      if (!entry.topics.some(item => item.id === topic.id)) entry.topics.push(topic);
+      if (!found.topics.some(item => item.id === topic.id)) found.topics.push(topic);
     }
-    merged.set(heading, entry);
+    merged.set(key, found);
   }
   return [...merged.values()];
 }

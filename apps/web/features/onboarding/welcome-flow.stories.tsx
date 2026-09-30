@@ -45,7 +45,7 @@ export const ChooseEverything: Story = {
 
     await expect(canvas.getByRole('heading', { level: 2, name: 'Pick a few topics' })).toBeVisible();
     // Topics come by type, with examples; a book series shares the books' group.
-    const books = canvas.getByRole('region', { name: 'Books & novels' });
+    const books = canvas.getByRole('region', { name: 'Books' });
     await expect(within(books).getAllByRole('button')).toHaveLength(4);
     await expect(canvas.getByRole('region', { name: 'Games' })).toBeVisible();
     await expect(within(books).getByRole('button', { name: /仙侠/ })).toHaveTextContent('in Fantasy');
@@ -110,7 +110,7 @@ export const Chinese: Story = {
   globals: { locale: 'zh-Hans' },
   parameters: { route: { pathname: '/zh-Hans/welcome' } },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('region', { name: '图书与小说' })).toBeVisible();
+    await expect(within(canvasElement).getByRole('region', { name: '图书' })).toBeVisible();
   },
 };
 

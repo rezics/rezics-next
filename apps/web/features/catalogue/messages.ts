@@ -37,10 +37,6 @@ const en = {
   // A Work's one primary action, in its kind's own verb.
   openRecipe: 'Open recipe', install: 'Install', copyPrompt: 'Copy prompt',
   promptCopied: 'Prompt copied', copyFailed: 'Couldn’t copy. Try again.',
-  // What a Work is, in one word (`workTypeLabel`).
-  typeBook: 'Book', typeGuide: 'Guide', typeRecipe: 'Recipe', typePrompt: 'Prompt', typeSkill: 'Skill', typeMod: 'Mod',
-  typeSoftware: 'Software', typeFilm: 'Film', typeSeries: 'TV series', typeVideo: 'Video', typeAudio: 'Audio',
-  typeMusic: 'Music',
 };
 
 export const englishMessages = en;

@@ -23,6 +23,4 @@ export default {
   whyItsHere: '为何入选',
   openRecipe: '查看菜谱', install: '安装', copyPrompt: '复制提示词',
   promptCopied: '已复制提示词', copyFailed: '未能复制，请重试。',
-  typeBook: '图书', typeGuide: '指南', typeRecipe: '菜谱', typePrompt: '提示词', typeSkill: '技能', typeMod: '模组',
-  typeSoftware: '软件', typeFilm: '电影', typeSeries: '剧集', typeVideo: '视频', typeAudio: '音频', typeMusic: '音乐',
 } satisfies Partial<CatalogueMessages>;

@@ -6,10 +6,10 @@ import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import { Expandable } from './expandable.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
+import { typeLabel } from '../catalogue/types.ts';
 import { formatCompact } from '../catalogue/work.ts';
-import { formatNumber, isoTime, languageName, paragraphs, sinceWhen, titleNeedsLanguageNote, typeNames }
+import { formatNumber, isoTime, languageName, paragraphs, sinceWhen, titleNeedsLanguageNote }
   from './format.ts';
-import { workPageKind } from './types/kind.ts';
 import type { WorkPageMessages } from './messages.ts';
 import type { WorkHeader as Header } from './types.ts';
 
@@ -64,10 +64,7 @@ export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale
   compact?: boolean;
 }) {
   const t = materializeData(messages, { locale });
-  const types = typeNames(work.types, t);
-  const kind = workPageKind(work.types);
-  const kindLabel = kind === 'prompt' ? t.prompt : kind === 'skill' ? t.skill
-    : kind === 'recipe' ? t.recipe : kind === 'guide' ? t.digitalDocument : types[0];
+  const kindLabel = typeLabel(work.types, locale);
   // What it is, in words a reader uses: "Book · English", and a lone serial fact ("Completed") with it.
   const single = serialStats(work, now, locale, t);
   const facts = [kindLabel, work.selectedLanguage ? languageName(work.selectedLanguage, locale) : null,

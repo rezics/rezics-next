@@ -35,12 +35,12 @@ export function SubjectName({ subject, fallback, className }: { subject: Subject
  * What an item is about, as its reviewer judges it: the cover, the name, what
  * kind of Work it is and who wrote it, its hook, and where to read it.
  */
-export function SubjectHeader({ subject, facts, headingId, fallback, t }: { subject: Subject; facts: WorkFacts | undefined;
-  headingId: string; fallback: string; t: T }) {
+export function SubjectHeader({ subject, facts, headingId, fallback, locale, t }: { subject: Subject;
+  facts: WorkFacts | undefined; headingId: string; fallback: string; locale: UiLocale; t: T }) {
   const work = subject.work;
   // A chapter is told by its Book: the Book's hook, status and authors.
   const told = subject.cover.work ?? work;
-  const kind = subject.book ? t.typeChapter : workTypeText(work, t);
+  const kind = subject.book ? t.typeChapter : workTypeText(work, locale, t);
   const authors = facts?.authors.map(author => author.name) ?? [];
   const status = [kind, completionText(told?.completionStatus, t),
     told?.chapterCount ? t.chapterCount(told.chapterCount) : null].filter(Boolean).join(' · ');

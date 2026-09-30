@@ -12,7 +12,7 @@ export default {
   filters: '검색 필터', filterResults: '결과 필터링',
   language: '언어', anyLanguage: '모든 언어',
   languageHelp: '이 언어로 공개된 텍스트만 검색됩니다.',
-  workType: '작품 종류', bookType: '책', documentType: '가이드', recipeType: '레시피',
+  workType: '작품 종류',
   include: '포함', exclude: '제외',
   includeType: insert('{{type}} 포함', { type: String }),
   excludeType: insert('{{type}} 제외', { type: String }),

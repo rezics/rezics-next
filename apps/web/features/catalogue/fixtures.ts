@@ -55,6 +55,14 @@ export const recipes: CatalogueWork[] = [
   work(44, 'Ginger lemon tea', 'en', 'recipe', [], null),
 ];
 
+/** Visual novels and other games: the registry's landscape key art, in the wide slot a game store gives it. */
+export const games: CatalogueWork[] = [
+  work(51, 'Steins;Gate', 'en', 'game', ['5pb.', 'Nitroplus'], [4.7, 2_104]),
+  work(52, 'Umineko: When They Cry', 'en', 'game', ['07th Expansion'], [4.5, 981]),
+  work(53, 'Stardew Valley', 'en', 'game', ['ConcernedApe'], [4.6, 18_320]),
+  work(54, 'ひぐらしのなく頃に', 'ja', 'game', ['07th Expansion'], null),
+];
+
 /**
  * Reader actions over an in-memory state. `fail` makes every write refuse, to
  * show how a control reports a write Main did not accept.

@@ -1,4 +1,5 @@
 import type { materializeData } from 'native-i18n';
+import { isUseAction, primaryActionOf } from '../catalogue/types.ts';
 import type { LibraryMessages } from './messages.ts';
 import type { ShelfStatus } from './types.ts';
 import type { LibraryRow } from './types.ts';
@@ -12,9 +13,9 @@ export function statusLabel(status: ShelfStatus, t: T): string {
   return status === 'reading' ? t.reading : status === 'read' ? t.read : t.wantToRead;
 }
 
-/** Software, mods and prompts use the same stored status slots as books. */
-export function isUseWork(row: Pick<LibraryRow, 'work' | 'types'>): boolean {
-  return row.work.kind === 'package' || !!row.types?.includes('https://rezics.com/vocab/PromptTemplate');
+/** Software, mods, skills and prompts use the same stored status slots as books; the registry says which are used. */
+export function isUseWork(row: Pick<LibraryRow, 'types'>): boolean {
+  return isUseAction(primaryActionOf(row.types ?? []));
 }
 
 export function rowStatusLabel(row: LibraryRow, t: T): string | null {

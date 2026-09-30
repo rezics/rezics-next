@@ -10,7 +10,7 @@ export default {
   descriptionMine: 'Obras públicas que has valorado, con tus favoritas primero.',
   community: 'Selecciones de', everyone: 'Todo el mundo', mine: 'Tus valoraciones',
   realmFallback: insert('Comunidad {{id}}', { id: String }),
-  typeFilter: 'Tipo de obra', allTypes: 'Todos', book: 'Libros', document: 'Guías', recipe: 'Recetas',
+  typeFilter: 'Tipo de obra', allTypes: 'Todos',
   favoritesAll: 'Favoritas de los lectores', favoritesBook: 'Favoritas de los lectores', favoritesDocument: 'Guías mejor valoradas',
   favoritesRecipe: 'Recetas mejor valoradas',
   recentAll: 'Añadidas recientemente', recentBook: 'Añadidas recientemente', recentDocument: 'Guías y referencias',

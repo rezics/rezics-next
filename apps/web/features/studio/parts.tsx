@@ -3,8 +3,7 @@ import { Badge } from '@rezics/ui/badge';
 import { TriangleAlertIcon } from 'lucide-react';
 import type { ContractOf } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
-import { messages as catalogueMessages } from '../catalogue/messages.ts';
-import { workTypeLabel } from '../catalogue/work.ts';
+import { typeLabel } from '../catalogue/types.ts';
 import { RetryButton } from '../work-page/retry-button.tsx';
 import type { ManuscriptLength } from './counts.ts';
 import type { StudioMessages } from './messages.ts';
@@ -22,8 +21,7 @@ export function languageName(tag: string, locale: UiLocale): string {
 
 /** A Work's kind uses the same name and type precedence as the catalogue. */
 export function kindLabel(types: readonly string[], locale: UiLocale, t: T): string {
-  const key = workTypeLabel(types);
-  return key ? catalogueMessages[locale][key] : t.kindChapter;
+  return typeLabel(types, locale) ?? t.kindChapter;
 }
 
 export function StateBadge({ state, t }: { state: InventoryState; t: T }) {

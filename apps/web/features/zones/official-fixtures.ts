@@ -304,7 +304,7 @@ function bookPeople(locale: UiLocale): ZonePerson[] {
 }
 
 const typeOf = { book: 'https://schema.org/Book', document: 'https://schema.org/DigitalDocument',
-  recipe: 'https://schema.org/Recipe', package: 'https://rezics.com/vocab/ModPackage' } as const;
+  recipe: 'https://schema.org/Recipe', package: 'https://rezics.com/vocab/ModPackage', game: 'https://schema.org/VideoGame' } as const;
 
 /** What Main's browse read would match for each Facet value among `works`, most common first. */
 export function browseCounts(works: readonly ZoneWork[]): FacetCounts {

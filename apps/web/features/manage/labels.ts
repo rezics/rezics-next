@@ -1,6 +1,6 @@
 import type { ContractOf } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
-import { workTypeLabel } from '../catalogue/work.ts';
+import { typeLabel } from '../catalogue/types.ts';
 import { date, readableCode } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import type { QueueAction } from './queue-state.ts';
@@ -49,10 +49,8 @@ export function reasonLabel(item: Pick<ModerationItem, 'kind' | 'reasonCode'>, t
 }
 
 /** What a Work is, in a word: a chapter of a Book, or the kind its types name (Prompt, Mod, Book…). */
-export function workTypeText(work: WorkSummary | undefined, t: T): string | null {
-  if (work?.partOf) return t.typeChapter;
-  const key = workTypeLabel(work?.types ?? []);
-  return key ? t[key] : null;
+export function workTypeText(work: WorkSummary | undefined, locale: UiLocale, t: T): string | null {
+  return work?.partOf ? t.typeChapter : typeLabel(work?.types ?? [], locale);
 }
 
 export function completionText(status: WorkSummary['completionStatus'], t: T): string | null {

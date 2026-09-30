@@ -1,8 +1,7 @@
 import type { ZoneBrowseEntry, ZoneText, ZoneWork } from '@rezics/zone-sdk';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
-import { messages as catalogueMessages } from '../catalogue/messages.ts';
-import { workTypeLabel } from '../catalogue/work.ts';
+import { labelOfType } from '../catalogue/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { type BrowseFacet, browseFacets, browseHref, type BrowseSort, type BrowseState, chipHref, cleared,
   facetParams, lengthBands, toggled, toggledExcludedConcept, urlValue } from './browse-state.ts';
@@ -56,8 +55,8 @@ export function valueLabel(facet: BrowseFacet, value: string, name: ZoneText | n
   switch (facet) {
     case 'concept': return name ?? null;
     case 'type': {
-      const key = workTypeLabel([value]);
-      return key ? plain(catalogueMessages[locale][key], locale) : null;
+      const label = labelOfType(value, locale);
+      return label ? plain(label) : null;
     }
     case 'status': {
       const word = { ongoing: messages.statusOngoing, completed: messages.statusCompleted,

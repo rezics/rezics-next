@@ -20,6 +20,7 @@ import { failureNotice, Notice } from './notice.tsx';
 import type { DiscoveryLoader } from './query.ts';
 import { type BrowseScope, sameScope, shortId } from './scope.ts';
 import { DiscoverShelf } from './shelf.tsx';
+import { entryLabel } from '../catalogue/types.ts';
 import { type DiscoverState, discoverHref, type ShelfSpec, type WorkTypeKey, workTypes } from './state.ts';
 import type { DiscoveryPage, DiscoveryQuery, Loaded, ReadFailure, WorkName } from './types.ts';
 
@@ -213,8 +214,8 @@ export function DiscoverView({ state, realm, realmMissing, shelves, conceptNames
           <nav aria-label={t.typeFilter} className="-mx-1 flex gap-1 overflow-x-auto px-1 scrollbar-none">
             <Link href={discoverHref({ ...state, type: null })} aria-current={state.type === null ? 'page' : undefined}
               className={pill}>{t.allTypes}</Link>
-            {workTypes.map(type => <Link key={type.key} href={discoverHref({ ...state, type: type.key })}
-              aria-current={state.type === type.key ? 'page' : undefined} className={pill}>{t[type.key]}</Link>)}
+            {workTypes().map(type => <Link key={type.key} href={discoverHref({ ...state, type: type.key })}
+              aria-current={state.type === type.key ? 'page' : undefined} className={pill}>{entryLabel(type.entry, locale, 'other')}</Link>)}
           </nav>
           {state.term ? <p className="inline-flex h-9 items-center gap-1 rounded-full bg-secondary ps-4 pe-1 text-sm">
             <span className="max-w-[min(24rem,60vw)] truncate">{genre

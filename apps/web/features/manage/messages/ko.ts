@@ -365,9 +365,8 @@ export default {
   ruleRemembered: '지난번 선택을 사용했습니다.', showText: '본문 표시', skillInstructions: '지침', skillSummary: '기능 설명',
   spoilerBadge: '스포일러', spoilerWarning: insert('{{book}}의 스포일러가 있을 수 있습니다.', { book: String }),
   statusCompleted: '완결', statusHiatus: '휴재 중', statusOngoing: '연재 중', submissionsHere: '제출',
-  typeAudio: '오디오', typeBook: '책', typeChapter: '장', typeFilm: '영화', typeGuide: '가이드', typeMod: '모드',
-  typeMusic: '음악', typePrompt: '프롬프트', typeRecipe: '레시피', typeSeries: '시리즈', typeSkill: '스킬',
-  typeSoftware: '소프트웨어', typeVideo: '동영상', whichRule: '어떤 규칙을 위반했나요?',
+  typeChapter: '장',
+  whichRule: '어떤 규칙을 위반했나요?',
   wholeBookSubmission: '책 전체를 이 커뮤니티에 추가합니다. 이후 게시되는 장도 이어서 추가됩니다.',
   wholeWorkSubmission: '작품 전체를 이 커뮤니티에 추가합니다.', writtenFor: insert('{{models}}용', { models: String }),
 } satisfies ManageMessages;

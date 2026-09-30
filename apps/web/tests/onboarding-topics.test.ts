@@ -1,20 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 import { added, earlier, languageTag, matchingLanguages, MAX_LANGUAGES } from '../features/onboarding/languages.ts';
 import { broaderName, MAX_TOPICS, startingLanguages, toggled, topicGroups } from '../features/onboarding/topics.ts';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
 import { choices } from '../features/onboarding/welcome-fixtures.ts';
 
 describe('G-431 the setup\'s topics', () => {
   test('types that read the same share one group, and a topic shows once in it', () => {
-    const groups = topicGroups(choices.groups);
-    expect(groups.map(group => group.heading)).toEqual(['typeBooks', 'typeGames', 'typeRecipes']);
+    seedServedTypes();
+    const groups = topicGroups(choices.groups, 'en');
+    expect(groups.map(group => group.heading)).toEqual(['Books', 'Games', 'Recipes']);
+    expect(groups.map(group => group.cover)).toEqual(['book', 'game', 'recipe']);
+    expect(topicGroups(choices.groups, 'ja').map(group => group.heading)).toEqual(['本', 'ゲーム', 'レシピ']);
     const books = groups[0]!;
     expect(books.cover).toBe('book');
     expect(new Set(books.topics.map(topic => topic.id)).size).toBe(books.topics.length);
-    expect(topicGroups([{ type: 'https://example.com/Unknown', concepts: [] }])[0]?.heading).toBe('typeGuides');
+    // A type the registry does not know gets its base's default heading and cover.
+    expect(topicGroups([{ type: 'https://example.com/Unknown', concepts: [] }], 'en')[0])
+      .toMatchObject({ heading: 'Works', cover: 'document' });
   });
 
   test('a narrower topic names its broader one when it is offered too', () => {
-    const groups = topicGroups(choices.groups);
+    seedServedTypes();
+    const groups = topicGroups(choices.groups, 'en');
     const xianxia = groups[0]!.topics.find(topic => topic.name.value === '仙侠')!;
     expect(broaderName(groups, xianxia)).toBe('Fantasy');
     expect(broaderName(groups, groups[0]!.topics[0]!)).toBeNull();

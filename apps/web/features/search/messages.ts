@@ -19,7 +19,7 @@ const en = {
   filters: 'Search filters', filterResults: 'Filter results',
   language: 'Language', anyLanguage: 'Any language',
   languageHelp: 'Only text published in this language matches.',
-  workType: 'Kind of work', bookType: 'Books', documentType: 'Guides', recipeType: 'Recipes',
+  workType: 'Kind of work',
   include: 'Include', exclude: 'Exclude',
   includeType: insert('Include {{type}}', { type: String }),
   excludeType: insert('Exclude {{type}}', { type: String }),

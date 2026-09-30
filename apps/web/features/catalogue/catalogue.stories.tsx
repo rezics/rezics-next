@@ -3,7 +3,7 @@ import type { ComponentProps } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { PageContainer } from '../shell/page.tsx';
-import { chinese, classics, guides, memoryReaderActions, recipes, storyWorkId } from './fixtures.ts';
+import { chinese, classics, games, guides, memoryReaderActions, recipes, storyWorkId } from './fixtures.ts';
 import { RateWork, type ReaderActions, ReaderActionsProvider, ShelfButton } from './reader-actions.tsx';
 import { WorkRow } from './work-row.tsx';
 import { WorkGrid, WorkShelf } from './work-shelf.tsx';
@@ -97,6 +97,20 @@ export const DocumentsAndRecipes: Story = {
         <WorkShelf {...args} heading={{ title: 'Recipes to try' }} works={recipes} />
       </PageContainer>
     </ReaderActionsProvider>,
+};
+
+/** A VideoGame wears the registry's landscape cover, not a book's. */
+export const Games: Story = {
+  args: { heading: { title: 'Visual novels and games' }, works: games },
+  async play({ canvasElement }) {
+    const covers = canvasElement.querySelectorAll<HTMLElement>('[data-slot="work-cover"]');
+    await expect(covers.length).toBe(games.length);
+    for (const cover of covers) {
+      await expect(cover.dataset.kind).toBe('game');
+      const box = cover.getBoundingClientRect();
+      await expect(box.width / box.height).toBeCloseTo(16 / 9, 1);
+    }
+  },
 };
 
 export const Grid: Story = {

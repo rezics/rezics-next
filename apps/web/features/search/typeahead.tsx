@@ -10,8 +10,8 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { CatalogueCover } from '../catalogue/cover.tsx';
-import { messages as catalogueMessages } from '../catalogue/messages.ts';
-import { authorSeparator, coverKindOf, workTypeLabel } from '../catalogue/work.ts';
+import { typeLabel } from '../catalogue/types.ts';
+import { authorSeparator, coverKindOf } from '../catalogue/work.ts';
 import { normalizePhrase, PHRASE } from './state.ts';
 import { isWideText, type TypeaheadItem } from './suggest.ts';
 import { typeaheadMessages } from './typeahead-messages.ts';
@@ -159,7 +159,7 @@ export function TypeaheadInput({ locale, load = mainTypeahead, ref, onKeyDown, o
         rounded-2xl border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-(--aura-shadow-card)">
       {items.map((item, index) => {
         const authors = item.authors.flatMap(author => author.displayName ? [author.displayName] : []);
-        const type = workTypeLabel(item.types);
+        const type = typeLabel(item.types, locale);
         // A credit that matched is named even when it is not among the Work's first authors.
         const credit = item.matchedField === 'credit' && !authors.includes(item.matchedText) ? item.matchedText : null;
         const byline = [...authors.slice(0, 2), ...credit ? [credit] : []];
@@ -178,7 +178,7 @@ export function TypeaheadInput({ locale, load = mainTypeahead, ref, onKeyDown, o
               className="truncate font-medium font-work-title text-[0.9375rem]">
               <Highlighted text={item.title.value} phrase={phrase} /></span>
             {type || byline.length ? <span className="truncate text-muted-foreground text-xs">
-              {type ? catalogueMessages[locale][type] : null}{type && byline.length ? ' · ' : null}
+              {type}{type && byline.length ? ' · ' : null}
               {byline.length ? <Highlighted text={t.byAuthor({ name: byline.join(authorSeparator(byline)) })}
                 phrase={item.matchedField === 'credit' ? phrase : ''} />
                 : null}</span> : null}

@@ -1,5 +1,5 @@
 import { isUuid, type SearchParams, single, withQuery } from '../discover/scope.ts';
-import { workTypes, type WorkTypeKey } from '../discover/state.ts';
+import { type WorkTypeKey, workTypeKeys } from '../discover/state.ts';
 
 // `/search?q&scope&realm&lang&term` as the URL gives it. Pure functions shared
 // by the route, its components and tests.
@@ -62,7 +62,7 @@ export function parseSearchState(params: SearchParams): ParsedSearch {
   const parseTypes = (raw: string | undefined): WorkTypeKey[] | null => {
     if (raw === undefined) return [];
     const keys = raw.split(',');
-    return keys.length <= workTypes.length && keys.every(key => workTypes.some(type => type.key === key))
+    return keys.length <= workTypeKeys.length && keys.every(key => workTypeKeys.some(known => known === key))
       && new Set(keys).size === keys.length ? keys as WorkTypeKey[] : null;
   };
   const includeTypes = parseTypes(single(params.include));

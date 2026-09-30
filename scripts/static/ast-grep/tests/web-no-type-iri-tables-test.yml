@@ -1,0 +1,19 @@
+id: web-no-type-iri-tables
+valid:
+  - 'const label = typeLabel(types, locale);'
+  - 'const docs = "https://schema.org/docs/gs.html";'
+  - 'const work = `https://rezics.com/id/${id}`;'
+  - 'const vocabulary = "https://rezics.com/vocab/";'
+invalid:
+  - 'const kinds: Record<string, string> = { "https://schema.org/Book": "book" };'
+  - 'const isPrompt = types.includes("https://rezics.com/vocab/PromptTemplate");'
+  - 'const book = types.includes(`https://schema.org/Book`);'
+  - 'const x = types.includes("https://schema.org/Recipe");'
+---
+id: web-no-type-iri-tables-tsx
+valid:
+  - 'const x = <span>{typeLabel(types, locale)}</span>;'
+  - 'const x = <a href="https://schema.org/docs/gs.html">docs</a>;'
+invalid:
+  - 'const x = <Work type="https://schema.org/Recipe" />;'
+  - 'const kind = types.includes("https://rezics.com/vocab/SkillPackage") ? <b /> : null;'

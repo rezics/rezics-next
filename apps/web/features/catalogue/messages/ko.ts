@@ -22,6 +22,4 @@ export default {
   ongoing: '연재 중', hiatus: '휴재 중',
   whyItsHere: '선정 이유', openRecipe: '레시피 열기', install: '설치', copyPrompt: '프롬프트 복사',
   promptCopied: '프롬프트를 복사했습니다', copyFailed: '복사하지 못했습니다. 다시 시도해 주세요.',
-  typeBook: '책', typeGuide: '안내서', typeRecipe: '레시피', typePrompt: '프롬프트', typeSkill: '스킬', typeMod: '모드',
-  typeSoftware: '소프트웨어', typeFilm: '영화', typeSeries: 'TV 시리즈', typeVideo: '동영상', typeAudio: '오디오', typeMusic: '음악',
 } satisfies Partial<CatalogueMessages>;

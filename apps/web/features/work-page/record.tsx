@@ -30,7 +30,7 @@ export function WorkRecord({ work, citation, locale, messages }: {
 }) {
   const t = materializeData(messages, { locale });
   const revision = idOf(work.revision);
-  const types = typeNames(work.types, t);
+  const types = typeNames(work.types, locale);
   const added = mintedAt(work.id);
   return <details className="group min-w-0 border-border/70 border-y">
     <summary className="flex cursor-pointer list-none items-center gap-2 py-4 font-semibold outline-none
