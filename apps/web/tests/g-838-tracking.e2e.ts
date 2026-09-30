@@ -7,6 +7,8 @@ import type { Catalogue } from './g-838-catalogue.ts';
 // Two browser contexts are two devices of one reader: a desktop and a phone, each signed in on its own.
 // The records are written once into this isolated QA stack through Main's routes (`g-838-catalogue.ts`).
 let catalogue: Catalogue;
+// Playwright's actions wait as long as the test does unless bounded; a stuck step should fail in seconds, with its error.
+test.use({ actionTimeout: 15_000 });
 // The QA tier gives the whole Playwright run 300 s; these marks show where it goes.
 const began = Date.now();
 const mark = (step: string) => console.log(`[g-838] ${step} at ${Math.round((Date.now() - began) / 1000)}s`);
@@ -74,7 +76,7 @@ async function shot(page: Page, info: TestInfo, name: string, target?: Locator) 
 }
 
 test('attempts on two devices, series progress and the offered correspondence', async ({ browser }, info) => {
-  test.setTimeout(540_000);
+  test.setTimeout(240_000);
   const { sao, index, spider } = catalogue;
   const volume = sao.volumes[0]!;
   const [a, b] = await Promise.all([device(browser, info, desktop, at(volume)), device(browser, info, phone, at(volume))]);
