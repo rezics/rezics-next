@@ -1,13 +1,24 @@
 import type { Pool, PoolClient } from 'pg';
 
+declare const fenceBrand: unique symbol;
+/** A live target lock, minted only while this owner's transaction is open. */
+export interface PreservationFence { readonly resource: string; readonly [fenceBrand]: true }
+export type PreservationAccess = Pool | PreservationFence;
+const activeFences = new WeakSet<PreservationFence>();
+
 /** Intake and erasure serialize on the same target across owner databases. */
 export async function lockPreservationTarget(client: PoolClient, resource: string): Promise<void> {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 931))', [resource]);
 }
 
-export async function withPreservationFence<T>(access: Pool, resource: string, operationId: string,
-  write: () => Promise<T>): Promise<{ held: true } | { held: false; value: T }> {
+export async function withPreservationFence<T>(access: PreservationAccess, resource: string, operationId: string,
+  write: (fence: PreservationFence) => Promise<T>): Promise<{ held: true } | { held: false; value: T }> {
+  if ('resource' in access) {
+    if (access.resource !== resource || !activeFences.has(access)) throw new Error('Preservation fence is unavailable');
+    return { held: false, value: await write(access) };
+  }
   const client = await access.connect();
+  const fence = { resource } as PreservationFence;
   try {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
@@ -17,13 +28,14 @@ export async function withPreservationFence<T>(access: Pool, resource: string, o
       await client.query('COMMIT');
       return { held: true };
     }
-    const value = await write();
+    activeFences.add(fence);
+    const value = await write(fence);
     await client.query('COMMIT');
     return { held: false, value };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;
-  } finally { client.release(); }
+  } finally { activeFences.delete(fence); client.release(); }
 }
 
 /** One indexed hold lookup and one idempotent audit append per held resource. */

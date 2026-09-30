@@ -94,7 +94,9 @@ counter-notice windows add 10 and 14 UTC weekdays, without a holiday calendar.
 The timing bases follow [FTC guidance](https://www.ftc.gov/business-guidance/resources/complying-take-it-down-act)
 and [17 USC 512(g)](https://www.copyright.gov/title17/92chap5.html#512).
 
-Erasure services and restore/reconciliation commands must supply the Access pool
-as `preservationAccess` when calling Content erasure. The HTTP composition wires
-it from Main's owner dependencies. Hold release and actual restoration remain
-staff decisions; correspondence does not release evidence or restart deadlines.
+Erasure services require the Access pool at construction, including recovery
+callers. Direct Content erasure requires that pool or a live owner-issued target
+fence. Deferred erasure responses expose the same generic outcome; the specific
+basis remains in Access's internal postponement records. Hold release and actual
+restoration remain staff decisions; correspondence does not release evidence or
+restart deadlines.

@@ -175,6 +175,8 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
 
     contentPool = new Pool({ connectionString: databases.urls.content, max: 2 });
     pools.add(contentPool);
+    access = new Pool({ connectionString: databases.urls.access, max: 2 });
+    pools.add(access);
     const intent = await journalErasure(relay, {
       operationId: `sys07-erase-${randomUUID()}`,
       requestDigest: 'a'.repeat(64), kind: 'revision',
@@ -188,7 +190,7 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
       intent.erasureEpoch, [saved.revisionId]);
     await applyContentErasure(contentPool, { erasureId: intent.erasureId,
       erasureEpoch: intent.erasureEpoch, resourceId,
-      revisionIds: [saved.revisionId] });
+      revisionIds: [saved.revisionId], preservationAccess: access });
     unlinkSync(join(objects, objectDigest));
     await markErasureSuppressed(relay, intent.erasureId);
 

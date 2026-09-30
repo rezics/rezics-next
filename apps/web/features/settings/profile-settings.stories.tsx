@@ -35,6 +35,14 @@ export const Person: Story = {
     await expect(canvas.getByRole('button', { name: 'Change handle' })).toBeDisabled();
     await expect(canvas.getByRole('heading', { name: 'Notifications' })).toBeVisible();
     await expect(canvas.getByRole('switch', { name: 'Replies · In-app' })).toBeVisible();
+    const notifications = within(canvasElement.querySelector('#notifications')!);
+    await expect(notifications.getAllByRole('switch')).toHaveLength(12);
+    for (const label of [englishMessages.notificationSubmissionDecision, englishMessages.notificationModerationOutcome,
+      englishMessages.notificationRealmRoleChange, englishMessages.notificationRealmMembershipChange,
+      englishMessages.notificationRealmInvitation, englishMessages.notificationClaimCorrection]) {
+      await expect(notifications.queryByRole('switch', { name: `${label} · In-app` })).not.toBeInTheDocument();
+      await expect(notifications.queryByRole('switch', { name: `${label} · Email` })).not.toBeInTheDocument();
+    }
     await expect(canvas.getByRole('combobox', { name: 'Library and shelves' })).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: 'Profile visibility' })).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: 'Who can follow you' })).toBeVisible();

@@ -180,7 +180,7 @@ test('SEARCH20/SEARCH08/WORK10/OPS10: erasure survives lost projection and offli
     expect((await queryPublicContentPhrase(env, content, cursor, consumer,
       { phrase: oldBody, language: 'en' })).total).toBe(2);
     const app = createMainApp(fuseki, { environment: env, account: { verify: async () => principal },
-      access: registry, erasures: new ErasureService(relayPool, contentPool),
+      access: registry, erasures: new ErasureService(relayPool, contentPool, accessPool),
       contentProjection: { content, cursor, consumer } });
     const page = (continuation?: object) => app.handle(new Request(
       'http://main.local/v1/queries/page', { method: 'POST',

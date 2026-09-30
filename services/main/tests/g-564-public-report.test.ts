@@ -6,6 +6,8 @@ import { openApiOperations } from '../src/routes/public-reports.ts';
 import { mandatoryPurposes, optionalPurposes } from '../src/modules/notification/schema.ts';
 import { reportAddress } from '../src/modules/public-report/owners.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import type { Pool } from 'pg';
+import { withPreservationFence, type PreservationFence } from '../src/modules/public-report/preservation.ts';
 
 test('G-564: every closed category has a process and every admitted base supports reporting', () => {
   const target = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
@@ -52,4 +54,22 @@ test('G-564: URL intake never performs a network fetch for an arbitrary caller a
   expect(await reportAddress({} as MainWorkDependencies,
     'https://rezics.com/media/assets/00000000-0000-4000-8000-000000000001'))
     .toBe('https://rezics.com/id/00000000-0000-4000-8000-000000000001');
+});
+
+test('G-564: a nested preservation fence cannot escape its transaction or authorize another target', async () => {
+  const queries: string[] = [];
+  const pool = { connect: async () => ({
+    query: async (sql: string) => { queries.push(sql); return { rows: [], rowCount: 0 }; },
+    release() {},
+  }) } as unknown as Pool;
+  let retained: PreservationFence | undefined;
+  const target = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const result = await withPreservationFence(pool, target, 'outer', async fence => {
+    retained = fence;
+    await expect(withPreservationFence(fence, 'another-target', 'wrong', async () => 0)).rejects.toThrow();
+    return withPreservationFence(fence, target, 'nested', async () => 42);
+  });
+  expect(result).toEqual({ held: false, value: { held: false, value: 42 } });
+  expect(queries.filter(sql => sql === 'BEGIN')).toHaveLength(1);
+  await expect(withPreservationFence(retained!, target, 'expired', async () => 0)).rejects.toThrow();
 });

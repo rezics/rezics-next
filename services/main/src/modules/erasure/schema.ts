@@ -6,6 +6,8 @@
 export const ERASURE_STAGES = ['requested', 'fenced', 'inventory_complete', 'deleting',
   'reconciling', 'verified', 'blocked'] as const;
 export const ERASURE_KINDS = ['account', 'resource', 'revision'] as const;
+/** A deferred public outcome never discloses a case or an internal retention basis. */
+export const ERASURE_DEFERRED_REASON = 'Erasure is deferred';
 export const ERASURE_AUTHORITIES = ['account_deletion', 'access_admission'] as const;
 /** Disclosure suppression and physical destruction are reported separately. */
 export const SUPPRESSION_STATUSES = ['pending', 'suppressed'] as const;

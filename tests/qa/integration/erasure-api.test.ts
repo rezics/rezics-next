@@ -69,7 +69,7 @@ test('OPS10/OPS11: Content erasure journals exact targets with receipts, denial,
     const registry = new AccessAdmissionRegistry(accessPool);
     const relayCosts: Costs = { calls: 0, rows: 0 };
     const contentCosts: Costs = { calls: 0, rows: 0 };
-    const service = new ErasureService(counted(relayPool, relayCosts), counted(contentPool, contentCosts));
+    const service = new ErasureService(counted(relayPool, relayCosts), counted(contentPool, contentCosts), accessPool);
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
     const environment = { fuseki, objectDirectory: objects,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };

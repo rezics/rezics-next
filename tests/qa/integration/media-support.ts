@@ -102,7 +102,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
   const mediaAccess = new CountingMediaAccess(accessPool);
   const votes = new AccessVotes(accessPool);
   const contextSelections = new PrivateContextSelections(accessPool);
-  const erasures = new ErasureService(relayPool, contentPool);
+  const erasures = new ErasureService(relayPool, contentPool, accessPool);
   const main = createMainApp(fuseki, { environment: env, access, grants, downloadLeases, accessPolicy,
     content, contentAuthoring: content, media, votes, erasures,
     ...(options.contentProjection ? { contentProjection: { content, cursor: contentCursor,

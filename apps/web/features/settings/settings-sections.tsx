@@ -13,7 +13,7 @@ import { preferenceCookie } from '../shell/preferences.ts';
 import type { SettingsMessages } from './messages.ts';
 
 type Channel = 'inbox' | 'email';
-type NotificationChoice = { purpose: 'social' | 'subscription' | 'governance'; topic: string;
+type NotificationChoice = { purpose: 'social' | 'subscription'; topic: string;
   channel: Channel; state: 'enabled' | 'disabled'; revision: string | null };
 type Library = { visibility: 'public' | 'private' | 'followers'; version: number };
 type Reader = { profile: 'reader-settings-v1'; fontSize: 15 | 17 | 19 | 22 | 25;
@@ -34,12 +34,6 @@ const topics = [
   ['subscription', 'followed-chapter', 'notificationFollowedChapter'],
   ['social', 'review-helpful', 'notificationReviewHelpful'],
   ['social', 'review', 'notificationReview'],
-  ['governance', 'submission-decision', 'notificationSubmissionDecision'],
-  ['governance', 'moderation-outcome', 'notificationModerationOutcome'],
-  ['governance', 'realm-role-change', 'notificationRealmRoleChange'],
-  ['governance', 'realm-membership-change', 'notificationRealmMembershipChange'],
-  ['governance', 'realm-invitation', 'notificationRealmInvitation'],
-  ['governance', 'claim-correction', 'notificationClaimCorrection'],
 ] as const;
 
 async function read<T>(path: string): Promise<T> {

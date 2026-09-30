@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
-import { withPreservationFence } from '../public-report/preservation.ts';
+import { withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
+import { ERASURE_DEFERRED_REASON } from './schema.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type GraphTerminalProof, type RegisteredAdmission } from '../access/admission.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
@@ -38,8 +39,7 @@ export interface ContentErasureInput {
 
 /** Owner pools of the erasure command: the retained relay journal and Content. */
 export class ErasureService {
-  preservationAccess?: Pool;
-  constructor(readonly relay: Pool, readonly content: Pool) {}
+  constructor(readonly relay: Pool, readonly content: Pool, readonly preservationAccess: Pool) {}
 }
 
 function canonical(value: unknown): string {
@@ -77,27 +77,25 @@ async function completeContentErasure(service: ErasureService, graph: WorkActiva
   erasureId: string): Promise<void> {
   const journaled = await readErasure(service.relay, erasureId);
   const revisionIds = journaled.targets.map(target => target.ref);
-  if (journaled.stage === 'blocked' && journaled.blockedReason?.startsWith('Governance preservation hold')) {
+  if (journaled.stage === 'blocked') {
     await access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
     return;
   }
   if (journaled.stage === 'requested') {
     try {
       const resourceId = admission.scope.slice('erasure:'.length);
-      const erase = async () => {
+      const erase = async (fence: PreservationFence) => {
         await suppressGraphContentRevisions(graph.fuseki, graph.lineage, erasureId,
           journaled.erasureEpoch, revisionIds);
         const graphProof = await readGraphErasureProof(graph.fuseki, graph.lineage, erasureId,
           journaled.erasureEpoch, revisionIds);
         await applyContentErasure(service.content, { erasureId, erasureEpoch: journaled.erasureEpoch,
-          resourceId, revisionIds, graphProof });
+          resourceId, revisionIds, graphProof, preservationAccess: fence });
         await markErasureSuppressed(service.relay, erasureId);
       };
-      const held = service.preservationAccess
-        ? (await withPreservationFence(service.preservationAccess, resourceId, erasureId, erase)).held
-        : (await erase(), false);
+      const held = (await withPreservationFence(service.preservationAccess, resourceId, erasureId, erase)).held;
       if (held) {
-        await markErasureBlocked(service.relay, erasureId, 'Governance preservation hold: material retained');
+        await markErasureBlocked(service.relay, erasureId, ERASURE_DEFERRED_REASON);
         await access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
         return;
       }

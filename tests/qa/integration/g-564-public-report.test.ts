@@ -15,7 +15,8 @@ import { NotificationStore } from '../../../services/main/src/modules/notificati
 import { applyContentErasure, ContentErasureStale } from '../../../services/main/src/modules/erasure/content.ts';
 import { recordAccountPreservation } from '../../../services/main/src/modules/public-report/preservation.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
-import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
+import { completePendingContentErasures, contentErasureDigest, ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
+import { journalErasure, readErasure } from '../../../services/main/src/modules/erasure/journal.ts';
 import { settleAccountErasures } from '../../../services/main/src/modules/erasure/account.ts';
 import { mirrorAccountDeletionIntent } from '../../../services/main/src/modules/outbox/account-deletion-journal.ts';
 import { retainAccountSubjectDeletion } from '../../../services/main/src/modules/outbox/account-subject-deletion.ts';
@@ -49,8 +50,7 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
     const deps: MainWorkDependencies = { environment: f.env, access: f.access, account: f.account.verifier,
       content: core, contentAuthoring: core, agentProvisioning: new AgentProvisioning(f.accessPool, f.env) };
     deps.publicReports = new PublicReports(f.accessPool, publicReportOwners(deps, f.pool, core));
-    deps.erasures = new ErasureService(relayPool, f.pool);
-    deps.preservationAccess = f.accessPool;
+    deps.erasures = new ErasureService(relayPool, f.pool, f.accessPool);
     deps.governance = { store: new GovernanceStore(f.accessPool,
       ownerEvidenceCapture({ graph: { env: f.env, canReadWork: async () => true } }),
       ownerTargetHeads({ graph: f.env, content: f.pool }), { current: async () => null }) };
@@ -244,14 +244,38 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
     const eraseKey = randomUUID();
     const erasureBody = { profile: 'content-revision-erasure-v1', actingSubject: f.actor,
       resourceId: resource, revisionIds: [activated.revision] };
+    // Recovery must honour the intake hold before any HTTP erasure initializes a service.
+    const principal = await f.account.verifier.verify(new Request('http://main.test/v1/erasures',
+      { headers: { authorization: `Bearer ${f.account.tokenA}` } }), ['access:manage']);
+    const digest = contentErasureDigest({ actingSubject: f.actor, resourceId: resource, revisionIds: [activated.revision] });
+    const admission = await f.access.register({ principal, actingSubject: f.actor, scope: `erasure:${resource}`,
+      action: 'erasure.request', idempotencyKey: eraseKey, requestDigest: digest });
+    await f.access.claim(admission.id, digest);
+    const pending = await journalErasure(relayPool, { operationId: `erasure:${admission.id}`, requestDigest: digest,
+      kind: 'revision', principalId: admission.principalId, admissionId: admission.id,
+      authorityEpoch: admission.authorityEpoch, targets: [{ kind: 'content_revision', ref: activated.revision }] });
+    expect(await completePendingContentErasures(deps.erasures, f.env, f.access)).toEqual({ completed: 1, failed: [] });
+    expect((await readErasure(relayPool, pending.erasureId)).stage).toBe('blocked');
+    expect((await f.pool.query('SELECT availability FROM content.revision WHERE id = $1', [activated.revision])).rows)
+      .toEqual([{ availability: 'available' }]);
     const held = await json<{ erasureId: string; stage: string; blockedReason: string; replayed: boolean }>(
       await call('POST', '/v1/erasures', erasureBody, { key: eraseKey, token: f.account.tokenA }), 200);
     expect(held.stage).toBe('blocked');
-    expect(held.blockedReason).toBe('Governance preservation hold: material retained');
+    expect(held.blockedReason).toBe('Erasure is deferred');
+    expect((await f.accessPool.query('SELECT reason FROM access.governance_erasure_postponement WHERE operation_id = $1',
+      [held.erasureId])).rows).toEqual([{ reason: 'child_exploitation' }]);
     const heldReplay = await json<typeof held>(await call('POST', '/v1/erasures', erasureBody,
       { key: eraseKey, token: f.account.tokenA }), 200);
     expect(heldReplay).toMatchObject({ erasureId: held.erasureId, stage: 'blocked', replayed: true,
       blockedReason: held.blockedReason });
+    // Every deferred erasure has the same public explanation, including retained inventories.
+    await relayPool.query("UPDATE relay.erasure SET blocked_reason = 'internal unrelated deferred reason' WHERE id = $1",
+      [held.erasureId]);
+    const unrelated = await json<typeof held>(await call('GET', `/v1/erasures/${held.erasureId}`,
+      undefined, { token: f.account.tokenA }), 200);
+    expect({ ...unrelated, replayed: true }).toEqual(heldReplay);
+    expect(await json<typeof held>(await call('POST', '/v1/erasures', erasureBody,
+      { key: eraseKey, token: f.account.tokenA }), 200)).toEqual(heldReplay);
     await recordAccountPreservation(f.accessPool, f.account.issuer, f.account.a.id, 'account-erasure-test');
     expect((await f.accessPool.query('SELECT reason FROM access.governance_erasure_postponement WHERE operation_id = $1',
       ['account-erasure-test'])).rows).toEqual([{ reason: 'child_exploitation' }]);

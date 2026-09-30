@@ -8,6 +8,7 @@ import { ErasureDenied, ErasureNotApplied, readRequestedErasure,
   requestContentErasure } from '../modules/erasure/request.ts';
 import { GraphErasureConflict, GraphErasureUnavailable } from '../modules/erasure/graph.ts';
 import { DESTRUCTION_STATUSES, DISPOSITION_DESTRUCTION, DISPOSITION_SUPPRESSION,
+  ERASURE_DEFERRED_REASON,
   ERASURE_KINDS, ERASURE_STAGES, RETENTION_CUSTODY, RETENTION_OWNERS, RETENTION_STORES,
   SUPPRESSION_STATUSES } from '../modules/erasure/schema.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -45,10 +46,10 @@ function result(report: ErasureReport, replayed: boolean): Response {
   return Response.json({ profile: 'erasure-v1', erasureId: report.erasureId,
     erasureEpoch: report.erasureEpoch, kind: report.kind, stage: report.stage,
     suppression: report.suppression, destruction: report.destruction,
-    blockedReason: report.blockedReason, requestedAt: report.requestedAt,
+    blockedReason: report.stage === 'blocked' ? ERASURE_DEFERRED_REASON : report.blockedReason, requestedAt: report.requestedAt,
     suppressedAt: report.suppressedAt, verifiedAt: report.verifiedAt,
     targets: report.targets.map(({ owner, kind, ref }) => ({ owner, kind, ref })),
-    dispositions: report.dispositions, replayed }, { headers: { 'cache-control': 'no-store' } });
+    dispositions: report.stage === 'blocked' ? [] : report.dispositions, replayed }, { headers: { 'cache-control': 'no-store' } });
 }
 
 function erasureError(error: unknown): Response {
@@ -85,7 +86,6 @@ export function erasureRoutes(work: MainWorkDependencies) {
     }, async ({ request, body }) => {
       try {
         if (!work.erasures) return problem(503, 'erasure_unavailable', 'Erasure owner is unavailable');
-        if (work.preservationAccess) work.erasures.preservationAccess = work.preservationAccess;
         const key = request.headers.get('idempotency-key');
         if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
           return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');

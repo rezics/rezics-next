@@ -36,7 +36,7 @@ export interface QueueApi {
 }
 
 /** The reporters a report's basis names, so the detail can say who said what. */
-export const reporters = (basis: DecisionBasis) => basis.reports.map(report => report.actingSubject);
+export const reporters = (basis: DecisionBasis) => basis.reports.flatMap(report => report.actingSubject ?? []);
 
 /** The Agents and Works a page of queue items mentions. */
 export function mentioned(items: readonly ModerationItem[]) {

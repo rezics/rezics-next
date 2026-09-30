@@ -1,13 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { acting, book, decidedPage, header, names, now, occurrences, publishedRules, queue, queueApi, queuePage, realm,
+import { acting, basisFor, book, decidedPage, header, names, now, occurrences, publishedRules, queue, queueApi, queuePage, realm,
   type Recorded } from './fixtures.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { ManageFailure } from './parts.tsx';
 import { RealmFrame } from './realm-frame.tsx';
 import { ruleMemoryKey } from './reason-dialog.tsx';
+import { reporters } from './queue-api.ts';
 import { QueueView } from './queue-view.tsx';
 
 const recorded: Recorded = { commits: [] };
@@ -122,6 +123,26 @@ export const KeepOrRemoveReport: Story = {
     await userEvent.click(dialog.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ action: 'keep' }),
       expect.objectContaining({ id: queue[5]!.id, action: 'remove', reason: 'Rule 1: no spoilers in titles.' })]));
+  },
+};
+
+/** Public reports keep their statement and receipt time without inventing an Agent identity. */
+export const AnonymousReporter: Story = {
+  args: { api: { ...queueApi(), basis: async item => {
+    const basis = basisFor(item);
+    return { ok: true, data: { ...basis, reports: [{ ...basis.reports[0]!, actingSubject: null,
+      statement: 'The credited edition differs from the published text.' }] } };
+  } } },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const statement = await canvas.findByText('The credited edition differs from the published text.');
+    await expect(statement).toBeVisible();
+    const report = within(statement.closest('li')!);
+    await expect(report.queryByText(/wrote/)).not.toBeInTheDocument();
+    await expect(statement.closest('li')!.querySelector('time')).toBeVisible();
+    const basis = await args.api.basis(queue[0]!);
+    if (!basis.ok) throw new Error('Report basis is unavailable');
+    await expect(reporters(basis.data)).toEqual([]);
   },
 };
 

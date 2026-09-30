@@ -78,7 +78,7 @@ export const SETTINGS_NOTIFICATION_TOPICS = [
   { purpose: 'social', topic: 'review-helpful' },
   { purpose: 'social', topic: 'review' },
 ] as const;
-/** One recovery check, one principal read, one indexed preference read; 3 purposes × 12 topics × 2 channels. */
+/** One recovery check, one principal read and one indexed preference read for optional topics. */
 export const NOTIFICATION_SETTINGS_COST = { readStatements: 3, maxRows: 72,
   responseItems: SETTINGS_NOTIFICATION_TOPICS.length * 2 } as const;
 export interface SettingsPreference { purpose: OptionalPurpose; topic: string;

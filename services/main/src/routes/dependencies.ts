@@ -126,7 +126,6 @@ export interface MainWorkDependencies {
   agentProfiles?: import('../modules/agent/profile.ts').AgentPublicProfiles;
   governance?: { store: GovernanceStore; rules?: GovernanceRules };
   publicReports?: PublicReports;
-  preservationAccess?: import('pg').Pool;
   managementReads?: ManagementReadStore;
   managementDecisionBasis?: import('../modules/management-reads/decision-basis.ts').ManagementDecisionBasis;
   realmJoining?: import('../modules/access/realm-management-joining.ts').AccessRealmJoining;

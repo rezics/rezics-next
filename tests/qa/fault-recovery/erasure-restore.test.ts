@@ -321,7 +321,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
 
     // OPS11: Content erasure through Main; retention of both earlier backups is explicit.
     const main = createMainApp(fuseki, { environment: { fuseki, lineage, objectDirectory: join(state, 'objects') },
-      account: verifier, access: registry, erasures: new ErasureService(relay, contentPool) });
+      account: verifier, access: registry, erasures: new ErasureService(relay, contentPool, accessPool) });
     const erase = async (revisionIds: string[]) => {
       const response = await main.handle(new Request('http://main.local/v1/erasures', { method: 'POST',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
@@ -355,7 +355,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     // The live Account owner keeps verifying the operator while restored copies stay isolated.
     const offline = (owners: { access: Pool; content: Pool }) => createMainApp(fuseki, {
       environment: { fuseki, lineage, objectDirectory: join(state, 'objects') }, account: verifier,
-      access: new AccessAdmissionRegistry(owners.access), erasures: new ErasureService(relay, owners.content) });
+      access: new AccessAdmissionRegistry(owners.access), erasures: new ErasureService(relay, owners.content, owners.access) });
     const readJournal = (mainApp: ReturnType<typeof offline>) => mainApp.handle(new Request(
       `http://main.local/v1/erasures/${contentErasure.erasureId}`, { headers: { authorization: `Bearer ${token}` } }));
 

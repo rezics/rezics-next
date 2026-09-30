@@ -60,8 +60,8 @@ function Reports({ basis, agents, now, locale, messages }: { basis: Loaded<Decis
       ? t.reportsAtLeast({ count: String(reports.length) }) : t.reportsHeading(reports.length)}</h4>
     <ul className="grid gap-2">
       {reports.map(report => <li key={report.id} className="grid gap-1 rounded-xl bg-muted/40 px-3 py-2.5 text-sm">
-        <p className="text-muted-foreground text-xs">{t.reporterWrote({ agent: agentLabel(agents[report.actingSubject],
-          report.actingSubject, id => t.agentFallback({ id })) })} · <time dateTime={isoTime(report.receivedAt)}
+        <p className="text-muted-foreground text-xs">{report.actingSubject ? <>{t.reporterWrote({ agent: agentLabel(agents[report.actingSubject],
+          report.actingSubject, id => t.agentFallback({ id })) })} · </> : null}<time dateTime={isoTime(report.receivedAt)}
           title={dateTime(report.receivedAt, locale)} suppressHydrationWarning>{relativeTime(report.receivedAt, now, locale)}</time></p>
         {report.statement ? <p dir="auto" className="whitespace-pre-line">{report.statement}</p>
           : <p className="text-muted-foreground">{t.noStatement}</p>}
