@@ -29,6 +29,12 @@ declare module './dependencies.ts' {
 const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const position = t.Object({ owner: t.Literal('content'), dataEpoch: t.String(), sequence: t.String() });
+const clearance = t.Union([t.Literal('screening'), t.Literal('cleared'), t.Literal('held'), t.Literal('rejected')]);
+const uploadResult = t.Object({ asset: uuid, upload: uuid, status: clearance, reason: t.Nullable(t.String()),
+  representation: t.Nullable(uuid), revision: t.Nullable(uuid), replayed: t.Boolean() }, { additionalProperties: false });
+const uploadStatus = t.Object({ upload: uuid, asset: uuid, status: clearance,
+  transfer: t.Union([t.Literal('reserved'), t.Literal('activated'), t.Literal('rejected'), t.Literal('expired')]),
+  reason: t.Nullable(t.String()), representation: t.Nullable(uuid) }, { additionalProperties: false });
 const commandResult = t.Object({ outcome: t.String(), id: t.Nullable(t.String()),
   predecessor: t.Nullable(t.String()), position, replayed: t.Boolean(), admission: t.String() });
 
@@ -61,6 +67,7 @@ const unavailable = () => problem(404, 'media_unavailable', 'Media is unavailabl
 
 export const openApiOperations = {
   '/v1/media/uploads': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/media/uploads/{upload}': { get: { bearer: true } },
   '/v1/media/uploads/{upload}/bytes': { put: { bearer: true } },
   '/v1/media/assets/{asset}/state': { post: { bearer: true, idempotencyKey: true } },
   '/v1/media/publications': { post: { bearer: true, idempotencyKey: true } },
@@ -146,15 +153,32 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const { profile: _profile, ...input } = body;
         const reserved = await reserveAdmittedUpload(work.environment, work.media, work.account, work.access,
           request, { ...input, idempotencyKey: key });
-        return Response.json({ ...reserved, uploadUrl: `/v1/media/uploads/${reserved.upload}/bytes` },
+        return Response.json({ ...reserved, status: 'screening', uploadUrl: `/v1/media/uploads/${reserved.upload}/bytes` },
           { status: reserved.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return mediaError(error); }
+    })
+    .get('/v1/media/uploads/:upload', {
+      params: t.Object({ upload: uuid }),
+      response: { 200: uploadStatus, ...authorizedReadProblems },
+    }, async ({ request, params }) => {
+      if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        const principal = await work.account.verify(request, ['work:edit']);
+        const principalId = await work.access.activePrincipalId(principal);
+        const row = await work.media.store.readUpload(params.upload);
+        if (!row || !principalId || row.principal !== principalId) return unavailable();
+        return Response.json({ upload: row.id, asset: row.asset, transfer: row.status,
+          status: row.clearance ?? (row.status === 'rejected' || row.status === 'expired' ? 'rejected' : 'screening'),
+          reason: row.clearanceReason ?? row.reason, representation: row.representation },
+        { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return mediaError(error); }
     })
     .put('/v1/media/uploads/:upload/bytes', {
       params: t.Object({ upload: uuid }),
       parse: 'none',
-      response: { 200: t.Object({}, { additionalProperties: true }), 201: t.Object({}, { additionalProperties: true }), ...writeProblems, 404: problemResult(404),
-        413: problemResult(413), 422: problemResult(422) },
+      response: { 200: uploadResult, 201: uploadResult, ...writeProblems, 404: problemResult(404),
+        413: problemResult(413), 422: uploadResult },
     }, async ({ request, params }) => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       const declared = Number(request.headers.get('content-length') ?? '0');
@@ -164,7 +188,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         if (bytes.length > MAX_UPLOAD_BYTES) return problem(413, 'media_too_large', 'Upload exceeds the admitted size');
         const result = await activateUploadedBytes(work.environment, work.media, work.account, work.access,
           request, params.upload, bytes);
-        if (result.status === 'rejected') {
+        if (result.status === 'rejected' && result.representation === null) {
           return Response.json({ ...result }, { status: 422, headers: { 'cache-control': 'no-store' } });
         }
         return Response.json(result, { status: result.replayed ? 200 : 201,
@@ -252,7 +276,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const item = await work.media.store.itemDelivery(params.use);
         if (!item || item.availability !== 'available' || item.disclosure !== 'public'
-          || item.moderation !== 'none' || item.lifecycle !== 'active') return unavailable();
+          || item.moderation !== 'none' || item.lifecycle !== 'active' || item.clearance !== 'cleared') return unavailable();
         const target = (await readResourceSummaries(work.environment, undefined,
           await readerFor(request, query.actingSubject),
           { resources: [item.target], context: 'urn:rezics:media:context:default', language: null })).summaries[0]!;
@@ -277,8 +301,10 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const principal = await work.account.verify(request, ['work:read']);
         const basis = await work.media.store.assetDelivery(params.asset, query.target,
           query.context ?? DEFAULT_MEDIA_CONTEXT);
-        if (!basis || basis.availability !== 'available' || basis.disclosure !== 'private'
+        if (!basis || basis.availability !== 'available' || (basis.disclosure !== 'private' && basis.owner !== query.actingSubject)
           || basis.moderation !== 'none' || basis.lifecycle !== 'active'
+          || !(basis.clearance === 'cleared' || (basis.clearance === 'screening' && basis.owner === query.actingSubject
+            && basis.uploader === await work.access.activePrincipalId(principal)))
           || !Number.isSafeInteger(basis.byteLength) || basis.byteLength < 1
           || basis.byteLength > MAX_UPLOAD_BYTES) return unavailable();
         lease = await work.downloadLeases.admit(principal, query.actingSubject, query.target, params.asset);

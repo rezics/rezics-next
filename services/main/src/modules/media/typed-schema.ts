@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { bigint, integer, pgSchema, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, integer, jsonb, pgSchema, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 // Media owner tables in Main's Content database. The SQL migration
 // `services/content/migrations/070_media_owner.sql` remains the DDL and trigger
@@ -73,6 +73,9 @@ const representation = media.table('representation', {
   availability: text('availability').$type<'available' | 'erased' | 'unavailable'>().notNull().default('available'),
   operationId: text('operation_id').notNull(),
   createdAt: createdAt(),
+  clearance: text('clearance').$type<'screening' | 'cleared' | 'held' | 'rejected'>().notNull().default('screening'),
+  clearanceReason: text('clearance_reason'),
+  originalId: uuid('original_id').notNull(),
 });
 
 const transformJob = media.table('transform_job', {
@@ -116,6 +119,7 @@ const selectionSlot = media.table('selection_slot', {
   role: text('role').$type<'avatar'>().notNull(),
   policy: text('policy').$type<'avatar-selection-v1'>().notNull(),
   head: uuid('head'),
+  deliveryHead: uuid('delivery_head'),
 });
 
 const selectionRevision = media.table('selection_revision', {
@@ -133,6 +137,24 @@ const selectionRevision = media.table('selection_revision', {
   createdAt: createdAt(),
 });
 
+const screenResult = media.table('screen_result', {
+  jobId: uuid('job_id').primaryKey(), sourceId: uuid('source_id').notNull(),
+  clearance: text('clearance').$type<'cleared' | 'held'>().notNull(), reason: text('reason'),
+  evidence: jsonb('evidence').notNull(), operationId: text('operation_id').notNull(), createdAt: createdAt(),
+});
+const screenReview = media.table('screen_review', {
+  jobId: uuid('job_id').primaryKey(), caseId: uuid('case_id'),
+  retryAfter: timestamp('retry_after', { withTimezone: true }).notNull().default(sql`clock_timestamp()`),
+});
+const clearanceDecision = media.table('clearance_decision', {
+  id: uuid('id').primaryKey(), sourceId: uuid('source_id').notNull(), decisionId: uuid('decision_id').notNull(),
+  clearance: text('clearance').$type<'cleared' | 'rejected'>().notNull(),
+  operationId: text('operation_id').notNull(), createdAt: createdAt(),
+});
+const suppressedDigest = media.table('suppressed_digest', {
+  digest: text('digest').primaryKey(), createdAt: createdAt(),
+});
+
 /** Every media owner table, for typed queries and the schema conformance test. */
 export const mediaTables = { asset, assetState, upload, representation, transformJob, use,
-  selectionSlot, selectionRevision } as const;
+  selectionSlot, selectionRevision, screenResult, screenReview, clearanceDecision, suppressedDigest } as const;

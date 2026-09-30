@@ -62,6 +62,7 @@ test('BOOK09: an image-only publication activates exact RustFS images without a 
 
   // The exact revision is activated through the existing Content publication command.
   await author.grant(`content:publish:${work.work}`, 'content.publish');
+  await author.grant(`work:read:${work.work}`, 'work.read');
   const published = await author.send('POST', '/v1/content-publications', { profile: 'content-publication-v1',
     preparationId: `images-${randomUUID()}`, revisionId: body.revisionId, expectedDigest: body.byteDigest,
     expectedContentEpoch: body.sourcePosition.dataEpoch, resourceId: work.work, variantId,

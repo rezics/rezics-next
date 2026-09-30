@@ -1,3 +1,6 @@
+import { MediaScreenStore } from './modules/media-screen/store.ts';
+import { MediaScreenWorker } from './modules/media-screen/worker.ts';
+import { LocalImageClassifier } from './modules/media-screen/classifier.ts';
 import { Pool } from 'pg';
 import { CatalogueIntakeStore, unverifiedWorks } from './modules/catalogue-intake/store.ts';
 import { WikiQuotationStore } from './modules/wiki/quotation.ts';
@@ -508,6 +511,9 @@ const feedWorker = relayPool ? new FeedRefreshWorker({ environment, account, acc
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) }, new FeedStore(pool), relayPool) : undefined;
 feedWorker?.start();
 worker.start();
+const mediaScreenWorker = new MediaScreenWorker(new MediaScreenStore(contentPool), new LocalImageClassifier(),
+  mediaObjects, governanceServices(pool, contentPool, content, sourceIntake, access, environment).store);
+mediaScreenWorker.start();
 discoveryWorker?.start();
 recommendationWorker?.start();
 serialStats?.start();
@@ -519,6 +525,7 @@ notificationDeliveryWorker?.start();
 
 let stopping = false;
 async function stop(): Promise<void> {
+  await mediaScreenWorker.stop();
   await serialStats?.stop();
   await readRankings.stop();
   if (stopping) return;

@@ -78,3 +78,25 @@ export function verifyImage(bytes: Uint8Array, declared: string): VerifiedImage 
   if (image.mediaType !== declared) throw new ImageFormatRejected('declared media type differs from the bytes');
   return image;
 }
+
+/** libvips can expose only a still PNG frame for APNG. Inspect bounded container
+ * chunk headers as well as decoder frame metadata before granting clearance. */
+export function assertStillContainer(bytes: Uint8Array, mediaType: ImageMediaType): void {
+  if (mediaType !== 'image/png' && mediaType !== 'image/webp') return;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const png = mediaType === 'image/png';
+  let offset = png ? 8 : 12;
+  for (let chunks = 0; offset + 8 <= bytes.length && chunks < 4096; chunks++) {
+    const length = view.getUint32(png ? offset : offset + 4, !png);
+    const type = String.fromCharCode(...bytes.subarray(png ? offset + 4 : offset, png ? offset + 8 : offset + 4));
+    if (['acTL', 'fcTL', 'fdAT', 'ANIM', 'ANMF'].includes(type)) {
+      throw new ImageFormatRejected('animated images require review');
+    }
+    const next = offset + 8 + length + (png ? 4 : length % 2);
+    if (next > bytes.length || next <= offset) throw new ImageFormatRejected('image chunks are malformed');
+    if (png && type === 'IEND') return;
+    offset = next;
+    if (!png && offset === bytes.length) return;
+  }
+  throw new ImageFormatRejected('image chunk bound exceeded');
+}

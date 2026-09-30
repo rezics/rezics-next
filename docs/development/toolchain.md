@@ -49,6 +49,27 @@ workspace `.env.example` files show variables. Personal overrides belong in
 the ignored root `.env.dev`, not `.env` or `.env.local`, which Bun can load into
 unrelated processes.
 
+## Local image screening
+
+Main pins NSFWJS 4.4.0 (MIT), TensorFlow.js 4.22.0 (Apache-2.0), Buffer 6.0.3
+(MIT) and sharp 0.35.5 (Apache-2.0). NSFWJS's bundled MobileNetV2 weights keep
+inference local without a hosted model or native TensorFlow build. sharp uses
+its prebuilt libvips adapter for the admitted raster formats; its redistributed
+libvips is LGPL-2.1-or-later. The smoke test
+[`g-571-screen.test.ts`](../../services/main/tests/g-571-screen.test.ts) loads
+and hashes the real weights, decodes a generated PNG and runs the CPU backend
+under Bun. No native install script is enabled.
+
+The [NSFWJS model-loading contract](https://github.com/infinitered/nsfwjs/tree/v4.4.0)
+supports bundled model definitions and tensor input. sharp's
+[constructor bounds](https://sharp.pixelplumbing.com/api-constructor/) and
+[processing timeout](https://sharp.pixelplumbing.com/api-operation/#timeout)
+supply decode limits. REZICS additionally bounds bytes, pixels and frames and
+terminates the classifier isolate at its deadline. These checks establish
+runtime compatibility and failure handling; they do not measure classifier
+accuracy on REZICS uploads. Thresholds and the weights digest live in
+[`policy.ts`](../../services/main/src/modules/media-screen/policy.ts).
+
 ## Architecture evaluation exception (2026-09-24)
 
 The [storage research runner](../../scripts/research/storage_architecture/README.md)
@@ -117,6 +138,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @storybook/react-vite | 11.0.0-alpha.1 | apps/accounts, apps/web |
 | @tailwindcss/vite | 4.3.3 | apps/about, apps/accounts, apps/web |
 | @tanstack/react-query | 5.103.2 | apps/web |
+| @tensorflow/tfjs | 4.22.0 | services/main |
 | @types/bun | 1.4.2 | apps/about, apps/accounts, packages/model, services/account, services/content, services/main |
 | @types/node | 26.6.2 | apphost, apps/about, apps/accounts, apps/web |
 | @types/nodemailer | 8.0.2 | services/account |
@@ -132,6 +154,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | axe-core | 4.13.0 | apps/about, apps/web |
 | better-auth | 1.7.5 | services/account, services/main |
 | better-call | 1.4.0 | services/account |
+| buffer | 6.0.3 | services/main |
 | dependency-cruiser | 18.4.0 | . |
 | drizzle-orm | 0.45.3 | services/content |
 | elysia | 2.0.0-beta.16 | apps/web, services/account, services/main |
@@ -147,6 +170,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | native-i18n | 0.2.0 | apps/accounts, apps/web |
 | next | 16.3.6 | apps/accounts, apps/web |
 | nodemailer | 10.0.10 | services/account |
+| nsfwjs | 4.4.0 | services/main |
 | nuqs | 2.10.1 | apps/web |
 | openapi-types | 12.1.3 | services/account, services/main |
 | oxfmt | 0.70.0 | . |
@@ -160,6 +184,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | react-server-dom-webpack | 19.3.0 | apps/accounts, apps/web |
 | recharts | 3.10.1 | packages/ui |
 | satori | 0.33.5 | apps/about |
+| sharp | 0.35.5 | services/main |
 | storybook | 11.0.0-alpha.1 | apps/accounts, apps/web |
 | tailwind-variants | 3.3.1 | packages/ui |
 | tailwindcss | 4.3.3 | apps/about, apps/accounts, apps/web |

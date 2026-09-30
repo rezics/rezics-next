@@ -75,9 +75,8 @@ per target, followed by joins to:
 The requested context's slot wins even when it records a removal.
 
 An image is returned only for a public, unsuppressed, active asset whose
-original is available and within the `avatar-selection-v1` rendition bounds:
-2048 px and 4 MiB. It is served as-is. The transform tables are ready, but no
-image transform runs yet. The target resource must also be readable.
+original is available, has clearance `cleared`, has no exact-byte suppression marker, and is within the `avatar-selection-v1` rendition bounds:
+2048 px and 4 MiB. It is served as-is. The local screen uses `transform_job` under profile `image-screen-v1`; no image rendition transform runs. The target resource must also be readable.
 
 Missing selection, removal, a pending or oversized rendition, and private,
 suppressed, deleted or erased media all return the same fallback. It carries no
@@ -86,13 +85,14 @@ and resource. Responses carry `generation.graph` and `generation.media` and are
 served `no-cache`/`no-store`.
 
 `GET /v1/media/avatars/{selection}` and `GET /v1/media/uses/{use}` re-derive every
-check at request time. A replaced selection therefore stops resolving at once.
+check at request time. A replacement keeps the preceding cleared selection deliverable until its exact original clears. Explicit removal stops the preceding selection immediately.
 
 ## Operation template
 
 | Operation | Route | Receipt action | Cost contract |
 | --- | --- | --- | --- |
 | Reserve upload | `POST /v1/media/uploads` | `media.upload.reserve` | 1 Access register and claim, 1 PG transaction (4–6 rows) |
+| Upload status | `GET /v1/media/uploads/{upload}` | Read only | 1 Account verification, 1 Access principal read, 1 indexed PG upload/original lookup |
 | Activate bytes | `PUT /v1/media/uploads/{upload}/bytes` | `media.upload.settle`, then `draft.save` | ≤ 8 MiB read once; 2 object creates and 1 read-back; 2 PG transactions; ≤ 4 CAS attempts |
 | Asset state CAS | `POST /v1/media/assets/{asset}/state` | `media.asset.state` | 1 PG transaction; erasure updates the asset's representations |
 | Avatar selection CAS | `PUT /v1/resources/{resource}/avatar` | `media.selection.change` | 1 summary read, 1 Access admission, 1 PG transaction |
@@ -137,13 +137,52 @@ Extension, for a new PG-owned media command:
 The current upload path accepts authenticated direct bytes only, with an 8 MiB
 cap, declared SHA-256, allowlisted raster MIME type and matching container header
 and dimensions. It stages and reads back exact bytes through RustFS before
-activation. It never fetches a caller URL, parses metadata, renders on the
-server or runs a transform. Delivery uses the exact allowlisted image type and
-`X-Content-Type-Options: nosniff`; it never serves SVG or caller-supplied HTML.
-No malware scanner is in this path. Header inspection does not certify full
-decoder validity, so a malformed raster can still be stored and fail to render.
-Adding server-side decoding, transformation or arbitrary source acquisition
-requires a pinned local scanner/decoder and a separate qualification gate.
+activation. The transfer path never fetches a caller URL or runs a transform.
+The separate [local screen](../media-screen/worker.ts) decodes with pinned sharp
+and classifies downscaled pixels with NSFWJS on CPU. Delivery uses the exact
+allowlisted image type and `X-Content-Type-Options: nosniff`.
+
+## Clearance and identical copies
+
+Originals activate with `screening`. The existing upload resource gains a status read so polling does not retransmit up to 8 MiB of bytes; only the reserving principal can poll
+`GET /v1/media/uploads/{upload}`. Transfer and polling responses expose
+`screening|cleared|held|rejected`, with no scores. An uploader's previously
+admitted preview can show screening bytes; held/rejected originals are withheld
+from all delivery. Private targets still require their ordinary Access lease.
+
+A complete finite score vector below the versioned thresholds reaches `cleared`
+under the local launch policy. An above-threshold result reaches `held` with
+`likely-explicit`; any decode, integrity, timeout or classifier failure reaches
+`held` with `screen-unavailable`. Scores, model version, exact weights digest
+and thresholds remain review evidence. Neither a score nor an automated report
+is a staff decision or a finding of legality. Animated files are held because
+screening one frame cannot clear all their bytes. These initial thresholds have
+not been calibrated against a representative REZICS corpus.
+
+Activation atomically queues one screen. A single-flight Main loop leases one
+original at a time for 60 seconds, with a 30-second deadline. Tokens and erasure
+epochs fence settlement. Sixteen expired attempts reach a review hold; obsolete
+jobs are cancelled. Held results queue platform case creation in a durable
+Content retry table. Governance deduplicates by screen job, discloses automation
+and records category `prohibited-imagery`. An unavailable case owner leaves the
+image held and retries later. G-565 supplies staff authority and decisions;
+`MediaScreenStore.reviewOriginal` applies its exact original CAS and records the
+staff decision. It never grants that authority.
+
+`suppressIdenticalCopies(originalDigest, after?, limit?)` writes a permanent
+SHA-256 marker before advancing at most 100 asset histories per call. Its asset
+cursor continues large sets; repeating a call skips already suppressed assets.
+Every delivery lookup consults that marker, so unfinished batches cannot serve
+copies. Later originals of the bytes activate rejected and suppressed without
+queuing a classifier. There is no perceptual hash or cross-asset byte deduplication.
+
+| Internal operation | Bound and lookup |
+| --- | --- |
+| Lease/cancel/exhaustion recovery | One job per indexed ready/expired queue probe; one source and asset lookup; 5-second PG statement deadline |
+| Screen settlement | One asset, token-fenced job, receipt, outbox and immutable result; no fan-out writes; delivery resolves each slot through primary-key probes |
+| Review intake retry | At most eight jobs per tick through pending retry index; one governance case/report/evidence transaction per job |
+| Staff clearance | One original CAS, decision, receipt/outbox and no avatar-slot fan-out |
+| Copy suppression | One digest marker plus at most 100 distinct asset probes/state histories; digest-and-asset index, returned continuation |
 
 ## Recovery obligations
 

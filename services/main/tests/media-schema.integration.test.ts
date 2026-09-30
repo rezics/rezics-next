@@ -143,8 +143,8 @@ test('BOOK09/VIEW07/VIEW08: media owner schema installs empty and upgrades from 
     expect(versions.rows.map(row => row.version)).toEqual(files.map(file => file.version));
     const tables = await empty.query<{ name: string }>(`SELECT table_name AS name FROM information_schema.tables
       WHERE table_schema = 'media' ORDER BY table_name`);
-    expect(tables.rows.map(row => row.name)).toEqual(['asset', 'asset_state', 'representation',
-      'selection_revision', 'selection_slot', 'transform_job', 'upload', 'use']);
+    expect(tables.rows.map(row => row.name)).toEqual(['asset', 'asset_state', 'clearance_decision', 'representation', 'screen_result', 'screen_review',
+      'selection_revision', 'selection_slot', 'suppressed_digest', 'transform_job', 'upload', 'use']);
     // The module's typed declarations match the migration's columns, nullability and defaults.
     const columns = await empty.query<{ table: string; column: string; nullable: string; defaulted: boolean }>(`
       SELECT table_name AS table, column_name AS column, is_nullable AS nullable,
@@ -180,8 +180,20 @@ test('BOOK09/VIEW07/VIEW08: media owner schema installs empty and upgrades from 
     expect(priorActions).toContain('draft.save');
     await rejects(receipt(upgraded, 'media.upload.reserve'), /receipt_action_registered/);
 
+    // Retained originals are not grandfathered into clearance at the screen upgrade.
+    for (const file of files.filter(file => file.version >= MEDIA_VERSION && file.version < 600)) {
+      await upgraded.query(readFileSync(join(migrationDirectory, file.name), 'utf8'));
+      await upgraded.query('INSERT INTO content.schema_migration (version) VALUES ($1)', [file.version]);
+    }
+    const retained = await createAsset(upgraded, iri(randomUUID()), { bytes: 'retained-original' });
+    const retainedOriginal = await activateOriginal(upgraded, retained.asset, retained.uploadId, 'retained-original');
     await migrateContent(upgraded);
     await migrateContent(upgraded);
+    const original = (await upgraded.query(`SELECT p.clearance, p.original_id, j.status, j.profile
+      FROM media.representation p JOIN media.transform_job j ON j.source_id = p.id
+      WHERE p.id = $1`, [retainedOriginal])).rows[0];
+    expect(original).toEqual({ clearance: 'screening', original_id: retainedOriginal,
+      status: 'queued', profile: 'image-screen-v1' });
     const versions = await upgraded.query<{ version: number }>('SELECT version FROM content.schema_migration ORDER BY version');
     expect(versions.rows.map(row => row.version)).toEqual(files.map(file => file.version));
     for (const action of priorActions) await receipt(upgraded, action);

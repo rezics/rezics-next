@@ -27,6 +27,8 @@ import { activateTextContribution, textContributionDigest }
 import { publishTextContribution, textPublicationDigest }
   from '../../../services/main/src/modules/contribution/publish.ts';
 import type { MediaDependencies } from '../../../services/main/src/modules/media/commands.ts';
+import { MediaScreenStore } from '../../../services/main/src/modules/media-screen/store.ts';
+import { screenVerdict } from '../../../services/main/src/modules/media-screen/policy.ts';
 import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
@@ -68,7 +70,7 @@ export type MediaStack = Awaited<ReturnType<typeof startMediaStack>>;
 
 /** Real Access, Content PostgreSQL, Jena and RustFS behind one Main app; Account is a
  * bearer-to-principal table so several isolated members can act concurrently. */
-export async function startMediaStack(label: string, options: { contentProjection?: boolean; profileCredits?: boolean } = {}) {
+export async function startMediaStack(label: string, options: { contentProjection?: boolean; profileCredits?: boolean; autoClearUploads?: boolean } = {}) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCOUNT_RELAY_DATABASE_URL || !Bun.env.MAIN_S3_ENDPOINT || !Bun.env.MAIN_OBJECT_DIRECTORY) {
@@ -119,14 +121,29 @@ export async function startMediaStack(label: string, options: { contentProjectio
       return principal;
     } } });
 
-  const call = (method: string, path: string, options: { token?: string; body?: unknown; key?: string;
-    raw?: Uint8Array } = {}) => main.handle(new Request(`http://main.local${path}`, { method,
+  // Existing media journeys use an explicitly deterministic benign screen.
+  // Screening acceptance disables this fixture convenience to observe every state.
+  const autoClearUploads = options.autoClearUploads ?? true;
+  const screenStore = new MediaScreenStore(contentPool);
+  const call = async (method: string, path: string, options: { token?: string; body?: unknown; key?: string;
+    raw?: Uint8Array } = {}) => {
+    const response = await main.handle(new Request(`http://main.local${path}`, { method,
     headers: { ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
       ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
       ...(options.raw ? { 'content-type': 'application/octet-stream' } : {}),
       ...(options.key ? { 'idempotency-key': options.key } : {}) },
     ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
     ...(options.raw ? { body: new Blob([new Uint8Array(options.raw)]) } : {}) }));
+    if (autoClearUploads && method === 'PUT' && /^\/v1\/media\/uploads\/[^/]+\/bytes$/.test(path)
+      && response.status < 300) {
+      for (let i = 0; i < 100; i++) {
+        const lease = await screenStore.leaseNext();
+        if (!lease) break;
+        await screenStore.settle(lease, screenVerdict({ Drawing: 0.05, Hentai: 0.01, Neutral: 0.9, Porn: 0.01, Sexy: 0.03 }));
+      }
+    }
+    return response;
+  };
 
   /** One Account principal, represented Agent and bearer token; grants are explicit per scope. */
   const member = async (name: string) => {

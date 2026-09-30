@@ -21,6 +21,7 @@ const sha = /^[0-9a-f]{64}$/;
 const crop = /^xywh=percent:([0-9]{1,3}(\.[0-9]{1,3})?,){3}[0-9]{1,3}(\.[0-9]{1,3})?$/;
 export const MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
 export type MediaType = typeof MEDIA_TYPES[number];
+export type Clearance = 'screening' | 'cleared' | 'held' | 'rejected';
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 /** Bounded avatar rendition: an original inside these limits is served as-is. */
 export const AVATAR_LIMITS = { maxPixels: 2048, maxBytes: 4 * 1024 * 1024 } as const;
@@ -67,6 +68,8 @@ export interface UploadRow {
   representation: string | null;
   principal: string;
   reason: string | null;
+  clearance: Clearance | null;
+  clearanceReason: string | null;
 }
 
 export interface ActivatedUpload {
@@ -129,6 +132,7 @@ export interface AvatarRow {
   width: number | null;
   height: number | null;
   availability: string | null;
+  clearance: Clearance | null;
   disclosure: string | null;
   moderation: string | null;
   lifecycle: string | null;
@@ -282,14 +286,18 @@ export class MediaStore {
     if (!uuid.test(upload)) throw new MediaInvalid('invalid upload id');
     const result = await this.pool.query(`SELECT u.id, u.asset_id, u.status, u.declared_media_type,
       u.declared_byte_length, u.declared_digest, u.quarantine_key, a.object_namespace, a.owner,
-      u.expires_at <= clock_timestamp() AS expired, r.id AS representation, u.principal_id, u.reason
+      u.expires_at <= clock_timestamp() AS expired, r.id AS representation, u.principal_id, u.reason,
+      media.delivery_clearance(r) AS clearance, CASE
+        WHEN media.delivery_clearance(r) = 'rejected' AND r.clearance <> 'rejected'
+          THEN 'identical-copy-suppressed' ELSE r.clearance_reason END AS clearance_reason
       FROM media.upload u JOIN media.asset a ON a.id = u.asset_id
       LEFT JOIN media.representation r ON r.upload_id = u.id WHERE u.id = $1`, [upload]);
     const row = result.rows[0];
     return row ? { id: row.id, asset: row.asset_id, status: row.status, mediaType: row.declared_media_type,
       byteLength: row.declared_byte_length, sha256: row.declared_digest, quarantineKey: row.quarantine_key,
       objectNamespace: row.object_namespace, owner: row.owner, expired: row.expired,
-      representation: row.representation, principal: row.principal_id, reason: row.reason } : null;
+      representation: row.representation, principal: row.principal_id, reason: row.reason,
+      clearance: row.clearance, clearanceReason: row.clearance_reason } : null;
   }
 
   /** Activate verified bytes already present in the asset namespace, or record a rejection. */
@@ -329,6 +337,14 @@ export class MediaStore {
         VALUES ($1,$2,'original',$3,$4,$5,$6,$7,$8,$9)`,
       [representation, current.asset, upload, verdict.sha256, verdict.byteLength, verdict.mediaType,
         verdict.width, verdict.height, operationId]);
+      await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure, moderation,
+        lifecycle, erasure_epoch, actor, authority_epoch, operation_id, data_epoch, sequence)
+        SELECT $1, a.id, a.state_head, s.disclosure, 'suppressed', s.lifecycle, s.erasure_epoch,
+          s.actor, s.authority_epoch, $2, $3, $4 FROM media.asset a
+        JOIN media.asset_state s ON s.id = a.state_head
+        WHERE a.id = $5 AND s.moderation <> 'suppressed'
+          AND EXISTS (SELECT 1 FROM media.suppressed_digest WHERE digest = $6)`,
+      [randomUUID(), operationId, at.dataEpoch, at.sequence, current.asset, verdict.sha256]);
       return { asset: current.asset, upload, representation, sha256: verdict.sha256, status: 'activated',
         reason: null, position: at, replayed: false };
     });
@@ -568,15 +584,15 @@ export class MediaStore {
   async itemDelivery(use: string) {
     if (!uuid.test(use)) return null;
     const result = await this.pool.query(`SELECT u.target, p.byte_digest, p.media_type, p.byte_length,
-      p.pixel_width, p.pixel_height, p.availability, s.disclosure, s.moderation, s.lifecycle, a.object_namespace
+      p.pixel_width, p.pixel_height, p.availability, media.delivery_clearance(p) AS clearance, s.disclosure, s.moderation, s.lifecycle, a.object_namespace
       FROM media.use u JOIN media.asset a ON a.id = u.asset_id JOIN media.asset_state s ON s.id = a.state_head
       JOIN media.representation p ON p.id = u.representation_id
-      WHERE u.id = $1 AND u.role = 'publication-item'`, [use]);
+      WHERE u.id = $1 AND u.role = 'publication-item' AND media.delivery_clearance(p) = 'cleared'`, [use]);
     const row = result.rows[0];
     return row ? { target: row.target as string, sha256: row.byte_digest as string,
       mediaType: row.media_type as string, byteLength: row.byte_length as number,
       width: row.pixel_width as number, height: row.pixel_height as number,
-      availability: row.availability as string, disclosure: row.disclosure as string,
+      availability: row.availability as string, clearance: row.clearance as Clearance, disclosure: row.disclosure as string,
       moderation: row.moderation as string, lifecycle: row.lifecycle as string,
       objectNamespace: row.object_namespace as string } : null;
   }
@@ -585,7 +601,7 @@ export class MediaStore {
   async assetDelivery(asset: string, target: string, context = DEFAULT_MEDIA_CONTEXT) {
     if (!uuid.test(asset) || !nativeId.test(target)
       || (context !== DEFAULT_MEDIA_CONTEXT && !nativeId.test(context))) return null;
-    const result = await this.pool.query(`SELECT p.byte_digest, p.media_type, p.byte_length, p.availability,
+    const result = await this.pool.query(`SELECT p.byte_digest, p.media_type, p.byte_length, p.availability, media.delivery_clearance(p) AS clearance, a.owner, uploader.principal_id AS uploader,
         st.disclosure, st.moderation, st.lifecycle, a.object_namespace
       FROM media.selection_slot s
       JOIN media.selection_revision r ON r.id = s.head
@@ -593,13 +609,58 @@ export class MediaStore {
       JOIN media.representation p ON p.id = u.representation_id
       JOIN media.asset a ON a.id = p.asset_id
       JOIN media.asset_state st ON st.id = a.state_head
+      JOIN media.representation original ON original.id = p.original_id
+      JOIN media.upload uploader ON uploader.id = original.upload_id
       WHERE s.target = $2 AND s.context = $3 AND s.role = 'avatar' AND a.id = $1
       LIMIT 1`, [asset, target, context]);
     const row = result.rows[0];
     return row ? { sha256: row.byte_digest as string, mediaType: row.media_type as string,
       byteLength: row.byte_length as number, availability: row.availability as string,
+      clearance: row.clearance as Clearance, owner: row.owner as string, uploader: row.uploader as string,
       disclosure: row.disclosure as string, moderation: row.moderation as string,
       lifecycle: row.lifecycle as string, objectNamespace: row.object_namespace as string } : null;
+  }
+
+  /** Internal governance capability. Each call denies all exact-byte copies immediately
+   * and advances at most 100 asset histories. Continue with the returned asset cursor. */
+  async suppressIdenticalCopies(originalDigest: string, after: string | null = null, limit = 100): Promise<{
+    suppressed: number; continuation: string | null }> {
+    if (!sha.test(originalDigest) || (after !== null && !uuid.test(after))
+      || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new MediaInvalid('invalid copy suppression');
+    await transaction(this.pool, async client => {
+      await client.query("SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`media-copy:${originalDigest}`]);
+      const marker = await client.query('INSERT INTO media.suppressed_digest (digest) VALUES ($1) ON CONFLICT DO NOTHING RETURNING digest', [originalDigest]);
+      if (marker.rowCount) {
+        const operationId = `media-copy-digest:${originalDigest}`;
+        await receipt(client, { operationId, digest: hash(operationId), action: 'media.copy.suppress',
+          outcome: 'succeeded', eventType: 'media.copy.suppression.started', payload: { digest: originalDigest } });
+      }
+    });
+    return transaction(this.pool, async client => {
+      await client.query("SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
+      const candidates = await client.query<{ id: string }>(`SELECT DISTINCT asset_id AS id FROM media.representation
+        WHERE kind = 'original' AND byte_digest = $1 AND ($2::uuid IS NULL OR asset_id > $2)
+        ORDER BY asset_id LIMIT $3`, [originalDigest, after, limit + 1]);
+      const batch = candidates.rows.slice(0, limit);
+      let suppressed = 0;
+      for (const asset of batch) {
+        const row = (await client.query(`SELECT a.state_head, s.* FROM media.asset a
+          JOIN media.asset_state s ON s.id = a.state_head WHERE a.id = $1 FOR UPDATE OF a`, [asset.id])).rows[0]!;
+        if (row.moderation === 'suppressed' || row.lifecycle === 'erased') continue;
+        const operationId = `media-copy:${originalDigest}:${asset.id}`;
+        const id = randomUUID();
+        const at = await receipt(client, { operationId, digest: hash(operationId), action: 'media.copy.suppress',
+          outcome: 'succeeded', eventType: 'media.copy.suppressed', payload: { asset: asset.id } });
+        await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure, moderation,
+          lifecycle, erasure_epoch, actor, authority_epoch, operation_id, data_epoch, sequence)
+          VALUES ($1,$2,$3,$4,'suppressed',$5,$6,$7,$8,$9,$10,$11)`,
+        [id, asset.id, row.state_head, row.disclosure, row.lifecycle, row.erasure_epoch, row.actor,
+          row.authority_epoch, operationId, at.dataEpoch, at.sequence]);
+        suppressed++;
+      }
+      return { suppressed, continuation: candidates.rows.length > limit ? batch.at(-1)!.id : null };
+    });
   }
 
   /** Current owner result for an admission; used for replay after Access denies a re-claim. */
@@ -641,12 +702,12 @@ export class MediaStore {
         SELECT data_epoch, sequence::text AS sequence FROM content.owner_control WHERE singleton),
       wanted AS (SELECT t.target, c.context, c.rank FROM unnest($1::text[]) AS t(target)
         CROSS JOIN unnest($2::text[]) WITH ORDINALITY AS c(context, rank)),
-      chosen AS (SELECT DISTINCT ON (w.target) w.target, s.context, s.head FROM wanted w
+      chosen AS (SELECT DISTINCT ON (w.target) w.target, s.context, media.delivered_selection(s) AS head FROM wanted w
         JOIN media.selection_slot s ON s.target = w.target AND s.context = w.context AND s.role = 'avatar'
         ORDER BY w.target, w.rank)
       SELECT c.target, c.context, c.head AS selection, r.sequence::text AS selection_position,
         u.id AS use, u.asset_id, u.crop, p.id AS representation, p.byte_digest, p.media_type, p.byte_length,
-        p.pixel_width, p.pixel_height, p.availability, st.disclosure, st.moderation, st.lifecycle,
+        p.pixel_width, p.pixel_height, p.availability, media.delivery_clearance(p) AS clearance, st.disclosure, st.moderation, st.lifecycle,
         st.sequence::text AS state_position, o.data_epoch AS owner_epoch, o.sequence AS owner_sequence
       FROM owner o LEFT JOIN chosen c ON true
       LEFT JOIN media.selection_revision r ON r.id = c.head
@@ -661,7 +722,7 @@ export class MediaStore {
         selectionPosition: row.selection_position, use: row.use, asset: row.asset_id, crop: row.crop,
         representation: row.representation, sha256: row.byte_digest, mediaType: row.media_type,
         byteLength: row.byte_length, width: row.pixel_width, height: row.pixel_height,
-        availability: row.availability, disclosure: row.disclosure, moderation: row.moderation,
+        availability: row.availability, clearance: row.clearance, disclosure: row.disclosure, moderation: row.moderation,
         lifecycle: row.lifecycle, statePosition: row.state_position });
     }
     const owner = result.rows[0]!;
@@ -673,10 +734,10 @@ export class MediaStore {
     if (!uuid.test(selection)) return null;
     const result = await this.pool.query(`SELECT r.target, r.context, r.id AS selection, u.id AS use,
       u.asset_id, u.crop, p.id AS representation, p.byte_digest, p.media_type, p.byte_length,
-      p.pixel_width, p.pixel_height, p.availability, st.disclosure, st.moderation, st.lifecycle,
+      p.pixel_width, p.pixel_height, p.availability, media.delivery_clearance(p) AS clearance, st.disclosure, st.moderation, st.lifecycle,
       a.object_namespace FROM media.selection_revision r
       JOIN media.selection_slot s ON s.target = r.target AND s.context = r.context AND s.role = r.role
-        AND s.head = r.id
+        AND media.delivered_selection(s) = r.id
       JOIN media.use u ON u.id = r.use_id JOIN media.asset a ON a.id = u.asset_id
       JOIN media.asset_state st ON st.id = a.state_head
       JOIN media.representation p ON p.id = u.representation_id WHERE r.id = $1`, [selection]);
@@ -685,16 +746,16 @@ export class MediaStore {
       selectionPosition: null, use: row.use, asset: row.asset_id, crop: row.crop,
       representation: row.representation, sha256: row.byte_digest, mediaType: row.media_type,
       byteLength: row.byte_length, width: row.pixel_width, height: row.pixel_height,
-      availability: row.availability, disclosure: row.disclosure, moderation: row.moderation,
+      availability: row.availability, clearance: row.clearance, disclosure: row.disclosure, moderation: row.moderation,
       lifecycle: row.lifecycle, statePosition: null, objectNamespace: row.object_namespace } : null;
   }
 }
 
 /** A disclosable avatar image: public, unsuppressed, active, available and within rendition bounds. */
 export function avatarImageEligible(row: Pick<AvatarRow, 'use' | 'disclosure' | 'moderation' | 'lifecycle'
-  | 'availability' | 'mediaType' | 'width' | 'height' | 'byteLength'>): boolean {
+  | 'availability' | 'clearance' | 'mediaType' | 'width' | 'height' | 'byteLength'>): boolean {
   return Boolean(row.use) && row.disclosure === 'public' && row.moderation === 'none'
-    && row.lifecycle === 'active' && row.availability === 'available'
+    && row.lifecycle === 'active' && row.availability === 'available' && row.clearance === 'cleared'
     && MEDIA_TYPES.includes(row.mediaType as MediaType)
     && (row.width ?? Infinity) <= AVATAR_LIMITS.maxPixels && (row.height ?? Infinity) <= AVATAR_LIMITS.maxPixels
     && (row.byteLength ?? Infinity) <= AVATAR_LIMITS.maxBytes;

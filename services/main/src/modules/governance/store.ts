@@ -139,6 +139,50 @@ export class GovernanceStore {
     private readonly heads: TargetHeads, private readonly rules: RuleBasis,
     private readonly effects?: ModerationEffects, private readonly reviews?: ReviewReportOwner) {}
 
+  /** Trusted media owner intake, never a public route. The durable screen job
+   * identifies one report across retries; automation is disclosed as evidence. */
+  async openScreeningCase(input: import('../media-screen/store.ts').ScreenReview): Promise<string> {
+    if (![input.job, input.asset, input.source].every(value => uuidPattern.test(value))
+      || !digestPattern.test(input.digest) || input.verdict.clearance !== 'held'
+      || !['likely-explicit', 'screen-unavailable'].includes(input.verdict.reason ?? '')) {
+      throw new GovernanceInvalid('invalid automated media evidence');
+    }
+    const resource = `https://rezics.com/id/${input.asset}`;
+    const request = sha256(canonical(input));
+    return this.transaction(async client => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`media-screen:${input.job}`]);
+      const previous = (await client.query<{ case_id: string; request_digest: string }>(
+        'SELECT case_id, request_digest FROM access.governance_report WHERE id = $1', [input.job])).rows[0];
+      if (previous) {
+        if (previous.request_digest !== request) throw new GovernanceConflict('screen job binds other evidence');
+        return previous.case_id;
+      }
+      const gate = await client.query("SELECT 1 FROM access.scope_gate WHERE id = 'governance:platform' AND open FOR SHARE");
+      if (!gate.rowCount) throw new GovernanceUnavailable('platform review intake is held');
+      await client.query(`INSERT INTO access.governance_case (id, kind, authority_kind, authority_scope_id,
+        context, target_owner, target_resource, target_component, disclosure)
+        VALUES ($1,'content_report','platform','governance:platform',$2,'media',$3,'record','private')
+        ON CONFLICT DO NOTHING`, [randomUUID(), GLOBAL_CONTEXT, resource]);
+      const caseRow = (await client.query<{ id: string }>(`SELECT id FROM access.governance_case
+        WHERE target_owner = 'media' AND target_resource = $1 AND target_component = 'record'
+          AND authority_scope_id = 'governance:platform' AND context = $2 AND kind = 'content_report'
+          AND state = 'open' FOR SHARE`, [resource, GLOBAL_CONTEXT])).rows[0];
+      if (!caseRow) throw new GovernanceStale('screen case closed concurrently');
+      const provenance = { automation: 'local-image-screen', reason: input.verdict.reason, ...input.verdict.evidence };
+      const evidenceDigest = sha256(canonical({ representation: input.source, digest: input.digest, provenance }));
+      await client.query(`INSERT INTO access.governance_report (id, case_id, idempotency_key, request_digest,
+        reason_code, statement, evidence_count, evidence_digest, process, declarations)
+        VALUES ($1,$2,$3,$4,'prohibited_imagery','Automated local image screening; requires staff review.',
+          1,$5,'platform_rules',$6)`, [input.job, caseRow.id, `media-screen:${input.job}`, request,
+        evidenceDigest, { automation: true, category: 'prohibited-imagery' }]);
+      await client.query(`INSERT INTO access.governance_evidence (report_id, ordinal, owner, resource, component,
+        locator, revision, representation, revision_digest, state, provenance)
+        VALUES ($1,1,'media',$2,'record',$3,$3,$3,$4,'available',$5)`,
+      [input.job, resource, input.source, input.digest, provenance]);
+      return caseRow.id;
+    });
+  }
+
   /** `read` work writes nothing; see controlRead for its asynchronous commit. */
   private async transaction<T>(work: (client: PoolClient) => Promise<T>, read = false): Promise<T> {
     const client = await this.pool.connect().catch(() => {

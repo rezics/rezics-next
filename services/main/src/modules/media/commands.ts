@@ -144,7 +144,8 @@ async function finish(media: MediaDependencies, uploadId: string,
       replayed: settled?.replayed ?? true };
   }
   const recorded = await media.store.recordAssetRevision(uploadId);
-  return { asset: upload.asset, upload: uploadId, status: 'activated' as const, reason: null,
+  return { asset: upload.asset, upload: uploadId, status: upload.clearance ?? 'screening',
+    reason: upload.clearanceReason,
     representation: upload.representation, revision: recorded.revision,
     replayed: (settled?.replayed ?? true) && recorded.replayed };
 }
