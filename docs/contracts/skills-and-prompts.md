@@ -38,7 +38,8 @@ to $0 with an operator cap. The maintainer selected [TypeSafe's Jev](https://doc
 advertisement/spam review, using typed confidence-aware results, evidence spans
 and human override. The approximately $20/million-items figure is a planning
 estimate to verify against the provider and local workload, not qualified cost.
-That choice needs an explicit funded cap before paid use.
+The maintainer approved a funded cap of US$10 a month on 2026-09-30; when it is
+reached, Jev pauses and review falls back to people until the next month.
 
 Other first-batch agents propose post/book tags against shared vocabulary,
 maintain entity relations, normalize free-form posts into structured content such

@@ -50,8 +50,9 @@ precision. An exact identifier auto-links only to an already trusted,
 collision-free binding of the same grain; an ISBN never proves Work identity.
 Populated, disputed or cross-owner merges stay with humans, and one wrong
 bridge can join clusters, so clustering is evaluated as well as pairs. Jev costs
-about $21 per million 500-token checks (TypeSafe, 2026-09-30); it runs only
-under a funded cap, per the [agent owner](skills-and-prompts.md#ai-speed-through-open-interfaces).
+about $21 per million 500-token checks (TypeSafe, 2026-09-30); it runs under the
+US$10 monthly cap approved on 2026-09-30, per the
+[agent owner](skills-and-prompts.md#ai-speed-through-open-interfaces).
 
 ## Merge and split as one capability
 
