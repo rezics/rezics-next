@@ -116,7 +116,7 @@ function describe(error: unknown): string {
 export const steps: readonly SeedStep[] = [
   seedAccounts, seedClassics, seedWorks, seedReleases, seedContributions, seedRealms, seedAdoptions,
   seedLibrary, seedChapters, seedModeration, seedHomeFeed,
-  seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedZoneSites, seedRecipes, seedBookConcepts,
+  seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedRecipes, seedZoneSites, seedBookConcepts,
   seedOfficialThemes,
   seedProfileShelves, seedCommunityRealms, seedCommunityDiscussions, seedReadingLives, seedRatings,
   seedReviews, seedCommunityVotes, seedCoReaders,

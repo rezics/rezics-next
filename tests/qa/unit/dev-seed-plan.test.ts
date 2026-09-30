@@ -364,7 +364,7 @@ describe('dev seed plan', () => {
     expect(steps.map(step => step.name)).toEqual([
       'seedAccounts', 'seedClassics', 'seedWorks', 'seedReleases', 'seedContributions', 'seedRealms', 'seedAdoptions',
       'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
-      'seedProfileCredits', 'seedProfileBios', 'seedProfileFollows', 'seedOfficialZones', 'seedRecipes', 'seedBookConcepts',
+      'seedProfileCredits', 'seedProfileBios', 'seedProfileFollows', 'seedOfficialZones', 'seedRecipes', 'seedZoneSites', 'seedBookConcepts',
       'seedOfficialThemes',
       // Shelves, ratings and votes wait for readable classics and community Realms (G-385).
       'seedProfileShelves', 'seedCommunityRealms', 'seedCommunityDiscussions', 'seedReadingLives',

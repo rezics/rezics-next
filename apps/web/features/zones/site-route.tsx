@@ -110,7 +110,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
     return mount ? zoneText(mount.name) : null;
   };
   switch (route.kind) {
-    case 'home': redirect(realmHref(locale, ref));
+    case 'home': return redirect(realmHref(locale, ref));
     case 'document': {
       const id = idOf(route.resource.id);
       if (!id) notFound();
