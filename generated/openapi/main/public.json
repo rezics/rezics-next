@@ -111862,6 +111862,82 @@
                                 {
                                   "additionalProperties": false,
                                   "properties": {
+                                    "correlation": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "predicate": {
+                                          "maxLength": 2048,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "resource": {
+                                          "maxLength": 2048,
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "types": {
+                                          "items": {
+                                            "maxLength": 2048,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          },
+                                          "minItems": 1,
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "predicate",
+                                        "resource",
+                                        "types"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "kind": {
+                                      "const": "related",
+                                      "type": "string"
+                                    },
+                                    "path": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "inverse": {
+                                            "const": true,
+                                            "type": "boolean"
+                                          },
+                                          "predicate": {
+                                            "maxLength": 2048,
+                                            "minLength": 1,
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "predicate"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "minItems": 1,
+                                      "type": "array"
+                                    },
+                                    "types": {
+                                      "items": {
+                                        "maxLength": 2048,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "minItems": 1,
+                                      "type": "array"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "path",
+                                    "types"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
                                     "aggregation": {
                                       "maxLength": 2048,
                                       "minLength": 1,
@@ -112063,6 +112139,11 @@
                           "version": {
                             "minimum": 1,
                             "type": "integer"
+                          },
+                          "within": {
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -311204,6 +311285,230 @@
                             "sourcePosition",
                             "count",
                             "matches"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "count": {
+                              "properties": {
+                                "kind": {
+                                  "const": "exact-page",
+                                  "type": "string"
+                                },
+                                "total": {
+                                  "type": "null"
+                                },
+                                "value": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "kind",
+                                "total"
+                              ],
+                              "type": "object"
+                            },
+                            "items": {
+                              "items": {
+                                "properties": {
+                                  "cover": {
+                                    "anyOf": [
+                                      {
+                                        "properties": {
+                                          "key": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "fallback",
+                                            "type": "string"
+                                          },
+                                          "policy": {
+                                            "type": "string"
+                                          },
+                                          "resourceType": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "policy",
+                                          "key",
+                                          "resourceType"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "properties": {
+                                          "basis": {
+                                            "properties": {
+                                              "context": {
+                                                "type": "string"
+                                              },
+                                              "policy": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "policy",
+                                              "context"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "crop": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "height": {
+                                            "type": "integer"
+                                          },
+                                          "kind": {
+                                            "const": "image",
+                                            "type": "string"
+                                          },
+                                          "mediaType": {
+                                            "type": "string"
+                                          },
+                                          "selection": {
+                                            "type": "string"
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "width": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "selection",
+                                          "url",
+                                          "mediaType",
+                                          "width",
+                                          "height",
+                                          "crop",
+                                          "basis"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "id": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "mainVersion": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "matchedReleases": {
+                                    "items": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "maxItems": 8,
+                                    "minItems": 1,
+                                    "type": "array"
+                                  },
+                                  "moreMatchedReleases": {
+                                    "type": "boolean"
+                                  },
+                                  "revision": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "properties": {
+                                      "basis": {
+                                        "enum": [
+                                          "requested",
+                                          "same-script",
+                                          "other-script",
+                                          "fallback"
+                                        ]
+                                      },
+                                      "direction": {
+                                        "enum": [
+                                          "ltr",
+                                          "rtl"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "language": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "language",
+                                      "direction",
+                                      "basis"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "revision",
+                                  "mainVersion",
+                                  "title",
+                                  "cover",
+                                  "matchedReleases",
+                                  "moreMatchedReleases"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 20,
+                              "type": "array"
+                            },
+                            "nextCursor": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "profile": {
+                              "const": "release-works-v1",
+                              "type": "string"
+                            },
+                            "resultGrain": {
+                              "const": "work",
+                              "type": "string"
+                            },
+                            "sourcePosition": {
+                              "properties": {
+                                "dataEpoch": {
+                                  "type": "string"
+                                },
+                                "sequence": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "dataEpoch",
+                                "sequence"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "resultGrain",
+                            "items",
+                            "nextCursor",
+                            "sourcePosition",
+                            "count"
                           ],
                           "type": "object"
                         }

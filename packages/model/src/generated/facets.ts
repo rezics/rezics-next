@@ -427,6 +427,303 @@ export const facetRegistry = {
     "digest": "34681c142eb5ce28e53f81618a125bf66e26c49fa89739c1675d3ebf2a1dad89",
     "current": true
   },
+  "https://rezics.com/definition/facet-release-v1": {
+    "id": "https://rezics.com/definition/facet-release-v1",
+    "name": "release",
+    "version": 1,
+    "appliesTo": "resource",
+    "subject": "https://schema.org/CreativeWork",
+    "path": [
+      {
+        "kind": "related",
+        "path": [
+          {
+            "predicate": "https://rezics.com/vocab/coverageWork",
+            "inverse": true
+          }
+        ],
+        "types": [
+          "https://rezics.com/vocab/Release"
+        ],
+        "correlation": {
+          "predicate": "https://rezics.com/vocab/coverage",
+          "resource": "https://rezics.com/vocab/work",
+          "types": [
+            "https://rezics.com/vocab/ReleaseCoverage"
+          ]
+        }
+      }
+    ],
+    "values": [
+      {
+        "kind": "class",
+        "class": "https://rezics.com/vocab/Release"
+      }
+    ],
+    "operators": [
+      "any",
+      "none"
+    ],
+    "source": "global",
+    "parameters": [],
+    "qualifiers": [],
+    "occurrence": true,
+    "labels": {
+      "en": "Release",
+      "zh-Hant": "發行版本",
+      "zh-Hans": "发行版本",
+      "ja": "リリース",
+      "ko": "발매판",
+      "de": "Veröffentlichung",
+      "fr": "Édition",
+      "es": "Edición"
+    },
+    "cost": {
+      "maxValues": 8,
+      "graphReads": 2,
+      "nested": 8
+    },
+    "digest": "1a0b1d5151d292cc63fae417268a2369c3ddab6b8f7b81f52e3d3d870cf3d752",
+    "current": true
+  },
+  "https://rezics.com/definition/facet-release-completeness-v1": {
+    "id": "https://rezics.com/definition/facet-release-completeness-v1",
+    "name": "releaseCompleteness",
+    "version": 1,
+    "appliesTo": "participant",
+    "subject": "https://rezics.com/vocab/Release",
+    "path": [
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/coverage"
+      },
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/completeness"
+      }
+    ],
+    "values": [
+      {
+        "kind": "datatype",
+        "datatype": "http://www.w3.org/2001/XMLSchema#string",
+        "pattern": "^(complete|partial|trial|unknown)$"
+      }
+    ],
+    "operators": [
+      "any",
+      "all",
+      "none"
+    ],
+    "source": "global",
+    "parameters": [],
+    "qualifiers": [],
+    "occurrence": false,
+    "within": "https://rezics.com/definition/facet-release-v1",
+    "labels": {
+      "en": "Release completeness",
+      "zh-Hant": "發行完整度",
+      "zh-Hans": "发行完整度",
+      "ja": "リリースの完全性",
+      "ko": "발매판 완전성",
+      "de": "Vollständigkeit der Ausgabe",
+      "fr": "Complétude de l’édition",
+      "es": "Integridad de la edición"
+    },
+    "cost": {
+      "maxValues": 8,
+      "graphReads": 0
+    },
+    "digest": "691aa13c51613fe66453545e2959e5a177649c7132b497b459dd39e3f6c5456d",
+    "current": true
+  },
+  "https://rezics.com/definition/facet-release-language-v1": {
+    "id": "https://rezics.com/definition/facet-release-language-v1",
+    "name": "releaseLanguage",
+    "version": 1,
+    "appliesTo": "participant",
+    "subject": "https://rezics.com/vocab/Release",
+    "path": [
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/coverage"
+      },
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/contentLanguage"
+      }
+    ],
+    "values": [
+      {
+        "kind": "datatype",
+        "datatype": "http://www.w3.org/2001/XMLSchema#string",
+        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+      }
+    ],
+    "operators": [
+      "any",
+      "all",
+      "none"
+    ],
+    "source": "global",
+    "parameters": [],
+    "qualifiers": [],
+    "occurrence": false,
+    "within": "https://rezics.com/definition/facet-release-v1",
+    "labels": {
+      "en": "Release language",
+      "zh-Hant": "發行內容語言",
+      "zh-Hans": "发行内容语言",
+      "ja": "リリース言語",
+      "ko": "발매판 언어",
+      "de": "Veröffentlichungssprache",
+      "fr": "Langue de l’édition",
+      "es": "Idioma de la edición"
+    },
+    "cost": {
+      "maxValues": 8,
+      "graphReads": 0
+    },
+    "digest": "52b856d7e5ddf5cf62c7144a253e9fcb468c5042bd605d1c4d42dc46ec3c6c31",
+    "current": true
+  },
+  "https://rezics.com/definition/facet-release-platform-v1": {
+    "id": "https://rezics.com/definition/facet-release-platform-v1",
+    "name": "releasePlatform",
+    "version": 1,
+    "appliesTo": "participant",
+    "subject": "https://rezics.com/vocab/Release",
+    "path": [
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/platform"
+      }
+    ],
+    "values": [
+      {
+        "kind": "datatype",
+        "datatype": "http://www.w3.org/2001/XMLSchema#string",
+        "pattern": "^.{1,120}$"
+      }
+    ],
+    "operators": [
+      "any",
+      "all",
+      "none"
+    ],
+    "source": "global",
+    "parameters": [],
+    "qualifiers": [],
+    "occurrence": false,
+    "within": "https://rezics.com/definition/facet-release-v1",
+    "labels": {
+      "en": "Platform or format",
+      "zh-Hant": "平台或載體",
+      "zh-Hans": "平台或载体",
+      "ja": "プラットフォーム・形式",
+      "ko": "플랫폼 또는 형식",
+      "de": "Plattform oder Format",
+      "fr": "Plateforme ou format",
+      "es": "Plataforma o formato"
+    },
+    "cost": {
+      "maxValues": 8,
+      "graphReads": 0
+    },
+    "digest": "0e2b4b9a2905aeefe6e5123a6c97528b076d95e8484981c072948db25c251c2f",
+    "current": true
+  },
+  "https://rezics.com/definition/facet-release-status-v1": {
+    "id": "https://rezics.com/definition/facet-release-status-v1",
+    "name": "releaseStatus",
+    "version": 1,
+    "appliesTo": "participant",
+    "subject": "https://rezics.com/vocab/Release",
+    "path": [
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/releaseStatus"
+      }
+    ],
+    "values": [
+      {
+        "kind": "datatype",
+        "datatype": "http://www.w3.org/2001/XMLSchema#string",
+        "pattern": "^(official|unofficial|virtual|withdrawn|cancelled)$"
+      }
+    ],
+    "operators": [
+      "any",
+      "all",
+      "none"
+    ],
+    "source": "global",
+    "parameters": [],
+    "qualifiers": [],
+    "occurrence": false,
+    "within": "https://rezics.com/definition/facet-release-v1",
+    "labels": {
+      "en": "Release status",
+      "zh-Hant": "發行狀態",
+      "zh-Hans": "发行状态",
+      "ja": "リリース状態",
+      "ko": "발매 상태",
+      "de": "Veröffentlichungsstatus",
+      "fr": "Statut de l’édition",
+      "es": "Estado de la edición"
+    },
+    "cost": {
+      "maxValues": 8,
+      "graphReads": 0
+    },
+    "digest": "541d9caf10ff71efcd74ebb9d71e4212142b586927f097f12fa9b9d9acc5f7b9",
+    "current": true
+  },
+  "https://rezics.com/definition/facet-release-territory-v1": {
+    "id": "https://rezics.com/definition/facet-release-territory-v1",
+    "name": "releaseTerritory",
+    "version": 1,
+    "appliesTo": "participant",
+    "subject": "https://rezics.com/vocab/Release",
+    "path": [
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/territory"
+      }
+    ],
+    "values": [
+      {
+        "kind": "datatype",
+        "datatype": "http://www.w3.org/2001/XMLSchema#string",
+        "pattern": "^(?:[A-Z]{2}|[0-9]{3})$"
+      }
+    ],
+    "operators": [
+      "any",
+      "all",
+      "none"
+    ],
+    "source": "global",
+    "parameters": [],
+    "qualifiers": [],
+    "occurrence": false,
+    "within": "https://rezics.com/definition/facet-release-v1",
+    "labels": {
+      "en": "Release territory",
+      "zh-Hant": "發行地區",
+      "zh-Hans": "发行地区",
+      "ja": "リリース地域",
+      "ko": "발매 지역",
+      "de": "Veröffentlichungsgebiet",
+      "fr": "Territoire de l’édition",
+      "es": "Territorio de la edición"
+    },
+    "cost": {
+      "maxValues": 8,
+      "graphReads": 0
+    },
+    "digest": "ecfc69ba05556b2e65bf1cdc686e8bc7f9f682f01ff728ff369fa33d5e211971",
+    "current": true
+  },
   "https://rezics.com/definition/facet-role-v1": {
     "id": "https://rezics.com/definition/facet-role-v1",
     "name": "role",
@@ -621,4 +918,4 @@ export const facetRegistry = {
 } as const;
 export type FacetRef = keyof typeof facetRegistry;
 /** Changes whenever any admitted Facet does. */
-export const facetRegistryDigest = "881223de55315b7dca85cc92e38730f4b92c66b82c735e0e2de1f0690c8e8bcf";
+export const facetRegistryDigest = "292fa7831b1ca44bfc8f26a6308c163d4935f6563d067dfad8fe519573b14960";

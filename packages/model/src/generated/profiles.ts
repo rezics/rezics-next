@@ -866,6 +866,20 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "release-v3": {
+    "sha256": "1c6febcd2ce283307c8aaff5722e54b38e84dedb5a3151741d374516c420b83b",
+    "file": "shapes/release-v3.ttl",
+    "shapes": [
+      "https://rezics.com/definition/release-v3/release-shape",
+      "https://rezics.com/definition/release-v3/coverage-shape",
+      "https://rezics.com/definition/release-v3/revision-shape"
+    ],
+    "focusRoles": [
+      "release",
+      "coverage",
+      "revision"
+    ]
+  },
   "rights-offering-v1": {
     "sha256": "dd10150cfac446923dbb9ac8501f47a0a24bb292dd0eb4ddbad9449ed1746f85",
     "file": "shapes/rights-offering-v1.ttl",
