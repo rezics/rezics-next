@@ -11,6 +11,8 @@ import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { hydrateBookGroup, projectBookGroup, validateBookGroups } from './book-group.ts';
 
 export interface StructureTargetAuthority {
+  /** Owner policies can distinguish the target's current structural type. */
+  environment?: WorkActivationEnvironment;
   access: Pick<AccessAdmissionRegistry, 'canReadWork'>
     & Partial<Pick<AccessAdmissionRegistry, 'canReadSemanticResource'>>;
   principal: VerifiedPrincipal;

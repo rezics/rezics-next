@@ -126,7 +126,7 @@ export async function changeAdmittedComposition(env: WorkActivationEnvironment, 
   const principal = await account.verify(request, [profile.editPermission,
     ...(targets.length && profile.targetReadPermission ? [profile.targetReadPermission] : [])]);
   for (const target of targets) {
-    if (!await canReadStructureTarget(profile, { access, principal,
+    if (!await canReadStructureTarget(profile, { environment: env, access, principal,
       actingSubject: input.actingSubject, target })) {
       throw new CompositionUnavailable('Structure target is unavailable');
     }
@@ -166,7 +166,7 @@ export async function sealAdmittedComposition(env: WorkActivationEnvironment, ac
     idempotencyKey: input.idempotencyKey, digest },
   admission => sealComposition(env, { admission, structure: input.structure,
     expectedHead: input.expectedHead,
-    canReadTarget: target => canReadStructureTarget(profile, { access, principal,
+    canReadTarget: target => canReadStructureTarget(profile, { environment: env, access, principal,
       actingSubject: input.actingSubject, target }) }));
 }
 
@@ -182,7 +182,7 @@ export async function restoreAdmittedComposition(env: WorkActivationEnvironment,
     idempotencyKey: input.idempotencyKey, digest },
   admission => restoreComposition(env, { admission, structure: input.structure,
     expectedHead: input.expectedHead, restoredFrom: input.restoredFrom,
-    canReadTarget: target => canReadStructureTarget(profile, { access, principal,
+    canReadTarget: target => canReadStructureTarget(profile, { environment: env, access, principal,
       actingSubject: input.actingSubject, target }) }));
 }
 
@@ -208,7 +208,7 @@ export async function activateAdmittedCompositionStage(env: WorkActivationEnviro
       mappingPolicy: input.mappingPolicy,
       manifestDigest: input.manifestDigest, onGraphStart: input.onGraphStart,
       onProjectionBatch: input.onProjectionBatch },
-    canReadTarget: target => canReadStructureTarget(profile, { access, principal,
+    canReadTarget: target => canReadStructureTarget(profile, { environment: env, access, principal,
       actingSubject: input.actingSubject, target }) }), true);
 }
 

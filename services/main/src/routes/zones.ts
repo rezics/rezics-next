@@ -7,6 +7,11 @@ import { CompositionConflict, InvalidCompositionChange, StaleCompositionHead }
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader }
   from '../modules/structure/graph.ts';
 import { readVisibleCompositionPage } from '../modules/collection/visible-page.ts';
+import { resolveZoneRoute, readZoneNavigation, zoneRouteViewer, ZoneRouteMissing, ZONE_ROUTE_COST }
+  from '../modules/zone/route.ts';
+import { WorkReadInvalid, WorkReadMoved, WorkReadUnavailable, WorkReadLimit }
+  from '../modules/work/read-session.ts';
+import { readName, workCard, readPosition } from '../modules/work/read-contract.ts';
 import { canReadStructureTarget, structureProfileFor } from '../modules/structure/profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
 import { createAdmittedOwner } from '../modules/zone/owner-create.ts';
@@ -55,6 +60,7 @@ export const openApiOperations = {
   '/v1/zones': { post: { bearer: true, idempotencyKey: true }, get: {} },
   '/v1/zones/by-segment/{segment}': { get: {} },
   '/v1/zones/{id}/presentation': { get: {} },
+  '/v1/zones/{id}/routes': { get: {} },
   '/v1/zones/{id}/mounts': { post: { bearer: true, idempotencyKey: true } },
   '/v1/zones/{id}/mounts/{occurrence}': { delete: { bearer: true, idempotencyKey: true } },
   '/v1/zones/{id}': { get: { bearer: true } },
@@ -71,6 +77,12 @@ function key(request: Request) {
 }
 
 function routeError(error: unknown): Response {
+  if (error instanceof ZoneRouteMissing) return problem(404, 'route_missing', 'Zone route is unavailable');
+  if (error instanceof WorkReadInvalid) return problem(400, 'invalid_zone_cursor', error.message);
+  if (error instanceof WorkReadMoved) return problem(409, 'zone_route_stale', error.message);
+  if (error instanceof WorkReadUnavailable || error instanceof WorkReadLimit) {
+    return problem(503, 'zone_route_unavailable', 'Zone route is unavailable');
+  }
   if (error instanceof InvalidZoneConfiguration) return problem(400, 'invalid_zone_configuration', error.message);
   if (error instanceof ZoneOfficialDenied) return problem(403, 'official_zone_denied', error.message);
   if (error instanceof ZoneQueryBudgetExceeded) return problem(503, 'zone_query_budget', error.message);
@@ -84,7 +96,8 @@ function routeError(error: unknown): Response {
   if (error instanceof ZoneStale) return problem(409, 'stale_zone_head', error.message);
   if (error instanceof ZoneUnavailable) return problem(404, 'zone_unavailable', 'Zone is unavailable');
   if (error instanceof InvalidCompositionChange) return problem(400, 'invalid_zone_change', error.message);
-  if (error instanceof StaleCompositionHead || error instanceof CompositionConflict) {
+  if (error instanceof CompositionConflict) return problem(409, 'zone_route_conflict', error.message);
+  if (error instanceof StaleCompositionHead) {
     return problem(409, 'zone_conflict', error.message);
   }
   if (error instanceof CompositionUnavailable) return problem(404, 'zone_unavailable', 'Zone is unavailable');
@@ -123,6 +136,8 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
     url: t.String(), width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }),
     mediaType: t.String() })) }), { maxItems: 6 }),
   moduleData: t.Array(t.Any()),
+  navigation: t.Array(t.Object({ occurrence: ref, segment: t.String(), target: ref,
+    kind: t.Union([t.Literal('document'), t.Literal('index')]), name: readName }), { maxItems: 50 }),
   renderTokens: t.Object({ ...ZonePresentation.properties.tokens.properties,
     textOnAccent: t.String({ pattern: '^#[0-9a-f]{6}$' }) }),
   execution,
@@ -130,8 +145,24 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
     officialPageSize: t.Integer(), maxModules: t.Integer(), maxBanners: t.Integer(),
     maxBannerMediaReads: t.Integer(),
     maxResolvedBlocks: t.Integer(), maxResolvedCollections: t.Integer(),
-    maxCollectionPlacements: t.Integer(), maxModuleGraphReads: t.Integer() }),
+    maxCollectionPlacements: t.Integer(), maxModuleGraphReads: t.Integer(),
+    maxNavigation: t.Integer(), maxNavigationGraphReads: t.Integer() }),
 });
+
+const mountBinding = t.Object({ occurrence: ref, segment: t.String(), target: ref });
+const resourceBinding = t.Object({ id: ref, types: t.Array(t.String(), { maxItems: 8 }) });
+const routeBasis = { profile: t.Literal('zone-route-v1'), zone: ref, path: t.String(),
+  realm: t.Nullable(ref), revision: ref, sourcePosition: readPosition,
+  cost: t.Object(Object.fromEntries(Object.entries(ZONE_ROUTE_COST).map(([name, value]) =>
+    [name, t.Literal(value)]))) };
+const routeRead = t.Union([
+  t.Object({ ...routeBasis, kind: t.Literal('home') }),
+  t.Object({ ...routeBasis, kind: t.Literal('document'), mount: mountBinding, resource: resourceBinding }),
+  t.Object({ ...routeBasis, kind: t.Literal('index'), mount: mountBinding, collection: ref,
+    items: t.Array(t.Union([workCard, resourceBinding]), { maxItems: 24 }), nextCursor: t.Nullable(t.String()) }),
+  t.Object({ ...routeBasis, kind: t.Literal('detail'), mount: t.Nullable(mountBinding),
+    collection: t.Nullable(ref), resource: resourceBinding, tab: t.Nullable(t.String()) }),
+]);
 
 async function navigation(fuseki: FusekiClient, zone: string): Promise<string | null> {
   const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?navigation WHERE {
@@ -160,7 +191,7 @@ async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, reques
     visible: item => item.role === 'mount' && !!item.target,
     canReadTarget: async target => {
       return canReadStructureTarget(structureProfileFor(header.profile), {
-        access: work.access, principal, actingSubject: input.actingSubject, target });
+        environment: work.environment, access: work.access, principal, actingSubject: input.actingSubject, target });
     } });
   return { zone, navigation: structure, revision: result.revision,
     predecessor: result.predecessor,
@@ -194,19 +225,21 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ actingSubject: t.Optional(ref),
         safeTheme: t.Optional(t.Literal('1')), 'safe-theme': t.Optional(t.Literal('1')),
         viewerOptOut: t.Optional(t.Literal('1')) },
-      { additionalProperties: false }), response: { 200: publicationRead, ...authorizedReadProblems } },
+      { additionalProperties: false }), response: { 200: publicationRead, ...authorizedReadProblems,
+        409: problemResult(409) } },
     async ({ request, params, query }: { request: Request; params: { id: string };
       query: { actingSubject?: string; safeTheme?: '1'; 'safe-theme'?: '1'; viewerOptOut?: '1' } }) => {
       try {
         const zone = `https://rezics.com/id/${params.id}`;
         const state = await readZonePublication(work.environment, zone);
+        const viewer = await zoneRouteViewer(work, request, query.actingSubject);
         if (state.disclosure !== 'public') {
-          if (!query.actingSubject) return problem(404, 'zone_unavailable', 'Zone is unavailable');
-          const principal = await work.account.verify(request, ['semantic:read']);
-          if (!await work.access.canReadSemanticResource?.(principal, query.actingSubject, zone)) {
+          if (!viewer.principal || !query.actingSubject
+            || !await work.access.canReadSemanticResource?.(viewer.principal, query.actingSubject, zone)) {
             return problem(404, 'zone_unavailable', 'Zone is unavailable');
           }
         }
+        const navigation = await readZoneNavigation(work, request, state, viewer);
         const moduleData = await readZoneModuleData(work.environment, state.configuration);
         const bannerMedia = await readZoneBannerMedia(work.media?.store, state.realm,
           state.presentation.banners);
@@ -218,19 +251,27 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const execution = forced ?? (theme && state.disclosure === 'public'
           ? zonePackageExecution(await readFirstPartyTheme(work.environment, theme.slice(-36)), zone)
           : { state: 'fallback' as const, reason: 'none_approved' as const });
-        const etag = `"${hash(JSON.stringify({ revision: state.revision, moduleData, bannerMedia, execution }))}"`;
-        const headers = { etag,
-          'cache-control': state.disclosure === 'public' && execution.state === 'fallback'
+        const etag = `"${hash(JSON.stringify({ revision: state.revision, navigation, moduleData, bannerMedia, execution }))}"`;
+      const headers = { etag, vary: 'accept-language, x-rezics-display-languages',
+          'cache-control': !viewer.principal && state.disclosure === 'public' && execution.state === 'fallback'
             && execution.reason === 'none_approved' ? 'public, max-age=30' : 'no-store' };
         if (request.headers.get('if-none-match') === headers.etag) return new Response(null, { status: 304, headers });
         return Response.json({ profile: 'zone-presentation-response-v1', zone, realm: state.realm,
           official: state.official, revision: state.revision, presentation: state.presentation,
-          moduleData, bannerMedia, renderTokens: zoneRenderTokens(execution.state === 'active'
+          navigation, moduleData, bannerMedia, renderTokens: zoneRenderTokens(execution.state === 'active'
             || execution.state === 'package'
             || execution.reason === 'none_approved'
             ? state.presentation.tokens : DEFAULT_ZONE_PRESENTATION.tokens),
           execution, cost: state.cost }, { headers });
       } catch (error) { return routeError(error); }
+    })
+    .get('/v1/zones/:id/routes', { params: t.Object({ id: groupUuid }),
+      query: t.Object({ path: t.String({ maxLength: 256 }), cursor: t.Optional(t.String({ maxLength: 2048 })),
+        actingSubject: t.Optional(ref) }, { additionalProperties: false }),
+      response: { 200: routeRead, ...errors } }, async ({ request, params, query }) => {
+      try { return Response.json(await resolveZoneRoute(work, request, {
+        zone: `https://rezics.com/id/${params.id}`, ...query }), { headers: { 'cache-control': 'no-store' } }); }
+      catch (error) { return routeError(error); }
     })
     .post('/v1/zones', { body: t.Object({ zone: ref, space: ref, disclosure, actingSubject: ref },
       { additionalProperties: false }), response: { 200: write, 201: write, 202: pendingOperation, ...errors } },
@@ -252,7 +293,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       } catch (error) { return routeError(error); }
     })
     .post('/v1/zones/:id/mounts', { params: t.Object({ id: groupUuid }),
-      body: t.Object({ expectedHead: ref, collection: ref, routeSegment: t.String({
+      body: t.Object({ expectedHead: ref, target: t.Optional(ref), collection: t.Optional(ref), routeSegment: t.String({
         pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }),
         disclosure, presentation: t.Optional(t.String({ format: 'uri' })),
         position: t.Optional(t.Union([t.Literal('first'), t.Literal('last'),
@@ -263,12 +304,24 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       try {
         const zone = `https://rezics.com/id/${params.id}`;
+        const target = body.target ?? body.collection;
+        if (!target || body.target && body.collection && body.target !== body.collection) {
+          return problem(400, 'invalid_zone_change', 'A target or matching collection alias is required');
+        }
+        const isWork = (await fuseki.query(`PREFIX schema: <https://schema.org/> ASK {
+          GRAPH ${iri(GRAPHS.current)} { ${iri(target)} a schema:CreativeWork } }`, 1024)).boolean === true;
+        if (isWork) {
+          const principal = await work.account.verify(request, ['work:read']);
+          if (!await work.access.canReadWork(principal, body.actingSubject, target)) {
+            throw new CompositionUnavailable('Structure target is unavailable');
+          }
+        }
         const structure = await navigation(fuseki, zone);
         if (!structure) throw new CompositionUnavailable('Zone is unavailable');
         const result = await changeAdmittedComposition(work.environment, work.account, work.access,
           request, { structure, expectedHead: body.expectedHead, actingSubject: body.actingSubject,
             idempotencyKey, operations: [{ op: 'insert', parent: structure,
-              position: body.position ?? 'last', role: 'mount', target: body.collection,
+              position: body.position ?? 'last', role: 'mount', target,
               qualifier: { type: 'zone-mount', zone, routeSegment: body.routeSegment,
                 disclosure: body.disclosure,
                 ...(body.presentation ? { presentation: body.presentation } : {}) } }] });

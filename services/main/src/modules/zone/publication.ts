@@ -9,11 +9,13 @@ import type { ZoneConfiguration } from './config-format.ts';
 import { readCompositionPage } from '../structure/read.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import type { MediaStore } from '../media/store.ts';
+import { ZONE_ROUTE_COST } from './route-cost.ts';
 
 export const ZONE_PUBLICATION_COST = { graphReads: 1, objectReads: 2,
   officialPageSize: 50, maxModules: 24, maxBanners: 6, maxBannerMediaReads: 6,
   maxResolvedBlocks: 4, maxResolvedCollections: 2, maxCollectionPlacements: 8,
-  maxModuleGraphReads: 64 } as const;
+  maxModuleGraphReads: 64, maxNavigation: ZONE_ROUTE_COST.maxNavigation,
+  maxNavigationGraphReads: ZONE_ROUTE_COST.maxGraphReads } as const;
 
 export async function readZonePublication(env: WorkActivationEnvironment, zone: string) {
   const state = await readZoneConfiguration(env, zone);
