@@ -358,11 +358,6 @@ export class ReaderLibraryStatusStore {
       }
       const current = await client.query<Row>(`SELECT ${columns} FROM reader.library_status
         WHERE agent = $1 AND work = $2 FOR UPDATE`, [input.agent, input.work]);
-      // Once real attempts exist, this slot is their projection. Historical
-      // standalone statuses keep their original command path and receipts.
-      if (current.rows[0]?.session_projection && !input.sessionProjection) {
-        throw new LibraryStatusConflict('Library status is projected from the latest consumption attempt');
-      }
       const version = Number(current.rows[0]?.version ?? 0);
       if (version !== input.expectedVersion) throw new StaleLibraryStatus('status changed');
       const startedOn = input.startedOn === undefined ? current.rows[0]?.started_on ?? null : input.startedOn;
@@ -371,6 +366,8 @@ export class ReaderLibraryStatusStore {
         || startedOn !== null && finishedOn !== null && startedOn > finishedOn) {
         throw new InvalidLibraryStatus('invalid reading dates');
       }
+      // A standalone statement detaches this slot from its attempt; the
+      // attempt's history remains unchanged under its own version check.
       const written = await client.query<Row>(`INSERT INTO reader.library_status
         (agent, work, status, started_on, finished_on, version, session_projection)
         VALUES ($1,$2,$3,$4,$5,$6,$7)

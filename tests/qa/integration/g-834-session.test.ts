@@ -4,7 +4,7 @@ import type { Pool, PoolClient } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
-import { LibraryStatusConflict, ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
+import { ReaderLibraryStatusStore, type StatusState } from '../../../services/main/src/modules/library/status.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
 import { SESSION_COST, type SessionState } from '../../../services/main/src/modules/session/contract.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
@@ -57,6 +57,17 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     };
     const target = await stack.publicWork(person, ['en'], 'Consumption Work');
     const legacy = await stack.publicWork(person, ['en'], 'Legacy status without attempts');
+    const putStatus = (changes: object, key = randomUUID()) => call('PUT',
+      `/v1/works/${target.work.slice(-36)}/reader-status`, { actingSubject: person, ...changes }, key);
+    const shelfSnapshot = async () => ({
+      row: (await stack.contentPool.query(`SELECT status, started_on::text, finished_on::text,
+        version::text, changed_at::text, session_projection FROM reader.library_status WHERE agent = $1 AND work = $2`,
+      [person, target.work])).rows[0],
+      commands: (await stack.contentPool.query(`SELECT count(*)::text AS count FROM reader.library_status_command
+        WHERE agent = $1`, [person])).rows[0],
+      sourceFence: (await stack.contentPool.query('SELECT revision::text FROM reader.also_enjoyed_source_fence WHERE id')).rows[0],
+      shelfFence: await library.fence(person),
+    });
     await library.write({ agent: person, work: legacy.work, status: 'read', startedOn: '2025-02-01',
       finishedOn: '2025-02-28', expectedVersion: 0, idempotencyKey: randomUUID() });
     expect(await json<Page>(await page(legacy.work), 200)).toEqual({ items: [], nextCursor: null });
@@ -70,12 +81,33 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     expect(planned.target.revision).toMatch(/^https:\/\/rezics.com\/id\//);
     expect((await library.batch(person, [target.work]))[0]).toMatchObject({ status: 'want-to-read', startedOn: null });
     let attempt: Saved = planned;
+    const plannedShelf = await shelfSnapshot();
+    attempt = await json<Saved>(await patch(attempt, { startedOn: '2026' }), 200);
+    expect(await shelfSnapshot()).toEqual(plannedShelf);
+    attempt = await json<Saved>(await patch(attempt, { startedOn: '2026-09' }), 200);
+    expect(await shelfSnapshot()).toEqual(plannedShelf);
     for (const state of ['active', 'paused', 'active', 'dnf']) {
+      const previous = attempt;
+      const shelfBefore = await shelfSnapshot();
       attempt = await json<Saved>(await patch(attempt, { state }), 200);
       expect(attempt).toMatchObject({ state, startedOn: '2026-09', finishedOn: null, completedAt: null });
       expect((await library.batch(person, [target.work]))[0]?.status).toBe(state === 'dnf' ? null : 'reading');
+      if (state === 'paused' || previous.state === 'paused') expect(await shelfSnapshot()).toEqual(shelfBefore);
     }
     expect((await patch(attempt, { state: 'active' })).status).toBe(400);
+    // Re-adding a DNF'd Work is a new Library statement, not a new attempt.
+    const dnfShelf = await shelfSnapshot();
+    const dnfHistory = await json<Page>(await page(target.work), 200);
+    expect(dnfShelf.row).toMatchObject({ status: null, session_projection: attempt.id });
+    const readded = await json<StatusState>(await putStatus({ status: 'want-to-read',
+      expectedVersion: Number(dnfShelf.row!.version) }), 200);
+    expect(readded).toMatchObject({ status: 'want-to-read', version: Number(dnfShelf.row!.version) + 1 });
+    const readdedShelf = await shelfSnapshot();
+    expect(readdedShelf.row!.session_projection).toBeNull();
+    expect(await json<Page>(await page(target.work), 200)).toEqual(dnfHistory);
+    expect(await json<{ code: string }>(await putStatus({ status: 'read',
+      expectedVersion: Number(dnfShelf.row!.version) }), 409)).toMatchObject({ code: 'stale_reader_status' });
+    expect(await shelfSnapshot()).toEqual(readdedShelf);
     const reread = await json<Saved>(await create(target.work, { state: 'active' }), 201);
     expect(reread.id).not.toBe(attempt.id);
     expect(reread).toMatchObject({ startedOn: null, finishedOn: null, completedAt: null });
@@ -90,10 +122,19 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     expect((await library.batch(person, [target.work]))[0]).toMatchObject({ status: 'read', startedOn: null, finishedOn: null });
     expect((await patch(finished, { state: 'active' })).status).toBe(400);
     const [projected] = await library.batch(person, [target.work]);
-    await expect(library.write({ agent: person, work: target.work, status: 'want-to-read',
-      expectedVersion: projected!.version, idempotencyKey: randomUUID() })).rejects.toBeInstanceOf(LibraryStatusConflict);
-    expect((await call('PUT', `/v1/works/${target.work.slice(-36)}/reader-status`,
-      { actingSubject: person, status: 'want-to-read', expectedVersion: projected!.version })).status).toBe(409);
+    const historyBeforeQuickEdit = await json<Page>(await page(target.work), 200);
+    const quickKey = randomUUID();
+    const quickIntent = { status: 'want-to-read', startedOn: '2026-08-01', finishedOn: '2026-08-31',
+      expectedVersion: projected!.version };
+    const quick = await json<StatusState & { replayed: boolean }>(await putStatus(quickIntent, quickKey), 200);
+    expect(quick).toMatchObject({ status: 'want-to-read', startedOn: '2026-08-01', finishedOn: '2026-08-31',
+      version: projected!.version + 1, replayed: false });
+    expect((await shelfSnapshot()).row!.session_projection).toBeNull();
+    expect(await json<Page>(await page(target.work), 200)).toEqual(historyBeforeQuickEdit);
+    expect(await json<{ code: string }>(await putStatus({ status: 'read', expectedVersion: projected!.version }), 409))
+      .toMatchObject({ code: 'stale_reader_status' });
+    expect(await json<StatusState & { replayed: boolean }>(await putStatus(quickIntent, quickKey), 200))
+      .toEqual({ ...quick, replayed: true });
     // Replay returns its immutable original result even after several later edits.
     expect(await json<Saved>(await create(target.work, { startedOn: '2026-09' }, startKey), 201))
       .toEqual({ ...planned, replayed: true });
@@ -126,6 +167,7 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     };
     const print = await release('Print edition'), audio = await release('Audio edition');
     let mixed = await json<Saved>(await create(target.work, { state: 'active', startedOn: '2026-09-01' }), 201);
+    const shelfBeforeSelections = await shelfSnapshot();
     mixed = await json<Saved>(await patch(mixed, {
       addSelections: [{ target: print.release, format: 'print', language: 'en' },
         { target: audio.release, format: 'audio', language: 'en' }] }), 200);
@@ -136,6 +178,7 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     expect((await create(target.mainVersion)).status).toBe(422);
     mixed = await json<Saved>(await patch(mixed, { addSelections: [{ language: 'en', format: 'print', target: print.release }] }), 200);
     expect(mixed.selections).toHaveLength(3);
+    expect(await shelfSnapshot()).toEqual(shelfBeforeSelections);
     const raced = await Promise.all([30, 60].map(value => patch(mixed, { position: { target: print.release, unit: 'page', value } })));
     expect(raced.map(response => response.status).sort()).toEqual([200, 409]);
     const winnerIndex = raced.findIndex(response => response.status === 200);
@@ -144,6 +187,15 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     expect(loser).toMatchObject({ code: 'stale_session', current: { id: mixed.id, version: 4, locators: winner.locators },
       submitted: { expectedVersion: 3, position: { value: [30, 60][1 - winnerIndex] } } });
     mixed = winner;
+    // Locator-only updates neither write Library commands nor reveal reading
+    // activity through shelf order or invalidate a public shelf's paging fence.
+    expect(await shelfSnapshot()).toEqual(shelfBeforeSelections);
+    const historyBeforeLocatorQuickEdit = await json<Page>(await page(target.work), 200);
+    await json<StatusState>(await putStatus({ status: 'want-to-read',
+      expectedVersion: Number(shelfBeforeSelections.row!.version) }), 200);
+    expect(await json<Page>(await page(target.work), 200)).toEqual(historyBeforeLocatorQuickEdit);
+    const manualShelf = await shelfSnapshot();
+    expect(manualShelf.row).toMatchObject({ status: 'want-to-read', session_projection: null });
     const locatorKey = randomUUID();
     const beforeLocator = mixed;
     mixed = await json<Saved>(await patch(mixed, { position: { target: print.release, unit: 'page', value: 80 } }, locatorKey), 200);
@@ -153,10 +205,15 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     expect(await json<Saved>(await patch(beforeLocator, { position: { target: print.release, unit: 'page', value: 80 } }, locatorKey), 200))
       .toEqual({ ...locatorResult, replayed: true });
     mixed = await json<Saved>(await patch(mixed, { position: { target: audio.release, unit: 'media-time', value: 1200.5 } }), 200);
+    expect(await shelfSnapshot()).toEqual(manualShelf);
     mixed = await json<Saved>(await patch(mixed, { state: 'finished', finishedOn: '2026-09-30' }), 200);
     const completedAt = mixed.completedAt;
+    const finishedShelf = await shelfSnapshot();
+    expect(finishedShelf.row).toMatchObject({ status: 'read', session_projection: mixed.id,
+      version: String(Number(manualShelf.row!.version) + 1) });
     mixed = await json<Saved>(await patch(mixed, { state: 'finished' }), 200);
     expect(mixed.completedAt).toBe(completedAt);
+    expect(await shelfSnapshot()).toEqual(finishedShelf);
     expect(mixed.locators).toEqual([{ target: print.release, unit: 'page', current: 5, furthest: 80 },
       { target: audio.release, unit: 'media-time', current: 1200.5, furthest: 1200.5 }]);
     expect((await library.batch(person, [target.work]))[0]).toMatchObject({ status: 'read', startedOn: '2026-09-01', finishedOn: '2026-09-30' });

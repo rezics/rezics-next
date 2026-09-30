@@ -1,4 +1,5 @@
 import type { ResolvedTarget } from '../target/contract.ts';
+import type { ReadingStatus } from '../library/status.ts';
 import { InvalidSession, SESSION_COST, type SessionChanges, type SessionSelection,
   type SessionState, type SessionStatus } from './contract.ts';
 
@@ -6,6 +7,14 @@ const transitions: Record<SessionStatus, SessionStatus[]> = {
   planned: ['planned', 'active', 'dnf', 'finished'], active: ['active', 'paused', 'dnf', 'finished'],
   paused: ['paused', 'active', 'dnf', 'finished'], dnf: ['dnf'], finished: ['finished'],
 };
+
+/** Library dates have day precision. Coarser dates stay private to the attempt. */
+export function sessionLibraryProjection(state: SessionState): [ReadingStatus | null, string | null, string | null] {
+  return [state.state === 'planned' ? 'want-to-read' : state.state === 'finished' ? 'read'
+    : state.state === 'dnf' ? null : 'reading',
+  state.startedOn?.length === 10 ? state.startedOn : null,
+  state.finishedOn?.length === 10 ? state.finishedOn : null];
+}
 
 function dateRange(value: string | null): [string, string] | null {
   if (value === null) return null;
@@ -67,6 +76,9 @@ export function applySessionChanges(current: SessionState, changes: SessionChang
   if (changes.position) {
     const { target, unit, value } = changes.position;
     const selection = selections.find(item => item.target.resource === target);
+    if (selection?.target.base === 'work') {
+      throw new InvalidSession('Choose an exact realization or release for locator progress');
+    }
     if (!selection || selection.progress === 'structure') {
       throw new InvalidSession('Hosted occurrence progress belongs to Structure progress');
     }

@@ -7,7 +7,7 @@ import { decodeReadCursor, encodeReadCursor } from '../work/read-session.ts';
 import { readId } from '../work/read-contract.ts';
 import { InvalidSession, SESSION_COST, SessionConflict, SessionMissing, StaleSession,
   sessionState, type SessionChanges, type SessionSelection, type SessionState } from './contract.ts';
-import { applySessionChanges } from './state.ts';
+import { applySessionChanges, sessionLibraryProjection } from './state.ts';
 
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
 export interface SessionOwner { principal: VerifiedPrincipal; agent: string }
@@ -145,7 +145,14 @@ export class ConsumptionSessionStore {
       const latest = await client.query<{ id: string }>(`SELECT id FROM reader.consumption_session
         WHERE principal_issuer = $1 AND principal_subject = $2 AND agent = $3 AND work = $4
         ORDER BY attempt_order DESC LIMIT 1`, [...identity, target.work]);
-      if (latest.rows[0]?.id === result.id) await this.project(client, input, result);
+      const projection = sessionLibraryProjection(result);
+      const previousProjection = current && sessionLibraryProjection(current);
+      // Positions, selections and active/paused transitions cannot change shelf
+      // order, invalidate public cursors or supersede a manual Library statement.
+      if (latest.rows[0]?.id === result.id && (!previousProjection
+        || projection.some((value, index) => value !== previousProjection[index]))) {
+        await this.project(client, input, result);
+      }
       const operation = `session:${hash([...identity.slice(0, 2), input.idempotencyKey])}`;
       const control = await client.query<{ data_epoch: string; sequence: string }>(
         'UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton RETURNING data_epoch, sequence::text');
@@ -169,12 +176,10 @@ export class ConsumptionSessionStore {
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
       [JSON.stringify(['library-status-work', input.agent, work])]);
     const [current] = await this.library.batch(input.agent, [work], client);
-    const status = state.state === 'planned' ? 'want-to-read' : state.state === 'finished' ? 'read'
-      : state.state === 'dnf' ? null : 'reading';
+    const [status, startedOn, finishedOn] = sessionLibraryProjection(state);
     await this.library.write({ agent: input.agent, work, status,
       sessionProjection: state.id,
-      startedOn: state.startedOn?.length === 10 ? state.startedOn : null,
-      finishedOn: state.finishedOn?.length === 10 ? state.finishedOn : null,
+      startedOn, finishedOn,
       expectedVersion: current!.version,
       idempotencyKey: `session.${hash([input.principal.issuer, input.principal.subject, input.idempotencyKey])}` }, client);
   }
