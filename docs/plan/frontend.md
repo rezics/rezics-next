@@ -287,6 +287,11 @@ The Studio Agent switcher, the publish dialog and Realm role impact previews
 are in code. These decisions wait for their surfaces and follow the
 [acting identity layers](../contracts/identity-and-access.md#acting-identity-layers):
 
+- **First sign-in** asks for the public name on an empty, required field and
+  fills nothing from the Account; no Person exists until it is submitted, and
+  handle suggestions come from the typed name only. The Account's own name and
+  email appear on no page, and the identity picker lists every Agent Main
+  returns for the person, whatever it may publish.
 - **Publishing defaults** are set per task and content profile in settings,
   prefill the publish form for that operation only, and say which Agent is
   used when a saved default is no longer eligible.
