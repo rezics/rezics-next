@@ -13,7 +13,7 @@ interface Embedded { id: string; workRef: string; locale: UiLocale; pageMessages
 export async function PartsPreview({ id, workRef, locale, pageMessages }: Embedded) {
   const t = copyOf(locale);
   const [parts, wholes] = await Promise.all([readParts(id, { limit: PREVIEW_COUNTS.parts + 1 }),
-    readWholes(id, PREVIEW_COUNTS.wholes)]);
+    readWholes(id, { limit: PREVIEW_COUNTS.wholes })]);
   const names = await namesOf([...(parts.ok ? parts.data.parts.flatMap(part => part.work ?? []) : []),
     ...(wholes.ok ? wholes.data.wholes.map(whole => whole.work) : [])]);
   return <PartsPreviewView parts={parts} wholes={wholes} names={names} workRef={workRef} pageMessages={pageMessages} t={t} />;

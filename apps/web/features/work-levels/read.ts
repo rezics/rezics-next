@@ -41,11 +41,11 @@ export async function readParts(id: string, query: { parent?: string; after?: st
     parent: query.parent ? iriOf(query.parent) : undefined, after: query.after, limit: query.limit } }), query.after);
 }
 
-export async function readWholes(id: string, limit = 20): Promise<Loaded<WholesPage>> {
+export async function readWholes(id: string, query: { after?: string; limit?: number } = {}): Promise<Loaded<WholesPage>> {
   const current = await actor();
   if (current.failure) return { ok: false, failure: current.failure };
   return settle(() => current.main.v1.resources({ resource: id }).wholes.get({ query: {
-    actingSubject: current.actingSubject, limit } }));
+    actingSubject: current.actingSubject, after: query.after, limit: query.limit ?? 20 } }), query.after);
 }
 
 export async function readRelations(id: string, query: { after?: string; limit?: number }):
@@ -107,9 +107,9 @@ export async function readRelease(work: string, release: string): Promise<Loaded
 }
 
 /** Releases carrying an ISBN-13, as Main resolves it. */
-export async function readReleasesByIsbn(isbn13: string): Promise<Loaded<ReleasePage>> {
+export async function readReleasesByIsbn(isbn13: string, cursor?: string): Promise<Loaded<ReleasePage>> {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.releases.get({ query: { isbn13, actingSubject } }));
+  return settle(() => main.v1.releases.get({ query: { isbn13, actingSubject, cursor } }), cursor);
 }
 
 /** The Work a release belongs to, from the release's resource summary. */

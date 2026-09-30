@@ -8,7 +8,8 @@ import { copyOf } from './messages.ts';
 import { EditionsPreviewView } from './previews.tsx';
 import { ReleaseView } from './release-page.tsx';
 
-const names = new Map([...fixture.names, ...fixture.translators]);
+const names = new Map([...fixture.names, ...fixture.translators,
+  [fixture.iri('7'), fixture.summary(fixture.iri('7'), 'Sword Art Online (bunko)', 'en', 'main-version')]]);
 
 function Page({ locale, view = 'section' }: { locale: UiLocale; view?: 'section' | 'preview' | 'release' }) {
   const t = copyOf(locale);
@@ -21,7 +22,7 @@ function Page({ locale, view = 'section' }: { locale: UiLocale; view?: 'section'
         ? <ReleaseView release={release} names={names} locale={locale} t={t}
           sources={fixture.realizations.ok ? [fixture.realizations.data.items[0]!] : []}
           realizations={new Map(fixture.realizations.ok ? [[fixture.iri('r1'), { ok: true as const, data: fixture.realizations.data.items[1]! }]] : [])} />
-        : <EditionsSection realizations={fixture.realizations} releases={fixture.releases} names={names} workRef={fixture.workRef}
+        : <EditionsSection realizations={fixture.realizations} sources={[]} releases={fixture.releases} names={names} workRef={fixture.workRef}
           query={{}} locale={locale} t={t} pageMessages={pageMessages[locale]} />}
   </div>;
 }
@@ -40,6 +41,10 @@ export const GroupedByLanguageAndScript: Story = {
     await expect(within(hant).getByText('Verified')).toBeVisible();
     await expect(within(hant).getByText(/Source text:/)).toBeVisible();
     await expect(within(hant).getByText('Lin Mei')).toBeVisible();
+    // A text that follows a Main Version names it, so the web serial's continuity and the bunko's differ.
+    const japanese = canvasElement.querySelector('[data-language-group="ja"]') as HTMLElement;
+    await expect(within(japanese).getByText(/Main Version:/)).toBeVisible();
+    await expect(within(japanese).getByText('Sword Art Online (bunko)')).toBeVisible();
     const hans = canvasElement.querySelector('[data-language-group="zh-Hans"]') as HTMLElement;
     await expect(within(hans).getByText('Unofficial')).toBeVisible();
     await expect(within(hans).getByText('Unverified')).toBeVisible();

@@ -32,6 +32,8 @@ export interface RowLabel {
 export interface RelationRow {
   key: string;
   label: RowLabel;
+  /** The projection the label came from, so a chip can take the singular form for its one counterpart. */
+  projection: RelationProjection;
   /** Rows of Works read as rows; relations to anything else (people, characters) read as role chips. */
   style: 'row' | 'chips';
   items: RelationItem[];
@@ -86,7 +88,7 @@ export function relationRows(entries: readonly RelationEntry[]): RelationRow[] {
     }
   }
   return [...groups].map(([key, { projection, items }]) => ({ key,
-    label: labelFor(projection, items.length),
+    label: labelFor(projection, items.length), projection,
     style: items.every(item => item.target.kind === 'resource' && item.target.summary?.status === 'available'
       && item.target.summary.type === 'work') ? 'row' as const : 'chips' as const, items }));
 }

@@ -23,14 +23,25 @@ function PartLabel({ part }: { part: Part }) {
 }
 
 /** The `Part of` lines: one per whole that places this Work, each a link to it. */
-export function WholesLines({ wholes, names, t }: { wholes: Loaded<WholesPage> | null; names: Names; t: Copy }) {
+export function WholesLines({ wholes, names, t, pages }: {
+  wholes: Loaded<WholesPage> | null; names: Names; t: Copy;
+  /** Where Main's cursor continues and where the list starts again; absent in a preview. */
+  pages?: { first: string | null; next: (cursor: string) => string };
+}) {
   if (!wholes?.ok || !wholes.data.wholes.length) return null;
-  return <ul id={anchors.wholes} aria-label={t.partOfList} className="grid scroll-mt-20 gap-1">
-    {wholes.data.wholes.map(whole => <li key={whole.occurrence} className="text-sm">
-      <span className="text-muted-foreground">{t.partOf}</span>{' '}
-      <NameLink reference={whole.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
-    </li>)}
-  </ul>;
+  const next = wholes.data.next;
+  return <div className="grid gap-1">
+    <ul id={anchors.wholes} aria-label={t.partOfList} className="grid scroll-mt-20 gap-1">
+      {wholes.data.wholes.map(whole => <li key={whole.occurrence} className="text-sm">
+        <span className="text-muted-foreground">{t.partOf}</span>{' '}
+        <NameLink reference={whole.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
+      </li>)}
+    </ul>
+    {pages && (pages.first || next) ? <nav aria-label={t.partOfList} className="flex flex-wrap gap-2">
+      {pages.first ? <Link href={pages.first} className={outline}>{t.firstPage}</Link> : null}
+      {next ? <Link href={pages.next(next)} className={outline}>{t.showMore}</Link> : null}
+    </nav> : null}
+  </div>;
 }
 
 /** What the Work's own Structure says about its run, as Main evidences it. */
@@ -75,7 +86,9 @@ export function PartsSection({ parts, wholes, names, workRef, query, locale: _lo
   const body = !parts.ok && parts.failure !== 'missing'
     ? <RegionFailure title={t.partsUnavailable} failure={parts.failure} messages={pageMessages} restartHref={first} />
     : <>
-      <WholesLines wholes={wholes} names={names} t={t} />
+      <WholesLines wholes={wholes} names={names} t={t} pages={{
+        first: query.wholesAfter ? connectionsHref(workRef, { ...query, wholesAfter: undefined }, anchors.wholes) : null,
+        next: cursor => connectionsHref(workRef, { ...query, wholesAfter: cursor }, anchors.wholes) }} />
       {page ? <Completion completion={page.completion} t={t} /> : null}
       {query.parent ? <Link href={connectionsHref(workRef, { ...query, parent: undefined, partsAfter: undefined },
         anchors.parts)} className={`${outline} w-fit`}>{t.allParts}</Link> : null}

@@ -91,6 +91,11 @@ describe('G-837 relation rows come from Main’s rendering', () => {
     const [chips] = relationRows([entry]);
     expect(chips!.style).toBe('chips');
     expect(chips!.items.map(item => item.target.kind)).toEqual(['resource', 'external', 'withheld']);
+    // Each chip names one counterpart, so each takes the singular label, not the row's plural.
+    const markup = renderToStaticMarkup(createElement(RelationRows, { rows: [chips!], locale: 'en', t: copyOf('en') }));
+    expect([...markup.matchAll(/data-role-chip/g)]).toHaveLength(3);
+    expect([...markup.matchAll(/Spin-off</g)]).toHaveLength(3);
+    expect(markup).not.toContain('Spin-offs');
   });
 });
 

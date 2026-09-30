@@ -23,6 +23,7 @@ export interface ConnectionsQuery {
   /** A group occurrence whose parts the Parts list shows, instead of the top level. */
   parent?: string;
   partsAfter?: string;
+  wholesAfter?: string;
   relationsAfter?: string;
   /** The franchise Collection whose members continue at `membersAfter`. */
   franchise?: string;
@@ -32,16 +33,16 @@ export interface ConnectionsQuery {
 const cursorOk = (value: string | undefined) => value === undefined || value.length <= 2048;
 
 export function parseConnectionsQuery(params: SearchParams): ConnectionsQuery | null {
-  const keys = ['grain', 'parent', 'partsAfter', 'relationsAfter', 'franchise', 'membersAfter'] as const;
+  const keys = ['grain', 'parent', 'partsAfter', 'wholesAfter', 'relationsAfter', 'franchise', 'membersAfter'] as const;
   if (keys.some(key => Array.isArray(params[key]))) return null;
   const grain = single(params.grain) ?? 'series';
   const parent = single(params.parent);
   const franchise = single(params.franchise);
-  const cursors = [single(params.partsAfter), single(params.relationsAfter), single(params.membersAfter)];
+  const cursors = [single(params.partsAfter), single(params.relationsAfter), single(params.membersAfter), single(params.wholesAfter)];
   if (!(grains as readonly string[]).includes(grain)) return null;
   if ((parent !== undefined && !uuid.test(parent)) || (franchise !== undefined && !uuid.test(franchise))) return null;
   if (!cursors.every(cursorOk)) return null;
-  return { grain: grain as Grain, parent, partsAfter: cursors[0], relationsAfter: cursors[1], franchise,
+  return { grain: grain as Grain, parent, partsAfter: cursors[0], wholesAfter: cursors[3], relationsAfter: cursors[1], franchise,
     membersAfter: cursors[2] };
 }
 

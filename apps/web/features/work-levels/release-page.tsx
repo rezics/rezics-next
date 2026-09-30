@@ -8,9 +8,6 @@ import type { Copy } from './messages.ts';
 import { NameLink } from './names.tsx';
 import type { Loaded, Names, Realization, Release } from './types.ts';
 
-/** How many of an omnibus's realizations one page reads; the rest are named without their details. */
-export const REALIZATIONS_SHOWN = 20;
-
 /**
  * A release with what it reaches: for each thing it covers, the Work, its Main Version and
  * the realization (who made that text) it carries. Everything comes from Main's release

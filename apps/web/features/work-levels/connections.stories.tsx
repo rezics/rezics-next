@@ -9,20 +9,20 @@ import { ConnectionsPreviewView } from './previews.tsx';
 import type { ConnectionsQuery } from './route.ts';
 import type { Loaded, RelationsPage } from './types.ts';
 
-const franchise = (grain: 'series' | 'parts'): Franchise => ({
+const franchise = (grain: 'series' | 'parts', paged = false): Franchise => ({
   collection: fixture.summary(fixture.iri('900'), 'A Certain Magical Index franchise', 'en', 'collection'),
   members: { ok: true, data: { collection: fixture.iri('900'), next: null, members: [fixture.iri('100'), fixture.iri('200'), fixture.iri('300')].map((target, index) => ({
     occurrence: fixture.iri(`8${index}`), role: 'member', parent: fixture.iri('9'), target, orderKey: `o${index}`, labels: [] })) } },
-  parts: grain === 'parts' && fixture.parts.ok ? new Map([[fixture.iri('100'), fixture.parts]]) : new Map() });
+  parts: grain === 'parts' && fixture.parts.ok ? new Map([[fixture.iri('100'), paged ? fixture.pagedParts : fixture.parts]]) : new Map() });
 
-function Page({ locale, grain = 'series', relations = fixture.relations, preview = false }: {
-  locale: UiLocale; grain?: ConnectionsQuery['grain']; relations?: Loaded<RelationsPage>; preview?: boolean;
+function Page({ locale, grain = 'series', relations = fixture.relations, preview = false, paged = false }: {
+  locale: UiLocale; paged?: boolean; grain?: ConnectionsQuery['grain']; relations?: Loaded<RelationsPage>; preview?: boolean;
 }) {
   const t = copyOf(locale);
   return <div className="mx-auto grid max-w-[46rem] gap-8 px-4 py-8 sm:px-8">
     {preview
       ? <ConnectionsPreviewView relations={relations} workRef={fixture.workRef} locale={locale} pageMessages={pageMessages[locale]} t={t} />
-      : <ConnectionsSection relations={relations} franchises={[franchise(grain)]} names={fixture.names} workRef={fixture.workRef}
+      : <ConnectionsSection relations={relations} franchises={[franchise(grain, paged)]} names={fixture.names} workRef={fixture.workRef}
         current={fixture.current} query={{ grain }} locale={locale} t={t} pageMessages={pageMessages[locale]} />}
   </div>;
 }
@@ -76,6 +76,13 @@ export const PartsGrain: Story = { args: { grain: 'parts' },
     await expect(within(canvas.getByRole('group', { name: 'Franchise level' })).getByRole('link', { name: 'Volumes and parts' }))
       .toHaveAttribute('aria-current', 'true');
     await expect(canvas.getByText('A Certain Magical Index NT 22 Reverse')).toBeVisible();
+  } };
+
+/** A member with more parts than one page links to its own page for them. */
+export const MemberWithMoreParts: Story = { args: { grain: 'parts', paged: true },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('link', { name: 'More parts…' }))
+      .toHaveAttribute('href', `/en/w/${fixture.iri('100').slice(-36)}/connections#parts`);
   } };
 
 export const Japanese: Story = { args: { locale: 'ja' }, globals: { viewport: { value: 'phone' } },

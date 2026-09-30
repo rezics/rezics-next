@@ -11,8 +11,8 @@ import type { WorkPageMessages } from '../work-page/messages.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import type { Copy } from './messages.ts';
 import { NameLink, SummaryLink } from './names.tsx';
-import { type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
-import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains } from './route.ts';
+import { labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
+import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains, workLinkHref } from './route.ts';
 import type { CollectionMembers, Loaded, Names, PartsPage, RelationsPage, Summary } from './types.ts';
 
 const outline = buttonVariants({ variant: 'outline', size: 'sm' });
@@ -62,7 +62,7 @@ export function RelationRows({ rows, locale, t }: { rows: readonly RelationRow[]
         <dt className="font-medium text-muted-foreground text-sm"><RowLabel label={row.label} locale={locale} t={t} /></dt>
         <dd className="grid min-w-0 gap-1">
           <ul className="grid gap-1">
-            {row.items.map(item => <li key={`${item.relation}-${item.target.kind === 'resource' ? item.target.reference : ''}`}
+            {row.items.map((item, index) => <li key={`${item.relation}-${index}`}
               className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <Target item={item} t={t} /><Unresolved item={item} t={t} />
             </li>)}
@@ -71,9 +71,9 @@ export function RelationRows({ rows, locale, t }: { rows: readonly RelationRow[]
       </div>)}
     </dl> : null}
     {chips.length ? <ul aria-label={t.rolesList} className="flex flex-wrap gap-2">
-      {chips.flatMap(row => row.items.map(item => <li key={`${row.key}-${item.relation}`} data-role-chip
+      {chips.flatMap(row => row.items.map((item, index) => <li key={`${row.key}-${item.relation}-${index}`} data-role-chip
         className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-border/70 px-3 py-1 text-sm">
-        <span className="text-muted-foreground"><RowLabel label={row.label} locale={locale} t={t} /></span>
+        <span className="text-muted-foreground"><RowLabel label={labelFor(row.projection, 1)} locale={locale} t={t} /></span>
         <Target item={item} t={t} />
       </li>))}
     </ul> : null}
@@ -119,7 +119,8 @@ function Members({ franchise, current, names, workRef, query, t }: {
                   <NameLink reference={part.work!} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
                   {part.displayLabel ? <> <bdi className="tabular-nums">({part.displayLabel})</bdi></> : null}
                 </li>)}
-                {parts.data.next ? <li>{t.morePartsExist}</li> : null}
+                {parts.data.next && workLinkHref(work) ? <li><Link href={`${workLinkHref(work)}/connections#parts`}
+                  className="text-primary underline-offset-4 hover:underline">{t.morePartsExist}</Link></li> : null}
               </ol>
               : parts.failure === 'missing' ? null
                 : <span className="ms-4 text-muted-foreground text-sm">{t.partsUnavailable}</span>
