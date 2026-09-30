@@ -1,9 +1,11 @@
 # REZICS Goal
 
-Status: direction settled on 2026-09-29; not started. On 2026-09-30 the
-maintainer held the formal start until the previous work is wrapped up: GPT-6.1
-Sol continues the stopped G-432, G-433 and G-435 and runs G-486. G-536, M4's
-first task, is briefed and stopped before any change. The previous
+Status: direction settled on 2026-09-29; not started, and paused while the
+maintainer finishes the documentation discussion. The previous work was wrapped
+up on 2026-09-30: G-486 merged; G-432, G-433 and G-435 were closed after one
+more run on GPT-6.1 Sol, their work kept on their `goal/g-43x` branches for the
+M5–M6 briefs to salvage; G-536, M4's first task, is stopped before any change.
+The M4–M8 brief drafts are untracked in `.temp/research/briefs-m4` to `-m8`. The previous
 frontend-centred Goal paused after M3 at `59a85a96`. Backend phase 1 finished on
 2026-09-27: recorded run `20260927t101230-1616d8`, local tag
 `goal/backend-phase1`, history on `archive/goals`. The public about site (G-480

@@ -149,12 +149,15 @@ Observations so far, to be revised with evidence:
 - **Opus 5.5.** Strongest here at frontend and UI judgment and whole-feature
   work; `xhigh` for architecture, first templates and hard design, `high` or
   `medium` for work that follows a verified template.
-- **GPT-6.1 Sol.** Replaced GPT-6 Sol and GPT-6 Astra on 2026-09-30; its first
-  tasks are the ones the previous manager left unfinished (G-432, G-433, G-435,
-  G-486). Its predecessors: GPT-6 Sol was the workhorse for backend changes,
-  tests and repairs (`high` for template-following work, `xhigh` for schemas,
-  authority, erasure and recovery); GPT-6 Astra did architecture and code
-  review, UX critique, hard debugging and audits. Record where 6.1 matches them.
+- **GPT-6.1 Sol.** Replaced GPT-6 Sol and GPT-6 Astra on 2026-09-30. On its
+  first four tasks (G-432, G-433, G-435 at `xhigh`, G-486 at `high`) it
+  reviewed inherited code sharply, found real defects and stopped rather than
+  build on missing foundations (G-432), and ran thorough checks and browser
+  matrices. It was weaker at the blast radius of shared edits (G-433 gated
+  covers on every surface and imported Zone package code into the host) and at
+  telling which decision owns a claim (G-486); an independent review before
+  merge caught both. It drew about one point of the `codex-1` week per
+  worker-hour.
 - **GPT-6 Luna.** Bounded mechanical work. At `max` it gave complete handoffs; at
   `high` and `xhigh` it more often returned partial ones.
 - **Grok 4.7.** Eight tasks through the Grok CLI and Cursor in the frontend
