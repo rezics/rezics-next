@@ -10,6 +10,9 @@ import { FusekiClient, type SparqlResult } from '../../../services/main/src/infr
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
+import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
+import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { AccessGrants } from '../../../services/main/src/modules/access/grants.ts';
 import { AccessDownloadLeases } from '../../../services/main/src/modules/access/download-leases.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
@@ -65,7 +68,7 @@ export type MediaStack = Awaited<ReturnType<typeof startMediaStack>>;
 
 /** Real Access, Content PostgreSQL, Jena and RustFS behind one Main app; Account is a
  * bearer-to-principal table so several isolated members can act concurrently. */
-export async function startMediaStack(label: string, options: { contentProjection?: boolean } = {}) {
+export async function startMediaStack(label: string, options: { contentProjection?: boolean; profileCredits?: boolean } = {}) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCOUNT_RELAY_DATABASE_URL || !Bun.env.MAIN_S3_ENDPOINT || !Bun.env.MAIN_OBJECT_DIRECTORY) {
@@ -105,6 +108,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
   const erasures = new ErasureService(relayPool, contentPool, accessPool);
   const main = createMainApp(fuseki, { environment: env, access, grants, downloadLeases, accessPolicy,
     content, contentAuthoring: content, media, votes, erasures,
+    ...(options.profileCredits ? { profiles: new ProfilesAccess(accessPool), personPreferences: new PersonPreferencesStore(accessPool) } : {}),
     ...(options.contentProjection ? { contentProjection: { content, cursor: contentCursor,
       consumer: contentConsumer } } : {}),
     mediaAccess, actingContexts, managedOrganizations, contextSelections,
@@ -134,6 +138,9 @@ export async function startMediaStack(label: string, options: { contentProjectio
     await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
       [principalId, principal.issuer, principal.subject]);
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [actor]);
+    if (options.profileCredits) await createAgentGraph(env, {
+      id: randomUUID(), agent: actor, kind: 'person', displayName: name, digest: sha(actor),
+    });
     const grant = async (scope: string, action: string) => {
       const client = await accessPool.connect();
       try {

@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
+import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
+import { hash } from '../../../services/main/src/modules/work/activate.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 async function json<T>(response: Response, expected = 200): Promise<T> {
@@ -10,11 +12,24 @@ async function json<T>(response: Response, expected = 200): Promise<T> {
 }
 
 test('releases keep kind and status, closed records, web snapshots and edition language lists', async () => {
-  const stack = await startMediaStack('releases');
+  const stack = await startMediaStack('releases', { profileCredits: true });
   try {
     const editor = await stack.member('release-editor');
     const work = await stack.publicWork(editor.actor, ['zh'], '紅樓夢');
-    await editor.grant(`work:edit:${work.work}`, 'work.edit');
+    // Creating a release fixture does not confer catalogue editing authority.
+    // The credit writer must hold G-508's exact Work editor mandate.
+    const authorCredit = async (target: { work: string }) => {
+      const path = `/v1/works/${target.work.slice(-36)}`;
+      const { revision } = await json<{ revision: string }>(await stack.call('GET', path));
+      const credit = { profile: 'native-agent-credit-v1', credit: id(), agent: editor.actor, role: 'author',
+        expectedWorkHead: revision, actingSubject: editor.actor };
+      expect((await editor.send('POST', `${path}/agent-credits`, credit)).status).toBe(403);
+      await editor.grant(`work:edit:${target.work}`, 'work.edit');
+      await json(await editor.send('POST', `${path}/agent-credits`, credit), 201);
+      expect((await json<{ items: { agent: string; role: string }[] }>(await stack.call('GET', `${path}/agent-credits`))).items)
+        .toContainEqual(expect.objectContaining({ agent: editor.actor, role: 'author' }));
+    };
+    await authorCredit(work);
     const root = `/v1/works/${work.work.slice(-36)}`;
     const editionId = id();
     const v1 = await json<{ revision: string }>(await editor.send('PUT', `${root}/metadata`, {
@@ -75,7 +90,7 @@ test('releases keep kind and status, closed records, web snapshots and edition l
       evidence: null })).status).toBe(400);
 
     const serial = await stack.publicWork(editor.actor, ['zh'], '星港夜話');
-    await editor.grant(`work:edit:${serial.work}`, 'work.edit');
+    await authorCredit(serial);
     const serialRoot = `/v1/works/${serial.work.slice(-36)}`;
     const web = id();
     await json(await editor.send('PUT', `${serialRoot}/releases/${web.slice(-36)}`, { profile: 'release-v1',
@@ -86,12 +101,20 @@ test('releases keep kind and status, closed records, web snapshots and edition l
       fixedRelease: null, coverage: null, evidence: null }));
     const text = '星港夜話 第一回至第十回';
     const snapshot = id();
-    const saved = await json<{ byteDigest: string }>(await editor.send('POST',
+    const saved = await json<{ byteDigest: string; receipt: string;
+      sourcePosition: { dataEpoch: string; sequence: string } }>(await editor.send('POST',
       `${serialRoot}/web-publications/${web.slice(-36)}/snapshots`, { profile: 'web-snapshot-v1',
         actingSubject: editor.actor, id: snapshot, acquisition: 'fixture',
         bytesBase64: Buffer.from(text, 'utf8').toString('base64'), mediaType: 'text/plain',
         fetchedAt: '2024-03-01T00:00:00.000Z', coverage: { scope: 'chapters 1-10', complete: false } }));
     expect(saved.byteDigest).toBe(createHash('sha256').update(text).digest('hex'));
+    const eventId = `urn:rezics:event:${hash(saved.receipt)}`;
+    const envelope = await readMainOutboxEnvelope(stack.fuseki, {
+      batchId: `urn:rezics:outbox:${hash(saved.receipt)}`, ...saved.sourcePosition,
+      routingEpoch: stack.env.lineage.routingEpoch, eventIds: [eventId],
+    }, eventId);
+    expect(envelope.type).toBe('com.rezics.release.changed.v1');
+    expect(envelope.data.receipt.snapshot).toBe(snapshot);
     const second = await json<{ byteDigest: string }>(await editor.send('POST',
       `${serialRoot}/web-publications/${web.slice(-36)}/snapshots`, { profile: 'web-snapshot-v1',
         actingSubject: editor.actor, id: id(), acquisition: 'fixture',
@@ -102,4 +125,4 @@ test('releases keep kind and status, closed records, web snapshots and edition l
     expect(read.originalUrl).toBe('https://example.com/star-harbor');
     expect(read.snapshots.map(item => item.byteDigest).sort()).toEqual([saved.byteDigest, second.byteDigest].sort());
   } finally { await stack.stop(); }
-});
+}, 30_000);

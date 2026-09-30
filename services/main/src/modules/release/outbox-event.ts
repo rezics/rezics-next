@@ -42,7 +42,10 @@ export const outboxEventHandlers = [{
     const receipt = await readReleaseReceipt({ fuseki }, admissionId);
     const snapshot = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?snapshot WHERE {
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receiptId)} rv:webSnapshot ?snapshot } } LIMIT 2`, 2048)).results?.bindings ?? [];
-    const releaseReceipt = receipt && receipt.outcome === 'succeeded' ? receipt : null;
+    if (snapshot.length > 1) throw new Error('Release event snapshot receipt is ambiguous');
+    // A snapshot receipt pins its basis releaseRevision too; its digest proves
+    // the snapshot, rather than a new release state.
+    const releaseReceipt = snapshot.length === 0 && receipt && receipt.outcome === 'succeeded' ? receipt : null;
     if (!releaseReceipt && snapshot.length !== 1) throw new Error('Release event receipt is incomplete');
     if (releaseReceipt && (receiptId !== releaseReceipt.receipt || value('digest') !== releaseReceipt.requestDigest
       || value('scope') !== releaseReceipt.scope || value('authorityEpoch') !== releaseReceipt.authorityEpoch)) {
