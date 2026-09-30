@@ -5,7 +5,10 @@ continuity scope. It gives readers a common entry and a maintained content axis,
 including when the Work has no hosted body. The Work identifies the creative
 referent; its Main Version selects the platform's current experience. An external
 edition, an independently published translation and a fixed release have their
-own identities. A new draft, display language or Realm does not fork the Work.
+own identities. A new draft, display language or Realm does not fork the Work. A Main
+Version unifies entry, not identity: a published version that rewrites a web
+version is a second Work with its own Main Version
+([Work levels](work-and-release.md#work-levels-realizations-and-versions)).
 
 Native language contributions can coexist, including alternatives in the same
 language. A reader's choice and a Realm recommendation select eligible variants;

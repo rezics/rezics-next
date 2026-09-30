@@ -107,6 +107,8 @@ Settled by the maintainer after research round R40–R50; the
 46. <a id="decision-46"></a>[Success measures and kill criteria](docs/product/goal.md#how-success-is-judged).
 47. <a id="decision-47"></a>[Competitor coverage validates the model](docs/product/platform-thesis.md#competitor-coverage) and orders the next reusable capabilities.
 48. <a id="decision-48"></a>[A thin, neutral wiki toolkit](docs/contracts/information-verification.md#a-big-franchise-wiki-for-every-work); publication policy lives in the API.
+49. <a id="decision-49"></a>[Work levels, realizations and versions](docs/contracts/work-and-release.md#work-levels-realizations-and-versions): Works within Works; translations are realizations; rewrites are two linked Works.
+50. <a id="decision-50"></a>[Catalogue quality pipeline](docs/contracts/identity-correction.md#catalogue-quality-pipeline) and [merge and split as one capability](docs/contracts/identity-correction.md#merge-and-split-as-one-capability).
 
 Settled research, also adopted on 2026-09-29:
 

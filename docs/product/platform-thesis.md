@@ -100,7 +100,8 @@ produces a misleading map, score or availability claim.
 | Scheduled | Event time, validity, recurrence or opening hours | Calendars, timelines, upcoming and open-at views |
 | Offered | Offer with seller, price, territory and validity | Availability tables and price history; purchase is separate |
 | Versioned | Releases, editions, coverage | Edition selection, coverage matrices, changelogs |
-| Composed, Trackable | Ordered parts and an admitted progress unit | Contents, sessions, progress, next item |
+| Composed, Trackable | Ordered parts, Works within Works, and an admitted progress unit | Contents, series and volumes, sessions, progress, next item |
+| Reconciled | Candidate search, grain declaration, merge and split plans | Duplicate prevention, redirects, recoverable merges and splits ([identity correction](../contracts/identity-correction.md#merge-and-split-as-one-capability)) |
 | Credited | Participation with a role | Credits sections and portfolios |
 | Listed | Collection membership | Mixed-type lists: ordered, annotated, exportable |
 | Reviewable | Target grain, question, scale and population | Contextual ratings and reviews |

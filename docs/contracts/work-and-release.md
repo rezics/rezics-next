@@ -73,3 +73,83 @@ review its translation without making those three acts target the same object.
 supports distinct creative and publication grains; REZICS extends that reasoning
 to progress, community judgments and cross-medium coverage. Installed release
 profiles above carry their field-level contracts; unknown correspondence stays unknown.
+
+## Work levels, realizations and versions
+
+Maintainer and product manager, 2026-09-30, adopting R56; the rule for rewrites
+is the maintainer's. **A unit is its own Work when evidence identifies a
+persistent creative or editorial scope that people need to identify
+independently** across occurrences or publications: creator or publisher
+designation, stable boundaries, independent attribution, established
+bibliographic identity or independent reuse. An ISBN, a file boundary, a title
+or a number alone is not enough. A unit that only groups, navigates or
+positions content inside one realization is an identified occurrence in the
+Work's Structure; it still has a stable ID, revisions, discussion and progress
+targets. So series, published volumes and separately identified episodes can
+be Works at several levels, while chapters, arcs and visual-novel routes are
+occurrences by default, and a mechanical split of one novel is two releases,
+not two Works.
+
+Five responsibilities stay separate:
+
+| Responsibility | Meaning |
+| --- | --- |
+| Work relation | Evidenced part-of, series membership, sequel, adaptation, revision or reboot; several parents allowed, cycles rejected |
+| Realization | A particular text, translation, performance or cut with its own contributors, rights, custody and revisions |
+| Structure | Revisioned occurrences with grouping, labels and order |
+| Release coverage | Which exact realizations or portions a publication embodies; one release may cover several Works |
+| Correspondence | A reviewed relation between selections: equivalent, partial, revised counterpart or unresolved |
+
+An anthology is an editorial Work whose entries are occurrences referring to the
+stories' own Works, which keep their identity, rights and ratings. **Ordinary
+translations, including independently published ones, are realizations of the
+same Work** with their own custody, translators and rights; only a creatively
+transformed translation is a derived Work. This replaces the earlier rule that
+an independently published translation is a separate Work, because splitting a
+story by language contradicts one graph; the installed translation links migrate
+to realization links. A fan translation is a realization pinned to its source
+version and never presented as official.
+
+**A Main Version unifies entry; it does not settle identity.** A typographic
+correction, a new printing or a faithful translation stays in the same Work; a
+director's cut is the same Work in a distinct cut; a published version that
+rewrites the web version's plot or continuity is a second Work with its own
+Main Version, linked by a revision relation; a remake or reboot is a distinct
+Work linked by a reboot relation. Both rewrite versions stay indexed, and the
+choice is a compromise that mitigates rather than removes the problem. Reviews
+name their target (story, translation, narration or production, and which
+version), progress pins language, version and part, and wiki facts pin their
+continuity (and, where needed, cut, chapter or episode). Nothing carries across
+versions without reviewed correspondence. Derivation kinds today are only
+adaptation, new recording and software fork (`model/definitions/work-derivation-v1.ts`);
+revision and reboot must be added.
+
+Worked example, Sword Art Online: the web version is one Work whose Structure
+holds its arcs and chapters; the Dengeki Bunko series is a Work whose volumes
+are Works; Yen Press's English volume 1 is a realization of volume 1 with
+separate paperback and digital releases; a volumes 1–3 omnibus is one release
+covering three Works; Progressive is a separate series Work linked by a reboot
+relation. Bunko volume 1 and the web Aincrad arc have only a partial, revised
+correspondence, so finishing one never completes the other. For A Certain
+Magical Index, the overall sequence holds the Original, New Testament and
+Genesis Testament subseries, each keeping its own volume numbering beside a
+separate order key.
+
+Series progress follows a versioned policy over an exact composition: required
+parts, optional extras, chosen order and available translations, counting each
+covered unit once so that an omnibus and its volumes never double-count. It
+reports "caught up with available material", "finished the published parts",
+"series concluded" and "correspondence unresolved" separately. A series' own
+ratings stay separate from its volumes' ratings; a derived statistic, if shown,
+states its formula and denominator.
+
+Missing today: general series membership and order, series pages and cross-level
+projections, release coverage beyond one Work, fragment correspondence and
+progress outside book composition (`services/main/src/routes/progress.ts`).
+Search hides results that are `isPartOf` another Work
+(`services/main/src/modules/work/search-multifield.ts`), which would hide
+volumes once they are Works. The M6 series briefs (G-602, G-608, G-609, G-611,
+G-612) become adapters over the shared Composed, Versioned and Trackable
+capabilities, never a book-only store. The SAO and Index franchises and a set of
+works whose web and published versions diverge are the acceptance fixtures.
+

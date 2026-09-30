@@ -2,8 +2,10 @@
 
 Content language is independent of interface locale, localized metadata and
 semantic [Context](context.md). A translated display title does not translate a
-book's body. An independently published translation is a separate Work linked to
-the source; a native multilingual Main Version can instead hold several language
+book's body. An independently published translation is a realization of the same
+Work with its own custody and a link to its exact source
+([Work levels](work-and-release.md#work-levels-realizations-and-versions),
+2026-09-30); a native multilingual Main Version can also hold several language
 contributions, including same-language alternatives. Publication provenance and
 authorization apply to a specific version, never automatically to its successor.
 
@@ -53,8 +55,8 @@ an external edition, a fixed release, or a web snapshot with a
 selector. An unknown source stays unresolved rather than guessed. Editions and
 snapshots differ in revisions and cuts, so "translated from this Work" is not
 enough. A community translation of a hosted Work is a new language contribution
-in its Main Version; an independently published translation is a separate Work
-with a translation link; a publisher's translated edition is its own release;
+in its Main Version; an independently published translation is a realization of
+the same Work with its own custody and a link to its exact source; a publisher's translated edition is its own release;
 translated subtitles or lyrics pin the exact cut or track; a user translation of
 indexed web content lives in a [virtual release](distribution.md#release-kinds-and-status).
 A title-only translation is localized metadata, not a new content version.
