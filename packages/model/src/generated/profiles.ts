@@ -1044,6 +1044,22 @@ export const profileRegistry = {
       "seal"
     ]
   },
+  "structure-work-composition-v1": {
+    "sha256": "c984bc7cce6e88b0b5cec96a325ffcaac7192d3c072da6224c850779b71a8910",
+    "file": "shapes/structure-work-composition-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/structure-work-composition-v1/structure-shape",
+      "https://rezics.com/definition/structure-work-composition-v1/placement-shape",
+      "https://rezics.com/definition/structure-work-composition-v1/removed-placement-shape",
+      "https://rezics.com/definition/structure-work-composition-v1/part-shape"
+    ],
+    "focusRoles": [
+      "structure",
+      "placement",
+      "removed-placement",
+      "part"
+    ]
+  },
   "tag-proposal-concept-v1": {
     "sha256": "a671d7af426d72082e47f328093c27c6088b2496a7d4925a38cd2ba29df0ca94",
     "file": "shapes/tag-proposal-concept-v1.ttl",

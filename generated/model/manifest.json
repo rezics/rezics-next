@@ -730,6 +730,11 @@
       "file": "shapes/structure-composition-v1.ttl"
     },
     {
+      "id": "structure-work-composition-v1",
+      "sha256": "c984bc7cce6e88b0b5cec96a325ffcaac7192d3c072da6224c850779b71a8910",
+      "file": "shapes/structure-work-composition-v1.ttl"
+    },
+    {
       "id": "tag-proposal-concept-v1",
       "sha256": "a671d7af426d72082e47f328093c27c6088b2496a7d4925a38cd2ba29df0ca94",
       "file": "shapes/tag-proposal-concept-v1.ttl"
@@ -2233,6 +2238,16 @@
       "type": "https://rezics.com/vocab/OccurrencePlacement",
       "routes": [
         {
+          "profile": "structure-work-composition-v1",
+          "shape": "https://rezics.com/definition/structure-work-composition-v1/placement-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/occurrenceRole",
+              "value": "https://rezics.com/vocab/PartRole"
+            }
+          ]
+        },
+        {
           "profile": "structure-composition-v1",
           "shape": "https://rezics.com/definition/structure-composition-v1/placement-shape",
           "when": []
@@ -2563,6 +2578,16 @@
       "type": "https://rezics.com/vocab/RemovedPlacement",
       "routes": [
         {
+          "profile": "structure-work-composition-v1",
+          "shape": "https://rezics.com/definition/structure-work-composition-v1/removed-placement-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/occurrenceRole",
+              "value": "https://rezics.com/vocab/PartRole"
+            }
+          ]
+        },
+        {
           "profile": "structure-composition-v1",
           "shape": "https://rezics.com/definition/structure-composition-v1/removed-placement-shape",
           "when": []
@@ -2743,6 +2768,16 @@
       "type": "https://rezics.com/vocab/Structure",
       "routes": [
         {
+          "profile": "structure-work-composition-v1",
+          "shape": "https://rezics.com/definition/structure-work-composition-v1/structure-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/structureProfile",
+              "value": "https://rezics.com/vocab/WorkComposition"
+            }
+          ]
+        },
+        {
           "profile": "structure-composition-v1",
           "shape": "https://rezics.com/definition/structure-composition-v1/structure-shape",
           "when": []
@@ -2835,6 +2870,16 @@
         {
           "profile": "work-metadata-details-v1",
           "shape": "https://rezics.com/definition/work-metadata-details-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/WorkPart",
+      "routes": [
+        {
+          "profile": "structure-work-composition-v1",
+          "shape": "https://rezics.com/definition/structure-work-composition-v1/part-shape",
           "when": []
         }
       ]
@@ -3108,6 +3153,7 @@
     "contexts/statement-v1.jsonld": "cfa9f2493ab50152388e2158a1771d418bbfba84e42ddd46a6aeb069c25f87de",
     "contexts/structure-book-v1.jsonld": "eb28283f3d1f5f9325581a641f211f124d284707479cc7ef68830263079c54b2",
     "contexts/structure-composition-v1.jsonld": "d57e94df71e5eca10623c63af5886224a81d8218273c1caaaea8fa3833cf4294",
+    "contexts/structure-work-composition-v1.jsonld": "bc1cbb06f5606b1156315e0c3e4e47d981dfe6579163e82e8ef9a6cc152e34c0",
     "contexts/tag-proposal-concept-v1.jsonld": "2b3e27aeef3ecd4d89ab8ae49e9a010177313c0a325ab6e0b977019871a1db99",
     "contexts/text-contribution-v1.jsonld": "78215401ecbc983cb593884da5d0a66775d5a63507343a1bbe69a218043f8bb9",
     "contexts/text-publication-v1.jsonld": "61f3a20fceb5f8a60a8ae389a537cc92dc3ce9d49c56d7389eac37a69e2a5ad2",
@@ -3215,6 +3261,7 @@
     "shapes/statement-v1.ttl": "da4cf542d30ca2d0af244fa86efd53e4a8780a7b8feae260abc05168c358aa2a",
     "shapes/structure-book-v1.ttl": "5598fd9d04b2729c3008a647c92c03c9f1580b5c103dbe2e1a84f10e226e6242",
     "shapes/structure-composition-v1.ttl": "0043acb8748937d04d177a90695b06ac23fcccd5742b7d0da3c728e2d468d746",
+    "shapes/structure-work-composition-v1.ttl": "c984bc7cce6e88b0b5cec96a325ffcaac7192d3c072da6224c850779b71a8910",
     "shapes/tag-proposal-concept-v1.ttl": "a671d7af426d72082e47f328093c27c6088b2496a7d4925a38cd2ba29df0ca94",
     "shapes/text-contribution-v1.ttl": "4a42b1851eaa3cace3e06c5a142329e7c3c380e756123c3b131dc2584c9d2d8b",
     "shapes/text-publication-v1.ttl": "831355eccb08af104d4dfc8d972cb4b8e4e4c39b40a3d83aab6a13f67af0dd37",
@@ -3243,9 +3290,9 @@
     "shapes/work-type-v2.ttl": "94ef660d31ca8af44f51d5ecc6ad767ea97c6c39d1dcbf7db4321b1152632b2f",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "ef6cb6ecbee9e85df74cf0ef4006b83929c75cc180e122de1cbf2e9549ef3977",
-    "packages/model/src/generated/profiles.ts": "c788919b763cd202143187dabde507e411df6053c339ed7bfd7d6e15ad4bb520",
-    "packages/model/src/generated/schemas.ts": "9d3f2e35d87ed0e1c16756d667534427235854dc24e68224528662911ddb66c5",
-    "packages/model/src/generated/vocabulary.ts": "b81d8aec80d91863e7a8174ee83de13934d3968c614357d0f5d8c295fd6a7022"
+    "packages/model/src/generated/arbitraries.ts": "7d0e35ec6aaec601ffca5c746d859a27d5f1adb435b7c063ee2fabc64ad053db",
+    "packages/model/src/generated/profiles.ts": "42b7b450fc8a767e3bcfe21d1c621c0735f6fae3f3b126920891900b65e0563e",
+    "packages/model/src/generated/schemas.ts": "0e506ae32ec05cbc6e06385f5645459933fe45058a5bfec198a0b34157c0bade",
+    "packages/model/src/generated/vocabulary.ts": "868387a5535e91f12d21a3f0c30d7564a711b515fcda8665138685a9a8197e0b"
   }
 }

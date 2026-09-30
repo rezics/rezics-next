@@ -62222,7 +62222,10 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "book-composition",
+                    "enum": [
+                      "book-composition",
+                      "work-composition"
+                    ],
                     "type": "string"
                   },
                   "work": {
@@ -62252,7 +62255,10 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "book-composition",
+                    "enum": [
+                      "book-composition",
+                      "work-composition"
+                    ],
                     "type": "string"
                   },
                   "work": {
@@ -62282,7 +62288,10 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "book-composition",
+                    "enum": [
+                      "book-composition",
+                      "work-composition"
+                    ],
                     "type": "string"
                   },
                   "work": {
@@ -62880,7 +62889,7 @@
             "name": "after",
             "required": false,
             "schema": {
-              "maxLength": 512,
+              "maxLength": 2048,
               "type": "string"
             }
           },
@@ -62909,6 +62918,34 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "completion": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "evidence": {
+                          "items": {
+                            "format": "uri",
+                            "maxLength": 2048,
+                            "type": "string"
+                          },
+                          "maxItems": 16,
+                          "type": "array",
+                          "uniqueItems": true
+                        },
+                        "status": {
+                          "enum": [
+                            "concluded",
+                            "ongoing",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "evidence"
+                      ],
+                      "type": "object"
+                    },
                     "component": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -62997,7 +63034,8 @@
                           "role": {
                             "enum": [
                               "group",
-                              "chapter"
+                              "chapter",
+                              "part"
                             ],
                             "type": "string"
                           },
@@ -63119,11 +63157,9 @@
                     "mainVersion",
                     "revision",
                     "predecessor",
-                    "placementCount",
                     "occurrences",
                     "next",
-                    "sourcePosition",
-                    "cost"
+                    "sourcePosition"
                   ],
                   "type": "object"
                 }
@@ -63413,11 +63449,66 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "completion": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "evidence": {
+                                  "items": {
+                                    "format": "uri",
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array",
+                                  "uniqueItems": true
+                                },
+                                "status": {
+                                  "enum": [
+                                    "concluded",
+                                    "ongoing",
+                                    "unknown"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "evidence"
+                              ],
+                              "type": "object"
+                            },
+                            "op": {
+                              "const": "completion",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "op",
+                            "completion"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "displayLabel": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
                             "division": {
                               "enum": [
                                 "volume",
                                 "part",
                                 "extras"
+                              ],
+                              "type": "string"
+                            },
+                            "inclusion": {
+                              "enum": [
+                                "required",
+                                "optional",
+                                "extra"
                               ],
                               "type": "string"
                             },
@@ -63474,7 +63565,8 @@
                             "role": {
                               "enum": [
                                 "group",
-                                "chapter"
+                                "chapter",
+                                "part"
                               ],
                               "type": "string"
                             },
@@ -63596,11 +63688,24 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "displayLabel": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
                             "division": {
                               "enum": [
                                 "volume",
                                 "part",
                                 "extras"
+                              ],
+                              "type": "string"
+                            },
+                            "inclusion": {
+                              "enum": [
+                                "required",
+                                "optional",
+                                "extra"
                               ],
                               "type": "string"
                             },
@@ -63643,7 +63748,10 @@
                     "type": "array"
                   },
                   "profile": {
-                    "const": "book-composition",
+                    "enum": [
+                      "book-composition",
+                      "work-composition"
+                    ],
                     "type": "string"
                   }
                 },
@@ -63674,11 +63782,66 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "completion": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "evidence": {
+                                  "items": {
+                                    "format": "uri",
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array",
+                                  "uniqueItems": true
+                                },
+                                "status": {
+                                  "enum": [
+                                    "concluded",
+                                    "ongoing",
+                                    "unknown"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "evidence"
+                              ],
+                              "type": "object"
+                            },
+                            "op": {
+                              "const": "completion",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "op",
+                            "completion"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "displayLabel": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
                             "division": {
                               "enum": [
                                 "volume",
                                 "part",
                                 "extras"
+                              ],
+                              "type": "string"
+                            },
+                            "inclusion": {
+                              "enum": [
+                                "required",
+                                "optional",
+                                "extra"
                               ],
                               "type": "string"
                             },
@@ -63735,7 +63898,8 @@
                             "role": {
                               "enum": [
                                 "group",
-                                "chapter"
+                                "chapter",
+                                "part"
                               ],
                               "type": "string"
                             },
@@ -63857,11 +64021,24 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "displayLabel": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
                             "division": {
                               "enum": [
                                 "volume",
                                 "part",
                                 "extras"
+                              ],
+                              "type": "string"
+                            },
+                            "inclusion": {
+                              "enum": [
+                                "required",
+                                "optional",
+                                "extra"
                               ],
                               "type": "string"
                             },
@@ -63904,7 +64081,10 @@
                     "type": "array"
                   },
                   "profile": {
-                    "const": "book-composition",
+                    "enum": [
+                      "book-composition",
+                      "work-composition"
+                    ],
                     "type": "string"
                   }
                 },
@@ -63935,11 +64115,66 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "completion": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "evidence": {
+                                  "items": {
+                                    "format": "uri",
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array",
+                                  "uniqueItems": true
+                                },
+                                "status": {
+                                  "enum": [
+                                    "concluded",
+                                    "ongoing",
+                                    "unknown"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "evidence"
+                              ],
+                              "type": "object"
+                            },
+                            "op": {
+                              "const": "completion",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "op",
+                            "completion"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "displayLabel": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
                             "division": {
                               "enum": [
                                 "volume",
                                 "part",
                                 "extras"
+                              ],
+                              "type": "string"
+                            },
+                            "inclusion": {
+                              "enum": [
+                                "required",
+                                "optional",
+                                "extra"
                               ],
                               "type": "string"
                             },
@@ -63996,7 +64231,8 @@
                             "role": {
                               "enum": [
                                 "group",
-                                "chapter"
+                                "chapter",
+                                "part"
                               ],
                               "type": "string"
                             },
@@ -64118,11 +64354,24 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "displayLabel": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "type": "string"
+                            },
                             "division": {
                               "enum": [
                                 "volume",
                                 "part",
                                 "extras"
+                              ],
+                              "type": "string"
+                            },
+                            "inclusion": {
+                              "enum": [
+                                "required",
+                                "optional",
+                                "extra"
                               ],
                               "type": "string"
                             },
@@ -64165,7 +64414,10 @@
                     "type": "array"
                   },
                   "profile": {
-                    "const": "book-composition",
+                    "enum": [
+                      "book-composition",
+                      "work-composition"
+                    ],
                     "type": "string"
                   }
                 },
@@ -64770,6 +65022,34 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "completion": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "evidence": {
+                          "items": {
+                            "format": "uri",
+                            "maxLength": 2048,
+                            "type": "string"
+                          },
+                          "maxItems": 16,
+                          "type": "array",
+                          "uniqueItems": true
+                        },
+                        "status": {
+                          "enum": [
+                            "concluded",
+                            "ongoing",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "evidence"
+                      ],
+                      "type": "object"
+                    },
                     "component": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -64858,7 +65138,8 @@
                           "role": {
                             "enum": [
                               "group",
-                              "chapter"
+                              "chapter",
+                              "part"
                             ],
                             "type": "string"
                           },
@@ -64980,11 +65261,9 @@
                     "mainVersion",
                     "revision",
                     "predecessor",
-                    "placementCount",
                     "occurrences",
                     "next",
-                    "sourcePosition",
-                    "cost"
+                    "sourcePosition"
                   ],
                   "type": "object"
                 }
@@ -67650,7 +67929,7 @@
             "name": "after",
             "required": false,
             "schema": {
-              "maxLength": 512,
+              "maxLength": 2048,
               "type": "string"
             }
           },
@@ -67679,6 +67958,34 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "completion": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "evidence": {
+                          "items": {
+                            "format": "uri",
+                            "maxLength": 2048,
+                            "type": "string"
+                          },
+                          "maxItems": 16,
+                          "type": "array",
+                          "uniqueItems": true
+                        },
+                        "status": {
+                          "enum": [
+                            "concluded",
+                            "ongoing",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "evidence"
+                      ],
+                      "type": "object"
+                    },
                     "component": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -67767,7 +68074,8 @@
                           "role": {
                             "enum": [
                               "group",
-                              "chapter"
+                              "chapter",
+                              "part"
                             ],
                             "type": "string"
                           },
@@ -67889,11 +68197,9 @@
                     "mainVersion",
                     "revision",
                     "predecessor",
-                    "placementCount",
                     "occurrences",
                     "next",
-                    "sourcePosition",
-                    "cost"
+                    "sourcePosition"
                   ],
                   "type": "object"
                 }
@@ -68806,7 +69112,7 @@
             "name": "after",
             "required": false,
             "schema": {
-              "maxLength": 512,
+              "maxLength": 2048,
               "type": "string"
             }
           },
@@ -68835,21 +69141,6 @@
               "application/json": {
                 "schema": {
                   "properties": {
-                    "cost": {
-                      "properties": {
-                        "pagesRead": {
-                          "type": "integer"
-                        },
-                        "pagesWritten": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "pagesRead",
-                        "pagesWritten"
-                      ],
-                      "type": "object"
-                    },
                     "coverage": {
                       "enum": [
                         "complete",
@@ -68929,9 +69220,6 @@
                     "structureRevision": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
-                    },
-                    "unavailableCount": {
-                      "type": "integer"
                     }
                   },
                   "required": [
@@ -68939,11 +69227,9 @@
                     "seal",
                     "structureRevision",
                     "coverage",
-                    "unavailableCount",
                     "pins",
                     "next",
-                    "sourcePosition",
-                    "cost"
+                    "sourcePosition"
                   ],
                   "type": "object"
                 }
@@ -353936,6 +354222,33 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "displayLabel": {
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "inclusion": {
+                                    "enum": [
+                                      "required",
+                                      "optional",
+                                      "extra"
+                                    ]
+                                  },
+                                  "type": {
+                                    "const": "work-part",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "displayLabel",
+                                  "inclusion"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
                                   "division": {
                                     "enum": [
                                       "volume",
@@ -354207,6 +354520,7 @@
                             "enum": [
                               "group",
                               "chapter",
+                              "part",
                               "member",
                               "mount",
                               "navigation",
@@ -360666,6 +360980,1008 @@
               }
             },
             "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/resources/{id}/parts": {
+      "get": {
+        "operationId": "getV1ResourcesByIdParts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parent",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "~elyTyp": 1,
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "completion": {
+                      "properties": {
+                        "evidence": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "status": {
+                          "enum": [
+                            "concluded",
+                            "ongoing",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "evidence"
+                      ],
+                      "type": "object"
+                    },
+                    "mainVersion": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "next": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "parts": {
+                      "items": {
+                        "properties": {
+                          "displayLabel": {
+                            "type": "string"
+                          },
+                          "inclusion": {
+                            "enum": [
+                              "required",
+                              "optional",
+                              "extra"
+                            ],
+                            "type": "string"
+                          },
+                          "labels": {
+                            "items": {
+                              "properties": {
+                                "language": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "mainVersion": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "occurrence": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "orderKey": {
+                            "type": "string"
+                          },
+                          "parent": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "role": {
+                            "enum": [
+                              "group",
+                              "part"
+                            ],
+                            "type": "string"
+                          },
+                          "segmentKey": {
+                            "type": "string"
+                          },
+                          "work": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "occurrence",
+                          "segmentKey",
+                          "orderKey",
+                          "parent",
+                          "role",
+                          "labels"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "resource": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "structure": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "resource",
+                    "mainVersion",
+                    "structure",
+                    "revision",
+                    "completion",
+                    "parts",
+                    "next",
+                    "sourcePosition"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/resources/{id}/wholes": {
+      "get": {
+        "operationId": "getV1ResourcesByIdWholes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "~elyTyp": 1,
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "next": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resource": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "datasetId": {
+                          "const": "product",
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "datasetId",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "wholes": {
+                      "items": {
+                        "properties": {
+                          "mainVersion": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "occurrence": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "orderKey": {
+                            "type": "string"
+                          },
+                          "segmentKey": {
+                            "type": "string"
+                          },
+                          "structure": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "work": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "occurrence",
+                          "mainVersion",
+                          "work",
+                          "segmentKey",
+                          "orderKey",
+                          "structure"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "resource",
+                    "wholes",
+                    "next",
+                    "sourcePosition"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
           },
           "500": {
             "content": {
