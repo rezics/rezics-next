@@ -1378,6 +1378,16 @@ export const profileRegistry = {
       "work"
     ]
   },
+  "work-kind-v3": {
+    "sha256": "08d0d5879c1810708f0bbd7eb1bd0ecc0a14c124cddfe202c66dd236e3b59f90",
+    "file": "shapes/work-kind-v3.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-kind-v3/work-shape"
+    ],
+    "focusRoles": [
+      "work"
+    ]
+  },
   "work-metadata-details-v1": {
     "sha256": "905826519ea23297628a4e192c81176ff210b1089cb1ba821a48b10456032a09",
     "file": "shapes/work-metadata-details-v1.ttl",
@@ -1478,6 +1488,18 @@ export const profileRegistry = {
     "shapes": [
       "https://rezics.com/definition/work-type-v2/work-shape",
       "https://rezics.com/definition/work-type-v2/work-revision-shape"
+    ],
+    "focusRoles": [
+      "work",
+      "work-revision"
+    ]
+  },
+  "work-type-v3": {
+    "sha256": "86360e7c7ec939c8ce2283b16e2ae825113f07132eef4891e48e174c72d9a718",
+    "file": "shapes/work-type-v3.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-type-v3/work-shape",
+      "https://rezics.com/definition/work-type-v3/work-revision-shape"
     ],
     "focusRoles": [
       "work",

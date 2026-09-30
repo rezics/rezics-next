@@ -1062,6 +1062,10 @@ export const WorkKindV2WorkShapeSchema = Type.Object({ "@id": Type.String({ minL
 
 export type WorkKindV2WorkShape = Static<typeof WorkKindV2WorkShapeSchema>;
 
+export const WorkKindV3WorkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, maxItems: 4, contains: Type.Literal("https://schema.org/CreativeWork") }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WorkKindV3WorkShape = Static<typeof WorkKindV3WorkShapeSchema>;
+
 export const WorkMetadataDetailsV1WorkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://schema.org/CreativeWork") }), "rv:descriptiveMetadataHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type WorkMetadataDetailsV1WorkShape = Static<typeof WorkMetadataDetailsV1WorkShapeSchema>;
@@ -1129,6 +1133,14 @@ export type WorkTypeV2WorkShape = Static<typeof WorkTypeV2WorkShapeSchema>;
 export const WorkTypeV2WorkRevisionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/RevisionAnchor") }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:operation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:manifest": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-metadata-v1"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-metadata-v1"), { maxItems: 1, minItems: 1 }), "rv:datasetId": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type WorkTypeV2WorkRevisionShape = Static<typeof WorkTypeV2WorkRevisionShapeSchema>;
+
+export const WorkTypeV3WorkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, maxItems: 4, contains: Type.Literal("https://schema.org/CreativeWork") }), "rv:mainVersion": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WorkTypeV3WorkShape = Static<typeof WorkTypeV3WorkShapeSchema>;
+
+export const WorkTypeV3WorkRevisionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/RevisionAnchor") }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:operation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:manifest": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-metadata-v1"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/work-metadata-v1"), { maxItems: 1, minItems: 1 }), "rv:datasetId": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type WorkTypeV3WorkRevisionShape = Static<typeof WorkTypeV3WorkRevisionShapeSchema>;
 
 export const ZoneCapabilityV1NavigationLinkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/Zone"), { maxItems: 1, minItems: 1 }), "rv:navigation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
@@ -1416,6 +1428,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/work-editorial-field-v1/control-shape": WorkEditorialFieldV1ControlShapeSchema,
   "https://rezics.com/definition/work-kind-v1/work-shape": WorkKindV1WorkShapeSchema,
   "https://rezics.com/definition/work-kind-v2/work-shape": WorkKindV2WorkShapeSchema,
+  "https://rezics.com/definition/work-kind-v3/work-shape": WorkKindV3WorkShapeSchema,
   "https://rezics.com/definition/work-metadata-details-v1/work-shape": WorkMetadataDetailsV1WorkShapeSchema,
   "https://rezics.com/definition/work-metadata-details-v1/component-shape": WorkMetadataDetailsV1ComponentShapeSchema,
   "https://rezics.com/definition/work-metadata-details-v1/revision-shape": WorkMetadataDetailsV1RevisionShapeSchema,
@@ -1433,6 +1446,8 @@ export const shapeSchemas = {
   "https://rezics.com/definition/work-type-v1/work-revision-shape": WorkTypeV1WorkRevisionShapeSchema,
   "https://rezics.com/definition/work-type-v2/work-shape": WorkTypeV2WorkShapeSchema,
   "https://rezics.com/definition/work-type-v2/work-revision-shape": WorkTypeV2WorkRevisionShapeSchema,
+  "https://rezics.com/definition/work-type-v3/work-shape": WorkTypeV3WorkShapeSchema,
+  "https://rezics.com/definition/work-type-v3/work-revision-shape": WorkTypeV3WorkRevisionShapeSchema,
   "https://rezics.com/definition/zone-capability-v1/navigation-link-shape": ZoneCapabilityV1NavigationLinkShapeSchema,
   "https://rezics.com/definition/zone-capability-v1/zone-shape": ZoneCapabilityV1ZoneShapeSchema,
   "https://rezics.com/definition/zone-capability-v1/mount-shape": ZoneCapabilityV1MountShapeSchema,
