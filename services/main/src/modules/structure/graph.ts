@@ -19,6 +19,7 @@ export function structureIri(value: string): string {
 }
 export const ROLE_IRI: Record<OccurrenceRole, string> = {
   group: `${RV}GroupRole`, chapter: `${RV}ChapterRole`, member: `${RV}MemberRole`,
+  part: `${RV}PartRole`,
   mount: `${RV}MountRole`, navigation: `${RV}NavigationRole`, ingredient: `${RV}IngredientRole`,
   step: `${RV}StepRole`, equipment: `${RV}EquipmentRole`,
 };

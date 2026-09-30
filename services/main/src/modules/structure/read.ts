@@ -7,6 +7,7 @@ import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey,
 import { isCatalogTarget, structureProfileFor } from './profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, newCost, type TreeCost } from './tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
+import { encodeReadCursor, decodeReadCursor } from '../work/read-session.ts';
 
 export interface CompositionPage {
   structure: string;
@@ -16,7 +17,9 @@ export interface CompositionPage {
   mainVersion: string;
   revision: string;
   predecessor: string | null;
+  /** Internal compatibility count; zero for profiles that withhold aggregate counts. */
   placementCount: number;
+  completion?: { status: 'concluded' | 'ongoing' | 'unknown'; evidence: string[] };
   occurrences: OccurrenceRecord[];
   next: string | null;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
@@ -154,11 +157,13 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
       throw error;
     }
-    const visible = record.target && !isCatalogTarget(profile, record.target)
-      && !await input.canReadTarget(record.target)
+    const withheld = record.target && !isCatalogTarget(profile, record.target)
+      && !await input.canReadTarget(record.target);
+    if (withheld && profile.withholdUnreadableTargets) throw new CompositionUnavailable('occurrence is unavailable');
+    const visible = withheld
       ? { ...record, target: undefined, selection: undefined, labels: [] } : record;
     let occurrenceContext: CompositionPage['occurrenceContext'];
-    if (record.state === 'active' && record.segmentKey && record.orderKey) {
+    if (!profile.withholdUnreadableTargets && record.state === 'active' && record.segmentKey && record.orderKey) {
       const key = orderTreeKey(record as Required<Pick<OccurrenceRecord,
         'parent' | 'segmentKey' | 'orderKey'>>);
       const before = await orderTree(objects).countBefore(manifest.order, key, cost);
@@ -182,7 +187,9 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     }
     return { structure: input.structure, owner: header.owner, component: header.component,
       work: header.work, mainVersion: header.mainVersion,
-      revision, predecessor: value('predecessor') ?? null, placementCount: manifest.placementCount,
+      revision, predecessor: value('predecessor') ?? null,
+      placementCount: profile.withholdUnreadableTargets ? 0 : manifest.placementCount,
+      ...(header.profile === 'work-composition' ? { completion: manifest.completion ?? { status: 'unknown', evidence: [] } } : {}),
       occurrences: [visible], next: null,
       sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! },
       cost, occurrenceContext };
@@ -197,11 +204,18 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     }
   }
   const prefix = `${parent}\u0001`;
-  if (input.after && (!input.after.startsWith(prefix) || input.after.length > 512)) {
+  const cursorPosition = { dataEpoch: value('epoch')!, sequence: value('sequence')! };
+  const cursorBinding = { structure: input.structure, revision, parent };
+  let after = input.after;
+  if (profile.withholdUnreadableTargets) {
+    try { after = decodeReadCursor(input.after, cursorBinding, cursorPosition)?.after; }
+    catch { throw new CompositionUnavailable('composition cursor is invalid or its head changed'); }
+  }
+  if (after && (!after.startsWith(prefix) || after.length > 512)) {
     throw new CompositionUnavailable('composition cursor is invalid');
   }
   const ordered = await orderTree(objects).range(manifest.order,
-    input.after ? `${input.after}\u0000` : prefix, `${parent}\u0002`, input.limit + 1, cost);
+    after ? `${after}\u0000` : prefix, `${parent}\u0002`, input.limit + 1, cost);
   const page = ordered.slice(0, input.limit);
   const found = await recordTree(objects).lookup(manifest.records,
     page.map(entry => entry.occurrence), cost);
@@ -220,11 +234,11 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     }
     if (record.target && !isCatalogTarget(profile, record.target)
       && !await input.canReadTarget(record.target)) {
-      occurrences.push({ ...record, target: undefined, selection: undefined, labels: [] });
+      if (!profile.withholdUnreadableTargets) occurrences.push({ ...record, target: undefined, selection: undefined, labels: [] });
     } else occurrences.push(record);
   }
   let outline: { offset: number; childCounts: Record<string, number>; parentOrdinal?: number } | undefined;
-  if (input.outline) {
+  if (input.outline && !profile.withholdUnreadableTargets) {
     const tree = orderTree(objects);
     const childCounts: Record<string, number> = {};
     for (const record of occurrences) {
@@ -241,8 +255,12 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
   }
   return { structure: input.structure, owner: header.owner, component: header.component,
     work: header.work, mainVersion: header.mainVersion,
-    revision, predecessor: value('predecessor') ?? null, placementCount: manifest.placementCount,
-    occurrences, next: ordered.length > input.limit ? orderTreeKey(page.at(-1)!) : null,
+    revision, predecessor: value('predecessor') ?? null,
+    placementCount: profile.withholdUnreadableTargets ? 0 : manifest.placementCount,
+    ...(header.profile === 'work-composition' ? { completion: manifest.completion ?? { status: 'unknown', evidence: [] } } : {}),
+    occurrences, next: ordered.length > input.limit ? (profile.withholdUnreadableTargets
+      ? encodeReadCursor(cursorBinding, cursorPosition, orderTreeKey(page.at(-1)!))
+      : orderTreeKey(page.at(-1)!)) : null,
     sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! },
     cost, ...outline };
 }

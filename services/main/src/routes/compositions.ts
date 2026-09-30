@@ -7,9 +7,9 @@ import { createAdmittedComposition, changeAdmittedComposition, sealAdmittedCompo
   from '../modules/structure/change-admitted.ts';
 import { cancelCompositionStage, CompositionConflict, CompositionExists, CompositionTooLarge,
   InvalidCompositionChange, StaleCompositionHead, type CompositionOperation } from '../modules/structure/change.ts';
-import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader }
+import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader, derivedId }
   from '../modules/structure/graph.ts';
-import { readCompositionPage } from '../modules/structure/read.ts';
+import { readCompositionPage, type CompositionPage } from '../modules/structure/read.ts';
 import { readCompositionSeal } from '../modules/structure/seal-read.ts';
 import { canReadStructureTarget, structureProfileFor } from '../modules/structure/profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
@@ -34,25 +34,38 @@ const position = t.Union([t.Literal('first'), t.Literal('last'),
   t.Object({ after: ref }, { additionalProperties: false })]);
 /** How a group divides the Book: numbered volumes, titled parts, or unnumbered extras. */
 const division = t.Union([t.Literal('volume'), t.Literal('part'), t.Literal('extras')]);
+const profile = t.Union([t.Literal('book-composition'), t.Literal('work-composition')]);
+const inclusion = t.Union([t.Literal('required'), t.Literal('optional'), t.Literal('extra')]);
+const completion = t.Object({ status: t.Union([t.Literal('concluded'), t.Literal('ongoing'), t.Literal('unknown')]),
+  evidence: t.Array(t.String({ format: 'uri', maxLength: 2048 }), { maxItems: 16, uniqueItems: true }) }, { additionalProperties: false });
 const operation = t.Union([
+  t.Object({ op: t.Literal('completion'), completion }, { additionalProperties: false }),
   t.Object({ op: t.Literal('insert'), parent: ref, position,
-    role: t.Union([t.Literal('group'), t.Literal('chapter')]),
+    role: t.Union([t.Literal('group'), t.Literal('chapter'), t.Literal('part')]),
     target: t.Optional(t.String({ format: 'uri' })),
     selection: t.Optional(selection), label: t.Optional(label), sourceKey: t.Optional(t.String()),
-    division: t.Optional(division) },
+    division: t.Optional(division), displayLabel: t.Optional(t.String({ minLength: 1, maxLength: 500 })),
+    inclusion: t.Optional(inclusion) },
   { additionalProperties: false }),
   t.Object({ op: t.Literal('move'), occurrence: ref, parent: ref, position },
     { additionalProperties: false }),
   t.Object({ op: t.Literal('remove'), occurrence: ref }, { additionalProperties: false }),
   t.Object({ op: t.Literal('update'), occurrence: ref, label: t.Optional(label),
-    division: t.Optional(division) }, { additionalProperties: false }),
+    division: t.Optional(division), displayLabel: t.Optional(t.String({ minLength: 1, maxLength: 500 })),
+    inclusion: t.Optional(inclusion) }, { additionalProperties: false }),
 ]);
 type BodyOperation = Static<typeof operation>;
 
 /** A group's division travels as the Book group qualifier of the Structure command. */
 function commandOperation(item: BodyOperation): CompositionOperation {
   if (item.op !== 'insert' && item.op !== 'update') return item;
-  const { division: groupDivision, ...rest } = item;
+  const { division: groupDivision, displayLabel, inclusion: partInclusion, ...rest } = item;
+  if (displayLabel !== undefined || partInclusion !== undefined || item.op === 'insert' && item.role === 'part') {
+    if (!displayLabel || !partInclusion || groupDivision || item.op === 'insert' && item.role !== 'part') {
+      throw new InvalidCompositionChange('a Work part requires its display label and inclusion');
+    }
+    return { ...rest, qualifier: { type: 'work-part', displayLabel, inclusion: partInclusion } };
+  }
   if (groupDivision && item.op === 'insert' && item.role !== 'group') {
     throw new InvalidCompositionChange('only a group has a division');
   }
@@ -71,12 +84,13 @@ const occurrence = t.Object({ occurrence: ref, state: t.Union([t.Literal('active
   t.Literal('removed')]), parent: ref,
   segmentKey: t.Optional(t.String()), orderKey: t.Optional(t.String()),
   removedBy: t.Optional(ref), role: t.Union([t.Literal('group'),
-    t.Literal('chapter')]), target: t.Optional(t.String()), selection: t.Optional(selection),
+    t.Literal('chapter'), t.Literal('part')]), target: t.Optional(t.String()), selection: t.Optional(selection),
   labels: t.Array(label), sourceKey: t.Optional(t.String()), introducedBy: ref,
   qualifier: t.Optional(t.Object({ type: t.String() }, { additionalProperties: true })) });
 const pageResult = t.Object({ structure: ref, owner: ref, component: ref, work: ref,
   mainVersion: ref, revision: ref,
-  predecessor: t.Nullable(ref), placementCount: t.Integer(), occurrences: t.Array(occurrence),
+  predecessor: t.Nullable(ref), placementCount: t.Optional(t.Integer()), completion: t.Optional(completion),
+  occurrences: t.Array(occurrence),
   next: t.Nullable(t.String()), sourcePosition,
   cost: t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer() }) });
 const writeResponses = { 200: writeResult, 201: writeResult, 202: pendingOperation,
@@ -84,6 +98,11 @@ const writeResponses = { 200: writeResult, 201: writeResult, 202: pendingOperati
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500),
   503: problemResult(503) };
 const readResponses = { 200: pageResult, ...authorizedReadProblems };
+function disclosedPage(page: CompositionPage) {
+  if (!page.completion) return page;
+  const { placementCount: _count, ...disclosed } = page;
+  return disclosed;
+}
 export const openApiOperations = {
   '/v1/compositions': { post: { bearer: true, idempotencyKey: true } },
   '/v1/compositions/{id}/changes': { post: { bearer: true, idempotencyKey: true } },
@@ -397,7 +416,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
   }
   return new Elysia()
     .post('/v1/compositions', {
-      body: t.Object({ profile: t.Literal('book-composition'), work: ref,
+      body: t.Object({ profile, work: ref,
         mainVersion: ref, ...writeBody.properties }, { additionalProperties: false }),
       response: writeResponses,
     }, async ({ request, body }) => {
@@ -405,9 +424,9 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       try {
         const result = await createAdmittedComposition(work.environment, work.account, work.access,
-          request, { work: body.work, mainVersion: body.mainVersion,
+          request, { profile: body.profile, work: body.work, mainVersion: body.mainVersion,
             actingSubject: body.actingSubject, idempotencyKey });
-        return Response.json({ structure: result.structure, mainVersion: result.mainVersion,
+        return Response.json({ structure: result.structure, mainVersion: result.mainVersion ?? result.component,
           revision: result.revision, receipt: result.receipt, replayed: result.replayed,
           sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch,
             sequence: result.sequence } }, { status: result.replayed ? 200 : 201,
@@ -416,7 +435,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
     })
     .post('/v1/compositions/:id/changes', {
       params: t.Object({ id: groupUuid }),
-      body: t.Object({ profile: t.Literal('book-composition'), expectedHead: ref,
+      body: t.Object({ profile, expectedHead: ref,
         operations: t.Array(operation, { minItems: 1, maxItems: 16 }),
         ...writeBody.properties }, { additionalProperties: false }),
       response: writeResponses,
@@ -424,13 +443,17 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       try {
+        const header = await readCompositionHeader(work.environment, `https://rezics.com/id/${params.id}`);
+        if (header && header.profile !== body.profile) throw new InvalidCompositionChange('composition profile differs');
         const result = await changeAdmittedComposition(work.environment, work.account, work.access,
           request, { structure: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
             operations: body.operations.map(commandOperation), actingSubject: body.actingSubject,
             idempotencyKey });
         return Response.json({ structure: result.structure, revision: result.revision,
           expectedHead: result.expectedHead, receipt: result.receipt, replayed: result.replayed,
-          occurrences: result.occurrences ?? [], ...(result.cost ? { cost: result.cost } : {}),
+          occurrences: result.occurrences ?? body.operations.flatMap((operation, index) =>
+            operation.op === 'insert' && result.revision ? [derivedId(`${result.revision}\0occurrence\0${index}`)] : []),
+          ...(result.cost ? { cost: result.cost } : {}),
           sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch,
             sequence: result.sequence } }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
@@ -475,7 +498,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
     .get('/v1/compositions/:id', {
       params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref, parent: t.Optional(ref),
-        after: t.Optional(t.String({ maxLength: 512 })), limit: t.Optional(t.Numeric({
+        after: t.Optional(t.String({ maxLength: 2048 })), limit: t.Optional(t.Numeric({
           minimum: 1, maximum: 100 })) }, { additionalProperties: false }),
       response: readResponses,
     }, async ({ request, params, query }) => {
@@ -492,13 +515,13 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           limit: query.limit ?? 50,
           canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
             access: work.access, principal, actingSubject: query.actingSubject, target }) });
-        return Response.json(page, { headers: { 'cache-control': 'no-store' } });
+        return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
     .get('/v1/compositions/:id/revisions/:revision', {
       params: t.Object({ id: groupUuid, revision: groupUuid }),
       query: t.Object({ actingSubject: ref, parent: t.Optional(ref),
-        after: t.Optional(t.String({ maxLength: 512 })), limit: t.Optional(t.Numeric({
+        after: t.Optional(t.String({ maxLength: 2048 })), limit: t.Optional(t.Numeric({
           minimum: 1, maximum: 100 })) }, { additionalProperties: false }),
       response: readResponses,
     }, async ({ request, params, query }) => {
@@ -516,7 +539,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           limit: query.limit ?? 50,
           canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
             access: work.access, principal, actingSubject: query.actingSubject, target }) });
-        return Response.json(page, { headers: { 'cache-control': 'no-store' } });
+        return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
     .get('/v1/compositions/:id/seals/:seal', {
@@ -560,7 +583,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           ...(query.revision ? { revision: query.revision } : {}), limit: 1,
           canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
             access: work.access, principal, actingSubject: query.actingSubject, target }) });
-        return Response.json(page, { headers: { 'cache-control': 'no-store' } });
+        return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
     .use(compositionStageRoutes(fuseki, work));

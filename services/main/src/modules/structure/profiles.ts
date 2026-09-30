@@ -39,6 +39,11 @@ export interface StructureProfileRegistration {
   targetReadPermission?: string;
   /** Current target disclosure. The Book default remains work:read. */
   authorizeTarget?: (authority: StructureTargetAuthority) => Promise<boolean>;
+  /** Owner target invariants, checked before planning and again inside the graph transaction. */
+  targetGuard?: (env: WorkActivationEnvironment, owner: string, targets: readonly string[]) =>
+    Promise<{ guard: string; rejection: string; invalid?: boolean }>;
+  /** Withhold unreadable uses entirely, including aggregate counts and ordinals. */
+  withholdUnreadableTargets?: boolean;
   /** Access action and graph receipt family for owner edits. */
   editAction: string;
   receiptFamily: string;
@@ -121,6 +126,8 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
         || profile.targetReadPermission !== undefined
           && !/^[a-z][a-z0-9.:-]{1,127}$/.test(profile.targetReadPermission)
         || profile.authorizeTarget !== undefined && typeof profile.authorizeTarget !== 'function'
+        || profile.targetGuard !== undefined && typeof profile.targetGuard !== 'function'
+        || profile.withholdUnreadableTargets !== undefined && typeof profile.withholdUnreadableTargets !== 'boolean'
         || typeof profile.editAction !== 'string'
         || !/^[a-z][a-z0-9.:-]{1,127}$/.test(profile.editAction)
         || typeof profile.receiptFamily !== 'string'
@@ -163,8 +170,11 @@ const profiles = await discoverStructureProfiles();
 const byGraph = new Map([...profiles.values()].map(profile => [profile.graphProfile, profile]));
 const byAction = new Map<string, StructureProfileRegistration>();
 for (const profile of profiles.values()) {
-  if (byAction.has(profile.editAction)) throw new Error(`Duplicate Structure edit action ${profile.editAction}`);
-  byAction.set(profile.editAction, profile);
+  const prior = byAction.get(profile.editAction);
+  if (prior && prior.receiptFamily !== profile.receiptFamily) {
+    throw new Error(`Inconsistent Structure receipt family for ${profile.editAction}`);
+  }
+  if (!prior) byAction.set(profile.editAction, profile);
 }
 
 export function structureProfileFor(id: string): StructureProfileRegistration {
@@ -179,6 +189,7 @@ export function structureProfileForGraph(graphProfile: string): StructureProfile
   return profile;
 }
 
+/** Receipt-family representative only; command policy comes from the Structure's own profile. */
 export function structureProfileForAction(action: string): StructureProfileRegistration {
   const profile = byAction.get(action);
   if (!profile) throw new Error(`No registered Structure profile for action ${action}`);

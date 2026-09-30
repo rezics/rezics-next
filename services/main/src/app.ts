@@ -17,6 +17,7 @@ import { classificationRoutes } from './routes/classification.ts';
 import { connectedAppRoutes } from './routes/connected-apps.ts';
 import { commerceRoutes } from './routes/commerce.ts';
 import { compositionRoutes } from './routes/compositions.ts';
+import { compositionReadRoutes } from './routes/composition-reads.ts';
 import { collectionRoutes } from './routes/collections.ts';
 import { zoneRoutes } from './routes/zones.ts';
 import { progressRoutes } from './routes/progress.ts';
@@ -153,6 +154,8 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(memberReplyRoutes(work))
     .use(workMaintainerRoutes(work))
     .use(lexiconRoutes(fuseki, work));
+    .use(compositionReadRoutes(work))
+    .use(workReadRoutes(work));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

@@ -32,14 +32,15 @@ export const STRUCTURE_LIMITS = {
   stageBytes: 1_073_741_824,
 } as const;
 
-export const STRUCTURE_PROFILES = ['book-composition', 'collection-membership', 'zone-navigation',
+export const STRUCTURE_PROFILES = ['book-composition', 'work-composition', 'collection-membership', 'zone-navigation',
   'wiki-navigation', 'recipe-composition'] as const;
-export const OCCURRENCE_ROLES = ['group', 'chapter', 'member', 'mount', 'navigation', 'ingredient',
+export const OCCURRENCE_ROLES = ['group', 'chapter', 'part', 'member', 'mount', 'navigation', 'ingredient',
   'step', 'equipment'] as const;
 
 /** Roles admitted per Structure profile; checked by the command family, not by node-local SHACL. */
 export const PROFILE_ROLES: Readonly<Record<StructureProfile, readonly OccurrenceRole[]>> = {
   'book-composition': ['group', 'chapter'],
+  'work-composition': ['group', 'part'],
   'collection-membership': ['group', 'member'],
   'zone-navigation': ['group', 'mount'],
   'wiki-navigation': ['group', 'navigation'],
@@ -71,6 +72,9 @@ export const BOOK_DIVISIONS = ['volume', 'part', 'extras'] as const;
 export type BookDivision = (typeof BOOK_DIVISIONS)[number];
 
 const qualifier = Type.Union([
+  Type.Object({ type: Type.Literal('work-part'),
+    displayLabel: Type.String({ minLength: 1, maxLength: 500 }),
+    inclusion: Type.Enum(['required', 'optional', 'extra']) }, { additionalProperties: false }),
   Type.Object({ type: Type.Literal('book-group'), division: Type.Enum(BOOK_DIVISIONS) },
     { additionalProperties: false }),
   Type.Object({
@@ -169,6 +173,11 @@ export const RecipeMeasure = Type.Object({
   evidence: Type.Optional(reference),
 }, { additionalProperties: false });
 
+/** Evidenced completion of the composing Work, retained with its exact Structure head. */
+export const WorkCompletion = Type.Object({ status: Type.Enum(['concluded', 'ongoing', 'unknown']),
+  evidence: Type.Array(reference, { maxItems: 16, uniqueItems: true }) }, { additionalProperties: false });
+export type WorkCompletion = Static<typeof WorkCompletion>;
+
 /**
  * Root of one complete Structure state. Small Structures have single-leaf trees;
  * a bounded edit copies the changed leaves and their ancestors and reuses the rest.
@@ -185,6 +194,7 @@ export const StructureManifest = Type.Object({
   order: treeRoot,
   placementCount: Type.Integer({ minimum: 0, maximum: STRUCTURE_LIMITS.maxPlacements }),
   measures: Type.Array(RecipeMeasure, { maxItems: STRUCTURE_LIMITS.measures }),
+  completion: Type.Optional(WorkCompletion),
   source: Type.Optional(Type.Object({ ref: reference, revision: reference,
     mappingPolicy: Type.Optional(Type.Union([Type.Literal('source-key'), Type.Literal('explicit')])),
     coverage: Type.Optional(Type.Union([Type.Literal('complete'), Type.Literal('partial')])),
@@ -293,17 +303,22 @@ export function checkOccurrenceRecord(record: OccurrenceRecord, profile: Structu
     }
   }
   const structural = record.role === 'group' || record.role === 'step';
-  const targeted = ['chapter', 'member', 'mount', 'navigation'].includes(record.role);
+  const targeted = ['chapter', 'part', 'member', 'mount', 'navigation'].includes(record.role);
   if ((structural && record.target !== undefined) || (targeted && record.target === undefined)) {
     throw new InvalidStructureObject(`role ${record.role} target cardinality differs`);
   }
   const qualifierType = record.qualifier?.type;
-  const expected = record.role === 'mount' ? 'zone-mount' : record.role === 'ingredient'
+  const expected = profile === 'work-composition' && record.role === 'part' ? 'work-part'
+    : record.role === 'mount' ? 'zone-mount' : record.role === 'ingredient'
     ? 'ingredient-line' : record.role === 'step' ? 'recipe-step' : undefined;
   // A Book group may say how it divides the book; one without a division reads as a plain part.
   const bookGroup = profile === 'book-composition' && record.role === 'group' && qualifierType === 'book-group';
   if (qualifierType !== expected && !bookGroup) {
     throw new InvalidStructureObject(`role ${record.role} requires qualifier ${expected ?? 'none'}`);
+  }
+  if (record.role === 'part' && (!Value.Check(qualifier, record.qualifier)
+    || record.qualifier?.type !== 'work-part' || /[\u0000-\u001f\u007f]/u.test(record.qualifier.displayLabel))) {
+    throw new InvalidStructureObject('a Work part requires its display label and inclusion');
   }
   if (record.qualifier?.type === 'ingredient-line'
     && record.qualifier.amountUpper !== undefined && record.qualifier.amount === undefined) {

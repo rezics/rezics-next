@@ -1,4 +1,5 @@
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { Value } from 'typebox/value';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
@@ -10,7 +11,7 @@ import { CONTINUITY, DATASET, GRAPHS, PROFILE, RV, hash, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { BOOK_DIVISIONS, InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
   STRUCTURE_SEAL_FORMAT, checkOccurrenceRecord, checkStructureManifest, checkStructureSealManifest,
-  checkRecipeMeasures, type RecipeMeasure, type OccurrenceRecord,
+  checkRecipeMeasures, WorkCompletion, type RecipeMeasure, type OccurrenceRecord,
   type OccurrenceRole, type OrderEntry, type PinEntry, type StructureManifest,
   type StructureProfile } from './format.ts';
 import { COMPOSITION_PROFILE, CompositionCorrupt, CompositionUnavailable, NATIVE_ID, ROLE_IRI,
@@ -39,6 +40,7 @@ export class CompositionCancelled extends Error {}
 
 export type Position = 'first' | 'last' | { after: string };
 export type CompositionOperation =
+  | { op: 'completion'; completion: WorkCompletion }
   | { op: 'insert'; parent: string; position: Position; role: OccurrenceRole; target?: string;
     selection?: Selection; label?: Label; sourceKey?: string;
     qualifier?: OccurrenceRecord['qualifier'] }
@@ -136,20 +138,29 @@ export function checkedOperations(operations: readonly CompositionOperation[],
     return label === undefined ? undefined : { value: label.value, language: label.language };
   };
   return operations.map(operation => {
+    if (operation.op === 'completion') {
+      if (registration?.id !== 'work-composition' || operations.length !== 1
+        || !Value.Check(WorkCompletion, operation.completion)
+        || operation.completion.status !== 'unknown' && !operation.completion.evidence.length) {
+        throw new InvalidCompositionChange('a Work completion status requires evidence, or explicit unknown');
+      }
+      return { op: 'completion', completion: { status: operation.completion.status,
+        evidence: [...operation.completion.evidence] } };
+    }
     if (operation.op === 'remove') return { op: 'remove', occurrence: native(operation.occurrence, 'occurrence') };
     if (operation.op === 'update') {
       const label = checkedLabel(operation.label);
       const qualifier = operation.qualifier;
       if (!label && !qualifier) throw new InvalidCompositionChange('an update names a label or a division');
-      // Only a Book group's division can change in place; other qualifiers are part of their use.
-      if (qualifier && (qualifier.type !== 'book-group' || !BOOK_DIVISIONS.includes(qualifier.division)
+      const workPart = qualifier?.type === 'work-part' && registration?.id === 'work-composition';
+      if (qualifier && !workPart && (qualifier.type !== 'book-group' || !BOOK_DIVISIONS.includes(qualifier.division)
         || Object.keys(qualifier).length !== 2
         || registration && registration.id !== 'book-composition')) {
         throw new InvalidCompositionChange('only a Book group division can be updated');
       }
       return { op: 'update', occurrence: native(operation.occurrence, 'occurrence'),
         ...(label ? { label } : {}),
-        ...(qualifier ? { qualifier: { type: 'book-group', division: qualifier.division } } : {}) };
+        ...(qualifier ? { qualifier } : {}) };
     }
     if (operation.op === 'move') {
       return { op: 'move', occurrence: native(operation.occurrence, 'occurrence'),
@@ -519,7 +530,8 @@ export async function structureCreationValidations(env: WorkActivationEnvironmen
 async function projectStageBatch(env: WorkActivationEnvironment, admission: Admission,
   input: { stageId: string; structure: string; generation: string; expectedHead: string;
     previousGeneration: string; ordinal: number; generationTriples: string;
-    projection: readonly string[]; revisionTriples: string; focus: readonly [string, string][] }): Promise<void> {
+    projection: readonly string[]; revisionTriples: string; focus: readonly [string, string][];
+    qualifierChecks?: readonly CommandValidation[] }): Promise<void> {
   const receipt = `urn:rezics:receipt:structure-projection:${hash(`${input.stageId}\0${input.ordinal}`)}`;
   const digest = hash(JSON.stringify({ family: 'structure-projection-batch-v1',
     stage: input.stageId, ordinal: input.ordinal, projection: input.projection }));
@@ -559,7 +571,7 @@ async function projectStageBatch(env: WorkActivationEnvironment, admission: Admi
         : `GRAPH ${iri(GRAPHS.current)} { ${iri(input.generation)} rv:structure ${iri(input.structure)} ;
             rv:generationState rv:Staging . }`}
       BIND(?n + 1 AS ?next) }`;
-  const checks = await validations(env, input.focus);
+  const checks = [...await validations(env, input.focus), ...input.qualifierChecks ?? []];
   const result = await env.fuseki.commandWithReceipt({ receipt, digest, update,
     validations: checks, deadlineMs: 10_000 });
   if (result.status === 'invalid' || result.status === 'unknown-profile') {
@@ -894,6 +906,7 @@ async function height(w: Working, occurrence: string): Promise<number> {
 }
 
 async function apply(w: Working, operation: CompositionOperation, index: number): Promise<void> {
+  if (operation.op === 'completion') return;
   const profile = structureProfileFor(w.header.profile);
   if (operation.op === 'insert') {
     const chain = await ancestry(w, operation.parent);
@@ -919,8 +932,8 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
   const state = await w.get(operation.occurrence);
   if (!state?.active) throw new CompositionConflict('occurrence is not active in this composition');
   if (operation.op === 'update') {
-    if (operation.qualifier && state.role !== 'group') {
-      throw new CompositionConflict('only a group has a division');
+    if (operation.qualifier && state.role !== (operation.qualifier.type === 'work-part' ? 'part' : 'group')) {
+      throw new CompositionConflict('qualifier does not belong to this occurrence role');
     }
     if (operation.label) state.label = operation.label;
     if (operation.qualifier) state.qualifier = operation.qualifier;
@@ -1019,7 +1032,7 @@ function diff(before: readonly string[], after: readonly string[]): { removed: s
 }
 
 const OPERATION_KIND = { insert: 'OccurrenceInsert', move: 'OccurrenceMove', remove: 'OccurrenceRemove',
-  update: 'OccurrenceUpdate' } as const;
+  update: 'OccurrenceUpdate', completion: 'OccurrenceUpdate' } as const;
 
 export interface ChangeCompositionIntent {
   admission: Admission;
@@ -1039,7 +1052,9 @@ export interface CompositionChangeResult {
 /** Apply one bounded change batch against the exact expected head and seal a new revision. */
 export async function changeComposition(env: WorkActivationEnvironment,
   intent: ChangeCompositionIntent): Promise<CompositionChangeResult> {
-  const registration = structureProfileForAction(intent.admission.action);
+  const header = await readCompositionHeader(env, intent.structure);
+  if (!header) throw new CompositionUnavailable('composition is unavailable');
+  const registration = structureProfileFor(header.profile);
   const operations = checkedOperations(intent.operations, registration);
   const digest = intent.newWork
     ? chapterCreateDigest(intent.structure, intent.expectedHead, operations, intent.newWork)
@@ -1050,8 +1065,6 @@ export async function changeComposition(env: WorkActivationEnvironment,
     ? [derivedId(`${revision}\0occurrence\0${index}`)] : []);
   const prior = await existing(env, intent.admission);
   if (prior) return { terminal: prior, committed: false, occurrences };
-  const header = await readCompositionHeader(env, intent.structure);
-  if (!header) throw new CompositionUnavailable('composition is unavailable');
   if (header.profile !== registration.id) throw new IdempotencyConflict('Structure action targets another profile');
   if (intent.newWork) {
     const chapter = intent.newWork;
@@ -1091,7 +1104,10 @@ export async function changeComposition(env: WorkActivationEnvironment,
   }
   const w = new Working(env, header, `${intent.admission.id}\0composition`, revision);
   const profile = structureProfileFor(header.profile);
+  let targetInvariant: { guard: string; rejection: string; invalid?: boolean } | undefined;
   try {
+    targetInvariant = await profile.targetGuard?.(env, header.owner, resourceTargets);
+    if (targetInvariant?.invalid) throw new CompositionConflict('invalid Work target ancestry');
     await checkFixedSelections(env, operations);
     for (const [index, operation] of operations.entries()) await apply(w, operation, index);
   } catch (error) {
@@ -1155,6 +1171,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
   }
   const count = header.placementCount + w.activeDelta;
   const next = await writeManifest(objects, { ...manifest,
+    ...(operations[0]?.op === 'completion' ? { completion: operations[0].completion } : {}),
     records: await recordTree(objects).apply(manifest.records, records, cost),
     order: await orderTree(objects).apply(manifest.order, order, cost), placementCount: count }, cost);
   const operation = derivedId(`${intent.admission.id}\0composition\0operation`);
@@ -1226,9 +1243,9 @@ export async function changeComposition(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ${iri(intent.expectedHead)} ;
         rv:selectedGeneration ${iri(header.generation)} .
         ${iri(header.generation)} rv:placementCount ${header.placementCount} . }
-      ${resourceTargets.length
-        ? `GRAPH ${iri(GRAPHS.current)} { ${resourceTargets.map((target, index) => `${iri(target)} ?targetPredicate${index} ?targetObject${index} .`).join(' ')} }`
-        : ''}
+      ${resourceTargets.map((target, index) => `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(target)} ?targetPredicate${index} ?targetObject${index} . } }`).join('\n')}
+      ${targetInvariant?.guard ?? ''}
       ${chapter ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(chapter.work)} ?chapterProperty ?chapterValue } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
@@ -1257,6 +1274,8 @@ export async function changeComposition(env: WorkActivationEnvironment,
       [...records.keys()].map(id => w.placements.get(id)!)) ?? []),
   ]);
   if (!committed && !await readCompositionReceipt(env, intent.admission.id, intent.admission.action)) {
+    if (targetInvariant?.rejection) await sealRejection(env, intent.admission, 'composition.change',
+      'TopologyConflict', `${headGuard} ${targetInvariant.rejection}`);
     await sealRejection(env, intent.admission, 'composition.change', 'StaleHead',
       `GRAPH ${iri(GRAPHS.current)} { ${iri(intent.structure)} rv:structureHead ?head }
       FILTER(?head != ${iri(intent.expectedHead)})`);
@@ -1344,13 +1363,13 @@ export interface SealCompositionIntent { admission: Admission; structure: string
  */
 export async function sealComposition(env: WorkActivationEnvironment,
   intent: SealCompositionIntent): Promise<{ terminal: CompositionTerminal; committed: boolean }> {
-  const registration = structureProfileForAction(intent.admission.action);
+  const header = await readCompositionHeader(env, intent.structure);
+  if (!header) throw new CompositionUnavailable('composition is unavailable');
+  const registration = structureProfileFor(header.profile);
   const digest = compositionSealDigest(intent.structure, intent.expectedHead);
   checkAdmission(intent.admission, digest, registration);
   const prior = await existing(env, intent.admission);
   if (prior) return { terminal: prior, committed: false };
-  const header = await readCompositionHeader(env, intent.structure);
-  if (!header) throw new CompositionUnavailable('composition is unavailable');
   if (header.profile !== registration.id
     || intent.admission.scope !== `${registration.editScopePrefix}${header.owner}`) {
     throw new IdempotencyConflict('Structure admission targets another owner');
@@ -1514,7 +1533,9 @@ export interface RestoreCompositionIntent {
 /** A bounded restore selects retained bytes as a new revision; target resources are never rewound. */
 export async function restoreComposition(env: WorkActivationEnvironment, intent: RestoreCompositionIntent):
   Promise<{ terminal: CompositionTerminal; committed: boolean; cost?: CompositionCost }> {
-  const registration = structureProfileForAction(intent.admission.action);
+  const header = await readCompositionHeader(env, intent.structure);
+  if (!header) throw new CompositionUnavailable('composition is unavailable');
+  const registration = structureProfileFor(header.profile);
   const digest = intent.stage
     ? compositionStageDigest(intent.structure, intent.expectedHead,
       intent.stage.id, intent.stage.manifestDigest)
@@ -1522,8 +1543,6 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   checkAdmission(intent.admission, digest, registration);
   const prior = await existing(env, intent.admission);
   if (prior) return { terminal: prior, committed: false };
-  const header = await readCompositionHeader(env, intent.structure);
-  if (!header) throw new CompositionUnavailable('composition is unavailable');
   if (header.profile !== registration.id
     || intent.admission.scope !== `${registration.editScopePrefix}${header.owner}`) {
     throw new IdempotencyConflict('restore admission targets another Structure owner');
@@ -1626,6 +1645,11 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   }
   const targets = [...new Set(active.flatMap(record => record.target
     && !isCatalogTarget(registration, record.target) ? [record.target] : []))];
+  const targetInvariant = await registration.targetGuard?.(env, header.owner, targets);
+  if (targetInvariant?.invalid) {
+    await sealRejection(env, intent.admission, 'composition.restore', 'TopologyConflict', headGuard);
+    return { terminal: await settled(env, intent.admission), committed: false };
+  }
   if (targets.length) {
     const available = new Set<string>();
     for (let offset = 0; offset < targets.length; offset += 100) {
@@ -1647,10 +1671,15 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
     ? derivedId(`${intent.stage.id}\0composition\0revision`)
     : derivedId(`${intent.admission.id}\0composition\0revision`);
   const operation = derivedId(`${intent.stage?.id ?? intent.admission.id}\0composition\0operation`);
+  // A stage replaces placements, not owner metadata that its upload API cannot edit.
+  const completion = intent.stage && header.profile === 'work-composition'
+    ? (await readManifest(objects, header, cost)).completion : sourceManifest.completion;
   const next = await writeManifest(objects, { ...sourceManifest, generation,
+    ...(completion ? { completion } : {}),
     ...(intent.stage ? {} : { restoredFrom: intent.restoredFrom }) }, cost);
   const segments = new Map<string, SegmentState & { firstIndex: number }>();
   const projectionByRecord = records.map(() => [] as string[]);
+  const projectedStates: PlacementState[] = [];
   const focusByRecord = records.map(() => [] as [string, string][]);
   for (const [index, record] of records.entries()) {
     if (record.state !== 'active') continue;
@@ -1674,6 +1703,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
         ...(record.selection ? { selection: record.selection as Selection } : {}) } : {}),
       ...(record.qualifier ? { qualifier: record.qualifier } : {}),
       ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}) };
+    projectedStates.push(state);
     projectionByRecord[index]!.push(...placementTriples(state, generation, header.profile));
     if (intent.stage && record.introducedBy === revision) {
       projectionByRecord[index]!.push(`${iri(record.occurrence)} a <https://schema.org/ListItem> ;
@@ -1726,7 +1756,8 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
         previousGeneration: header.generation, ordinal,
         generationTriples: ordinal === 0 ? generationTriples : '',
         revisionTriples: ordinal === 0 ? candidateRevisionTriples : '',
-        projection: batchProjection, focus: batchFocus });
+        projection: batchProjection, focus: batchFocus,
+        qualifierChecks: await registration.qualifierValidations?.(env, projectedStates.slice(first, last)) });
       checkpoint = await intent.stage.onProjectionBatch(ordinal);
     }
   }
@@ -1771,6 +1802,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
         ${iri(header.generation)} rv:generationState rv:Active .
         ${targets.map((target, index) => `${iri(target)} rv:mainVersion ?main${index} .`).join('\n')} }
       ${stageGuard}
+      ${targetInvariant?.guard ?? ''}
       ${intent.stage ? `GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:StructureRevision ;
         rv:component ${iri(header.structure)} ; rv:generation ${iri(generation)} ;
         rv:manifest ${iri(manifestIri(next))} . }`
@@ -1778,9 +1810,12 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       BIND(?n + 1 AS ?next) }`;
   const finalFocus: [string, string][] = [['structure', header.structure],
     ['generation', generation], ['generation', header.generation], ['revision', revision]];
-  const checks = await validations(env, intent.stage ? finalFocus : focus);
+  const checks = [...await validations(env, intent.stage ? finalFocus : focus),
+    ...(!intent.stage ? await registration.qualifierValidations?.(env, projectedStates) ?? [] : [])];
   const committed = await dispatch(env, intent.admission, update, checks);
   if (!committed && !await readCompositionReceipt(env, intent.admission.id, intent.admission.action)) {
+    if (targetInvariant?.rejection) await sealRejection(env, intent.admission, 'composition.restore',
+      'TopologyConflict', `${headGuard} ${targetInvariant.rejection}`, intent.stage ? { generation } : undefined);
     await sealRejection(env, intent.admission, 'composition.restore', 'StaleHead',
       `GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ?head }
       FILTER(?head != ${iri(intent.expectedHead)})`, intent.stage
