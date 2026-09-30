@@ -21,10 +21,10 @@ export type ResourceType = 'work' | 'main-version' | 'space' | 'realm' | 'concep
   | 'character' | 'context' | 'role' | 'relation-definition'
   | 'release' | 'occurrence' | 'realization' | 'resource';
 
-/** Main Version is an entry axis, so it has no capability target base. */
-export const summaryBases = { work: 'work', 'main-version': null, space: 'resource',
-  realm: 'resource', concept: 'resource', character: 'resource', context: 'resource',
-  role: 'resource', 'relation-definition': 'resource', release: 'release',
+/** Entry axes and owners without a supported exact revision path have no target base. */
+export const summaryBases = { work: 'work', 'main-version': null, space: null,
+  realm: null, concept: null, character: 'resource', context: 'resource',
+  role: 'resource', 'relation-definition': null, release: 'release',
   occurrence: 'occurrence', realization: 'realization', resource: 'resource',
 } as const satisfies Record<ResourceType, Base | null>;
 
@@ -215,7 +215,8 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
             { ?component a rv:MainVersion ; rv:work ?work }
             UNION { ?component a schema:CreativeWork ; rv:mainVersion ?main . BIND(?component AS ?work) }
             BIND("occurrence" AS ?type) }
-          UNION { ?r a rv:TextContribution ; rv:work ?work . BIND("realization" AS ?type) }
+          UNION { ?r a rv:TextContribution ; rv:work ?work ; rv:publicationHead ?publication .
+            BIND("realization" AS ?type) }
           UNION { ?r a rv:Space . BIND("space" AS ?type) }
           UNION { ?r a rv:Realm ; rv:realmState rv:Active . BIND("realm" AS ?type) }
           UNION { ?r a skos:Concept ; rv:conceptState rv:Active . BIND("concept" AS ?type) }

@@ -48,6 +48,8 @@ function readerFor(session: WorkReadSession): SummaryReader {
     restrictedTitles: (heads, context) => deps.governance!.store.restrictedTitles(heads, context),
   } : {};
   if (!principal || !actingSubject) return reader;
+  let verifiedContext: ReturnType<typeof deps.account.verify> | undefined;
+  const contextPrincipal = () => verifiedContext ??= deps.account.verify(session.request, ['context:read']);
   return { ...reader,
     realmReadProof: realm => Promise.resolve(deps.access.realmReadProof?.(principal, actingSubject, realm) ?? null),
     canReadWork: work => deps.access.canReadWork(principal, actingSubject, work),
@@ -57,10 +59,12 @@ function readerFor(session: WorkReadSession): SummaryReader {
       deps.access.canReadSemanticResource?.(principal, actingSubject, resource) ?? false),
     canReadSemantics: deps.mediaAccess
       ? resources => deps.mediaAccess!.canReadSemantics(principal, actingSubject, resources) : undefined,
-    canReadPrivateContext: context => Promise.resolve(
-      deps.contextSelections?.canReadPrivate(principal, actingSubject, context) ?? false),
+    canReadPrivateContext: deps.contextSelections
+      ? async context => deps.contextSelections!.canReadPrivate(await contextPrincipal(), actingSubject, context)
+      : undefined,
     canReadPrivateContexts: deps.mediaAccess
-      ? contexts => deps.mediaAccess!.canReadPrivateContexts(principal, actingSubject, contexts) : undefined,
+      ? async contexts => deps.mediaAccess!.canReadPrivateContexts(await contextPrincipal(), actingSubject, contexts)
+      : undefined,
   };
 }
 

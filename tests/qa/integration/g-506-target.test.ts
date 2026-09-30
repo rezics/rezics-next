@@ -4,6 +4,7 @@ import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
+import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import { readResourceSummaries, type ResourceSummary } from '../../../services/main/src/modules/media/summary.ts';
@@ -22,7 +23,9 @@ test('G-506: API-seeded SAO targets preserve exact grain, owner disclosure and b
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
   const preparation = Date.now();
   const directory = resolve('.temp', `g-506-${randomUUID()}`);
-  const f = await authorCreditFixture(Bun.env as Record<string, string>, directory);
+  // Deliberately omit context:read: Work authority must not admit private Contexts.
+  const f = await authorCreditFixture(Bun.env as Record<string, string>, directory,
+    'openid work:create work:edit work:read work:protect context:write classification:define');
   let graphQueries = 0;
   const query = f.env.fuseki.query.bind(f.env.fuseki);
   const graph = new Proxy(f.env.fuseki, { get(target, property) {
@@ -109,6 +112,35 @@ test('G-506: API-seeded SAO targets preserve exact grain, owner disclosure and b
     const sao = { web: await createWork('Sword Art Online'), bunko: await createWork('Sword Art Online'),
       volume1: await createWork('Sword Art Online volume 1') };
     const text = { web: await publish(sao.web), bunko: await publish(sao.bunko), volume1: await publish(sao.volume1) };
+    const draftOnly = await json<{ contribution: string }>(await call('POST', '/v1/contributions', {
+      profile: 'text-contribution-v1', work: sao.web.work, language: 'en', body: 'Private unpublished SAO draft',
+      actingSubject: f.actor }), 201);
+    expect((await get(draftOnly.contribution)).status).toBe(404);
+    const draftSummaries = await json<{ summaries: ResourceSummary[] }>(await call('POST', '/v1/resources/summaries', {
+      profile: 'resource-summary-batch-v1', resources: [sao.web.work, draftOnly.contribution] }, false), 200);
+    expect(draftSummaries.summaries[0]).toMatchObject({ status: 'available', work: sao.web.work });
+    expect(draftSummaries.summaries[1]).toEqual({ reference: draftOnly.contribution, status: 'unavailable' });
+    await expect(resolveBatch([draftOnly.contribution])).rejects.toBeInstanceOf(TargetUnavailable);
+
+    await f.grant('classification:define:global', 'classification.proposition.define');
+    const concept = await json<{ concept: string }>(await call('POST', '/v1/classification-vocabulary', {
+      profile: 'classification-proposition-v2', scheme: null,
+      labels: [{ language: 'en', value: 'SAO continuity' }], alternativeLabels: [], broader: [], narrower: [],
+      actingSubject: f.actor }), 201);
+    expect(await json(await get(concept.concept), 200)).toMatchObject({ status: 'available', base: null, work: null });
+    const unsupported = await resolveBatch([concept.concept]).catch(error => error);
+    expect(unsupported).toBeInstanceOf(TargetNotBound);
+    expect(unsupported).toMatchObject({ status: 422, code: 'target_not_bound' });
+
+    await f.grant('context:create:root', 'context.create');
+    const privateContext = await json<{ context: string }>(await call('POST', '/v1/contexts', {
+      profile: 'context-v1', role: 'shared', disclosure: 'private', base: null, entries: [], actingSubject: f.actor }), 201);
+    await f.grant(`context:read:${privateContext.context}`, 'context.read');
+    expect((await get(privateContext.context)).status).toBe(404);
+    await expect(resolveBatch([privateContext.context])).rejects.toBeInstanceOf(TargetUnavailable);
+    expect((await get(privateContext.context, true)).status).toBe(401);
+    await expect(resolveBatch([privateContext.context], 'discussion', true)).rejects.toBeInstanceOf(AccountAssertionDenied);
+
     const paperback = await releaseOf(sao.volume1);
     await f.grant(`release:seal:${sao.volume1.mainVersion}`, 'release.seal');
     const sealed = await json<{ release: string }>(await call('POST', '/v1/fixed-releases', {

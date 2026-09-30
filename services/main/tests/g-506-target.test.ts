@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { Value } from 'typebox/value';
 import type { MainWorkDependencies } from '../src/app.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
@@ -11,6 +12,11 @@ import { resolveTargets, TargetNotBound, TargetUnavailable, TARGET_RESOLVE_COST 
   from '../src/modules/target/resolve.ts';
 import { WorkReadSession, WorkReadMoved, WorkReadUnavailable, WorkReadInvalid, WorkReadLimit }
   from '../src/modules/work/read-session.ts';
+import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
+import { PrivateContextSelections } from '../src/modules/context/private-selection.ts';
+import { CONTEXT_PROFILE } from '../src/modules/context/schema.ts';
+import { disclosePublicSearchFields } from '../src/modules/search-disclosure/public-fields.ts';
+import { prepareComponent, RV } from '../src/modules/work/activate.ts';
 
 const id = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${number.toString().padStart(12, '0')}`;
 const literal = (value: string) => ({ type: 'literal' as const, value });
@@ -34,6 +40,8 @@ function fixture(records: Array<{ resource: string; type: ResourceType; work?: s
       options.revisionRows ?? records.map((record, index) => ({ epoch: literal('epoch'),
         sequence: literal(options.revisionSequence ?? '1'), r: uri(record.resource),
         revision: uri(id(1000 + index)), type: uri('https://schema.org/CreativeWork') })) } };
+    if (query.includes('SELECT ?epoch ?sequence WHERE')) return { results: { bindings:
+      [{ epoch: literal('epoch'), sequence: literal('1') }] } };
     throw new Error(`Unexpected graph probe: ${query}`);
   };
   let accessBatches = 0;
@@ -124,6 +132,92 @@ test('G-506: Main Version and grain mismatch are 422 only after target admission
     { hidden: [id(2)] });
   const unavailable = await resolveTargets(hiddenMismatch.session, [id(1)], 'rating').catch(error => error);
   expect(unavailable).toMatchObject({ status: 404, code: 'resource_unavailable' });
+  const concept = fixture([{ resource: id(1), type: 'concept' }]);
+  const summaries = await readResourceSummaries(concept.session.deps.environment, undefined, {},
+    { resources: [id(1)], context: DEFAULT_MEDIA_CONTEXT, language: null });
+  expect(summaries.summaries[0]).toMatchObject({ status: 'available', base: null, work: null });
+  await expect(resolveTargets(concept.session, [id(1)], 'discussion')).rejects.toBeInstanceOf(TargetNotBound);
+  for (const type of ['space', 'realm', 'concept', 'relation-definition'] as const) expect(summaryBases[type]).toBeNull();
+});
+
+test('G-506: public search requires a title fence for every summary carrying a Work title', async () => {
+  const records: Array<{ resource: string; type: ResourceType; work?: string }> =
+    ['work', 'main-version', 'release', 'occurrence', 'realization'].map((type, index) => ({
+    resource: id(index + 1), type: type as ResourceType, work: id(1),
+  }));
+  records.push({ resource: id(6), type: 'concept' });
+  const f = fixture(records);
+  const input = { resources: records.map(record => record.resource), contexts: [], statements: [],
+    mediaContext: DEFAULT_MEDIA_CONTEXT, language: null };
+  const unfenced = await disclosePublicSearchFields(f.session.deps.environment, undefined, undefined, input);
+  expect(unfenced.fields.map(field => field.owner)).toEqual([id(6)]);
+  const fenced = await disclosePublicSearchFields(f.session.deps.environment, undefined, undefined, input,
+    async () => new Set<string>());
+  expect(fenced.fields.map(field => field.owner)).toEqual(input.resources);
+  const withheld = await disclosePublicSearchFields(f.session.deps.environment, undefined, undefined, input,
+    async () => new Set([id(1)]));
+  expect(withheld.fields.map(field => field.owner)).toEqual([id(6)]);
+});
+
+test('G-506: private Context batch and fallback readers lazily verify context:read before Access', async () => {
+  for (const batch of [true, false]) {
+    const directory = mkdtempSync('.temp/g-506-context-');
+    try {
+      const records = [{ resource: id(1), type: 'context' as const, public: false },
+        { resource: id(2), type: 'context' as const, public: false }];
+      const f = fixture(records);
+      const env = f.session.deps.environment;
+      env.objectDirectory = directory;
+      const heads = records.map((record, index) => ({ context: uri(record.resource),
+        semanticHead: uri(id(1000 + index)), disclosure: uri(`${RV}Private`),
+        semanticManifest: uri(`urn:rezics:sha256:${prepareComponent(directory, record.resource,
+          { revision: id(1000 + index), entries: [] }, CONTEXT_PROFILE)}`) }));
+      const query = env.fuseki.query.bind(env.fuseki);
+      env.fuseki.query = async (sparql, maxBytes) => sparql.includes('SELECT ?epoch ?hold ?context ?disclosure')
+        ? { results: { bindings: heads.map(head => ({ ...head, epoch: literal('epoch') })) } }
+        : query(sparql, maxBytes);
+      let denied = true;
+      const checks: string[][] = [];
+      const scoped = { issuer: 'https://account.test', subject: 'context-reader' };
+      f.session.deps.account = { verify: async (request, permissions) => {
+        expect(request).toBe(f.session.request);
+        checks.push([...permissions]);
+        if (denied) throw new AccountAssertionDenied('context:read is required');
+        return scoped;
+      } };
+      let accessChecks = 0;
+      if (batch) {
+        f.session.deps.mediaAccess!.canReadPrivateContexts = async (principal, actor, contexts) => {
+          expect(principal).toBe(scoped);
+          expect(actor).toBe(f.session.options.actingSubject!);
+          accessChecks++;
+          return new Set(contexts);
+        };
+      } else {
+        f.session.deps.mediaAccess = undefined;
+        const selections = new PrivateContextSelections({} as never);
+        selections.canReadPrivate = async (principal, actor) => {
+          expect(principal).toBe(scoped);
+          expect(actor).toBe(f.session.options.actingSubject!);
+          accessChecks++;
+          return true;
+        };
+        f.session.deps.contextSelections = selections;
+      }
+      const resources = records.map(record => record.resource);
+      await expect(resolveTargets(f.session, resources, 'discussion')).rejects.toBeInstanceOf(AccountAssertionDenied);
+      expect(checks).toEqual([['context:read']]);
+      expect(accessChecks).toBe(0);
+      denied = false;
+      checks.length = 0;
+      expect(await resolveTargets(f.session, resources, 'discussion')).toHaveLength(2);
+      expect(checks).toEqual([['context:read']]);
+      expect(accessChecks).toBe(batch ? 1 : 2);
+      const plain = fixture([{ resource: id(3), type: 'work', work: id(3) }]);
+      plain.session.deps.account = { verify: async () => { throw new Error('Work read must not require context:read'); } };
+      expect(await resolveTargets(plain.session, [id(3)], 'discussion')).toHaveLength(1);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  }
 });
 
 test('G-506: graph movement, ambiguous heads and excess revision rows never produce an exact pin', async () => {

@@ -98,7 +98,7 @@ async function publicChain(env: WorkActivationEnvironment, revision: string,
 function publicSummary(summary: ResourceSummary, restrictedTitles: boolean): summary is
   Extract<ResourceSummary, { status: 'available' }> {
   return summary.status === 'available' && summary.disclosure === 'public'
-    && (restrictedTitles || (summary.type !== 'work' && summary.type !== 'main-version'));
+    && (restrictedTitles || summary.work === null);
 }
 
 /** Read owner values before phrase matching. A candidate's indexed literal,
