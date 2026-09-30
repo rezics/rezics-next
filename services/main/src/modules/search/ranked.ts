@@ -16,7 +16,9 @@ import { FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge, type SparqlResul
 export const RANKED_CATALOGUE_COST = { pageSize: 64, candidates: MAX_PHRASE_CANDIDATES,
   rankReads: 8, responseBytes: MAX_SEARCH_RESPONSE_BYTES } as const;
 export interface RankedCatalogueRequest { phrase: string; language: string | null;
-  author?: string; realm?: string; pageSize: number; continuation?: string }
+  author?: string; realm?: string; pageSize: number; continuation?: string;
+  /** The Zone adapter retains its admitted 1–100 character phrase contract. */
+  phraseContract?: 'zone-browse' }
 interface RankAfter { id: string; score: string; commit: string }
 interface RankHit { id: string; key: string | null; score: string }
 interface RankEnvelope { hits: RankHit[]; commit: string; more: boolean; restart?: boolean }
@@ -41,7 +43,8 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
   filter: (rows: RankedCatalogueMatch[]) => Promise<RankedCatalogueMatch[]> = async rows => rows,
   presentationGeneration?: string) {
   const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
-  if (phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
+  if (phrase.length < (input.phraseContract === 'zone-browse' ? 1 : 2)
+    || phrase.length > (input.phraseContract === 'zone-browse' ? 100 : 80) || /[\u0000-\u001f\u007f]/u.test(phrase)
     || !Number.isInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > RANKED_CATALOGUE_COST.pageSize
     || input.author !== undefined && !native.test(input.author)
     || input.realm !== undefined && !native.test(input.realm)

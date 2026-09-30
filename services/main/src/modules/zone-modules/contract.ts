@@ -52,13 +52,10 @@ export const zoneEditorLists = t.Object({ profile: t.Literal('zone-editor-lists-
     items: t.Array(t.Object({ id: readId, title: readName, cover: readAvatar }), { maxItems: 8 }) }),
   { maxItems: 2 }), sourcePosition: readPosition });
 
-/**
- * A Zone browse page reads the Realm's newest adoptions as one window, filters
- * and sorts it in memory and hydrates one page. `windowRows` stays within one
- * summary batch (64); Zones larger than the window report lower-bound matches.
- */
-export const ZONE_BROWSE_COST = { windowRows: 60, pageSize: ZONE_MODULE_COST.pageSize, typeRows: 240,
-  summaryBatches: 3, serialStatBatches: 2, serialSummaryBatches: 1, tagBatches: 1,
+/** Request bounds, never a population window. Keyset batches continue even
+ * when every examined candidate is hidden or filtered out. */
+export const ZONE_BROWSE_COST = { batchRows: 64, batches: 4, pageSize: ZONE_MODULE_COST.pageSize, typeRows: 512,
+  summaryBatches: 6, serialStatBatches: 5, serialSummaryBatches: 1, tagBatches: 4,
   creditQueries: ZONE_MODULE_COST.pageSize, filterValues: 8, textCharacters: 100 } as const;
 export const zoneBrowseSorts = ['relevance', 'newest', 'updated'] as const;
 export type ZoneBrowseSort = (typeof zoneBrowseSorts)[number];
@@ -86,12 +83,12 @@ const condition = t.Union([included, excluded, t.Object({ facet: t.Literal('leng
   range: t.Object({ min: t.Optional(t.String()), max: t.Optional(t.String()) }) })]);
 const facetValues = t.Array(t.Object({ value: t.String(), count: t.Integer({ minimum: 0 }),
   /** A Concept's name in the requested language; other values are labelled by the client's Facet vocabulary. */
-  name: t.Optional(readName) }), { maxItems: ZONE_BROWSE_COST.windowRows });
+  name: t.Optional(readName) }), { maxItems: ZONE_BROWSE_COST.batchRows * ZONE_BROWSE_COST.batches });
 export const zoneBrowsePage = t.Object({ profile: t.Literal('zone-browse-v1'), realm: readId,
   /** The Query as Main applied it: text, sort and the Filter in FilterDocument form. */
   query: t.Object({ text: t.Nullable(t.String()), sort: sortValue,
     filter: t.Object({ all: t.Array(condition, { maxItems: 6 }) }) }),
-  /** How many of the window's Works each value would match, with the other Facets' Conditions applied. */
+  /** How many of the examined public Works each value would match, with the other Facets' Conditions applied. */
   facets: t.Object({ type: facetValues, concept: facetValues, status: facetValues, length: facetValues }),
   /**
    * Tags come from the Realm's Discovery projection: `current`, `stale` (built
@@ -101,6 +98,6 @@ export const zoneBrowsePage = t.Object({ profile: t.Literal('zone-browse-v1'), r
   tags: t.Union([t.Literal('current'), t.Literal('stale'), t.Literal('unavailable')]),
   matches: t.Object({ value: t.Integer({ minimum: 0 }),
     kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }),
-  /** The newest adoptions read; `complete` when the Realm has no older ones. */
-  window: t.Object({ scanned: t.Integer({ minimum: 0, maximum: ZONE_BROWSE_COST.windowRows }), complete: t.Boolean() }),
+  /** Examined public candidates this request; `complete` at the end of traversal. */
+  window: t.Object({ scanned: t.Integer({ minimum: 0, maximum: ZONE_BROWSE_COST.batchRows * 8 }), complete: t.Boolean() }),
   items: t.Array(zoneWork, { maxItems: ZONE_BROWSE_COST.pageSize }), ...pageFields });

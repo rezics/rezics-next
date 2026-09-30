@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { Value } from 'typebox/value';
 import { resolveFacet } from '../src/modules/facets/registry.ts';
 import { compileQuery, QueryRejected, type QueryRefusal } from '../src/modules/query/compile.ts';
-import { browseWindow, compileZoneBrowse, filterDocument } from '../src/modules/zone-modules/browse.ts';
+import { browseCandidates, compileZoneBrowse, filterDocument } from '../src/modules/zone-modules/browse.ts';
 import { zoneBrowsePage, zoneBrowseQuery, zoneWork } from '../src/modules/zone-modules/contract.ts';
 
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
@@ -28,7 +28,7 @@ test('G657: every browse parameter and response Facet resolves through the admit
     expect(facet).toBeDefined();
     expect(facet!.appliesTo).toBe('resource');
   }
-  const counts = browseWindow([], {}, null, 'newest').facets;
+  const counts = browseCandidates([], {}, null, 'newest').facets;
   expect(Object.keys(counts).sort()).toEqual(Object.keys(zoneBrowsePage.properties.facets.properties).sort());
   for (const name of Object.keys(counts)) expect(resolveFacet(name)).toBeDefined();
   expect(zoneWork.properties).not.toHaveProperty('mod');

@@ -98,6 +98,7 @@ import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
 import type { ConsumptionSessionStore } from '../modules/session/store.ts';
 
 export interface MainWorkDependencies {
+  zoneBrowse?: import('../modules/zone-browse/store.ts').BrowseEntryReader;
   wikiQuotations?: QuotationReader;
   editorialReview?: import('../modules/editorial-review/store.ts').EditorialReviewStore;
   types?: import('../modules/types/store.ts').AdmittedTypeStore;

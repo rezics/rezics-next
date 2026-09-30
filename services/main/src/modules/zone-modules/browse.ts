@@ -1,13 +1,18 @@
 import type { Static } from 'typebox';
 import { primaryDiscoveryCredits } from '../discovery/credits.ts';
-import { readEpochOrder } from '../discovery/lineage.ts';
+import { readRankedCatalogue } from '../search/ranked.ts';
+import { InvalidSearchContinuation, SearchContinuationRestart } from '../work/search-continuation.ts';
+import { InvalidPublicQuery, PublicRealmUnavailable } from '../work/search-public.ts';
+import { PublicQueryUnavailable } from '../work/search-budget.ts';
+import { SearchIndexUnavailable } from '../work/search-readiness.ts';
+import type { BrowseAfter, BrowseEntry } from '../zone-browse/store.ts';
 import { readPublicHubCards } from '../hub/public-card.ts';
 import { compileQuery, QueryRejected } from '../query/compile.ts';
 import { RecommendationUnavailable } from '../recommendation/derived-generation.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
-import { GRAPHS, WORK_SEMANTIC_TYPES, iri } from '../work/activate.ts';
+import { GRAPHS, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid, WorkReadUnavailable,
-  type WorkReadSession } from '../work/read-session.ts';
+  WorkReadExpired, WorkReadMissing, type WorkReadSession, type ReadRow } from '../work/read-session.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import { ZONE_BROWSE_COST, type zoneBrowseQuery, type ZoneBrowseSort, zoneLengthBands } from './contract.ts';
 import { displayZoneCredits, zoneCreditNames } from './read.ts';
@@ -16,7 +21,7 @@ type Query = Static<typeof zoneBrowseQuery> & { excludeStatus?: Status[] };
 type BrowseFacet = keyof Static<typeof import('./contract.ts').zoneBrowsePage>['facets'];
 type Status = 'ongoing' | 'completed' | 'hiatus';
 
-/** One window candidate with what its Conditions and sorts read. */
+/** One batch candidate with what its Conditions and sorts read. */
 export interface BrowseCandidate {
   work: string; order: number; title: string; types: string[];
   /** Accepted Concepts, or null when the Realm's Tags could not be read. */
@@ -116,7 +121,7 @@ const holds = (item: BrowseCandidate, filter: BrowseFilter, except?: BrowseFacet
  * counts with every other Facet's Conditions applied (so a reader sees what
  * choosing one more value would leave). Pure: the read's in-memory step.
  */
-export function browseWindow(candidates: readonly BrowseCandidate[], filter: BrowseFilter,
+export function browseCandidates(candidates: readonly BrowseCandidate[], filter: BrowseFilter,
   text: string | null, sort: ZoneBrowseSort) {
   const relevance = new Map(candidates.map(item => [item.work, text ? textRelevance(text, item.title) : 1]));
   const found = candidates.filter(item => relevance.get(item.work)! > 0 && holds(item, filter));
@@ -171,34 +176,14 @@ async function readTags(session: WorkReadSession, realm: string, works: readonly
   }
 }
 
-/**
- * A Zone's browse page. One candidate query reads the Realm's newest
- * ZONE_BROWSE_COST.windowRows public adoptions with their completion status
- * (the graph sorts D Realm decisions, O(D log D), as the other module reads
- * do); one type query, one summary batch, one composition
- * statistics batch and one Tags batch read the window; one page of at most 20
- * is hydrated with its serial summaries, credits, names and Hub cards, then
- * fenced by a second summary batch. A third names at most 60 Concepts.
- */
-export async function readZoneBrowse(session: WorkReadSession, realm: string, query: Query) {
-  // Keep direct owner reads under the same admission invariant as both HTTP adapters.
-  compileZoneBrowse(realm, query);
-  await readRealmBasis(session, realm);
-  const text = query.q?.trim() ? query.q.trim() : null;
-  const sort: ZoneBrowseSort = query.sort ?? (text ? 'relevance' : 'newest');
-  const filter = browseFilter(query);
-  const limit = session.options.limit ?? ZONE_BROWSE_COST.pageSize;
-  const binding = ['zone-browse-v1', realm, text, sort, filterDocument(filter), session.options.language ?? null];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  const offset = cursor ? Number(cursor.after) : 0;
-  if (!Number.isSafeInteger(offset) || offset < 0 || offset >= ZONE_BROWSE_COST.windowRows) {
-    throw new WorkReadInvalid('Zone browse cursor is invalid');
-  }
-  const epochs = await readEpochOrder(session);
+async function readBrowseBatch(session: WorkReadSession, realm: string, ids: string[],
+  filter: BrowseFilter, entries?: Map<string, BrowseEntry>) {
+  if (!ids.length) return { candidates: [] as BrowseCandidate[], tags: 'unavailable' as const,
+    rows: new Map<string, ReadRow>(), summaries: new Map<string, Awaited<ReturnType<WorkReadSession['summaries']>>[number]>() };
   const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?evidence ?revisionEpoch
-    ?sequence ?epochOrder ?status WHERE {
-    ${epochs}
-    GRAPH ${iri(GRAPHS.current)} {
+    ?sequence ?status WHERE {
+    VALUES ?work { ${ids.map(iri).join(" ")} }
+    { GRAPH ${iri(GRAPHS.current)} {
       ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
         rv:mainVersion ?main ; rv:selectionHead ?evidence .
       ?work rv:head ?head .
@@ -209,8 +194,21 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
       rv:mainVersion ?main ; rv:contribution ?contribution ;
       rv:publicationDecision ?decision ; rv:selectedDraft ?draft ;
       rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence .
+      ${session.options.language ? `FILTER EXISTS { ?evidence rv:language ${lit(session.options.language)} }` : ""}
       ?decision rv:disclosure rv:Public .
-      FILTER NOT EXISTS { ?draft a rv:ErasedRevision } }
+      FILTER NOT EXISTS { ?draft a rv:ErasedRevision } } }
+    UNION
+    { GRAPH ${iri(GRAPHS.current)} {
+        ?slot a rv:RealmResourceSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
+          rv:mainVersion ?main ; rv:selectionHead ?evidence . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?evidence a rv:RealmSubmissionSelection ;
+        rv:component ?slot ; rv:context ${iri(realm)} ; rv:work ?work ; rv:mainVersion ?main ;
+        rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?publicationSlot a rv:RealmPublicationSlot ;
+          rv:realm ${iri(realm)} ; rv:work ?work ; rv:selectionHead ?publicationSelection . }
+        GRAPH ${iri(GRAPHS.revisions)} { ?publicationSelection a rv:PublicationSelection } }
+    }
+    GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head . OPTIONAL { ?work rv:completionStatus ?status } }
     ${publicWork('?work', '?main')}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work schema:isPartOf ?book } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
@@ -220,17 +218,17 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
         rv:occurrenceRole rv:ChapterRole ; schema:item ?work .
       FILTER NOT EXISTS { ?chapterPlacement rv:removedBy ?chapterRemoval }
     } }
-  } ORDER BY ?epochOrder DESC(?sequence) STR(?evidence) LIMIT ${ZONE_BROWSE_COST.windowRows + 1}`,
-  ZONE_BROWSE_COST.windowRows + 1);
+  } LIMIT ${ids.length + 1}`, ids.length);
   if (rows.some(row => !row.work || !row.head || !row.main || !row.evidence || !row.revisionEpoch
-    || !/^\d+$/.test(row.sequence?.value ?? '') || !/^\d+$/.test(row.epochOrder?.value ?? '')
+    || !/^\d+$/.test(row.sequence?.value ?? '')
     || row.status && !['ongoing', 'completed', 'hiatus'].includes(row.status.value))
     || new Set(rows.map(row => row.work!.value)).size !== rows.length) {
     throw new WorkReadUnavailable('Zone browse candidates are ambiguous');
   }
-  const window = rows.slice(0, ZONE_BROWSE_COST.windowRows), ids = window.map(row => row.work!.value);
-  const typeRows = ids.length ? await session.query(`SELECT ?work ?type WHERE {
-    VALUES ?work { ${ids.map(iri).join(' ')} }
+  const byWork = new Map(rows.map(row => [row.work!.value, row]));
+  const visibleIds = ids.filter(work => byWork.has(work));
+  const typeRows = visibleIds.length ? await session.query(`SELECT ?work ?type WHERE {
+    VALUES ?work { ${visibleIds.map(iri).join(' ')} }
     VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?work a ?type }
   } LIMIT ${ZONE_BROWSE_COST.typeRows + 1}`, ZONE_BROWSE_COST.typeRows) : [];
@@ -241,34 +239,114 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
     }
     types.set(row.work.value, [...types.get(row.work.value) ?? [], row.type.value].sort());
   }
-  const [summaries, stats, tags] = await Promise.all([session.summaries(ids),
-    session.deps.serialStats?.batch(ids, session.position.sequence)
+  const [summaries, stats, tags] = await Promise.all([session.summaries(visibleIds),
+    session.deps.serialStats?.batch(visibleIds, session.position.sequence)
       ?? new Map<string, { wordCount: number | null; lastUpdatedAt: string | null }>(),
-    readTags(session, realm, ids)]);
+    readTags(session, realm, visibleIds)]);
   if ((filter.concept?.length || filter.conceptExclude?.length) && tags.state === 'unavailable') {
     throw new WorkReadUnavailable('Zone Tags are unavailable');
   }
-  const candidates = window.flatMap((row, order): BrowseCandidate[] => {
-    const summary = summaries[order], work = row.work!.value;
+  const candidates = visibleIds.flatMap((work, order): BrowseCandidate[] => {
+    const summary = summaries[order], row = byWork.get(work)!;
     if (summary?.status !== 'available' || summary.disclosure !== 'public') return [];
     const stat = stats.get(work);
+    const entry = entries?.get(work);
     return [{ work, order, title: summary.name.value, types: types.get(work) ?? [],
       concepts: tags.state === 'unavailable' ? null : tags.concepts.get(work) ?? [],
-      status: (row.status?.value ?? null) as Status | null, words: stat?.wordCount ?? null,
-      updatedAt: stat?.lastUpdatedAt ?? null }];
+      status: (row.status?.value ?? null) as Status | null, words: entry ? entry.words : stat?.wordCount ?? null,
+      updatedAt: entry ? entry.updatedAt : stat?.lastUpdatedAt ?? null }];
   });
-  const { found: matched, facets: counts } = browseWindow(candidates, filter, text, sort);
-  // Tags built before the latest change are not applied, as Discover withholds its term matches.
-  const found = (filter.concept?.length || filter.conceptExclude?.length) && tags.state !== 'current' ? [] : matched;
-  const page = found.slice(offset, offset + limit), pageIds = page.map(item => item.work);
+  return { candidates, tags: tags.state, rows: byWork,
+    summaries: new Map(visibleIds.map((work, index) => [work, summaries[index]!])) };
+}
+
+/** Each request seeks at most four 64-row batches and hydrates at most 20
+ * Works. Filters may yield an empty page with a continuation: a request budget
+ * never becomes a Realm population limit. Cursor keys address examined rows. */
+export async function readZoneBrowse(session: WorkReadSession, realm: string, query: Query) {
+  compileZoneBrowse(realm, query);
+  await readRealmBasis(session, realm);
+  const text = query.q?.trim() || null;
+  const sort: ZoneBrowseSort = query.sort ?? (text ? 'relevance' : 'newest');
+  const filter = browseFilter(query);
+  const limit = session.options.limit ?? ZONE_BROWSE_COST.pageSize;
+  const binding = ['zone-browse-v2', realm, text, sort, filterDocument(filter), session.options.language ?? null];
+  const cursor = decodeReadCursor(session.options.cursor, binding, session.position, sort === 'newest');
+  let prior: { after: BrowseAfter | null; ranked?: string; visible: number } = { after: null, visible: 0 };
+  if (cursor) {
+    try {
+      prior = JSON.parse(cursor.after) as typeof prior;
+      if (!Number.isSafeInteger(prior.visible) || prior.visible < 0
+        || prior.after && (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(prior.after.work)
+          || prior.after.key !== null && typeof prior.after.key !== 'string')
+        || prior.ranked !== undefined && typeof prior.ranked !== 'string') throw new Error('cursor');
+    } catch { throw new WorkReadInvalid('Zone browse cursor is invalid'); }
+  }
+  const rows = new Map<string, ReadRow>();
+  const summaries = new Map<string, Awaited<ReturnType<WorkReadSession['summaries']>>[number]>();
+  const examined: BrowseCandidate[] = [], page: BrowseCandidate[] = [];
+  let tags: 'current' | 'stale' | 'unavailable' = 'unavailable';
+  let after = prior.after, ranked: string | undefined, more = false;
+  const evaluate = async (ids: string[], entries?: Map<string, BrowseEntry>) => {
+    const batch = await readBrowseBatch(session, realm, ids, filter, entries);
+    tags = batch.tags;
+    for (const [work, row] of batch.rows) rows.set(work, row);
+    for (const [work, summary] of batch.summaries) summaries.set(work, summary);
+    const found = new Set(browseCandidates(batch.candidates, filter,
+      sort === 'relevance' ? null : text, sort).found.map(item => item.work));
+    if ((filter.concept?.length || filter.conceptExclude?.length) && tags !== 'current') found.clear();
+    return { candidates: batch.candidates, found };
+  };
+  if (sort === 'relevance') {
+    const result = await readRankedCatalogue(session.deps.environment, { phrase: text!, realm, phraseContract: 'zone-browse',
+      language: session.options.language ?? null, pageSize: limit, continuation: prior.ranked }, async matches => {
+      const batch = await evaluate(matches.map(item => item.work));
+      examined.push(...batch.candidates);
+      return matches.filter(item => batch.found.has(item.work));
+    }).catch((error: unknown) => {
+      if (error instanceof InvalidSearchContinuation || error instanceof InvalidPublicQuery) {
+        throw new WorkReadInvalid(error.message, { cause: error });
+      }
+      if (error instanceof SearchContinuationRestart) throw new WorkReadExpired(error.message, { cause: error });
+      if (error instanceof PublicRealmUnavailable) throw new WorkReadMissing(error.message, { cause: error });
+      if (error instanceof PublicQueryUnavailable || error instanceof SearchIndexUnavailable) {
+        throw new WorkReadUnavailable(error.message, { cause: error });
+      }
+      throw error;
+    });
+    const candidates = new Map(examined.map(item => [item.work, item]));
+    page.push(...result.results.map(item => candidates.get(item.work)!));
+    ranked = result.next ?? undefined;
+    more = !!ranked;
+  } else {
+    const projection = session.deps.zoneBrowse;
+    if (!projection) throw new WorkReadUnavailable('Zone browse projection is unavailable');
+    for (let batchIndex = 0; batchIndex < ZONE_BROWSE_COST.batches; batchIndex++) {
+      const entries = await projection.batch(realm, sort, after, session.position);
+      if (!entries.length) { more = false; break; }
+      const batch = await evaluate(entries.map(item => item.work), new Map(entries.map(item => [item.work, item])));
+      const candidates = new Map(batch.candidates.map(item => [item.work, item]));
+      for (const [index, entry] of entries.entries()) {
+        const candidate = candidates.get(entry.work);
+        if (candidate && batch.found.has(entry.work) && page.length === limit) { more = true; break; }
+        if (candidate) examined.push(candidate);
+        if (candidate && batch.found.has(entry.work)) page.push(candidate);
+        after = { work: entry.work, key: sort === 'newest' ? entry.adoptedOrder : entry.updatedAt };
+        more = index + 1 < entries.length || entries.length === ZONE_BROWSE_COST.batchRows;
+      }
+      if (!more || page.length === limit) break;
+    }
+  }
+  const counts = browseCandidates(examined, filter, sort === 'relevance' ? null : text, sort).facets;
+  const pageIds = page.map(item => item.work);
   const conceptIds = [...new Set([...(filter.concept ?? []), ...(filter.conceptExclude ?? []),
-    ...counts.concept.map(item => item.value)])].slice(0, ZONE_BROWSE_COST.windowRows);
+    ...counts.concept.map(item => item.value)])].slice(0, ZONE_BROWSE_COST.batchRows);
   const [serial, conceptNames] = await Promise.all([readSerialSummaries(session, page.flatMap(item => {
-    const summary = summaries[item.order];
+    const summary = summaries.get(item.work);
     return summary?.status === 'available' && summary.type === 'work' ? [item.work] : [];
   })), session.summaries(conceptIds)]);
   const hydrated = await Promise.all(page.map(async item => {
-    const row = window[item.order]!, summary = summaries[item.order]!;
+    const row = rows.get(item.work)!, summary = summaries.get(item.work)!;
     if (summary.status !== 'available') throw new WorkReadUnavailable('Zone browse summary moved');
     const facts = serial.get(item.work);
     if (!facts) throw new WorkReadUnavailable('Zone browse Work metadata is incomplete');
@@ -295,10 +373,12 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
       ? [{ ...item, name: summary.name }] : [];
   });
   await readRealmBasis(session, realm);
-  const complete = rows.length <= ZONE_BROWSE_COST.windowRows;
-  const next = offset + limit < found.length ? encodeReadCursor(binding, session.position, String(offset + limit)) : null;
+  const complete = !more;
+  const visible = prior.visible + page.length;
+  const next = more ? encodeReadCursor(binding, session.position,
+    JSON.stringify({ after, ranked, visible }), '', cursor?.expiresAt ?? Date.now() + 300_000) : null;
   return { profile: 'zone-browse-v1' as const, realm,
-    query: { text, sort, filter: filterDocument(filter) }, facets: { ...counts, concept }, tags: tags.state,
-    matches: { value: found.length, kind: complete ? 'exact' as const : 'lower-bound' as const },
-    window: { scanned: window.length, complete }, ...pageResult(session, items, next) };
+    query: { text, sort, filter: filterDocument(filter) }, facets: { ...counts, concept }, tags,
+    matches: { value: visible, kind: complete ? 'exact' as const : 'lower-bound' as const },
+    window: { scanned: examined.length, complete }, ...pageResult(session, items, next) };
 }

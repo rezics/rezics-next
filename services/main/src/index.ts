@@ -35,6 +35,7 @@ import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
 import { StructureProgressStore } from './modules/progress/store.ts';
 import { SerialStatisticsProjection } from './modules/work/serial-projection.ts';
+import { ZoneBrowseProjection } from './modules/zone-browse/store.ts';
 import { ReadRankingProjection } from './modules/rankings/projection.ts';
 import { ReadingSettingsStore } from './modules/reading-settings/store.ts';
 import { StructureStageStore } from './modules/structure/stage.ts';
@@ -222,6 +223,8 @@ const environment = {
 };
 const serialStats = recommendationRelayPool
   ? new SerialStatisticsProjection(pool, recommendationRelayPool, contentPool, environment) : undefined;
+const zoneBrowse = recommendationRelayPool
+  ? new ZoneBrowseProjection(pool, recommendationRelayPool, environment) : undefined;
 const partitionRoutes = new OwnerPartitionRoutes(pool);
 const graphRouteLease = await partitionRoutes.initialize({ owner: 'graph', datasetId: DATASET,
   location: fusekiUrl, routingEpoch: environment.lineage.routingEpoch });
@@ -352,6 +355,7 @@ const app = createMainApp(fuseki, {
   feed: new FeedStore(pool),
   reviews: new ReaderReviews(pool),
   serialStats,
+  zoneBrowse,
   readRankings,
   feedViewerState: new FeedViewerStateReader(),
   homePersonal: new HomePersonalStore(pool),
@@ -519,6 +523,7 @@ mediaScreenWorker.start();
 discoveryWorker?.start();
 recommendationWorker?.start();
 serialStats?.start();
+zoneBrowse?.start();
 readRankings.start();
 correctionWorker.start();
 notificationProducerWorker.start();
@@ -529,6 +534,7 @@ let stopping = false;
 async function stop(): Promise<void> {
   await mediaScreenWorker.stop();
   await serialStats?.stop();
+  await zoneBrowse?.stop();
   await readRankings.stop();
   if (stopping) return;
   stopping = true;

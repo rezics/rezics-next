@@ -10,6 +10,7 @@ import { metadataDigest, type MetadataIntent } from '../../../services/main/src/
 import { selectMainDefault, mainSelectionDigest } from '../../../services/main/src/modules/work/select-main.ts';
 import { selectRealmLocal, realmSelectionDigest } from '../../../services/main/src/modules/work/select-realm.ts';
 import { SerialStatisticsProjection } from '../../../services/main/src/modules/work/serial-projection.ts';
+import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { startMediaStack } from './media-support.ts';
 
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
@@ -69,7 +70,9 @@ test('G657: registry Facets drive Fiction browse and Query; removed and unsuppor
       [generation, work, (index + 1) * 100]);
     }
     const stats = new SerialStatisticsProjection(stack.accessPool, relay, stack.contentPool, stack.env);
-    const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, serialStats: stats,
+    const zoneBrowse = new ZoneBrowseProjection(stack.accessPool, relay, stack.env);
+    await zoneBrowse.backfill();
+    const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, serialStats: stats, zoneBrowse,
       account: { verify: async () => { throw new Error('Public browse made an authority request'); } } });
     const call = (path: string, body?: unknown) => app.handle(new Request(`http://main.local${path}`, {
       method: body === undefined ? 'GET' : 'POST',
