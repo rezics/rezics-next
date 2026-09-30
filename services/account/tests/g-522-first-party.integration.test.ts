@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { accountFixture } from './account-fixture.ts';
 import { oauthFixture } from './oauth-fixture.ts';
 import { revokeSessions } from '../src/security-activity.ts';
@@ -32,12 +33,36 @@ test('G522 classification: registry membership, skipConsent and explicit consent
   } finally { await f.close(); }
 }, 60_000);
 
+test('G522 sign-out token cleanup follows registry membership independently of skipConsent', async () => {
+  const f = await accountFixture();
+  try {
+    const oauth = await oauthFixture(f);
+    const reader = await f.signup('token-classification@example.test');
+    const matrix = [];
+    for (const firstParty of [false, true]) {
+      for (const skipConsent of [false, true]) {
+        const client = await oauth.createClient(skipConsent);
+        if (firstParty) await f.pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1)', [client.client_id]);
+        const tokens = await oauth.issue(client.client_id, reader.cookie);
+        matrix.push({ clientId: client.client_id, firstParty, tokens });
+      }
+    }
+    expect((await f.request('/api/auth/sign-out', {}, reader.cookie)).ok).toBe(true);
+    for (const entry of matrix) {
+      const refreshed = await oauth.token({ grant_type: 'refresh_token', client_id: entry.clientId,
+        refresh_token: entry.tokens.refresh_token, resource: f.config.resource });
+      expect(refreshed.ok).toBe(!entry.firstParty);
+    }
+  } finally { await f.close(); }
+}, 60_000);
+
 for (const mode of ['single', 'group', 'others'] as const) {
   test(`G522 session sign-out (${mode}): revokes rotated product refresh tokens, preserves other people and current session`, async () => {
     const f = await accountFixture();
     try {
       const oauth = await oauthFixture(f);
       const client = await oauth.createClient(true);
+      const external = await oauth.createClient();
       await f.pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1)', [client.client_id]);
       await f.pool.query('UPDATE "oauthClient" SET name = $1 WHERE "clientId" = $2', ['REZICS', client.client_id]);
       const reader = await f.signup(`sessions-${mode}@example.test`);
@@ -46,6 +71,7 @@ for (const mode of ['single', 'group', 'others'] as const) {
         undefined, { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/140.0' });
       const cookie = signedIn.headers.get('set-cookie')!;
       const session = await f.auth.api.getSession({ headers: new Headers({ cookie }) });
+      const externalTokens = await oauth.issue(external.client_id, cookie);
       const issued = await oauth.issue(client.client_id, cookie);
       const refresh = (token: string) => oauth.token({ grant_type: 'refresh_token', client_id: client.client_id,
         refresh_token: token, resource: f.config.resource });
@@ -72,6 +98,13 @@ for (const mode of ['single', 'group', 'others'] as const) {
       expect(await (await revoke()).json()).toEqual({ revoked: mode === 'others' ? list.items.filter(row => !row.thisDevice).length : 1 });
       expect(await (await revoke()).json()).toEqual({ revoked: 0 });
       expect((await refresh(tokens.refresh_token)).ok).toBe(false);
+      const externalRefresh = await oauth.token({ grant_type: 'refresh_token', client_id: external.client_id,
+        refresh_token: externalTokens.refresh_token, resource: f.config.resource });
+      expect(externalRefresh.ok).toBe(true);
+      expect(await oauth.introspect((await externalRefresh.json() as { access_token: string }).access_token)).toMatchObject({ active: true });
+      const apps = await (await f.request('/api/account/connected-apps', undefined, reader.cookie)).json() as {
+        items: { clientId: string }[] };
+      expect(apps.items.map(app => app.clientId)).toEqual([external.client_id]);
       expect((await refresh(currentTokens.refresh_token)).ok).toBe(true);
       expect(await (await f.request('/api/auth/get-session', undefined, cookie)).json()).toBeNull();
       expect((await f.request('/api/account/sessions/revoke', selection)).status).toBe(401);
@@ -79,25 +112,116 @@ for (const mode of ['single', 'group', 'others'] as const) {
   }, 60_000);
 }
 
-test('G522 concurrent refresh and session sign-out cannot leave a usable refresh token', async () => {
+for (const route of ['devices', 'accounts'] as const) {
+  test(`G522 concurrent refresh and ${route} sign-out cannot leave a usable refresh token`, async () => {
+    const f = await accountFixture();
+    try {
+      const oauth = await oauthFixture(f);
+      const client = await oauth.createClient(true);
+      await f.pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1)', [client.client_id]);
+      const reader = await f.signup('concurrent-session@example.test');
+      const other = await f.request('/api/auth/sign-in/email', { email: reader.email, password: reader.password });
+      const cookie = other.headers.get('set-cookie')!;
+      const session = await f.auth.api.getSession({ headers: new Headers({ cookie }) });
+      const tokens = await oauth.issue(client.client_id, cookie);
+      const refresh = (token: string) => oauth.token({ grant_type: 'refresh_token', client_id: client.client_id,
+        refresh_token: token, resource: f.config.resource });
+      const [revoked, raced] = await Promise.all([
+        route === 'devices'
+          ? f.request('/api/account/sessions/revoke', { sessionId: session!.session.id }, reader.cookie)
+          : f.request('/api/auth/sign-out', {}, cookie),
+        refresh(tokens.refresh_token),
+      ]);
+      expect(revoked.ok).toBe(true);
+      if (route === 'devices') expect(await revoked.json()).toEqual({ revoked: 1 });
+      if (raced.ok) expect((await refresh((await raced.json() as { refresh_token: string }).refresh_token)).ok).toBe(false);
+      expect((await refresh(tokens.refresh_token)).ok).toBe(false);
+      expect((await f.pool.query('SELECT 1 FROM "oauthRefreshToken" WHERE "userId" = $1 AND revoked IS NULL', [reader.id])).rowCount).toBe(0);
+    } finally { await f.close(); }
+  }, 60_000);
+}
+
+for (const action of ['sign-out', 'revoke-session', 'revoke-other-sessions', 'revoke-sessions'] as const) {
+  test(`G522 Accounts ${action}: signs the product out in those browsers and preserves consented offline access`, async () => {
+    const f = await accountFixture();
+    try {
+      const oauth = await oauthFixture(f);
+      const product = await oauth.createClient(true);
+      const external = await oauth.createClient();
+      await f.pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1)', [product.client_id]);
+      const reader = await f.signup(`native-${action}@example.test`);
+      const signedIn = await f.request('/api/auth/sign-in/email', { email: reader.email, password: reader.password });
+      const cookie = signedIn.headers.get('set-cookie')!;
+      const session = await f.auth.api.getSession({ headers: new Headers({ cookie }) });
+      const productTokens = await oauth.issue(product.client_id, cookie);
+      const externalTokens = await oauth.issue(external.client_id, cookie);
+      const keptTokens = await oauth.issue(product.client_id, reader.cookie);
+      const response = await f.request(`/api/auth/${action}`, action === 'revoke-session' ? { token: session!.session.token } : {},
+        action === 'sign-out' ? cookie : reader.cookie);
+      expect(response.ok).toBe(true);
+      expect((await f.pool.query('SELECT 1 FROM "session" WHERE id = $1', [session!.session.id])).rowCount).toBe(0);
+      expect((await f.pool.query(`SELECT 1 FROM "oauthRefreshToken"
+        WHERE "userId" = $1 AND "clientId" = $2 AND "sessionId" IS NULL`, [reader.id, product.client_id])).rowCount).toBe(0);
+      const refresh = (clientId: string, token: string) => oauth.token({ grant_type: 'refresh_token', client_id: clientId,
+        refresh_token: token, resource: f.config.resource });
+      expect((await refresh(product.client_id, productTokens.refresh_token)).ok).toBe(false);
+      expect((await refresh(product.client_id, keptTokens.refresh_token)).ok).toBe(action !== 'revoke-sessions');
+      const externalRefresh = await refresh(external.client_id, externalTokens.refresh_token);
+      expect(externalRefresh.ok).toBe(true);
+      expect(await oauth.introspect((await externalRefresh.json() as { access_token: string }).access_token)).toMatchObject({ active: true });
+      const consent = await f.pool.query('SELECT 1 FROM "oauthConsent" WHERE "userId" = $1 AND "clientId" = $2',
+        [reader.id, external.client_id]);
+      expect(consent.rowCount).toBe(1);
+    } finally { await f.close(); }
+  }, 60_000);
+}
+
+test('G522 expiry: live first-party sessions stay listed and expiry cleanup cannot detach product tokens', async () => {
   const f = await accountFixture();
   try {
     const oauth = await oauthFixture(f);
-    const client = await oauth.createClient(true);
-    const reader = await f.signup('concurrent-session@example.test');
-    const other = await f.request('/api/auth/sign-in/email', { email: reader.email, password: reader.password });
-    const cookie = other.headers.get('set-cookie')!;
-    const session = await f.auth.api.getSession({ headers: new Headers({ cookie }) });
-    const tokens = await oauth.issue(client.client_id, cookie);
-    const refresh = (token: string) => oauth.token({ grant_type: 'refresh_token', client_id: client.client_id,
+    const product = await oauth.createClient(true);
+    const external = await oauth.createClient();
+    await f.pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1)', [product.client_id]);
+    const reader = await f.signup('expired-products@example.test');
+    const sessions = [];
+    for (const state of ['live', 'live-revoke', 'revoked', 'expired-token', 'external-only'] as const) {
+      const signedIn = await f.request('/api/auth/sign-in/email', { email: reader.email, password: reader.password });
+      const cookie = signedIn.headers.get('set-cookie')!;
+      const session = await f.auth.api.getSession({ headers: new Headers({ cookie }) });
+      const externalTokens = await oauth.issue(external.client_id, cookie);
+      const productTokens = state === 'external-only' ? null : await oauth.issue(product.client_id, cookie);
+      await f.pool.query('UPDATE "session" SET "expiresAt" = now() - interval \'1 minute\' WHERE id = $1', [session!.session.id]);
+      if (state === 'revoked') await f.pool.query(`UPDATE "oauthRefreshToken" SET revoked = now()
+        WHERE "sessionId" = $1 AND "clientId" = $2`, [session!.session.id, product.client_id]);
+      if (state === 'expired-token') await f.pool.query(`UPDATE "oauthRefreshToken" SET "expiresAt" = now() - interval '1 minute'
+        WHERE "sessionId" = $1 AND "clientId" = $2`, [session!.session.id, product.client_id]);
+      sessions.push({ id: session!.session.id, cookie, state, externalTokens, productTokens });
+    }
+    const list = await (await f.request('/api/account/sessions?limit=100', undefined, reader.cookie)).json() as {
+      items: { id: string; expiresAt: string }[] };
+    const live = sessions.find(session => session.state === 'live')!;
+    const actionable = sessions.find(session => session.state === 'live-revoke')!;
+    expect(list.items.find(session => session.id === live.id)).toBeDefined();
+    expect(list.items.find(session => session.id === actionable.id)).toBeDefined();
+    expect(Date.parse(list.items.find(session => session.id === live.id)!.expiresAt)).toBeLessThan(Date.now());
+    for (const hidden of sessions.filter(session => !session.state.startsWith('live'))) {
+      expect(list.items.find(session => session.id === hidden.id)).toBeUndefined();
+    }
+    const refresh = (clientId: string, token: string) => oauth.token({ grant_type: 'refresh_token', client_id: clientId,
       refresh_token: token, resource: f.config.resource });
-    const [revoked, raced] = await Promise.all([
-      f.request('/api/account/sessions/revoke', { sessionId: session!.session.id }, reader.cookie), refresh(tokens.refresh_token),
-    ]);
+    const revoked = await f.request('/api/account/sessions/revoke', { sessionId: actionable.id }, reader.cookie);
     expect(await revoked.json()).toEqual({ revoked: 1 });
-    if (raced.ok) expect((await refresh((await raced.json() as { refresh_token: string }).refresh_token)).ok).toBe(false);
-    expect((await refresh(tokens.refresh_token)).ok).toBe(false);
-    expect((await f.pool.query('SELECT 1 FROM "oauthRefreshToken" WHERE "userId" = $1 AND revoked IS NULL', [reader.id])).rowCount).toBe(0);
+    expect((await refresh(product.client_id, actionable.productTokens!.refresh_token)).ok).toBe(false);
+    expect((await refresh(external.client_id, actionable.externalTokens.refresh_token)).ok).toBe(true);
+    // Better Auth's expired-session read deletes the Account session via its
+    // native adapter, so the same hook covers automatic cleanup and sign-out.
+    expect(await (await f.request('/api/auth/get-session', undefined, live.cookie)).json()).toBeNull();
+    expect((await f.pool.query('SELECT 1 FROM "session" WHERE id = $1', [live.id])).rowCount).toBe(0);
+    expect((await refresh(product.client_id, live.productTokens!.refresh_token)).ok).toBe(false);
+    expect((await refresh(external.client_id, live.externalTokens.refresh_token)).ok).toBe(true);
+    const after = await (await f.request('/api/account/sessions?limit=100', undefined, reader.cookie)).json() as typeof list;
+    expect(after.items.find(session => session.id === live.id)).toBeUndefined();
   } finally { await f.close(); }
 }, 60_000);
 
@@ -106,6 +230,7 @@ test('G522 failed session deletion rolls back token revocation and a retry signs
   try {
     const oauth = await oauthFixture(f);
     const client = await oauth.createClient(true);
+    await f.pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1)', [client.client_id]);
     const reader = await f.signup('rollback-session@example.test');
     const session = await f.auth.api.getSession({ headers: new Headers({ cookie: reader.cookie }) });
     const tokens = await oauth.issue(client.client_id, reader.cookie);
@@ -124,5 +249,38 @@ test('G522 failed session deletion rolls back token revocation and a retry signs
     await f.pool.query('DROP TRIGGER g522_fail_session_delete ON "session"');
     expect(await revoke()).toEqual({ revoked: 1 });
     expect((await refresh(rotated.refresh_token)).ok).toBe(false);
+  } finally { await f.close(); }
+}, 60_000);
+
+test('G522 native bulk sign-out reaches first-party tokens beyond the provider hook snapshot', async () => {
+  const f = await accountFixture();
+  try {
+    const oauth = await oauthFixture(f);
+    const product = await oauth.createClient(true);
+    await f.pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1)', [product.client_id]);
+    const reader = await f.signup('bulk-products@example.test');
+    const current = await f.auth.api.getSession({ headers: new Headers({ cookie: reader.cookie }) });
+    await f.pool.query(`INSERT INTO "session" (id, "userId", token, "createdAt", "updatedAt", "expiresAt")
+      SELECT 'g522-bulk-' || n, "userId", 'g522-bulk-token-' || n, "createdAt", "updatedAt", "expiresAt"
+      FROM "session", generate_series(1, 150) n WHERE id = $1`, [current!.session.id]);
+    const context = await f.auth.$context;
+    const snapshot = await context.adapter.findMany<{ id: string }>({ model: 'session', where: [{ field: 'userId', value: reader.id }] });
+    expect(snapshot).toHaveLength(100);
+    const excluded = (await f.pool.query<{ id: string; token: string }>(`SELECT id, token FROM "session"
+      WHERE "userId" = $1 AND id <> ALL($2::text[]) ORDER BY id LIMIT 1`, [reader.id, snapshot.map(row => row.id)])).rows[0]!;
+    // A real, signed Account cookie for a session outside the pinned provider's
+    // hook snapshot. OAuth issuance still follows authorization code and PKCE.
+    const signature = createHmac('sha256', f.secret).update(excluded.token).digest('base64');
+    const cookie = `${context.authCookies.sessionToken.name}=${encodeURIComponent(`${excluded.token}.${signature}`)}`;
+    expect((await f.auth.api.getSession({ headers: new Headers({ cookie }) }))?.session.id).toBe(excluded.id);
+    const tokens = await oauth.issue(product.client_id, cookie);
+    const revoked = await f.request('/api/auth/revoke-sessions', {}, reader.cookie);
+    expect(revoked.ok).toBe(true);
+    expect((await f.pool.query('SELECT 1 FROM "session" WHERE "userId" = $1', [reader.id])).rowCount).toBe(0);
+    expect((await f.pool.query(`SELECT 1 FROM "oauthRefreshToken"
+      WHERE "userId" = $1 AND "clientId" = $2`, [reader.id, product.client_id])).rowCount).toBe(0);
+    const refreshed = await oauth.token({ grant_type: 'refresh_token', client_id: product.client_id,
+      refresh_token: tokens.refresh_token, resource: f.config.resource });
+    expect(refreshed.ok).toBe(false);
   } finally { await f.close(); }
 }, 60_000);

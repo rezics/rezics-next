@@ -18,6 +18,7 @@ import { deviceLabel } from './security-activity.ts';
 import { ACCOUNT_GENERATION_CLAIM, GRANT_GENERATION_CLAIM, currentAccountGenerations } from './account-fence.ts';
 import { bootstrapOperators, operatorRole, rolePermits } from './operators.ts';
 import { operatorAuthHooks } from './operator-auth-hooks.ts';
+import { beforeSessionDelete } from './first-party-session.ts';
 
 export interface AccountConfig {
   baseURL: string;
@@ -59,7 +60,8 @@ export function accountAuthOptions(config: AccountConfig) {
         throw new APIError('FORBIDDEN', { code: 'ACCOUNT_UNAVAILABLE', message: 'Sign-in is unavailable for this account' });
       }
       return { data: session };
-    } } } },
+    } }, delete: { before: (session: { id: string; userId: string }, context: { path?: string } | null) =>
+      beforeSessionDelete(config.pool, session, context) } } },
     emailAndPassword: { enabled: true,
       requireEmailVerification,
       minPasswordLength: 12,

@@ -8,6 +8,7 @@ import { accountFailure, accountJson, accountSession, type AccountAuth } from '.
 import { decodeCursor, encodeCursor, pageQuery } from './pagination.ts';
 import { requireStepUp } from './methods.ts';
 import { accountResponses, activityView, pageView, sessionView } from './views.ts';
+import { deleteFirstPartySessionTokens } from './first-party-session.ts';
 
 export function deviceLabel(userAgent?: string | null) {
   const ua = userAgent ?? '';
@@ -57,6 +58,9 @@ export async function readSecurityActivity(pool: Pool, secret: string, userId: s
     failedAttemptsLast24Hours: { count: failed.rows[0]!.count, capped: failed.rows[0]!.count === 1000 } };
 }
 
+/** User-indexed session seek, bounded page, and session-indexed token/registry
+ * probes. An expired Account session remains actionable while its first-party
+ * offline access is live; external app grants belong in connected apps. */
 export async function readSessions(pool: Pool, secret: string, userId: string, currentId: string,
   query: { limit?: number; cursor?: string } = {}) {
   const scope = `sessions:${userId}`;
@@ -68,7 +72,9 @@ export async function readSessions(pool: Pool, secret: string, userId: string, c
       s."userAgent", s."ipAddress", s.rezics_client_id AS "clientId", c.name AS "clientName",
       s."createdAt"::text AS "cursorKey"
     FROM "session" s LEFT JOIN "oauthClient" c ON c."clientId" = s.rezics_client_id
-    WHERE s."userId" = $1 AND s."expiresAt" > now()
+    WHERE s."userId" = $1 AND (s."expiresAt" > now() OR EXISTS (
+      SELECT 1 FROM "oauthRefreshToken" r JOIN rezics_oauth_first_party_client fp ON fp.client_id = r."clientId"
+      WHERE r."userId" = s."userId" AND r."sessionId" = s.id AND r.revoked IS NULL AND r."expiresAt" > now()))
       AND ($2::timestamptz IS NULL OR (s."createdAt", s.id) < ($2, $3))
     ORDER BY s."createdAt" DESC, s.id DESC LIMIT $4`, [userId, cursor?.key ?? null, cursor?.id ?? null, limit + 1]);
   const rows = result.rows.slice(0, limit);
@@ -100,11 +106,7 @@ export async function revokeSessions(pool: Pool, userId: string, currentId: stri
         : await db.query<{ id: string }>('SELECT id FROM "session" WHERE "userId" = $1 AND id <> $2 ORDER BY id FOR UPDATE',
           [userId, currentId]);
     const ids = selected.rows.map(row => row.id);
-    // Delete the entire selected session's retained rotations. Marking them
-    // revoked would trigger the provider's user/client-wide reuse cleanup on
-    // the next refresh and sign out unrelated sessions for the same product.
-    await db.query(`DELETE FROM "oauthRefreshToken"
-      WHERE "userId" = $1 AND "sessionId" = ANY($2::text[])`, [userId, ids]);
+    await deleteFirstPartySessionTokens(db, userId, ids);
     const result = await db.query('DELETE FROM "session" WHERE "userId" = $1 AND id = ANY($2::text[])', [userId, ids]);
     await db.query('COMMIT');
     return { revoked: result.rowCount ?? 0 };
