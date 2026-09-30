@@ -6,7 +6,7 @@ import { agentPattern, controlRead, controlTransaction, ControlConflict, Control
 import { baselineMemberProof } from '../access/baseline.ts';
 import { followPrincipal } from '../follows/authority.ts';
 import { canonicalReadingLanguages, invalidateHomePreferences, lockReadingPreferences,
-  READING_LANGUAGE_LIMIT } from './languages.ts';
+  PRIMARY_READING_PERSON_SQL, READING_LANGUAGE_LIMIT } from './languages.ts';
 
 export interface PersonChoices {
   profileVisibility: 'public' | 'private';
@@ -52,14 +52,8 @@ export class PersonPreferencesStore {
       const owner = await requirePrincipal(client, principal);
       if (!principal.emailVerified) return [];
       const row = (await client.query<{ content_languages: string[] | null }>(`SELECT p.content_languages
-        FROM access.agent_provision a
-        JOIN access.authority_subject s ON s.id = a.agent_id AND s.active
-        JOIN access.representation r ON r.id = a.representation_id AND r.active
-          AND r.principal_id = a.principal_id AND r.subject_id = a.agent_id
-          AND r.action = 'agent.control' AND r.valid_until > clock_timestamp()
-        LEFT JOIN access.person_preferences p ON p.agent_id = a.agent_id
-        WHERE a.principal_id = $1 AND a.agent_kind = 'person' AND a.state = 'active'
-        ORDER BY a.created_at, a.id LIMIT 1`, [owner.id])).rows[0];
+        FROM (${PRIMARY_READING_PERSON_SQL}) reader
+        LEFT JOIN access.person_preferences p ON p.agent_id = reader.agent_id`, [owner.id])).rows[0];
       return row?.content_languages ?? [];
     });
   }

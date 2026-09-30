@@ -20,6 +20,9 @@ const state = join(root, '.temp', `g-514-${randomUUID()}`);
 let pool: Pool;
 const principal = { issuer: 'https://account.rezics.test', subject: 'g-514', emailVerified: true };
 const owner = randomUUID(), agent = `https://rezics.com/id/${randomUUID()}`, representation = randomUUID();
+const secondaryAgent = `https://rezics.com/id/${randomUUID()}`;
+const feedOnlyOwner = randomUUID(), feedOnlyAgent = `https://rezics.com/id/${randomUUID()}`;
+const feedOnlyPrincipal = { ...principal, subject: 'g-514-feed-only' };
 let home: HomePersonalStore, person: PersonPreferencesStore, app: Pick<Elysia, 'handle'>;
 const languages = ['ar', 'zh-TW', 'yue-Hant', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'he', 'sr-Latn', 'pa-Arab'];
 
@@ -33,6 +36,16 @@ async function freePort(): Promise<number> {
       server.close(() => resolvePort(address.port));
     });
   });
+}
+
+async function provisionPerson(principalId: string, personAgent: string, control: string, createdAt: string) {
+  await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [personAgent]);
+  await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+    VALUES ($1,$2,$3,'agent.control','infinity')`, [control, principalId, personAgent]);
+  await pool.query(`INSERT INTO access.agent_provision (id, principal_id, idempotency_key, request_digest,
+    agent_id, agent_kind, display_name, principal_epoch, state, graph_data_epoch, graph_sequence, representation_id,
+    created_at) VALUES ($1,$2,$3,$4,$5,'person','Reader',0,'active','epoch',0,$6,$7)`,
+    [randomUUID(), principalId, `g-514-provision:${randomUUID()}`, 'a'.repeat(64), personAgent, control, createdAt]);
 }
 
 beforeAll(async () => {
@@ -49,17 +62,21 @@ beforeAll(async () => {
   }
   await pool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
     [owner, principal.issuer, principal.subject]);
-  await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [agent]);
-  await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
-    VALUES ($1,$2,$3,'agent.control','infinity')`, [representation, owner, agent]);
-  await pool.query(`INSERT INTO access.agent_provision (id, principal_id, idempotency_key, request_digest,
-    agent_id, agent_kind, display_name, principal_epoch, state, graph_data_epoch, graph_sequence, representation_id)
-    VALUES ($1,$2,'g-514-provision',$3,$4,'person','Reader',0,'active','epoch',0,$5)`,
-    [randomUUID(), owner, 'a'.repeat(64), agent, representation]);
+  await provisionPerson(owner, agent, representation, '2026-01-01T00:00:00Z');
+  await provisionPerson(owner, secondaryAgent, randomUUID(), '2026-01-02T00:00:00Z');
   await pool.query(`INSERT INTO access.person_preferences (agent_id, content_languages, version, profile_visibility)
     VALUES ($1,$2,1,'private')`, [agent, ['en', 'zh-tw', 'iw']]);
   await pool.query('INSERT INTO access.home_state (principal_id, revision, preferences) VALUES ($1,$2,$3)',
     [owner, randomUUID(), { ...defaultPreferences, contentLanguages: ['ar', 'zh-TW', 'yue-hant', 'he'] }]);
+  await pool.query(`INSERT INTO access.person_preferences (agent_id, content_languages, version)
+    VALUES ($1,$2,1)`, [secondaryAgent, ['de']]);
+  await pool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
+    [feedOnlyOwner, feedOnlyPrincipal.issuer, feedOnlyPrincipal.subject]);
+  await provisionPerson(feedOnlyOwner, feedOnlyAgent, randomUUID(), '2026-01-01T00:00:00Z');
+  await pool.query('INSERT INTO access.home_state (principal_id, revision, preferences) VALUES ($1,$2,$3)',
+    [feedOnlyOwner, randomUUID(), { ...defaultPreferences, contentLanguages: ['ar', 'zh-tw', 'yue-hant', 'ar'] }]);
+  expect((await pool.query('SELECT 1 FROM access.person_preferences WHERE agent_id = $1', [feedOnlyAgent]))
+    .rowCount).toBe(0);
   await pool.query(readFileSync(join(accessDir, migration), 'utf8'));
   home = new HomePersonalStore(pool); person = new PersonPreferencesStore(pool);
   const work = { homePersonal: home, personPreferences: person,
@@ -93,6 +110,16 @@ test('G-514: migration merges settings first, canonicalizes and deduplicates Hom
     .rows[0].preferences).not.toHaveProperty('contentLanguages');
   await expect(pool.query(`UPDATE access.home_state SET preferences = preferences || '{"contentLanguages":["en"]}'`
     + ' WHERE principal_id = $1', [owner])).rejects.toMatchObject({ code: '23514' });
+});
+
+test('G-514 R2: migration creates settings for a reader with only feed languages', async () => {
+  expect(await person.read(feedOnlyPrincipal, feedOnlyAgent)).toMatchObject({ ...DEFAULT_PERSON_CHOICES,
+    version: 1, contentLanguages: ['ar', 'zh-TW', 'yue-Hant'] });
+  expect((await home.read(feedOnlyPrincipal, feedOnlyAgent)).preferences.contentLanguages)
+    .toEqual(['ar', 'zh-TW', 'yue-Hant']);
+  expect(await person.languagesForReader(feedOnlyPrincipal)).toEqual(['ar', 'zh-TW', 'yue-Hant']);
+  expect((await pool.query('SELECT preferences FROM access.home_state WHERE principal_id = $1', [feedOnlyOwner]))
+    .rows[0].preferences).not.toHaveProperty('contentLanguages');
 });
 
 test('G-514: settings API writes twelve ordered languages; feed and onboarding shared read see them', async () => {
@@ -137,12 +164,30 @@ test('G-514: feed API writes one store, preserves unrelated choices and invalida
   expect(conflict.status).toBe(409);
 });
 
+test('G-514: display and feed use the primary Person languages while acting as a different Person', async () => {
+  const before = await settings(), feedBefore = await home.read(principal, secondaryAgent);
+  expect((await person.read(principal, secondaryAgent)).contentLanguages).toEqual(['de']);
+  expect(feedBefore.preferences.contentLanguages).toEqual(before.contentLanguages);
+  expect(feedBefore.preferences.contentLanguages).toEqual(await person.languagesForReader(principal));
+  const response = await call('/v1/me/feed-preferences', { actingSubject: secondaryAgent,
+    expectedRevision: feedBefore.revision, preferences: { ...defaultPreferences, contentLanguages: ['ja', 'ar'] } },
+  'feed:secondary');
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect((await settings()).contentLanguages).toEqual(['ja', 'ar']);
+  expect((await settings()).version).toBe(before.version + 1);
+  expect(await person.languagesForReader(principal)).toEqual(['ja', 'ar']);
+  const read = await call(`/v1/me/feed-preferences?actingSubject=${encodeURIComponent(secondaryAgent)}`);
+  expect(read.status).toBe(200);
+  expect((await read.json()).preferences.contentLanguages).toEqual(['ja', 'ar']);
+  expect((await person.read(principal, secondaryAgent)).contentLanguages).toEqual(['de']);
+});
+
 test('G-514: concurrent settings/feed writes with the same old state produce one winner and one 409', async () => {
   const before = await settings(), feedBefore = await personal();
   const responses = await Promise.all([
     call('/v1/me/person-preferences', { ...DEFAULT_PERSON_CHOICES, actingSubject: agent,
       expectedVersion: before.version, contentLanguages: ['ar'] }, 'race:settings'),
-    call('/v1/me/feed-preferences', { actingSubject: agent, expectedRevision: feedBefore.revision,
+    call('/v1/me/feed-preferences', { actingSubject: secondaryAgent, expectedRevision: feedBefore.revision,
       preferences: { ...defaultPreferences, contentLanguages: ['yue-Hant'] } }, 'race:feed'),
   ]);
   expect(responses.map(response => response.status).sort()).toEqual([200, 409]);

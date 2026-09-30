@@ -41,17 +41,31 @@ test('G-514: signed-in display names use saved language order, with an explicit 
   const session = new WorkReadSession({} as MainWorkDependencies, request, {}, { dataEpoch: 'epoch', sequence: '0' });
   expect(session.displayLanguages).toEqual(['de']);
   session.readingLanguages = ['ar', 'zh-TW', 'yue-Hant'];
-  expect(session.displayLanguages).toEqual(['ar', 'zh-TW', 'yue-Hant']);
+  expect(session.displayLanguages).toEqual(['ar', 'zh-TW', 'yue-Hant', 'de', 'en']);
   expect(selectDisplayName({ original: 'en', labels: { en: 'English', 'zh-Hant': '漢字', ar: 'العربية' } },
     session.displayLanguages)).toMatchObject({ value: 'العربية', language: 'ar' });
   session.options.language = 'zh-Hant';
-  expect(session.displayLanguages).toEqual(['zh-Hant', 'ar', 'zh-TW', 'yue-Hant']);
+  expect(session.displayLanguages).toEqual(['zh-Hant', 'ar', 'zh-TW', 'yue-Hant', 'de', 'en']);
+});
+
+test('G-514 R1: Japanese reading preferences retain English UI and browser display fallbacks', () => {
+  const labels = { original: 'zh-Hans', labels: { 'zh-Hans': '中文原名', en: 'English name' } };
+  for (const headers of [new Headers({ 'x-rezics-display-languages': 'en,de', 'accept-language': 'fr' }),
+    new Headers({ 'accept-language': 'en,de;q=0.8' })]) {
+    const session = new WorkReadSession({} as MainWorkDependencies,
+      new Request('http://main.test/v1/works', { headers }), {}, { dataEpoch: 'epoch', sequence: '0' });
+    session.readingLanguages = ['ja'];
+    expect(session.displayLanguages.slice(0, 3)).toEqual(['ja', 'en', 'de']);
+    expect(selectDisplayName(labels, session.displayLanguages)).toMatchObject({ value: 'English name', language: 'en' });
+  }
 });
 
 test('G-514: language consumers use the shared preference field and one feed membership rule', () => {
   const source = (name: string) => readFileSync(new URL(`../src/modules/${name}.ts`, import.meta.url), 'utf8');
   const personal = source('feed/personal');
   expect(personal).toContain('LEFT JOIN access.person_preferences p ON p.agent_id = reader.agent_id');
+  expect(personal).toContain('LEFT JOIN (${PRIMARY_READING_PERSON_SQL}) reader ON true');
+  expect(personal).not.toContain('writeReadingLanguages(client, input.actingSubject');
   expect(personal).toContain('contentLanguages: state?.content_languages ?? []');
   expect(personal).toContain("preferences: Omit<HomePreferences, 'contentLanguages'>");
   expect(personal).toContain('const { contentLanguages, ...preferences } = input.preferences');

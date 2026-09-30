@@ -81,8 +81,11 @@ export class WorkReadSession {
   /** Snapshot of the signed-in reader's Main preference, shared by every name read. */
   readingLanguages: readonly string[] | null = null;
   get displayLanguages(): string[] {
-    const ordered = this.readingLanguages?.join(',') ?? this.request.headers.get('x-rezics-display-languages');
-    return readerLanguages([this.options.language, this.options.languages, ordered]
+    const ordered = this.request.headers.get('x-rezics-display-languages');
+    const browserFallbacks = this.readingLanguages !== null
+      ? readerLanguages(null, this.request.headers.get('accept-language')).join(',') : null;
+    return readerLanguages([this.options.language, this.options.languages,
+      this.readingLanguages?.join(','), ordered, browserFallbacks]
       .filter(Boolean).join(',') || null, this.request.headers.get('accept-language'));
   }
   principal: VerifiedPrincipal | null = null;
