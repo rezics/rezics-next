@@ -31,7 +31,7 @@ function fixture(count = 1000) {
       type: work === concept ? 'concept' : 'work', name: { value: `Story ${work}`, language: 'en',
         direction: 'ltr', basis: 'requested' }, avatar: { kind: 'fallback', policy: 'test', key: work, resourceType: 'work' } })),
     deps: {
-      zoneBrowse: { batch: async (_: string, sort: 'newest' | 'updated', after: { work: string; key: string | null } | null) => {
+      zoneBrowse: { current: () => true, batch: async (_: string, sort: 'newest' | 'updated', after: { work: string; key: string | null } | null) => {
         const ordered = [...entries].sort((a, b) => sort === 'newest' ? Number(b.adoptedOrder) - Number(a.adoptedOrder)
           || b.work.localeCompare(a.work) : (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '') || b.work.localeCompare(a.work));
         const found = ordered.filter(entry => !after || (sort === 'newest'
@@ -117,4 +117,42 @@ test('G828: stale Tags withhold conditioned Works; unavailable Tags refuse', asy
   expect((await readZoneBrowse(data.make(), realm, {})).items).toHaveLength(6);
   data.setTags('unavailable');
   await expect(readZoneBrowse(data.make(), realm, { concept: [concept] })).rejects.toBeInstanceOf(WorkReadUnavailable);
+});
+
+test('G828: title queries use adoption order, describe the fallback, and traverse all matches', async () => {
+  const data = fixture();
+  const first = data.make();
+  const original = first.summaries.bind(first);
+  first.summaries = async ids => (await original(ids)).map((summary, n) => summary.status === 'available'
+    ? { ...summary, name: { ...summary.name, value: ids[n] === id(1) ? 'A Story' : 'Story' } } : summary);
+  const page = await readZoneBrowse(first, realm, { q: 'Story', sort: 'relevance' });
+  expect(page.items[0]!.id).toBe(id(1)); // A later exact title must not rank ahead of the first adoption.
+  expect(page.query).toMatchObject({ sort: 'relevance', appliedSort: 'newest', textMatch: 'title' });
+  const seen = page.items.map(item => item.id);
+  let cursor = page.nextCursor;
+  while (cursor) {
+    const next = await readZoneBrowse(data.make(cursor), realm, { q: 'Story', sort: 'relevance' });
+    seen.push(...next.items.map(item => item.id));
+    cursor = next.nextCursor;
+  }
+  expect(new Set(seen).size).toBe(1000);
+  expect(seen).toEqual(data.entries.map(entry => entry.work));
+  expect((await readZoneBrowse(data.make(), realm, { q: 'No such title' })).items).toEqual([]);
+  expect((await readZoneBrowse(data.make(), realm, { q: 'S' })).items).toHaveLength(20);
+});
+
+test('G828: lagging projection serves candidates with lower-bound counts through continuation', async () => {
+  const data = fixture(30), first = data.make();
+  first.deps.zoneBrowse!.current = () => false;
+  const page = await readZoneBrowse(first, realm, {});
+  expect(page.items).toHaveLength(20);
+  expect(page.matches).toEqual({ value: 20, kind: 'lower-bound' });
+  const second = await readZoneBrowse(data.make(page.nextCursor!), realm, {});
+  expect(second.items).toHaveLength(10);
+  expect(second.nextCursor).toBeNull();
+  expect(second.matches).toEqual({ value: 30, kind: 'lower-bound' });
+  expect(second.window.complete).toBe(false);
+  const fresh = await readZoneBrowse(data.make(), realm, {});
+  const end = await readZoneBrowse(data.make(fresh.nextCursor!), realm, {});
+  expect(end.matches.kind).toBe('exact');
 });

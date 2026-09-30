@@ -2,11 +2,12 @@ import type { Pool } from 'pg';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { WorkReadUnavailable, type ReadPosition } from '../work/read-session.ts';
 
-export const ZONE_BROWSE_PROJECTION_COST = { batch: 64, relayEvents: 64, pollMs: 500 } as const;
+export const ZONE_BROWSE_PROJECTION_COST = { batch: 64, relayEvents: 64, relayBatches: 16, pollMs: 500 } as const;
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export interface BrowseEntry { work: string; adoptedOrder: string; updatedAt: string | null; words: number | null }
 export interface BrowseAfter { work: string; key: string | null }
 export interface BrowseEntryReader {
+  current(position: ReadPosition): boolean;
   batch(realm: string, sort: 'newest' | 'updated', after: BrowseAfter | null, position?: ReadPosition): Promise<BrowseEntry[]>;
 }
 
@@ -26,7 +27,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = (this.ready ? this.tick() : this.backfill())
+      this.running = (this.ready ? this.catchUp() : this.backfill())
         .catch(error => { console.error('Zone browse projection deferred', error); })
         .finally(() => { this.running = undefined; });
     }, ZONE_BROWSE_PROJECTION_COST.pollMs);
@@ -160,10 +161,22 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     [this.env.lineage.dataEpoch, this.after, this.afterEvent, head, ZONE_BROWSE_PROJECTION_COST.relayEvents])).rows;
     const epochs = rows.length ? await this.epochs() : '';
     for (const row of rows) {
+      if (!row.envelope || typeof row.envelope.type !== 'string') {
+        console.error('Zone browse relay skipped malformed event', { event: row.event_id, sequence: row.sequence });
+        continue;
+      }
       const receipt = row.envelope.data?.receipt;
-      if (receipt?.outcome === 'succeeded' && receipt.realm && receipt.work
-        && /(?:realm\.selection-changed|realm\.publication-suppressed|realm\.submission-selected|realm\.resource-selected)/.test(row.envelope.type)) {
-        if (!ID.test(receipt.realm) || !ID.test(receipt.work)) throw new WorkReadUnavailable('Zone browse relay identity is invalid');
+      if (/(?:realm\.selection-changed|realm\.publication-suppressed|realm\.submission-selected|realm\.resource-selected)/.test(row.envelope.type)
+        && !receipt?.outcome) {
+        console.error('Zone browse relay skipped missing receipt', { event: row.event_id, sequence: row.sequence });
+        continue;
+      }
+      if (/(?:realm\.selection-changed|realm\.publication-suppressed|realm\.submission-selected|realm\.resource-selected)/.test(row.envelope?.type ?? '')
+        && receipt?.outcome === 'succeeded') {
+        if (!receipt.realm || !receipt.work || !ID.test(receipt.realm) || !ID.test(receipt.work)) {
+          console.error('Zone browse relay skipped malformed adoption', { event: row.event_id, sequence: row.sequence });
+          continue;
+        }
         const values = `VALUES (?realm ?work) { (${iri(receipt.realm)} ${iri(receipt.work)}) }`;
         const projected = await this.project(values, epochs);
         if (!projected.length) await this.access.query('DELETE FROM access.zone_browse_entry WHERE realm = $1 AND work = $2',
@@ -185,11 +198,26 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     return rows.length;
   }
 
+  /** Drain up to 1,024 events per poll; a full batch never pays another 500 ms wait. */
+  async catchUp(): Promise<number> {
+    let total = 0;
+    for (let batch = 0; batch < ZONE_BROWSE_PROJECTION_COST.relayBatches; batch++) {
+      const count = await this.tick();
+      total += count;
+      if (count < ZONE_BROWSE_PROJECTION_COST.relayEvents) break;
+    }
+    return total;
+  }
+
+  current(position: ReadPosition): boolean {
+    return this.ready && position.dataEpoch === this.env.lineage.dataEpoch
+      && BigInt(position.sequence) <= BigInt(this.observed);
+  }
+
   async batch(realm: string, sort: 'newest' | 'updated', after: BrowseAfter | null, position?: ReadPosition): Promise<BrowseEntry[]> {
     if (!this.ready) throw new WorkReadUnavailable('Zone browse backfill is not ready');
-    if (position && (position.dataEpoch !== this.env.lineage.dataEpoch
-      || BigInt(position.sequence) > BigInt(this.observed))) {
-      throw new WorkReadUnavailable('Zone browse relay has not reached the read position');
+    if (position && position.dataEpoch !== this.env.lineage.dataEpoch) {
+      throw new WorkReadUnavailable('Zone browse projection belongs to another data epoch');
     }
     type Row = { work: string; adopted_order: string; updated_at: string | null; word_count: string | null };
     const read = async (seek: string, values: (string | null)[], limit: number) =>

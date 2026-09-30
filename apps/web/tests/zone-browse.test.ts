@@ -95,12 +95,12 @@ describe('Browse page model', () => {
     expect(model.notes).toEqual([]);
   });
 
-  test('says when filters looked through only the newest picks, and when Tags are catching up', () => {
+  test('keeps lower-bound results and Tag feedback without claiming a newest-picks window', () => {
     const state = parseBrowseState({ concept, q: 'm' });
     const model = browseModel({ base, zoneName: 'Mods', state, admitted: new Map(), locale: 'zh-Hans',
       messages: { ...messages, ...zhHans }, page: { ...page(state), items: [work('c')], tags: 'stale',
         matches: { value: 60, kind: 'lower-bound' }, window: { scanned: 60, complete: false } } });
-    expect(model.notes).toEqual(['筛选范围是本社区最新收录的 60 部作品。', '标签正在同步最新变化，请稍后再试。']);
+    expect(model.notes).toEqual(['标签正在同步最新变化，请稍后再试。']);
     expect(model.results).toBe('至少 60 个结果');
     expect(model.sorts.map(sort => sort.sort)).toEqual(['relevance', 'newest', 'updated']);
   });

@@ -87,6 +87,9 @@ const facetValues = t.Array(t.Object({ value: t.String(), count: t.Integer({ min
 export const zoneBrowsePage = t.Object({ profile: t.Literal('zone-browse-v1'), realm: readId,
   /** The Query as Main applied it: text, sort and the Filter in FilterDocument form. */
   query: t.Object({ text: t.Nullable(t.String()), sort: sortValue,
+    /** Title matching falls back to adoption order for requested relevance. */
+    appliedSort: t.Union([t.Literal('newest'), t.Literal('updated')]),
+    textMatch: t.Union([t.Literal('title'), t.Literal('none')]),
     filter: t.Object({ all: t.Array(condition, { maxItems: 6 }) }) }),
   /** How many of the examined public Works each value would match, with the other Facets' Conditions applied. */
   facets: t.Object({ type: facetValues, concept: facetValues, status: facetValues, length: facetValues }),
@@ -98,6 +101,6 @@ export const zoneBrowsePage = t.Object({ profile: t.Literal('zone-browse-v1'), r
   tags: t.Union([t.Literal('current'), t.Literal('stale'), t.Literal('unavailable')]),
   matches: t.Object({ value: t.Integer({ minimum: 0 }),
     kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }),
-  /** Examined public candidates this request; `complete` at the end of traversal. */
+  /** Examined public candidates this request; `complete` only after traversal ends and the projection is current. */
   window: t.Object({ scanned: t.Integer({ minimum: 0, maximum: ZONE_BROWSE_COST.batchRows * 8 }), complete: t.Boolean() }),
   items: t.Array(zoneWork, { maxItems: ZONE_BROWSE_COST.pageSize }), ...pageFields });

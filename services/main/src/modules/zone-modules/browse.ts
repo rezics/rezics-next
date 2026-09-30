@@ -1,18 +1,14 @@
+import { zoneAdoption } from './adoption.ts';
 import type { Static } from 'typebox';
 import { primaryDiscoveryCredits } from '../discovery/credits.ts';
-import { readRankedCatalogue } from '../search/ranked.ts';
-import { InvalidSearchContinuation, SearchContinuationRestart } from '../work/search-continuation.ts';
-import { InvalidPublicQuery, PublicRealmUnavailable } from '../work/search-public.ts';
-import { PublicQueryUnavailable } from '../work/search-budget.ts';
-import { SearchIndexUnavailable } from '../work/search-readiness.ts';
 import type { BrowseAfter, BrowseEntry } from '../zone-browse/store.ts';
 import { readPublicHubCards } from '../hub/public-card.ts';
 import { compileQuery, QueryRejected } from '../query/compile.ts';
 import { RecommendationUnavailable } from '../recommendation/derived-generation.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
-import { GRAPHS, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
+import { GRAPHS, WORK_SEMANTIC_TYPES, iri } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid, WorkReadUnavailable,
-  WorkReadExpired, WorkReadMissing, type WorkReadSession, type ReadRow } from '../work/read-session.ts';
+  type WorkReadSession, type ReadRow } from '../work/read-session.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import { ZONE_BROWSE_COST, type zoneBrowseQuery, type ZoneBrowseSort, zoneLengthBands } from './contract.ts';
 import { displayZoneCredits, zoneCreditNames } from './read.ts';
@@ -183,31 +179,9 @@ async function readBrowseBatch(session: WorkReadSession, realm: string, ids: str
   const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?evidence ?revisionEpoch
     ?sequence ?status WHERE {
     VALUES ?work { ${ids.map(iri).join(" ")} }
-    { GRAPH ${iri(GRAPHS.current)} {
-      ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
-        rv:mainVersion ?main ; rv:selectionHead ?evidence .
-      ?work rv:head ?head .
-      OPTIONAL { ?work rv:completionStatus ?status }
-      ?contribution rv:publicationHead ?decision . }
-    GRAPH ${iri(GRAPHS.revisions)} { ?evidence a rv:PublicationSelection ;
-      rv:component ?slot ; rv:context ${iri(realm)} ; rv:work ?work ;
-      rv:mainVersion ?main ; rv:contribution ?contribution ;
-      rv:publicationDecision ?decision ; rv:selectedDraft ?draft ;
-      rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence .
-      ${session.options.language ? `FILTER EXISTS { ?evidence rv:language ${lit(session.options.language)} }` : ""}
-      ?decision rv:disclosure rv:Public .
-      FILTER NOT EXISTS { ?draft a rv:ErasedRevision } } }
-    UNION
-    { GRAPH ${iri(GRAPHS.current)} {
-        ?slot a rv:RealmResourceSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
-          rv:mainVersion ?main ; rv:selectionHead ?evidence . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?evidence a rv:RealmSubmissionSelection ;
-        rv:component ?slot ; rv:context ${iri(realm)} ; rv:work ?work ; rv:mainVersion ?main ;
-        rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?publicationSlot a rv:RealmPublicationSlot ;
-          rv:realm ${iri(realm)} ; rv:work ?work ; rv:selectionHead ?publicationSelection . }
-        GRAPH ${iri(GRAPHS.revisions)} { ?publicationSelection a rv:PublicationSelection } }
-    }
+    { ${zoneAdoption(realm, session.options.language)} }
+    BIND(?selection AS ?evidence)
+    GRAPH ${iri(GRAPHS.revisions)} { ?evidence rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . }
     GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head . OPTIONAL { ?work rv:completionStatus ?status } }
     ${publicWork('?work', '?main')}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work schema:isPartOf ?book } }
@@ -268,76 +242,58 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   await readRealmBasis(session, realm);
   const text = query.q?.trim() || null;
   const sort: ZoneBrowseSort = query.sort ?? (text ? 'relevance' : 'newest');
+  // Ranked catalogue search indexes body text, not titles. Until a title
+  // index exists, relevance requests traverse title matches in adoption order.
+  const appliedSort = sort === 'relevance' ? 'newest' : sort;
   const filter = browseFilter(query);
   const limit = session.options.limit ?? ZONE_BROWSE_COST.pageSize;
-  const binding = ['zone-browse-v2', realm, text, sort, filterDocument(filter), session.options.language ?? null];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position, sort === 'newest');
-  let prior: { after: BrowseAfter | null; ranked?: string; visible: number } = { after: null, visible: 0 };
+  const binding = ['zone-browse-v3', realm, text, sort, filterDocument(filter), session.options.language ?? null];
+  const cursor = decodeReadCursor(session.options.cursor, binding, session.position, appliedSort === 'newest');
+  let prior: { after: BrowseAfter | null; current: boolean; visible: number } = { after: null, current: true, visible: 0 };
   if (cursor) {
     try {
       prior = JSON.parse(cursor.after) as typeof prior;
       if (!Number.isSafeInteger(prior.visible) || prior.visible < 0
         || prior.after && (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(prior.after.work)
           || prior.after.key !== null && typeof prior.after.key !== 'string')
-        || prior.ranked !== undefined && typeof prior.ranked !== 'string') throw new Error('cursor');
+        || typeof prior.current !== 'boolean') throw new Error('cursor');
     } catch { throw new WorkReadInvalid('Zone browse cursor is invalid'); }
   }
   const rows = new Map<string, ReadRow>();
   const summaries = new Map<string, Awaited<ReturnType<WorkReadSession['summaries']>>[number]>();
   const examined: BrowseCandidate[] = [], page: BrowseCandidate[] = [];
   let tags: 'current' | 'stale' | 'unavailable' = 'unavailable';
-  let after = prior.after, ranked: string | undefined, more = false;
+  let after = prior.after, more = false;
   const evaluate = async (ids: string[], entries?: Map<string, BrowseEntry>) => {
     const batch = await readBrowseBatch(session, realm, ids, filter, entries);
     tags = batch.tags;
     for (const [work, row] of batch.rows) rows.set(work, row);
     for (const [work, summary] of batch.summaries) summaries.set(work, summary);
     const found = new Set(browseCandidates(batch.candidates, filter,
-      sort === 'relevance' ? null : text, sort).found.map(item => item.work));
+      text, appliedSort).found.map(item => item.work));
     if ((filter.concept?.length || filter.conceptExclude?.length) && tags !== 'current') found.clear();
     return { candidates: batch.candidates, found };
   };
-  if (sort === 'relevance') {
-    const result = await readRankedCatalogue(session.deps.environment, { phrase: text!, realm, phraseContract: 'zone-browse',
-      language: session.options.language ?? null, pageSize: limit, continuation: prior.ranked }, async matches => {
-      const batch = await evaluate(matches.map(item => item.work));
-      examined.push(...batch.candidates);
-      return matches.filter(item => batch.found.has(item.work));
-    }).catch((error: unknown) => {
-      if (error instanceof InvalidSearchContinuation || error instanceof InvalidPublicQuery) {
-        throw new WorkReadInvalid(error.message, { cause: error });
-      }
-      if (error instanceof SearchContinuationRestart) throw new WorkReadExpired(error.message, { cause: error });
-      if (error instanceof PublicRealmUnavailable) throw new WorkReadMissing(error.message, { cause: error });
-      if (error instanceof PublicQueryUnavailable || error instanceof SearchIndexUnavailable) {
-        throw new WorkReadUnavailable(error.message, { cause: error });
-      }
-      throw error;
-    });
-    const candidates = new Map(examined.map(item => [item.work, item]));
-    page.push(...result.results.map(item => candidates.get(item.work)!));
-    ranked = result.next ?? undefined;
-    more = !!ranked;
-  } else {
-    const projection = session.deps.zoneBrowse;
-    if (!projection) throw new WorkReadUnavailable('Zone browse projection is unavailable');
-    for (let batchIndex = 0; batchIndex < ZONE_BROWSE_COST.batches; batchIndex++) {
-      const entries = await projection.batch(realm, sort, after, session.position);
-      if (!entries.length) { more = false; break; }
-      const batch = await evaluate(entries.map(item => item.work), new Map(entries.map(item => [item.work, item])));
-      const candidates = new Map(batch.candidates.map(item => [item.work, item]));
-      for (const [index, entry] of entries.entries()) {
-        const candidate = candidates.get(entry.work);
-        if (candidate && batch.found.has(entry.work) && page.length === limit) { more = true; break; }
-        if (candidate) examined.push(candidate);
-        if (candidate && batch.found.has(entry.work)) page.push(candidate);
-        after = { work: entry.work, key: sort === 'newest' ? entry.adoptedOrder : entry.updatedAt };
-        more = index + 1 < entries.length || entries.length === ZONE_BROWSE_COST.batchRows;
-      }
-      if (!more || page.length === limit) break;
+  const projection = session.deps.zoneBrowse;
+  if (!projection) throw new WorkReadUnavailable('Zone browse projection is unavailable');
+  let current = prior.current && projection.current(session.position);
+  for (let batchIndex = 0; batchIndex < ZONE_BROWSE_COST.batches; batchIndex++) {
+    const entries = await projection.batch(realm, appliedSort, after, session.position);
+    if (!entries.length) { more = false; break; }
+    const batch = await evaluate(entries.map(item => item.work), new Map(entries.map(item => [item.work, item])));
+    const candidates = new Map(batch.candidates.map(item => [item.work, item]));
+    for (const [index, entry] of entries.entries()) {
+      const candidate = candidates.get(entry.work);
+      if (candidate && batch.found.has(entry.work) && page.length === limit) { more = true; break; }
+      if (candidate) examined.push(candidate);
+      if (candidate && batch.found.has(entry.work)) page.push(candidate);
+      after = { work: entry.work, key: appliedSort === 'newest' ? entry.adoptedOrder : entry.updatedAt };
+      more = index + 1 < entries.length || entries.length === ZONE_BROWSE_COST.batchRows;
     }
+    if (!more || page.length === limit) break;
   }
-  const counts = browseCandidates(examined, filter, sort === 'relevance' ? null : text, sort).facets;
+  current = current && projection.current(session.position);
+  const counts = browseCandidates(examined, filter, text, appliedSort).facets;
   const pageIds = page.map(item => item.work);
   const conceptIds = [...new Set([...(filter.concept ?? []), ...(filter.conceptExclude ?? []),
     ...counts.concept.map(item => item.value)])].slice(0, ZONE_BROWSE_COST.batchRows);
@@ -373,12 +329,12 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
       ? [{ ...item, name: summary.name }] : [];
   });
   await readRealmBasis(session, realm);
-  const complete = !more;
+  const complete = !more && current;
   const visible = prior.visible + page.length;
   const next = more ? encodeReadCursor(binding, session.position,
-    JSON.stringify({ after, ranked, visible }), '', cursor?.expiresAt ?? Date.now() + 300_000) : null;
+    JSON.stringify({ after, current, visible }), '', cursor?.expiresAt ?? Date.now() + 300_000) : null;
   return { profile: 'zone-browse-v1' as const, realm,
-    query: { text, sort, filter: filterDocument(filter) }, facets: { ...counts, concept }, tags,
+    query: { text, sort, appliedSort, textMatch: text ? 'title' as const : 'none' as const, filter: filterDocument(filter) }, facets: { ...counts, concept }, tags,
     matches: { value: visible, kind: complete ? 'exact' as const : 'lower-bound' as const },
     window: { scanned: examined.length, complete }, ...pageResult(session, items, next) };
 }

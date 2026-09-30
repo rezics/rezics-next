@@ -1,8 +1,11 @@
 import { expect, test } from 'bun:test';
-import { type BrowseCandidate, browseCandidates, filterDocument, textRelevance }
+import type { WorkReadSession } from '../src/modules/work/read-session.ts';
+import { QueryRejected } from '../src/modules/query/compile.ts';
+import { type BrowseCandidate, browseCandidates, filterDocument, textRelevance, readZoneBrowse }
   from '../src/modules/zone-modules/browse.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const realm = id(950);
 const MOD = 'https://rezics.com/vocab/ModPackage', DOC = 'https://schema.org/DigitalDocument';
 const BOOK = 'https://schema.org/Book';
 const fabric = id(900), forge = id(901);
@@ -77,4 +80,19 @@ test('text ranks whole titles, starts and words before inner matches; sorts brea
     .toEqual(['Tidy Inventory', 'Minecraft shaders: a gentle first setup']);
   expect(titles(browseCandidates(candidates, {}, null, 'updated').found)).toEqual(['Chunk Weaver', '末班地铁',
     'Lumen Lanterns', 'Tidy Inventory', 'Minecraft shaders: a gentle first setup']);
+});
+
+// Admission must run before any owner/session read, including Realm visibility.
+const unread = () => ({ realm: async () => { throw new Error('owner read before admission'); },
+  query: async () => { throw new Error('graph read before admission'); } }) as unknown as WorkReadSession;
+
+test('relevance needs text, and an empty length range is refused before any graph read', async () => {
+  await expect(readZoneBrowse(unread(), realm, { sort: 'relevance' })).rejects.toBeInstanceOf(QueryRejected);
+  await expect(readZoneBrowse(unread(), realm, { length: '500-100' })).rejects.toBeInstanceOf(QueryRejected);
+});
+
+test('unknown and removed Conditions refuse before any owner read', async () => {
+  for (const query of [{ type: ['https://example.com/Unknown'] }, { loader: ['Fabric'] }]) {
+    await expect(readZoneBrowse(unread(), realm, query as never)).rejects.toBeInstanceOf(QueryRejected);
+  }
 });

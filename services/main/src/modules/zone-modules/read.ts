@@ -1,3 +1,4 @@
+import { zoneAdoption } from './adoption.ts';
 import { readEpochOrder } from '../discovery/lineage.ts';
 import { namedDiscoveryCredits, primaryDiscoveryCredits } from '../discovery/credits.ts';
 import type { DiscoveryCredit, ProjectedCredit } from '../discovery/contract.ts';
@@ -65,20 +66,13 @@ export async function readZoneWorks(session: WorkReadSession, realm: string, kin
   const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?evidence ?revisionEpoch
     ?sequence ?epochOrder WHERE {
     ${epochs}
+    { ${zoneAdoption(realm)} }
     GRAPH ${iri(GRAPHS.current)} {
-      ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
-        rv:mainVersion ?main ; rv:selectionHead ?selection .
       ?work rv:head ?head .
-      ${status ? '?work rv:completionStatus "completed" ; rv:descriptiveMetadataHead ?evidence .'
-        : 'BIND(?selection AS ?evidence)'}
-      ?contribution rv:publicationHead ?decision . }
-    GRAPH ${iri(GRAPHS.revisions)} { ?selection a rv:PublicationSelection ;
-      rv:component ?slot ; rv:context ${iri(realm)} ; rv:work ?work ;
-      rv:mainVersion ?main ; rv:contribution ?contribution ;
-      rv:publicationDecision ?decision ; rv:selectedDraft ?draft .
-      ?decision rv:disclosure rv:Public .
-      FILTER NOT EXISTS { ?draft a rv:ErasedRevision }
-      ?evidence a ${status ? 'rv:WorkMetadataRevision' : 'rv:PublicationSelection'} ;
+      ${status ? '?work rv:completionStatus "completed" ; rv:descriptiveMetadataHead ?evidence .' : ''} }
+    ${status ? '' : 'BIND(?selection AS ?evidence)'}
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?evidence ${status ? 'a rv:WorkMetadataRevision ;' : ''}
         rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . }
     ${publicWork('?work', '?main')}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work schema:isPartOf ?book } }
@@ -169,11 +163,9 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
   const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?chapter ?placement ?publication
     ?contentRevision ?language ?revisionEpoch ?sequence ?epochOrder ?ownerEpoch ?ownerSequence WHERE {
     ${epochs}
+    { ${zoneAdoption(realm)} }
     GRAPH ${iri(GRAPHS.current)} {
-      ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
-        rv:mainVersion ?main ; rv:selectionHead ?selection .
       ?work rv:head ?head .
-      ?contribution rv:publicationHead ?workDecision .
       ?structure a rv:Structure ; rv:structureOf ?main ; rv:selectedGeneration ?generation .
       ?generation rv:generationState rv:Active .
       ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
@@ -182,11 +174,6 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
       ?variant a rv:ContentVariant ; rv:resource ?chapter ;
         rv:contentPublicationHead ?publication ; rv:publicSearchEligibilityHead ?eligibility . }
     GRAPH ${iri(GRAPHS.revisions)} {
-      ?selection a rv:PublicationSelection ; rv:component ?slot ; rv:context ${iri(realm)} ;
-        rv:work ?work ; rv:mainVersion ?main ; rv:contribution ?contribution ;
-        rv:publicationDecision ?workDecision ; rv:selectedDraft ?draft .
-      ?workDecision rv:disclosure rv:Public .
-      FILTER NOT EXISTS { ?draft a rv:ErasedRevision }
       ?publication a rv:ContentPublicationDecision, rv:RevisionAnchor ;
         rv:resource ?chapter ; rv:component ?variant ; rv:contentRevision ?contentRevision ;
         rv:contentLanguage ?language ; rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence .

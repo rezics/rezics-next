@@ -122,7 +122,6 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
     label: view === 'list' ? messages.viewList : messages.viewGrid,
     href: browseHref(base, { ...state, view, cursor: state.cursor }) }));
   const notes = [
-    page.window.complete ? null : t.windowNote({ count: String(page.window.scanned) }),
     page.tags === 'stale' && (state.filter.concept || state.excludedConcepts?.length) ? messages.tagsStale : null,
     page.tags === 'unavailable' && (state.filter.concept || state.excludedConcepts?.length)
       ? messages.tagsUnavailable : null,

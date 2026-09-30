@@ -217,8 +217,10 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
   other Zone, client or agent can reuse; Zone browse admits Conditions through
   the shared Query compiler.
   The home leads with its search and those values; the Works tab became
-  Browse's grid. It reads the Realm's newest adoptions as one bounded window
-  and says so when a Zone outgrows it, until a listing projection replaces it.
+  Browse's grid. Keyset pages traverse all adopted Works through the listing
+  projection. Counts say ‘at least’ until traversal finishes with a current
+  projection. Title queries match titles in adoption order until ranked title
+  search exists; the response records the applied sort and text matching.
   REZICS counts no downloads, so nothing sorts or shows them.
 - **Customization tiers.** Every Zone gets theme-token presets and a module
   layout; filtered community CSS is deferred. **Official Zones** may ship full

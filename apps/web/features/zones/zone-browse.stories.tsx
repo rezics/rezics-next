@@ -3,6 +3,8 @@ import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import mods from '../../zones/official/mods/index.tsx';
 import { RealmPageStory } from '../realm/story-page.tsx';
+import { browseModel } from './browse-view.ts';
+import { parseBrowseState } from './browse-state.ts';
 import { ZoneBrowse } from './browse.tsx';
 import { zoneMessagesFor } from './fixtures.ts';
 import { type ModRelease, ModSections } from './mod-sections.tsx';
@@ -68,6 +70,29 @@ export const NothingMatches: Story = { args: { params: { length: '0-99999' } },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('heading', { name: 'Nothing matches these filters' })).toBeVisible();
   } };
+
+/** A lower-bound count can finish this page while the adoption projection catches up. */
+export const ProjectionCatchingUp: Story = {
+  render: (_, { globals }) => {
+    const locale = (globals.locale as UiLocale | undefined) ?? 'en';
+    const zone = officialZone('mods', locale), messages = zoneMessagesFor(locale);
+    const model = browseModel({ base: `/${locale}/r/mods/browse`, zoneName: zone.name.value,
+      state: parseBrowseState({}), admitted: new Map(), locale, messages,
+      page: { items: officialBrowseModel('mods', locale).items,
+        facets: { type: [], concept: [], status: [], length: [] },
+        matches: { value: 10, kind: 'lower-bound' }, window: { scanned: 64, complete: false },
+        tags: 'current', nextCursor: null, sort: 'newest' } });
+    return <RealmPageStory zone={zone} pkg={mods} execution={{ mode: 'package', slug: 'mods' }} locale={locale}>
+      <ZoneBrowse model={model} messages={messages} card={cardRenderer(zone, mods, locale, messages)} />
+    </RealmPageStory>;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('status')).toHaveTextContent('10+ results');
+    await expect(canvas.queryByText(/newest picks/)).toBeNull();
+    await fits();
+  },
+};
 
 export const Dark: Story = { globals: { theme: 'dark' }, play: fits };
 

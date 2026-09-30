@@ -13,6 +13,7 @@ import { startMediaStack } from './media-support.ts';
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const book = 'https://schema.org/Book';
 type Page = { items: { id: string }[]; nextCursor: string | null;
+  query: { sort: string; appliedSort: string; textMatch: string };
   matches: { value: number; kind: string }; facets: Record<string, { value: string; count: number }[]> };
 
 test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; public counts, relay, backfill and serial recovery', async () => {
@@ -36,15 +37,15 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> INSERT DATA {
         GRAPH ${iri(GRAPHS.current)} { ${batch.map(row => `
           ${iri(row.work)} a schema:CreativeWork, schema:Book ; rv:mainVersion ${iri(row.main)} ;
-            rv:head ${iri(row.head)} ; rdfs:label ${lit(`Story ${row.index}`)}@en ;
+            rv:head ${iri(row.head)} ; rdfs:label ${lit(`${phrase} Story ${row.index}`)}@en ;
             rv:completionStatus ${lit(row.index % 2 ? 'ongoing' : 'completed')} .
           ${hidden.has(row.work) ? '' : `${iri(row.work)} rv:catalogueVisible true .`}
           ${iri(row.main)} a rv:MainVersion ; rv:work ${iri(row.work)} .
           ${iri(row.contribution)} rv:publicationHead ${iri(row.decision)} .
-          ${iri(row.slot)} a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ${iri(row.work)} ;
+          ${iri(row.slot)} a rv:${row.index % 2 ? 'RealmResourceSlot' : 'RealmPublicationSlot'} ; rv:realm ${iri(realm)} ; rv:work ${iri(row.work)} ;
             rv:mainVersion ${iri(row.main)} ; rv:selectionHead ${iri(row.selection)} .`).join('\n')} }
         GRAPH ${iri(GRAPHS.revisions)} { ${batch.map(row => `
-          ${iri(row.selection)} a rv:PublicationSelection ; rv:component ${iri(row.slot)} ; rv:context ${iri(realm)} ;
+          ${iri(row.selection)} a rv:${row.index % 2 ? 'RealmSubmissionSelection' : 'PublicationSelection'} ; rv:component ${iri(row.slot)} ; rv:context ${iri(realm)} ;
             rv:work ${iri(row.work)} ; rv:mainVersion ${iri(row.main)} ; rv:contribution ${iri(row.contribution)} ;
             rv:publicationDecision ${iri(row.decision)} ; rv:selectedDraft ${iri(row.draft)} ; rv:language "en" ;
             rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence ${row.index + 1} .
@@ -94,6 +95,7 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
       do {
         page = await read(params);
         expect(page.items.every(item => !hidden.has(item.id))).toBe(true);
+        if (sort === 'relevance') expect(page.query).toMatchObject({ appliedSort: 'newest', textMatch: 'title' });
         seen.push(...page.items.map(item => item.id));
         if (page.nextCursor) params.set('cursor', page.nextCursor);
       } while (page.nextCursor);
@@ -101,6 +103,23 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
       expect(page.matches).toEqual({ value: seen.length, kind: 'exact' });
       return seen;
     };
+    // Home's adoption list must admit the same resource-slot Works as browse.
+    const adopted: string[] = [];
+    let adoptionCursor: string | null = null;
+    do {
+      const response = await app.handle(new Request(`http://main.local/v1/realms/${realm.slice(-36)}/modules/new-adoptions`
+        + (adoptionCursor ? `?cursor=${encodeURIComponent(adoptionCursor)}` : '')));
+      if (response.status !== 200) throw new Error(`New adoptions ${response.status}: ${await response.text()}`);
+      const page = await response.json() as Page;
+      adopted.push(...page.items.map(item => item.id));
+      adoptionCursor = page.nextCursor;
+    } while (adoptionCursor);
+    expect(adopted.sort()).toEqual(works.filter(row => !hidden.has(row.work)).map(row => row.work).sort());
+    // Home lists localize titles with fallback; they do not filter adoptions by text language.
+    const localized = await app.handle(new Request(`http://main.local/v1/realms/${realm.slice(-36)}/modules/new-adoptions?language=ja`));
+    expect(localized.status).toBe(200);
+    expect((await localized.json() as Page).items).toHaveLength(20);
+
     for (const sort of ['newest', 'updated', 'relevance']) {
       const text = sort === 'relevance' ? { q: phrase } : {};
       const all = await traverse(sort, text);
@@ -139,8 +158,13 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
       JSON.stringify({ type: 'com.rezics.realm.publication-suppressed.v1',
         data: { receipt: { outcome: 'succeeded', realm, work: target.work } } })]);
     await relay.query(`INSERT INTO relay.delivered_batch (data_epoch,sequence,batch_id,routing_epoch,event_count)
-      VALUES ($1,1001,$2,$3,1)`, [stack.env.lineage.dataEpoch, id(), stack.env.lineage.routingEpoch]);
-    expect(await projection.tick()).toBe(1);
+      VALUES ($1,1001,$2,$3,2)`, [stack.env.lineage.dataEpoch, id(), stack.env.lineage.routingEpoch]);
+    // Poisoned receipt comes first in the same batch; it must not starve the valid removal.
+    await relay.query(`INSERT INTO relay.delivered_event (source,event_id,data_epoch,sequence,envelope)
+      VALUES ('https://rezics.com/services/main','!g828-poison',$1,1001,$2::jsonb)`, [stack.env.lineage.dataEpoch,
+      JSON.stringify({ type: 'com.rezics.realm.resource-selected.v1',
+        data: { receipt: { outcome: 'succeeded', realm: 'invalid identity', work: target.work } } })]);
+    expect(await projection.tick()).toBe(2);
     expect(await projection.tick()).toBe(0);
     expect((await stack.accessPool.query('SELECT 1 FROM access.zone_browse_entry WHERE realm = $1 AND work = $2',
       [realm, target.work])).rowCount).toBe(0);
@@ -151,10 +175,33 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
     await relay.query(`INSERT INTO relay.delivered_batch (data_epoch,sequence,batch_id,routing_epoch,event_count)
       VALUES ($1,1002,$2,$3,80)`, [stack.env.lineage.dataEpoch, id(), stack.env.lineage.routingEpoch]);
     expect(await projection.tick()).toBe(64);
-    await expect(projection.batch(realm, 'newest', null, { dataEpoch: stack.env.lineage.dataEpoch, sequence: '1002' }))
-      .rejects.toBeInstanceOf(WorkReadUnavailable);
-    expect(await projection.tick()).toBe(16);
+    const lagged = { dataEpoch: stack.env.lineage.dataEpoch, sequence: '1002' };
+    expect(projection.current(lagged)).toBe(false);
+    await stack.fuseki.update(`DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} <${RV}sequence> ?old } }
+      INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} <${RV}sequence> 1002 } }
+      WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} <${RV}sequence> ?old } }`);
+    await stack.accessPool.query('UPDATE access.serial_stats_checkpoint SET sequence = 1002 WHERE singleton');
+    const laggedPage = await read(new URLSearchParams({ q: 'Story 998' }));
+    expect(laggedPage.items.map(item => item.id)).toEqual([works[998]!.work]);
+    expect(laggedPage.nextCursor).not.toBeNull();
+    expect(laggedPage.matches).toEqual({ value: 1, kind: 'lower-bound' });
+    let laggedEnd = laggedPage;
+    while (laggedEnd.nextCursor) {
+      laggedEnd = await read(new URLSearchParams({ q: 'Story 998', cursor: laggedEnd.nextCursor }));
+      expect(laggedEnd.items).toEqual([]);
+    }
+    expect(laggedEnd.matches).toEqual({ value: 1, kind: 'lower-bound' });
+    expect(await projection.batch(realm, 'newest', null, lagged)).toHaveLength(64);
+    expect(await projection.catchUp()).toBe(16);
+    expect(projection.current(lagged)).toBe(true);
+    expect(await traverse('relevance', { q: 'Story 998' })).toEqual([works[998]!.work]);
     expect(await projection.tick()).toBe(0);
-    await projection.batch(realm, 'newest', null, { dataEpoch: stack.env.lineage.dataEpoch, sequence: '1002' });
+    await relay.query(`INSERT INTO relay.delivered_event (source,event_id,data_epoch,sequence,envelope)
+      SELECT 'https://rezics.com/services/main', 'urn:g828:burst:' || n, $1, 1003,
+        '{"type":"com.rezics.work.edited.v1"}'::jsonb FROM generate_series(1,160) AS n`, [stack.env.lineage.dataEpoch]);
+    await relay.query(`INSERT INTO relay.delivered_batch (data_epoch,sequence,batch_id,routing_epoch,event_count)
+      VALUES ($1,1003,$2,$3,160)`, [stack.env.lineage.dataEpoch, id(), stack.env.lineage.routingEpoch]);
+    expect(await projection.catchUp()).toBe(160);
+    expect(projection.current({ dataEpoch: stack.env.lineage.dataEpoch, sequence: '1003' })).toBe(true);
   } finally { await relay.end(); await stack.stop(); }
 }, 600_000);
