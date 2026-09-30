@@ -76,19 +76,19 @@ test('A new owner can configure community rules and publish the public profile',
     expect(imageAuthority.rows).toMatchObject([{ action: 'media.avatar', represented: 'media.avatar' }]);
     const current = await h.call('GET', `${h.root}/settings`);
     expect(current.status, JSON.stringify(current.body)).toBe(200);
-    const rules = [{ id: 'rule-1', title: { en: 'Be kind', 'zh-CN': '友善交流' },
-      body: { en: 'Respect other readers.', 'zh-CN': '尊重其他读者。' }, governanceRule: null }];
+    const rules = [{ id: 'rule-1', title: { original: 'en', labels: { en: 'Be kind', 'zh-Hans': '友善交流' } },
+      body: { original: 'en', labels: { en: 'Respect other readers.', 'zh-Hans': '尊重其他读者。' } }, governanceRule: null }];
     const settings = await h.call('PUT', `${h.root}/settings`, { actingSubject: h.actor,
       expectedGeneration: current.body.generation, expectedRulesRevision: current.body.ruleBasis.revision,
       reason: 'Set up the community', settings: { ...current.body.settings,
         visibility: 'public', reviewRequired: false, reviewMode: 'open',
         whoMaySubmit: 'members', selfJoin: true, rules } });
     expect(settings.status, JSON.stringify(settings.body)).toBe(201);
-    const publication = { name: { en: 'Reading Circle', 'zh-CN': '读书会' },
-      description: { en: 'Discuss good books.', 'zh-CN': '一起讨论好书。' },
+    const publication = { name: { original: 'en', labels: { en: 'Reading Circle', 'zh-Hans': '读书会' } },
+      description: { original: 'en', labels: { en: 'Discuss good books.', 'zh-Hans': '一起讨论好书。' } },
       iconSelection: null, bannerSelection: null, replyPolicy: 'members-direct', rules,
       count: { kind: 'exact', value: null }, moderators: [] };
-    const profile = await h.call('PUT', `${h.root}/profile`, { profile: 'realm-public-profile-v1',
+    const profile = await h.call('PUT', `${h.root}/profile`, { profile: 'realm-public-profile-v2',
       expectedHead: null, actingSubject: h.actor, publication });
     expect(profile.status, JSON.stringify(profile.body)).toBe(201);
     const read = await h.call('GET', `${h.root}?language=zh-CN`, undefined, null);

@@ -1,7 +1,7 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { readId, readUuid } from '../work/read-contract.ts';
-import { communityRule, MAX_RULES } from '../realm-profile/schema.ts';
+import { localizedCommunityRule, MAX_RULES } from '../realm-profile/schema.ts';
 
 // Management uses indexed Access reads. Settings also deliver one pending policy
 // receipt through a bounded graph command; no Realm contents are scanned.
@@ -67,7 +67,7 @@ export const realmSettings = t.Object({ visibility: t.Union([t.Literal('public')
   reviewMode: t.Optional(t.Union([t.Literal('mandatory'), t.Literal('trusted-members'), t.Literal('open')])),
   whoMaySubmit: t.Union([t.Literal('granted'), t.Literal('members'), t.Literal('closed')]),
   selfJoin: t.Optional(t.Boolean()),
-  rules: t.Array(communityRule, { maxItems: MAX_RULES }) }, { additionalProperties: false });
+  rules: t.Array(localizedCommunityRule, { maxItems: MAX_RULES }) }, { additionalProperties: false });
 export type RealmSettings = Static<typeof realmSettings>;
 export const settingsCommand = t.Object({ ...commandFields, settings: realmSettings,
   expectedRulesRevision: t.Nullable(generation) }, { additionalProperties: false });

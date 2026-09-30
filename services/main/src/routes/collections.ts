@@ -61,11 +61,11 @@ const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemR
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500),
   503: problemResult(503) };
 
-interface DynamicDefinitionBody { definition: string; name: string;
+interface DynamicDefinitionBody { definition: string; name: string; language?: string;
   disclosure: 'public' | 'private'; actingSubject: string;
   query: { phrase: string; language: string | null;
     context?: { kind: 'realm-local'; id: string } }; resultBudget: number }
-interface CaptureBody { definitionRevision: string; collection: string; name: string;
+interface CaptureBody { definitionRevision: string; collection: string; name: string; language?: string;
   disclosure: 'public' | 'private'; actingSubject: string }
 
 export const openApiOperations = {
@@ -171,7 +171,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
     & { structureObjects?: typeof work.structureObjects }).structureObjects = work.structureObjects;
   return new Elysia()
     .post('/v1/collection-definitions', { body: t.Object({ definition: ref,
-      name: t.String({ minLength: 1, maxLength: 300 }), disclosure: t.Union([
+      name: t.String({ minLength: 1, maxLength: 300 }), language: t.Optional(t.String({ minLength: 2, maxLength: 35 })), disclosure: t.Union([
         t.Literal('public'), t.Literal('private') ]), actingSubject: ref,
       query: t.Object({ phrase: t.String({ minLength: 2, maxLength: 80 }),
         language: t.Union([t.String({ minLength: 2, maxLength: 35 }), t.Null()]),
@@ -187,7 +187,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
         const requestDigest = hash(JSON.stringify({ family: 'dynamic-collection-create-v1', ...body }));
         const result = await createAdmittedOwner(work.environment, work.account, work.access,
           request, { kind: 'definition', owner: body.definition, actingSubject: body.actingSubject,
-            idempotencyKey, requestDigest, disclosure: body.disclosure, name: body.name,
+            idempotencyKey, requestDigest, disclosure: body.disclosure, name: body.name, language: body.language,
             query: body.query, resultBudget: body.resultBudget });
         return Response.json({ definition: result.owner, revision: result.revision,
           receipt: result.receipt, replayed: result.replayed },
@@ -249,6 +249,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
     .post('/v1/collection-definitions/:id/captures', { params: t.Object({ id: groupUuid }),
       body: t.Object({ definitionRevision: ref, collection: ref,
         name: t.String({ minLength: 1, maxLength: 300 }),
+        language: t.Optional(t.String({ minLength: 2, maxLength: 35 })),
         disclosure: t.Union([t.Literal('public'), t.Literal('private')]), actingSubject: ref },
       { additionalProperties: false }), response: { 200: t.Any(), 201: t.Any(),
         202: pendingOperation, ...errors } },
@@ -279,7 +280,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
               request, { kind: 'collection', owner: step.owner,
                 actingSubject: body.actingSubject, idempotencyKey: step.idempotencyKey,
                 requestDigest: step.requestDigest, disclosure: body.disclosure,
-                name: body.name, capture: snapshot }) });
+                name: body.name, language: body.language, capture: snapshot }) });
         let revision = captured.revision;
         let receipt = captured.structureReceipt;
         let replayed = captured.replayed;
@@ -304,6 +305,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
       } catch (error) { return routeError(error); }
     })
     .post('/v1/collections', { body: t.Object({ collection: ref, name: t.String({ minLength: 1, maxLength: 300 }),
+      language: t.Optional(t.String({ minLength: 2, maxLength: 35 })),
       disclosure: t.Union([t.Literal('public'), t.Literal('private')]), actingSubject: ref },
     { additionalProperties: false }), response: { 200: write, 201: write, 202: pendingOperation, ...errors } },
     async ({ request, body }) => {
@@ -312,6 +314,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
       try {
         const requestDigest = hash(JSON.stringify({ family: 'collection-create-v1',
           collection: body.collection, name: body.name, disclosure: body.disclosure,
+          ...(body.language !== undefined ? { language: body.language } : {}),
           actingSubject: body.actingSubject }));
         const result = await bootstrapAdmittedStructureOwner(work.environment, work.account,
           work.access, request, { profile: 'collection-membership', owner: body.collection,
@@ -319,7 +322,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
             createOwner: step => createAdmittedOwner(work.environment, work.account, work.access,
               request, { kind: 'collection', owner: step.owner, actingSubject: body.actingSubject,
                 idempotencyKey: step.idempotencyKey, requestDigest: step.requestDigest,
-                disclosure: body.disclosure, name: body.name }) });
+                disclosure: body.disclosure, name: body.name, language: body.language }) });
         return Response.json({ collection: result.owner, structure: result.structure,
           revision: result.revision, receipt: result.structureReceipt, replayed: result.replayed },
         { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });

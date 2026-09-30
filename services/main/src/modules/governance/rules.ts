@@ -1,14 +1,31 @@
 import type { Pool, PoolClient } from 'pg';
 import { t } from 'elysia';
 import { Value } from 'typebox/value';
-import { communityRule, MAX_RULES } from '../realm-profile/schema.ts';
+import { checkedCommunityRules, communityRule, legacyRuleText, localizedCommunityRule,
+  MAX_RULES } from '../realm-profile/schema.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale, GovernanceUnavailable,
   sha256, type RuleBasis } from './store.ts';
 
 export const RULE_PUBLISH_ACTION = 'governance.rule.publish';
-export const publicRealmRules = t.Object({ profile: t.Literal('realm-settings-rules-v1'),
-  public: t.Literal(true), rules: t.Array(communityRule, { maxItems: MAX_RULES }) }, { additionalProperties: false });
+const legacyRealmRules = t.Object({ profile: t.Literal('realm-settings-rules-v1'),
+  public: t.Boolean(), rules: t.Array(communityRule, { maxItems: MAX_RULES }) }, { additionalProperties: false });
+const realmRulesDocument = t.Object({ profile: t.Literal('realm-settings-rules-v2'),
+  public: t.Boolean(), rules: t.Array(localizedCommunityRule, { maxItems: MAX_RULES }) }, { additionalProperties: false });
+export const publicRealmRules = t.Object({ ...realmRulesDocument.properties,
+  public: t.Literal(true) }, { additionalProperties: false });
+
+/** Normalize immutable v1 reads only; publications use the native localized v2 fields. */
+export function currentRealmRulesDocument(document: unknown) {
+  const current = Value.Check(realmRulesDocument, document) ? document
+    : Value.Check(legacyRealmRules, document) ? { ...document, profile: 'realm-settings-rules-v2' as const,
+      rules: document.rules.map(rule => ({ ...rule, title: legacyRuleText(rule.title),
+        body: legacyRuleText(rule.body) })) } : null;
+  if (!current) throw new GovernanceInvalid('Realm rules document has an unsupported shape');
+  try { checkedCommunityRules(current.rules); }
+  catch { throw new GovernanceInvalid('Realm rules document has invalid localized text'); }
+  return current;
+}
 export const realmRulesRef = (realm: string) => `urn:rezics:realm-rules:${realm.slice(-36)}`;
 const keyPattern = /^[A-Za-z0-9:_./-]{1,128}$/;
 const agentPattern = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -92,7 +109,13 @@ export class GovernanceRules implements RuleBasis {
     // public profile validation while allowing its private publication flag.
     const document = authorizedRealmRead && row.document && typeof row.document === 'object'
       ? { ...row.document, public: true } : row.document;
-    return Value.Check(publicRealmRules, document) ? document.rules : null;
+    try {
+      const current = currentRealmRulesDocument(document);
+      return current.public ? current.rules : null;
+    } catch (error) {
+      if (error instanceof GovernanceInvalid) return null;
+      throw error;
+    }
   }
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {

@@ -3,7 +3,7 @@ import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry }
   from '../access/admission.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { validLocalizedText, type LocalizedText } from '../display-language/select.ts';
+import { canonicalLanguage, validLocalizedText, type LocalizedText } from '../display-language/select.ts';
 import { compositionReceiptIri, readCompositionReceipt, sealStructureAdmissionCancellation,
   terminalResult } from '../structure/change.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
@@ -43,11 +43,13 @@ export async function readCollectionName(env: WorkActivationEnvironment, collect
     throw new CollectionNameUnavailable('Collection name is unavailable');
   }
   const row = rows[0]!;
+  // RDF language tags are case-insensitive; localized JSON uses canonical spellings.
+  const language = canonicalLanguage(row.plain!['xml:lang'] || 'und');
+  if (!row.head && !language) throw new CollectionNameUnavailable('Collection name language is invalid');
   const name: LocalizedText = row.head
     ? (() => { try { return JSON.parse(row.payload!.value) as LocalizedText; }
       catch { throw new CollectionNameUnavailable('Collection name revision is invalid'); } })()
-    : { original: row.plain!['xml:lang'] || 'en',
-      labels: { [row.plain!['xml:lang'] || 'en']: row.plain!.value } };
+    : { original: language!, labels: { [language!]: row.plain!.value } };
   try { checkedCollectionName(name); }
   catch { throw new CollectionNameUnavailable('Collection name revision is invalid'); }
   if (row.head && (row.plain!.value !== name.labels[name.original]

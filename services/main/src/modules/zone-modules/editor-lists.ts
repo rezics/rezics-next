@@ -49,7 +49,7 @@ export async function readZoneEditorLists(session: WorkReadSession, realm: strin
         throw new WorkReadUnavailable('Editor Collection name is ambiguous');
       }
       const names = labels.get(row.collection.value) ?? new Map<string, string>();
-      const language = row.name['xml:lang']?.toLowerCase() ?? 'en';
+      const language = row.name['xml:lang']?.toLowerCase() || 'und';
       if (names.has(language) && names.get(language) !== row.name.value) {
         throw new WorkReadUnavailable('Editor Collection name is ambiguous');
       }

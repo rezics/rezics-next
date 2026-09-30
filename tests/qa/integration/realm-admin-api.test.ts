@@ -13,6 +13,7 @@ import { RealmSubmissionStore } from '../../../services/main/src/modules/realm-s
 import { REALM_ADMIN_COST } from '../../../services/main/src/modules/realm-admin/contract.ts';
 import { notificationProducerSubjectReader } from '../../../services/main/src/modules/notification-producers/subjects.ts';
 import { notificationRoleName } from '../../../services/main/src/modules/notification/display.ts';
+import { selectDisplayName, type LocalizedText } from '../../../services/main/src/modules/display-language/select.ts';
 
 async function setup() {
   const stack = await startMediaStack('realm-admin');
@@ -148,19 +149,27 @@ test('Realm settings: atomic rule CAS, localization, submission restrictions and
       whoMaySubmit: 'granted', rules: [] }, ruleBasis: { revision: null } });
     const input = { actingSubject: s.owner.actor, expectedGeneration: '0', expectedRulesRevision: null,
       reason: 'Require community membership', settings: { visibility: 'public', reviewRequired: true,
-        whoMaySubmit: 'members', rules: [{ id: 'kindness', title: { en: 'Be kind', 'zh-CN': '友善交流' },
-          body: { en: 'Discuss ideas respectfully.', 'zh-CN': '尊重他人，理性讨论。' }, governanceRule: null }] } };
+        whoMaySubmit: 'members', rules: [{ id: 'kindness', title: { original: 'ja', labels: { ja: '親切に', ko: '친절하게' } },
+          body: { original: 'ja', labels: { ja: '読者を尊重する', ko: '독자를 존중하세요' } }, governanceRule: null }] } };
     const key = randomUUID();
     const changed = await s.call('PUT', '/settings', input, s.owner.token, key);
     expect(changed.status).toBe(201);
     expect(changed.body.settings).toEqual(input.settings);
+    const recorded = await s.call('GET', `/settings${s.actorQuery()}`);
+    expect(recorded.status).toBe(200);
+    expect(recorded.body.settings).toMatchObject({ rules: input.settings.rules });
+    const localizedRules = (recorded.body.settings as { rules: { title: LocalizedText }[] }).rules;
+    expect(selectDisplayName(localizedRules[0]!.title, ['ja']))
+      .toMatchObject({ value: '親切に', language: 'ja', direction: 'ltr' });
+    expect(selectDisplayName(localizedRules[0]!.title, ['ko']))
+      .toMatchObject({ value: '친절하게', language: 'ko', direction: 'ltr' });
     const basis = changed.body.ruleBasis as { ref: string; revision: string; digest: string };
     expect(await new GovernanceRules(s.stack.accessPool).current(basis.ref, s.scope))
       .toEqual({ revision: basis.revision, digest: basis.digest });
     expect(await new GovernanceRules(s.stack.accessPool).publishedRealmRules(s.realm)).toEqual(input.settings.rules);
     const sameDocument = await new GovernanceRules(s.stack.accessPool).publish(s.owner.principal, {
       scopeId: s.scope, ref: `urn:comparison:${randomUUID()}`, actingSubject: s.owner.actor,
-      expectedRevision: null, document: { rules: input.settings.rules, public: true, profile: 'realm-settings-rules-v1' },
+      expectedRevision: null, document: { rules: input.settings.rules, public: true, profile: 'realm-settings-rules-v2' },
       idempotencyKey: randomUUID() });
     expect(sameDocument.digest).toBe(basis.digest);
     expect((await s.call('PUT', '/settings', input, s.owner.token, key)).body.replayed).toBe(true);
@@ -174,6 +183,21 @@ test('Realm settings: atomic rule CAS, localization, submission restrictions and
       expectedRevision: basis.revision, document: { rules: input.settings.rules }, idempotencyKey: randomUUID() });
     expect(await external.publishedRealmRules(s.realm)).toBeNull();
     expect((await s.call('PUT', '/settings', { ...input, expectedGeneration: '1', expectedRulesRevision: basis.revision })).status).toBe(409);
+    // Immutable v1 storage is still readable; normalization never rewrites its digest.
+    for (const same of [true, false]) {
+      const document = { profile: 'realm-settings-rules-v1', public: true, rules: [{ id: 'legacy',
+        title: { en: 'Be kind', 'zh-CN': same ? 'Be kind' : '友善' },
+        body: { en: 'Respect readers', 'zh-CN': same ? 'Respect readers' : '尊重读者' }, governanceRule: null }] };
+      const stored = await external.publish(s.owner.principal, { ref: basis.ref, scopeId: s.scope,
+        actingSubject: s.owner.actor, expectedRevision: (await external.current(basis.ref, s.scope))!.revision,
+        document, idempotencyKey: randomUUID() });
+      const normalized = await s.call('GET', `/settings${s.actorQuery()}`);
+      expect(normalized.status).toBe(200);
+      expect(normalized.body).toMatchObject({ ruleBasis: { revision: stored.revision, digest: stored.digest },
+        settings: { rules: [{ title: same ? { original: 'und', labels: { und: 'Be kind' } }
+          : { original: 'en', labels: { en: 'Be kind', 'zh-Hans': '友善' } } }] } });
+      expect((await external.read(s.owner.principal, s.owner.actor, basis.ref, s.scope)).document).toEqual(document);
+    }
     await s.outsider.grant(`submission:submit:${s.realm}`, 'submission.submit');
     const id = () => `https://rezics.com/id/${randomUUID()}`;
     const denied = await s.call('POST', '/submissions', { actingSubject: s.outsider.actor,

@@ -3,7 +3,8 @@ import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry }
   from '../access/admission.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { compositionReceiptIri, readCompositionReceipt,
+import { canonicalLanguage } from '../display-language/select.ts';
+import { compositionReceiptIri, InvalidCompositionChange, readCompositionReceipt,
   sealStructureAdmissionCancellation, terminalResult } from '../structure/change.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, prepareComponent,
@@ -28,6 +29,7 @@ export interface OwnerCreateInput {
   space?: string;
   disclosure: 'public' | 'private';
   name?: string;
+  language?: string;
   capture?: { from: string; coverage: 'complete' | 'partial';
     members: { work: string; selection: string }[];
     sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string } };
@@ -41,6 +43,13 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
   request: Request, input: OwnerCreateInput) {
+  const language = canonicalLanguage(input.language ?? 'und');
+  if (!language || language.length > 35
+    || input.name !== undefined && (!input.name.trim() || input.name.length > 300)
+    || input.kind !== 'zone' && input.name === undefined
+    || input.language !== undefined && input.name === undefined) {
+    throw new InvalidCompositionChange('Owner name or language is invalid');
+  }
   const def = definitions[input.kind];
   const profile = `https://rezics.com/definition/${def.profile}`;
   const namespace = input.kind === 'definition' ? 'collection' : input.kind;
@@ -68,6 +77,7 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
       const manifest = prepareComponent(env.objectDirectory, input.owner, {
         kind: input.kind, owner: input.owner, actingSubject: input.actingSubject,
         space: input.space, disclosure: input.disclosure, name: input.name,
+        ...(input.name !== undefined ? { language } : {}),
         capture: input.capture, query: input.query, resultBudget: input.resultBudget }, profile);
       const receipt = compositionReceiptIri(admission.id, def.action);
       const batch = `urn:rezics:outbox:${hash(receipt)}`;
@@ -76,15 +86,16 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
       const ownerTriples = input.kind === 'zone'
         ? `${iri(input.owner)} a rv:Zone ; rv:space ${iri(input.space!)} ; rv:zoneState rv:Active ;
           rv:zoneHead ${iri(revision)} ; rv:disclosure rv:${disclosure} .
+          ${input.name !== undefined ? `${iri(input.owner)} <https://schema.org/name> ${lit(input.name)}@${language} .` : ''}
           ${iri(input.space!)} rv:zoneCapability ${iri(input.owner)} .`
         : input.kind === 'definition'
         ? `${iri(input.owner)} a rv:DynamicCollection ; rv:curator ${iri(input.actingSubject)} ;
           rv:disclosure rv:${disclosure} ; rv:collectionState rv:Active ;
-          rv:definitionHead ${iri(revision)} ; <https://schema.org/name> ${lit(input.name!)}@en .`
+          rv:definitionHead ${iri(revision)} ; <https://schema.org/name> ${lit(input.name!)}@${language} .`
         : `${iri(input.owner)} a rv:Collection ; rv:curator ${iri(input.actingSubject)} ;
           rv:disclosure rv:${disclosure} ; rv:collectionState rv:Active ;
           rv:collectionKind rv:${input.capture ? 'CapturedCollection' : 'StaticCollection'} ;
-          rv:collectionHead ${iri(revision)} ; <https://schema.org/name> ${lit(input.name!)}@en .
+          rv:collectionHead ${iri(revision)} ; <https://schema.org/name> ${lit(input.name!)}@${language} .
           ${input.capture ? `${iri(input.owner)} rv:capturedFrom ${iri(input.capture.from)} ;
             rv:captureCoverage rv:${input.capture.coverage === 'complete' ? 'Complete' : 'Partial'} .` : ''}`;
       const prerequisite = input.kind === 'zone'

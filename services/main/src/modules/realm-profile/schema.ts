@@ -31,8 +31,29 @@ export const communityRule = t.Object({ id: t.String({ pattern: '^[a-z0-9]+(?:-[
   governanceRule: t.Nullable(t.Object({ ref: t.String({ minLength: 1, maxLength: 512 }),
     revision: t.String({ pattern: '^[1-9][0-9]{0,18}$' }) }, { additionalProperties: false })) },
 { additionalProperties: false });
-const profileRule = t.Object({ ...communityRule.properties,
+export const localizedCommunityRule = t.Object({ ...communityRule.properties,
   title: localizedRuleTitle, body: localizedRuleBody }, { additionalProperties: false });
+const localizedCommunityRules = t.Array(localizedCommunityRule, { maxItems: MAX_RULES });
+
+/** Settings and public profiles share authored rule fields, including multiline bodies. */
+export function checkedCommunityRules(rules: unknown): Static<typeof localizedCommunityRules> {
+  if (!Value.Check(localizedCommunityRules, rules)
+    || new Set(rules.map(rule => rule.id)).size !== rules.length
+    || rules.some(rule => [rule.title, rule.body].some(field => {
+      const entries = Object.entries(field.labels);
+      return entries.length < 1 || entries.length > 20
+        || canonicalLanguage(field.original) !== field.original || !(field.original in field.labels)
+        || entries.some(([tag, value]) => canonicalLanguage(tag) !== tag || !value.trim()
+          || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value));
+    }))) throw new RealmProfileInvalid('Realm rules are invalid');
+  return rules;
+}
+
+/** The old editor duplicated one authored string into both mandatory languages. */
+export function legacyRuleText(labels: { en: string; 'zh-CN': string }): LocalizedText {
+  return labels.en === labels['zh-CN']
+    ? { original: 'und', labels: { und: labels.en } } : legacyLocalizedText(labels);
+}
 export const memberCount = t.Union([
   // Exact requests select disclosure policy; Access supplies the value at read time.
   t.Object({ kind: t.Literal('exact'), value: t.Null() }, { additionalProperties: false }),
@@ -44,7 +65,7 @@ export const publicProfile = t.Object({ name: localizedName, description: locali
   iconSelection: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
   bannerSelection: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
   replyPolicy: t.Optional(t.Union([t.Literal('moderated'), t.Literal('members-direct')])),
-  rules: t.Array(profileRule, { maxItems: MAX_RULES }), count: memberCount,
+  rules: localizedCommunityRules, count: memberCount,
   moderators: t.Array(readId, { maxItems: MAX_MODERATORS }) }, { additionalProperties: false });
 
 export type PublicProfile = Static<typeof publicProfile>;
@@ -62,8 +83,8 @@ export function currentProfile(payload: unknown): PublicProfile {
   if (!Value.Check(legacyPublicProfile, payload)) throw new RealmProfileInvalid('Realm public profile is invalid');
   return checkedProfile({ ...payload, name: legacyLocalizedText(payload.name),
     description: legacyLocalizedText(payload.description),
-    rules: payload.rules.map(rule => ({ ...rule, title: legacyLocalizedText(rule.title),
-      body: legacyLocalizedText(rule.body) })) });
+    rules: payload.rules.map(rule => ({ ...rule, title: legacyRuleText(rule.title),
+      body: legacyRuleText(rule.body) })) });
 }
 
 export class RealmProfileInvalid extends Error {}

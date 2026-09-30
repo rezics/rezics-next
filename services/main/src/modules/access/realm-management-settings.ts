@@ -5,7 +5,8 @@ import { realmSettings, RealmAdminInvalid, RealmAdminStale, RealmAdminConflict, 
   type SettingsCommand } from '../realm-admin/contract.ts';
 import { AdmissionDenied } from './admission.ts';
 import { realmMemberProof } from '../realm-reply/member-policy.ts';
-import { realmRulesRef, publishRuleRevision } from '../governance/rules.ts';
+import { currentRealmRulesDocument, realmRulesRef, publishRuleRevision } from '../governance/rules.ts';
+import { checkedCommunityRules } from '../realm-profile/schema.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale } from '../governance/store.ts';
 import type { RealmReviewMode } from '../space/policy.ts';
 
@@ -16,13 +17,16 @@ const hash = (input: unknown) => createHash('sha256').update(JSON.stringify(inpu
 export async function readRealmSettings(client: PoolClient, realm: string) {
   const row = (await client.query<{ who_may_submit: RealmSettings['whoMaySubmit']; visibility: RealmSettings['visibility']; review_mode: RealmReviewMode; self_join: boolean }>(`
     SELECT who_may_submit,visibility,review_mode,self_join FROM access.realm_admin_settings WHERE realm = $1`, [realm])).rows[0];
-  const rules = (await client.query<{ revision: string; digest: string; document: { rules?: unknown } }>(`
+  const rules = (await client.query<{ revision: string; digest: string; document: unknown }>(`
     SELECT h.revision::text,h.digest,r.document FROM access.governance_rule_head h
     JOIN access.governance_rule_revision r ON r.ref = h.ref AND r.revision = h.revision
     WHERE h.ref = $1 AND h.scope_id = $2`, [realmRulesRef(realm), `governance:realm:${realm}`])).rows[0];
+  let currentRules: RealmSettings['rules'];
+  try { currentRules = rules ? currentRealmRulesDocument(rules.document).rules : []; }
+  catch { throw new RealmAdminInvalid('Realm rules document has an unsupported shape'); }
   const settings = { visibility: row?.visibility ?? 'public', reviewRequired: (row?.review_mode ?? 'mandatory') === 'mandatory',
     reviewMode: row?.review_mode ?? 'mandatory',
-    whoMaySubmit: row?.who_may_submit ?? 'granted', selfJoin: row?.self_join ?? false, rules: rules?.document.rules ?? [] };
+    whoMaySubmit: row?.who_may_submit ?? 'granted', selfJoin: row?.self_join ?? false, rules: currentRules };
   if (!Value.Check(realmSettings, settings)) throw new RealmAdminInvalid('Realm rules document has an unsupported shape');
   return { settings, ruleBasis: { ref: realmRulesRef(realm), revision: rules?.revision ?? null, digest: rules?.digest ?? null } };
 }
@@ -32,11 +36,9 @@ export async function saveRealmSettings(client: PoolClient, realm: string, princ
   const settings = input.settings;
   const mode = settings.reviewMode ?? (settings.reviewRequired ? 'mandatory' : 'open');
   if (settings.reviewRequired !== (mode === 'mandatory')) throw new RealmAdminInvalid('Review mode and reviewRequired disagree');
-  if (new Set(settings.rules.map(rule => rule.id)).size !== settings.rules.length
-    || settings.rules.some(rule => [...Object.values(rule.title), ...Object.values(rule.body)].some(value => !value.trim()))) {
-    throw new RealmAdminInvalid('Rules need unique identities and nonempty localized text');
-  }
-  const document = { profile: 'realm-settings-rules-v1', public: settings.visibility !== 'private', rules: settings.rules };
+  try { checkedCommunityRules(settings.rules); }
+  catch { throw new RealmAdminInvalid('Rules need unique identities and valid localized text'); }
+  const document = { profile: 'realm-settings-rules-v2', public: settings.visibility !== 'private', rules: settings.rules };
   if (Buffer.byteLength(JSON.stringify(document)) > 16_384) throw new RealmAdminInvalid('Rules exceed the governance document budget');
   const ref = realmRulesRef(realm);
   const published = await publishRuleRevision(client, principalId, { ref, scopeId: `governance:realm:${realm}`,
