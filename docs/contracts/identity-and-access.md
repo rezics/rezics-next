@@ -83,9 +83,11 @@ representation creates no voting weight. See the
 
 Decision 4, maintainer, 2026-09-29. Every Zone remains visible, while role and
 trust gate creation. Ordinary participants browse, rate, shelve, review, discuss
-and report; authors create their own Works; administrator-appointed editors
-maintain the catalogue with history. Administrators create Zones, official
-Realms, Software and Mod entries and run imports. These are product roles,
+and report; contributors may create provisional, unverified Works under the
+[catalogue quality pipeline](identity-correction.md#catalogue-quality-pipeline)
+(decision 50); administrator-appointed editors maintain the catalogue with
+history. Administrators create administrator-only kinds, Zones and official
+Realms, run imports and appoint editors (decision 4). These are product roles,
 not permission implied by a visible control.
 
 Permission-backed translations need explicit publication eligibility. A private
@@ -106,7 +108,8 @@ retain their explicit, scoped authorization.
 
 Main owns public identities, each Agent's permissions page (invite, accept,
 change, revoke), Realm roles, resource-scoped installations and AI assignments
-through one scoped authorization object. “Manage as yourself” differs from
+through one authority model: the existing grant, lineage and representation
+structures, evaluated at admission. “Manage as yourself” differs from
 public attribution as that identity. Discovery is independent of task eligibility;
 confirm the public identity before publishing private Account data. Delegation
 never exposes private reading history. Transfers, last-controller protection,
