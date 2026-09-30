@@ -28,7 +28,7 @@ import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedPage, Ch
  * `actingSubject` with a bearer token, so a person without an eligible Agent
  * reads publicly and Mine asks them to choose one.
  */
-const reader = cache(async () => {
+export const reader = cache(async () => {
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
   const state = token ? await sessionAgentState() : null;
   const acting = state?.sessionAgent.eligible ? state.sessionAgent.actingSubject ?? undefined : undefined;
