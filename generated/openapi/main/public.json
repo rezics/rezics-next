@@ -151907,6 +151907,12 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "displayName": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                    "type": "string"
+                  },
                   "profile": {
                     "const": "person-onboarding-v1",
                     "type": "string"
@@ -151922,6 +151928,12 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "displayName": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                    "type": "string"
+                  },
                   "profile": {
                     "const": "person-onboarding-v1",
                     "type": "string"
@@ -151937,6 +151949,12 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "displayName": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                    "type": "string"
+                  },
                   "profile": {
                     "const": "person-onboarding-v1",
                     "type": "string"
@@ -152225,6 +152243,12 @@
                 "schema": {
                   "properties": {
                     "code": {
+                      "enum": [
+                        "public_name_required",
+                        "person_onboarding_compensated",
+                        "idempotency_conflict",
+                        "stale_context"
+                      ],
                       "type": "string"
                     },
                     "currentHead": {
