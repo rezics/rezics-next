@@ -75,7 +75,8 @@ export async function seedReleases(state: SeedState) {
       coverage: snapshot.coverage,
     }, author.token, seedKey('snapshot', snapshot.id));
   }
-  await publishReadable(state, classic, 'hongloumeng', '紅樓夢。程甲本與通行本，以及一部英譯。');
+  // The imported classic already has its public text and source eligibility.
+  // Keep that selection while adding edition facts; only the new serial needs one.
   await publishReadable(state, serial, 'star-harbor', '星港夜話。連載的前兩回。');
   state.created.set('hongloumeng', classic);
   state.created.set('star-harbor', serial);
