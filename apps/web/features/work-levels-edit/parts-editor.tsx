@@ -14,7 +14,7 @@ import { materializeData } from 'native-i18n';
 import type { Copy, WorkLevelsEditMessages } from './messages.ts';
 import { useWrite } from './use-write.ts';
 import { invalidField, WriteStatus } from './write-status.tsx';
-import type { WriteState } from './write.ts';
+import type { Values, WriteState } from './write.ts';
 import { WorkPicker, type WorkLoader } from './work-picker.tsx';
 
 export interface EditablePart {
@@ -56,6 +56,8 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
   const invalid = invalidField(state);
   /** What was typed into this row's own form when its last submit was refused, so a refusal never loses it. */
   const typed = (part: EditablePart) => values.intent === 'update' && values.occurrence === part.occurrence ? values : null;
+  /** What was typed into the add form, when that is the form whose last submit was refused. */
+  const added: Values = values.intent === 'add' ? values : {};
   return <div className="grid gap-6">
     <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} reloading={reloading} /></div>
     {parts.length ? <ol aria-label={t.partsList} className="grid divide-y divide-border/60 border-border/60 border-y">
@@ -78,7 +80,7 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
             <Button type="submit" variant="outline" size="sm" disabled={pending} aria-label={t.moveDown({ label: part.label })}>
               <ArrowDownIcon aria-hidden="true" /></Button></Context></form> : null}
           {part.role === 'part' ? <details open={typed(part) ? true : undefined}
-            className="rounded-xl border border-border/60 px-2 py-1 text-sm">
+            className="rounded-xl border border-border/60 px-2 py-1 text-sm open:basis-full">
             <summary className="flex cursor-pointer items-center gap-1 py-1" aria-label={t.editPart({ label: part.label })}>
               <PencilIcon aria-hidden="true" className="size-4" />{t.edit}</summary>
             <form action={run} className="grid gap-3 py-2"><Context work={work} structure={structure} head={head} intent="update">
@@ -91,7 +93,7 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
                 </NativeSelect></Field>
               <Button type="submit" size="sm" disabled={pending} className="w-fit">{t.savePart}</Button></Context></form>
           </details> : null}
-          <details className="rounded-xl border border-border/60 px-2 py-1 text-sm">
+          <details className="rounded-xl border border-border/60 px-2 py-1 text-sm open:basis-full">
             <summary className="flex cursor-pointer items-center gap-1 py-1" aria-label={t.removePart({ label: part.label })}>
               <Trash2Icon aria-hidden="true" className="size-4" />{t.removeButton}</summary>
             <form action={run} className="grid gap-2 py-2"><Context work={work} structure={structure} head={head} intent="remove">
@@ -110,17 +112,17 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
       <h3 className="font-semibold text-base">{t.addPart}</h3>
       <Context work={work} structure={structure} head={head} intent="add" />
       <Field invalid={invalid === 'target'}><FieldLabel>{t.partTarget}</FieldLabel>
-        <WorkPicker name="target" locale={locale} t={t} load={load} initial={values.target ?? ''} invalid={invalid === 'target'} />
+        <WorkPicker name="target" locale={locale} t={t} load={load} initial={added.target ?? ''} invalid={invalid === 'target'} />
         <FieldHelper>{t.partTargetHelp}</FieldHelper></Field>
       <Field invalid={invalid === 'label'}><FieldLabel>{t.partLabel}</FieldLabel>
-        <Input name="label" defaultValue={values.label ?? ''} maxLength={500} required autoComplete="off" />
+        <Input name="label" defaultValue={added.label ?? ''} maxLength={500} required autoComplete="off" />
         <FieldHelper>{t.partLabelHelp}</FieldHelper></Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field><FieldLabel>{t.partInclusion}</FieldLabel>
-          <NativeSelect name="inclusion" defaultValue={values.inclusion ?? 'required'}>
+          <NativeSelect name="inclusion" defaultValue={added.inclusion ?? 'required'}>
             {inclusionOptions(t).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</NativeSelect></Field>
         <Field><FieldLabel>{t.partPlace}</FieldLabel>
-          <NativeSelect name="after" defaultValue={values.after ?? 'last'}>
+          <NativeSelect name="after" defaultValue={added.after ?? 'last'}>
             <option value="last">{t.placeLast}</option><option value="first">{t.placeFirst}</option>
             {parts.map(part => <option key={part.occurrence} value={part.occurrence}>{t.placeAfter({ label: part.label })}</option>)}
           </NativeSelect></Field>
