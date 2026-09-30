@@ -38,10 +38,13 @@ function pageError(error: unknown) {
     return problem(503, 'entity_page_unavailable', 'Resource page is unavailable');
   return workReadError(error);
 }
-export function entityPageRoutes(
-  work: MainWorkDependencies,
-  mountedReads: () => ReadonlySet<string>,
-) {
+/** GET paths mounted in Main, set once by the composition root so the page can
+ * omit sections whose read is not mounted. Kept out of the plugin signature:
+ * the generated route groups pass only `work` (and `fuseki`). */
+let mountedReads: () => ReadonlySet<string> = () => new Set();
+export function setMountedReads(read: () => ReadonlySet<string>): void { mountedReads = read; }
+
+export function entityPageRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get(
       '/v1/resources/:id/page',
