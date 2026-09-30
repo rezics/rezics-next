@@ -251,8 +251,6 @@ function extraRoutes7(fuseki: FusekiClient, work: SearchRouteDependencies) {
 
 function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
-    .use(facetRoutes());
-    .use(workStatsRoutes(work))
     .use(facetRoutes())
     .use(typeRoutes());
 }
