@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { selectDisplayName } from '@rezics/main/language';
+import { materializeData } from 'native-i18n';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
@@ -13,6 +15,7 @@ import { facetLabel } from '../concept/facets.ts';
 import { ClassificationRegion, type CommunityGenres } from './classification.tsx';
 import { WorkCredits } from './credits.tsx';
 import * as fixture from './fixtures.ts';
+import { languageName } from './format.ts';
 import { messages } from './messages.ts';
 import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { WorkRecord } from './record.tsx';
@@ -374,6 +377,34 @@ export const TitleFallback: Story = {
   globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByText(/尚无.*标题，以英语显示/)).toBeVisible();
+  },
+};
+
+export const G504OtherScriptTitle: Story = {
+  args: { work: { ...fixture.work, title: selectDisplayName(
+    { original: 'zh-Hans', labels: { 'zh-Hans': '雨夜书店' } }, ['zh-Hant'])!,
+    originalTitle: null, tagline: null, description: null, selectedLanguage: null }, locale: 'zh-Hant' },
+  globals: { locale: 'zh-Hant' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: '雨夜书店' })).toHaveAttribute('lang', 'zh-Hans');
+    const t = materializeData(messages['zh-Hant'], { locale: 'zh-Hant' });
+    await expect(canvas.getByText(t.titleFallback({ requested: languageName('zh-Hant', 'zh-Hant'),
+      shown: languageName('zh-Hans', 'zh-Hant') }))).toBeVisible();
+    await noOverflow();
+  },
+};
+
+export const G504UndeterminedRtlTitle: Story = {
+  args: { work: { ...fixture.work, title: selectDisplayName(new Map([['und', '١٢٣ … مكتبة ليلة المطر']]))!,
+    originalTitle: null, tagline: null, description: null, selectedLanguage: null } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const title = canvas.getByRole('heading', { level: 1 });
+    await expect(title).toHaveAttribute('lang', 'und');
+    await expect(title).toHaveAttribute('dir', 'rtl');
+    await expect(canvas.queryByText(/No .* title yet/)).toBeNull();
+    await noOverflow();
   },
 };
 

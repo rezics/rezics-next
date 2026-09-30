@@ -1,3 +1,4 @@
+import { languageSatisfies, type DisplayName } from '@rezics/main/language';
 import type { UiLocale } from '../../i18n/define.ts';
 import { messages, type WorkPageMessages } from './messages.ts';
 
@@ -90,9 +91,11 @@ const scripts: Record<string, RegExp> = {
  * language's own ("雨夜书店" in Chinese) reads as the reader's already. A
  * record that states no language (`und`) is not known to be in another one.
  */
-export function titleNeedsLanguageNote(title: { value: string; language: string; basis: 'requested' | 'fallback' },
+export function titleNeedsLanguageNote(title: Pick<DisplayName, 'value' | 'language' | 'basis'>,
   locale: UiLocale): boolean {
-  if (title.basis !== 'fallback' || unstated.has(primary(title.language))) return false;
+  if (unstated.has(primary(title.language))) return false;
+  if (title.basis === 'other-script') return !languageSatisfies(title.language, [locale]);
+  if (title.basis !== 'fallback') return false;
   const wanted = primary(locale);
   if (primary(title.language) === wanted) return false;
   // A CJK interface judges by script; a Latin-script one by the tag, since Latin text alone can't tell English from German.

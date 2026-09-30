@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { displayLanguageBasis } from '../display-language/schema.ts';
 import { AVATAR_POLICY } from './store.ts';
 import { FALLBACK_POLICY, MAX_SUMMARY_BATCH } from './summary.ts';
 import { targetBase, targetRef } from '../target/contract.ts';
@@ -8,7 +9,7 @@ const resourceType = t.Union(['work', 'main-version', 'space', 'realm', 'concept
   .map(value => t.Literal(value)));
 const name = t.Object({ value: t.String(), language: t.String(),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]),
-  basis: t.Union([t.Literal('requested'), t.Literal('fallback')]),
+  basis: displayLanguageBasis,
   context: t.Optional(t.String()), preferenceRevision: t.Optional(t.String()) },
 { additionalProperties: false });
 const avatar = t.Union([

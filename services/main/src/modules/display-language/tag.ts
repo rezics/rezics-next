@@ -12,6 +12,7 @@ const rtlScripts = new Set(['Adlm', 'Arab', 'Armi', 'Avst', 'Chrs', 'Cprt', 'Ely
   'Hatr', 'Hebr', 'Hung', 'Khar', 'Lydi', 'Mand', 'Mani', 'Mend', 'Merc', 'Mero', 'Narb',
   'Nbat', 'Nkoo', 'Ougr', 'Palm', 'Phli', 'Phlp', 'Phnx', 'Prti', 'Rohg', 'Samr', 'Sarb',
   'Sogd', 'Sogo', 'Syrc', 'Thaa', 'Yezi']);
+const rtlLetter = new RegExp([...rtlScripts].map(script => `\\p{Script=${script}}`).join('|'), 'u');
 
 /** Intl's structural validation and aliases, plus RFC 5646 §2.2.7 private-only tags.
  * This does not validate subtags against a pinned IANA registry. Empty is not recorded. */
@@ -33,9 +34,14 @@ export function canonicalLanguage(value: string): string | null {
   return parseLanguage(value)?.tag ?? null;
 }
 
-/** Likely script is a presentation hint; it never rewrites the recorded language. */
-export function direction(language: string): 'ltr' | 'rtl' {
-  return rtlScripts.has(parseLanguage(language)?.script ?? '') ? 'rtl' : 'ltr';
+/** A recorded or likely script wins; otherwise the text's first letter sets base direction.
+ * https://www.w3.org/International/questions/qa-html-dir#dirauto
+ * Looking at text never assigns a language to an undetermined or unrecorded source. */
+export function direction(language: string, text = ''): 'ltr' | 'rtl' {
+  const script = parseLanguage(language)?.script;
+  if (script) return rtlScripts.has(script) ? 'rtl' : 'ltr';
+  const letter = text.match(/\p{Letter}/u)?.[0];
+  return letter && rtlLetter.test(letter) ? 'rtl' : 'ltr';
 }
 
 export type LanguageMatch = 'requested' | 'same-script' | 'other-script';

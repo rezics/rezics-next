@@ -5,6 +5,7 @@ import { canonicalLanguage, direction, languageSatisfies, parseLanguage, readerL
   selectDisplayName, validLocalizedText } from '../src/modules/display-language/select.ts';
 import { languageTag } from '../src/modules/display-language/schema.ts';
 import { readName } from '../src/modules/work/read-contract.ts';
+import { resourceSummary } from '../src/modules/media/summary-contract.ts';
 import { contentLanguages, InvalidContentLanguages, originalLanguages, recordedLanguageTag,
   textLanguage } from '../src/modules/release/languages.ts';
 
@@ -41,6 +42,28 @@ test.each(['', ' ', 'en_US', 'not a tag', 'e', 'en--US', 'en-x', 'x', 'x-1234567
   expect(Value.Check(languageTag, source)).toBe(false);
 });
 
+test.each([
+  ['az-Arab', 'Latin text', 'rtl'], ['ku-Latn', 'کوردی', 'ltr'], ['ku', 'کوردی', 'ltr'],
+  ['ar', 'Latin text', 'rtl'], ['pa-Guru', 'پنجابی', 'ltr'], ['und-Arab', 'Latin text', 'rtl'],
+  ['und', '١٢٣ … العربية', 'rtl'], ['und', '123 … עברית', 'rtl'],
+  ['und', '… 𞤀𞤁', 'rtl'], ['und', '… Latin العربية', 'ltr'], ['und', '… العربية Latin', 'rtl'],
+  ['und', '日本語 العربية', 'ltr'], ['und', '123 🎉', 'ltr'], ['und', '', 'ltr'],
+  ['', '… العربية', 'rtl'],
+] as const)('G-504 shared direction honors script and uses undetermined text letters', (language, text, expected) => {
+  expect(direction(language, text)).toBe(expected);
+  for (const requested of [[], [language]]) {
+    expect(selectDisplayName(new Map([[language, text || '123']]), requested)?.direction).toBe(expected);
+  }
+});
+
+test('G-504 an undetermined RTL label keeps its language on exact and original fallback paths', () => {
+  const field = { original: 'und', labels: { en: 'English', und: '١٢٣ … العربية' } };
+  expect(selectDisplayName(field, ['und'])).toEqual({ value: '١٢٣ … العربية', language: 'und',
+    direction: 'rtl', basis: 'requested' });
+  expect(selectDisplayName(field, ['ja'])).toEqual({ value: '١٢٣ … العربية', language: 'und',
+    direction: 'rtl', basis: 'fallback' });
+});
+
 test('G-504 languageTag runs the shared validator in an API request', async () => {
   const app = new Elysia().post('/language', { body: languageTag }, ({ body }) => parseLanguage(body));
   const request = (value: string) => new Request('http://localhost/language', { method: 'POST',
@@ -70,6 +93,9 @@ test.each([
   const selected = selectDisplayName(field, readers);
   expect(selected).toEqual(expected);
   expect(Value.Check(readName, selected)).toBe(true);
+  expect(Value.Check(resourceSummary, { reference: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
+    status: 'available', type: 'resource', base: 'resource', work: null, disclosure: 'public', name: selected,
+    avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'test', resourceType: 'resource' } })).toBe(true);
 });
 
 test('G-504 reader order cannot let an other-script fallback hide a later readable choice', () => {

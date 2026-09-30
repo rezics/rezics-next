@@ -54,13 +54,13 @@ export function selectDisplayName(field: LocalizedText | ReadonlyMap<string, str
     const selected = exact
       ?? labels.find(row => row.parsed && languageMatch(row.parsed, language) === 'same-script');
     if (selected) return { value: selected.value, language: selected.language,
-      direction: direction(selected.language), basis: exact ? 'requested' : 'same-script' };
+      direction: direction(selected.language, selected.value), basis: exact ? 'requested' : 'same-script' };
     otherScript ??= labels.find(row => row.parsed && languageMatch(row.parsed, language) === 'other-script');
   }
   const selected = otherScript ?? labels.find(row => row.language === (canonicalLanguage(original ?? '') ?? original))
     ?? labels[0];
   return selected ? { value: selected.value, language: selected.language,
-    direction: direction(selected.language), basis: otherScript ? 'other-script' : 'fallback' } : null;
+    direction: direction(selected.language, selected.value), basis: otherScript ? 'other-script' : 'fallback' } : null;
 }
 
 export function legacyLocalizedText(labels: { en: string; 'zh-CN': string }): LocalizedText {

@@ -6,7 +6,7 @@ import { PROFILES } from '../semantic/schema.ts';
 import { readWorkComponentState } from '../work/history.ts';
 import { readPublicRealmNames } from '../space/read.ts';
 import { currentProfile } from '../realm-profile/schema.ts';
-import { readerLanguages, selectDisplayName, type LocalizedText } from '../display-language/select.ts';
+import { readerLanguages, selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import type { Base } from '../target/contract.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaUnavailable,
   type AvatarRow, type MediaStore } from './store.ts';
@@ -61,8 +61,7 @@ export type AvatarDescriptor =
 export type ResourceSummary =
   | { reference: string; status: 'available'; type: ResourceType; disclosure: 'public' | 'restricted';
     base: Base | null; work: string | null;
-    name: { value: string; language: string; direction: 'ltr' | 'rtl'; basis: 'requested' | 'fallback';
-      context?: string; preferenceRevision?: string };
+    name: DisplayName & { context?: string; preferenceRevision?: string };
     avatar: AvatarDescriptor }
   | { reference: string; status: 'unavailable' };
 
