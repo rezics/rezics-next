@@ -10,7 +10,7 @@ import { WORK_READ_COST } from '../src/modules/work/read-contract.ts';
 import { ZONE_CONFIG_FORMAT, ZONE_PROFILE } from '../src/modules/zone/config-format.ts';
 import { parseZonePath, ZONE_RESERVED_SEGMENTS } from '../src/modules/zone/route-path.ts';
 import { resolveZoneRoute, ZoneRouteMissing, ZONE_ROUTE_COST } from '../src/modules/zone/route.ts';
-import { readResourceSummaries } from '../src/modules/media/summary.ts';
+import { readResourceSummaries, summaryBases } from '../src/modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -31,7 +31,7 @@ test('G630: exact route paths admit native resources and pass slug tabs to the h
 
 function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
   workMount?: boolean; privateMount?: boolean; granted?: boolean; moved?: 'once' | 'always';
-  removedDuringRead?: boolean; deniedWorkScope?: boolean; revoked?: boolean }) {
+  removedDuringRead?: boolean; deniedWorkScope?: boolean; collectionSemantic?: boolean; revoked?: boolean }) {
   const zone = id(), space = id(), realm = id(), navigation = id(), collection = id(), structure = id();
   const resource = id(), occurrence = id(), head = id(), generation = id(), revision = id();
   const directory = resolve('.temp', `g-630-unit-${randomUUID()}`);
@@ -53,10 +53,16 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
         const requested = [collection, resource].filter(target => query.includes(`<${target}>`));
         const result = rows(requested.map(target => {
           const isCollection = target === collection;
-          return { epoch: 'epoch', sequence: String(sequence), r: target,
+          const row: Record<string, string> = { epoch: 'epoch', sequence: String(sequence), r: target,
           type: isCollection ? 'collection' : 'work', public: isCollection || input.readable ? 'true' : 'false',
-          work: resource, head, label: isCollection ? 'Picks' : 'Member', erased: 'false' };
+          label: isCollection ? 'Picks' : 'Member', erased: 'false' };
+          if (!isCollection) { row.work = resource; row.head = head; }
+          return row;
         }));
+        if (input.collectionSemantic && requested.includes(collection)) {
+          result.results!.bindings.push({ ...result.results!.bindings.find(row => row.r?.value === collection)!,
+            type: { type: 'literal', value: 'resource' } });
+        }
         for (const row of result.results!.bindings) row.label!['xml:lang'] = 'en';
         return result;
       }
@@ -122,6 +128,18 @@ test('G630 class guard: paths × membership × disclosure; a readable non-member
       expect(f.queries.length).toBeLessThan(50);
     } finally { f.close(); }
   }
+});
+
+test('G630/G506: Collection summaries opt in with base/work null and outrank semantic attachments', async () => {
+  const f = fixture({ member: true, readable: true, collectionSemantic: true });
+  try {
+    const input = { resources: [f.collection], context: DEFAULT_MEDIA_CONTEXT, language: null };
+    expect((await readResourceSummaries(f.work.environment, undefined, {}, input)).summaries)
+      .toEqual([{ reference: f.collection, status: 'unavailable' }]);
+    expect((await readResourceSummaries(f.work.environment, undefined, {}, { ...input, includeCollections: true })).summaries)
+      .toMatchObject([{ reference: f.collection, status: 'available', type: 'collection', base: null, work: null }]);
+    expect(summaryBases.collection).toBeNull();
+  } finally { f.close(); }
 });
 
 test('G630: direct Work routes need an exact public adoption; grants never replace population', async () => {

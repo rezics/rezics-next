@@ -277,7 +277,8 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     throw new MediaUnavailable('graph lineage is unavailable');
   }
   const rows = new Map<string, GraphRow>();
-  // A descriptive semantic component cannot revive an erased owner's identity.
+  // Keep protection/erasure flags until all rows are collected: dropping only
+  // the Work row could let its descriptive semantic component revive the identity.
   const erased = new Set(bindings.filter(binding => binding.erased?.value === 'true')
     .flatMap(binding => binding.r ? [binding.r.value] : []));
   for (const binding of bindings) {
