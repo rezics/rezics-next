@@ -9,7 +9,9 @@ import { RealmReplyDenied, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavail
 import { acknowledgeContentDecision, cancelPlacement, placeReply,
   readPlacementHead, readRootPlacementHeads,
   readReplyGraphReceipt } from './graph.ts';
-import { readableReplyRoot, type ReplyRootProof } from './root.ts';
+import { readableReplyRoot, replyRoot } from './root.ts';
+import { targetRead } from '../target/resolve.ts';
+import { WorkReadMissing } from '../work/read-session.ts';
 import { readRealmPolicy, reviewPolicy } from '../space/policy.ts';
 import type { RealmPermit } from '../access/realm-management-policy.ts';
 
@@ -38,20 +40,16 @@ async function realmReplyReadProof(access: RealmReadAuthority, env: WorkActivati
 /** The same exact placement, Content review and two-sided Realm fence serve direct reads and notifications. */
 export async function visibleRealmReply(content: Pick<RealmReplyContentStore, 'origin' | 'currentReview'>,
   access: RealmReadAuthority, env: WorkActivationEnvironment, realm: string, reply: string,
-  principal?: VerifiedPrincipal, actor?: string, rootProof?: ReplyRootProof) {
+  principal?: VerifiedPrincipal, actor?: string) {
   const before = await realmReplyReadProof(access, env, realm, principal, actor);
   if (!before) return null;
   const origin = await content.origin(reply);
   if (origin?.realm && origin.realm !== realm) return null;
   const placement = await readPlacementHead(env, realm, reply);
   if (!placement) return null;
-  const readable = rootProof ?? ((resource, revision) => readableReplyRoot(env, resource, revision,
-    access, principal ?? null, actor));
-  if (!await readable(placement.rootTarget, placement.rootRevision)) return null;
   if (!await content.currentReview(realm, reply, placement.revisionId,
     placement.reviewDecisionId, placement.preparationId)) return null;
-  return await realmReplyReadProof(access, env, realm, principal, actor) === before
-    && await readable(placement.rootTarget, placement.rootRevision) ? placement : null;
+  return await realmReplyReadProof(access, env, realm, principal, actor) === before ? placement : null;
 }
 
 /** Content owns identities and exact review; Jena owns Realm-local placement. */
@@ -107,8 +105,18 @@ export class RealmReplyStore {
     const admission = await this.admission(principal, input.author, 'reply.create',
       `reply:create:${input.rootTarget}`, key, digest, input.rootRevision);
     let result;
-    try { result = await this.content.createReply(admission, input); }
+    try {
+      // A lost-response retry retains its successful identity after a target edit.
+      // Only a new Content identity must bind to the target's current root.
+      if (!await this.content.hasReceipt(admission.id, 'reply.create', digest)) {
+        const currentRoot = await targetRead(this.env, { access: this.access, principal, actingSubject: input.author },
+          session => replyRoot(session, input.rootTarget, input.rootRevision));
+        if (!currentRoot) throw new RealmReplyDenied('Reply root is unavailable');
+      }
+      result = await this.content.createReply(admission, input);
+    }
     catch (error) {
+      if (error instanceof WorkReadMissing) error = new RealmReplyDenied('Reply root is unavailable');
       if (error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale) {
         const succeeded = await this.content.cancelCreate(admission);
         if (succeeded) await acknowledgeContentDecision(this.env, admission);
@@ -213,8 +221,8 @@ export class RealmReplyStore {
       replayed: admission.replayed || prepared.replayed };
   }
 
-  async visible(realm: string, reply: string, principal?: VerifiedPrincipal, actor?: string, rootProof?: ReplyRootProof) {
-    return visibleRealmReply(this.content, this.access, this.env, realm, reply, principal, actor, rootProof);
+  async visible(realm: string, reply: string, principal?: VerifiedPrincipal, actor?: string) {
+    return visibleRealmReply(this.content, this.access, this.env, realm, reply, principal, actor);
   }
 
   async readPublic(reply: string, principal?: VerifiedPrincipal, actor?: string) {
@@ -240,9 +248,8 @@ export class RealmReplyStore {
     if (!before) return null;
     const page = await this.content.listCurrent(rootTarget, rootRevision, after, realm ?? null);
     if (realm) {
-      const rootProof: ReplyRootProof = async (resource, revision) => resource === rootTarget && revision === rootRevision;
       const visible = await Promise.all(page.items.map(async item =>
-        (await this.visible(realm, item.reply as string, principal, actor, rootProof))?.revisionId === item.revisionId));
+        (await this.visible(realm, item.reply as string, principal, actor))?.revisionId === item.revisionId));
       page.items = page.items.filter((_item, index) => visible[index]);
       if (await realmReplyReadProof(this.access, this.env, realm, principal, actor) !== before) return null;
     }

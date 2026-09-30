@@ -12,7 +12,6 @@ import { REALM_THREAD_COST, type realmThread, type realmThreadReply, type realmT
   type threadSort, type threadWindow } from './thread-contract.ts';
 import type { PlacedHead, RealmReplyThreadStore, ThreadVote } from './thread-store.ts';
 import { resolveTargets, targetSummaries, TARGET_RESOLVE_COST } from '../target/resolve.ts';
-import { replyRootProof } from './root.ts';
 
 type Sort = Static<typeof threadSort>;
 type Window = Static<typeof threadWindow>;
@@ -85,8 +84,6 @@ async function bodies(session: WorkReadSession, heads: readonly Head[]) {
 
 /** At most one authority/summary batch and one resolver batch per 64 distinct
  * roots on the page. Hidden roots cannot suppress otherwise readable threads. */
-const rootKey = (head: Pick<Head, 'work' | 'rootRevision'>) => JSON.stringify([head.work, head.rootRevision]);
-
 async function works(session: WorkReadSession, heads: readonly Head[]) {
   const unique = [...new Set(heads.map(head => head.work))];
   const titles = new Map<string, { id: string; title: Static<typeof import('../work/read-contract.ts').readName>;
@@ -99,14 +96,10 @@ async function works(session: WorkReadSession, heads: readonly Head[]) {
     }
     const available = result.summaries.filter(summary => summary.status === 'available' && summary.base !== null);
     if (!available.length) continue;
-    const targets = await resolveTargets(session, available.map(summary => summary.reference), 'discussion');
-    const proofs = new Map(targets.map(target => [target.resource, replyRootProof(session, target)]));
+    await resolveTargets(session, available.map(summary => summary.reference), 'discussion');
     for (const summary of available) {
-      if (summary.status !== 'available') continue;
-      for (const head of heads.filter(head => head.work === summary.reference)) {
-        if (await proofs.get(summary.reference)!(head.work, head.rootRevision)) titles.set(rootKey(head),
-          { id: summary.reference, title: summary.name, cover: summary.avatar });
-      }
+      if (summary.status === 'available') titles.set(summary.reference,
+        { id: summary.reference, title: summary.name, cover: summary.avatar });
     }
   }
   return titles;
@@ -205,7 +198,7 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
     works(session, page), authors(session, page.map(row => row.author)),
     threads.counts(realm, page.map(row => row.reply))]);
   const items: Summary[] = page.flatMap(row => {
-    const text = texts.get(row.reply), about = titles.get(rootKey(row));
+    const text = texts.get(row.reply), about = titles.get(row.work);
     if (!text || !about) return [];
     const { title, body } = discussionParts(text.body);
     return [{ reply: row.reply, placement: row.placement, work: about, author: named(row.author),
@@ -216,7 +209,7 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
   });
   await readRealmBasis(session, realm);
   const currentTargets = await works(session, page);
-  const readableReplies = new Set(page.filter(row => currentTargets.has(rootKey(row))).map(row => row.reply));
+  const readableReplies = new Set(page.filter(row => currentTargets.has(row.work)).map(row => row.reply));
   return { profile: 'realm-threads-v1' as const, realm, sort, window,
     ...pageResult(session, items.filter(item => readableReplies.has(item.reply)), next) };
 }
@@ -273,7 +266,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     authors(session, all.map(row => row.author)),
     threads.votes(session.position.dataEpoch, all.map(row => row.placement), reader(session)),
     blockedAuthors(session, all.map(row => row.author))]);
-  const about = titles.get(rootKey(focused));
+  const about = titles.get(focused.work);
   if (!about || !texts.has(focus)) throw new WorkReadMissing('Reply is unavailable');
   const reply = (row: Head): Reply[] => {
     const text = texts.get(row.reply);
@@ -312,7 +305,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     throw new WorkReadMoved('Reader blocks changed during the thread read');
   }
   await readRealmBasis(session, realm);
-  if (!(await works(session, [focused])).has(rootKey(focused))) throw new WorkReadMissing('Thread target is unavailable');
+  if (!(await works(session, [focused])).has(focused.work)) throw new WorkReadMissing('Thread target is unavailable');
   return { profile: 'realm-thread-v1', realm, thread: ancestors[0]?.reply ?? focus, focus, sort, work: about,
     rootRevision: focused.rootRevision, ancestors, items, complete, sourcePosition: session.position };
 }

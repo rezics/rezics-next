@@ -789,7 +789,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       work: second.work, mainVersion: second.mainVersion, expectedRevisionHead: null,
       value: 8, actingSubject: author }, a.token), 201);
     await json(await call('POST', '/v1/reviews', { profile: 'reader-review-command-v1',
-      actingSubject: author, context: rating.context, work: second.work, expectedRevision: null,
+      actingSubject: author, context: rating.context, target: second.work, expectedRevision: null,
       language: 'en', text: 'A complete feed review', spoiler: false }, a.token), 201);
     await drain(); await refresh();
     await stack.accessPool.query(`UPDATE access.feed_item SET sort_time = now() - interval '100 milliseconds'

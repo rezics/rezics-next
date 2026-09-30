@@ -4,12 +4,16 @@ import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, type AccessAdmissionRegistry } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { readableReplyRoot } from '../realm-reply/root.ts';
+import { readReplyRoot, replyRoot } from '../realm-reply/root.ts';
+import { targetRead } from '../target/resolve.ts';
+import { WorkReadMissing } from '../work/read-session.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import { ContentDraftStale, contentDraftReceiptIri, sealContentDraftAdmission } from './draft.ts';
 
+/** Direct root probes run before and after admission; Access baseline and
+ * delegated target authority retain their owners' separate cost contracts. */
 export const MEMBER_REPLY_COST = { bodyBytes: 8192, pageSize: 32,
-  graphQueries: 7, graphResponseBytes: 16_384, ownerRowLocks: 12 } as const;
+  graphQueries: 11, graphResponseBytes: 262_144, ownerRowLocks: 12 } as const;
 export interface MemberReplyDraft {
   originRealm?: string | null;
   reply: string; variantId: string; rootTarget: string; rootRevision: string;
@@ -44,8 +48,17 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
       return saveMemberReplyDraft(env, content, account, access, request, input, key, true);
     });
   }
-  if (!await readableReplyRoot(env, input.rootTarget, input.rootRevision, access,
-    principal, input.actingSubject)) throw new AdmissionDenied('reply root is unavailable');
+  const proveRoot = async (creating: boolean) => {
+    try {
+      const readable = await targetRead(env, { access, principal, actingSubject: input.actingSubject },
+        session => (creating ? replyRoot : readReplyRoot)(session, input.rootTarget, input.rootRevision));
+      if (!readable) throw new AdmissionDenied('reply root is unavailable');
+    } catch (error) {
+      if (error instanceof WorkReadMissing) throw new AdmissionDenied('reply root is unavailable');
+      throw error;
+    }
+  };
+  await proveRoot(false);
   const command: SaveDraftCommand = { operationId: '', variant: { id: input.variantId,
     resourceId: input.reply, language: { kind: 'tag', tag: input.language, originalTag: input.language },
     direction: input.direction }, expectedHead: input.expectedHead, model: 'member-reply-v1',
@@ -58,6 +71,7 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
     baselineRelatedWork: input.rootTarget, baselineSourceRevision: input.rootRevision,
     idempotencyKey: key, requestDigest: digest });
   command.operationId = `content-draft:${admission.id}`;
+  const creating = input.expectedHead === null && !await content.readDraftReceipt(command.operationId);
   command.provenance = { kind: 'admitted-original-contribution-v1', author: input.actingSubject,
     admissionId: admission.id, authorityEpoch: admission.authorityEpoch, scope, requestDigest: digest,
     expectedHead: input.expectedHead, rightsBasis: 'original-contribution' };
@@ -72,9 +86,10 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
       }
     }
   }
-  if (!await readableReplyRoot(env, input.rootTarget, input.rootRevision, access, principal, input.actingSubject)) {
+  try { await proveRoot(creating); }
+  catch (error) {
     await access.recordGraphOutcome(admission.id, await sealContentDraftAdmission(content, admission));
-    throw new AdmissionDenied('reply root changed');
+    throw error;
   }
   let saved;
   try { saved = await content.saveDraft(command); }

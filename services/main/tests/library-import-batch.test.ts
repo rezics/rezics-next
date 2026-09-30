@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { Value } from 'typebox/value';
+import { reviewCommand } from '../src/modules/review/contract.ts';
 import { importReviewedBatch, type ReviewedImportBatch }
   from '../src/modules/library-import/batch.ts';
 import type { ReaderLibraryImportStore, ImportPlacement }
@@ -85,4 +87,35 @@ test('G428: a newer reader date remains until the reader chooses Keep mine or Us
   expect((await importReviewedBatch(fake, request, batch('replace'), 'replace')).items[0]?.result.issues)
     .toEqual([]);
   expect(counts()).toEqual({ statusWrites: 1, shelfWrites: 1, finishedOn: '2026-01-04' });
+});
+
+test('G-650: public library review import uses the resource read and target command, including retry', async () => {
+  const { fake } = store('2026-01-04');
+  const originalCall = fake.call.bind(fake);
+  let reads = 0, writes = 0;
+  fake.call = async called => {
+    const url = new URL(called.url);
+    if (url.pathname === `/v1/resources/${work.slice(-36)}/reviews` && called.method === 'GET') {
+      reads++;
+      return Response.json({ items: [] });
+    }
+    if (url.pathname === '/v1/reviews' && called.method === 'POST') {
+      const body = await called.json();
+      expect(Value.Check(reviewCommand, body)).toBe(true);
+      expect(body).toMatchObject({ target: work, text: 'A public imported review' });
+      writes++;
+      return Response.json({ revision: iri('000000000030') }, { status: 201 });
+    }
+    if (url.pathname.endsWith('/reader-state')) return Response.json({
+      status: { status: 'read', startedOn: null, finishedOn: '2026-01-04', version: 2 },
+      rating: { global: { value: 4 } }, customShelves: [] });
+    return originalCall(called);
+  };
+  const input = batch();
+  input.context = iri('000000000031');
+  input.rows[0] = { ...input.rows[0]!, review: 'A public imported review', reviewVisibility: 'public', shelves: [] };
+  const result = await importReviewedBatch(fake, request, input, 'public-review');
+  expect(result).toMatchObject({ pending: false, items: [{ result: { issues: [], applied: ['public-review'] } }] });
+  expect(await importReviewedBatch(fake, request, input, 'public-review')).toEqual(result);
+  expect({ reads, writes }).toEqual({ reads: 1, writes: 1 });
 });

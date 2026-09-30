@@ -97,7 +97,7 @@ test('G265: reply admission rejects private/erased roots, unverified and suspend
     await h.fuseki.update(`INSERT DATA { GRAPH <urn:rezics:graph:revisions> {
       <${input.rootRevision}> a <https://rezics.com/vocab/ErasedRevision> } }`);
     expect((await h.get(`/v1/member-replies/${input.reply.split('/').at(-1)}`)).status).toBe(404);
-    expect((await h.post('/v1/member-reply-drafts', { ...input, expectedHead: edits.find(result => result.status === 201)!.body.revisionId })).status).toBe(409);
+    expect((await h.post('/v1/member-reply-drafts', { ...input, expectedHead: edits.find(result => result.status === 201)!.body.revisionId })).status).toBe(403);
     await h.accountPool.query('UPDATE rezics_account_security SET suspended_at = now(), generation = generation + 1 WHERE user_id = $1', [h.user.id]);
     expect((await h.post('/v1/member-reply-drafts', input)).status).toBe(401);
   } finally { await h.close(); }

@@ -108,7 +108,7 @@ test('G-298: origin disclosure, all visibility/review transitions, indexed reads
     expect(JSON.stringify(search.body)).not.toContain(automatic.input.selectedDraft);
     const discovery = await h.call('GET', `/v1/works?scope=realm&realm=${encodeURIComponent(h.realm)}`, undefined, null);
     expect(discovery.status).toBe(404);
-    const feed = await h.call('GET', `/v1/works/${h.work.work.slice(-36)}/discussion`, undefined, null);
+    const feed = await h.call('GET', `/v1/resources/${h.work.work.slice(-36)}/discussion`, undefined, null);
     expect(feed.status, JSON.stringify(feed.body)).toBe(200);
     expect(JSON.stringify(feed.body)).not.toContain(h.realm);
     // A moderator veto still dominates automatic policy approval.

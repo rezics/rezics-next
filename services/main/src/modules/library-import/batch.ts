@@ -157,7 +157,7 @@ class ImportCommands {
       note = notes.items[0] ?? null;
     }
     if (row.review && row.reviewVisibility === 'public' && this.batch.context) {
-      const reviews = await this.read<{ items: Review[] }>(`/v1/works/${uuid(work)}/reviews?context=${
+      const reviews = await this.read<{ items: Review[] }>(`/v1/resources/${uuid(work)}/reviews?context=${
         encodeURIComponent(this.batch.context)}&actingSubject=${encodeURIComponent(agent)}&limit=1&showSpoilers=true`);
       if (!reviews) return null;
       review = reviews.items.find(item => item.author === agent) ?? null;
@@ -211,7 +211,7 @@ class ImportCommands {
     if (row.review && row.reviewVisibility === 'public' && this.batch.context
       && (!review || review.text !== row.review && row.conflictChoice === 'replace')) {
       const body = { profile: 'reader-review-command-v1', actingSubject: agent,
-        context: this.batch.context, work, expectedRevision: review?.revision ?? null,
+        context: this.batch.context, target: work, expectedRevision: review?.revision ?? null,
         language: this.batch.language, text: row.review, spoiler: false };
       const step = await this.step(index, 'public-review', 'POST', '/v1/reviews', body);
       if (step === 'retry') return null;

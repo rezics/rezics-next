@@ -140,10 +140,10 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
   return { session, calls };
 }
 
-test('G-650: Realm thread reads hide stale roots that are not published Work drafts', async () => {
+test('G-650: Realm threads retain replies rooted on earlier target revisions', async () => {
   const f = world([{ id: 1, author: 1, rootRevision: reply(901) }]);
-  expect((await readRealmThreads(f.session, realm, { sort: 'new' })).items).toEqual([]);
-  await expect(readRealmThread(f.session, realm, reply(1))).rejects.toBeInstanceOf(WorkReadMissing);
+  expect((await readRealmThreads(f.session, realm, { sort: 'new' })).items).toHaveLength(1);
+  expect(await readRealmThread(f.session, realm, reply(1))).toMatchObject({ rootRevision: reply(901) });
 });
 
 // 1 opens the thread; 2 and 3 answer it; 4 answers 2; 5 answers 3 but lost its review, so 6 under it is hidden too.

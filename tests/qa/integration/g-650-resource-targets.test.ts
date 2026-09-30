@@ -70,7 +70,7 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
         expectedHead: structure.revision, actingSubject: f.actor, operations: [{ op: 'insert',
           parent: structure.structure, position: 'last', role: 'chapter', target: 'https://schema.org/DigitalDocument',
           label: { value: 'Aincrad chapter one', language: 'en' } }] }));
-    return { target: result.occurrences[0]!, revision: result.revision };
+    return { target: result.occurrences[0]!, revision: result.revision, structure: structure.structure };
   };
   try {
     const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
@@ -120,6 +120,9 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
       { target: sao.unpublished.work, revision: sao.unpublished.workRevision }];
     const discussion = (target: string, authenticated = true) => call('GET', `/v1/resources/${shortId(target)}/discussion`
       + (authenticated ? `?actingSubject=${encodeURIComponent(f.actor)}` : ''), undefined, authenticated);
+    const retained: { input: { profile: string; reply: string; variantId: string; rootTarget: string;
+      rootRevision: string; language: string; direction: string; expectedHead: null; body: string; actingSubject: string };
+      key: string; identityKey: string; revisionId: string }[] = [];
     for (const root of targets) {
       const reply = nativeId();
       await f.grant(`content:draft:${reply}`, 'content.draft');
@@ -129,11 +132,13 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
         body: `Discussion about ${root.target}`, actingSubject: f.actor };
       const key = randomUUID();
       const draft = await json<{ revisionId: string }>(await call('POST', '/v1/member-reply-drafts', input, true, key), 201);
+      const identityKey = randomUUID();
+      retained.push({ input, key, identityKey, revisionId: draft.revisionId });
       expect(await json(await call('POST', '/v1/member-reply-drafts', input, true, key)))
         .toMatchObject({ revisionId: draft.revisionId, replayed: true });
       await json(await call('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply,
         variantId: input.variantId, revisionId: draft.revisionId, author: f.actor, rootTarget: root.target,
-        rootRevision: root.revision, parentReply: null, parentRevision: null, contextRevision: null }), 201);
+        rootRevision: root.revision, parentReply: null, parentRevision: null, contextRevision: null }, true, identityKey), 201);
       const current = await json<{ revisionDigest: string }>(await call('GET',
         `/v1/member-replies/${shortId(reply)}?actingSubject=${encodeURIComponent(f.actor)}`));
       const approved = await json<{ decisionId: string }>(await call('POST', '/v1/realm-reply-reviews', {
@@ -152,6 +157,55 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
     const threads = await json<{ items: { work: { id: string } }[] }>(await call('GET',
       `/v1/realms/${shortId(realm.realm)}/threads?actingSubject=${encodeURIComponent(reviewer.agent)}&sort=new`));
     expect(threads.items.map(item => item.work.id).sort()).toEqual(targets.map(root => root.target).sort());
+    // Changing an owner head must not erase a discussion anchored to retained evidence.
+    await json(await call('POST', `/v1/compositions/${shortId(chapter.structure)}/changes`, {
+      profile: 'book-composition', expectedHead: chapter.revision, actingSubject: f.actor,
+      operations: [{ op: 'insert', parent: chapter.structure, position: 'last', role: 'chapter',
+        target: 'https://schema.org/DigitalDocument', label: { value: 'Aincrad chapter two', language: 'en' } }] }));
+    await f.grant(`work:edit:${sao.web.work}`, 'work.edit');
+    await json(await call('POST', '/v1/content-edits', { profile: 'metadata-only-v1', work: sao.web.work,
+      expectedHead: sao.web.workRevision, title: 'Sword Art Online revised', actingSubject: f.actor }));
+    await f.grant(`semantic:edit:${character.component}`, 'semantic.change');
+    const editedCharacter = await json<{ revision: string }>(await call('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', target: character.component, expectedHead: character.revision,
+      actingSubject: f.actor, state: { component: 'resource', types: ['https://rezics.com/vocab/Character'],
+        properties: [{ predicate: 'https://schema.org/name', value: { kind: 'language-string',
+          lexical: 'Kirito revised', language: 'en', direction: 'ltr' } }] } }));
+    for (const { input, key, identityKey, revisionId } of retained) {
+      expect(await json(await discussion(input.rootTarget))).toMatchObject({ items: [{ reply: input.reply }] });
+      expect(await json(await call('GET', `/v1/realms/${shortId(realm.realm)}/threads/${shortId(input.reply)}`
+        + `?actingSubject=${encodeURIComponent(reviewer.agent)}`))).toMatchObject({ rootRevision: input.rootRevision });
+      expect(await json(await call('POST', '/v1/member-reply-drafts', input, true, key)))
+        .toMatchObject({ revisionId, replayed: true });
+      expect(await json(await call('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1',
+        reply: input.reply, variantId: input.variantId, revisionId, author: f.actor,
+        rootTarget: input.rootTarget, rootRevision: input.rootRevision, parentReply: null,
+        parentRevision: null, contextRevision: null }, true, identityKey))).toMatchObject({ replayed: true });
+    }
+    expect((await json<{ items: unknown[] }>(await call('GET', `/v1/realms/${shortId(realm.realm)}/threads`
+      + `?actingSubject=${encodeURIComponent(reviewer.agent)}&sort=new`))).items).toHaveLength(targets.length);
+    for (const target of [chapter.target, character.component, paperback.release]) {
+      expect((await call('GET', `/v1/works/${shortId(target)}/history`
+        + `?actingSubject=${encodeURIComponent(f.actor)}`)).status).toBe(404);
+    }
+    const oldCharacter = retained[1]!;
+    const obsoleteReply = nativeId();
+    await f.grant(`content:draft:${obsoleteReply}`, 'content.draft');
+    expect((await call('POST', '/v1/member-reply-drafts', { ...oldCharacter.input,
+      reply: obsoleteReply, variantId: `urn:rezics:variant:${randomUUID()}` })).status).toBe(403);
+    await json(await call('POST', '/v1/member-reply-drafts', { ...oldCharacter.input,
+      expectedHead: oldCharacter.revisionId, body: 'Edited reply on retained character evidence' }), 201);
+    // Write scopes authorize both writes; target authority must not introduce work:read OAuth.
+    const fullToken = f.account.tokenA;
+    f.account.tokenA = await f.account.tokenFor(f.account.a, 'openid comment:create work:edit');
+    const scopedReply = nativeId(), variantId = `urn:rezics:variant:${randomUUID()}`;
+    await f.grant(`content:draft:${scopedReply}`, 'content.draft');
+    const scopedDraft = await json<{ revisionId: string }>(await call('POST', '/v1/member-reply-drafts', {
+      ...oldCharacter.input, reply: scopedReply, variantId, rootRevision: editedCharacter.revision }), 201);
+    await json(await call('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply: scopedReply,
+      variantId, revisionId: scopedDraft.revisionId, author: f.actor, rootTarget: character.component,
+      rootRevision: editedCharacter.revision, parentReply: null, parentRevision: null, contextRevision: null }), 201);
+    f.account.tokenA = fullToken;
     expect(await json(await discussion(sao.bunko.work, false))).toMatchObject({ items: [] });
     expect((await discussion(hidden.target, false)).status).toBe(404);
     expect((await discussion(sao.unpublished.work, false)).status).toBe(404);
@@ -191,5 +245,15 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
     expect((await call('POST', '/v1/reviews', { profile: 'reader-review-command-v1', actingSubject: reviewer.agent,
       context: context.context, target: paperback.release, expectedRevision: null, language: 'en',
       text: 'A release is a future review grain', spoiler: false })).status).toBe(422);
+    await f.env.fuseki.update(`INSERT DATA { GRAPH <urn:rezics:graph:revisions> {
+      <${chapter.revision}> a <https://rezics.com/vocab/ErasedRevision>
+    } }`);
+    expect(await json(await discussion(chapter.target))).toMatchObject({ items: [] });
+    expect((await call('GET', `/v1/member-replies/${shortId(retained[0]!.input.reply)}`
+      + `?actingSubject=${encodeURIComponent(f.actor)}`)).status).toBe(404);
+    expect((await call('POST', '/v1/member-reply-drafts', { ...retained[0]!.input,
+      expectedHead: retained[0]!.revisionId, body: 'Erased root cannot be edited' })).status).toBe(403);
+    expect((await call('GET', `/v1/realms/${shortId(realm.realm)}/threads/${shortId(retained[0]!.input.reply)}`
+      + `?actingSubject=${encodeURIComponent(reviewer.agent)}`)).status).toBe(404);
   } finally { await f.close(); rmSync(directory, { recursive: true, force: true }); }
 }, 240_000);

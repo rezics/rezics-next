@@ -30,33 +30,28 @@ async function replyRootRevision(session: TargetReadSession, target: ResolvedTar
   return rows.length === 1;
 }
 
-export type ReplyRootProof = (resource: string, revision: string) => Promise<boolean>;
-
-/** Reuse a resolved root within one fenced read. The caller re-resolves target
- * authority before returning. At most one extra probe per distinct Work draft,
- * so a full discussion page does not repeat summary/authority reads per reply. */
-export function replyRootProof(session: TargetReadSession, target: ResolvedTarget): ReplyRootProof {
-  const revisions = new Map<string, Promise<boolean>>();
-  return async (resource, revision) => {
-    if (resource !== target.resource || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(revision)) return false;
-    let result = revisions.get(revision);
-    if (!result) {
-      result = replyRootRevision(session, target, revision);
-      revisions.set(revision, result);
-    }
-    return result;
-  };
+/** Retained replies keep their original root after metadata or Structure edits.
+ * Current target authority and erasure still govern disclosure and reply edits. */
+export async function readReplyRoot(session: TargetReadSession, resource: string, revision: string): Promise<boolean> {
+  const { resolveTargets } = await import('../target/resolve.ts');
+  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(revision)) return false;
+  await resolveTargets(session, [resource], 'discussion');
+  const rows = await session.query(`SELECT ?root WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { BIND(${iri(revision)} AS ?root)
+      ?root ?predicate ?object . FILTER NOT EXISTS { ?root a rv:ErasedRevision } }
+  } LIMIT 1`, 1);
+  return rows.length === 1;
 }
 
 /** Access keeps its graph-only baseline signature. Restricted roots require
  * authenticated resolution and explicit authority. Two position probes, one
- * summary, one exact revision and at most one Work draft probe; no bodies. */
+ * summary, one exact target revision and one retained-root probe; no bodies. */
 export async function publicReplyRoot(graph: Pick<FusekiClient, 'query'>,
   resource: string, revision: string): Promise<boolean> {
   const { publicTargetRead, TargetNotBound } = await import('../target/resolve.ts');
   if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(resource)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(revision)) return false;
-  try { return await publicTargetRead(graph, session => replyRoot(session, resource, revision)); }
+  try { return await publicTargetRead(graph, session => readReplyRoot(session, resource, revision)); }
   catch (error) {
     if (error instanceof WorkReadMissing || error instanceof TargetNotBound) return false;
     throw error;
@@ -71,7 +66,7 @@ export async function readableReplyRoot(environment: WorkActivationEnvironment,
   if (!native.test(resource) || !native.test(revision)) return false;
   try {
     return await targetRead(environment, { access, principal, actingSubject },
-      session => replyRoot(session, resource, revision));
+      session => readReplyRoot(session, resource, revision));
   } catch (error) {
     if (error instanceof WorkReadMissing || error instanceof TargetNotBound) return false;
     throw error;

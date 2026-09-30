@@ -5,11 +5,11 @@ import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { reviewCommand } from '../src/modules/review/contract.ts';
 import { reviewTarget } from '../src/modules/review/read.ts';
-import { replyRoot, replyRootProof, publicReplyRoot } from '../src/modules/realm-reply/root.ts';
-import { readWorkDiscussion } from '../src/modules/work-activity/read.ts';
+import { replyRoot, readReplyRoot, publicReplyRoot } from '../src/modules/realm-reply/root.ts';
+import { readWorkDiscussion, readWorkActivityHistory } from '../src/modules/work-activity/read.ts';
 import { readWorkRatingContexts, readWorkRating } from '../src/modules/work/read-rating.ts';
-import { WorkReadSession, WorkReadMoved } from '../src/modules/work/read-session.ts';
-import { resolveTargets, TargetNotBound, TargetUnavailable } from '../src/modules/target/resolve.ts';
+import { WorkReadSession, WorkReadMoved, WorkReadMissing } from '../src/modules/work/read-session.ts';
+import { TargetNotBound, TargetUnavailable } from '../src/modules/target/resolve.ts';
 import { workReadError } from '../src/routes/work-reads.ts';
 import { prepareComponent, RV } from '../src/modules/work/activate.ts';
 import { PROFILES } from '../src/modules/semantic/schema.ts';
@@ -24,7 +24,7 @@ const directory = mkdtempSync('.temp/g-650-unit-');
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 function fixture(type: 'work' | 'release' | 'occurrence' | 'character', options: {
-  public?: boolean; allowed?: boolean; draft?: boolean; moved?: boolean } = {}) {
+  public?: boolean; allowed?: boolean; draft?: boolean; moved?: boolean; erasedRoot?: boolean } = {}) {
   const queries: string[] = [];
   const graph = new FusekiClient('http://graph.invalid');
   const semanticManifest = prepareComponent(directory, id(1), { component: 'resource', lifecycle: 'active',
@@ -45,6 +45,7 @@ function fixture(type: 'work' | 'release' | 'occurrence' | 'character', options:
     else if (query.includes('SELECT DISTINCT ?main ?realm')) rows = [{ main: uri(id(3)) }];
     else if (query.includes('SELECT ?main WHERE')) rows = [{ main: uri(id(3)) }];
     else if (query.includes('SELECT ?decision WHERE')) rows = options.draft ? [{ decision: uri(id(4)) }] : [];
+    else if (query.includes('SELECT ?root WHERE')) rows = options.erasedRoot ? [] : [{ root: uri(id(9)) }];
     else if (query.includes('SELECT ?context')) rows = [];
     else if (query.includes('SELECT ?resource ?manifest')) rows = [{ resource: uri(id(1)),
       manifest: uri(`urn:rezics:sha256:${semanticManifest}`) }];
@@ -136,15 +137,19 @@ test('G-650: Collection membership resolves resources without a Content selectio
   expect(pinned).toMatchObject({ selection: { mode: 'fixed-revision', revision: contentRevision } });
 });
 
-test('G-650: full discussion pages reuse the fenced root and exact Work draft probes', async () => {
-  const f = fixture('work', { draft: true });
-  const [target] = await resolveTargets(f.session, [id(1)], 'discussion');
-  const proof = replyRootProof(f.session, target!);
-  for (let reply = 0; reply < 20; reply++) {
-    expect(await proof(id(1), id(2))).toBe(true);
-    expect(await proof(id(1), id(9))).toBe(true);
-    expect(await proof(id(10), id(2))).toBe(false);
+test('G-650: retained roots survive target edits while new replies require current roots', async () => {
+  for (const type of ['work', 'release', 'occurrence', 'character'] as const) {
+    const f = fixture(type, { allowed: true });
+    expect(await replyRoot(f.session, id(1), id(9))).toBe(false);
+    expect(await readReplyRoot(f.session, id(1), id(9))).toBe(true);
+    const erased = fixture(type, { allowed: true, erasedRoot: true });
+    expect(await readReplyRoot(erased.session, id(1), id(9))).toBe(false);
   }
-  expect(f.queries.filter(query => query.includes('SELECT ?epoch ?sequence ?hold'))).toHaveLength(1);
-  expect(f.queries.filter(query => query.includes('SELECT ?decision WHERE'))).toHaveLength(1);
+});
+
+test('G-650: Work history rejects readable non-Work targets', async () => {
+  for (const type of ['release', 'occurrence', 'character'] as const) {
+    await expect(readWorkActivityHistory(fixture(type, { allowed: true }).session, id(1)))
+      .rejects.toBeInstanceOf(WorkReadMissing);
+  }
 });

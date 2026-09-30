@@ -28,7 +28,7 @@ export async function seedReviews(state: SeedState) {
       const reader = person(state, review.reader);
       const work = publicWork(state, review.work)?.work.work ?? state.created.get(review.work)?.work;
       if (!work) throw new Error(`Review target ${review.work} is unavailable`);
-      const page = await state.api.get<{ items: Own[] }>(`/v1/works/${short(work)}/reviews?context=${
+      const page = await state.api.get<{ items: Own[] }>(`/v1/resources/${short(work)}/reviews?context=${
         encodeURIComponent(context)}&showSpoilers=true&limit=1&actingSubject=${encodeURIComponent(reader.actingSubject)}`,
       reader.token);
       const own = page.items.find(item => item.author === reader.actingSubject);
@@ -36,7 +36,7 @@ export async function seedReviews(state: SeedState) {
       if (!own || own.text !== review.text || own.spoiler !== (review.spoiler ?? false)
         || own.language !== review.language || own.rating !== review.rating) {
         id = (await state.api.post<{ review: string }>('/v1/reviews', { profile: 'reader-review-command-v1',
-          actingSubject: reader.actingSubject, context, work, expectedRevision: own?.revision ?? null,
+          actingSubject: reader.actingSubject, context, target: work, expectedRevision: own?.revision ?? null,
           language: review.language, text: review.text, spoiler: review.spoiler ?? false }, reader.token,
         seedKey('review', `${review.reader}:${review.work}${own ? `:${own.revision.slice(-12)}` : ''}`))).review;
         changed++;

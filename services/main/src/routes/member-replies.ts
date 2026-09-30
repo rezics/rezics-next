@@ -4,8 +4,6 @@ import { contentDraftWriteResult, readProblems, writeProblems } from '../api-res
 import { saveMemberReplyDraft } from '../modules/content-publication/reply-draft.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
-import { replyRoot } from '../modules/realm-reply/root.ts';
-import { workRead, WorkReadMoved } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -39,11 +37,6 @@ export function memberReplyRoutes(work: MainWorkDependencies) {
         const key = request.headers.get('idempotency-key');
         if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
         if (!work.contentAuthoring) return problem(503, 'content_unavailable', 'Content authoring is unavailable');
-        await workRead(work, request, { actingSubject: body.actingSubject }, async session => {
-          if (!await replyRoot(session, body.rootTarget, body.rootRevision)) {
-            throw new WorkReadMoved('Reply root revision changed');
-          }
-        });
         const saved = await saveMemberReplyDraft(work.environment, work.contentAuthoring,
           work.account, work.access, request, body, key);
         return Response.json(saved, { status: saved.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });

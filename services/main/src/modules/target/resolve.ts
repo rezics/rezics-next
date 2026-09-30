@@ -25,7 +25,8 @@ export class TargetUnavailable extends WorkReadMissing {
 export type RedirectOf = (resource: string) => string | null | Promise<string | null>;
 /** Report owners cover admitted grains such as Realm profiles and standalone
  * media that do not yet participate in the other capability summaries. */
-export type ReportTargets = (session: TargetReadSession, resources: readonly string[]) =>
+export type ReportTargets<Session extends TargetReadSession = WorkReadSession> =
+  (session: Session, resources: readonly string[]) =>
   Promise<ReadonlyMap<string, ResolvedTarget>>;
 
 /** Graph-only baseline proofs have no principal or optional hydration owners. */
@@ -170,8 +171,8 @@ async function redirected(resource: string, redirectOf: RedirectOf): Promise<str
 /** All targets must be admitted and bound. Results preserve input order and
  * duplicates; a failed batch exposes no partial target metadata. Call inside
  * workRead so its graph-position and current-principal fences cover hydration. */
-export async function resolveTargets(session: TargetReadSession, iris: readonly string[],
-  capability: Capability, redirectOf?: RedirectOf, reportOwners?: ReportTargets): Promise<ResolvedTarget[]> {
+export async function resolveTargets<Session extends TargetReadSession>(session: Session, iris: readonly string[],
+  capability: Capability, redirectOf?: RedirectOf, reportOwners?: ReportTargets<Session>): Promise<ResolvedTarget[]> {
   session.checkDeadline();
   if (!iris.length || iris.length > TARGET_RESOLVE_COST.batch
     || iris.some(resource => !Value.Check(targetRef, resource))) {

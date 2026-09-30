@@ -11,7 +11,7 @@ import { groupUuid } from './shared.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
-const params = t.Object({ id: groupUuid });
+const params = t.Object({ resource: groupUuid });
 const query = t.Object({ actingSubject: ref, parent: t.Optional(ref),
   after: t.Optional(t.String({ maxLength: 2048 })),
   limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) }, { additionalProperties: false });
@@ -36,23 +36,23 @@ const failure = (error: unknown) => {
   return workReadError(error);
 };
 export const openApiOperations = {
-  '/v1/resources/{id}/parts': { get: { bearer: true } },
-  '/v1/resources/{id}/wholes': { get: { bearer: true } },
+  '/v1/resources/{resource}/parts': { get: { bearer: true } },
+  '/v1/resources/{resource}/wholes': { get: { bearer: true } },
 } as const;
 
 export function compositionReadRoutes(work: MainWorkDependencies) {
   return new Elysia()
-    .get('/v1/resources/:id/parts', { params, query, response: { 200: parts, ...errors } }, async ({ request, params, query }) => {
+    .get('/v1/resources/:resource/parts', { params, query, response: { 200: parts, ...errors } }, async ({ request, params, query }) => {
       try { return Response.json(await workRead(work, request, { actingSubject: query.actingSubject },
-        session => readWorkParts(session, `https://rezics.com/id/${params.id}`, { ...query, limit: query.limit ?? 50 })),
+        session => readWorkParts(session, `https://rezics.com/id/${params.resource}`, { ...query, limit: query.limit ?? 50 })),
       { headers: { 'cache-control': 'private, no-store' } }); }
       catch (error) { return failure(error); }
     })
-    .get('/v1/resources/:id/wholes', { params, query: t.Object({ actingSubject: ref,
+    .get('/v1/resources/:resource/wholes', { params, query: t.Object({ actingSubject: ref,
       after: query.properties.after, limit: query.properties.limit }, { additionalProperties: false }),
     response: { 200: wholes, ...errors } }, async ({ request, params, query }) => {
       try { return Response.json(await workRead(work, request, { actingSubject: query.actingSubject },
-        session => readWorkWholes(session, `https://rezics.com/id/${params.id}`, { ...query, limit: query.limit ?? 50 })),
+        session => readWorkWholes(session, `https://rezics.com/id/${params.resource}`, { ...query, limit: query.limit ?? 50 })),
       { headers: { 'cache-control': 'private, no-store' } }); }
       catch (error) { return failure(error); }
     });

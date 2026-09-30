@@ -22,7 +22,7 @@ async function checkCommunity(state: SeedState) {
   let shown = 0;
   for (const [id, count] of context ? planned : []) {
     const work = publicWork(state, id)?.work.work ?? state.created.get(id)?.work;
-    const page = work ? await api.getPublic<{ items: unknown[] }>(`/v1/works/${work.slice(-36)}/reviews?context=${
+    const page = work ? await api.getPublic<{ items: unknown[] }>(`/v1/resources/${work.slice(-36)}/reviews?context=${
       encodeURIComponent(context!)}&limit=20`) : { items: [] };
     shown += page.items.length;
     if (page.items.length < count) findings.add(`Reviews: ${id} shows ${page.items.length} of ${count} planned`);

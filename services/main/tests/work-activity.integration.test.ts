@@ -19,9 +19,13 @@ test('Work activity: reviewed body, public history, pagination, revocation, eras
   try {
     const member = await stack.member('activity-owner');
     const work = await stack.publicWork(member.actor, ['en'], 'Activity public Work');
+    const workHead = await stack.fuseki.query(`SELECT ?head WHERE {
+      GRAPH <urn:rezics:graph:current> { <${work.work}> <https://rezics.com/vocab/head> ?head }
+    }`);
+    const workRevision = workHead.results!.bindings[0]!.head!.value;
     const privateWork = await stack.privateWork(member.actor, 'Activity private Work');
-    const missing = `/v1/works/${randomUUID()}`;
-    const root = `/v1/works/${short(work.work)}`;
+    const missing = `/v1/resources/${randomUUID()}`;
+    const root = `/v1/resources/${short(work.work)}`;
     await member.grant('space:create:root', 'space.create');
     const createRealm = async (name: string) => json(await member.send('POST', '/v1/spaces', {
       profile: 'space-realm-v1', name, capabilities: ['realm'],
@@ -51,8 +55,8 @@ test('Work activity: reviewed body, public history, pagination, revocation, eras
     const draft = { operationId: randomUUID(), variant: {
       id: variantId, resourceId: reply,
       language: { kind: 'tag' as const, tag: 'en', originalTag: 'en' }, direction: 'ltr' as const,
-    }, expectedHead: null, model: 'member-reply-v1', sourceRevision: work.mainVersion,
-    serializedJson: JSON.stringify({ rootTarget: work.work, rootRevision: work.mainVersion,
+    }, expectedHead: null, model: 'member-reply-v1', sourceRevision: workRevision,
+    serializedJson: JSON.stringify({ rootTarget: work.work, rootRevision: workRevision,
       body: 'Reviewed reply body', deleted: false }) };
     const saved = await stack.content.saveDraft({ ...draft, provenance: {
       kind: 'admitted-original-contribution-v1', author: member.actor, admissionId: randomUUID(),
@@ -66,7 +70,7 @@ test('Work activity: reviewed body, public history, pagination, revocation, eras
     await member.grant(`reply:place:${realmId}`, 'reply.place');
     await json(await post('/v1/realm-replies', { profile: 'realm-reply-identity-v1',
       reply, variantId, revisionId, author: member.actor, rootTarget: work.work,
-      rootRevision: work.mainVersion, parentReply: null, parentRevision: null,
+      rootRevision: workRevision, parentReply: null, parentRevision: null,
       contextRevision: null }), 201);
     const reviewInput = { profile: 'realm-reply-review-v1', realm: realmId, reply,
       revisionId, revisionDigest: digest, expectedGeneration: '0', supersedes: null,
@@ -97,26 +101,26 @@ test('Work activity: reviewed body, public history, pagination, revocation, eras
     const scoped = await json(await read(`${root}/discussion?realm=${encodeURIComponent(realmId)}`));
     expect(scoped.items).toHaveLength(1);
     expect((await read(`${root}/discussion?realm=${encodeURIComponent('https://rezics.com/id/' + randomUUID())}`)).status).toBe(404);
-    const history = await json(await read(`${root}/history?limit=1`));
+    const history = await json(await read(`/v1/works/${short(work.work)}/history?limit=1`));
     expect(history.items).toMatchObject([{ kind: 'reply-placement', id: secondPlacement.placement }]);
     expect(history.nextCursor).toBeString();
-    expect((await read(`${root}/history?kind=metadata-revision&cursor=${history.nextCursor}`)).status).toBe(400);
-    const next = await json(await read(`${root}/history?limit=1&cursor=${history.nextCursor}`));
+    expect((await read(`/v1/works/${short(work.work)}/history?kind=metadata-revision&cursor=${history.nextCursor}`)).status).toBe(400);
+    const next = await json(await read(`/v1/works/${short(work.work)}/history?limit=1&cursor=${history.nextCursor}`));
     expect(next.items).toHaveLength(1);
     expect(next.items[0].kind).toBe('reply-placement');
-    expect((await json(await read(`${root}/history?kind=metadata-revision`))).items).toHaveLength(1);
+    expect((await json(await read(`/v1/works/${short(work.work)}/history?kind=metadata-revision`))).items).toHaveLength(1);
     const revoked = await json(await post('/v1/realm-reply-reviews', { ...reviewInput,
       expectedGeneration: '1', supersedes: review.decisionId, outcome: 'revoked',
       reasonReference: 'test-revocation' }), 201);
     expect(revoked.outcome).toBe('revoked');
     expect((await json(await read(`${root}/discussion`))).items).toMatchObject([
       { realm: secondRealmId, body: 'Reviewed reply body' }]);
-    expect((await json(await read(`${root}/history?kind=reply-placement`))).items)
+    expect((await json(await read(`/v1/works/${short(work.work)}/history?kind=reply-placement`))).items)
       .toMatchObject([{ id: secondPlacement.placement }]);
     await stack.contentPool.query(`UPDATE content.revision SET availability = 'erased',
       serialized_bytes = NULL, body = NULL WHERE id = $1`, [revisionId]);
     expect((await json(await read(`${root}/discussion`))).items).toEqual([]);
     await stack.publicWork(member.actor, ['en'], 'Graph position changed');
-    expect((await read(`${root}/history?limit=1&cursor=${history.nextCursor}`)).status).toBe(409);
+    expect((await read(`/v1/works/${short(work.work)}/history?limit=1&cursor=${history.nextCursor}`)).status).toBe(409);
   } finally { await stack.stop(); }
 }, 180_000);

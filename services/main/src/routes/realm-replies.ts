@@ -5,9 +5,9 @@ import { RealmReplyConflict, RealmReplyDenied, RealmReplyInvalid,
 import { realmReplyDigest } from '../modules/realm-reply/store.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
-import { resolveTargets } from '../modules/target/resolve.ts';
-import { replyRoot } from '../modules/realm-reply/root.ts';
-import { workRead, WorkReadMoved } from '../modules/work/read-session.ts';
+import { resolveTargets, targetRead } from '../modules/target/resolve.ts';
+import { readReplyRoot } from '../modules/realm-reply/root.ts';
+import { workRead, WorkReadMissing } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -85,11 +85,14 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
         if (!work.realmReplies) return problem(503, 'realm_reply_unavailable', 'Realm replies are unavailable');
         const idempotencyKey = key(request);
         if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
-        await workRead(work, request, { actingSubject: body.author }, async session => {
-          if (!await replyRoot(session, body.rootTarget, body.rootRevision)) {
-            throw new WorkReadMoved('Reply root revision changed');
-          }
-        });
+        try {
+          await targetRead(work.environment, { access: work.access, principal, actingSubject: body.author }, async session => {
+            if (!await readReplyRoot(session, body.rootTarget, body.rootRevision)) throw new RealmReplyDenied('Reply root is unavailable');
+          });
+        } catch (error) {
+          if (error instanceof WorkReadMissing) throw new RealmReplyDenied('Reply root is unavailable');
+          throw error;
+        }
         const { profile: _profile, ...input } = body;
         const result = await work.realmReplies.create(principal, input, idempotencyKey,
           realmReplyDigest(body));
