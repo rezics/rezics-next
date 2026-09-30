@@ -62,25 +62,17 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   const at = (resource: string, locale = 'en') => `/${locale}/e/${uuid(resource)}`;
   await page.setViewportSize(desktop);
 
-  // Signed out: Main answers a public Work's chapter alike to everyone. Where it answers, the page reads, relations ask
-  // for a sign-in and "Discuss" leads to sign-in rather than a dead end; where it does not, the page is a plain 404.
-  const askMain = () => fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/resources/${uuid(seeded.occurrence)}/page`);
-  let anonymous = await askMain();
-  // Access learns of the seeded records from its outbox; give it a moment before judging what anonymous readers see.
-  for (const deadline = Date.now() + 45_000; anonymous.status !== 200 && Date.now() < deadline;) {
-    await new Promise(done => setTimeout(done, 1000));
-    anonymous = await askMain();
+  // Signed out: the page reads, relations ask for a sign-in and "Discuss" leads to sign-in rather than a dead end.
+  // Access learns of the seeded records from its outbox; until it has, a public chapter answers 404 to everyone.
+  let first = await page.goto(at(seeded.occurrence));
+  for (const deadline = Date.now() + 60_000; first?.status() !== 200 && Date.now() < deadline;) {
+    await page.waitForTimeout(2000);
+    first = await page.goto(at(seeded.occurrence));
   }
-  info.annotations.push({ type: 'anonymous-occurrence', description: String(anonymous.status) });
-  const first = await page.goto(at(seeded.occurrence));
-  expect(first?.status()).toBe(anonymous.status === 200 ? 200 : 404);
-  if (anonymous.status === 200) {
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Sword Art Online');
-    await expect(page.getByText('Sign in to see what this is related to.')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Discuss this list item' }).first()).toHaveAttribute('href', /\/auth\/start\?next=/);
-  } else {
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Nothing here');
-  }
+  expect(first?.status()).toBe(200);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Sword Art Online');
+  await expect(page.getByText('Sign in to see what this is related to.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Discuss this list item' }).first()).toHaveAttribute('href', /\/auth\/start\?next=/);
   lap('signed-out page');
   await signInAtAccounts(page, at(seeded.occurrence), member);
   lap('signed in');
