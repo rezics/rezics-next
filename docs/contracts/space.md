@@ -19,6 +19,29 @@ Current profiles and operations live in `model/definitions/space-realm-v1.ts`,
 `model/definitions/zone-capability-v1.ts` and
 `services/main/src/modules/{space,zone}/`.
 
+## Mounted routes and disclosure
+
+Zone navigation mounts bind routes to current Resources. A Work mount resolves
+as a document; a Collection mount resolves as a member index or an exact member
+detail. A readable Work outside that Collection cannot resolve through its
+route. The `/w/{work}` route requires the default Realm's current public
+adoption. Removing a mount leaves its Collection, Works and other authorized
+uses intact.
+
+Public presentation includes readable public mounts in Structure order. Private
+mounts and targets require current Access grants; private Work targets also
+require `work:read` OAuth scope independently of `semantic:read`. Route and
+presentation reads retry concurrent graph changes within one request budget.
+Index continuations bind to the Collection's membership head and data epoch,
+so unrelated writes do not expire them; a membership change requires restarting
+from the first page.
+
+The common summary reader hides protected Works and erased Work heads even
+from readers with Work grants. Public Work summaries require the reviewed
+selection to match the Contribution's current public publication decision and
+selected draft. An earlier public decision does not make a later private
+publication public. These disclosure checks also apply to MainVersion summaries.
+
 ## Remaining capabilities
 
 Management grant provisioning, Realm policy revisions and general Realm
@@ -30,7 +53,7 @@ statements never makes them Realm speech.
 
 Joining a Realm still needs staged enrollment and effective Access admission.
 Membership in an Org or Realm must not imply management of a Space or its
-referenced content; ban and mute states need separate recovery rules. Routes
-should resolve typed ResourceRefs through the common renderer, and removing a
-route must leave other authorized uses intact. These requirements need owner
-schemas, commands and tests before this page can be retired.
+referenced content; ban and mute states need separate recovery rules. The web
+still needs to render typed route bindings through the common renderer. These
+remaining requirements need owner schemas, commands and tests before this page
+can be retired.

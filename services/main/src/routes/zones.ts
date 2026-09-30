@@ -7,7 +7,7 @@ import { CompositionConflict, InvalidCompositionChange, StaleCompositionHead }
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader }
   from '../modules/structure/graph.ts';
 import { readVisibleCompositionPage } from '../modules/collection/visible-page.ts';
-import { resolveZoneRoute, readZoneNavigation, zoneRouteViewer, ZoneRouteMissing, ZONE_ROUTE_COST }
+import { resolveZoneRoute, readZonePresentation, zoneRouteViewer, ZoneRouteMissing, ZONE_ROUTE_COST }
   from '../modules/zone/route.ts';
 import { WorkReadInvalid, WorkReadMoved, WorkReadUnavailable, WorkReadLimit }
   from '../modules/work/read-session.ts';
@@ -20,7 +20,7 @@ import { changeZoneConfiguration, readZoneConfiguration,
 import { InvalidZoneConfiguration } from '../modules/zone/config-format.ts';
 import { DEFAULT_ZONE_PRESENTATION, ZonePresentation, zoneRenderTokens }
   from '../modules/zone/presentation-format.ts';
-import { listOfficialZones, officialZoneBySegment, readZonePublication, readZoneModuleData,
+import { listOfficialZones, officialZoneBySegment, readZoneModuleData,
   readZoneBannerMedia }
   from '../modules/zone/publication.ts';
 import { zonePackageExecution, readFirstPartyTheme }
@@ -175,7 +175,8 @@ async function navigation(fuseki: FusekiClient, zone: string): Promise<string | 
 async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, request: Request,
   zone: string, input: { actingSubject: string; revision?: string; after?: string; limit?: number }) {
   await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-  const principal = await work.account.verify(request, ['semantic:read']);
+  const { principal, workPrincipal } = await zoneRouteViewer(work, request, input.actingSubject);
+  if (!principal) throw new CompositionUnavailable('Zone is unavailable');
   if (!await work.access.canReadSemanticResource?.(principal, input.actingSubject, zone)) {
     throw new CompositionUnavailable('Zone is unavailable');
   }
@@ -191,7 +192,12 @@ async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, reques
     visible: item => item.role === 'mount' && !!item.target,
     canReadTarget: async target => {
       return canReadStructureTarget(structureProfileFor(header.profile), {
-        environment: work.environment, access: work.access, principal, actingSubject: input.actingSubject, target });
+        environment: work.environment, access: {
+          canReadWork: (_principal, actor, resource) => workPrincipal
+            ? work.access.canReadWork(workPrincipal, actor, resource) : Promise.resolve(false),
+          canReadSemanticResource: (semanticPrincipal, actor, resource) =>
+            work.access.canReadSemanticResource?.(semanticPrincipal, actor, resource) ?? Promise.resolve(false),
+        }, principal, actingSubject: input.actingSubject, target });
     } });
   return { zone, navigation: structure, revision: result.revision,
     predecessor: result.predecessor,
@@ -225,45 +231,40 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ actingSubject: t.Optional(ref),
         safeTheme: t.Optional(t.Literal('1')), 'safe-theme': t.Optional(t.Literal('1')),
         viewerOptOut: t.Optional(t.Literal('1')) },
-      { additionalProperties: false }), response: { 200: publicationRead, ...authorizedReadProblems,
-        409: problemResult(409) } },
+      { additionalProperties: false }), response: { 200: publicationRead, ...authorizedReadProblems } },
     async ({ request, params, query }: { request: Request; params: { id: string };
       query: { actingSubject?: string; safeTheme?: '1'; 'safe-theme'?: '1'; viewerOptOut?: '1' } }) => {
       try {
         const zone = `https://rezics.com/id/${params.id}`;
-        const state = await readZonePublication(work.environment, zone);
-        const viewer = await zoneRouteViewer(work, request, query.actingSubject);
-        if (state.disclosure !== 'public') {
-          if (!viewer.principal || !query.actingSubject
-            || !await work.access.canReadSemanticResource?.(viewer.principal, query.actingSubject, zone)) {
-            return problem(404, 'zone_unavailable', 'Zone is unavailable');
-          }
-        }
-        const navigation = await readZoneNavigation(work, request, state, viewer);
-        const moduleData = await readZoneModuleData(work.environment, state.configuration);
-        const bannerMedia = await readZoneBannerMedia(work.media?.store, state.realm,
-          state.presentation.banners);
-        const theme = state.presentation.official?.theme;
-        const forced = query.safeTheme || query['safe-theme']
-          ? { state: 'fallback' as const, reason: 'safe_mode' as const }
-          : query.viewerOptOut ? { state: 'fallback' as const, reason: 'viewer_opt_out' as const }
-            : null;
-        const execution = forced ?? (theme && state.disclosure === 'public'
-          ? zonePackageExecution(await readFirstPartyTheme(work.environment, theme.slice(-36)), zone)
-          : { state: 'fallback' as const, reason: 'none_approved' as const });
-        const etag = `"${hash(JSON.stringify({ revision: state.revision, navigation, moduleData, bannerMedia, execution }))}"`;
-      const headers = { etag, vary: 'accept-language, x-rezics-display-languages',
-          'cache-control': !viewer.principal && state.disclosure === 'public' && execution.state === 'fallback'
-            && execution.reason === 'none_approved' ? 'public, max-age=30' : 'no-store' };
-        if (request.headers.get('if-none-match') === headers.etag) return new Response(null, { status: 304, headers });
-        return Response.json({ profile: 'zone-presentation-response-v1', zone, realm: state.realm,
-          official: state.official, revision: state.revision, presentation: state.presentation,
-          navigation, moduleData, bannerMedia, renderTokens: zoneRenderTokens(execution.state === 'active'
-            || execution.state === 'package'
-            || execution.reason === 'none_approved'
-            ? state.presentation.tokens : DEFAULT_ZONE_PRESENTATION.tokens),
-          execution, cost: state.cost }, { headers });
-      } catch (error) { return routeError(error); }
+        return await readZonePresentation(work, request, zone, query.actingSubject, async (state, navigation, viewer) => {
+          const moduleData = await readZoneModuleData(work.environment, state.configuration);
+          const bannerMedia = await readZoneBannerMedia(work.media?.store, state.realm,
+            state.presentation.banners);
+          const theme = state.presentation.official?.theme;
+          const forced = query.safeTheme || query['safe-theme']
+            ? { state: 'fallback' as const, reason: 'safe_mode' as const }
+            : query.viewerOptOut ? { state: 'fallback' as const, reason: 'viewer_opt_out' as const }
+              : null;
+          const execution = forced ?? (theme && state.disclosure === 'public'
+            ? zonePackageExecution(await readFirstPartyTheme(work.environment, theme.slice(-36)), zone)
+            : { state: 'fallback' as const, reason: 'none_approved' as const });
+          const etag = `"${hash(JSON.stringify({ revision: state.revision, navigation, moduleData, bannerMedia, execution }))}"`;
+          const headers = { etag, vary: 'accept-language, x-rezics-display-languages',
+            'cache-control': !viewer.principal && state.disclosure === 'public' && execution.state === 'fallback'
+              && execution.reason === 'none_approved' ? 'public, max-age=30' : 'no-store' };
+          if (request.headers.get('if-none-match') === headers.etag) return new Response(null, { status: 304, headers });
+          return Response.json({ profile: 'zone-presentation-response-v1', zone, realm: state.realm,
+            official: state.official, revision: state.revision, presentation: state.presentation,
+            navigation, moduleData, bannerMedia, renderTokens: zoneRenderTokens(execution.state === 'active'
+              || execution.state === 'package'
+              || execution.reason === 'none_approved'
+              ? state.presentation.tokens : DEFAULT_ZONE_PRESENTATION.tokens),
+            execution, cost: state.cost }, { headers });
+        });
+      } catch (error) {
+        if (error instanceof ZoneRouteMissing) return problem(404, 'zone_unavailable', 'Zone is unavailable');
+        return routeError(error);
+      }
     })
     .get('/v1/zones/:id/routes', { params: t.Object({ id: groupUuid }),
       query: t.Object({ path: t.String({ maxLength: 256 }), cursor: t.Optional(t.String({ maxLength: 2048 })),

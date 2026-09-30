@@ -1,4 +1,6 @@
-import { fusekiReadBudget, type SparqlResult } from '../../infrastructure/fuseki.ts';
+import { setTimeout as delay } from 'node:timers/promises';
+import { fusekiReadBudget, FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge,
+  type SparqlResult } from '../../infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type {} from '../../routes/media.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
@@ -9,7 +11,9 @@ import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { NATIVE_ID, readCompositionHeader, type CompositionHeader } from '../structure/graph.ts';
 import { DATASET, GRAPHS, RV, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadSession, WorkReadMoved,
-  WorkReadUnavailable, publicWork, type ReadPosition } from '../work/read-session.ts';
+  WorkReadExpired, WorkReadLimit, WorkReadUnavailable, publicWork, type ReadPosition } from '../work/read-session.ts';
+import { WORK_READ_COST } from '../work/read-contract.ts';
+import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import type { WorkCard } from '../work/read-header.ts';
 import { readZonePublication } from './publication.ts';
@@ -37,20 +41,30 @@ export type ZoneRoute = RouteBasis & (
   | { kind: 'detail'; mount: ZoneMountBinding | null; collection: string | null;
     resource: ResourceBinding; tab: string | null });
 
-export interface ZoneRouteViewer { principal: VerifiedPrincipal | null; actingSubject?: string }
+export interface ZoneRouteViewer {
+  principal: VerifiedPrincipal | null; workPrincipal: VerifiedPrincipal | null; actingSubject?: string;
+}
 
 /** Presentation and route reads share optional semantic-read authentication. */
 export async function zoneRouteViewer(work: MainWorkDependencies, request: Request,
   actingSubject?: string): Promise<ZoneRouteViewer> {
-  return { principal: actingSubject ? await work.account.verify(request, ['semantic:read']) : null,
+  const principal = actingSubject ? await work.account.verify(request, ['semantic:read']) : null;
+  let workPrincipal: VerifiedPrincipal | null = null;
+  if (principal) {
+    try { workPrincipal = await work.account.verify(request, ['work:read']); }
+    catch { /* Semantic scope alone cannot authorize a private Work. */ }
+  }
+  return { principal, workPrincipal,
     ...(actingSubject ? { actingSubject } : {}) };
 }
 
 function summaryReader(work: MainWorkDependencies, viewer: ZoneRouteViewer): SummaryReader {
-  const { principal, actingSubject } = viewer;
+  const { principal, workPrincipal, actingSubject } = viewer;
   return {
+    ...(workPrincipal && actingSubject ? {
+      canReadWork: (target: string) => work.access.canReadWork(workPrincipal, actingSubject, target),
+    } : {}),
     ...(principal && actingSubject ? {
-      canReadWork: (target: string) => work.access.canReadWork(principal, actingSubject, target),
       canReadSemantic: (target: string) => work.access.canReadSemanticResource?.(principal,
         actingSubject, target) ?? Promise.resolve(false),
     } : {}),
@@ -111,7 +125,7 @@ class RouteRead {
 
 /** All probes and hydration share one request budget. The position fence also
  * prevents a removed mount/member or changed disclosure from surviving hydration. */
-async function boundedRead<T>(work: MainWorkDependencies, request: Request, viewer: ZoneRouteViewer,
+async function boundedRead<T>(work: MainWorkDependencies, request: Request, actingSubject: string | undefined,
   operation: (read: RouteRead) => Promise<T>): Promise<T> {
   const outer = fusekiReadBudget.getStore();
   const deadline = AbortSignal.timeout(ZONE_ROUTE_COST.deadlineMs);
@@ -124,15 +138,41 @@ async function boundedRead<T>(work: MainWorkDependencies, request: Request, view
     set bytesLeft(value: number) { const used = this.bytesLeft - value; bytes -= used; if (outer) outer.bytesLeft -= used; },
   };
   try { return await fusekiReadBudget.run(budget, async () => {
-    const before = await position(work);
-    const read = new RouteRead(work, request, viewer, before);
-    const result = await operation(read);
-    for (const resource of read.requiredSemantics) await read.semantic(resource);
-    const after = await position(work);
-    if (before.sequence !== after.sequence) throw new WorkReadMoved('Zone population changed during the read');
-    signal.throwIfAborted();
-    return result;
+    // Only read callbacks are replayed. All attempts share the same budget and
+    // repeat scope, population and disclosure checks against fresh state.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const before = await position(work);
+        const viewer = await zoneRouteViewer(work, request, actingSubject);
+        const read = new RouteRead(work, request, viewer, before);
+        let result: T;
+        try { result = await operation(read); }
+        catch (error) {
+          // A mount/head removed between probes is a moved read, not a stable 404.
+          if (error instanceof ZoneRouteMissing && (await position(work)).sequence !== before.sequence) {
+            throw new WorkReadMoved('Zone population changed during the read', { cause: error });
+          }
+          throw error;
+        }
+        for (const resource of read.requiredSemantics) await read.semantic(resource);
+        const after = await position(work);
+        if (before.sequence !== after.sequence) throw new WorkReadMoved('Zone population changed during the read');
+        signal.throwIfAborted();
+        return result;
+      } catch (error) {
+        if (!(error instanceof WorkReadMoved || error instanceof SearchSnapshotMoved)
+          || error instanceof WorkReadExpired) throw error;
+        if (attempt + 1 === WORK_READ_COST.attempts) {
+          throw new WorkReadUnavailable('A consistent Zone read could not be obtained within its budget', { cause: error });
+        }
+        await delay(Math.min(WORK_READ_COST.retryDelayMs * 2 ** attempt,
+          WORK_READ_COST.maximumRetryDelayMs), undefined, { signal });
+      }
+    }
   }); } catch (error) {
+    if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) {
+      throw new WorkReadLimit('Zone read budget exceeded');
+    }
     if (signal.aborted) throw new WorkReadUnavailable('Zone route deadline exceeded');
     throw error;
   }
@@ -148,9 +188,11 @@ async function navigationHeader(read: RouteRead, state: Publication) {
 
 /** ≤50 public mounts in immutable Structure order. Target names use the same
  * current disclosure reader as routes, including localized Collection names. */
-export function readZoneNavigation(work: MainWorkDependencies, request: Request,
-  state: Publication, viewer: ZoneRouteViewer) {
-  return boundedRead(work, request, viewer, async read => {
+export function readZonePresentation<T>(work: MainWorkDependencies, request: Request,
+  zone: string, actingSubject: string | undefined,
+  present: (state: Publication, navigation: ZoneNavigationItem[], viewer: ZoneRouteViewer) => Promise<T>) {
+  return boundedRead(work, request, actingSubject, async read => {
+    const state = await readZonePublication(work.environment, zone);
     await read.zone(state);
     const header = await navigationHeader(read, state);
     const page = await readVisibleCompositionPage(work.environment, { structure: header.structure, header,
@@ -170,7 +212,7 @@ export function readZoneNavigation(work: MainWorkDependencies, request: Request,
         kind: summary.type === 'collection' ? 'index' : 'document', name: summary.name });
     }
     const fenced = await read.targets(items.map(item => item.target));
-    return items.filter((_, index) => fenced[index] !== null);
+    return present(state, items.filter((_, index) => fenced[index] !== null), read.viewer);
   });
 }
 
@@ -281,8 +323,7 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
   input: { zone: string; path: string; cursor?: string; actingSubject?: string }): Promise<ZoneRoute> {
   const path = parseZonePath(input.path);
   if (!path) throw new ZoneRouteMissing('Zone route is unavailable');
-  const viewer = await zoneRouteViewer(work, request, input.actingSubject);
-  return boundedRead(work, request, viewer, async read => {
+  return boundedRead(work, request, input.actingSubject, async read => {
     let state: Publication;
     try { state = await readZonePublication(work.environment, input.zone); }
     catch (error) { if (error instanceof ZoneUnavailable) throw new ZoneRouteMissing('Zone route is unavailable'); throw error; }
@@ -318,10 +359,12 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
       if (fenced.some(target => !target)) throw new ZoneRouteMissing('Zone route is unavailable');
       return { ...basis, kind: 'detail', mount, collection: mount.target, resource: binding, tab: path.tab };
     }
-    // The graph position seals all selected heads/generations. Keep request
-    // identity separate so a changed head is stale (409), not a malformed cursor.
-    const binding = ['zone-route-v1', input.zone, input.path, viewer.actingSubject ?? null];
-    const cursor = decodeReadCursor(input.cursor, binding, read.position);
+    // Unrelated graph writes do not expire an immutable membership continuation.
+    // A changed Collection head or recovery epoch still requires a fresh page.
+    const binding = ['zone-route-v1', input.zone, input.path, input.actingSubject ?? null,
+      mount.target, header.structure];
+    const collectionPosition = { dataEpoch: read.position.dataEpoch, sequence: header.head };
+    const cursor = decodeReadCursor(input.cursor, binding, collectionPosition);
     const page = await readVisibleCompositionPage(work.environment, { structure: header.structure, header,
       ...(cursor ? { after: cursor.after } : {}), limit: ZONE_ROUTE_COST.pageSize,
       canReadTarget: async target => !!await read.target(target),
@@ -331,6 +374,6 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
     if (!fenced[0]) throw new ZoneRouteMissing('Zone route is unavailable');
     return { ...basis, kind: 'index', mount, collection: mount.target,
       items: items.filter((_, index) => fenced[index + 1] !== null),
-      nextCursor: page.next ? encodeReadCursor(binding, read.position, page.next) : null };
+      nextCursor: page.next ? encodeReadCursor(binding, collectionPosition, page.next) : null };
   });
 }

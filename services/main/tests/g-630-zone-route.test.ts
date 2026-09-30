@@ -5,7 +5,8 @@ import { resolve } from 'node:path';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { RV, prepareComponent } from '../src/modules/work/activate.ts';
-import { WorkReadMoved } from '../src/modules/work/read-session.ts';
+import { WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { WORK_READ_COST } from '../src/modules/work/read-contract.ts';
 import { ZONE_CONFIG_FORMAT, ZONE_PROFILE } from '../src/modules/zone/config-format.ts';
 import { parseZonePath, ZONE_RESERVED_SEGMENTS } from '../src/modules/zone/route-path.ts';
 import { resolveZoneRoute, ZoneRouteMissing, ZONE_ROUTE_COST } from '../src/modules/zone/route.ts';
@@ -29,7 +30,8 @@ test('G630: exact route paths admit native resources and pass slug tabs to the h
 });
 
 function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
-  workMount?: boolean; privateMount?: boolean; granted?: boolean; moved?: boolean; revoked?: boolean }) {
+  workMount?: boolean; privateMount?: boolean; granted?: boolean; moved?: 'once' | 'always';
+  removedDuringRead?: boolean; deniedWorkScope?: boolean; revoked?: boolean }) {
   const zone = id(), space = id(), realm = id(), navigation = id(), collection = id(), structure = id();
   const resource = id(), occurrence = id(), head = id(), generation = id(), revision = id();
   const directory = resolve('.temp', `g-630-unit-${randomUUID()}`);
@@ -39,7 +41,9 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
   } }, ZONE_PROFILE);
   const queries: string[] = [];
   let positions = 0;
+  let sequence = 7;
   let semanticChecks = 0;
+  const scopes: string[][] = [];
   const rows = (values: Record<string, string>[]): SparqlResult => ({ results: { bindings: values.map(value =>
     Object.fromEntries(Object.entries(value).map(([key, text]) => [key, { type: 'literal', value: text }]))) } });
   const work = { environment: { objectDirectory: directory, lineage: { dataEpoch: 'epoch', routingEpoch: '1' },
@@ -49,21 +53,25 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
         const requested = [collection, resource].filter(target => query.includes(`<${target}>`));
         const result = rows(requested.map(target => {
           const isCollection = target === collection;
-          return { epoch: 'epoch', sequence: '7', r: target,
+          return { epoch: 'epoch', sequence: String(sequence), r: target,
           type: isCollection ? 'collection' : 'work', public: isCollection || input.readable ? 'true' : 'false',
           work: resource, head, label: isCollection ? 'Picks' : 'Member', erased: 'false' };
         }));
         for (const row of result.results!.bindings) row.label!['xml:lang'] = 'en';
         return result;
       }
-      if (query.includes('SELECT ?sequence WHERE')) return rows([{ sequence: input.moved && ++positions > 1 ? '8' : '7' }]);
+      if (query.includes('SELECT ?sequence WHERE')) {
+        positions++;
+        if (input.moved === 'always' || input.moved === 'once' && positions === 2) sequence++;
+        return rows([{ sequence: String(sequence) }]);
+      }
       if (query.includes('ASK')) {
         if (query.includes('rv:MemberRole')) {
           expect(query).toContain(`rv:selectedGeneration <${generation}>`);
           expect(query).toContain(`rv:generation <${generation}>`);
           expect(query).toContain('FILTER NOT EXISTS { ?placement rv:removedBy ?removal }');
           expect(query).toContain(`<${resource}>`);
-          return { boolean: input.member };
+          return { boolean: input.member && !(input.removedDuringRead && sequence > 7) };
         }
         if (query.includes('rv:RealmPublicationSlot')) {
           expect(query).toContain(`rv:work <${resource}>`);
@@ -86,12 +94,16 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
       if (query.includes('SELECT ?structure')) return rows([{ structure }]);
       if (query.includes('SELECT DISTINCT ?type')) return rows([{ type: 'https://schema.org/DigitalDocument' }]);
       throw new Error(`Unexpected Zone query: ${query}`);
-    } } }, account: { verify: async () => ({ issuer: 'test', subject: 'reader' }) },
+    } } }, account: { verify: async (_request: Request, required: string[]) => {
+      scopes.push(required);
+      if (input.deniedWorkScope && required.includes('work:read')) throw new Error('OAuth scope denied');
+      return { issuer: 'test', subject: 'reader' };
+    } },
     access: { canReadWork: async () => input.granted === true,
       canReadSemanticResource: async () => input.granted === true
         && (!input.revoked || ++semanticChecks === 1) } } as unknown as MainWorkDependencies;
   const request = new Request('http://main.local/v1/zones/test/routes');
-  return { work, request, zone, resource, collection, queries, directory,
+  return { work, request, zone, resource, collection, queries, scopes, directory,
     close: () => rmSync(directory, { recursive: true, force: true }) };
 }
 
@@ -143,13 +155,40 @@ test('G630: private mounts and members require current grants, while Work mounts
   } finally { document.close(); }
 });
 
-test('G630: a graph change during hydration cannot retain old population or disclosure', async () => {
-  const f = fixture({ member: true, readable: true, moved: true });
+test('G630: a graph write retries the route against fresh population and repeats OAuth scopes', async () => {
+  const f = fixture({ member: true, readable: true, moved: 'once', granted: true });
+  try {
+    expect(await resolveZoneRoute(f.work, f.request, { zone: f.zone, actingSubject: id(),
+      path: `/picks/${f.resource.slice(-36)}` })).toMatchObject({ kind: 'detail', sourcePosition: { sequence: '8' } });
+    expect(f.scopes).toEqual([['semantic:read'], ['work:read'], ['semantic:read'], ['work:read']]);
+    expect(f.queries.filter(query => query.includes('rv:MemberRole'))).toHaveLength(2);
+  } finally { f.close(); }
+  const removed = fixture({ member: true, readable: true, moved: 'once', removedDuringRead: true });
+  try {
+    await expect(resolveZoneRoute(removed.work, removed.request, { zone: removed.zone,
+      path: `/picks/${removed.resource.slice(-36)}` })).rejects.toBeInstanceOf(ZoneRouteMissing);
+  } finally { removed.close(); }
+});
+
+test('G630: continuous graph writes exhaust the bounded retries without returning a route conflict', async () => {
+  const f = fixture({ member: true, readable: true, moved: 'always' });
   try {
     await expect(resolveZoneRoute(f.work, f.request, { zone: f.zone,
-      path: `/picks/${f.resource.slice(-36)}` })).rejects.toBeInstanceOf(WorkReadMoved);
+      path: `/picks/${f.resource.slice(-36)}` })).rejects.toBeInstanceOf(WorkReadUnavailable);
+    expect(f.queries.filter(query => query.includes('rv:MemberRole'))).toHaveLength(WORK_READ_COST.attempts);
     expect(ZONE_ROUTE_COST).toMatchObject({ pageSize: 24, maxNavigation: 50, membershipQueries: 1, maxPages: 8 });
   } finally { f.close(); }
+});
+
+test('G630: semantic OAuth scope and Work Access grants cannot disclose private members or documents', async () => {
+  for (const workMount of [false, true]) {
+    const f = fixture({ member: true, readable: false, workMount, granted: true, deniedWorkScope: true });
+    try {
+      await expect(resolveZoneRoute(f.work, f.request, { zone: f.zone, actingSubject: id(),
+        path: workMount ? '/guide' : `/picks/${f.resource.slice(-36)}` })).rejects.toBeInstanceOf(ZoneRouteMissing);
+      expect(f.scopes).toEqual([['semantic:read'], ['work:read']]);
+    } finally { f.close(); }
+  }
 });
 
 test('G630: a private-mount grant revoked during hydration is fenced without a graph change', async () => {

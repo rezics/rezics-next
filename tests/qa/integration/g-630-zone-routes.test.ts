@@ -5,6 +5,12 @@ import { S3ImmutableObjects, type ImmutableObjects }
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { ZONE_RESERVED_SEGMENTS } from '../../../services/main/src/modules/zone/route-path.ts';
 import type { ZoneRoute, ZoneNavigationItem } from '../../../services/main/src/modules/zone/route.ts';
+import { zoneRoutes } from '../../../services/main/src/routes/zones.ts';
+import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
+import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { readResourceSummaries } from '../../../services/main/src/modules/media/summary.ts';
+import { DEFAULT_MEDIA_CONTEXT } from '../../../services/main/src/modules/media/store.ts';
+import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { startMediaStack } from './media-support.ts';
 
 const short = (id: string) => id.slice(-36);
@@ -96,6 +102,7 @@ test('G630: mounted Zone routes enforce current typed bindings, complete paging 
     expect(await json(await editor.send('POST', `${root}/mounts`, document.body, document.key)))
       .toMatchObject({ revision: document.revision, replayed: true });
     const privateMount = await mount(collection, 'private-picks', 'private');
+    await mount(hidden.work, 'private-guide');
     const routeUrl = (path: string, cursor?: string) => `${root}/routes?${new URLSearchParams({ path,
       ...(cursor ? { cursor } : {}) })}`;
     const get = (path: string, cursor?: string) => stack.call('GET', routeUrl(path, cursor));
@@ -123,6 +130,36 @@ test('G630: mounted Zone routes enforce current typed bindings, complete paging 
     await missing(await get(`/picks/${short(hidden.work)}`));
     expect(await json(await editor.read(routeUrl(`/picks/${short(hidden.work)}`))))
       .toMatchObject({ kind: 'detail', resource: { id: hidden.work } });
+    // Access grants remain identical; only the Account token's OAuth scope differs.
+    const scopedMain = zoneRoutes(stack.fuseki, { environment: stack.env, access: stack.access,
+      account: { verify: async (request, scopes) => {
+        if (scopes.includes('work:read') && request.headers.get('authorization') !== 'Bearer work-scope') {
+          throw new AccountAssertionDenied('work:read OAuth scope is required');
+        }
+        return editor.principal;
+      } } } as MainWorkDependencies);
+    const scopedRead = (path: string, workScope: boolean) => scopedMain.handle(new Request(
+      `http://main.local${path}${path.includes('?') ? '&' : '?'}actingSubject=${encodeURIComponent(editor.actor)}`,
+      { headers: { authorization: `Bearer ${workScope ? 'work-scope' : 'semantic-only'}` } }));
+    for (const path of [routeUrl(`/picks/${short(hidden.work)}`), routeUrl('/private-guide')]) {
+      await missing(await scopedRead(path, false));
+      expect((await scopedRead(path, true)).status).toBe(200);
+    }
+    for (const path of [root, `${root}/revisions/${short(head)}`]) {
+      const denied = await json<{ mounts: Array<{ target?: string }> }>(await scopedRead(path, false));
+      expect(denied.mounts.map(item => item.target)).not.toContain(hidden.work);
+      expect(denied.mounts.map(item => item.target)).not.toContain(guide.work);
+      expect(denied.mounts.map(item => item.target)).toContain(collection);
+      const allowed = await json<{ mounts: Array<{ target?: string }> }>(await scopedRead(path, true));
+      expect(allowed.mounts.map(item => item.target)).toContain(hidden.work);
+      expect(allowed.mounts.map(item => item.target)).toContain(guide.work);
+    }
+    const scopedPresentation = await json<{ navigation: ZoneNavigationItem[] }>(
+      await scopedRead(`${root}/presentation`, false));
+    expect(scopedPresentation.navigation.map(item => item.target)).not.toContain(hidden.work);
+    const allowedPresentation = await json<{ navigation: ZoneNavigationItem[] }>(
+      await scopedRead(`${root}/presentation`, true));
+    expect(allowedPresentation.navigation.map(item => item.target)).toContain(hidden.work);
     await missing(await outsider.read(routeUrl(`/picks/${short(hidden.work)}`)));
     await missing(await get('/private-picks'));
     expect(await json(await editor.read(routeUrl('/private-picks')))).toMatchObject({ kind: 'index' });
@@ -135,6 +172,23 @@ test('G630: mounted Zone routes enforce current typed bindings, complete paging 
       .toEqual([['guide', 'document', 'Guide'], ['picks', 'index', 'Picks']]);
     expect(presentation.navigation.map(item => item.occurrence))
       .toEqual([document.occurrences[0]!, picks.occurrences[0]!]);
+    // Commit an unrelated Work after the opening position probe. Every surface,
+    // including a continuation, must discard its first attempt and retry.
+    for (const path of [routeUrl('/picks'), routeUrl('/picks', first.nextCursor!), `${root}/presentation`]) {
+      const query = stack.fuseki.query;
+      let openingProbes = 0;
+      stack.fuseki.query = async (...args) => {
+        const result = await query.call(stack.fuseki, ...args);
+        if (args[0].includes('SELECT ?sequence WHERE') && ++openingProbes === 1) {
+          await stack.privateWork(editor.actor, 'Concurrent unrelated Work');
+        }
+        return result;
+      };
+      try {
+        expect((await stack.call('GET', path)).status).toBe(200);
+        expect(openingProbes).toBeGreaterThanOrEqual(3);
+      } finally { stack.fuseki.query = query; }
+    }
     const etag = (await stack.call('GET', `${root}/presentation`)).headers.get('etag');
     await json(await editor.send('PUT', `/v1/collections/${short(collection)}/name`, {
       profile: 'collection-public-name-v1', expectedHead: null, actingSubject: editor.actor,
@@ -181,7 +235,9 @@ test('G630: mounted Zone routes enforce current typed bindings, complete paging 
     }), 201);
     expect(await json(await get(`/w/${short(works[0]!.work)}/discussion`))).toMatchObject({ kind: 'detail', tab: 'discussion' });
     await missing(await get(`/w/${short(nonMember.work)}`));
-    expect((await get('/picks', first.nextCursor!)).status).toBe(409);
+    // Names, navigation and Realm publication writes do not change membership.
+    expect(await json(await get('/picks', first.nextCursor!)))
+      .toMatchObject({ kind: 'index', items: [{ id: works[24]!.work }], nextCursor: null });
     await editor.grant(`publication:reject:${space.realm}`, 'publication.reject');
     await json(await editor.send('POST', '/v1/publication-rejections', {
       profile: 'realm-local-rejection-v1', context: { kind: 'realm-local', id: space.realm },
@@ -195,6 +251,7 @@ test('G630: mounted Zone routes enforce current typed bindings, complete paging 
       operations: [{ op: 'remove', occurrence: memberOccurrences[0]! }],
     }));
     await missing(await get(`/picks/${short(works[0]!.work)}`));
+    expect((await get('/picks', first.nextCursor!)).status).toBe(409);
     // Removing a route preserves the mounted Collection and all remaining members.
     const removed = await json<{ revision: string }>(await editor.send('DELETE',
       `${root}/mounts/${short(picks.occurrences[0]!)}`, { expectedHead: head, actingSubject: editor.actor }));
@@ -221,5 +278,36 @@ test('G630: mounted Zone routes enforce current typed bindings, complete paging 
     await missing(await editor.read(routeUrl(`/picks/${short(hidden.work)}`)));
     await missing(await get('/unknown'));
     expect(privateMount.occurrences).toHaveLength(1);
+    // Exercise the common summary query on real RDF for both Work references
+    // and their MainVersions; OAuth/Access cannot override protected or erased heads.
+    const summaries = (work: { work: string; mainVersion: string }, granted = false) =>
+      readResourceSummaries(stack.env, undefined, granted ? { canReadWork: async () => true } : {},
+        { resources: [work.work, work.mainVersion], context: DEFAULT_MEDIA_CONTEXT, language: null });
+    const protectedWork = await stack.publicWork(editor.actor, ['en'], 'Protected summary');
+    expect((await summaries(protectedWork)).summaries.every(item => item.status === 'available')).toBe(true);
+    await stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(protectedWork.work)} <${RV}protectionHead> ${iri(native())} } }`);
+    expect((await summaries(protectedWork, true)).summaries.map(item => item.status))
+      .toEqual(['unavailable', 'unavailable']);
+    const erasedWork = await stack.publicWork(editor.actor, ['en'], 'Erased summary');
+    expect((await summaries(erasedWork)).summaries.every(item => item.status === 'available')).toBe(true);
+    await stack.fuseki.update(`INSERT { GRAPH ${iri(GRAPHS.revisions)} { ?head a <${RV}ErasedRevision> } }
+      WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(erasedWork.work)} <${RV}head> ?head } }`);
+    expect((await summaries(erasedWork, true)).summaries.map(item => item.status))
+      .toEqual(['unavailable', 'unavailable']);
+    const superseded = await stack.publicWork(editor.actor, ['en'], 'Earlier public selection');
+    expect((await summaries(superseded)).summaries.every(item => item.status === 'available')).toBe(true);
+    const privateDecision = native();
+    await stack.fuseki.update(`DELETE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(superseded.variants[0]!.contribution)} <${RV}publicationHead> ?old } }
+      INSERT { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(superseded.variants[0]!.contribution)} <${RV}publicationHead> ${iri(privateDecision)} }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(privateDecision)} a <${RV}PublicationDecision> ;
+          <${RV}disclosure> <${RV}Private> } }
+      WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(superseded.variants[0]!.contribution)} <${RV}publicationHead> ?old } }`);
+    expect((await summaries(superseded)).summaries.map(item => item.status)).toEqual(['unavailable', 'unavailable']);
+    expect((await summaries(superseded, true)).summaries.map(item =>
+      item.status === 'available' ? item.disclosure : item.status)).toEqual(['restricted', 'restricted']);
   } finally { await stack.stop(); }
 }, 300_000);
