@@ -8,7 +8,7 @@ export const releaseV3Profile = {
   id: 'release-v3', layout: 'compact',
   comments: ['One release is a formal edition, a web publication, a REZICS fixed release, or a virtual release.',
     'Each coverage entry correlates one Work, exact realization revision, language and completeness.',
-    'Legacy v1 writes retain unknown coverage explicitly; v2 history remains readable without invented entry correlations.'],
+    'Written from release-v2 requests; v1 and v2 history remains readable without invented entry correlations.'],
   prefixes: [['sh', 'http://www.w3.org/ns/shacl#'], ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
     ['xsd', 'http://www.w3.org/2001/XMLSchema#'], ['schema', 'https://schema.org/'], ['rv', 'https://rezics.com/vocab/']],
   shapes: [
@@ -21,8 +21,7 @@ export const releaseV3Profile = {
         in: ['"official"', '"unofficial"', '"virtual"', '"withdrawn"', '"cancelled"'] },
       { path: 'rv:releaseHead', minCount: 1, maxCount: 1, class: 'rv:ReleaseRevision' },
       { path: 'rv:definitionProfile', hasValue: `<${profile}>`, maxCount: 1 },
-      { path: 'rv:coverage', maxCount: 64, class: 'rv:ReleaseCoverage' },
-      { path: 'rv:legacyRelease', maxCount: 1, in: ['"true"'] },
+      { path: 'rv:coverage', minCount: 1, maxCount: 64, class: 'rv:ReleaseCoverage' },
       { path: 'rv:platform', maxCount: 1, datatype: 'xsd:string', maxLength: 120 },
       { path: 'rv:territory', maxCount: 1, datatype: 'xsd:string', pattern: '^(?:[A-Z]{2}|[0-9]{3})$' },
       { path: 'rv:isbn13', maxCount: 1, datatype: 'xsd:string', pattern: '^97[89][0-9]{10}$' },
@@ -36,9 +35,6 @@ export const releaseV3Profile = {
       { path: 'rv:fixedRelease', maxCount: 1, nodeKind: 'sh:IRI' },
       { path: 'rv:coverageScope', maxCount: 1, datatype: 'xsd:string', maxLength: 120 },
       { path: 'rv:coverageComplete', maxCount: 1, in: ['"true"', '"false"'] },
-    ], or: [
-      [{ path: 'rv:coverage', minCount: 1, class: 'rv:ReleaseCoverage' }, { path: 'rv:legacyRelease', maxCount: 0, datatype: 'xsd:string' }],
-      [{ path: 'rv:coverage', maxCount: 0, class: 'rv:ReleaseCoverage' }, { path: 'rv:legacyRelease', hasValue: '"true"', datatype: 'xsd:string' }],
     ] },
     { iri: `${profile}/coverage-shape`, canonical: { types: ['rv:ReleaseCoverage'] }, properties: [
       { path: 'rdf:type', hasValue: 'rv:ReleaseCoverage', maxCount: 1 },

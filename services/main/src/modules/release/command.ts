@@ -11,7 +11,7 @@ import { workEditReceiptIri } from '../work/edit.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { resolveReleaseCoverage } from '../realization/coverage.ts';
 import { languageListLiteral } from './languages.ts';
-import { assertReleaseCorrection, checkedRelease, checkedReleaseV2, resolvedReleaseV2, checkedReleaseV3, resolvedReleaseV3, parseStoredRelease, releaseDigest, releaseLanguageLiteral, RELEASE_V3_PROFILE, identifierLiteral, RELEASE_V2_PROFILE,
+import { assertReleaseCorrection, checkedRelease, checkedReleaseV2, resolvedReleaseV2, parseStoredRelease, releaseDigest, releaseLanguageLiteral, RELEASE_V3_PROFILE, identifierLiteral, RELEASE_V2_PROFILE,
   RELEASE_COST, RELEASE_V2_COST, RELEASE_PROFILE, InvalidRelease, ReleaseUnavailable, StaleRelease, type AnyReleaseRecord } from './schema.ts';
 
 export function releaseReceiptIri(admissionId: string): string {
@@ -82,9 +82,9 @@ async function sealRelease(env: WorkActivationEnvironment, admission: Registered
 }
 
 async function loadRelease(env: WorkActivationEnvironment, work: string, release: string, basis?: string):
-  Promise<{ revision: string; record: AnyReleaseRecord } | null> {
+  Promise<{ revision: string; graphProfile: string; record: AnyReleaseRecord } | null> {
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?revision ?state WHERE {
+    SELECT ?revision ?state ?profile WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(release)} a rv:Release ; rv:work ${iri(work)} .
         ${basis ? '' : `${iri(release)} rv:releaseHead ?revision`} }
       ${basis ? `BIND(${iri(basis)} AS ?revision)` : ''}
@@ -92,8 +92,9 @@ async function loadRelease(env: WorkActivationEnvironment, work: string, release
         rv:modelRevision ?profile . VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} ${iri(RELEASE_V3_PROFILE)} } }
     } LIMIT 2`, RELEASE_V2_COST.stateBytes * 2)).results?.bindings ?? [];
   if (!rows.length) return null;
-  if (rows.length !== 1 || !rows[0]?.revision || !rows[0].state) throw new ReleaseUnavailable('Release head is incomplete');
-  return { revision: rows[0].revision.value, record: parseStoredRelease(rows[0].state.value, work) };
+  if (rows.length !== 1 || !rows[0]?.revision || !rows[0].state || !rows[0].profile) throw new ReleaseUnavailable('Release head is incomplete');
+  return { revision: rows[0].revision.value, graphProfile: rows[0].profile.value,
+    record: parseStoredRelease(rows[0].state.value, work) };
 }
 
 function projection(release: string, revision: string, record: AnyReleaseRecord): string {
@@ -111,19 +112,14 @@ function projection(release: string, revision: string, record: AnyReleaseRecord)
   if (record.profile === 'release-v1' && record.coverage) lines.push(`${iri(release)} rv:coverageScope ${lit(record.coverage.scope)} ;
     rv:coverageComplete ${lit(String(record.coverage.complete))} .`);
   if (record.isbn13) lines.push(`${iri(release)} rv:isbn13 ${lit(record.isbn13)} .`);
-  lines.push(`${iri(release)} rv:definitionProfile ${iri(RELEASE_V3_PROFILE)} .`);
-  if (record.profile === 'release-v1') {
-    lines.push(`${iri(release)} rv:coverageWork ${iri(record.work)} ; rv:legacyRelease "true" .`);
-  } else {
+  if (record.profile === 'release-v2') {
+    lines.push(`${iri(release)} rv:definitionProfile ${iri(RELEASE_V3_PROFILE)} .`);
     for (const entry of record.coverage) {
       const resolved = record.resolvedCoverage.find(row => row.realization === entry.realization)!;
       const node = coverageEntry(release, entry.realization);
       // coverageWork is a derived lookup edge; language/completeness exist only on the entry.
       lines.push(`${iri(release)} rv:coverageWork ${iri(resolved.work)} ; rv:coverage ${iri(node)} .
-        ${iri(node)} a rv:ReleaseCoverage ; rv:work ${iri(resolved.work)} ;
-          rv:realization ${iri(entry.realization)} ; rv:revision ${iri(entry.revision)} ;
-          rv:contentLanguage ${lit(resolved.language)} ; rv:completeness ${lit(entry.completeness)} .`);
-      if (entry.portion) lines.push(`${iri(node)} rv:portion ${lit(entry.portion)} .`);
+        ${coverageFacts(release, entry, resolved)}`);
     }
     for (const identifier of record.identifiers) lines.push(`${iri(release)} rv:identifier ${lit(identifierLiteral(identifier))} .`);
     if (record.platform) lines.push(`${iri(release)} rv:platform ${lit(record.platform)} .`);
@@ -136,11 +132,20 @@ function projection(release: string, revision: string, record: AnyReleaseRecord)
 export const coverageEntry = (release: string, realization: string): string =>
   `urn:rezics:release-coverage:${hash(JSON.stringify([release, realization]))}`;
 
+function coverageFacts(release: string, entry: Extract<AnyReleaseRecord, { profile: 'release-v2' }>['coverage'][number],
+  resolved: Extract<AnyReleaseRecord, { profile: 'release-v2' }>['resolvedCoverage'][number]): string {
+  const node = iri(coverageEntry(release, entry.realization));
+  return `${node} a rv:ReleaseCoverage ; rv:work ${iri(resolved.work)} ;
+    rv:realization ${iri(entry.realization)} ; rv:revision ${iri(entry.revision)} ;
+    rv:contentLanguage ${lit(resolved.language)} ; rv:completeness ${lit(entry.completeness)} .
+    ${entry.portion ? `${node} rv:portion ${lit(entry.portion)} .` : ''}`;
+}
+
 /** One release CAS. V2 adds one bounded join of at most 64 exact realization states. */
 export async function commitRelease(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   record: AnyReleaseRecord): Promise<boolean> {
   const release = record.id;
-  const profile = RELEASE_V3_PROFILE;
+  const profile = record.profile === 'release-v1' ? RELEASE_PROFILE : RELEASE_V3_PROFILE;
   const digest = releaseDigest(record);
   if (admission.action !== 'work.edit' || admission.scope !== `work:edit:${record.work}`
     || admission.requestDigest !== digest) throw new IdempotencyConflict('Release admission differs');
@@ -168,7 +173,7 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
   if (rows.length !== 1 || !rows[0]?.sequence) throw new ReleaseUnavailable('Release work is unavailable');
   const revision = ID + Bun.randomUUIDv7();
   const validations = [
-    ...await profileValidations(env.fuseki, 'release-v3', [
+    ...await profileValidations(env.fuseki, record.profile === 'release-v1' ? 'release-v1' : 'release-v3', [
       { shape: `${profile}/release-shape`, focus: [release], graphs: [GRAPHS.current, GRAPHS.revisions] },
       { shape: `${profile}/revision-shape`, focus: [revision], graphs: [GRAPHS.current, GRAPHS.revisions] },
       ...(record.profile !== 'release-v1' ? [{ shape: `${profile}/coverage-shape`,
@@ -187,18 +192,12 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(receipt)}`;
   const prior = record.expectedHead;
-  // The command module requires literal data subjects. Delete exact old scalar facts of reused
-  // entries, never a variable subject or a Cartesian OPTIONAL expansion. Removed entries remain
-  // unlinked; immutable revision payloads retain their history. At most 66 subjects are touched.
-  const oldEntries = current && current.record.profile !== 'release-v1' && record.profile !== 'release-v1'
-    ? current.record.coverage.filter(entry => record.coverage.some(next => next.realization === entry.realization))
-      .map(entry => {
-        const old = current.record.profile !== 'release-v1'
-          ? current.record.resolvedCoverage.find(row => row.realization === entry.realization)! : undefined;
-        return `${iri(coverageEntry(release, entry.realization))} rv:revision ${iri(entry.revision)} ;
-          rv:contentLanguage ${lit(old!.language)} ; rv:completeness ${lit(entry.completeness)} .
-          ${entry.portion ? `${iri(coverageEntry(release, entry.realization))} rv:portion ${lit(entry.portion)} .` : ''}`;
-      }).join('\n') : '';
+  // Delete every old entry's exact facts, including removed entries. Immutable payloads retain
+  // history, while re-adds start clean. The old/new union is bounded to 64 (66 touched subjects).
+  const oldRecord = current?.record;
+  const oldEntries = current?.graphProfile === RELEASE_V3_PROFILE && oldRecord?.profile === 'release-v2'
+    ? oldRecord.coverage.map(entry => coverageFacts(release, entry,
+      oldRecord.resolvedCoverage.find(row => row.realization === entry.realization)!)).join('\n') : '';
   const update = `PREFIX rv: <${RV}>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
@@ -234,7 +233,7 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
           VALUES ?oldPredicate { rv:work rv:releaseHead rv:releaseKind rv:releaseStatus rv:contentLanguages
             rv:titleLanguage rv:tracklistLanguage rv:originalLanguages rv:isTranslation rv:originalUrl
             rv:fixedRelease rv:coverageScope rv:coverageComplete rv:isbn13 rv:definitionProfile
-            rv:coverage rv:legacyRelease rv:coverageWork rv:coverageRealization rv:coverageRevision rv:contentLanguage rv:completeness rv:identifier rv:platform rv:territory }`
+            rv:coverage rv:coverageWork rv:coverageRealization rv:coverageRevision rv:contentLanguage rv:completeness rv:identifier rv:platform rv:territory }`
           : `FILTER NOT EXISTS { ${iri(release)} ?occupiedProperty ?occupiedValue }`} }
       ${record.profile !== 'release-v1' ? record.resolvedCoverage.map(entry => `
         GRAPH ${iri(GRAPHS.current)} { ${iri(entry.realization)} a rv:Realization ; rv:work ${iri(entry.work)} }
@@ -257,8 +256,7 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
 export async function setRelease(deps: MainWorkDependencies, request: Request,
   input: unknown & { work: string; idempotencyKey: string }) {
   const { work: workId, idempotencyKey, ...body } = input;
-  const record = (body as { profile?: string }).profile === 'release-v3'
-    ? checkedReleaseV3(body, workId) : (body as { profile?: string }).profile === 'release-v2'
+  const record = (body as { profile?: string }).profile === 'release-v2'
     ? checkedReleaseV2(body, workId) : checkedRelease(body, workId);
   const digest = releaseDigest(record);
   const signal = AbortSignal.timeout(RELEASE_COST.deadlineMs);
@@ -271,8 +269,7 @@ export async function setRelease(deps: MainWorkDependencies, request: Request,
     if (!await deps.access.canEditWork(principal, record.actingSubject, record.work)) {
       throw new AdmissionDenied('Release Work edit is not admitted');
     }
-    const resolved = record.profile === 'release-v3'
-      ? resolvedReleaseV3(record, await resolveReleaseCoverage(env, record.coverage)) : record.profile === 'release-v2'
+    const resolved = record.profile === 'release-v2'
       ? resolvedReleaseV2(record, await resolveReleaseCoverage(env, record.coverage)) : record;
     if (resolved.profile !== 'release-v1') {
       for (const coveredWork of new Set(resolved.resolvedCoverage.map(entry => entry.work))) {

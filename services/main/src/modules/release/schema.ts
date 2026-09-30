@@ -67,24 +67,13 @@ export const releaseV2Write = t.Object({ ...releaseFields, profile: t.Literal('r
   coverage: t.Array(releaseCoverage, { minItems: 1, maxItems: RELEASE_V2_COST.coverage }),
 }, closed);
 export type ReleaseV2Write = Static<typeof releaseV2Write>;
-export const releaseV3Write = t.Object({ ...releaseV2Write.properties, profile: t.Literal('release-v3') }, closed);
-export type ReleaseV3Write = Static<typeof releaseV3Write>;
 export interface CoveredRealization { realization: string; revision: string; work: string;
   language: string; kind: 'original' | 'translation'; status: 'official' | 'unofficial' }
 export interface ReleaseV2Record extends ReleaseV2Write {
   work: string; contentLanguages: string[]; isTranslation: boolean; originalLanguages: string[];
   resolvedCoverage: CoveredRealization[];
 }
-export type ReleaseV3Record = Omit<ReleaseV2Record, 'profile'> & { profile: 'release-v3' };
-export type AnyReleaseRecord = ReleaseRecord | ReleaseV2Record | ReleaseV3Record;
-
-export function checkedReleaseV3(input: unknown, work: string): ReleaseV3Write & { work: string } {
-  if (!Value.Check(releaseV3Write, input)) throw new InvalidRelease('Release does not match release-v3');
-  return { ...checkedReleaseV2({ ...input, profile: 'release-v2' }, work), profile: 'release-v3' };
-}
-export function resolvedReleaseV3(input: ReleaseV3Write & { work: string }, resolved: CoveredRealization[]): ReleaseV3Record {
-  return { ...resolvedReleaseV2({ ...input, profile: 'release-v2' }, resolved), profile: 'release-v3' };
-}
+export type AnyReleaseRecord = ReleaseRecord | ReleaseV2Record;
 export class InvalidRelease extends Error {}
 export class StaleRelease extends Error {}
 export class ReleaseUnavailable extends Error {}
@@ -195,6 +184,11 @@ export function assertReleaseCorrection(before: AnyReleaseRecord, after: AnyRele
   if ((before.profile === 'release-v1') !== (after.profile === 'release-v1')) {
     throw new InvalidRelease('A correction keeps its coverage contract');
   }
+  // Both deleted and inserted entries are touched in one command transaction.
+  if (before.profile === 'release-v2' && after.profile === 'release-v2'
+    && new Set([...before.coverage, ...after.coverage].map(entry => entry.realization)).size > RELEASE_V2_COST.coverage) {
+    throw new InvalidRelease('Old and new coverage together exceed 64 entries; split the correction');
+  }
   if (!releaseChanged(before, after)) return;
   if (before.profile !== 'release-v1' && after.profile !== 'release-v1' && before.kind !== 'virtual'
     && after.coverage.some(entry => !before.coverage.some(old => old.realization === entry.realization))) {
@@ -218,7 +212,7 @@ export function assertReleaseCorrection(before: AnyReleaseRecord, after: AnyRele
 export function releaseChanged(before: AnyReleaseRecord, after: AnyReleaseRecord): boolean {
   const facts = (record: AnyReleaseRecord) => {
     const { evidence: ignoredEvidence, expectedHead: ignoredHead, actingSubject: ignoredActor, ...rest } = record;
-    return { ...rest, profile: record.profile === 'release-v2' ? 'release-v3' : record.profile };
+    return rest;
   };
   return JSON.stringify(facts(before)) !== JSON.stringify(facts(after));
 }
@@ -228,11 +222,9 @@ export function parseStoredRelease(raw: string, work?: string): AnyReleaseRecord
     const value = JSON.parse(raw) as AnyReleaseRecord;
     const { work: stored, ...body } = value;
     if (work && stored !== work) throw new ReleaseUnavailable('Release state is invalid');
-    if (body.profile === 'release-v2' || body.profile === 'release-v3') {
+    if (body.profile === 'release-v2') {
       const { resolvedCoverage, contentLanguages: languages, isTranslation, originalLanguages: originals, ...input } = body;
-      const record = input.profile === 'release-v3'
-        ? resolvedReleaseV3(checkedReleaseV3(input, stored), resolvedCoverage)
-        : resolvedReleaseV2(checkedReleaseV2(input, stored), resolvedCoverage);
+      const record = resolvedReleaseV2(checkedReleaseV2(input, stored), resolvedCoverage);
       if (JSON.stringify(record.contentLanguages) !== JSON.stringify(languages)
         || record.isTranslation !== isTranslation || originals.length) throw new Error('Derived coverage differs');
       return record;
@@ -244,7 +236,7 @@ export function parseStoredRelease(raw: string, work?: string): AnyReleaseRecord
   }
 }
 
-export function releaseDigest(record: AnyReleaseRecord | ((ReleaseV2Write | ReleaseV3Write) & { work: string })): string {
+export function releaseDigest(record: AnyReleaseRecord | (ReleaseV2Write & { work: string })): string {
   if (record.profile !== 'release-v1') {
     const payload = Object.fromEntries(Object.entries(record).filter(([key]) =>
       !['resolvedCoverage', 'contentLanguages', 'isTranslation', 'originalLanguages'].includes(key)));
@@ -270,7 +262,6 @@ export function identifierLiteral(identifier: { provider: string; value: string 
 }
 
 export function releaseProfileOf(record: { profile: AnyReleaseRecord['profile'] }): string {
-  if (record.profile === 'release-v3') return RELEASE_V3_PROFILE;
   return record.profile === 'release-v2' ? RELEASE_V2_PROFILE : RELEASE_PROFILE;
 }
 

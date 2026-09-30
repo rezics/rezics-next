@@ -136,9 +136,7 @@ export function releaseGroupPattern(condition: FilterCondition, release: string,
       GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:component ${release} ; rv:modelRevision <https://rezics.com/definition/release-v2> }
       FILTER(${groupTest(condition.where!, release, key, binding ? { ...binding, legacy: 'v2' } : undefined)})
     } UNION {
-      { GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:component ${release} ; rv:modelRevision <https://rezics.com/definition/release-v1> } }
-      UNION { GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:modelRevision ${v3} }
-        GRAPH ${iri(GRAPHS.current)} { ${release} rv:legacyRelease "true" } }
+      GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:component ${release} ; rv:modelRevision <https://rezics.com/definition/release-v1> }
       FILTER(${groupTest(condition.where!, release, key, binding ? { ...binding, legacy: 'v1' } : undefined)})
     }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${release} rv:protectionHead ?releaseProtection${key} } }

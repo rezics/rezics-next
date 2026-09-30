@@ -28,7 +28,7 @@ public class ReleaseCoverageUpgradeTest {
         data.add(uri(graph), uri(subject), uri(RV + predicate), NodeFactory.createLiteralString(value));
     }
 
-    @Test public void onlyAnExactSuccessfulReleaseCasMayUpgradeV1OrV2ToV3() {
+    @Test public void onlyAnExactSuccessfulReleaseCasMayUpgradeV2ToV3() {
         DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
         data.begin(ReadWrite.WRITE);
         try {
@@ -50,7 +50,7 @@ public class ReleaseCoverageUpgradeTest {
             iri(data, revisions, HEAD, "modelRevision", v3);
             iri(data, revisions, HEAD, "shapeRevision", v3);
             iri(data, revisions, PRIOR, "component", RELEASE);
-            for (String profile : List.of("release-v1", "release-v2")) {
+            for (String profile : List.of("release-v2")) {
                 var route = new ProfileRegistry.Route(profile, "urn:probe:shape", List.of());
                 var before = new ModelMutationPolicy.Subject(uri(current),
                     new CanonicalPolicy.Selection(RV + "Release", route, Set.of()), Map.of(), Set.of(uri(RV + "Release")),

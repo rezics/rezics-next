@@ -4,6 +4,7 @@ import { Value } from 'typebox/value';
 import { startMediaStack, type MediaStack } from './media-support.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import type { RealizationWrite } from '../../../services/main/src/modules/realization/schema.ts';
+import { coverageEntry } from '../../../services/main/src/modules/release/command.ts';
 import type { ReleaseV2Write, ReleaseWrite } from '../../../services/main/src/modules/release/schema.ts';
 import { RELEASE_QUERY_COST, releaseWorksPage } from '../../../services/main/src/modules/facets/release-contract.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
@@ -44,6 +45,20 @@ async function release(editor: Editor, work: string, coverage: ReleaseV2Write['c
   const saved = await json<{ revision: string }>(await editor.send('PUT',
     `${root(work)}/releases/${body.id.slice(-36)}`, body));
   return { body, saved };
+}
+
+// Frozen v2 projections never had entry nodes; editing one must not attempt to retire absent nodes.
+async function freezeV2(stack: MediaStack, release: string, revision: string) {
+  await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(release)} rv:coverage ?entry ; rv:definitionProfile ?profile . ?entry ?p ?o }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} rv:modelRevision ?profile ; rv:shapeRevision ?profile }
+    } INSERT {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(release)} rv:definitionProfile <https://rezics.com/definition/release-v2> ;
+        rv:contentLanguage ?language ; rv:completeness ?completeness ; rv:coverageRealization ?realization ; rv:coverageRevision ?coveredRevision }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} rv:modelRevision <https://rezics.com/definition/release-v2> ;
+        rv:shapeRevision <https://rezics.com/definition/release-v2> }
+    } WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(release)} rv:coverage ?entry ; rv:definitionProfile ?profile .
+      ?entry rv:contentLanguage ?language ; rv:completeness ?completeness ; rv:realization ?realization ; rv:revision ?coveredRevision ; ?p ?o } }`);
 }
 
 // These are owner-command API fixtures, including a real mixed public/private omnibus.
@@ -117,22 +132,14 @@ test('G851: one usable release supplies every condition and every explanation; d
       .items.map(item => item.id)).not.toContain(omnibus.body.id);
     expect((await json<{ items: { id: string }[] }>(await stack.call('GET', `${root(book.work)}/releases?contentLanguage=en`)))
       .items.map(item => item.id)).toContain(omnibus.body.id);
-    // Every successful modern write uses v3, even a v2 request. Explicit v3 requests work too.
-    const v3Body = { ...bilingual.body, profile: 'release-v3', id: id() };
-    const v3 = await json<{ revision: string }>(await editor.send('PUT', `${root(vn.work)}/releases/${v3Body.id.slice(-36)}`, v3Body));
+    // V3 is the graph profile; its immutable state remains the existing v2 API record.
     expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
-      ${iri(v3.revision)} rv:modelRevision <https://rezics.com/definition/release-v3> } }`)).boolean).toBe(true);
+      ${iri(bilingual.saved.revision)} rv:modelRevision <https://rezics.com/definition/release-v3> ; rv:releaseState ?state .
+      FILTER(CONTAINS(?state, '\"profile\":\"release-v2\"')) } }`)).boolean).toBe(true);
+    const unsupported = { ...bilingual.body, profile: 'release-v3', id: id() };
+    expect((await editor.send('PUT', `${root(vn.work)}/releases/${unsupported.id.slice(-36)}`, unsupported)).status).toBe(400);
     // Freeze an old v2 projection: its irrecoverable aggregate semantics stay release-level.
-    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(bilingual.body.id)} rv:coverage ?entry ; rv:definitionProfile ?profile . ?entry ?p ?o }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(bilingual.saved.revision)} rv:modelRevision ?profile ; rv:shapeRevision ?profile }
-    } INSERT {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(bilingual.body.id)} rv:definitionProfile <https://rezics.com/definition/release-v2> ;
-        rv:contentLanguage ?language ; rv:completeness ?completeness ; rv:coverageRealization ?realization ; rv:coverageRevision ?coveredRevision }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(bilingual.saved.revision)} rv:modelRevision <https://rezics.com/definition/release-v2> ;
-        rv:shapeRevision <https://rezics.com/definition/release-v2> }
-    } WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(bilingual.body.id)} rv:coverage ?entry ; rv:definitionProfile ?profile .
-      ?entry rv:contentLanguage ?language ; rv:completeness ?completeness ; rv:realization ?realization ; rv:revision ?coveredRevision ; ?p ?o } }`);
+    await freezeV2(stack, bilingual.body.id, bilingual.saved.revision);
     expect((await call([bilingualGroup])).items[0]!.matchedReleases).toEqual([bilingual.body.id]);
     expect((await json<{ coverage: unknown[] }>(await stack.call('GET',
       `${root(vn.work)}/releases/${bilingual.body.id.slice(-36)}`))).coverage).toHaveLength(2);
@@ -161,20 +168,42 @@ test('G851: one usable release supplies every condition and every explanation; d
       fixedRelease: null, coverage: null, evidence: null };
     const legacySaved = await json<{ revision: string }>(await editor.send('PUT', `${root(vn.work)}/releases/${legacy.id.slice(-36)}`, legacy));
     expect((await call([{ ...group(playable), any: [legacy.id] }])).items[0]!.matchedReleases).toEqual([legacy.id]);
-    // Old v1 has rv:work alone and is still included by a status-only group.
-    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(legacy.id)} rv:coverageWork ${iri(vn.work)} ; rv:definitionProfile ?profile ; rv:legacyRelease "true" }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(legacySaved.revision)} rv:modelRevision ?profile ; rv:shapeRevision ?profile }
-    } INSERT { GRAPH ${iri(GRAPHS.revisions)} { ${iri(legacySaved.revision)} rv:modelRevision <https://rezics.com/definition/release-v1> ;
-      rv:shapeRevision <https://rezics.com/definition/release-v1> } }
-    WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(legacy.id)} rv:definitionProfile ?profile } }`);
+    // V1 uses rv:work alone and stays on its graph profile, including after correction.
+    const legacyCorrected = await json<{ revision: string }>(await editor.send('PUT',
+      `${root(vn.work)}/releases/${legacy.id.slice(-36)}`, { ...legacy, expectedHead: legacySaved.revision, evidence: id(), publisher: 'Correction' }));
+    for (const revision of [legacySaved.revision, legacyCorrected.revision]) {
+      expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(revision)} rv:modelRevision <https://rezics.com/definition/release-v1> } }`)).boolean).toBe(true);
+    }
     expect((await call([{ ...group(playable), any: [legacy.id] }])).items[0]!.matchedReleases).toEqual([legacy.id]);
 
-    const legacyUpgraded = await json<{ revision: string }>(await editor.send('PUT',
-      `${root(vn.work)}/releases/${legacy.id.slice(-36)}`, { ...legacy, expectedHead: legacySaved.revision, evidence: id(), publisher: 'Correction' }));
+    // A virtual entry may be removed, then re-added with different completeness and no stale portion.
+    const secondJa = await realization(editor, vn.work, 'ja');
+    const virtual = await release(editor, vn.work, [ja, { ...secondJa, completeness: 'trial', portion: 'Opening' }],
+      'Virtual', { kind: 'virtual', status: 'virtual' });
+    const dropped = await json<{ revision: string }>(await editor.send('PUT',
+      `${root(vn.work)}/releases/${virtual.body.id.slice(-36)}`, { ...virtual.body,
+        expectedHead: virtual.saved.revision, evidence: id(), coverage: [ja] }));
+    expect((await stack.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(coverageEntry(virtual.body.id, secondJa.realization))} ?p ?o } }`)).boolean).toBe(false);
+    const readded = await json<{ revision: string }>(await editor.send('PUT',
+      `${root(vn.work)}/releases/${virtual.body.id.slice(-36)}`, { ...virtual.body,
+        expectedHead: dropped.revision, evidence: id(), coverage: [ja, { ...secondJa, completeness: 'partial' }] }));
+    const virtualRead = await json<{ revision: string; coverage: { realization: string; completeness: string; portion?: string }[] }>(
+      await stack.call('GET', `${root(vn.work)}/releases/${virtual.body.id.slice(-36)}`));
+    expect(virtualRead.revision).toBe(readded.revision);
+    expect(virtualRead.coverage).toHaveLength(2);
+    expect(virtualRead.coverage.find(entry => entry.realization === secondJa.realization))
+      .toMatchObject({ completeness: 'partial' });
+    expect(virtualRead.coverage.find(entry => entry.realization === secondJa.realization)).not.toHaveProperty('portion');
+
+    // The same removal is possible when upgrading a frozen v2 aggregate projection.
+    await freezeV2(stack, virtual.body.id, readded.revision);
+    const legacyDropped = await json<{ revision: string }>(await editor.send('PUT',
+      `${root(vn.work)}/releases/${virtual.body.id.slice(-36)}`, { ...virtual.body,
+        expectedHead: readded.revision, evidence: id(), coverage: [ja] }));
     expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
-      ${iri(legacyUpgraded.revision)} rv:modelRevision <https://rezics.com/definition/release-v3> } }`)).boolean).toBe(true);
-    expect((await call([{ ...group(playable), any: [legacy.id] }])).items[0]!.matchedReleases).toEqual([legacy.id]);
+      ${iri(legacyDropped.revision)} rv:modelRevision <https://rezics.com/definition/release-v3> } }`)).boolean).toBe(true);
 
     const th = await realization(editor, vn.work, 'th');
     const thaiRelease = await release(editor, vn.work, [th], 'Windows', { territory: 'TH', status: 'unofficial' });

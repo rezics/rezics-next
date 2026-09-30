@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { checkedReleaseV2, checkedReleaseV3, resolvedReleaseV2, resolvedReleaseV3,
+import { checkedReleaseV2, resolvedReleaseV2,
   parseStoredRelease, releaseDigest, assertReleaseCorrection } from '../src/modules/release/schema.ts';
 import { coverageEntry } from '../src/modules/release/command.ts';
 
@@ -17,19 +17,32 @@ const resolved = [
   { realization: id(6), revision: id(7), work: id(3), language: 'en', kind: 'translation' as const, status: 'official' as const },
 ];
 
-test('G851: v2 history and v3 requests preserve exact entry state and versioned retry identities', () => {
-  const v2 = checkedReleaseV2(body, id(3));
-  const v3 = checkedReleaseV3({ ...body, profile: 'release-v3' }, id(3));
-  const old = resolvedReleaseV2(v2, resolved), modern = resolvedReleaseV3(v3, resolved);
-  expect(parseStoredRelease(JSON.stringify(old))).toEqual(old);
-  expect(parseStoredRelease(JSON.stringify(modern))).toEqual(modern);
-  expect(modern.coverage).toEqual(old.coverage);
-  expect(releaseDigest(v2)).toBe(releaseDigest(old));
-  expect(releaseDigest(v3)).toBe(releaseDigest(modern));
-  expect(releaseDigest(v3)).not.toBe(releaseDigest(v2));
-  expect(() => assertReleaseCorrection(old, { ...modern, expectedHead: id(8) })).not.toThrow();
-  expect(() => assertReleaseCorrection(old, { ...modern, expectedHead: id(8), publisher: 'Changed' }))
+test('G851: v2 API records retain entry state and retry identities with v3 graph storage', () => {
+  const request = checkedReleaseV2(body, id(3));
+  const record = resolvedReleaseV2(request, resolved);
+  expect(record.profile).toBe('release-v2');
+  expect(parseStoredRelease(JSON.stringify(record))).toEqual(record);
+  expect(record.coverage).toEqual(request.coverage);
+  expect(releaseDigest(request)).toBe(releaseDigest(record));
+  expect(() => checkedReleaseV2({ ...body, profile: 'release-v3' }, id(3))).toThrow();
+  expect(() => parseStoredRelease(JSON.stringify({ ...record, profile: 'release-v3' }))).toThrow();
+  expect(() => assertReleaseCorrection(record, { ...record, expectedHead: id(8) })).not.toThrow();
+  expect(() => assertReleaseCorrection(record, { ...record, expectedHead: id(8), publisher: 'Changed' }))
     .toThrow('evidence');
   expect(coverageEntry(id(8), id(4))).not.toBe(coverageEntry(id(9), id(4)));
   expect(coverageEntry(id(8), id(4))).not.toBe(coverageEntry(id(8), id(6)));
+});
+
+test('G851: one correction bounds the union of old and new entries; larger replacements can be split', () => {
+  const rows = Array.from({ length: 65 }, (_, n) => ({ realization: id(100 + n), revision: id(200 + n),
+    work: id(3), language: 'ja', kind: 'original' as const, status: 'official' as const }));
+  const make = (entries: typeof rows) => resolvedReleaseV2(checkedReleaseV2({ ...body,
+    kind: 'virtual', status: 'virtual', expectedHead: id(8), evidence: id(9),
+    coverage: entries.map(row => ({ realization: row.realization, revision: row.revision, completeness: 'complete' })),
+  }, id(3)), entries);
+  const old = make(rows.slice(0, 64)), changed = make(rows.slice(1));
+  expect(() => assertReleaseCorrection(old, changed)).toThrow('split the correction');
+  const reduced = make(rows.slice(1, 64));
+  expect(() => assertReleaseCorrection(old, reduced)).not.toThrow();
+  expect(() => assertReleaseCorrection(reduced, changed)).not.toThrow();
 });

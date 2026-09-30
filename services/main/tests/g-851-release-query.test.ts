@@ -40,6 +40,7 @@ test('G851: release group compiles one bound node and includes every child in ad
   expect(pattern).toContain('release-v1');
   expect(pattern).toContain('release-v2');
   expect(pattern).toContain('release-v3');
+  expect(pattern).not.toContain('legacyRelease');
   expect(pattern).toContain('?covered_publicSelection');
   for (const facet of ['release', ...children.map(child => child.facet), 'releaseTerritory']) {
     expect(Value.Check(facetDefinition, resolveFacet(facet))).toBe(true);

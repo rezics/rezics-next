@@ -129,7 +129,7 @@ final class ModelMutationPolicy {
                                                    String name, Subject before) {
         if (!before.graph().equals(CURRENT) || before.selection() == null
             || !before.selection().type().equals(RV + "Release")
-            || !Set.of("release-v1", "release-v2").contains(before.selection().route().profile())) return false;
+            || !before.selection().route().profile().equals("release-v2")) return false;
         Node release = NodeFactory.createURI(name);
         Node own = NodeFactory.createURI(receipt);
         Node v3 = NodeFactory.createURI("https://rezics.com/definition/release-v3");

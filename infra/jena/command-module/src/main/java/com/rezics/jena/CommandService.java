@@ -252,6 +252,7 @@ final class CommandService extends ActionService {
                 protection != null && protection.action() != null);
             RebuildPolicy.Snapshot rebuild = RebuildPolicy.capture(dataset, plan, receipt);
             ModelMutationPolicy.Snapshot model = ModelMutationPolicy.capture(profiles, dataset, plan);
+            var releaseCoverage = ReleaseCoveragePolicy.capture(dataset, model);
             java.util.Map<String, ReleasePolicy.Prior> releases = ReleasePolicy.capture(dataset, plan);
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(delta == null ? dataset : delta.observed()));
             String stored = receiptValue(dataset, receipt, "requestDigest");
@@ -273,11 +274,13 @@ final class CommandService extends ActionService {
             if (protectionInvariant != null) return invalid(protectionInvariant);
             String rebuildInvariant = RebuildPolicy.check(dataset, receipt, rebuild);
             if (rebuildInvariant != null) return invalid(rebuildInvariant);
-            Map<String, Object> modelInvariant = ModelMutationPolicy.check(profiles, dataset, plan, receipt, model);
+            Set<String> retiredCoverage = ReleaseCoveragePolicy.retired(dataset, receipt, model, releaseCoverage);
+            Map<String, Object> modelInvariant = ModelMutationPolicy.check(profiles, dataset, plan, receipt,
+                ReleaseCoveragePolicy.remaining(model, retiredCoverage));
             if (modelInvariant != null) return modelInvariant;
             String releaseInvariant = ReleasePolicy.check(dataset, plan, receipt, releases);
             if (releaseInvariant != null) return invalid(releaseInvariant);
-            Map<String, Object> scope = validateScope(dataset, receipt, plan, validations);
+            Map<String, Object> scope = validateScope(dataset, receipt, plan, validations, retiredCoverage);
             if (scope != null) return scope;
             String sourceBinding = SourceProjectionPolicy.check(dataset, receipt, plan);
             if (sourceBinding != null) return invalid(sourceBinding);
@@ -324,7 +327,7 @@ final class CommandService extends ActionService {
         }
     }
     private Map<String, Object> validateScope(DatasetGraph dataset, String receipt, CommandPolicy.Plan plan,
-                                              List<Validation> validations) {
+                                              List<Validation> validations, Set<String> retiredCoverage) {
         boolean productData = !plan.current().isEmpty() || !plan.revisions().isEmpty()
             || !plan.source().isEmpty()
             || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH) && !plan.bootstrap();
@@ -353,6 +356,7 @@ final class CommandService extends ActionService {
         boolean freshPublication = plan.revisions().stream().anyMatch(subject ->
             hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentPublicationDecision"));
         for (String subject : plan.current()) {
+            if (retiredCoverage.contains(subject)) continue;
             boolean covered = directCurrent.contains(subject);
             if (!covered) {
                 Node node = NodeFactory.createURI(subject);
