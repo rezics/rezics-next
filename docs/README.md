@@ -20,9 +20,9 @@ They are design contracts, not claims that software or deployments are complete.
 
 ## Start here
 
-For the shortest path, follow [installation and graph quickstart](operations/installation.md),
-then the [first authenticated journey](plan/README.md#fast-start-milestones).
-Development uses the [toolchain lock](development/toolchain.md) and the
+Start with the [goal page](product/goal.md) and the
+[platform thesis](product/platform-thesis.md); for a local stack, follow
+[installation and graph quickstart](operations/installation.md). Development uses the [toolchain lock](development/toolchain.md) and the
 [executable test harness](testing/test-harness.md). Main, Account, the web app and
 the Accounts site exist in part.
 
