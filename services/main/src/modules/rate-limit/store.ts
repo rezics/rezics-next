@@ -86,7 +86,7 @@ export class PostgresRateLimitStore implements RateLimitStore {
     const result = await this.pool.query<{ allowed: boolean; retry_after: number }>(`INSERT INTO access.rate_limit_v1 AS r
       (key, family, count, expires_at) VALUES ($1, $2, 1, now() + $3 * interval '1 second')
       ON CONFLICT (key, family) DO UPDATE SET
-        count = CASE WHEN r.expires_at <= now() THEN 1 ELSE LEAST(r.count + 1, $4 + 1) END,
+        count = CASE WHEN r.expires_at <= now() THEN 1 ELSE GREATEST(r.count, LEAST(r.count + 1, $4 + 1)) END,
         expires_at = CASE WHEN r.expires_at <= now() THEN now() + $3 * interval '1 second' ELSE r.expires_at END
       RETURNING count <= $4 AS allowed, GREATEST(1, ceil(extract(epoch FROM expires_at - now())))::int AS retry_after`,
     [key, family, budget.seconds, budget.maximum]);

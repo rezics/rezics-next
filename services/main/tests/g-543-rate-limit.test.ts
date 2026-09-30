@@ -177,6 +177,12 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
     expect((await send('member', '/v1/media/uploads')).status).toBe(429);
     const concurrent = await Promise.all(Array.from({ length: 40 }, () => store.consume('concurrent', 'write', { maximum: 7, seconds: 60 })));
     expect(concurrent.filter(result => result.allowed)).toHaveLength(7);
+    // A demotion must not truncate the spent count. Re-gaining the old role
+    // or switching back to an installed client cannot refill its window.
+    for (let i = 0; i < 3; i++) expect((await store.consume('changing-class', 'write', { maximum: 3, seconds: 60 })).allowed).toBe(true);
+    expect((await store.consume('changing-class', 'write', { maximum: 3, seconds: 60 })).allowed).toBe(false);
+    expect((await store.consume('changing-class', 'write', { maximum: 1, seconds: 60 })).allowed).toBe(false);
+    expect((await store.consume('changing-class', 'write', { maximum: 3, seconds: 60 })).allowed).toBe(false);
     // A retry refused with 429 has no effect; after reset the existing
     // idempotency boundary returns the original effect once.
     await pool.query(`INSERT INTO access.representation(id, principal_id, subject_id, action, valid_until)
