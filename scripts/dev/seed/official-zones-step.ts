@@ -5,6 +5,7 @@ import { grantRealmProfileSeed, officialModClient, realmProfileClient } from './
 import { editorList, extraWorks, fabricApi, fictionQuotes, fictionWorks, laterModReleases, officialHubItems, officialMods,
   type OfficialRealmId, penNames, publicTexts, realmProfiles, zoneContent } from './official-plan.ts';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantImportedContributionSeedAuthority,
+  grantImportedWorkSeedAuthority,
   type LocalOperatorInput } from './operator.ts';
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
 import { localizedBilingual, people, profilePlan, seedKey, works } from './plan.ts';
@@ -168,13 +169,14 @@ async function describeWork(o: Official, key: string, target: WorkReceipt, autho
   }
 }
 
-/** The author's credit, until Main credits a Work's creator by itself. `actor` maintains the Work. */
+/** Preserve the credited author while giving the writing identity an exact editor mandate. */
 async function credit(o: Official, key: string, target: WorkReceipt, author: string, as: Session, actor = author) {
   const id = short(target.work);
   const listed = await o.read<{ items: { agent: string; role: string }[] }>(`/v1/works/${id}/agent-credits`);
   if (listed?.items.some(item => item.agent === author && item.role === 'author')) return;
   const work = await o.read<{ revision: string }>(`/v1/works/${id}`);
   if (!work) throw new Error(`Work ${key} is not public`);
+  await grantHomeSeedAuthority(o.input(as, actor), [{ action: 'work.edit', scope: `work:edit:${target.work}` }]);
   await o.api.post(`/v1/works/${id}/agent-credits`, { profile: 'native-agent-credit-v1',
     credit: `https://rezics.com/id/${derivedId(`official-credit:${key}`).slice(-36)}`, agent: author, role: 'author',
     expectedWorkHead: work.revision, actingSubject: actor }, as.token,
@@ -312,6 +314,9 @@ async function lighterTexts(o: Official) {
     await refreshSeedTokens(o.state);
     await o.state.optional(`Zone work ${extra.id}`, async () => {
       const as = o.person(extra.owner);
+      if (extra.type === 'mod' || extra.type === 'software') {
+        await grantImportedWorkSeedAuthority(o.input(as, as.actingSubject));
+      }
       const target = await createWork(o, { profile: 'metadata-only-v1', title: extra.title,
         semanticTypes: [kinds[extra.type]], language: extra.language, authoring: 'own-work',
         actingSubject: as.actingSubject }, as.token, seedKey('official-work', extra.id));
@@ -649,7 +654,8 @@ async function joining(o: Official) {
     const realm = o.realm(id), steward = realm.steward, root = `/v1/realms/${short(realm.receipt.realm)}`;
     await o.api.post(`${root}/management`, { actingSubject: steward.actingSubject }, steward.token,
       seedKey('realm-management', short(realm.receipt.realm)));
-    const rules = profile.rules.map(rule => ({ ...rule, governanceRule: null }));
+    const rules = profile.rules.map(rule => ({ ...rule, title: localizedBilingual(rule.title),
+      body: localizedBilingual(rule.body), governanceRule: null }));
     const current = await o.read<Settings>(`${root}/settings?actingSubject=${encodeURIComponent(steward.actingSubject)}`,
       steward.token);
     if (current && (!current.settings.selfJoin || JSON.stringify(current.settings.rules) !== JSON.stringify(rules))) {

@@ -1,5 +1,5 @@
 import { SeedApiError } from './api.ts';
-import { grantHomeSeedAuthority } from './operator.ts';
+import { grantHomeSeedAuthority, grantImportedWorkSeedAuthority } from './operator.ts';
 import { firstSeedTypes, seedKey, semanticTypes, works, type DemoWork } from './plan.ts';
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
 import { afterCatchUp, type SeedState, type WorkReceipt } from './state.ts';
@@ -16,6 +16,13 @@ export async function seedWorks(state: SeedState) {
     const author = work.author === 'moonlight' ? state.penAgents.get('moonlight')
       : work.author ? session.actingSubject : undefined;
     if (work.author && !author) throw new Error(`Work author ${work.author} is unavailable`);
+    // Mod creation is administrator-only under G-508. Give the fixture author
+    // explicit creation authority rather than relying on a member baseline.
+    if (work.type === 'mod') {
+      if (!state.operatorInput) throw new Error('Mod seed creation requires the local fixture operator');
+      await grantImportedWorkSeedAuthority({ ...state.operatorInput,
+        ownerAccountSubject: session.accountId, actingSubject: author ?? owner.actingSubject });
+    }
     const body = {
       profile: 'metadata-only-v1', title: work.seedTitle ?? work.title, semanticTypes: semanticTypes(work.type),
       language: work.language, actingSubject: author ?? owner.actingSubject,

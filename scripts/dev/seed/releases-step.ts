@@ -1,3 +1,4 @@
+import { grantImportedWorkSeedAuthority } from './operator.ts';
 import { seedKey, semanticTypes } from './plan.ts';
 import type { ContributionReceipt, PublicationReceipt, SeedState, WorkReceipt } from './state.ts';
 
@@ -45,18 +46,20 @@ export async function seedReleases(state: SeedState) {
   const author = state.sessions[0];
   if (!author) throw new Error('Release seed needs an account');
   const actor = author.actingSubject;
-  const classic = await state.api.post<WorkReceipt>('/v1/works', {
-    profile: 'metadata-only-v1', title: releaseSeedPlan.classic.title, semanticTypes: semanticTypes('book'),
-    language: releaseSeedPlan.classic.language, actingSubject: actor,
-  }, author.token, seedKey('release-work', 'hongloumeng'));
+  // Reuse the imported classic and its source-backed Cao Xueqin credit. A
+  // second bare record would lose that author or misattribute him to the seed user.
+  const classic = state.created.get('red-chamber');
+  if (!classic || !state.operatorInput) throw new Error('Release seed requires the imported Red Chamber and fixture operator');
+  await grantImportedWorkSeedAuthority(state.operatorInput, classic.work, classic.mainVersion);
   for (const edition of releaseSeedPlan.editions) {
     await state.api.put(`/v1/works/${classic.work.slice(-36)}/releases/${edition.id.slice(-36)}`,
       releaseBody(edition, actor), author.token, seedKey('release', edition.id));
   }
   const serial = await state.api.post<WorkReceipt>('/v1/works', {
     profile: 'metadata-only-v1', title: releaseSeedPlan.serial.title, semanticTypes: semanticTypes('book'),
-    language: releaseSeedPlan.serial.language, actingSubject: actor,
+    language: releaseSeedPlan.serial.language, actingSubject: actor, authoring: 'own-work',
   }, author.token, seedKey('release-work', 'star-harbor'));
+  await grantImportedWorkSeedAuthority(state.operatorInput, serial.work, serial.mainVersion);
   const web = releaseSeedPlan.serial;
   await state.api.put(`/v1/works/${serial.work.slice(-36)}/releases/${web.release.slice(-36)}`, {
     profile: 'release-v1', expectedHead: null, actingSubject: actor, id: web.release,

@@ -66,7 +66,8 @@ async function roleChange(api: SeedApi, root: string, owner: Session, change: ob
 async function openRealm(api: SeedApi, plan: CommunityRealm, root: string, owner: Session) {
   await api.post(`${root}/management`, { actingSubject: owner.actingSubject }, owner.token,
     seedKey('realm-management', `community:${plan.id}`));
-  const rules = plan.rules.map(rule => ({ ...rule, governanceRule: null }));
+  const rules = plan.rules.map(rule => ({ ...rule, title: localizedBilingual(rule.title),
+    body: localizedBilingual(rule.body), governanceRule: null }));
   const current = await readMain<Settings>(api, `${root}/settings?${query(owner)}`, owner.token);
   if (!current) throw new Error(`Realm ${plan.id} settings are unavailable`);
   const desired = { ...current.settings, visibility: 'public', selfJoin: true, reviewMode: 'trusted-members',

@@ -27,6 +27,7 @@ import { seedProfileCredits } from './profile-credits-step.ts';
 import { seedProfileFollows } from './profile-follows-step.ts';
 import { seedProfileShelves } from './profile-shelves-step.ts';
 import { seedRatings } from './ratings.ts';
+import { waitForSeedApis } from './readiness.ts';
 import { seedRecipes } from './recipes-step.ts';
 import { seedCoReaders } from './reading-lives-coreaders.ts';
 import { seedReadingLives } from './reading-lives-step.ts';
@@ -146,6 +147,7 @@ async function run(options: Options): Promise<boolean> {
       + 'Agents, Spaces and Access grants together. No data was changed.');
   }
   const { endpoints, fixture } = configuration();
+  await waitForSeedApis(endpoints);
   const findings = new Set<string>();
   const state: SeedState = { api: new SeedApi(endpoints), endpoints, fixture, findings,
     async optional<T>(label: string, operation: () => Promise<T>): Promise<T | null> {
@@ -164,8 +166,10 @@ async function run(options: Options): Promise<boolean> {
     : options.zonesOnly ? [seedAccounts, seedClassics, seedWorks, seedRealms, seedOfficialThemes] : steps;
   for (const step of plan) {
     const begun = performance.now();
-    await refreshSeedTokens(state);
-    await step(state);
+    try {
+      await refreshSeedTokens(state);
+      await step(state);
+    } catch (error) { throw new Error(`${step.name}: ${describe(error)}`); }
     timings.push(`  ${((performance.now() - begun) / 1000).toFixed(1).padStart(6)} s  ${step.name}`);
   }
   console.log(`Step timings (${((performance.now() - started) / 1000).toFixed(1)} s in all):`);

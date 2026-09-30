@@ -18,7 +18,8 @@ function stableId(id: string): string {
  * own shelves; the caller runs each on its own, so one failing leaves the rest.
  */
 export function profileSteps(api: SeedApi, owner: Session, sessions: Session[],
-  agents: ReadonlyMap<string, string>, works: ReadonlyMap<string, string>) {
+  agents: ReadonlyMap<string, string>, works: ReadonlyMap<string, string>,
+  creditWriter: (work: string) => Promise<Session>) {
   // Public reads go anonymously: with a bearer token Main would also want an acting Agent.
   const read = <T>(path: string): Promise<T> => api.getPublic<T>(path);
   const agentOf = (id: string) => agents.get(id) ?? sessions.find(session => session.id === id)?.actingSubject;
@@ -30,14 +31,17 @@ export function profileSteps(api: SeedApi, owner: Session, sessions: Session[],
       const work = works.get(workKey);
       if (!agent || !work) continue;
       const id = work.slice(-36);
-      const query = `?actingSubject=${encodeURIComponent(owner.actingSubject)}`;
+      // Some Works acquire their public text in later phases. The authorized
+      // editor can inspect their existing credits before they are public.
+      const writer = await creditWriter(work);
+      const query = `?actingSubject=${encodeURIComponent(writer.actingSubject)}`;
       const listed = await api.get<{ items: Array<{ agent: string; role: string }> }>(
-        `/v1/works/${id}/agent-credits${query}`, owner.token);
+        `/v1/works/${id}/agent-credits${query}`, writer.token);
       if (!listed.items.some(item => item.agent === agent && item.role === role)) {
-        const { revision } = await api.get<{ revision: string }>(`/v1/works/${id}${query}`, owner.token);
+        const { revision } = await api.get<{ revision: string }>(`/v1/works/${id}${query}`, writer.token);
         await api.post(`/v1/works/${id}/agent-credits`, { profile: 'native-agent-credit-v1',
           credit: stableId(`credit:${key}:${workKey}:${role}`), agent, role, expectedWorkHead: revision,
-          actingSubject: owner.actingSubject }, owner.token,
+          actingSubject: writer.actingSubject }, writer.token,
         seedKey('credit', `${key}:${workKey}:${role}:${revision.slice(-12)}`));
       }
       count++;
