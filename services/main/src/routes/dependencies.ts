@@ -107,6 +107,7 @@ export interface MainWorkDependencies {
   suitability?: import('../modules/suitability/store.ts').SuitabilityStore;
   sessions?: ConsumptionSessionStore;
   onboardingPersons?: import('../modules/onboarding/persons.ts').OnboardingPersons;
+  rateLimit?: import('../modules/rate-limit/hook.ts').MainRateLimit;
   alsoEnjoyed?: import('../modules/also-enjoyed/store.ts').AlsoEnjoyedStore;
   serialStats?: import('../modules/work/serial-projection.ts').SerialStatisticsProjection;
   readRankings?: import('../modules/rankings/projection.ts').ReadRankingProjection;

@@ -1,0 +1,45 @@
+import { Elysia } from 'elysia';
+import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
+import { AccountAssertionDenied } from '../account/verify-assertion.ts';
+import { rateLimitFamily, type Budgets, type PrincipalClass } from './budgets.ts';
+import { anonymousIdentity, type RateLimitOptions, type RateLimitStore } from './store.ts';
+
+export interface MainRateLimit {
+  store: RateLimitStore;
+  options: RateLimitOptions;
+  budgets: Budgets;
+}
+
+export function rateLimitHook(account: Pick<AccountAssertionVerifier, 'verify'>, limit?: MainRateLimit) {
+  return new Elysia({ name: 'main-rate-limit-v1' }).beforeHandle('global', async function enforceRateLimit({ request, server }) {
+    // Embedded route fixtures may omit deployment dependencies. The HTTP
+    // composition root always supplies the store; no runtime fail-open switch.
+    if (!limit) return;
+    const anonymous = !request.headers.has('authorization');
+    const family = rateLimitFamily(request.method, new URL(request.url).pathname);
+    if (!family) return;
+    try {
+      let principalClass: PrincipalClass = 'anonymous';
+      let identity = anonymousIdentity(request, server?.requestIP(request)?.address, limit.options);
+      if (!anonymous) {
+        const principal = await account.verify(request, []);
+        // POST is also used for read-only query profiles. Signed readers have
+        // unlimited search; merely supplying a header cannot claim that class.
+        if (family === 'search') return;
+        identity = JSON.stringify([principal.issuer, principal.subject]);
+        principalClass = await limit.store.classify(principal);
+      }
+      const decision = await limit.store.consume(identity, family, limit.budgets[principalClass][family]);
+      if (!decision.allowed) return Response.json({ type: 'about:blank', status: 429,
+        code: 'rate_limited', title: 'Request budget exhausted', family }, { status: 429,
+        headers: { 'content-type': 'application/problem+json', 'retry-after': String(decision.retryAfter), 'cache-control': 'no-store' } });
+    } catch (error) {
+      const status = error instanceof AccountAssertionDenied ? 401 : 503;
+      return Response.json({ type: 'about:blank', status,
+        code: status === 401 ? 'invalid_account_assertion' : 'rate_limit_unavailable',
+        title: status === 401 ? 'Account assertion refused' : 'Request budget unavailable' }, { status,
+        headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store',
+          ...(status === 503 ? { 'retry-after': '5' } : {}) } });
+    }
+  });
+}

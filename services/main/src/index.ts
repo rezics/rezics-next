@@ -8,6 +8,7 @@ import { ContentComments, ContentCore, ContentProjectionCursor,
   migrateContent } from '../../content/src/index.ts';
 import { createMainApp } from './app.ts';
 import type { MainWorkDependencies } from './routes/dependencies.ts';
+import { mainRateLimit } from './modules/rate-limit/config.ts';
 import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
 import { AuthorReaders } from './modules/author-page/readers.ts';
@@ -339,6 +340,7 @@ const app = createMainApp(fuseki, {
   editorialReview: new EditorialReviewStore(pool),
   types,
   suitability: new SuitabilityStore(pool, access),
+  rateLimit: mainRateLimit(pool, config),
   follows: new FollowsStore(pool),
   feed: new FeedStore(pool),
   reviews: new ReaderReviews(pool),
