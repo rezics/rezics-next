@@ -184,8 +184,8 @@ export function libraryRoutes(work: MainWorkDependencies) {
     })
     .put('/v1/works/:id/reader-status', { params: t.Object({ id: readUuid }),
       body: t.Object({ actingSubject: readId, expectedVersion: t.Integer({ minimum: 0 }),
-        status, startedOn: t.Nullable(t.String({ format: 'date' })),
-        finishedOn: t.Nullable(t.String({ format: 'date' })) }, { additionalProperties: false }),
+        status, startedOn: t.Optional(t.Nullable(t.String({ format: 'date' }))),
+        finishedOn: t.Optional(t.Nullable(t.String({ format: 'date' }))) }, { additionalProperties: false }),
       response: { 200: statusState, ...errors },
     }, async ({ request, params, body }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library is unavailable');

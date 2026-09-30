@@ -117,8 +117,8 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
     available: () => !denied,
     async setStatus(work: string, status: ReadingStatus | null) {
       const api = main().v1.works({ id: work.slice(-36) })['reader-status'];
-      const put = (entry: ReaderEntry) => api.put({ actingSubject, expectedVersion: entry.version, status,
-        startedOn: null, finishedOn: null }, { headers: { 'idempotency-key': crypto.randomUUID() } });
+      const put = (entry: ReaderEntry) => api.put({ actingSubject, expectedVersion: entry.version, status },
+        { headers: { 'idempotency-key': crypto.randomUUID() } });
       const base = entries.get(work) ?? await refresh(work);
       if (!base) return false;
       let response = await put(base);

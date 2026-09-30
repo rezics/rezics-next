@@ -9,7 +9,8 @@ export type ReadingStatus = 'want-to-read' | 'reading' | 'read';
 export interface StatusState { work: string; status: ReadingStatus | null;
   startedOn: string | null; finishedOn: string | null; version: number; changedAt: string | null }
 export interface StatusCommand { agent: string; work: string; status: ReadingStatus | null;
-  startedOn: string | null; finishedOn: string | null; expectedVersion: number; idempotencyKey: string }
+  /** Omitted dates keep their saved value; null clears only the named field. */
+  startedOn?: string | null; finishedOn?: string | null; expectedVersion: number; idempotencyKey: string }
 export interface WorkProgress { structure: string; occurrence: string; selectedRevision: string | null;
   completed: boolean; position: string | null; version: number; changedAt: string }
 export class InvalidLibraryStatus extends Error {}
@@ -320,13 +321,15 @@ export class ReaderLibraryStatusStore {
     if (!ID.test(input.agent) || !ID.test(input.work) || !KEY.test(input.idempotencyKey)
       || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0
       || ![null, 'want-to-read', 'reading', 'read'].includes(input.status)
-      || !validDate(input.startedOn) || !validDate(input.finishedOn)
-      || (input.status !== 'read' && (input.startedOn !== null || input.finishedOn !== null))
-      || (input.startedOn && input.finishedOn && input.startedOn > input.finishedOn)) {
+      || input.startedOn !== undefined && !validDate(input.startedOn)
+      || input.finishedOn !== undefined && !validDate(input.finishedOn)) {
       throw new InvalidLibraryStatus('invalid status command');
     }
+    // Full-form requests retain the historical bytes so old receipts replay.
+    // A keep marker cannot collide with a date or an explicit null (clear).
     const digest = createHash('sha256').update(JSON.stringify([input.work, input.status,
-      input.startedOn, input.finishedOn, input.expectedVersion])).digest('hex');
+      input.startedOn === undefined ? ['keep'] : input.startedOn,
+      input.finishedOn === undefined ? ['keep'] : input.finishedOn, input.expectedVersion])).digest('hex');
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -350,14 +353,20 @@ export class ReaderLibraryStatusStore {
         WHERE agent = $1 AND work = $2 FOR UPDATE`, [input.agent, input.work]);
       const version = Number(current.rows[0]?.version ?? 0);
       if (version !== input.expectedVersion) throw new StaleLibraryStatus('status changed');
+      const startedOn = input.startedOn === undefined ? current.rows[0]?.started_on ?? null : input.startedOn;
+      const finishedOn = input.finishedOn === undefined ? current.rows[0]?.finished_on ?? null : input.finishedOn;
+      if (!validDate(startedOn) || !validDate(finishedOn)
+        || startedOn !== null && finishedOn !== null && startedOn > finishedOn) {
+        throw new InvalidLibraryStatus('invalid reading dates');
+      }
       const written = await client.query<Row>(`INSERT INTO reader.library_status
         (agent, work, status, started_on, finished_on, version)
         VALUES ($1,$2,$3,$4,$5,$6)
         ON CONFLICT (agent, work) DO UPDATE SET status = EXCLUDED.status,
           started_on = EXCLUDED.started_on, finished_on = EXCLUDED.finished_on,
           version = EXCLUDED.version, changed_at = clock_timestamp()
-        RETURNING ${columns}`, [input.agent, input.work, input.status, input.startedOn,
-        input.finishedOn, version + 1]);
+        RETURNING ${columns}`, [input.agent, input.work, input.status, startedOn,
+        finishedOn, version + 1]);
       const result = state(input.work, written.rows[0]);
       await client.query(`INSERT INTO reader.library_status_command
         (agent, idempotency_key, request_digest, result) VALUES ($1,$2,$3,$4)`,
