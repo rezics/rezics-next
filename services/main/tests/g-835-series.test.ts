@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import * as fc from 'fast-check';
 import { seriesProgress, SERIES_POLICY, type SeriesPart, type CoveragePin } from '../src/modules/session/series-policy.ts';
+import { readableSeriesCoverage } from '../src/modules/session/series-coverage.ts';
+import type { WorkReadSession } from '../src/modules/work/read-session.ts';
 import type { SessionState } from '../src/modules/session/contract.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -24,7 +26,7 @@ test('G-835: reference states distinguish caught up, published finish, conclusio
       correspondenceUnresolved: false }, next: { part: { displayLabel: '21' }, reason: 'awaiting_chosen_language' } });
   expect(summary(parts.slice(0, 22).map((part, n) => attempt(n, part.work)), [], parts, 'concluded'))
     .toMatchObject({ states: { caughtUpWithAvailableMaterial: true, finishedPublishedParts: true, seriesConcluded: true } });
-  expect(summary([], [], parts, 'unknown', true)).toMatchObject({ partial: true,
+  expect(summary([], [], parts, 'unknown', true)).toMatchObject({ partial: true, next: null,
     states: { caughtUpWithAvailableMaterial: null, finishedPublishedParts: null, seriesConcluded: null } });
   const release = attempt(30, id(80), 'release', id(81));
   expect(summary([release], [{ resource: id(81), revision: release.target.revision,
@@ -45,13 +47,13 @@ test('G-835: reference omnibus plus volume one completes 24 distinct parts, neve
   }));
 });
 
-test('G-835: percentages, ownership, another language, partial coverage and another Work never fabricate completion', () => {
+test('G-835: percentages, ownership, partial coverage and another Work never fabricate completion', () => {
   const active = attempt(0, parts[0]!.work, 'realization', id(90), 'en', 'active');
   active.locators = [{ target: id(90), unit: 'percentage', current: 100, furthest: 100 }];
   const coverage: CoveragePin = { resource: id(90), revision: active.target.revision, entries: [{ work: parts[0]!.work,
     language: 'en', completeness: 'complete', realization: id(90), revision: active.target.revision }] };
   expect(summary([active], [coverage]).counts.completed).toBe(0);
-  expect(summary([{ ...active, state: 'finished' }], [coverage]).counts.completed).toBe(0);
+  expect(summary([{ ...active, state: 'finished' }], [coverage]).counts.completed).toBe(1);
   expect(summary().counts.completed).toBe(0); // Ownership is outside the policy's input.
   expect(summary([attempt(1, id(500))]).counts.completed).toBe(0); // Web Spider does not finish book Spider.
   expect(summary([attempt(1, parts[0]!.work, 'occurrence', id(501))]).counts.completed).toBe(0);
@@ -83,4 +85,31 @@ test('G-835: optional uses do not block finish and repeated required uses retain
   expect(summary([release], [{ resource: id(80), revision: id(9999), entries: [{ work: parts[0]!.work,
     language: 'zh-Hant', completeness: 'complete', realization: id(81), revision: id(82) }] }]))
     .toMatchObject({ counts: { completed: 0 }, states: { correspondenceUnresolved: true } });
+});
+
+test('G-835: Japanese completion and Library/import read states finish Works for a zh-Hant reader', () => {
+  const read = parts.slice(0, 10).map((part, n) => attempt(n, part.work, 'work', part.work, 'ja'));
+  const library = parts.slice(5, 12).map(part => ({ work: part.work, status: 'read' as const,
+    startedOn: null, finishedOn: '2020-01-01', version: 1, changedAt: '2026-10-01' }));
+  library.push({ ...library[0]!, work: id(700) });
+  const result = seriesProgress(parts, read, [], 'zh-Hant', 'ongoing', false, library);
+  expect(result.counts.completed).toBe(12);
+  expect(result.next?.part.work).toBe(parts[12]!.work);
+  expect(seriesProgress(parts, [], [], 'zh-Hant', 'ongoing', false,
+    [{ ...library[0]!, status: 'reading' }]).counts.completed).toBe(0);
+});
+
+test('G-835: coverage readability batches distinct Works once across every edition', async () => {
+  const works = Array.from({ length: 130 }, (_, n) => id(n + 1));
+  const pins = works.map((work, n): CoveragePin => ({ resource: id(n + 200), revision: id(n + 400),
+    entries: [work, works[0]!].map(work => ({ work, language: 'ja', completeness: 'complete', realization: null, revision: null })) }));
+  const batches: string[][] = [];
+  const session = { summaries: async (resources: string[]) => {
+    batches.push(resources);
+    return resources.map(reference => ({ reference, status: reference === works[129] ? 'unavailable' : 'available' }));
+  } } as unknown as Pick<WorkReadSession, 'summaries'>;
+  expect(await readableSeriesCoverage(session, works.slice(0, 24), [...pins, ...pins])).toHaveLength(258);
+  expect(batches.map(batch => batch.length)).toEqual([64, 64, 2]);
+  expect(batches.flat()).toEqual(works);
+  await expect(readableSeriesCoverage(session, [works[129]!], pins)).rejects.toThrow('Progress inputs');
 });

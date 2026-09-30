@@ -3,15 +3,15 @@ import { Value } from 'typebox/value';
 import type { SessionOwner } from './store.ts';
 import { sessionState, type SessionState } from './contract.ts';
 import { SERIES_COST } from './series-policy.ts';
-import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, type ReadPosition } from '../work/read-session.ts';
+import { decodeReadCursor, encodeReadCursor, type ReadPosition } from '../work/read-session.ts';
 
 export class SeriesSessionReader {
   constructor(private readonly pool: Pool) {}
   /** Indexed seeks per Work/selection in one round trip. At most (W+R)*257
    * candidate IDs, O((W+R)*257 log history) work, independent of older history. */
   async batch(owner: SessionOwner, works: string[], releases: string[], position: ReadPosition,
-    cursor?: string, limit: number = SERIES_COST.sessions) {
-    if (!Number.isInteger(limit) || limit < 1 || limit > SERIES_COST.sessions) throw new WorkReadInvalid('Invalid session batch size');
+    cursor?: string) {
+    const limit = SERIES_COST.sessions;
     const identity = [owner.principal.issuer, owner.principal.subject, owner.agent];
     const binding = ['series-sessions-v1', ...identity, works, releases];
     const after = decodeReadCursor(cursor, binding, position)?.after;

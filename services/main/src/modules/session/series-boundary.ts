@@ -5,11 +5,10 @@ import type { SessionState } from './contract.ts';
 /** Occurrence order is comparable only inside one exact Structure revision.
  * At most 4096 pins and four ancestor joins, one graph batch. A changed text or
  * composition needs reviewed correspondence, never numeric order inference. */
-export async function furthestSeriesOccurrence(session: WorkReadSession, work: string, language: string,
+export async function furthestSeriesOccurrence(session: WorkReadSession, work: string,
   attempts: SessionState[]) {
   const pins = new Map(attempts.filter(attempt => attempt.state === 'finished').flatMap(attempt => attempt.selections
-    .filter(selection => selection.target.base === 'occurrence' && selection.target.work === work
-      && (selection.language === null || selection.language.toLowerCase() === language.toLowerCase()))
+    .filter(selection => selection.target.base === 'occurrence' && selection.target.work === work)
     .map(selection => [`${selection.target.resource}|${selection.target.revision}`, selection.target] as const)));
   if (!pins.size) return { occurrence: null, unresolved: false };
   const rows = await session.query(`SELECT ?resource ?revision ?structure ?segmentKey ?orderKey

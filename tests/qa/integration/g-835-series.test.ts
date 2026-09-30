@@ -120,7 +120,18 @@ test('G-835: Index reference API, distinct omnibus coverage, preference races, p
     const empty = await json<Summary>(await summary());
     expect(empty).toMatchObject({ counts: { completed: 0, required: 22 }, partial: false,
       states: { caughtUpWithAvailableMaterial: false, finishedPublishedParts: false, seriesConcluded: true } });
-    for (const volume of volumes.slice(0, 20)) await json(await finish(volume.work), 201);
+    // Completed in Japanese; the preference selects future availability only.
+    for (const volume of volumes.slice(0, 10)) await json(await call('POST', '/v1/me/sessions',
+      { actingSubject: person, expectedVersion: 0, target: volume.work, state: 'finished',
+        addSelections: [{ target: volume.work, language: 'ja' }] }), 201);
+    // Library statements and imported completion dates share the status owner,
+    // without requiring a fabricated session or language.
+    for (const volume of volumes.slice(10, 15)) await json(await call('PUT', `/v1/works/${short(volume.work)}/reader-status`,
+      { actingSubject: person, status: 'read', expectedVersion: 0 }));
+    // This is the ordinary command shape emitted by the reviewed-import adapter.
+    for (const volume of volumes.slice(15, 20)) await json(await call('PUT', `/v1/works/${short(volume.work)}/reader-status`,
+      { actingSubject: person, status: 'read', startedOn: null, finishedOn: '2020-01-01', expectedVersion: 0 }));
+    expect((await json<Summary>(await summary())).revisions.library).toContainEqual({ work: volumes[10]!.work, version: 1 });
     const caught = await json<Summary>(await summary());
     expect(caught).toMatchObject({ counts: { completed: 20 },
       states: { caughtUpWithAvailableMaterial: true, finishedPublishedParts: false, correspondenceUnresolved: false },
@@ -184,7 +195,9 @@ test('G-835: Index reference API, distinct omnibus coverage, preference races, p
       profile: 'book-composition', actingSubject: person, expectedHead: chapterComposition.revision,
       operations: [1, 2].map(n => ({ op: 'insert', role: 'chapter', parent: chapterComposition.structure,
         position: 'last', target: 'https://schema.org/DigitalDocument', label: { value: `Chapter ${n}`, language: 'en' } })) }));
-    await json(await finish(chapters.occurrences[1]!), 201);
+    await json(await call('POST', '/v1/me/sessions', { actingSubject: person,
+      target: chapters.occurrences[1]!, expectedVersion: 0, state: 'finished',
+      addSelections: [{ target: chapters.occurrences[1]!, language: 'ja' }] }), 201);
     const boundary = await json<Summary>(await summary());
     expect(boundary.counts.completed).toBe(24);
     expect(boundary.furthestCompleted?.occurrence).toEqual({ resource: chapters.occurrences[1]!, revision: chapters.revision });
@@ -205,9 +218,12 @@ test('G-835: Index reference API, distinct omnibus coverage, preference races, p
       profile: 'work-composition', actingSubject: person, expectedHead: spiderComposition.revision,
       operations: [{ op: 'insert', role: 'part', parent: spiderComposition.structure, position: 'last',
         target: bookPart.work, displayLabel: '22 Reverse', inclusion: 'required' }] }));
+    await stack.contribution(bookPart.work, person, 'zh-hant', 'Traditional Chinese book part');
     await json(await finish(web.work), 201);
     const webSummary = await json<Summary>(await call('GET', `/v1/me/progress-summaries/${short(spider.work)}?actingSubject=${encodeURIComponent(person)}&language=zh-Hant`));
     expect(webSummary.counts.completed).toBe(0);
+    expect(webSummary.next).toMatchObject({ part: { work: bookPart.work, available: true }, reason: 'next_available_required_part' });
+    for (const option of ['sessionLimit', 'releaseLimit']) expect((await summary(`&${option}=1`)).status).toBe(400);
 
     // Unreadable uses do not contribute identifiers, labels, counts or next.
     const hidden = await stack.privateWork(person, 'Private volume');
@@ -245,7 +261,7 @@ test('G-835: Index reference API, distinct omnibus coverage, preference races, p
     expect(batch.next).toBeTruthy();
     const tail = await series.batch(owner, [original.work, ...volumes.map(volume => volume.work)], [release], graph, batch.next!);
     expect(new Set([...batch.items, ...tail.items].map(item => item.id)).size).toBe(batch.items.length + tail.items.length);
-    expect(await json<Summary>(await summary())).toMatchObject({ partial: true,
+    expect(await json<Summary>(await summary())).toMatchObject({ partial: true, next: null, primaryAction: null,
       states: { caughtUpWithAvailableMaterial: null, finishedPublishedParts: null } });
 
     let writeSql = 0;

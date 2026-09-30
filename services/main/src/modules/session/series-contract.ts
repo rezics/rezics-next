@@ -21,6 +21,7 @@ export const seriesSummary = t.Object({ resource: readId, scope: t.Literal('disc
   primaryAction: t.Nullable(t.Object({ work: readId, edition: editionChoice.properties.edition, language: readLanguage })),
   revisions: t.Object({ composition: t.Object({ structure: readId, revision: readId }),
     sessions: t.Array(t.Object({ id: readId, version: t.Integer() }), { maxItems: SERIES_COST.sessions }),
+    library: t.Array(t.Object({ work: readId, version: t.Integer() }), { maxItems: SERIES_COST.parts }),
     selections: t.Array(pin, { maxItems: SERIES_COST.selectionPins }),
     graph: t.Object({ dataEpoch: t.String(), sequence: t.String() }) }),
   continuation: t.Object({ parts: t.Nullable(t.String()), groups: t.Array(readId),

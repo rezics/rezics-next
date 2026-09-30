@@ -13,7 +13,6 @@ import { editionChoice, editionPreference, InvalidEditionPreference, StaleEditio
   EditionPreferenceConflict } from '../modules/session/preference-contract.ts';
 import { readSeriesProgress } from '../modules/session/series-read.ts';
 import { seriesSummary } from '../modules/session/series-contract.ts';
-import { SERIES_COST } from '../modules/session/series-policy.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { problem } from './problems.ts';
@@ -51,9 +50,7 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
     .get('/v1/me/progress-summaries/:resource', { params: t.Object({ resource: readUuid }),
       query: t.Object({ actingSubject: readId, language: t.Optional(readLanguage), parent: t.Optional(readId),
         after: t.Optional(t.String({ maxLength: 2048 })), sessionCursor: t.Optional(t.String({ maxLength: 2048 })),
-        releaseCursor: t.Optional(t.String({ maxLength: 2048 })),
-        sessionLimit: t.Optional(t.Integer({ minimum: 1, maximum: SERIES_COST.sessions })),
-        releaseLimit: t.Optional(t.Integer({ minimum: 1, maximum: SERIES_COST.releaseCandidates })) }, { additionalProperties: false }),
+        releaseCursor: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
       response: { 200: seriesSummary, ...workReadProblems } }, async ({ request, params, query }) => {
       try {
         const owner = await own(request, query.actingSubject);
@@ -97,7 +94,7 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
           if (!body.edition) return;
           if (body.edition.kind === 'realization') {
             const selected = await readWorkRealization(session, resource, body.edition.resource, body.edition.revision);
-            if (selected.language !== language) throw new InvalidEditionPreference('Edition must pin this Work in the chosen language');
+            if (recordedLanguageTag(selected.language) !== language) throw new InvalidEditionPreference('Edition must pin this Work in the chosen language');
           } else {
             // Current disclosure applies; intent keeps its exact retained pin.
             // Replaying after an imprint correction must still succeed.
@@ -107,8 +104,8 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
             } } LIMIT 2`, 1);
             const pinned = rows[0]?.state ? parseStoredRelease(rows[0].state.value) : null;
             const matches = pinned?.profile === 'release-v2'
-              ? pinned.resolvedCoverage.some(entry => entry.work === resource && entry.language === language)
-              : pinned?.work === resource && pinned.contentLanguages.includes(language);
+              ? pinned.resolvedCoverage.some(entry => entry.work === resource && recordedLanguageTag(entry.language) === language)
+              : pinned?.work === resource && pinned.contentLanguages.some(tag => recordedLanguageTag(tag) === language);
             if (!matches) {
               throw new InvalidEditionPreference('Edition must pin this Work in the chosen language');
             }

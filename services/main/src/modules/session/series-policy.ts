@@ -1,23 +1,24 @@
+import type { StatusState } from '../library/status.ts';
 import type { SessionLocator, SessionState } from './contract.ts';
 
 /** Changing completion meaning requires a new policy version and new fixtures. */
-export const SERIES_POLICY = 'composition-progress-v1' as const;
-export const SERIES_COST = { parts: 100, maximumParts: 256, sessions: 256,
-  releaseCandidates: 256, selectionPins: 4096, sessionSql: 1, availabilityBatches: 1,
-  coverageBatches: 1, occurrenceBatches: 1, preferenceSql: 1 } as const;
+export const SERIES_POLICY = 'composition-progress-v2' as const;
+export const SERIES_COST = { parts: 100, sessions: 256,
+  releaseCandidates: 256, selectionPins: 4096, sessionSql: 1 } as const;
 export interface SeriesPart { occurrence: string; work: string; displayLabel: string;
   inclusion: 'required' | 'optional' | 'extra'; available: boolean }
 export interface CoveragePin { resource: string; revision: string; entries: Array<{
   work: string; language: string | null; completeness: 'complete' | 'partial' | 'trial' | 'unknown';
   realization: string | null; revision: string | null }> }
 
-/** Only explicit completion counts. Language/locator percentages and Library
- * ownership never imply a finish; correspondence never changes a Work identity. */
+/** Completion belongs to the Work across realization languages. Only explicit
+ * finishes and Library read statements count, including imported statements.
+ * Percentages and ownership never imply a finish; correspondence never changes identity. */
 export function seriesProgress(parts: SeriesPart[], sessions: SessionState[], coverage: CoveragePin[],
-  language: string, conclusion: 'concluded' | 'ongoing' | 'unknown', partial = false) {
+  language: string, conclusion: 'concluded' | 'ongoing' | 'unknown', partial = false, library: StatusState[] = []) {
   const pins = new Map(coverage.map(pin => [`${pin.resource}|${pin.revision}`, pin]));
   const works = new Set(parts.map(part => part.work));
-  const completed = new Set<string>();
+  const completed = new Set(library.filter(item => item.status === 'read' && works.has(item.work)).map(item => item.work));
   const boundaries = new Map<string, SessionLocator>();
   let correspondenceUnresolved = false;
   for (const session of sessions) {
@@ -35,8 +36,7 @@ export function seriesProgress(parts: SeriesPart[], sessions: SessionState[], co
       const relevant = covered.filter(entry => works.has(entry.work));
       if (relevant.some(entry => entry.completeness !== 'complete')) correspondenceUnresolved = true;
       for (const entry of relevant) {
-        if (session.state !== 'finished' || entry.completeness !== 'complete'
-          || entry.language !== null && entry.language.toLowerCase() !== language.toLowerCase()) continue;
+        if (session.state !== 'finished' || entry.completeness !== 'complete') continue;
         completed.add(entry.work);
         // An omnibus page/time cannot locate a point inside its last volume.
         // Keep that boundary unknown unless coverage identifies exactly one Work.
@@ -64,7 +64,7 @@ export function seriesProgress(parts: SeriesPart[], sessions: SessionState[], co
       finishedPublishedParts: partial ? null : pending.length === 0,
       seriesConcluded: conclusion === 'unknown' ? null : conclusion === 'concluded',
       correspondenceUnresolved },
-    next: next ? { part: next, reason: available ? 'next_available_required_part' as const
+    next: !partial && next ? { part: next, reason: available ? 'next_available_required_part' as const
       : pending.length ? 'awaiting_chosen_language' as const : 'optional_extra' as const } : null,
     furthestCompleted: furthest ? { part: furthest, occurrence: null as { resource: string; revision: string } | null,
       locator: boundaries.get(furthest.work) ?? null } : null,
