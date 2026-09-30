@@ -47,18 +47,26 @@ and owner tests identify the replacement profile's required behavior.
 ## Restricted structure and open vocabulary
 
 Decision 15, product manager under maintainer delegation, 2026-09-29.
-Structural types come from a versioned registry; descriptive types and properties
-can be added under a namespace and steward without adding behaviour. Anyone may
-propose; definition, application, acceptance and activation are separate powers.
+Structural types come from a versioned registry; descriptive types add labels and
+presentation without adding behaviour. Administrators holding a `type:admit` grant
+admit or retire descriptive types through the API. A type's structural base binds
+its capabilities; descriptive metadata cannot grant authority or add properties
+to that base.
+Retirement blocks new use while existing records retain their labels and
+presentation. Definition, application, acceptance and activation remain separate
+powers.
 Ship everyday application, contest, translation and alias review first. Merge
 and split retain IDs but wait for a later workbench.
 
 The reason is safe extension without forcing each subject into a new executable
 profile. [SHACL's open and closed shapes](https://www.w3.org/TR/shacl/#ClosedConstraintComponent)
 support controlled structural boundaries; [SKOS](https://www.w3.org/TR/skos-reference/)
-supports multilingual descriptive vocabulary. Neither label nor namespace creates
-authority. The [vertical manifest](../product/platform-thesis.md#the-vertical-engine-is-the-product)
-composes these admitted definitions.
+supports multilingual descriptive vocabulary. Labels create no authority;
+descriptive admission requires a current administrator grant. The
+[vertical manifest](../product/platform-thesis.md#the-vertical-engine-is-the-product)
+composes these admitted definitions. This administrator-only admission decision
+was confirmed in G-653 on 2026-10-01; it replaces the earlier namespace, steward
+and open-proposal design for types.
 
 ## Classification journeys
 
