@@ -64,7 +64,7 @@ export interface ZoneWork {
   title: ZoneText | null;
   cover: ZoneImage | null;
   /** What kind of object a generated cover imitates. */
-  kind: 'book' | 'document' | 'recipe' | 'package';
+  kind: 'book' | 'document' | 'recipe' | 'package' | 'game';
   author: ZoneText | null;
   /** Destination for the credited author when Main identifies one. */
   authorHref?: string | null;

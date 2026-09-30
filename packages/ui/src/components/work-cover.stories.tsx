@@ -31,7 +31,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A Work’s cover at standard sizes with the proportions of its kind: bound books 2:3, poster-like documents 3:4, recipe cards and package tiles square. With a selected image it shows the image; without one it generates a typographic cover — title and authors in the Work-title face, on colors picked from the kind and the Work’s `id` (only its UUID counts, so the IRI, a `/w/` path and the bare UUID draw one cover) — so a shelf of uncovered Works still reads as books, never as empty avatars. Short Chinese and Japanese titles are set upright on a title slip, as on a thread-bound book. Leave `alt` out where the title sits beside the cover; the cover is then decorative.',
+          'A Work’s cover at standard sizes with the proportions of its kind: bound books 2:3, poster-like documents 3:4, recipe cards and package tiles square, game key art 16:9. With a selected image it shows the image; without one it generates a typographic cover — title and authors in the Work-title face, on colors picked from the kind and the Work’s `id` (only its UUID counts, so the IRI, a `/w/` path and the bare UUID draw one cover) — so a shelf of uncovered Works still reads as books, never as empty avatars. Short Chinese and Japanese titles are set upright on a title slip, as on a thread-bound book. Leave `alt` out where the title sits beside the cover; the cover is then decorative.',
       },
     },
   },
@@ -58,6 +58,7 @@ const kinds: { kind: WorkCoverKind; title: string; authors: string[]; lang: stri
   { kind: 'document', title: 'Bun — JavaScript runtime', authors: ['Oven'], lang: 'en' },
   { kind: 'recipe', title: 'Weekend buttermilk pancakes', authors: [], lang: 'en' },
   { kind: 'package', title: 'Recipe scaling assistant', authors: [], lang: 'en' },
+  { kind: 'game', title: 'Steins;Gate', authors: ['5pb.'], lang: 'en' },
 ];
 
 export const Kinds: Story = {

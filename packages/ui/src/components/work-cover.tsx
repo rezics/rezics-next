@@ -4,13 +4,14 @@ import { cn } from '../utils.ts';
 
 /**
  * What the Work is, as a physical object: a bound book, a poster-like
- * document, a recipe card or a package tile. Each has its own proportions
+ * document, a recipe card, a package tile or a game's key art. Each has its own proportions
  * and generated design.
  */
-export type WorkCoverKind = 'book' | 'document' | 'recipe' | 'package';
+export type WorkCoverKind = 'book' | 'document' | 'recipe' | 'package' | 'game';
 
-/** Width over height: books 2:3, documents 3:4, recipe cards and package tiles square. */
-export const workCoverRatio: Record<WorkCoverKind, number> = { book: 2 / 3, document: 3 / 4, recipe: 1, package: 1 };
+/** Width over height: books 2:3, documents 3:4, recipe cards and package tiles square, game key art 16:9. */
+export const workCoverRatio: Record<WorkCoverKind, number> = { book: 2 / 3, document: 3 / 4, recipe: 1, package: 1,
+  game: 16 / 9 };
 
 /** A generated cover's colors: its ground, the text on it and a decorative accent. */
 export interface WorkCoverSwatch {
@@ -60,6 +61,15 @@ const swatches: Record<WorkCoverKind, readonly WorkCoverSwatch[]> = {
     { ground: 'oklch(0.96 0.01 90)', ink: 'oklch(0.24 0.03 260)', accent: 'oklch(0.5 0.15 258)' },
     { ground: 'oklch(0.41 0.07 210)', ink: 'oklch(0.97 0.02 85)', accent: 'oklch(0.84 0.09 85)' },
     { ground: 'oklch(0.89 0.1 96)', ink: 'oklch(0.24 0.03 260)', accent: 'oklch(0.3 0.04 260)' },
+  ],
+  // Key art skies: night indigo, deep teal, ember dusk, forest, violet and storm, each with a lit horizon.
+  game: [
+    { ground: 'oklch(0.3 0.09 272)', ink: 'oklch(0.97 0.02 85)', accent: 'oklch(0.8 0.13 70)' },
+    { ground: 'oklch(0.34 0.07 205)', ink: 'oklch(0.97 0.02 85)', accent: 'oklch(0.82 0.11 150)' },
+    { ground: 'oklch(0.36 0.1 35)', ink: 'oklch(0.97 0.02 85)', accent: 'oklch(0.85 0.12 80)' },
+    { ground: 'oklch(0.33 0.07 150)', ink: 'oklch(0.97 0.02 85)', accent: 'oklch(0.86 0.1 110)' },
+    { ground: 'oklch(0.32 0.11 305)', ink: 'oklch(0.97 0.02 85)', accent: 'oklch(0.8 0.12 350)' },
+    { ground: 'oklch(0.3 0.03 250)', ink: 'oklch(0.97 0.02 85)', accent: 'oklch(0.78 0.1 230)' },
   ],
 };
 
@@ -145,7 +155,7 @@ const workCoverVariants = tv({
       lg: 'w-40 rounded-[0.5rem]', xl: 'w-56 rounded-[0.5rem]', fill: 'w-full rounded-[0.5rem]',
     },
     // Recipe cards and package tiles round further; books and documents take the size's radius.
-    kind: { book: '', document: '', recipe: 'rounded-[12%]', package: 'rounded-[22%]' },
+    kind: { book: '', document: '', recipe: 'rounded-[12%]', package: 'rounded-[22%]', game: '' },
   },
   defaultVariants: { size: 'fill', kind: 'book' },
 });
@@ -299,11 +309,76 @@ function PackageDesign({ title, lang, dir, swatch }: DesignProps) {
   </div>;
 }
 
+/** The title's size on key art, in percent of its width: large for a short name, two or three lines at most. */
+export function gameTitleSize(title: string): number {
+  let width = 0;
+  for (const character of title) width += wide.test(character) ? 1.8 : 1;
+  const longest = longestWord(title);
+  const byLength = width <= 10 ? 8.5 : width <= 20 ? 7 : width <= 36 ? 5.6 : 4.6;
+  // A bold letter is about 0.6em wide and the title column about 62% of the art's width.
+  return Math.max(4, Math.min(byLength, longest ? 62 / (0.6 * longest) : byLength));
+}
+
+/**
+ * Key art in the wide slot a game store gives it: a sky over a horizon, one
+ * of four scenes (hills and a low sun, a lit grid, a star field or a canyon),
+ * the title large at the lower left and the developer small above it.
+ */
+function GameDesign({ title, lang, dir, authors, swatch, layout }: DesignProps) {
+  const glow = `color-mix(in oklab, ${swatch.accent} 55%, transparent)`;
+  const shade = 'rgb(0 0 0 / 0.28)';
+  const scene = [
+    <span key="hills" className="absolute inset-0">
+      <span className="absolute end-[12%] bottom-[30%] size-[30cqw] rounded-full"
+        style={{ background: `radial-gradient(circle, ${swatch.accent} 0 55%, ${glow} 56% 70%, transparent 71%)` }} />
+      <span className="absolute inset-x-0 bottom-0 h-[46%] [clip-path:polygon(0_45%,18%_20%,34%_52%,52%_14%,70%_48%,86%_26%,100%_40%,100%_100%,0_100%)]"
+        style={{ background: shade }} />
+      <span className="absolute inset-x-0 bottom-0 h-[30%] [clip-path:polygon(0_60%,22%_30%,46%_62%,68%_28%,100%_55%,100%_100%,0_100%)]"
+        style={{ background: 'rgb(0 0 0 / 0.38)' }} />
+    </span>,
+    <span key="grid" className="absolute inset-0">
+      <span className="absolute start-1/2 bottom-[42%] size-[34cqw] -translate-x-1/2 rounded-full rtl:translate-x-1/2"
+        style={{ background: `linear-gradient(180deg, ${swatch.accent}, ${glow})` }} />
+      <span className="absolute inset-x-0 bottom-0 h-[42%] [transform:perspective(40cqw)_rotateX(58deg)] [transform-origin:bottom]"
+        style={{ backgroundImage: `repeating-linear-gradient(90deg, ${glow} 0 0.5cqw, transparent 0.5cqw 8cqw),
+          repeating-linear-gradient(0deg, ${glow} 0 0.5cqw, transparent 0.5cqw 6cqw)` }} />
+    </span>,
+    <span key="stars" className="absolute inset-0">
+      <span className="absolute inset-0 opacity-80" style={{ backgroundImage:
+        `radial-gradient(${swatch.ink} 0.35cqw, transparent 0.45cqw), radial-gradient(${swatch.accent} 0.3cqw, transparent 0.4cqw)`,
+      backgroundSize: '11cqw 9cqw, 17cqw 13cqw', backgroundPosition: '0 0, 5cqw 4cqw' }} />
+      <span className="absolute -end-[8%] -bottom-[40%] size-[62cqw] rounded-full"
+        style={{ background: `radial-gradient(circle at 30% 30%, ${swatch.accent}, ${shade} 70%)` }} />
+    </span>,
+    <span key="canyon" className="absolute inset-0">
+      <span className="absolute inset-x-0 top-[18%] h-[22%] opacity-70" style={{ background:
+        `linear-gradient(180deg, transparent, ${glow}, transparent)` }} />
+      <span className="absolute inset-y-0 start-0 w-[34%] [clip-path:polygon(0_0,70%_0,55%_40%,85%_70%,60%_100%,0_100%)]"
+        style={{ background: shade }} />
+      <span className="absolute inset-y-0 end-0 w-[30%] [clip-path:polygon(40%_0,100%_0,100%_100%,20%_100%,45%_62%,25%_35%)]"
+        style={{ background: 'rgb(0 0 0 / 0.36)' }} />
+    </span>,
+  ][layout];
+  return <>
+    <span aria-hidden="true">{scene}</span>
+    {/* A foot shade keeps the title legible over any scene. */}
+    <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[62%]"
+      style={{ background: 'linear-gradient(0deg, rgb(0 0 0 / 0.55), transparent)' }} />
+    <div className="absolute inset-x-[6%] bottom-[9%] flex max-h-[80%] flex-col justify-end gap-[2.5cqw] pe-[26%]">
+      <Authors authors={authors} lang={lang} className="text-[2.6cqw] opacity-90" />
+      <p lang={lang} dir={dir} style={{ fontSize: `${gameTitleSize(title)}cqw` }}
+        className="hidden text-balance font-bold font-work-title leading-[1.05] tracking-[-0.01em] [overflow-wrap:anywhere]
+          [text-shadow:0_0.3cqw_1.2cqw_rgb(0_0_0/0.45)] @min-[6rem]:line-clamp-3">{title}</p>
+    </div>
+  </>;
+}
+
 interface DesignProps {
   title: string; lang?: string; dir?: 'ltr' | 'rtl'; authors: readonly string[]; swatch: WorkCoverSwatch; layout: number;
 }
 
-const designs = { book: BookDesign, document: DocumentDesign, recipe: RecipeDesign, package: PackageDesign };
+const designs = { book: BookDesign, document: DocumentDesign, recipe: RecipeDesign, package: PackageDesign,
+  game: GameDesign };
 
 /**
  * A Work's cover at a standard size and the right proportions for its kind.
