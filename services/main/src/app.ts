@@ -60,6 +60,7 @@ import { searchRoutes, type SearchRouteDependencies } from './routes/search.ts';
 import { searchGenerationRoutes } from './routes/search-generations.ts';
 import { relationRoutes } from './routes/relations.ts';
 import { semanticRoutes } from './routes/semantic.ts';
+import { lexiconRoutes } from './routes/lexicon.ts';
 import { sourceRoutes } from './routes/sources.ts';
 import { sourceRunRoutes } from './routes/source-runs.ts';
 import { sourceSupportRoutes } from './routes/source-supports.ts';
@@ -151,6 +152,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(realmAdminRoutes(work))
     .use(memberReplyRoutes(work))
     .use(workMaintainerRoutes(work))
+    .use(lexiconRoutes(fuseki, work))
     .use(workReadRoutes(work));
 }
 

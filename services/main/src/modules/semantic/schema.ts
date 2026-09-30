@@ -109,6 +109,7 @@ export const RESERVED_OWNER_TYPES: ReadonlySet<string> = new Set([
   `${RV}OutboxBatch`, `${RV}AuthorCredit`, `${RV}AuthorCreditRevision`, `${RV}RelationOccurrence`,
   `${RV}RelationOccurrenceRevision`, `${RV}SemanticRevision`, `${RV}SemanticDefinition`,
   `${RV}DefinitionRevision`, `${RV}ModelGeneration`, `${RV}ModelComponent`, `${RV}ExternalReference`,
+  `${RV}DefinitionPresentation`, `${RV}PresentationRevision`,
   `${RV}Space`, `${RV}Realm`, `${RV}ClassificationContext`, `${RV}Decision`,
 ]);
 
@@ -117,6 +118,8 @@ export const RESERVED_OWNER_PREDICATES: ReadonlySet<string> = new Set([
   `${RV}head`, `${RV}semanticHead`, `${RV}mainVersion`, `${RV}work`, `${RV}continuityProfile`,
   `${RV}scalarValue`, `${RV}hostingPolicy`, `${RV}definitionHead`, `${RV}occurrenceHead`,
   `${RV}participation`, `${RV}generationHead`, 'http://www.w3.org/2000/01/rdf-schema#label',
+  `${RV}presentationHead`, `${RV}presentationDefinition`, `${RV}meaningRevision`,
+  `${RV}fromRole`, `${RV}toRole`, `${RV}presentationLanguage`,
 ]);
 
 const OWL = 'http://www.w3.org/2002/07/owl#';
