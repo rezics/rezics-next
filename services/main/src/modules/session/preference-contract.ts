@@ -12,6 +12,6 @@ export const editionPreference = t.Object({ work: readId, ...editionChoice.prope
 export type EditionPreference = Static<typeof editionPreference>;
 export class InvalidEditionPreference extends Error {}
 export class StaleEditionPreference extends Error {
-  constructor(readonly current: EditionPreference) { super('Edition preference changed'); }
+  constructor(readonly current: EditionPreference | null) { super('Edition preference changed'); }
 }
 export class EditionPreferenceConflict extends Error {}

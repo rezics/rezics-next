@@ -56,8 +56,7 @@ export class EditionPreferenceStore {
       const version = Number(current?.version ?? 0);
       if (version !== expectedVersion) {
         await assertOwner();
-        throw new StaleEditionPreference({ work,
-          ...(current?.choice ?? { language: choice.language, edition: null }), version });
+        throw new StaleEditionPreference(current ? { work, ...current.choice, version } : null);
       }
       const result = { work, ...choice, version: version + 1 };
       await client.query(`INSERT INTO reader.edition_preference

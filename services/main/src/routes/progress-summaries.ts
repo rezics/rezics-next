@@ -33,6 +33,10 @@ function failure(error: unknown) {
       code: 'stale_edition_preference' }, current: error.current },
   { status: 409, headers: { ...headers, 'content-type': 'application/problem+json' } });
   if (error instanceof EditionPreferenceConflict) return problem(409, 'edition_preference_conflict', error.message);
+  if (error && typeof error === 'object' && 'code' in error
+    && ['55P03', '57014', '40P01'].includes(String(error.code))) {
+    return problem(503, 'progress_unavailable', 'Reader state is busy; retry with the same Idempotency-Key');
+  }
   return workReadError(error);
 }
 export function progressSummariesRoutes(work: MainWorkDependencies) {
@@ -80,7 +84,7 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
       body: t.Object({ actingSubject: readId, expectedVersion: t.Integer({ minimum: 0,
         maximum: Number.MAX_SAFE_INTEGER - 1 }), ...editionChoice.properties }, { additionalProperties: false }),
       response: { 200: t.Object({ ...editionPreference.properties, replayed: t.Boolean() }),
-        ...workReadProblems, 409: t.Object({ ...problemResult(409).properties, current: t.Optional(editionPreference) }) } },
+        ...workReadProblems, 409: t.Object({ ...problemResult(409).properties, current: t.Optional(t.Nullable(editionPreference)) }) } },
     async ({ request, params, body }) => {
       try {
         if (!work.editionPreferences) throw new WorkReadUnavailable('Edition preferences are unavailable');

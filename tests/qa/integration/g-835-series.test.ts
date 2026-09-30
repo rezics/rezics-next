@@ -141,6 +141,9 @@ test('G-835: Index reference API, distinct omnibus coverage, preference races, p
     const childPrefPath = `/v1/me/edition-preferences/${short(volumes[20]!.work)}`;
     const edition = { kind: 'realization', resource: nextText.realization, revision: nextText.revision };
     expect(await json(await call('PUT', childPrefPath,
+      { actingSubject: person, expectedVersion: 1, language: 'zh-Hant', edition }), 409))
+      .toMatchObject({ code: 'stale_edition_preference', current: null });
+    expect(await json(await call('PUT', childPrefPath,
       { actingSubject: person, expectedVersion: 0, language: 'zh-Hant', edition }))).toMatchObject({ edition });
     expect(await json<Summary>(await summary())).toMatchObject({
       next: { part: { displayLabel: '21' }, reason: 'next_available_required_part' },
@@ -261,6 +264,10 @@ test('G-835: Index reference API, distinct omnibus coverage, preference races, p
     await expect(preferences.write(owner, volumes[1]!.work, { language: 'en', edition: null }, 0,
       randomUUID(), async () => { throw new Error('Revoked before stale disclosure'); })).rejects.toThrow('Revoked before stale disclosure');
     expect((await stack.contentPool.query('SELECT 1 FROM reader.edition_preference_command WHERE idempotency_key = $1', [rollbackKey])).rows).toEqual([]);
+    const originalWrite = preferences.write.bind(preferences);
+    preferences.write = async () => { throw { code: '55P03' }; };
+    try { expect((await pref('zh-Hant', 2)).status).toBe(503); }
+    finally { preferences.write = originalWrite; }
     expect((await summary()).headers.get('cache-control')).toBe('private, no-store');
     const originalBatch = preferences.batch.bind(preferences);
     preferences.batch = async (...args) => {
