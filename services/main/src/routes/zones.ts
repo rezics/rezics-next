@@ -15,6 +15,8 @@ import { readName, workCard, readPosition } from '../modules/work/read-contract.
 import { canReadStructureTarget, structureProfileFor } from '../modules/structure/profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
 import { createAdmittedOwner } from '../modules/zone/owner-create.ts';
+import { ZoneName, readZoneName } from '../modules/zone/read-name.ts';
+import { languageTag } from '../modules/display-language/schema.ts';
 import { changeZoneConfiguration, readZoneConfiguration,
   ZoneOfficialDenied, ZoneStale, ZoneUnavailable } from '../modules/zone/configuration.ts';
 import { InvalidZoneConfiguration } from '../modules/zone/config-format.ts';
@@ -50,6 +52,7 @@ const write = t.Object({ zone: ref, navigation: ref, revision: ref, receipt: t.S
   replayed: t.Boolean(), occurrences: t.Optional(t.Array(ref)), cost: t.Optional(cost),
   sourcePosition: t.Optional(sourcePosition) });
 const read = t.Object({ zone: ref, navigation: ref, revision: ref,
+  ownerRevision: ref, ...ZoneName.properties,
   predecessor: t.Nullable(ref), mounts: t.Array(t.Any()), next: t.Nullable(t.String()),
   sourcePosition });
 const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
@@ -112,6 +115,7 @@ const queryBlock = t.Object({ block: t.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)
   definition: ref, parent: t.Optional(t.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 })),
   maxRows: t.Integer({ minimum: 1, maximum: 1000 }) }, { additionalProperties: false });
 const configRead = t.Object({ zone: ref, revision: ref, configuration: t.Any(),
+  ...ZoneName.properties,
   cost: t.Object({ graphReads: t.Integer(), objectReads: t.Integer() }) });
 const revisionWrite = t.Object({ zone: ref, revision: ref, receipt: t.String(),
   replayed: t.Boolean(), sourcePosition });
@@ -130,6 +134,7 @@ const execution = t.Union([
     revision: ref, activation: ref }),
 ]);
 const publicationRead = t.Object({ profile: t.Literal('zone-presentation-response-v1'),
+  ...ZoneName.properties,
   zone: ref, realm: t.Nullable(ref), official: t.Nullable(t.String()), revision: ref,
   presentation: ZonePresentation,
   bannerMedia: t.Array(t.Object({ id: t.String(), image: t.Nullable(t.Object({
@@ -152,6 +157,7 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
 const mountBinding = t.Object({ occurrence: ref, segment: t.String(), target: ref });
 const resourceBinding = t.Object({ id: ref, types: t.Array(t.String(), { maxItems: 8 }) });
 const routeBasis = { profile: t.Literal('zone-route-v1'), zone: ref, path: t.String(),
+  ...ZoneName.properties,
   realm: t.Nullable(ref), revision: ref, sourcePosition: readPosition,
   cost: t.Object(Object.fromEntries(Object.entries(ZONE_ROUTE_COST).map(([name, value]) =>
     [name, t.Literal(value)]))) };
@@ -180,6 +186,7 @@ async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, reques
   if (!await work.access.canReadSemanticResource?.(principal, input.actingSubject, zone)) {
     throw new CompositionUnavailable('Zone is unavailable');
   }
+  const state = await readZoneConfiguration(work.environment, zone);
   const structure = await navigation(fuseki, zone);
   if (!structure) throw new CompositionUnavailable('Zone is unavailable');
   const header = await readCompositionHeader(work.environment, structure);
@@ -199,7 +206,9 @@ async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, reques
             work.access.canReadSemanticResource?.(semanticPrincipal, actor, resource) ?? Promise.resolve(false),
         }, principal, actingSubject: input.actingSubject, target });
     } });
+  // The optional revision selects navigation history; metadata names the current owner head.
   return { zone, navigation: structure, revision: result.revision,
+    ownerRevision: state.revision, name: state.name, language: state.language, direction: state.direction,
     predecessor: result.predecessor,
     mounts: result.occurrences, next: result.next, sourcePosition: result.sourcePosition };
 }
@@ -254,6 +263,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               && execution.reason === 'none_approved' ? 'public, max-age=30' : 'no-store' };
           if (request.headers.get('if-none-match') === headers.etag) return new Response(null, { status: 304, headers });
           return Response.json({ profile: 'zone-presentation-response-v1', zone, realm: state.realm,
+            name: state.name, language: state.language, direction: state.direction,
             official: state.official, revision: state.revision, presentation: state.presentation,
             navigation, moduleData, bannerMedia, renderTokens: zoneRenderTokens(execution.state === 'active'
               || execution.state === 'package'
@@ -274,12 +284,14 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         zone: `https://rezics.com/id/${params.id}`, ...query }), { headers: { 'cache-control': 'no-store' } }); }
       catch (error) { return routeError(error); }
     })
-    .post('/v1/zones', { body: t.Object({ zone: ref, space: ref, disclosure, actingSubject: ref },
+    .post('/v1/zones', { body: t.Object({ zone: ref, space: ref, disclosure, actingSubject: ref,
+      name: t.Optional(t.String({ minLength: 1, maxLength: 300 })), language: t.Optional(languageTag) },
       { additionalProperties: false }), response: { 200: write, 201: write, 202: pendingOperation, ...errors } },
     async ({ request, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       try {
+        readZoneName(body.name, body.language);
         const requestDigest = hash(JSON.stringify({ family: 'zone-create-v1', ...body }));
         const result = await bootstrapAdmittedStructureOwner(work.environment, work.account,
           work.access, request, { profile: 'zone-navigation', owner: body.zone,
@@ -287,7 +299,9 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             createOwner: step => createAdmittedOwner(work.environment, work.account, work.access,
               request, { kind: 'zone', owner: step.owner, actingSubject: body.actingSubject,
                 idempotencyKey: step.idempotencyKey, requestDigest: step.requestDigest,
-                space: body.space, disclosure: body.disclosure }) });
+                space: body.space, disclosure: body.disclosure,
+                ...(body.name !== undefined ? { name: body.name } : {}),
+                ...(body.language !== undefined ? { language: body.language } : {}) }) });
         return Response.json({ zone: result.owner, navigation: result.structure,
           revision: result.revision, receipt: result.structureReceipt, replayed: result.replayed },
         { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
@@ -388,6 +402,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         }
         const state = await readZoneConfiguration(work.environment, zone);
         return Response.json({ zone, revision: state.revision, configuration: state.configuration,
+          name: state.name, language: state.language, direction: state.direction,
           cost: state.cost }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
     })
@@ -417,6 +432,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .put('/v1/zones/:id/configuration', { params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, actingSubject: ref,
+        name: t.Optional(t.String({ minLength: 1, maxLength: 300 })), language: t.Optional(languageTag),
         defaultRealm: t.Optional(t.Union([ref, t.Null()])),
         official: t.Optional(t.Union([t.Object({ routeSegment: t.String({
           pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }) },
@@ -437,6 +453,8 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           request, { zone: `https://rezics.com/id/${params.id}`,
             expectedHead: body.expectedHead, actingSubject: body.actingSubject,
             idempotencyKey, operation: 'configure', patch: {
+              ...(body.name !== undefined ? { name: body.name } : {}),
+              ...(body.language !== undefined ? { language: body.language } : {}),
               ...(body.defaultRealm !== undefined ? { defaultRealm: body.defaultRealm } : {}),
               ...(body.official !== undefined ? { official: body.official } : {}),
               ...(body.defaultContext !== undefined ? { defaultContext: body.defaultContext } : {}),

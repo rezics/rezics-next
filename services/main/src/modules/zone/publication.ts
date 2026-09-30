@@ -23,6 +23,7 @@ export async function readZonePublication(env: WorkActivationEnvironment, zone: 
   const presentation = typeof state.configuration.presentation === 'object'
     ? state.configuration.presentation : DEFAULT_ZONE_PRESENTATION;
   return { zone, realm: state.configuration.defaultRealm ?? null,
+    name: state.name, language: state.language, direction: state.direction,
     official: state.configuration.official?.routeSegment ?? null,
     revision: state.revision, disclosure: state.disclosure, presentation,
     configuration: state.configuration,

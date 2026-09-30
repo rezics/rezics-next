@@ -13,6 +13,7 @@ import { checkZoneConfiguration, InvalidZoneConfiguration, ZONE_CONFIG_FORMAT,
   ZONE_LIMITS, ZONE_PROFILE, type ZoneConfiguration, type ZoneQueryBlock } from './config-format.ts';
 import { activeDefinitionDependenciesGuard } from '../context/definition-state.ts';
 import { ZONE_PRESENTATION_PROFILE, type ZonePresentation } from './presentation-format.ts';
+import { readZoneName } from './read-name.ts';
 
 export class ZoneUnavailable extends Error {}
 export class ZoneStale extends Error {}
@@ -72,6 +73,7 @@ export async function readZoneConfiguration(env: WorkActivationEnvironment, zone
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const head = await zoneHead(env, zone);
   const stored = await readWorkComponentState(env, head.manifest, zone, ZONE_PROFILE);
+  const name = readZoneName(stored.name, stored.language);
   const configuration = stored.configuration;
   const config = configuration && typeof configuration === 'object' && !Array.isArray(configuration)
     ? checkZoneConfiguration(Buffer.from(JSON.stringify(configuration)))
@@ -91,14 +93,15 @@ export async function readZoneConfiguration(env: WorkActivationEnvironment, zone
   if (advancedBase64 && config.advanced !== `sha256:${hash(Buffer.from(advancedBase64, 'base64'))}`) {
     throw new ZoneUnavailable('Zone advanced configuration digest differs');
   }
-  return { ...head, configuration: config, ...(advancedBase64 ? { advancedBase64 } : {}),
+  return { ...head, ...name, configuration: config, ...(advancedBase64 ? { advancedBase64 } : {}),
     cost: { graphReads: 1, objectReads: 2 } };
 }
 
 export interface ZoneRevisionInput {
   zone: string; expectedHead: string; actingSubject: string; idempotencyKey: string;
   operation: 'configure' | 'retire' | 'recover';
-  patch?: { defaultRealm?: string | null; official?: { routeSegment: string } | null;
+  patch?: { name?: string; language?: string;
+    defaultRealm?: string | null; official?: { routeSegment: string } | null;
     presentation?: ZonePresentation | null;
     defaultContext?: ZoneConfiguration['defaultContext'] | null;
     budget?: ZoneConfiguration['budget']; queryBlocks?: ZoneQueryBlock[];
@@ -169,6 +172,18 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     }
     const prior = head.configuration;
     const patch = input.patch;
+    let name;
+    try {
+      // An unrelated edit retains metadata. A new name without a writer language is und.
+      if (patch?.language !== undefined && patch.name === undefined) {
+        throw new InvalidZoneConfiguration('Zone language requires a name');
+      }
+      name = patch?.name !== undefined ? readZoneName(patch.name, patch.language)
+        : readZoneName(head.name ?? undefined, head.name === null ? undefined : head.language);
+    } catch (error) {
+      if (error instanceof InvalidZoneConfiguration) return invalid(error);
+      throw error;
+    }
     let advancedBase64 = head.advancedBase64;
     if (patch?.advancedBase64 === null) advancedBase64 = undefined;
     else if (patch?.advancedBase64 !== undefined) {
@@ -222,6 +237,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     const revision = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     const operation = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     const manifest = prepareComponent(env.objectDirectory, input.zone, { configuration: config,
+      ...(name.name !== null ? { name: name.name, language: name.language } : {}),
       ...(advancedBase64 ? { advancedBase64 } : {}) }, ZONE_PROFILE);
     const receipt = compositionReceiptIri(admission.id, admission.action);
     const batch = `urn:rezics:outbox:${hash(receipt)}`;

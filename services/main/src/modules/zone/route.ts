@@ -32,6 +32,7 @@ export interface ZoneNavigationItem extends ZoneMountBinding {
 }
 interface ResourceBinding { id: string; types: string[] }
 interface RouteBasis { profile: 'zone-route-v1'; zone: string; path: string;
+  name: Publication['name']; language: string; direction: Publication['direction'];
   realm: string | null; revision: string; sourcePosition: ReadPosition; cost: typeof ZONE_ROUTE_COST }
 export type ZoneRoute = RouteBasis & (
   { kind: 'home' }
@@ -329,6 +330,7 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
     catch (error) { if (error instanceof ZoneUnavailable) throw new ZoneRouteMissing('Zone route is unavailable'); throw error; }
     await read.zone(state);
     const basis: RouteBasis = { profile: 'zone-route-v1', zone: input.zone, path: input.path,
+      name: state.name, language: state.language, direction: state.direction,
       realm: state.realm, revision: state.revision, sourcePosition: read.position, cost: ZONE_ROUTE_COST };
     if (path.kind === 'home') return { ...basis, kind: 'home' };
     if (path.kind === 'work') {
