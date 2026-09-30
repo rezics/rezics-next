@@ -335,10 +335,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   if (reader && !homePersonal) throw new WorkReadUnavailable('Home preferences are unavailable');
   if (!session.deps.personPreferences) throw new WorkReadUnavailable('Person preferences are unavailable');
   if (query.scope === 'following' && !reader) throw new WorkReadInvalid('Following requires authentication');
-  const [personal, checkpoint, following, personSettings] = await inOrder(
+  const [personal, checkpoint, personSettings] = await inOrder(
     reader ? homePersonal!.read(reader.principal, reader.agent) : null,
     store.checkpoint(session.position.dataEpoch),
-    reader ? follows.matches(reader.principal, reader.agent, []) : null,
     reader && session.deps.personPreferences
       ? session.deps.personPreferences.read(reader.principal, reader.agent) : null);
   if (!query.contentLanguages && personal?.preferences.contentLanguages.length) {
@@ -346,12 +345,17 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   }
   const scope = query.scope ?? personal?.preferences.tab ?? 'all';
   if (scope === 'following' && !reader) throw new WorkReadInvalid('Following requires authentication');
+  // Following needs its inventory before validating a cursor. All gets the
+  // same head from its card-match batch; the private preferences already bind
+  // the cursor to the principal through the same followPrincipal authority.
+  const following = reader && scope === 'following'
+    ? await follows.matches(reader.principal, reader.agent, []) : null;
   const sort = query.sort ?? personal?.preferences.sort ?? 'best', window = query.window ?? 'all';
   if (scope === 'following' && sort === 'top') throw new WorkReadInvalid('Top is available in All');
   const watermarkRead = settle(reader && scope === 'following' && sort === 'new'
     ? homePersonal!.getWatermark(reader.principal, reader.agent, 'following') : Promise.resolve(null));
   const binding = ['home-feed-v1', FEED_RANKING.version, scope, sort, window, normalized(query),
-    following?.owner ?? null, reader?.agent ?? null,
+    personal?.owner ?? null, reader?.agent ?? null,
     personSettings ? digest([personSettings.version, personSettings.blockedPeople]) : null];
   const cursor = decodeReadCursor(query.cursor, binding, session.position);
   let after: { key: string; id: string } | undefined;
@@ -653,7 +657,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     settle(projected ? store.reviewPending(checkpoint.review_sequence) : Promise.resolve(false)),
     watermarkRead]);
   if (unwrap(latest).revision !== checkpoint.revision) throw new WorkReadMoved('Feed changed');
-  if (reader && unwrap(followsNow)?.revision !== following?.revision) throw new WorkReadMoved('Follows changed');
+  if (reader && unwrap(followsNow)?.revision !== (following ?? matches)?.revision) {
+    throw new WorkReadMoved('Follows changed');
+  }
   if (reader && unwrap(personalNow)?.revision !== personal?.revision) throw new WorkReadMoved('Home preferences changed');
   const last = page.at(-1);
   const current = projected && !unwrap(pending);
