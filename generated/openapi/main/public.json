@@ -113918,9 +113918,14 @@
                                     ]
                                   },
                                   "rating": {
+                                    "~elyTyp": 7,
                                     "maximum": 10,
                                     "minimum": 1,
-                                    "type": "integer"
+                                    "nullable": true,
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ]
                                   },
                                   "review": {
                                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -313659,6 +313664,33 @@
                       "release"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-target-latest-mean-v1",
+                        "type": "string"
+                      },
+                      "target": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "target"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -313776,6 +313808,33 @@
                       "release"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-target-latest-mean-v1",
+                        "type": "string"
+                      },
+                      "target": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "target"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -313891,6 +313950,33 @@
                       "profile",
                       "context",
                       "release"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-target-latest-mean-v1",
+                        "type": "string"
+                      },
+                      "target": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "target"
                     ],
                     "type": "object"
                   }
@@ -315854,6 +315940,225 @@
                         "sourcePosition"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "aggregationPolicy": {
+                          "const": "latest-per-rater-mean",
+                          "type": "string"
+                        },
+                        "cadence": {
+                          "const": "standing",
+                          "type": "string"
+                        },
+                        "complete": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "context": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "count": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "histogram": {
+                          "items": {
+                            "maximum": 100,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "maxItems": 10,
+                          "minItems": 10,
+                          "type": "array"
+                        },
+                        "mean": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "population": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "populationPolicy": {
+                          "const": "account-principal",
+                          "type": "string"
+                        },
+                        "precision": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "kind": {
+                                  "const": "no-data",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "properties": {
+                                "denominator": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "kind": {
+                                  "const": "exact-rational",
+                                  "type": "string"
+                                },
+                                "numerator": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "numerator",
+                                "denominator"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "profile": {
+                          "const": "realm-target-latest-mean-v1",
+                          "type": "string"
+                        },
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "scale": {
+                          "properties": {
+                            "max": {
+                              "const": 10,
+                              "type": "number"
+                            },
+                            "min": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "scope": {
+                          "properties": {
+                            "countedTarget": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "grain": {
+                              "enum": [
+                                "release",
+                                "realization",
+                                "occurrence",
+                                "resource"
+                              ],
+                              "type": "string"
+                            },
+                            "population": {
+                              "const": "account-principal",
+                              "type": "string"
+                            },
+                            "question": {
+                              "maxLength": 120,
+                              "minLength": 3,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "question",
+                            "grain",
+                            "population",
+                            "countedTarget"
+                          ],
+                          "type": "object"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "sum": {
+                          "maximum": 1000,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "target": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "targetGrain": {
+                          "enum": [
+                            "release",
+                            "realization",
+                            "occurrence",
+                            "resource"
+                          ],
+                          "type": "string"
+                        },
+                        "withdrawnCount": {
+                          "maximum": 100,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "complete",
+                        "context",
+                        "realm",
+                        "target",
+                        "targetGrain",
+                        "scope",
+                        "scale",
+                        "cadence",
+                        "populationPolicy",
+                        "aggregationPolicy",
+                        "population",
+                        "count",
+                        "withdrawnCount",
+                        "histogram",
+                        "sum",
+                        "mean",
+                        "precision",
+                        "sourcePosition"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -316696,6 +317001,45 @@
                       "actingSubject"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-target-rating-context-v1",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "targetGrain": {
+                        "enum": [
+                          "release",
+                          "realization",
+                          "occurrence",
+                          "resource"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "question",
+                      "targetGrain",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -316798,6 +317142,45 @@
                       "actingSubject"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-target-rating-context-v1",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "targetGrain": {
+                        "enum": [
+                          "release",
+                          "realization",
+                          "occurrence",
+                          "resource"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "question",
+                      "targetGrain",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -316897,6 +317280,45 @@
                       "profile",
                       "realm",
                       "question",
+                      "actingSubject"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-target-rating-context-v1",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "targetGrain": {
+                        "enum": [
+                          "release",
+                          "realization",
+                          "occurrence",
+                          "resource"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "question",
+                      "targetGrain",
                       "actingSubject"
                     ],
                     "type": "object"
@@ -317316,6 +317738,113 @@
                         "replayed"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "aggregation": {
+                          "const": "latest-per-rater-mean",
+                          "type": "string"
+                        },
+                        "cadence": {
+                          "const": "standing",
+                          "type": "string"
+                        },
+                        "context": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "contextRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "population": {
+                          "const": "account-principal",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "realm-target-rating-context-v1",
+                          "type": "string"
+                        },
+                        "question": {
+                          "maxLength": 120,
+                          "minLength": 3,
+                          "type": "string"
+                        },
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scale": {
+                          "properties": {
+                            "max": {
+                              "const": 10,
+                              "type": "number"
+                            },
+                            "min": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "targetGrain": {
+                          "enum": [
+                            "release",
+                            "realization",
+                            "occurrence",
+                            "resource"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "context",
+                        "realm",
+                        "question",
+                        "contextRevision",
+                        "targetGrain",
+                        "scale",
+                        "cadence",
+                        "population",
+                        "aggregation",
+                        "profile",
+                        "sourcePosition",
+                        "replayed"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -317713,6 +318242,113 @@
                         },
                         "targetGrain": {
                           "const": "fixedRelease",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "context",
+                        "realm",
+                        "question",
+                        "contextRevision",
+                        "targetGrain",
+                        "scale",
+                        "cadence",
+                        "population",
+                        "aggregation",
+                        "profile",
+                        "sourcePosition",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "aggregation": {
+                          "const": "latest-per-rater-mean",
+                          "type": "string"
+                        },
+                        "cadence": {
+                          "const": "standing",
+                          "type": "string"
+                        },
+                        "context": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "contextRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "population": {
+                          "const": "account-principal",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "realm-target-rating-context-v1",
+                          "type": "string"
+                        },
+                        "question": {
+                          "maxLength": 120,
+                          "minLength": 3,
+                          "type": "string"
+                        },
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "scale": {
+                          "properties": {
+                            "max": {
+                              "const": 10,
+                              "type": "number"
+                            },
+                            "min": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "targetGrain": {
+                          "enum": [
+                            "release",
+                            "realization",
+                            "occurrence",
+                            "resource"
+                          ],
                           "type": "string"
                         }
                       },
@@ -318374,6 +319010,87 @@
                         },
                         "targetGrain": {
                           "const": "fixedRelease",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "context",
+                        "realm",
+                        "question",
+                        "contextRevision",
+                        "targetGrain",
+                        "scale",
+                        "cadence",
+                        "population",
+                        "aggregation",
+                        "profile"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "aggregation": {
+                          "const": "latest-per-rater-mean",
+                          "type": "string"
+                        },
+                        "cadence": {
+                          "const": "standing",
+                          "type": "string"
+                        },
+                        "context": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "contextRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "population": {
+                          "const": "account-principal",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "realm-target-rating-context-v1",
+                          "type": "string"
+                        },
+                        "question": {
+                          "maxLength": 120,
+                          "minLength": 3,
+                          "type": "string"
+                        },
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "scale": {
+                          "properties": {
+                            "max": {
+                              "const": 10,
+                              "type": "number"
+                            },
+                            "min": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "targetGrain": {
+                          "enum": [
+                            "release",
+                            "realization",
+                            "occurrence",
+                            "resource"
+                          ],
                           "type": "string"
                         }
                       },
@@ -319681,6 +320398,55 @@
                       "actingSubject"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedRevisionHead": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "profile": {
+                        "const": "realm-target-rating-observation-v1",
+                        "type": "string"
+                      },
+                      "target": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "value": {
+                        "~elyTyp": 7,
+                        "maximum": 10,
+                        "minimum": 1,
+                        "nullable": true,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "target",
+                      "actingSubject",
+                      "expectedRevisionHead",
+                      "value"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -319858,6 +320624,55 @@
                       "actingSubject"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedRevisionHead": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "profile": {
+                        "const": "realm-target-rating-observation-v1",
+                        "type": "string"
+                      },
+                      "target": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "value": {
+                        "~elyTyp": 7,
+                        "maximum": 10,
+                        "minimum": 1,
+                        "nullable": true,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "target",
+                      "actingSubject",
+                      "expectedRevisionHead",
+                      "value"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -320033,6 +320848,55 @@
                       "expectedRevisionHead",
                       "value",
                       "actingSubject"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "context": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedRevisionHead": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "profile": {
+                        "const": "realm-target-rating-observation-v1",
+                        "type": "string"
+                      },
+                      "target": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "value": {
+                        "~elyTyp": 7,
+                        "maximum": 10,
+                        "minimum": 1,
+                        "nullable": true,
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "context",
+                      "target",
+                      "actingSubject",
+                      "expectedRevisionHead",
+                      "value"
                     ],
                     "type": "object"
                   }
@@ -320416,6 +321280,93 @@
                         "value",
                         "availability",
                         "profile",
+                        "sourcePosition",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "availability": {
+                          "enum": [
+                            "available",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "context": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "observation": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "observationRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "realm-target-rating-observation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "target": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "value": {
+                          "~elyTyp": 7,
+                          "maximum": 10,
+                          "minimum": 1,
+                          "nullable": true,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "context",
+                        "target",
+                        "observation",
+                        "observationRevision",
+                        "predecessor",
+                        "value",
+                        "availability",
                         "sourcePosition",
                         "replayed"
                       ],
@@ -320804,6 +321755,93 @@
                         "replayed"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "availability": {
+                          "enum": [
+                            "available",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "context": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "observation": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "observationRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "realm-target-rating-observation-v1",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "target": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "value": {
+                          "~elyTyp": 7,
+                          "maximum": 10,
+                          "minimum": 1,
+                          "nullable": true,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "context",
+                        "target",
+                        "observation",
+                        "observationRevision",
+                        "predecessor",
+                        "value",
+                        "availability",
+                        "sourcePosition",
+                        "replayed"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -321170,7 +322208,8 @@
               "enum": [
                 "realm-daily-rating-observation-v1",
                 "realm-experience-rating-observation-v1",
-                "realm-release-rating-observation-v1"
+                "realm-release-rating-observation-v1",
+                "realm-target-rating-observation-v1"
               ],
               "type": "string"
             }
@@ -321196,6 +322235,15 @@
           {
             "in": "query",
             "name": "release",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
             "required": false,
             "schema": {
               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -321550,6 +322598,83 @@
                         "profile"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "availability": {
+                          "enum": [
+                            "available",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "context": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "evaluatedAt": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "observationRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "originalSubmissionAt": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "realm-target-rating-observation-v1",
+                          "type": "string"
+                        },
+                        "revisedAt": {
+                          "type": "string"
+                        },
+                        "submittedAt": {
+                          "type": "string"
+                        },
+                        "target": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "value": {
+                          "~elyTyp": 7,
+                          "maximum": 10,
+                          "minimum": 1,
+                          "nullable": true,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "context",
+                        "target",
+                        "observation",
+                        "observationRevision",
+                        "predecessor",
+                        "value",
+                        "availability",
+                        "evaluatedAt",
+                        "submittedAt",
+                        "originalSubmissionAt",
+                        "revisedAt"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -321712,6 +322837,45 @@
               }
             },
             "description": "Response for status 404"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
           },
           "500": {
             "content": {
@@ -380073,92 +381237,47 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "context": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "count": {
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    "distribution": {
-                      "items": {
-                        "properties": {
-                          "count": {
-                            "minimum": 0,
-                            "type": "integer"
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "aggregationScope": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "countedTarget": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "grain": {
+                              "const": "main-version",
+                              "type": "string"
+                            },
+                            "population": {
+                              "enum": [
+                                "account-principal",
+                                "global-account-principal",
+                                "reader-account-principal"
+                              ],
+                              "type": "string"
+                            },
+                            "question": {
+                              "maxLength": 120,
+                              "minLength": 3,
+                              "type": "string"
+                            }
                           },
-                          "value": {
-                            "type": "integer"
-                          }
-                        },
-                        "required": [
-                          "value",
-                          "count"
-                        ],
-                        "type": "object"
-                      },
-                      "maxItems": 10,
-                      "type": "array"
-                    },
-                    "mainVersion": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "mean": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "number",
-                        "null"
-                      ]
-                    },
-                    "profile": {
-                      "const": "work-rating-read-v1",
-                      "type": "string"
-                    },
-                    "scale": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "properties": {
-                        "max": {
-                          "type": "integer"
-                        },
-                        "min": {
-                          "type": "integer"
-                        },
-                        "step": {
-                          "const": 1,
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "min",
-                        "max",
-                        "step"
-                      ],
-                      "type": [
-                        "object",
-                        "null"
-                      ]
-                    },
-                    "scope": {
-                      "properties": {
-                        "kind": {
-                          "enum": [
-                            "global",
-                            "realm",
-                            "mine"
+                          "required": [
+                            "question",
+                            "grain",
+                            "population",
+                            "countedTarget"
                           ],
-                          "type": "string"
+                          "type": [
+                            "object",
+                            "null"
+                          ]
                         },
-                        "realm": {
+                        "context": {
                           "~elyTyp": 7,
                           "nullable": true,
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -380166,55 +381285,330 @@
                             "string",
                             "null"
                           ]
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "realm"
-                      ],
-                      "type": "object"
-                    },
-                    "sourcePosition": {
-                      "properties": {
-                        "dataEpoch": {
+                        },
+                        "count": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "distribution": {
+                          "items": {
+                            "properties": {
+                              "count": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "value": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 10,
+                          "type": "array"
+                        },
+                        "mainVersion": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
-                        "sequence": {
+                        "mean": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "work-rating-read-v1",
+                          "type": "string"
+                        },
+                        "scale": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "max": {
+                              "type": "integer"
+                            },
+                            "min": {
+                              "type": "integer"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "scope": {
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "global",
+                                "realm",
+                                "mine"
+                              ],
+                              "type": "string"
+                            },
+                            "realm": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "realm"
+                          ],
+                          "type": "object"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "status": {
+                          "enum": [
+                            "available",
+                            "no-context"
+                          ],
+                          "type": "string"
+                        },
+                        "work": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         }
                       },
                       "required": [
-                        "dataEpoch",
-                        "sequence"
+                        "profile",
+                        "work",
+                        "mainVersion",
+                        "scope",
+                        "context",
+                        "status",
+                        "aggregationScope",
+                        "scale",
+                        "count",
+                        "mean",
+                        "distribution",
+                        "sourcePosition"
                       ],
                       "type": "object"
                     },
-                    "status": {
-                      "enum": [
-                        "available",
-                        "no-context"
+                    {
+                      "properties": {
+                        "aggregationScope": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "countedTarget": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "grain": {
+                              "enum": [
+                                "release",
+                                "realization",
+                                "occurrence",
+                                "resource"
+                              ],
+                              "type": "string"
+                            },
+                            "population": {
+                              "const": "account-principal",
+                              "type": "string"
+                            },
+                            "question": {
+                              "maxLength": 120,
+                              "minLength": 3,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "question",
+                            "grain",
+                            "population",
+                            "countedTarget"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "context": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "count": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "distribution": {
+                          "items": {
+                            "properties": {
+                              "count": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "value": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "count"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 10,
+                          "type": "array"
+                        },
+                        "mean": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "target-rating-read-v1",
+                          "type": "string"
+                        },
+                        "scale": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "max": {
+                              "type": "integer"
+                            },
+                            "min": {
+                              "type": "integer"
+                            },
+                            "step": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "scope": {
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "global",
+                                "realm",
+                                "mine"
+                              ],
+                              "type": "string"
+                            },
+                            "realm": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "realm"
+                          ],
+                          "type": "object"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "status": {
+                          "enum": [
+                            "available",
+                            "no-context"
+                          ],
+                          "type": "string"
+                        },
+                        "target": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "targetGrain": {
+                          "enum": [
+                            "release",
+                            "realization",
+                            "occurrence",
+                            "resource"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "target",
+                        "targetGrain",
+                        "scope",
+                        "context",
+                        "status",
+                        "aggregationScope",
+                        "scale",
+                        "count",
+                        "mean",
+                        "distribution",
+                        "sourcePosition"
                       ],
-                      "type": "string"
-                    },
-                    "work": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "profile",
-                    "work",
-                    "mainVersion",
-                    "scope",
-                    "context",
-                    "status",
-                    "scale",
-                    "count",
-                    "mean",
-                    "distribution",
-                    "sourcePosition"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -381787,17 +383181,32 @@
                             "type": "string"
                           },
                           "rating": {
+                            "~elyTyp": 7,
                             "maximum": 10,
                             "minimum": 1,
-                            "type": "integer"
+                            "nullable": true,
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
                           },
                           "ratingObservation": {
+                            "~elyTyp": 7,
+                            "nullable": true,
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "ratingRevision": {
+                            "~elyTyp": 7,
+                            "nullable": true,
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "realm": {
                             "~elyTyp": 7,
@@ -384200,9 +385609,14 @@
                             "type": "string"
                           },
                           "rating": {
+                            "~elyTyp": 7,
                             "maximum": 10,
                             "minimum": 1,
-                            "type": "integer"
+                            "nullable": true,
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
                           },
                           "review": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -384626,6 +386040,16 @@
                     "const": "reader-review-command-v1",
                     "type": "string"
                   },
+                  "rating": {
+                    "~elyTyp": 7,
+                    "maximum": 10,
+                    "minimum": 1,
+                    "nullable": true,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "spoiler": {
                     "type": "boolean"
                   },
@@ -384682,6 +386106,16 @@
                     "const": "reader-review-command-v1",
                     "type": "string"
                   },
+                  "rating": {
+                    "~elyTyp": 7,
+                    "maximum": 10,
+                    "minimum": 1,
+                    "nullable": true,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "spoiler": {
                     "type": "boolean"
                   },
@@ -384737,6 +386171,16 @@
                   "profile": {
                     "const": "reader-review-command-v1",
                     "type": "string"
+                  },
+                  "rating": {
+                    "~elyTyp": 7,
+                    "maximum": 10,
+                    "minimum": 1,
+                    "nullable": true,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
                   },
                   "spoiler": {
                     "type": "boolean"
@@ -385695,17 +387139,32 @@
                       "type": "string"
                     },
                     "rating": {
+                      "~elyTyp": 7,
                       "maximum": 10,
                       "minimum": 1,
-                      "type": "integer"
+                      "nullable": true,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
                     },
                     "ratingObservation": {
+                      "~elyTyp": 7,
+                      "nullable": true,
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "ratingRevision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "realm": {
                       "~elyTyp": 7,
