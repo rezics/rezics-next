@@ -97,8 +97,16 @@ try {
     await editor.grant(`governance:realm:${realm.realm}`, action);
   }
   const settingsRoot = `/v1/realms/${short(realm.realm)}/settings`;
-  const settings = await json<{ generation: string; ruleBasis: { revision: string | null } }>(
-    await editor.send('GET', `${settingsRoot}?actingSubject=${encodeURIComponent(editor.actor)}`));
+  // Access learns of the new community from its outbox; until it has, settings answer 503.
+  interface Settings { generation: string; ruleBasis: { revision: string | null } }
+  let found: Settings | null = null as Settings | null;
+  for (const deadline = Date.now() + 90_000; !found && Date.now() < deadline;) {
+    const response = await editor.send('GET', `${settingsRoot}?actingSubject=${encodeURIComponent(editor.actor)}`);
+    if (response.status === 200) found = await response.json() as Settings;
+    else await new Promise(done => setTimeout(done, 1000));
+  }
+  if (!found) throw new Error('The community’s settings never became readable');
+  const settings: Settings = found;
   await json(await editor.send('PUT', settingsRoot, { actingSubject: editor.actor, expectedGeneration: settings.generation,
     expectedRulesRevision: settings.ruleBasis.revision, reason: 'Allow direct public posts', settings: {
       visibility: 'public', reviewRequired: false, reviewMode: 'open', whoMaySubmit: 'granted', rules: [] } }));
