@@ -16,6 +16,7 @@ import { ReaderReviews } from './modules/review/store.ts';
 import { FeedViewerStateReader } from './modules/feed/viewer-state.ts';
 import { HomePersonalStore } from './modules/feed/personal.ts';
 import { PersonPreferencesStore } from './modules/preferences/store.ts';
+import { SuitabilityStore } from './modules/suitability/store.ts';
 import { SavedFilterStore } from './modules/saved-filter/store.ts';
 import { RankingHomeTrendingReader } from './modules/feed/trending.ts';
 import { FeedRefreshWorker } from './modules/feed/refresh.ts';
@@ -318,6 +319,7 @@ const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
   ? openLibraryFixtureFetch(config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT) : fetch;
 const libraryImport = new ReaderLibraryImportStore(contentPool);
 const app = createMainApp(fuseki, {
+  suitability: new SuitabilityStore(pool, access),
   follows: new FollowsStore(pool),
   feed: new FeedStore(pool),
   reviews: new ReaderReviews(pool),

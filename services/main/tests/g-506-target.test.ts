@@ -67,7 +67,8 @@ test('G-506: shared schemas preserve exact grains and every capability has an ex
     discussion: ['work', 'realization', 'release', 'occurrence', 'resource'],
     'collection-member': ['work', 'realization', 'release', 'occurrence', 'resource'],
     'library-status': ['work'], progress: ['occurrence'], continuity: ['work', 'realization', 'occurrence'],
-    'spoiler-boundary': ['occurrence'] });
+    'spoiler-boundary': ['occurrence'],
+    suitability: ['work', 'realization', 'release', 'occurrence', 'resource'] });
   expect(capabilityPath(id(1), 'discussion')).toBe('/v1/resources/00000000-0000-4000-8000-000000000001/discussion');
   expect(Value.Check(targetRef, id(1))).toBe(true);
   expect(Value.Check(targetRef, { target: id(1), base: 'work' })).toBe(false);
