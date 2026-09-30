@@ -1,10 +1,9 @@
-import type { UiLocale } from '../../i18n/define.ts';
 import { chinese, classics, memoryReaderActions } from '../catalogue/fixtures.ts';
 import type { ReaderWorkState } from '../catalogue/reader-actions.tsx';
 import type { CatalogueWork } from '../catalogue/work.ts';
 import type { LibraryApi } from './api.ts';
 import type { ShelfView } from './read.ts';
-import { type LibraryState, pageOf, parseLibraryState, sortLibrary, statusShelves } from './state.ts';
+import { type LibraryState, parseLibraryState, statusShelves } from './state.ts';
 import type { CustomShelf, FollowedAuthor, FollowedAuthors, LibraryItem, LibraryOverview, LibraryRow, Loaded, Review,
   ShelfStatus } from './types.ts';
 
@@ -76,21 +75,20 @@ export function storyOverview(items: readonly LibraryItem[] = libraryItems, extr
     visibility: { ok: true, data: { visibility: 'public', version: 2, changedAt: hoursAgo(1000) } }, ...extra };
 }
 
-/** A shelf as the route reads it: filtered, sorted and paged by the same functions, from `items`. */
-export function storyView(state: LibraryState, items: readonly LibraryRow[] = libraryItems,
-  locale: UiLocale = 'en'): ShelfView {
+/**
+ * A shelf as a story shows it. Rows stay in the order given: the product does
+ * not sort or page them, and neither do the stories.
+ */
+export function storyView(state: LibraryState, items: readonly LibraryRow[] = libraryItems): ShelfView {
   const custom = state.shelf.kind === 'custom' ? customShelves.find(item => item.id.endsWith((state.shelf as {
     id: string }).id)) ?? null : null;
   const chosen = state.shelf.kind === 'all' ? items
     : state.shelf.kind === 'status' ? items.filter(row => row.status === (state.shelf as { status: ShelfStatus }).status)
       : items.filter(row => row.customShelves.some(item => item.id === custom?.id))
-        .map((row, index) => ({ ...row, occurrence: `${custom!.id.slice(0, -4)}${String(index).padStart(4, '0')}` }));
-  const sorted = state.shelf.kind === 'custom' ? chosen : sortLibrary(chosen, state.sort, state.order, locale);
-  const page = pageOf(sorted, state.page);
+        .map((row, index) => ({ ...row, occurrence: `${custom!.id}#${index}` }));
   // The route reads reviews only for the list.
-  const rows: LibraryRow[] = page.items.map(row => (state.layout === 'grid' ? { ...row, review: undefined } : row));
-  return { shelf: state.shelf, custom, total: sorted.length, rows, page: page.page, pages: page.pages,
-    truncated: false, seed: {} };
+  const rows: LibraryRow[] = chosen.map(row => (state.layout === 'grid' ? { ...row, review: undefined } : row));
+  return { shelf: state.shelf, custom, total: chosen.length, rows, nextCursor: null, seed: {} };
 }
 
 export const readingRows = libraryItems.filter(row => row.status === 'reading');

@@ -57,6 +57,11 @@ export interface LibraryItem {
   stateRead?: boolean;
   /** On a custom shelf, the member's occurrence, which removal names. */
   occurrence?: string;
+  /**
+   * False when Main kept the shelf row but could not name the Work. The row
+   * stays, as a placeholder, so the shelf still matches Main's count.
+   */
+  available?: boolean;
 }
 
 /**

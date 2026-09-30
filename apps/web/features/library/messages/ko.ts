@@ -70,7 +70,7 @@ export default {
   emptyWantToRead: '읽고 싶은 작품이 아직 없어요', emptyWantToReadBody: '나중에 읽을 작품을 발견하면 저장해 두세요.',
   emptyRead: '읽음으로 표시한 작품이 아직 없어요', emptyReadBody: '다 읽은 작품과 읽은 날짜가 여기에 표시돼요.',
   emptyCustom: '이 책장은 비어 있어요', emptyCustomBody: '다른 책장에서 작품을 선택해 여기에 추가해 보세요.',
-  truncated: insert('이 책장의 작품 {{count}}개까지 표시합니다.', { count: String }),
+  unavailableWork: '이 작품을 표시할 수 없어요',
 
   unavailableTitle: '서재를 불러오지 못했어요',
   unavailableBody: 'REZICS에서 책장을 가져오지 못했어요. 잠시 후 다시 시도해 주세요.',
@@ -81,7 +81,7 @@ export default {
   missingShelfTitle: '서재에 이 책장이 없어요', missingShelfBody: '삭제됐거나 다른 사람의 책장일 수 있어요.', backToAll: '전체로 돌아가기',
 
   pages: '페이지', pageOf: insert('{{pages}}페이지 중 {{page}}페이지', { page: String, pages: String }),
-  previousPage: '이전 페이지', nextPage: '다음 페이지',
+  firstPage: '첫 페이지', previousPage: '이전 페이지', nextPage: '다음 페이지',
   yearlyGoal: insert('{{year}}년 독서 목표', { year: String }),
   goalProgress: insert('{{completed}} / {{target}}권 완독', { completed: String, target: String }),
   goalUnset: '올해 완독할 책 목표 설정', setGoal: '목표 설정', editGoal: '목표 수정', goalTarget: '완독할 책 수',

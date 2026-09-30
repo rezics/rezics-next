@@ -73,7 +73,7 @@ export default {
   emptyWantToRead: 'Noch nichts auf deiner Merkliste', emptyWantToReadBody: 'Speichere interessante Werke, um sie später zu lesen.',
   emptyRead: 'Noch keine Werke als gelesen markiert', emptyReadBody: 'Abgeschlossene Werke erscheinen hier mit deinen Lesedaten.',
   emptyCustom: 'Dieses Regal ist leer', emptyCustomBody: 'Wähle in einem anderen Regal Werke aus und füge sie hier hinzu.',
-  truncated: insert('Die ersten {{count}} Werke in diesem Regal werden angezeigt.', { count: String }),
+  unavailableWork: 'Dieses Werk ist nicht verfügbar',
 
   unavailableTitle: 'Deine Bibliothek konnte nicht geladen werden',
   unavailableBody: 'REZICS konnte deine Regale gerade nicht erreichen. Versuch es gleich noch einmal.',
@@ -85,7 +85,7 @@ export default {
   missingShelfBody: 'Es wurde möglicherweise entfernt oder gehört jemand anderem.', backToAll: 'Zurück zu allen',
 
   pages: 'Seiten', pageOf: insert('Seite {{page}} von {{pages}}', { page: String, pages: String }),
-  previousPage: 'Vorherige Seite', nextPage: 'Nächste Seite',
+  firstPage: 'Erste Seite', previousPage: 'Vorherige Seite', nextPage: 'Nächste Seite',
   yearlyGoal: insert("Leseziel für {{year}}", { year: String }),
   goalProgress: insert("Bücher: {{completed}} / {{target}}", { completed: String, target: String }),
   goalUnset: "Lege fest, wie viele Bücher du dieses Jahr beenden möchtest.",

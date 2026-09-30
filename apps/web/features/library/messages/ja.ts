@@ -72,7 +72,7 @@ export default {
   emptyWantToRead: '「読みたい」作品はまだありません', emptyWantToReadBody: '気になる作品を保存して、あとで読みましょう。',
   emptyRead: '読了した作品はまだありません', emptyReadBody: '読み終えた作品は読書日と一緒にここに表示されます。',
   emptyCustom: 'この本棚は空です', emptyCustomBody: '別の本棚で作品を選び、ここに追加してください。',
-  truncated: insert('この本棚の先頭{{count}}作品を表示しています。', { count: String }),
+  unavailableWork: 'この作品は表示できません',
 
   unavailableTitle: 'ライブラリを読み込めませんでした',
   unavailableBody: 'REZICSから本棚を読み込めません。少し待ってからもう一度お試しください。',
@@ -83,7 +83,7 @@ export default {
   missingShelfTitle: 'この本棚はライブラリにありません', missingShelfBody: '削除されたか、別の人の本棚かもしれません。', backToAll: 'すべてに戻る',
 
   pages: 'ページ', pageOf: insert('{{pages}}ページ中{{page}}ページ目', { page: String, pages: String }),
-  previousPage: '前のページ', nextPage: '次のページ',
+  firstPage: '最初のページ', previousPage: '前のページ', nextPage: '次のページ',
   yearlyGoal: insert('{{year}}年の読書目標', { year: String }),
   goalProgress: insert('{{completed}} / {{target}}冊読了', { completed: String, target: String }),
   goalUnset: '今年読み終える本の目標を設定', setGoal: '目標を設定', editGoal: '目標を編集', goalTarget: '読了目標の冊数',

@@ -5,14 +5,14 @@ import { ActionBar, ActionBarBody, ActionBarClose, ActionBarContent, ActionBarSe
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@rezics/ui/menu';
 import { cn } from '@rezics/ui/utils';
-import { BookmarkMinusIcon, CheckSquareIcon, ChevronDownIcon, FolderInputIcon, FolderMinusIcon, LockIcon,
+import { BookmarkMinusIcon, BookXIcon, CheckSquareIcon, ChevronDownIcon, FolderInputIcon, FolderMinusIcon, LockIcon,
   TagIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { type ReactNode, useState, useSyncExternalStore } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { relativeTime } from '../feed/time.ts';
 import { AuthorNames } from '../catalogue/author-names.tsx';
-import { ShelfButton } from '../catalogue/reader-actions.tsx';
+import { ShelfButton, ShelfMark } from '../catalogue/reader-actions.tsx';
 import { RatingInline } from '../catalogue/rating.tsx';
 import { slotRatio } from '../catalogue/work.ts';
 import { CoverLink, WorkTile, workTitle } from '../catalogue/work-tile.tsx';
@@ -28,6 +28,13 @@ import type { CustomShelf, LibraryRow, ShelfStatus } from './types.ts';
 type T = ReturnType<typeof materializeData<LibraryMessages>>;
 
 const shelfHref = (id: string) => libraryHref(parseLibraryState({}), { shelf: { kind: 'custom', id: id.slice(-36) } });
+
+/** A shelf row Main could not name: no generated cover, so it is not mistaken for a Work. */
+function PlaceholderCover({ className }: { className?: string }) {
+  return <div aria-hidden="true" className={cn('grid place-items-center rounded-md border border-dashed border-border',
+    'bg-muted/50 text-muted-foreground', className)}>
+    <BookXIcon className="size-5" /></div>;
+}
 
 /** "Added Sep 3, 2026 · Last read 2 days ago", and the reader's own shelves the Work is on. */
 function RowMeta({ row, now, locale, t }: { row: LibraryRow; now: number; locale: UiLocale; t: T }) {
@@ -67,30 +74,34 @@ function Row({ row, selecting, selected, onSelect, now, avatarQuery, locale, mes
   avatarQuery?: string; locale: UiLocale; messages: LibraryMessages;
 }) {
   const t = materializeData(messages, { locale });
-  const title = workTitle(row.work, locale);
+  const unavailable = row.available === false;
+  const title = unavailable ? t.unavailableWork : workTitle(row.work, locale);
   return <li className={cn('flex gap-3 py-6 first:pt-2 sm:gap-4', selected && 'bg-accent/40')}>
     {selecting ? <SelectBox title={title} checked={selected} onChange={onSelect} t={t} className="mt-1" /> : null}
     <article className="group/tile relative grid min-w-0 flex-1 grid-cols-[4.5rem_minmax(0,1fr)] gap-x-4
       sm:grid-cols-[5.5rem_minmax(0,1fr)_auto] sm:gap-x-6">
-      <CoverLink work={row.work} avatarQuery={avatarQuery} className="row-span-2 self-start sm:row-span-1" />
+      {unavailable ? <PlaceholderCover className="aspect-[2/3] row-span-2 self-start sm:row-span-1" />
+        : <CoverLink work={row.work} avatarQuery={avatarQuery} className="row-span-2 self-start sm:row-span-1" />}
       <div className="grid min-w-0 content-start gap-2.5">
-        <div className="grid gap-1">
-          <h3 lang={row.work.title?.language} dir={row.work.title?.direction}
-            className="text-pretty font-medium font-work-title text-lg/snug [overflow-wrap:anywhere]">
-            <Link href={row.work.href} className="rounded-sm outline-none decoration-1 underline-offset-2 hover:underline
-              focus-visible:ring-2 focus-visible:ring-ring">{title}</Link>
-          </h3>
-          {row.work.authors.length ? <p className="text-muted-foreground">
-            <AuthorNames authors={row.work.authors} /></p> : null}
-          {isUseWork(row) && row.status ? <p className="text-muted-foreground text-xs">
-            {rowStatusLabel(row, t)}</p> : null}
-        </div>
-        {row.status === 'reading' ? <ReadingProgress row={row} locale={locale} messages={messages} /> : null}
-        {row.status === 'read' ? <ReadDates row={row} now={now} locale={locale} messages={messages} /> : null}
-        {row.stateRead && (row.status === 'read' || row.rating !== null)
-          ? <OwnRating row={row} locale={locale} messages={messages} /> : null}
-        {row.status === 'read' ? <ReviewCell row={row} locale={locale} messages={messages} /> : null}
-        {row.status === 'read' ? <PrivateReviewCell row={row} locale={locale} messages={messages} /> : null}
+        {unavailable ? <h3 className="text-pretty font-medium text-lg/snug text-muted-foreground">{title}</h3> : <>
+          <div className="grid gap-1">
+            <h3 lang={row.work.title?.language} dir={row.work.title?.direction}
+              className="text-pretty font-medium font-work-title text-lg/snug [overflow-wrap:anywhere]">
+              <Link href={row.work.href} className="rounded-sm outline-none decoration-1 underline-offset-2 hover:underline
+                focus-visible:ring-2 focus-visible:ring-ring">{title}</Link>
+            </h3>
+            {row.work.authors.length ? <p className="text-muted-foreground">
+              <AuthorNames authors={row.work.authors} /></p> : null}
+            {isUseWork(row) && row.status ? <p className="text-muted-foreground text-xs">
+              {rowStatusLabel(row, t)}</p> : null}
+          </div>
+          {row.status === 'reading' ? <ReadingProgress row={row} locale={locale} messages={messages} /> : null}
+          {row.status === 'read' ? <ReadDates row={row} now={now} locale={locale} messages={messages} /> : null}
+          {row.stateRead && (row.status === 'read' || row.rating !== null)
+            ? <OwnRating row={row} locale={locale} messages={messages} /> : null}
+          {row.status === 'read' ? <ReviewCell row={row} locale={locale} messages={messages} /> : null}
+          {row.status === 'read' ? <PrivateReviewCell row={row} locale={locale} messages={messages} /> : null}
+        </>}
         <RowMeta row={row} now={now} locale={locale} t={t} />
       </div>
       <div className="col-start-2 mt-3 self-start sm:col-start-3 sm:mt-0">
@@ -106,8 +117,22 @@ function Tile({ row, slot, selecting, selected, onSelect, avatarQuery, locale, m
   avatarQuery?: string; locale: UiLocale; messages: LibraryMessages;
 }) {
   const t = materializeData(messages, { locale });
-  const title = workTitle(row.work, locale);
+  const unavailable = row.available === false;
+  const title = unavailable ? t.unavailableWork : workTitle(row.work, locale);
   const chapters = row.progress?.chapters;
+  if (unavailable) return <li className="relative min-w-0">
+    <article className="group/tile relative flex min-w-0 flex-col">
+      <div className="relative" style={{ aspectRatio: String(slot) }}>
+        <PlaceholderCover className="absolute inset-0" />
+        <ShelfMark work={row.work.id} title={title} locale={locale} />
+      </div>
+      <h3 className="mt-3 text-pretty text-muted-foreground text-sm">{title}</h3>
+    </article>
+    {selecting ? <label className="absolute start-2 top-2 z-30 grid size-9 cursor-pointer place-items-center rounded-full
+      bg-background/92 shadow-[0_2px_8px_rgb(0_0_0/0.18)] backdrop-blur">
+      <SelectBox title={title} checked={selected} onChange={onSelect} t={t} />
+    </label> : null}
+  </li>;
   return <li className="relative min-w-0">
     <WorkTile work={{ ...row.work, rating: null }} slot={slot} headingLevel={3} avatarQuery={avatarQuery}
       locale={locale} className={cn(selected

@@ -30,7 +30,7 @@ export default async function LibraryRoute({ searchParams }: Props) {
   const session = await readSession();
   if (!session) redirect(signInPath(here));
   if (session.agent.status !== 'selected') redirect(`${localizedPath('/identity', locale)}?next=${encodeURIComponent(here)}`);
-  const first = state.shelf.kind === 'all' && state.page === 1;
+  const first = state.shelf.kind === 'all' && state.cursor === null;
   const year = new Date().getUTCFullYear();
   const [reader, overview, view, reading, authors, goal, stats, messages] = await Promise.all([
     libraryReader(), readOverview(),

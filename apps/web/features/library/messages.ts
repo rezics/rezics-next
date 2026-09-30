@@ -226,7 +226,7 @@ export const messages = {
   emptyReadBody: 'Works you finish land here with the dates you read them.',
   emptyCustom: 'This shelf is empty',
   emptyCustomBody: 'On another shelf, choose Select, pick works and add them here.',
-  truncated: insert('Showing the first {{count}} works on this shelf.', { count: String }),
+  unavailableWork: 'This work isn’t available',
 
   unavailableTitle: 'Couldn’t load your library',
   unavailableBody: 'REZICS couldn’t reach your shelves just now. Try again in a moment.',
@@ -244,6 +244,7 @@ export const messages = {
 
   pages: 'Pages',
   pageOf: insert('Page {{page}} of {{pages}}', { page: String, pages: String }),
+  firstPage: 'First page',
   previousPage: 'Previous page',
   nextPage: 'Next page',
 };

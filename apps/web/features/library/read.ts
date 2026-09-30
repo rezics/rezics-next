@@ -8,7 +8,7 @@ import { shelfCard } from '../profile/cards.ts';
 import { shellReader } from '../shell/communities-read.ts';
 import { workHref } from '../work-page/route.ts';
 import { dayText, momentText } from './format.ts';
-import { type LibraryShelf, type LibraryState, pageOf, sortLibrary, statusShelves } from './state.ts';
+import { type LibraryState, statusShelves } from './state.ts';
 import type { ContinueItem, CustomShelf, FollowedAuthors, LibraryItem, LibraryOverview, LibraryRow, Loaded,
   PrivateImportReview, ReaderStateItem, ReadingProgress, ReadingYear, Review, ShelfStatus, StatusShelfItem,
   YearlyGoal } from './types.ts';
@@ -16,19 +16,18 @@ import type { ContinueItem, CustomShelf, FollowedAuthors, LibraryItem, LibraryOv
 // Server reads for `/library`, as the session's Agent. Each region returns
 // its own `Loaded` outcome, so a shelf that cannot load leaves the rest.
 //
-// Main sorts a status shelf only by when each Work reached it, twenty at a
-// time, and fails closed past 240 shelved Works per reader
-// (`ReaderLibraryStatusStore.publicCandidates`). So Library reads the chosen
-// shelf whole, at most twelve pages, and sorts and pages it here; reader
-// state (ratings, last read) is read for the whole shelf only when the sort
-// needs it, otherwise for the page shown.
+// A rendered shelf page is one Main page: status shelves use `sort`, `order`
+// and `cursor` on `/v1/me/shelves/status/:status/works`; a custom shelf uses
+// the Collection's `after` continuation. Rows stay in that order, including a
+// placeholder where Main kept a status row but could not name the Work. All
+// is the shelf list and the reading preview, not a second inventory.
 
-const SHELF_PAGE = 20;
-const MAX_SHELF_PAGES = 12;
+/** Main's status-shelf page, and the same size for one Collection page. */
+const MAIN_SHELF_LIMIT = 20;
+/** The reading strip on All: one short Main page, not a window over a larger read. */
+const READING_PREVIEW = 3;
 // Main's `/v1/me/shelves` page; five pages is more custom shelves than anyone keeps in view.
 const MAX_CUSTOM_PAGES = 5;
-// Main's Collection read takes at most 100 members at once.
-const CUSTOM_MEMBERS = 100;
 const PARALLEL = 6;
 
 /** Runs `task` over `items`, `PARALLEL` at a time, in order. */
@@ -98,40 +97,29 @@ async function readCustomShelves(main: MainClient, actingSubject: string) {
   return { ok: true as const, data: { ...first!, items } };
 }
 
-/**
- * A whole status shelf, newest first as Main keeps it, read once per request.
- * Main answers 409 when the shelf changed between pages; the read then starts
- * again, once.
- */
-const readWholeShelf = cache(async (status: ShelfStatus): Promise<Loaded<StatusShelfItem[]>> => {
-  const reader = await libraryReader();
-  if (!reader) return { ok: false, failure: 'sign-in' };
-  for (let attempt = 0; ; attempt++) {
-    const items: StatusShelfItem[] = [];
-    let cursor: string | undefined;
-    let moved = false;
-    for (let page = 0; page < MAX_SHELF_PAGES; page++) {
-      const read = await settle(() => reader.main.v1.me.shelves.status({ status }).works.get({ query: {
-        actingSubject: reader.actingSubject, limit: SHELF_PAGE, cursor } }));
-      if (!read.ok) {
-        if (read.failure === 'moved' && !attempt) { moved = true; break; }
-        return read;
-      }
-      items.push(...read.data.items);
-      if (!read.data.nextCursor) break;
-      cursor = read.data.nextCursor;
-    }
-    if (!moved) return { ok: true, data: items };
-  }
-});
+/** One Main read. A 409 on the first page is read again once; a stale cursor stays a 409. */
+async function readOnce<T>(call: () => Promise<{ data: T | null; error: { status: number; value: unknown } | null }>,
+  cursor: string | null): Promise<Loaded<T>> {
+  const first = await settle(call);
+  return !first.ok && first.failure === 'moved' && !cursor ? settle(call) : first;
+}
 
-function statusItem(item: StatusShelfItem): LibraryItem {
-  const work = item.card ? shelfCard(item.card)
-    : { id: item.work, href: workHref(item.work.slice(-36)), title: null, cover: null, kind: 'book', authors: [],
-      rating: null } satisfies CatalogueWork;
-  return { work, types: item.card?.types ?? [], status: item.status, version: item.version, shelvedAt: momentText(item.changedAt),
-    startedOn: dayText(item.startedOn), finishedOn: dayText(item.finishedOn), rating: null, lastReadAt: null,
-    customShelves: [] };
+function unnamedWork(work: string): CatalogueWork {
+  return { id: work, href: workHref(work.slice(-36)), title: null, cover: null, kind: 'book', authors: [], rating: null };
+}
+
+/**
+ * One status page in Main's order. A missing card stays in the page as a
+ * placeholder; dropping it would make the shelf shorter than Main's count.
+ */
+export function statusShelfItems(items: readonly StatusShelfItem[]): LibraryItem[] {
+  return items.map(item => {
+    const named = item.card ? shelfCard(item.card) : null;
+    return { work: named ?? unnamedWork(item.work), types: item.card?.types ?? [], status: item.status,
+      version: item.version, shelvedAt: momentText(item.changedAt), startedOn: dayText(item.startedOn),
+      finishedOn: dayText(item.finishedOn), rating: null, lastReadAt: null, customShelves: [],
+      available: named !== null };
+  });
 }
 
 /**
@@ -229,101 +217,76 @@ async function readPrivateReviews(reader: Reader, rows: readonly LibraryItem[]):
 }
 
 export interface ShelfView {
-  shelf: LibraryShelf;
+  shelf: LibraryState['shelf'];
   /** The custom shelf shown; null for the status shelves and All. */
   custom: CustomShelf | null;
-  total: number;
+  /** Main's exact status count. Null when a custom shelf's one page is not the whole shelf. */
+  total: number | null;
   rows: LibraryRow[];
-  page: number;
-  pages: number;
-  /** A custom shelf with more members than one read shows. */
-  truncated: boolean;
+  /** Main's continuation, passed back as the next page's cursor. */
+  nextCursor: string | null;
   /** Reader state for the rows, so their shelf controls render settled. */
   seed: ReaderSeed;
 }
 
-/** Works on the chosen status shelves in the chosen order, and the rows of the page shown. */
-async function readStatusView(reader: Reader, overview: LibraryOverview, state: LibraryState,
-  statuses: readonly ShelfStatus[]): Promise<Loaded<{ items: LibraryItem[]; states: Map<string, ReaderStateItem> }>> {
-  const shelves = await Promise.all(statuses.map(status => overview.counts[status]
-    ? readWholeShelf(status) : Promise.resolve({ ok: true as const, data: [] })));
-  const failed = shelves.find(shelf => !shelf.ok);
-  if (failed && !failed.ok) return failed;
-  let items = shelves.flatMap(shelf => (shelf.ok ? shelf.data : []).map(statusItem));
-  let states = new Map<string, ReaderStateItem>();
-  if (state.sort === 'rating' || state.sort === 'last-read') {
-    // Works Main could not name are left out of the batch, where one would fail it.
-    states = await readStates(reader.main, reader.actingSubject,
-      items.filter(item => item.work.title).map(item => item.work.id));
-    items = items.map(item => withState(item, states.get(item.work.id)));
-  }
-  return { ok: true, data: { items, states } };
-}
-
-/** A custom shelf's members in its own order, as far as one read of Main's Collection goes. */
-async function readMembers(reader: Reader, shelf: CustomShelf):
-  Promise<Loaded<{ members: { work: string; occurrence: string }[]; truncated: boolean }>> {
-  const read = await settle(() => reader.main.v1.collections({ id: shelf.id.slice(-36) }).get({ query: {
-    actingSubject: reader.actingSubject, limit: CUSTOM_MEMBERS } }));
-  if (!read.ok) return read;
-  // Main types occurrences loosely; these are the Structure's occurrence records.
-  const occurrences = read.data.occurrences as { occurrence: string; state: 'active' | 'removed'; role: string;
-    target?: string }[];
-  const members = occurrences.flatMap(item => item.state === 'active' && item.role === 'member' && item.target
-    ? [{ work: item.target, occurrence: item.occurrence }] : []);
-  return { ok: true, data: { members, truncated: read.data.next !== null } };
-}
-
-/** A custom shelf member as a card, from the Work's own read; null when Main cannot show it. */
+/** A custom shelf member as a card, from the Work's own read; a placeholder when Main cannot show it. */
 async function memberItem(member: { work: string; occurrence: string }, locale: UiLocale): Promise<LibraryItem> {
   const read = await readWork(member.work, locale);
   const work: CatalogueWork = read.ok
     ? { id: member.work, href: workHref(member.work.slice(-36)), title: read.data.title, cover: read.data.cover,
       kind: coverKindOf(read.data.types), authors: [], rating: null, completion: read.data.completionStatus }
-    : { id: member.work, href: workHref(member.work.slice(-36)), title: null, cover: null, kind: 'book', authors: [],
-      rating: null };
+    : unnamedWork(member.work);
   return { work, types: read.ok ? read.data.types : [], status: null, version: 0, shelvedAt: null,
-    startedOn: null, finishedOn: null, rating: null,
-    lastReadAt: null, customShelves: [], occurrence: member.occurrence };
+    startedOn: null, finishedOn: null, rating: null, lastReadAt: null, customShelves: [],
+    occurrence: member.occurrence, available: read.ok };
 }
 
 /**
- * The chosen shelf, sorted and paged, with what the page's rows show:
+ * The chosen shelf as one Main page, with what that page's rows show:
  * reader state, reading progress and, in the list, the reader's reviews.
  */
 export async function readShelfView(state: LibraryState, locale: UiLocale): Promise<Loaded<ShelfView>> {
   const [reader, overview] = await Promise.all([libraryReader(), readOverview()]);
   if (!reader) return { ok: false, failure: 'sign-in' };
   if (!overview.ok) return overview;
+  if (state.shelf.kind === 'all') {
+    return { ok: true, data: { shelf: state.shelf, custom: null, total: statusShelves.reduce((sum, status) =>
+      sum + overview.data.counts[status], 0), rows: [], nextCursor: null, seed: {} } };
+  }
   let custom: CustomShelf | null = null;
-  let states = new Map<string, ReaderStateItem>();
-  let truncated = false;
-  let total: number;
-  let page: { items: LibraryItem[]; page: number; pages: number };
+  let items: LibraryItem[];
+  let total: number | null;
+  let nextCursor: string | null;
   if (state.shelf.kind === 'custom') {
     const id = state.shelf.id;
     custom = overview.data.customShelves.find(shelf => shelf.id.endsWith(id)) ?? null;
     if (!custom) return { ok: false, failure: 'missing' };
-    const read = await readMembers(reader, custom);
+    const collection = custom.id.slice(-36);
+    const read = await readOnce(() => reader.main.v1.collections({ id: collection }).get({ query: {
+      actingSubject: reader.actingSubject, limit: MAIN_SHELF_LIMIT, ...(state.cursor ? { after: state.cursor } : {}) } }),
+    state.cursor);
     if (!read.ok) return read;
-    truncated = read.data.truncated;
-    total = read.data.members.length;
-    const members = pageOf(read.data.members, state.page);
-    page = { ...members, items: await pooled(members.items, member => memberItem(member, locale)) };
+    // Main types occurrences loosely; these are the Structure's occurrence records, in Collection order.
+    const occurrences = read.data.occurrences as { occurrence: string; state: 'active' | 'removed'; role: string;
+      target?: string }[];
+    const members = occurrences.flatMap(item => item.state === 'active' && item.role === 'member' && item.target
+      ? [{ work: item.target, occurrence: item.occurrence }] : []);
+    items = await pooled(members, member => memberItem(member, locale));
+    nextCursor = read.data.next;
+    total = state.cursor === null && nextCursor === null ? items.length : null;
   } else {
-    const read = await readStatusView(reader, overview.data, state,
-      state.shelf.kind === 'all' ? statusShelves : [state.shelf.status]);
+    const status = state.shelf.status;
+    const read = await readOnce(() => reader.main.v1.me.shelves.status({ status }).works.get({ query: {
+      actingSubject: reader.actingSubject, sort: state.sort, order: state.order, limit: MAIN_SHELF_LIMIT,
+      ...(state.cursor ? { cursor: state.cursor } : {}) } }), state.cursor);
     if (!read.ok) return read;
-    states = read.data.states;
-    const items = sortLibrary(read.data.items, state.sort, state.order, locale);
-    total = items.length;
-    page = pageOf(items, state.page);
+    items = statusShelfItems(read.data.items);
+    nextCursor = read.data.nextCursor;
+    total = overview.data.counts[status];
   }
-  const missing = page.items.filter(item => !states.has(item.work.id) && item.work.title).map(item => item.work.id);
-  if (missing.length) for (const [work, item] of await readStates(reader.main, reader.actingSubject, missing, true)) {
-    states.set(work, item);
-  }
-  const shown = page.items.map(item => withState(item, states.get(item.work.id)));
+  const states = await readStates(reader.main, reader.actingSubject,
+    items.filter(item => item.available !== false).map(item => item.work.id), true);
+  const shown = items.map(item => withState(item, states.get(item.work.id)));
   const [progress, reviews, privateReviews] = await Promise.all([
     readProgress(shown, locale),
     state.layout === 'list' && overview.data.ratingContext
@@ -336,27 +299,27 @@ export async function readShelfView(state: LibraryState, locale: UiLocale): Prom
     if (known) return [[item.work.id, readerEntry(known)]];
     return item.status ? [[item.work.id, { status: item.status, version: item.version, rating: null }]] : [];
   }));
-  return { ok: true, data: { shelf: state.shelf, custom, total, page: page.page, pages: page.pages,
-    truncated, seed, rows: shown.map(item => ({ ...item,
+  return { ok: true, data: { shelf: state.shelf, custom, total, nextCursor, seed,
+    rows: shown.map(item => ({ ...item,
       ...(item.status === 'reading' ? { progress: progress.get(item.work.id) ?? null } : {}),
       ...(reviews.has(item.work.id) ? { review: reviews.get(item.work.id) } : {}),
       ...(privateReviews.has(item.work.id) ? { privateReview: privateReviews.get(item.work.id) } : {}) })) } };
 }
 
 /**
- * Currently reading, for the top of All: the Works in progress, most
- * recently read first, each with where to continue.
+ * Currently reading, for the top of All: one Main page of the reading shelf,
+ * most recently read first, each with where to continue.
  */
 export async function readCurrentlyReading(locale: UiLocale): Promise<LibraryRow[]> {
   const [reader, overview] = await Promise.all([libraryReader(), readOverview()]);
   if (!reader || !overview.ok || !overview.data.counts.reading) return [];
-  const shelf = await readWholeShelf('reading');
+  const shelf = await readOnce(() => reader.main.v1.me.shelves.status({ status: 'reading' }).works.get({ query: {
+    actingSubject: reader.actingSubject, sort: 'last-read', order: 'desc', limit: READING_PREVIEW } }), null);
   if (!shelf.ok) return [];
-  const items = shelf.data.map(statusItem);
+  const items = statusShelfItems(shelf.data.items);
   const states = await readStates(reader.main, reader.actingSubject,
-    items.filter(item => item.work.title).map(item => item.work.id), true);
-  const shown = sortLibrary(items.map(item => withState(item, states.get(item.work.id))), 'last-read', 'desc', locale)
-    .slice(0, 6);
+    items.filter(item => item.available !== false).map(item => item.work.id), true);
+  const shown = items.map(item => withState(item, states.get(item.work.id)));
   const progress = await readProgress(shown, locale);
   return shown.map(item => ({ ...item, progress: progress.get(item.work.id) ?? null }));
 }

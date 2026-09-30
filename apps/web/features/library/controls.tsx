@@ -110,7 +110,8 @@ export function SortControl({ state, locale, messages }: { state: LibraryState; 
   const t = materializeData(messages, { locale });
   const router = useRouter();
   const sorts = sortsFor(state.shelf);
-  if (!sorts.length) return <p className="text-muted-foreground text-sm">{t.shelfOrder}</p>;
+  if (!sorts.length) return state.shelf.kind === 'custom'
+    ? <p className="text-muted-foreground text-sm">{t.shelfOrder}</p> : null;
   const go = (change: Partial<LibraryState>) => router.push(localizedPath(libraryHref(state, change), locale));
   const reversed = state.order === 'asc' ? 'desc' : 'asc';
   return <div className="flex items-center gap-1">

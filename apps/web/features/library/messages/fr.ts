@@ -73,7 +73,7 @@ export default {
   emptyWantToRead: 'Aucune œuvre à lire pour le moment', emptyWantToReadBody: 'Enregistrez les œuvres qui vous intéressent pour les lire plus tard.',
   emptyRead: 'Aucune œuvre marquée comme lue', emptyReadBody: 'Les œuvres terminées apparaîtront ici avec leurs dates de lecture.',
   emptyCustom: 'Cette étagère est vide', emptyCustomBody: 'Sélectionnez des œuvres dans une autre étagère pour les ajouter ici.',
-  truncated: insert('Affichage des {{count}} premières œuvres de cette étagère.', { count: String }),
+  unavailableWork: 'Cette œuvre n’est pas disponible',
 
   unavailableTitle: 'Impossible de charger votre bibliothèque',
   unavailableBody: 'REZICS n’a pas pu accéder à vos étagères. Réessayez dans un instant.',
@@ -85,7 +85,7 @@ export default {
   missingShelfBody: 'Elle a peut-être été supprimée ou appartient à quelqu’un d’autre.', backToAll: 'Retour à tout',
 
   pages: 'Pages', pageOf: insert('Page {{page}} sur {{pages}}', { page: String, pages: String }),
-  previousPage: 'Page précédente', nextPage: 'Page suivante',
+  firstPage: 'Première page', previousPage: 'Page précédente', nextPage: 'Page suivante',
   yearlyGoal: insert("Objectif de lecture pour {{year}}", { year: String }),
   goalProgress: insert("Livres : {{completed}} / {{target}}", { completed: String, target: String }),
   goalUnset: "Définissez un objectif de livres à terminer cette année.",

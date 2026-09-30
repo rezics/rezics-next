@@ -1,9 +1,9 @@
 import { initials } from '@rezics/ui/avatar-initials';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { BookMarkedIcon, BookOpenCheckIcon, BookOpenIcon, ChevronLeftIcon, ChevronRightIcon, CompassIcon, HouseIcon,
-  LayoutGridIcon, LibraryBigIcon, ListIcon, LockIcon, RefreshCwIcon, RotateCwIcon, SearchXIcon, TriangleAlertIcon,
-  UserRoundCogIcon } from 'lucide-react';
+import { BookMarkedIcon, BookOpenCheckIcon, BookOpenIcon, BookXIcon, ChevronLeftIcon, ChevronRightIcon,
+  CompassIcon, HouseIcon, LayoutGridIcon, LibraryBigIcon, ListIcon, LockIcon, RefreshCwIcon, RotateCwIcon, SearchXIcon,
+  TriangleAlertIcon, UserRoundCogIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -108,12 +108,20 @@ function CurrentlyReading({ rows, total, state, avatarQuery, locale, messages }:
       sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 xl:grid-cols-3">
       {rows.map(row => <li key={row.work.id} className="group/tile flex w-[85%] shrink-0 snap-start gap-4 rounded-2xl
         bg-muted/50 p-4 sm:w-auto">
-        <CoverLink work={row.work} avatarQuery={avatarQuery} className="w-20 shrink-0 self-start" />
+        {row.available === false
+          ? <div aria-hidden="true" className="grid aspect-[2/3] w-20 shrink-0 place-items-center self-start rounded-md
+            border border-dashed border-border bg-background text-muted-foreground">
+            <BookXIcon className="size-5" /></div>
+          : <CoverLink work={row.work} avatarQuery={avatarQuery} className="w-20 shrink-0 self-start" />}
         <div className="grid min-w-0 flex-1 content-start gap-3">
-          <h3 lang={row.work.title?.language} className="line-clamp-2 font-medium font-work-title text-base/snug">
-            <Link href={row.work.href} className="rounded-sm outline-none hover:underline focus-visible:ring-2
-              focus-visible:ring-ring">{workTitle(row.work, locale)}</Link></h3>
-          <ReadingProgress row={row} locale={locale} messages={messages} />
+          {row.available === false
+            ? <h3 className="text-pretty font-medium text-base/snug text-muted-foreground">{t.unavailableWork}</h3>
+            : <>
+              <h3 lang={row.work.title?.language} className="line-clamp-2 font-medium font-work-title text-base/snug">
+                <Link href={row.work.href} className="rounded-sm outline-none hover:underline focus-visible:ring-2
+                  focus-visible:ring-ring">{workTitle(row.work, locale)}</Link></h3>
+              <ReadingProgress row={row} locale={locale} messages={messages} />
+            </>}
         </div>
       </li>)}
     </ul>
@@ -186,17 +194,15 @@ function LayoutToggle({ state, locale, messages }: { state: LibraryState; locale
   </nav>;
 }
 
-function Pagination({ state, page, pages, locale, messages }: { state: LibraryState; page: number; pages: number;
+/** First page and the next Main page. Browser back and forward restore the ones already opened. */
+function Pagination({ state, nextCursor, locale, messages }: { state: LibraryState; nextCursor: string | null;
   locale: UiLocale; messages: LibraryMessages }) {
   const t = materializeData(messages, { locale });
-  if (pages < 2) return null;
+  if (!state.cursor && !nextCursor) return null;
   return <nav aria-label={t.pages} className="flex flex-wrap items-center justify-between gap-3">
-    {page > 1 ? <Link href={libraryHref(state, { page: page - 1 })} rel="prev" className={buttonVariants({
-      variant: 'outline' })}><ChevronLeftIcon aria-hidden="true" className="rtl:rotate-180" />{t.previousPage}</Link>
-      : <span />}
-    <p className="text-muted-foreground text-sm tabular-nums">{t.pageOf({ page: count(page, locale),
-      pages: count(pages, locale) })}</p>
-    {page < pages ? <Link href={libraryHref(state, { page: page + 1 })} rel="next" className={buttonVariants({
+    {state.cursor ? <Link href={libraryHref(state, { cursor: null })} className={buttonVariants({ variant: 'outline' })}>
+      <ChevronLeftIcon aria-hidden="true" className="rtl:rotate-180" />{t.firstPage}</Link> : <span />}
+    {nextCursor ? <Link href={libraryHref(state, { cursor: nextCursor })} rel="next" className={buttonVariants({
       variant: 'outline' })}>{t.nextPage}<ChevronRightIcon aria-hidden="true" className="rtl:rotate-180" /></Link>
       : <span />}
   </nav>;
@@ -281,13 +287,11 @@ function ShelfSection({ state, view, overview, now, avatarQuery, locale, message
     <header className="grid gap-1 border-border/70 border-b pb-4">
       <h2 id="library-shelf"
         className="flex flex-wrap items-baseline gap-x-3 text-balance font-semibold text-2xl tracking-tight">
-        {title}<span className="font-normal text-muted-foreground text-lg tabular-nums">
-          {count(data.total, locale)}{data.truncated ? '+' : ''}</span>
+        {title}{data.total !== null ? <span className="font-normal text-muted-foreground text-lg tabular-nums">
+          {count(data.total, locale)}</span> : null}
         {data.custom?.disclosure === 'private' ? <LockIcon role="img" aria-label={t.privateShelf}
           className="size-4 self-center text-muted-foreground" /> : null}
       </h2>
-      {data.truncated ? <p className="text-muted-foreground text-sm">{t.truncated({ count: count(data.total, locale) })}</p>
-        : null}
     </header>
     {data.rows.length
       ? <LibraryList rows={data.rows} shelf={data.shelf} custom={data.custom} customShelves={overview.customShelves}
@@ -295,7 +299,7 @@ function ShelfSection({ state, view, overview, now, avatarQuery, locale, message
         controls={<><SortControl state={state} locale={locale} messages={messages} />
           <LayoutToggle state={state} locale={locale} messages={messages} /></>} />
       : <EmptyShelf shelf={data.shelf} locale={locale} messages={messages} />}
-    <Pagination state={state} page={data.page} pages={data.pages} locale={locale} messages={messages} />
+    <Pagination state={state} nextCursor={data.nextCursor} locale={locale} messages={messages} />
   </section>;
 }
 
@@ -359,13 +363,13 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
         : <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-12">
           <ShelfNav state={state} overview={data} locale={locale} messages={messages} />
           <div className="grid min-w-0 content-start gap-10">
-            {state.shelf.kind === 'all' && reading.length && state.page === 1
-              ? <CurrentlyReading rows={reading.slice(0, 3)} total={data.counts.reading} state={state}
+            {state.shelf.kind === 'all' && !state.cursor && reading.length
+              ? <CurrentlyReading rows={reading} total={data.counts.reading} state={state}
                 avatarQuery={avatarQuery} locale={locale} messages={messages} /> : null}
             {authors ? <FollowedAuthorsSection authors={authors} avatarQuery={avatarQuery} locale={locale}
               messages={messages} /> : null}
-            <ShelfSection state={state} view={view} overview={data} now={now} avatarQuery={avatarQuery}
-              locale={locale} messages={messages} />
+            {state.shelf.kind === 'all' ? null : <ShelfSection state={state} view={view} overview={data} now={now}
+              avatarQuery={avatarQuery} locale={locale} messages={messages} />}
           </div>
         </div>}
     </PageContainer>

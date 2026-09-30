@@ -71,7 +71,7 @@ export default {
   emptyWantToRead: '想讀書架還沒有作品', emptyWantToReadBody: '遇到感興趣的作品時，先存起來以後閱讀。',
   emptyRead: '還沒有標記為讀過的作品', emptyReadBody: '讀完的作品會連同閱讀日期顯示在這裡。',
   emptyCustom: '這個書架是空的', emptyCustomBody: '在其他書架選取作品，再將它們加入這裡。',
-  truncated: insert('只顯示此書架最前面的 {{count}} 部作品。', { count: String }),
+  unavailableWork: '這部作品暫不可用',
 
   unavailableTitle: '無法載入你的藏書庫',
   unavailableBody: 'REZICS 暫時無法連線到你的書架，請稍後再試。', shelfUnavailable: '無法載入此書架',
@@ -81,7 +81,7 @@ export default {
   missingShelfTitle: '你的藏書庫裡沒有這個書架', missingShelfBody: '它可能已被移除，或屬於其他人。', backToAll: '返回全部',
 
   pages: '頁面', pageOf: insert('第 {{page}} 頁，共 {{pages}} 頁', { page: String, pages: String }),
-  previousPage: '上一頁', nextPage: '下一頁',
+  firstPage: '第一頁', previousPage: '上一頁', nextPage: '下一頁',
   yearlyGoal: insert('{{year}} 年閱讀目標', { year: String }),
   goalProgress: insert('已讀完 {{completed}} / {{target}} 本', { completed: String, target: String }),
   goalUnset: '設定今年的閱讀目標', setGoal: '設定目標', editGoal: '編輯目標', goalTarget: '預計讀完本數',

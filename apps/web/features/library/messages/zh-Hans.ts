@@ -213,7 +213,7 @@ export default {
   emptyReadBody: '读完的作品会带着阅读日期出现在这里。',
   emptyCustom: '这个书单还是空的',
   emptyCustomBody: '在其他书架上点“选择”，选好作品后加入这里。',
-  truncated: insert('只显示此书单的前 {{count}} 部作品。', { count: String }),
+  unavailableWork: '这部作品暂不可用',
 
   unavailableTitle: '未能加载你的书架',
   unavailableBody: 'REZICS 暂时无法读取你的书架，请稍后再试。',
@@ -231,6 +231,7 @@ export default {
 
   pages: '分页',
   pageOf: insert('第 {{page}} 页，共 {{pages}} 页', { page: String, pages: String }),
+  firstPage: '第一页',
   previousPage: '上一页',
   nextPage: '下一页',
 } satisfies Partial<LibraryMessages>;

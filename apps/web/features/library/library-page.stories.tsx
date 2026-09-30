@@ -53,11 +53,8 @@ export const All: Story = {
     await expect(reading.getAllByRole('link', { name: /^Continue/ })[0]).toHaveAttribute('href',
       `/en/w/${libraryItems[0]!.work.id.slice(-36)}/read/chapter-10`);
     await expect(reading.getByRole('progressbar', { name: /雨夜书店/ })).toHaveAttribute('aria-valuenow', '75');
-    const list = within(canvas.getByRole('region', { name: 'All 12' }));
-    await expect(list.getByRole('button', { name: 'Sort: Date added' })).toBeVisible();
-    await expect(list.getByRole('link', { name: 'List' })).toHaveAttribute('aria-current', 'page');
-    await expect(list.getByText('Read Jan 2 – 12, 2026')).toBeVisible();
-    await expect(list.getByText('Funnier than I remembered.', { exact: false })).toBeVisible();
+    // All is the shelf list and this preview. The Works themselves are on their status shelves.
+    await expect(canvas.queryByRole('region', { name: /^All / })).toBeNull();
   },
 };
 
@@ -69,6 +66,9 @@ export const ReadHistory: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 2, name: 'Read 4' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Sort: Date added' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'List' })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getByText('Funnier than I remembered.', { exact: false })).toBeVisible();
     await expect(canvas.queryByRole('region', { name: 'Currently reading' })).toBeNull();
     // Dates: the finish date is edited in a popover and checked against the start.
     await userEvent.click(canvas.getByRole('button', { name: 'Add dates — Frankenstein; or, The Modern Prometheus' }));
@@ -219,15 +219,79 @@ export const AddToShelf: Story = {
   },
 };
 
-/** Covers instead of rows: the reader's stars under read Works and chapters read under those in progress. */
+/** Covers instead of rows: chapters read under a Work in progress, on that status shelf. */
 export const Grid: Story = {
-  args: { state: libraryState({ view: 'grid' }), view: { ok: true, data: storyView(libraryState({ view: 'grid' })) } },
-  parameters: { route: { pathname: '/en/library', search: '?view=grid' } },
+  args: { state: libraryState({ shelf: 'reading', view: 'grid' }), reading: [],
+    view: { ok: true, data: storyView(libraryState({ shelf: 'reading', view: 'grid' })) } },
+  parameters: { route: { pathname: '/en/library', search: '?shelf=reading&view=grid' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Grid' })).toHaveAttribute('aria-current', 'page');
-    await expect(canvas.getAllByText('9 of 12 chapters')).toHaveLength(2);
+    await expect(canvas.getAllByText('9 of 12 chapters')).toHaveLength(1);
     await expect(canvas.queryByRole('button', { name: /Write a review/ })).toBeNull();
+  },
+};
+
+/** Main's cursor is the page. Next continues; First returns to the shelf's start. */
+export const PagedChinese: Story = {
+  args: { state: libraryState({ shelf: 'read', cursor: 'page-2' }), reading: [], locale: 'zh-Hans', messages: zh,
+    view: { ok: true, data: { ...storyView(libraryState({ shelf: 'read' })), nextCursor: 'page-3' } } },
+  parameters: { route: { pathname: '/zh-Hans/library', search: '?shelf=read&cursor=page-2' } },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: '下一页' })).toHaveAttribute('href',
+      '/zh-Hans/library?shelf=read&cursor=page-3');
+    await expect(canvas.getByRole('link', { name: '第一页' })).toHaveAttribute('href', '/zh-Hans/library?shelf=read');
+  },
+};
+
+/** Main's cursor is the page. Next continues; First returns to the shelf's start. */
+export const Paged: Story = {
+  args: { state: libraryState({ shelf: 'read', cursor: 'page-2' }), reading: [],
+    view: { ok: true, data: { ...storyView(libraryState({ shelf: 'read' })), nextCursor: 'page-3' } } },
+  parameters: { route: { pathname: '/en/library', search: '?shelf=read&cursor=page-2' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Next page' })).toHaveAttribute('href',
+      '/en/library?shelf=read&cursor=page-3');
+    await expect(canvas.getByRole('link', { name: 'First page' })).toHaveAttribute('href', '/en/library?shelf=read');
+  },
+};
+
+/** A status row Main could not name stays on the shelf, without a generated cover or a title link. */
+export const UnavailableWork: Story = {
+  args: (() => {
+    const state = libraryState({ shelf: 'read' });
+    const named = libraryItems.find(row => row.status === 'read')!;
+    const missingId = 'https://rezics.com/id/00000000-0000-4000-8000-000000000099';
+    const missing = { ...named, available: false, rating: null, lastReadAt: null, customShelves: [],
+      review: undefined, progress: null,
+      work: { ...named.work, id: missingId, href: `/w/${missingId.slice(-36)}`, title: null, cover: null, authors: [] } };
+    const overview = storyOverview();
+    return { state, reading: [],
+      overview: { ok: true as const, data: { ...overview, counts: { ...overview.counts, read: 2 } } },
+      view: { ok: true as const, data: { ...storyView(state, [missing, named]), total: 2 } },
+      readerActions: storyReaderActions([...libraryItems, missing]) };
+  })(),
+  parameters: { route: { pathname: '/en/library', search: '?shelf=read' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 2, name: 'Read 2' })).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 3, name: 'This work isn’t available' })).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 3, name: 'Pride and Prejudice' })).toBeVisible();
+  },
+};
+
+/** The same placeholder, in Chinese, on a phone. */
+export const UnavailableChinese: Story = {
+  args: { ...UnavailableWork.args, locale: 'zh-Hans', messages: zh },
+  parameters: { route: { pathname: '/zh-Hans/library', search: '?shelf=read' } },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 2, name: '读过 2' })).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 3, name: '这部作品暂不可用' })).toBeVisible();
   },
 };
 
@@ -319,9 +383,10 @@ export const Denied: Story = {
   },
 };
 
-/** The shelf could not load; the shelves and the header stay. */
+/** The shelf could not load; the shelves and the header stay. All has no shelf request to fail. */
 export const ShelfUnavailable: Story = {
-  args: { view: { ok: false, failure: 'unavailable' }, reading: [] },
+  args: { state: libraryState({ shelf: 'read' }), view: { ok: false, failure: 'unavailable' }, reading: [] },
+  parameters: { route: { pathname: '/en/library', search: '?shelf=read' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('alert')).toHaveTextContent('Couldn’t load this shelf');
@@ -330,10 +395,17 @@ export const ShelfUnavailable: Story = {
 };
 
 /** The shelf changed between Main's pages. */
-export const ShelfMoved: Story = { args: { view: { ok: false, failure: 'moved' }, reading: [] } };
+export const ShelfMoved: Story = {
+  args: { state: libraryState({ shelf: 'read', cursor: 'page-2' }), view: { ok: false, failure: 'moved' }, reading: [] },
+  parameters: { route: { pathname: '/en/library', search: '?shelf=read&cursor=page-2' } },
+};
 
 /** A custom shelf the reader does not have. */
-export const MissingShelf: Story = { args: { view: { ok: false, failure: 'missing' }, reading: [] } };
+export const MissingShelf: Story = {
+  args: { state: libraryState({ shelf: '00000000-0000-4000-8000-000000000099' }),
+    view: { ok: false, failure: 'missing' }, reading: [] },
+  parameters: { route: { pathname: '/en/library', search: '?shelf=00000000-0000-4000-8000-000000000099' } },
+};
 
 export const Phone: Story = { globals: { viewport: { value: 'phone' } } };
 
@@ -404,7 +476,8 @@ export const AuthorsUnavailable: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 2, name: 'Couldn’t load the authors you follow' })).toBeVisible();
-    await expect(canvas.getByRole('region', { name: 'All 12' })).toBeVisible();
+    await expect(canvas.getByRole('navigation', { name: 'Shelves' })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: 'Currently reading' })).toBeVisible();
   },
 };
 

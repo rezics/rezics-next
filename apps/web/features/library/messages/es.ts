@@ -73,7 +73,7 @@ export default {
   emptyWantToRead: 'Aún no tienes obras por leer', emptyWantToReadBody: 'Guarda las obras que encuentres para leerlas más adelante.',
   emptyRead: 'Aún no has marcado obras como leídas', emptyReadBody: 'Las obras que termines aparecerán aquí con sus fechas de lectura.',
   emptyCustom: 'Esta estantería está vacía', emptyCustomBody: 'Selecciona obras en otra estantería y añádelas aquí.',
-  truncated: insert('Se muestran las primeras {{count}} obras de esta estantería.', { count: String }),
+  unavailableWork: 'Esta obra no está disponible',
 
   unavailableTitle: 'No se pudo cargar tu biblioteca',
   unavailableBody: 'REZICS no pudo acceder a tus estanterías. Inténtalo de nuevo dentro de un momento.',
@@ -85,7 +85,7 @@ export default {
   missingShelfBody: 'Puede que se haya eliminado o que pertenezca a otra persona.', backToAll: 'Volver a todas',
 
   pages: 'Páginas', pageOf: insert('Página {{page}} de {{pages}}', { page: String, pages: String }),
-  previousPage: 'Página anterior', nextPage: 'Página siguiente',
+  firstPage: 'Primera página', previousPage: 'Página anterior', nextPage: 'Página siguiente',
   yearlyGoal: insert("Objetivo de lectura de {{year}}", { year: String }),
   goalProgress: insert("Libros: {{completed}} / {{target}}", { completed: String, target: String }),
   goalUnset: "Fíjate un objetivo de libros que quieras terminar este año.",

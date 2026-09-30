@@ -74,6 +74,9 @@ test('a reader starts with an empty library, shelves a Work and manages it from 
   await page.goto('/en/library');
   await expect(shelves(page).getByRole('link', { name: 'Want to read 1' })).toHaveAttribute('href',
     '/en/library?shelf=want-to-read');
+  // All lists the shelves. The Work is on the status shelf Main pages.
+  await shelves(page).getByRole('link', { name: 'Want to read 1' }).click();
+  await expect(page).toHaveURL(/\/en\/library\?shelf=want-to-read$/);
   await expect(page.getByRole('heading', { level: 3, name: seed.title })).toBeVisible();
 
   // Select moves it to Read; the counts follow.
