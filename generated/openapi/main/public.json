@@ -471997,6 +471997,15 @@
                     ],
                     "type": "string"
                   },
+                  "language": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "space": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
@@ -472030,6 +472039,15 @@
                     ],
                     "type": "string"
                   },
+                  "language": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "space": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
@@ -472061,6 +472079,15 @@
                       "public",
                       "private"
                     ],
+                    "type": "string"
+                  },
+                  "language": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 300,
+                    "minLength": 1,
                     "type": "string"
                   },
                   "space": {
@@ -472652,9 +472679,28 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "direction": {
+                      "enum": [
+                        "ltr",
+                        "rtl"
+                      ],
+                      "type": "string"
+                    },
+                    "language": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "mounts": {
                       "items": {},
                       "type": "array"
+                    },
+                    "name": {
+                      "maxLength": 300,
+                      "minLength": 1,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "navigation": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -472667,6 +472713,10 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "ownerRevision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
                     },
                     "predecessor": {
                       "~elyTyp": 7,
@@ -472710,6 +472760,10 @@
                     "zone",
                     "navigation",
                     "revision",
+                    "ownerRevision",
+                    "name",
+                    "language",
+                    "direction",
                     "predecessor",
                     "mounts",
                     "next",
@@ -473008,6 +473062,25 @@
                       ],
                       "type": "object"
                     },
+                    "direction": {
+                      "enum": [
+                        "ltr",
+                        "rtl"
+                      ],
+                      "type": "string"
+                    },
+                    "language": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "name": {
+                      "maxLength": 300,
+                      "minLength": 1,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "revision": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -473021,6 +473094,9 @@
                     "zone",
                     "revision",
                     "configuration",
+                    "name",
+                    "language",
+                    "direction",
                     "cost"
                   ],
                   "type": "object"
@@ -473361,6 +473437,15 @@
                   },
                   "expectedHead": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "language": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 300,
+                    "minLength": 1,
                     "type": "string"
                   },
                   "official": {
@@ -473995,6 +474080,15 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "language": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "official": {
                     "additionalProperties": false,
                     "properties": {
@@ -474625,6 +474719,15 @@
                   },
                   "expectedHead": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "language": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 300,
+                    "minLength": 1,
                     "type": "string"
                   },
                   "official": {
@@ -476919,6 +477022,13 @@
                       ],
                       "type": "object"
                     },
+                    "direction": {
+                      "enum": [
+                        "ltr",
+                        "rtl"
+                      ],
+                      "type": "string"
+                    },
                     "execution": {
                       "anyOf": [
                         {
@@ -477121,9 +477231,21 @@
                         }
                       ]
                     },
+                    "language": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "moduleData": {
                       "items": {},
                       "type": "array"
+                    },
+                    "name": {
+                      "maxLength": 300,
+                      "minLength": 1,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "navigation": {
                       "items": {
@@ -477812,6 +477934,9 @@
                   },
                   "required": [
                     "profile",
+                    "name",
+                    "language",
+                    "direction",
                     "zone",
                     "realm",
                     "official",
@@ -479352,9 +479477,28 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "direction": {
+                      "enum": [
+                        "ltr",
+                        "rtl"
+                      ],
+                      "type": "string"
+                    },
+                    "language": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "mounts": {
                       "items": {},
                       "type": "array"
+                    },
+                    "name": {
+                      "maxLength": 300,
+                      "minLength": 1,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "navigation": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -479367,6 +479511,10 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "ownerRevision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
                     },
                     "predecessor": {
                       "~elyTyp": 7,
@@ -479410,6 +479558,10 @@
                     "zone",
                     "navigation",
                     "revision",
+                    "ownerRevision",
+                    "name",
+                    "language",
+                    "direction",
                     "predecessor",
                     "mounts",
                     "next",
@@ -479764,9 +479916,28 @@
                           ],
                           "type": "object"
                         },
+                        "direction": {
+                          "enum": [
+                            "ltr",
+                            "rtl"
+                          ],
+                          "type": "string"
+                        },
                         "kind": {
                           "const": "home",
                           "type": "string"
+                        },
+                        "language": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "maxLength": 300,
+                          "minLength": 1,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "path": {
                           "type": "string"
@@ -479812,6 +479983,9 @@
                         "profile",
                         "zone",
                         "path",
+                        "name",
+                        "language",
+                        "direction",
                         "realm",
                         "revision",
                         "sourcePosition",
@@ -479874,8 +480048,19 @@
                           ],
                           "type": "object"
                         },
+                        "direction": {
+                          "enum": [
+                            "ltr",
+                            "rtl"
+                          ],
+                          "type": "string"
+                        },
                         "kind": {
                           "const": "document",
+                          "type": "string"
+                        },
+                        "language": {
+                          "minLength": 1,
                           "type": "string"
                         },
                         "mount": {
@@ -479898,6 +480083,14 @@
                             "target"
                           ],
                           "type": "object"
+                        },
+                        "name": {
+                          "maxLength": 300,
+                          "minLength": 1,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "path": {
                           "type": "string"
@@ -479963,6 +480156,9 @@
                         "profile",
                         "zone",
                         "path",
+                        "name",
+                        "language",
+                        "direction",
                         "realm",
                         "revision",
                         "sourcePosition",
@@ -480030,6 +480226,13 @@
                             "deadlineMs"
                           ],
                           "type": "object"
+                        },
+                        "direction": {
+                          "enum": [
+                            "ltr",
+                            "rtl"
+                          ],
+                          "type": "string"
                         },
                         "items": {
                           "items": {
@@ -480294,6 +480497,10 @@
                           "const": "index",
                           "type": "string"
                         },
+                        "language": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "mount": {
                           "properties": {
                             "occurrence": {
@@ -480314,6 +480521,14 @@
                             "target"
                           ],
                           "type": "object"
+                        },
+                        "name": {
+                          "maxLength": 300,
+                          "minLength": 1,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "nextCursor": {
                           "~elyTyp": 7,
@@ -480367,6 +480582,9 @@
                         "profile",
                         "zone",
                         "path",
+                        "name",
+                        "language",
+                        "direction",
                         "realm",
                         "revision",
                         "sourcePosition",
@@ -480442,8 +480660,19 @@
                           ],
                           "type": "object"
                         },
+                        "direction": {
+                          "enum": [
+                            "ltr",
+                            "rtl"
+                          ],
+                          "type": "string"
+                        },
                         "kind": {
                           "const": "detail",
+                          "type": "string"
+                        },
+                        "language": {
+                          "minLength": 1,
                           "type": "string"
                         },
                         "mount": {
@@ -480469,6 +480698,14 @@
                           ],
                           "type": [
                             "object",
+                            "null"
+                          ]
+                        },
+                        "name": {
+                          "maxLength": 300,
+                          "minLength": 1,
+                          "type": [
+                            "string",
                             "null"
                           ]
                         },
@@ -480544,6 +480781,9 @@
                         "profile",
                         "zone",
                         "path",
+                        "name",
+                        "language",
+                        "direction",
                         "realm",
                         "revision",
                         "sourcePosition",
