@@ -56,14 +56,17 @@ function Parties({ label, agents, names, t }: { label: string; agents: readonly 
 }
 
 /** One realization: who made this text and how far it can be trusted. */
-export function RealizationRow({ realization, all, releases, names, locale, t }: {
+export function RealizationRow({ realization, all, releases, names, locale, t, showLanguage = false }: {
   realization: Realization; all: readonly Realization[]; releases: readonly Release[]; names: Names; locale: UiLocale; t: Copy;
+  /** True where no group heading already names the language (a release's own page). */
+  showLanguage?: boolean;
 }) {
   const covering = releases.filter(release => release.coverage.some(entry => entry.realization === realization.id));
   const evidence = realization.evidence?.startsWith('https://') && !realization.evidence.startsWith('https://rezics.com/id/')
     ? realization.evidence : null;
   return <li id={`realization-${realization.id.slice(-12)}`} className="grid min-w-0 gap-3 border-border/70 border-b pb-4">
     <div className="flex flex-wrap items-center gap-2">
+      {showLanguage ? <span className="font-medium"><LanguageName tag={realization.language} locale={locale} /></span> : null}
       <Badge variant="secondary">{realization.kind === 'original' ? t.kindOriginal : t.kindTranslation}</Badge>
       <Badge variant={realization.status === 'official' ? 'soft' : 'outline'}>
         {realization.status === 'official' ? t.statusOfficial : t.statusUnofficial}</Badge>

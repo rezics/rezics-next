@@ -40,7 +40,7 @@ export function ReleaseView({ release, realizations, sources, names, locale, t }
             </p>
             {realization?.ok
               ? <ul><RealizationRow realization={realization.data} all={loaded} releases={[]} names={names}
-                locale={locale} t={t} /></ul>
+                locale={locale} t={t} showLanguage /></ul>
               : realization ? <p className="text-muted-foreground text-sm">{t.realizationUnavailable}</p> : null}
           </li>;
         })}

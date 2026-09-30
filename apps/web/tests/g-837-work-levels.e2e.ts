@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { type BrowserContext, expect, type Page, test, type TestInfo } from '@playwright/test';
+import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 import type { Catalogue } from './g-837-catalogue.ts';
 
@@ -36,9 +36,10 @@ const desktop = { width: 1280, height: 860 };
 const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 
 /** One screenshot per viewport in light and dark, none with horizontal overflow. */
-async function shoot(page: Page, context: BrowserContext, path: string, name: string, info: TestInfo) {
+async function shoot(page: Page, path: string, name: string, info: TestInfo) {
   for (const theme of ['light', 'dark'] as const) {
-    await context.addCookies([{ name: 'rezics_theme', value: theme, url: page.url() }]);
+    // A signed-in page takes the member's saved theme ("system"), which follows the browser's preference.
+    await page.emulateMedia({ colorScheme: theme });
     for (const [label, viewport] of [['desktop', desktop], ['phone', phone]] as const) {
       await page.setViewportSize(viewport);
       await page.goto(path);
@@ -50,7 +51,7 @@ async function shoot(page: Page, context: BrowserContext, path: string, name: st
   await page.setViewportSize(desktop);
 }
 
-test('parts, connections and editions read from Main for the franchise records', async ({ page, context }, info) => {
+test('parts, connections and editions read from Main for the franchise records', async ({ page }, info) => {
   test.setTimeout(420_000);
   const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
   if (!path) throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must point to the isolated QA web-auth fixture');
@@ -163,10 +164,10 @@ test('parts, connections and editions read from Main for the franchise records',
   await expect(page.locator('[data-language-group="zh-Hant"]')).toBeVisible();
 
   // Screenshots, desktop and phone in both themes, none overflowing.
-  await shoot(page, context, at(index.newTestament, 'connections'), 'index-connections', info);
-  await shoot(page, context, at(sao.bunko, 'connections') + '?grain=parts', 'sao-connections-parts', info);
-  await shoot(page, context, at(railgun.anime, 'connections'), 'railgun-connections', info);
-  await shoot(page, context, at(volumeOne.work, 'editions'), 'volume-editions', info);
-  await shoot(page, context, `/en/releases/${uuid(volumeOne.release)}`, 'release', info);
-  await shoot(page, context, `/zh-Hans/w/${uuid(sao.bunko.work)}/connections`, 'sao-connections-zh-Hans', info);
+  await shoot(page, at(index.newTestament, 'connections'), 'index-connections', info);
+  await shoot(page, at(sao.bunko, 'connections') + '?grain=parts', 'sao-connections-parts', info);
+  await shoot(page, at(railgun.anime, 'connections'), 'railgun-connections', info);
+  await shoot(page, at(volumeOne.work, 'editions'), 'volume-editions', info);
+  await shoot(page, `/en/releases/${uuid(volumeOne.release)}`, 'release', info);
+  await shoot(page, `/zh-Hans/w/${uuid(sao.bunko.work)}/connections`, 'sao-connections-zh-Hans', info);
 });
