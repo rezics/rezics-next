@@ -52,6 +52,8 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
   const { state, run, pending, values, reload, formKey } = useWrite(action);
   if (!mayEdit(allowed)) return null;
   const invalid = invalidField(state);
+  /** What was typed into this row's own form when its last submit was refused, so a refusal never loses it. */
+  const typed = (part: EditablePart) => values.intent === 'update' && values.occurrence === part.occurrence ? values : null;
   return <div className="grid gap-6">
     <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} /></div>
     {parts.length ? <ol aria-label={t.partsList} className="grid divide-y divide-border/60 border-border/60 border-y">
@@ -73,15 +75,16 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
             <input type="hidden" name="after" value={parts[index + 1]!.occurrence} />
             <Button type="submit" variant="outline" size="sm" disabled={pending} aria-label={t.moveDown({ label: part.label })}>
               <ArrowDownIcon aria-hidden="true" /></Button></Context></form> : null}
-          {part.role === 'part' ? <details className="rounded-xl border border-border/60 px-2 py-1 text-sm">
+          {part.role === 'part' ? <details open={typed(part) ? true : undefined}
+            className="rounded-xl border border-border/60 px-2 py-1 text-sm">
             <summary className="flex cursor-pointer items-center gap-1 py-1" aria-label={t.editPart({ label: part.label })}>
               <PencilIcon aria-hidden="true" className="size-4" />{t.edit}</summary>
             <form action={run} className="grid gap-3 py-2"><Context work={work} structure={structure} head={head} intent="update">
               <input type="hidden" name="occurrence" value={part.occurrence} />
               <Field><FieldLabel>{t.partLabel}</FieldLabel>
-                <Input name="label" defaultValue={part.label} maxLength={500} required autoComplete="off" /></Field>
+                <Input name="label" defaultValue={typed(part)?.label ?? part.label} maxLength={500} required autoComplete="off" /></Field>
               <Field><FieldLabel>{t.partInclusion}</FieldLabel>
-                <NativeSelect name="inclusion" defaultValue={part.inclusion}>
+                <NativeSelect name="inclusion" defaultValue={typed(part)?.inclusion ?? part.inclusion}>
                   {inclusionOptions(t).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </NativeSelect></Field>
               <Button type="submit" size="sm" disabled={pending} className="w-fit">{t.savePart}</Button></Context></form>
