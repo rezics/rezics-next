@@ -116,6 +116,7 @@ import { queryRoutes } from './routes/query.ts';
 import { savedFilterRoutes } from './routes/saved-filters.ts';
 import { wikiRoutes, wikiSchemaError } from './routes/wiki.ts';
 import { rateLimitHook } from './modules/rate-limit/hook.ts';
+import { composeDisclosure } from './modules/disclosure/assembly.ts';
 
 export type { MainWorkDependencies } from './routes/dependencies.ts';
 
@@ -282,6 +283,7 @@ function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
 export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependencies) {
+  if (work) composeDisclosure(work);
   // Registered first so it also handles every plugin route mounted below.
   const app = new Elysia()
     .error(({ error, request }) => wikiSchemaError(error, request))

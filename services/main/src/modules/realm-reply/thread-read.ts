@@ -63,7 +63,7 @@ function head(row: ReadRow): Head {
     epochOrder: row.epochOrder?.value ?? '0', sequence: row.sequence!.value };
 }
 
-/** Exact placed bodies, in Content's 64-revision batches. Any unreadable body hides its reply. */
+/** Exact placed bodies, in Content's 64-revision batches. Unreadable bodies keep a neutral reply position. */
 async function bodies(session: WorkReadSession, heads: readonly Head[]) {
   const revisions = [...new Set(heads.map(item => item.revisionId))];
   const read = new Map<string, { body: string; language: string | null }>();
@@ -199,13 +199,13 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
     threads.counts(realm, page.map(row => row.reply))]);
   const items: Summary[] = page.flatMap(row => {
     const text = texts.get(row.reply), about = titles.get(row.work);
-    if (!text || !about) return [];
-    const { title, body } = discussionParts(text.body);
-    return [{ reply: row.reply, placement: row.placement, work: about, author: named(row.author),
-      time: row.time.toISOString(), language: text.language, title,
+    if (!about) return [];
+    const { title, body } = text ? discussionParts(text.body) : { title: '', body: '' };
+    return [{ reply: row.reply, placement: row.placement, work: about, author: text ? named(row.author) : null,
+      time: row.time.toISOString(), language: text?.language ?? null, title,
       excerpt: clip(body, REALM_THREAD_COST.excerptChars),
-      vote: votes.get(row.placement) ?? closed,
-      replies: { value: counted.counts.get(row.reply) ?? 0, kind: counted.complete ? 'exact' : 'lower-bound' } }];
+      vote: text ? votes.get(row.placement) ?? closed : closed,
+      replies: { value: text ? counted.counts.get(row.reply) ?? 0 : 0, kind: counted.complete ? 'exact' : 'lower-bound' } }];
   });
   await readRealmBasis(session, realm);
   const currentTargets = await works(session, page);
@@ -267,21 +267,20 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     threads.votes(session.position.dataEpoch, all.map(row => row.placement), reader(session)),
     blockedAuthors(session, all.map(row => row.author))]);
   const about = titles.get(focused.work);
-  if (!about || !texts.has(focus)) throw new WorkReadMissing('Reply is unavailable');
+  if (!about) throw new WorkReadMissing('Reply is unavailable');
   const reply = (row: Head): Reply[] => {
     const text = texts.get(row.reply);
-    if (!text) return [];
-    const { title, body } = row.parent ? { title: null, body: text.body.trim() } : discussionParts(text.body);
-    const hidden = blocked.has(row.author);
+    const { title, body } = !text ? { title: null, body: '' }
+      : row.parent ? { title: null, body: text.body.trim() } : discussionParts(text.body);
+    const hidden = blocked.has(row.author) || !text;
     return [{ reply: row.reply, placement: row.placement, parent: row.parent,
-      author: hidden ? null : named(row.author), blocked: hidden,
-      time: row.time.toISOString(), language: text.language, revisionId: row.revisionId,
+      author: hidden ? null : named(row.author), blocked: blocked.has(row.author),
+      time: row.time.toISOString(), language: text?.language ?? null, revisionId: row.revisionId,
       title: hidden ? null : title,
       body: hidden ? '' : clip(body, REALM_THREAD_COST.bodyChars),
-      vote: votes.get(row.placement) ?? closed }];
+      vote: hidden ? closed : votes.get(row.placement) ?? closed }];
   };
-  // Depth first, each reply's replies in the chosen order. A reply whose body
-  // is gone takes its replies with it, as a hidden placement does.
+  // Depth first, retaining a neutral parent position when its body is restricted.
   const children = new Map<string, Head[]>();
   for (const row of below.slice(1)) children.set(row.parent!, [...children.get(row.parent!) ?? [], row]);
   const items: Reply[] = [];
@@ -325,10 +324,11 @@ export async function readProfileContributions(session: WorkReadSession, author:
     cursor ? { time: cursor.order, reply: cursor.after } : undefined);
   const page = nodes.slice(0, PROFILE_CONTRIBUTION_COST.pageSize);
   const items = [];
-  for (const node of page) {
+  const disclosed = await session.deps.realmReplies.readPublicBatch(page.map(node => node.reply),
+    session.principal ?? undefined, session.options.actingSubject);
+  for (const [index, node] of page.entries()) {
     if (!node.origin) continue;
-    const visible = await session.deps.realmReplies.readPublic(node.reply,
-      session.principal ?? undefined, session.options.actingSubject);
+    const visible = disclosed[index];
     if (!visible || visible.originRealm !== node.origin || visible.author !== author) continue;
     const parts = node.parent ? { title: null, body: visible.body } : discussionParts(visible.body);
     items.push({ reply: node.reply, realm: node.origin, parent: node.parent,

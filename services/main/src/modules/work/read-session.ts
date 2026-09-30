@@ -17,6 +17,8 @@ import { WORK_READ_COST } from './read-contract.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
 import { fenceAuthorNames } from '../source/author-name-read.ts';
 import { knownSearchPosition } from '../search/snapshot-state.ts';
+import { disclosureViewer } from '../disclosure/viewer.ts';
+import { discloseInventory, type DisclosureChannel, type DisclosureTarget } from '../disclosure/read.ts';
 export { publicWork, unerased } from './public-patterns.ts';
 
 export class WorkReadInvalid extends Error {}
@@ -89,6 +91,10 @@ export class WorkReadSession {
       .filter(Boolean).join(',') || null, this.request.headers.get('accept-language'));
   }
   principal: VerifiedPrincipal | null = null;
+  get viewer() { return disclosureViewer(this.principal); }
+  disclosure(targets: readonly DisclosureTarget[], channel: DisclosureChannel = 'read') {
+    return discloseInventory(this.deps.environment, targets, this.viewer, channel);
+  }
   stale = false;
   private readonly realmProofs = new Map<string, string>();
 
@@ -127,11 +133,8 @@ export class WorkReadSession {
   async summaries(resources: string[]): Promise<ResourceSummary[]> {
     this.checkDeadline();
     if (!resources.length) return [];
-    const reader = { realmReadProof: this.principal && this.options.actingSubject ? (realm: string) =>
+    const reader = { viewer: this.viewer, realmReadProof: this.principal && this.options.actingSubject ? (realm: string) =>
       Promise.resolve(this.deps.access.realmReadProof?.(this.principal!, this.options.actingSubject!, realm) ?? null) : undefined,
-    restrictedTitles: this.deps.governance?.store
-      ? (heads: readonly { work: string; revision: string }[], context: string) =>
-        this.deps.governance!.store.restrictedTitles(heads, context) : undefined,
     canReadWork: this.principal && this.options.actingSubject ? (work: string) =>
       this.deps.access.canReadWork(this.principal!, this.options.actingSubject!, work) : undefined };
     const result = await readResourceSummaries(this.deps.environment, this.deps.media?.store, reader,

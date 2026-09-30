@@ -7,7 +7,7 @@ import { publicAgent } from '../profiles/read.ts';
 import { parsedMetadataState } from '../work/metadata-read.ts';
 import { MAX_SEARCH_RESPONSE_BYTES, SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../work/search-budget.ts';
-import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
+import { discloseSearchMatches } from '../disclosure/search.ts';
 import { knownSearchPosition } from './snapshot-state.ts';
 import { publicWork } from '../work/public-patterns.ts';
 
@@ -18,29 +18,19 @@ import { publicWork } from '../work/public-patterns.ts';
  * it remains subject to the same 1,500 ms deadline and 8 MiB request budget.
  * A field index can replace this scan when measured latency warrants it. */
 export const SEARCH_FIELD_COST = { candidates: 512, graphQueries: 2, sourceQueries: 4,
-  titleDecisionQueries: 24,
+  disclosureQueries: 32,
   responseBytes: MAX_SEARCH_RESPONSE_BYTES, typeaheadItems: 10 } as const;
 export type SearchField = 'title' | 'credit' | 'tagline' | 'body';
 export interface SearchFieldOwners { names?: SourceAuthorNameStore;
+  /** The combined body/field owner gates its complete relation once. */
+  deferDisclosure?: boolean;
   restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) => Promise<ReadonlySet<string>> }
-const fieldReads = new WeakMap<SearchFieldOwners, { sourceGeneration: string | null;
-  heads: { work: string; revision: string }[]; restricted: ReadonlySet<string> }>();
-async function titleRestrictions(owners: SearchFieldOwners, heads: { work: string; revision: string }[]) {
-  const restricted = new Set<string>();
-  for (let offset = 0; owners.restrictedTitles && offset < heads.length; offset += 64) {
-    for (const work of await owners.restrictedTitles(heads.slice(offset, offset + 64), DEFAULT_MEDIA_CONTEXT)) restricted.add(work);
-  }
-  return restricted;
-}
+const fieldReads = new WeakMap<SearchFieldOwners, { sourceGeneration: string | null }>();
 export async function fenceSearchFields(owners: SearchFieldOwners) {
   const prior = fieldReads.get(owners);
   if (!prior) return;
   if (owners.names && prior.sourceGeneration !== await owners.names.searchGeneration()) {
     throw new SearchSnapshotMoved('Source author names changed during matching');
-  }
-  const restricted = await titleRestrictions(owners, prior.heads);
-  if (restricted.size !== prior.restricted.size || [...restricted].some(work => !prior.restricted.has(work))) {
-    throw new SearchSnapshotMoved('Title disclosure changed during matching');
   }
 }
 export interface FieldMatch { work: string; mainVersion: string; matchUnit: string;
@@ -135,11 +125,7 @@ export async function querySearchFields(env: WorkActivationEnvironment,
     }
   } LIMIT ${SEARCH_FIELD_COST.candidates + 1}`, SEARCH_FIELD_COST.responseBytes)).results?.bindings ?? [];
   if (rows.length > SEARCH_FIELD_COST.candidates) throw new PublicQueryBudgetExceeded('Search field candidates exceed their bound');
-  const heads = [...new Map(rows.filter(row => row.work && row.head)
-    .map(row => [row.resultWork?.value ?? row.work!.value,
-      { work: row.resultWork?.value ?? row.work!.value, revision: row.head!.value }])).values()];
-  const restricted = await titleRestrictions(owners, heads);
-  fieldReads.set(owners, { sourceGeneration: sourceRead?.generation ?? null, heads, restricted });
+  fieldReads.set(owners, { sourceGeneration: sourceRead?.generation ?? null });
   const matches: FieldMatch[] = [];
   for (const row of rows) {
     if (row.epoch?.value !== position.dataEpoch || row.sequence?.value !== position.sequence) {
@@ -151,7 +137,6 @@ export async function querySearchFields(env: WorkActivationEnvironment,
     if (row.resultWork && (!row.resultMain || !row.chapterTitle)) {
       throw new PublicQueryUnavailable('chapter search identity is incomplete');
     }
-    if (restricted.has(row.resultWork?.value ?? row.work.value) && row.field?.value !== 'credit') continue;
     const values: Array<{ field: SearchField; text: string; language: string | null }> = [];
     if (row.field?.value === 'metadata') {
       const state = parsedMetadataState(row.state?.value ?? '');
@@ -179,11 +164,12 @@ export async function querySearchFields(env: WorkActivationEnvironment,
   }
   await fenceSearchFields(owners);
   // The route's final uncached fence covers matching, facets and card facts.
-  if (knownSearchPosition(env.fuseki, env.lineage)) return rankedSearchMatches(matches);
+  const disclosed = owners.deferDisclosure ? matches : await discloseSearchMatches(env, matches, prefix ? 'typeahead' : 'search');
+  if (knownSearchPosition(env.fuseki, env.lineage)) return rankedSearchMatches(disclosed);
   const after = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
       FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } } }`, 8192)).results?.bindings ?? [];
   if (after.length !== 1 || after[0]?.epoch?.value !== position.dataEpoch
     || after[0]?.sequence?.value !== position.sequence) throw new SearchSnapshotMoved('Search fields changed during matching');
-  return rankedSearchMatches(matches);
+  return rankedSearchMatches(disclosed);
 }

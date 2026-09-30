@@ -9,6 +9,8 @@ import { readStatement, resolveStatementAcceptance, StatementNotFound }
 import type { Acceptance } from '../statement/graph.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment }
   from '../work/activate.ts';
+import { discloseInventory } from '../disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const contextId = (value: string) => native.test(value) || value === 'urn:rezics:semantic-context:global';
@@ -19,6 +21,7 @@ const publicOnly = async () => false;
  * it must never be truncated into a precise count. */
 export const PUBLIC_DISCLOSURE_COST = { contexts: 8, statements: 16, resources: 32,
   summaryTargets: 64, graphQueries: 192, badgeChecks: 32, mediaBatches: 2,
+  summaryAccessQueries: 3,
   outputBytes: 1_048_576 } as const;
 
 export class InvalidPublicDisclosure extends Error {}
@@ -95,10 +98,9 @@ async function publicChain(env: WorkActivationEnvironment, revision: string,
   return rows.every(row => row.disclosure?.value === `${RV}Public`);
 }
 
-function publicSummary(summary: ResourceSummary, restrictedTitles: boolean): summary is
+function publicSummary(summary: ResourceSummary): summary is
   Extract<ResourceSummary, { status: 'available' }> {
-  return summary.status === 'available' && summary.disclosure === 'public'
-    && (restrictedTitles || summary.work === null);
+  return summary.status === 'available' && summary.disclosure === 'public';
 }
 
 /** Read owner values before phrase matching. A candidate's indexed literal,
@@ -174,9 +176,9 @@ async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironmen
   if (targets.length) {
     const batch = await readResourceSummaries(env, media,
       { ...reader, ...(restrictedTitles ? { restrictedTitles } : {}) },
-      { resources: targets, context: input.mediaContext, language: input.language });
+      { resources: targets, context: input.mediaContext, language: input.language, channel: 'search' });
     if (batch.generation.graph !== `${start.dataEpoch}:${start.sequence}`
-      || batch.cost.mediaQueries > 1 || batch.cost.accessQueries > 1) {
+      || batch.cost.mediaQueries > 1 || batch.cost.accessQueries > PUBLIC_DISCLOSURE_COST.summaryAccessQueries) {
       throw new PublicDisclosureUnavailable('resource summary moved during disclosure');
     }
     mediaBatches = batch.cost.mediaQueries;
@@ -185,9 +187,9 @@ async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironmen
   }
   for (const statement of statementReads) {
     const subject = summaries.get(statement.subject);
-    if (!subject || !publicSummary(subject, Boolean(restrictedTitles))) continue;
+    if (!subject || !publicSummary(subject)) continue;
     const object = statement.object ? summaries.get(statement.object) : null;
-    if (statement.object && (!object || !publicSummary(object, Boolean(restrictedTitles)))) continue;
+    if (statement.object && (!object || !publicSummary(object))) continue;
     const badge = await judgments!.protectionCheck(statement.statement, statement.acceptance,
       statement.concept);
     badgeChecks++;
@@ -201,7 +203,7 @@ async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironmen
   }
   for (const resource of new Set(input.resources)) {
     const summary = summaries.get(resource);
-    if (summary && publicSummary(summary, Boolean(restrictedTitles))) {
+    if (summary && publicSummary(summary)) {
       fields.push({ kind: 'resource-name', owner: resource, text: summary.name.value,
         language: summary.name.language, avatar: summary.avatar });
     }
@@ -217,10 +219,16 @@ async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironmen
   if (end.dataEpoch !== start.dataEpoch || end.sequence !== start.sequence) {
     throw new PublicDisclosureUnavailable('search disclosure graph moved');
   }
-  if (Buffer.byteLength(JSON.stringify(fields), 'utf8') > PUBLIC_DISCLOSURE_COST.outputBytes) {
+  const fenced = fields.filter(field => native.test(field.owner));
+  const decisions = await discloseInventory(env, fenced.map(field => ({ owner: 'graph' as const,
+    resource: field.owner, component: field.kind === 'resource-name' ? 'name' as const : 'record' as const })),
+  ANONYMOUS_VIEWER, 'search');
+  const denied = new Set(fenced.filter((_, index) => decisions[index] !== 'visible').map(field => field.owner));
+  const disclosed = fields.filter(field => !denied.has(field.owner));
+  if (Buffer.byteLength(JSON.stringify(disclosed), 'utf8') > PUBLIC_DISCLOSURE_COST.outputBytes) {
     throw new PublicDisclosureUnavailable('search disclosure response exceeds its byte budget');
   }
-  return { fields, sourcePosition: start,
+  return { fields: disclosed, sourcePosition: start,
     cost: { contexts: contexts.length, statements: input.statements.length,
       summaryTargets: targets.length, badgeChecks, mediaBatches } };
 }

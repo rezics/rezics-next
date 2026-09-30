@@ -26,6 +26,18 @@ import { inOrder, settle, unwrap, type Settled } from './settled.ts';
 import { clip, discussionParts } from '../realm-reply/discussion-text.ts';
 
 export interface FeedReader { principal: VerifiedPrincipal; agent: string }
+/** Keep the candidate's place without retaining any author, words or image. */
+export function feedTombstone(item: FeedItem): FeedItem {
+  const actor = { id: item.actor.id, name: '', handle: '' };
+  return { ...item, actor, authors: [], reasons: [], post: { title: null, excerpt: null, language: null },
+    realm: null, card: { kind: 'activity' }, score: 0, vote: 0, voteRevision: null,
+    reason: { kind: 'recommended', basis: 'all' }, viewerState: { status: 'unavailable' },
+    group: { key: item.id, count: 1, actors: [actor] }, comments: { value: 0, kind: 'exact' },
+    target: { ...item.target, title: { value: '', language: 'en', direction: 'ltr', basis: 'fallback' },
+      cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: item.id, resourceType: 'work' },
+      types: [], excerpt: null, language: null }, primaryAction: { kind: 'open', href: '#' },
+    links: { target: '#', actor: '#', comments: '#', vote: '#' } };
+}
 /** Graph calls left (of 160) below which reader state waits for the fence. */
 const SPECULATIVE_VIEWER_CALLS = 100;
 
@@ -619,11 +631,27 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       disclosed.push(item);
     } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
   }
-  const { chosen: selected, seen, realms } = select(disclosed);
+  const fenceTargets = disclosed.flatMap(item => {
+    const source = final.get(item.id)!;
+    return [{ owner: source.kind === 'review' ? 'review' as const : 'graph' as const,
+      resource: source.id, component: 'body' as const, revision: source.readerReview?.revision, work: source.work,
+      context: source.realm ?? undefined },
+    { owner: 'content' as const, resource: source.reply ?? source.contentTarget ?? source.target,
+      component: 'body' as const, revision: source.contentRevision?.replace(/^urn:rezics:content:revision:/, '') ?? null,
+      work: source.work, context: source.realm ?? undefined }];
+  });
+  const policy = await session.disclosure(fenceTargets, 'feed');
+  const hidden = new Set(disclosed.filter((_item, index) => policy[index * 2] !== 'visible'
+    || policy[index * 2 + 1] !== 'visible').map(item => item.id));
+  const hiddenGroups = new Set(page.filter(row => row.group_members.some(id => hidden.has(id))).map(row => row.id));
+  const safe = disclosed.map((item, index) => policy[index * 2] === 'visible' && policy[index * 2 + 1] === 'visible'
+    ? item : feedTombstone(item));
+  const { chosen: selected, seen, realms } = select(safe);
   followedSeen = seen; recentRealms = realms;
   const targets = viewerTargets(selected);
   const states = unwrap(await readViewer(targets));
   for (const item of selected) {
+    if (hidden.has(item.id) || hiddenGroups.has(item.id)) continue;
     const rawState = states?.get(item.id) ?? { status: reader ? 'unavailable' : 'anonymous' };
     const state = rawState.status === 'available' && personSettings?.spoilerPolicy === 'show'
       ? { ...rawState, spoiler: { policy: 'show' as const, hidden: false } } : rawState;
@@ -671,7 +699,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       lastVisitedAt: unwrap(watermark)?.data_epoch === session.position.dataEpoch
         ? unwrap(watermark)!.updated_at.toISOString() : null,
       state: more ? 'more' as const : current ? 'caught-up' as const : 'projecting' as const } : null,
-    ...pageResult(session, selected, more && last
+    ...pageResult(session, selected.map(item => hidden.has(item.id) || hiddenGroups.has(item.id)
+      ? feedTombstone(item) : item), more && last
       ? encodeReadCursor(binding, session.position, last.id, JSON.stringify({ key: last.order_key,
         projection: checkpoint.revision, following: scope === 'following' ? following?.revision ?? null : null,
         personal: personal?.revision ?? null,

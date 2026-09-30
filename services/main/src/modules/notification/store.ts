@@ -4,6 +4,8 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { deliveryChannels, notificationKinds, notificationPurposes, optionalPurposes,
   preferenceChannels } from './schema.ts';
 import type { NotificationSubjectReader } from './dispatcher.ts';
+import { discloseNotifications } from '../disclosure/notifications.ts';
+import { disclosureViewer } from '../disclosure/viewer.ts';
 
 export class NotificationInvalid extends Error {}
 export class NotificationDenied extends Error {}
@@ -171,8 +173,14 @@ export class NotificationStore {
     this.readSubjects.set(disclosureBasis, reader);
   }
   async resolveDigestSubject(input: Parameters<NotificationSubjectReader['resolve']>[0]) {
-    const resolver = this.readSubjects.get(input.disclosureBasis) ?? this.defaultReadSubject;
-    return resolver ? resolver.resolve(input) : { status: 'unavailable' as const };
+    return (await this.resolveDigestSubjects([input]))[0]!;
+  }
+  async resolveDigestSubjects(inputs: readonly Parameters<NotificationSubjectReader['resolve']>[0][]) {
+    const subjects = await Promise.all(inputs.map(async input => {
+      const resolver = this.readSubjects.get(input.disclosureBasis) ?? this.defaultReadSubject;
+      return { input, result: resolver ? await resolver.resolve(input) : { status: 'unavailable' as const } };
+    }));
+    return discloseNotifications(this.pool, subjects, 'digest');
   }
   constructor(private readonly pool: Pool) {}
 
@@ -538,7 +546,18 @@ export class NotificationStore {
             reviewId: fields.reviewId ?? null,
           } } : null });
     }
-    return { ...result, items, groups: groupNotifications(items) };
+    const checked = await discloseNotifications(this.pool, items.map((item, index) => ({
+      input: { principalId: principalId!, owner: result.items[index]!.raw.subject_owner,
+        ref: result.items[index]!.raw.subject_ref, revision: result.items[index]!.raw.subject_revision,
+        disclosureBasis: result.items[index]!.raw.disclosure_basis, realm: result.items[index]!.raw.realm },
+      result: item.subject ? { status: 'available' as const, subject: { private: true,
+        fields: item.display ? { ...Object.fromEntries(Object.entries(item.display.target)
+          .filter((entry): entry is [string, string] => typeof entry[1] === 'string')) } : {} } }
+        : { status: 'undisclosed' as const },
+    })), 'inbox', disclosureViewer(principal));
+    const disclosed = items.map((item, index) => checked[index]?.status === 'available'
+      ? item : { ...item, subject: null, display: null });
+    return { ...result, items: disclosed, groups: groupNotifications(disclosed) };
   }
 
   /** Exact visible count through 99; an unusually hidden-heavy inbox fails closed after 256 reads. */
@@ -560,7 +579,7 @@ export class NotificationStore {
         ORDER BY i.sequence DESC LIMIT $2`, [principalId, NOTIFICATION_LIMITS.unreadScan + 1])).rows;
       return { principalId, rows };
     });
-    let count = 0;
+    const subjects = [];
     for (const row of rows.slice(0, NOTIFICATION_LIMITS.unreadScan)) {
       const resolver = this.readSubjects.get(row.disclosure_basis) ?? this.defaultReadSubject;
       if (!resolver) continue;
@@ -568,10 +587,12 @@ export class NotificationStore {
         ref: row.subject_ref, revision: row.subject_revision, disclosureBasis: row.disclosure_basis,
         realm: row.realm })
         .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
-      if (resolved.status === 'available' && ++count >= NOTIFICATION_LIMITS.unreadCap) {
-        return { count: 99, overflow: true };
-      }
+      subjects.push({ input: { principalId: principalId!, owner: row.subject_owner, ref: row.subject_ref,
+        revision: row.subject_revision, disclosureBasis: row.disclosure_basis, realm: row.realm }, result: resolved });
     }
+    const visible = await discloseNotifications(this.pool, subjects, 'inbox', disclosureViewer(principal));
+    const count = visible.filter(subject => subject.status === 'available').length;
+    if (count >= NOTIFICATION_LIMITS.unreadCap) return { count: 99, overflow: true };
     if (rows.length > NOTIFICATION_LIMITS.unreadScan) {
       throw new NotificationUnavailable('unread count exceeds the disclosure scan bound');
     }

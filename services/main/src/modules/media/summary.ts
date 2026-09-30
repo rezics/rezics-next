@@ -9,6 +9,8 @@ import { currentProfile } from '../realm-profile/schema.ts';
 import { checkedCollectionName } from '../collection/names.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import type { SemanticDisclosure } from '../access/semantic-disclosure.ts';
+import { discloseInventory, type DisclosureChannel, type DisclosureTarget } from '../disclosure/read.ts';
+import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 import { direction, readerLanguages, selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import type { Base } from '../target/contract.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaUnavailable,
@@ -36,6 +38,7 @@ export const summaryBases = { work: 'work', 'main-version': null, space: null,
 export interface SummaryReader {
   /** Wiki read policy, applied after owner disclosure and before delivery. */
   visibleRecords?: (records: readonly string[]) => Promise<ReadonlySet<string>>;
+  viewer?: Viewer;
   /** Current approved membership, including its revocation generations. */
   realmReadProof?: (realm: string) => Promise<string | null>;
   /** Readable non-public Work, checked against current Access only after the graph read. */
@@ -54,6 +57,7 @@ export interface SummaryReader {
 }
 
 export interface SummaryInput {
+  channel?: DisclosureChannel;
   resources: readonly string[];
   context: string;
   language: string | null;
@@ -467,18 +471,6 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     const selected = contextBatch.selectedNames.get(reference);
     if (selected?.size) row.labels = selected;
   }
-  if (reader.restrictedTitles && readable.size) {
-    for (const [reference, row] of readable) {
-      if (row.work && !row.head) readable.delete(reference);
-    }
-    const heads = [...new Map([...readable.values()].filter(row => row.work && row.head)
-      .map(row => [row.work!, { work: row.work!, revision: row.head! }])).values()];
-    const fenced = await reader.restrictedTitles(heads, input.context);
-    if (heads.length) cost.accessQueries++;
-    for (const [reference, row] of readable) {
-      if (row.work && fenced.has(row.work)) readable.delete(reference);
-    }
-  }
   let avatars = new Map<string, AvatarRow>();
   let mediaGeneration: string | null = null;
   if (media && readable.size && !contextBatch.selectedContextDenied) {
@@ -498,6 +490,30 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   if (reader.visibleRecords) {
     const visible = await reader.visibleRecords([...readable.keys()]);
     for (const reference of readable.keys()) if (!visible.has(reference)) readable.delete(reference);
+  }
+  // The final assembly gates names and assets together. No optional title-only
+  // callback can grant disclosure, and a hidden asset becomes the usual fallback.
+  const targets: DisclosureTarget[] = [];
+  const entries = [...readable];
+  const nameIndexes = new Map<string, number>(), assetIndexes = new Map<string, number>();
+  for (const [reference, row] of entries) {
+    nameIndexes.set(reference, targets.length);
+    targets.push({ owner: 'graph', resource: reference, component: 'name',
+      revision: reference === row.work ? row.head : null, work: row.work,
+      workRevision: row.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context });
+    const asset = avatars.get(reference)?.asset;
+    if (asset) {
+      assetIndexes.set(reference, targets.length);
+      targets.push({ owner: 'media', resource: `https://rezics.com/id/${asset}`, component: 'cover' });
+    }
+  }
+  const decisions = await discloseInventory(env, targets, reader.viewer ?? ANONYMOUS_VIEWER,
+    input.channel ?? 'summary');
+  cost.accessQueries += Math.ceil(targets.length / MAX_SUMMARY_BATCH);
+  for (const [reference] of entries) {
+    if (decisions[nameIndexes.get(reference)!] !== 'visible') readable.delete(reference);
+    const assetIndex = assetIndexes.get(reference);
+    if (assetIndex !== undefined && decisions[assetIndex] !== 'visible') avatars.delete(reference);
   }
   const summaries = input.resources.map((reference): ResourceSummary => {
     const row = readable.get(reference);

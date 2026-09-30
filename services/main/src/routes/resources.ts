@@ -7,7 +7,9 @@ import { publicAgent } from '../modules/profiles/read.ts';
 import { DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaMissing } from '../modules/media/store.ts';
 import { MAX_SUMMARY_BATCH, readContentAvailability, readResourceSummaries,
   type SummaryReader } from '../modules/media/summary.ts';
-import { DATASET, GRAPHS, RV, iri, lit } from '../modules/work/activate.ts';
+import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
+import { readSitemap } from '../modules/disclosure/sitemap.ts';
+import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { mediaError, mediaRoutes } from './media.ts';
@@ -20,7 +22,6 @@ const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const context = t.Union([t.Literal(DEFAULT_MEDIA_CONTEXT), nativeId]);
 const language = t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLength: 35 });
-const SITEMAP_PAGE = 500;
 
 const unavailable = () => problem(404, 'resource_unavailable', 'Resource is unavailable');
 
@@ -30,10 +31,7 @@ export const openApiOperations = {
 
 /** Resource summaries, previews, sitemap and avatar selection, plus the media owner routes. */
 export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
-  const governanceReader = work.governance?.store
-    ? { restrictedTitles: (heads: readonly { work: string; revision: string }[], context: string) =>
-      work.governance!.store.restrictedTitles(heads, context) } : {};
-  const anonymousReader: SummaryReader = { ...governanceReader,
+  const anonymousReader: SummaryReader = {
     canReadSemantics: work.mediaAccess
       ? resources => work.mediaAccess!.canReadSemantics(null, null, resources, fuseki)
       : undefined };
@@ -43,7 +41,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
     const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
     const contextPrincipal = () => work.account.verify(request, ['context:read']);
-    return { ...governanceReader, canReadWorks: batch && work.mediaAccess
+    return { viewer: disclosureViewer(await workPrincipal()), canReadWorks: batch && work.mediaAccess
       ? async resources => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources) : undefined,
     canReadWork: async resource => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
     canReadSemantic: async resource => !!work.access.canReadSemanticResource
@@ -115,7 +113,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         // Anonymous: only public resources resolve; private and absent share one answer.
         const batch = await readResourceSummaries(work.environment, work.media?.store, anonymousReader,
-          { resources: [`${ID}${params.resource}`], context: DEFAULT_MEDIA_CONTEXT,
+          { resources: [`${ID}${params.resource}`], context: DEFAULT_MEDIA_CONTEXT, channel: 'preview',
             language: query.language ?? null,
             languages: readerLanguages([query.language, request.headers.get('x-rezics-display-languages')]
               .filter(Boolean).join(',') || null, request.headers.get('accept-language')) });
@@ -131,34 +129,8 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     }, async ({ query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-        // Public Works only: the current Main selection names a public publication decision.
-        const result = await fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-          SELECT ?sequence ?work WHERE {
-            GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(work.environment.lineage.dataEpoch)} ;
-              rv:sequence ?sequence . }
-            OPTIONAL {
-              { SELECT ?work WHERE {
-                GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork ; rv:mainVersion ?main .
-                  ?main rv:selectionHead ?selection . }
-                GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:publicationDecision ?decision .
-                  ?decision rv:disclosure rv:Public . }
-                FILTER NOT EXISTS {
-                  GRAPH ${iri(GRAPHS.current)} { ?variant rv:resource ?work ; rv:contentPublicationHead ?pin }
-                  GRAPH ${iri(GRAPHS.revisions)} { ?pin rv:contentRevision ?contentRevision .
-                    ?contentRevision a rv:ErasedRevision }
-                }
-                ${query.after ? `FILTER(STR(?work) > ${lit(query.after)})` : ''}
-              } ORDER BY ?work LIMIT ${SITEMAP_PAGE + 1} }
-            }
-          }`);
-        const rows = result.results?.bindings ?? [];
-        if (!rows[0]?.sequence) return problem(503, 'graph_unavailable', 'Graph lineage is unavailable');
-        const works = rows.map(row => row.work?.value).filter((value): value is string => Boolean(value));
-        const page = works.slice(0, SITEMAP_PAGE);
-        return Response.json({ profile: 'public-sitemap-v1',
-          entries: page.map(reference => ({ reference, preview: `/v1/public-previews/${reference.slice(ID.length)}` })),
-          next: works.length > SITEMAP_PAGE ? page.at(-1) : null,
-          generation: rows[0].sequence.value }, { headers: { 'cache-control': 'public, no-cache' } });
+        return Response.json(await readSitemap(work.environment, query.after),
+          { headers: { 'cache-control': 'public, no-cache' } });
       } catch (error) { return mediaError(error); }
     })
     .put('/v1/resources/:resource/avatar', {

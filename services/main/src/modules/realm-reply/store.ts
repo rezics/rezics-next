@@ -14,6 +14,8 @@ import { targetRead } from '../target/resolve.ts';
 import { WorkReadMissing } from '../work/read-session.ts';
 import { readRealmPolicy, reviewPolicy } from '../space/policy.ts';
 import type { RealmPermit } from '../access/realm-management-policy.ts';
+import { discloseInventory } from '../disclosure/read.ts';
+import { disclosureViewer } from '../disclosure/viewer.ts';
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -225,7 +227,7 @@ export class RealmReplyStore {
     return visibleRealmReply(this.content, this.access, this.env, realm, reply, principal, actor);
   }
 
-  async readPublic(reply: string, principal?: VerifiedPrincipal, actor?: string) {
+  private async assemblePublic(reply: string, principal?: VerifiedPrincipal, actor?: string) {
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
     const result = await this.content.readCurrent(reply);
     if (!result || !await readableReplyRoot(this.env, result.rootTarget, result.rootRevision,
@@ -235,6 +237,23 @@ export class RealmReplyStore {
       if (visible?.revisionId !== result.revisionId) return null;
     }
     return result;
+  }
+
+  /** Profile pages share one final audience batch for their eight candidates. */
+  async readPublicBatch(replies: readonly string[], principal?: VerifiedPrincipal, actor?: string) {
+    if (replies.length > 32) throw new RealmReplyInvalid('Reply read exceeds its bound');
+    const results = await Promise.all(replies.map(reply => this.assemblePublic(reply, principal, actor)));
+    const available = results.flatMap((result, index) => result ? [{ result, index }] : []);
+    const decisions = await discloseInventory(this.env, available.map(({ result, index }) => ({
+      owner: 'content' as const, resource: replies[index]!, component: 'body' as const,
+      revision: result.revisionId, work: result.rootTarget, context: result.originRealm ?? undefined,
+    })), disclosureViewer(principal ?? null), 'read');
+    for (const [ordinal, { index }] of available.entries()) if (decisions[ordinal] !== 'visible') results[index] = null;
+    return results;
+  }
+
+  async readPublic(reply: string, principal?: VerifiedPrincipal, actor?: string) {
+    return (await this.readPublicBatch([reply], principal, actor))[0] ?? null;
   }
 
   /** An explicit Realm selects its origin partition before LIMIT. Independent
@@ -254,6 +273,10 @@ export class RealmReplyStore {
       if (await realmReplyReadProof(this.access, this.env, realm, principal, actor) !== before) return null;
     }
     if (!await readableReplyRoot(this.env, rootTarget, rootRevision, this.access, principal ?? null, actor)) return null;
+    const decisions = await discloseInventory(this.env, page.items.map(item => ({ owner: 'content' as const,
+      resource: item.reply, component: 'body' as const, revision: item.revisionId,
+      work: rootTarget, context: realm })), disclosureViewer(principal ?? null), 'thread');
+    page.items = page.items.filter((_item, index) => decisions[index] === 'visible');
     return page;
   }
 
@@ -262,7 +285,11 @@ export class RealmReplyStore {
     if (!before) throw new RealmReplyDenied('Realm is unavailable');
     const page = await readRootPlacementHeads(this.env, realm, rootTarget);
     let count = 0;
-    for (const placement of page.heads) {
+    const decisions = await discloseInventory(this.env, page.heads.map(placement => ({ owner: 'content' as const,
+      resource: placement.reply, component: 'body' as const, revision: placement.revisionId,
+      work: rootTarget, context: realm })), disclosureViewer(principal ?? null), 'count');
+    for (const [index, placement] of page.heads.entries()) {
+      if (decisions[index] !== 'visible') continue;
       if (await this.content.currentReview(realm, placement.reply, placement.revisionId,
         placement.reviewDecisionId, placement.preparationId)) count++;
     }

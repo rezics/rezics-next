@@ -1,4 +1,5 @@
 import { rankedSearchMatches } from '../search/fields.ts';
+import { discloseSearchMatches } from '../disclosure/search.ts';
 import { publicWork } from './public-patterns.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
@@ -128,7 +129,7 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
   if (new Set(matches.map(match => match.matchUnit)).size !== matches.length) {
     throw new PublicQueryUnavailable('title/body relation has duplicate units');
   }
-  const results = rankedSearchMatches(matches);
+  const results = rankedSearchMatches(await discloseSearchMatches(env, matches));
   return { profile: 'public-main-title-body-v1' as const, contractVersion: '1' as const,
     resultGrain: 'mainVersion' as const, context: 'main-version-default' as const,
     complete: true as const, population: index.population, indexGeneration: index.generation,

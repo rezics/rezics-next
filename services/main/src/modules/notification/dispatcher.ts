@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { discloseNotifications } from '../disclosure/notifications.ts';
 import type { Pool, PoolClient } from 'pg';
 import { NotificationConflict, NotificationInvalid, NotificationStore, NotificationUnavailable, normalizeNotificationError,
   requireAccessOpen, rollback, sha256 } from './store.ts';
@@ -222,9 +223,12 @@ export class NotificationDispatcher {
       LEFT JOIN access.notification_display_context c ON c.item_id = i.id WHERE d.id = $1`, [row.id])).rows[0];
     if (!context) return { kind: 'cancel', reason: 'ineligible' };
     const subjectReader = this.scopedSubjects.get(context.disclosure_basis) ?? this.subjects;
-    const resolved = await subjectReader.resolve({ principalId: row.principal_id, owner: context.subject_owner,
+    const input = { principalId: row.principal_id, owner: context.subject_owner,
       ref: context.subject_ref, revision: context.subject_revision, disclosureBasis: context.disclosure_basis,
-      realm: context.realm });
+      realm: context.realm };
+    const [resolved] = await discloseNotifications(this.pool,
+      [{ input, result: await subjectReader.resolve(input) }], row.channel);
+    if (!resolved) return { kind: 'cancel', reason: 'undisclosed' };
     if (resolved.status === 'erased') return { kind: 'cancel', reason: 'subject_erased' };
     if (resolved.status !== 'available') return { kind: 'cancel', reason: 'undisclosed' };
     // Push without lock-screen disclosure carries no private subject fields.

@@ -5,6 +5,7 @@ import { decisionOutcomes, enforcementEffects, GLOBAL_CONTEXT, governanceCompone
   processSteps } from './schema.ts';
 import type { ModerationEffects } from './effects.ts';
 import type { ReviewReportOwner } from './report-review.ts';
+import { DisclosureStore } from '../disclosure/read.ts';
 
 export class GovernanceInvalid extends Error {}
 export class GovernanceDenied extends Error {}
@@ -135,9 +136,12 @@ function validTarget(target: { owner: string; resource: string; component: strin
  * effective enforcement fence and its outbox fact, and process steps.
  */
 export class GovernanceStore {
+  readonly disclosure: DisclosureStore;
   constructor(private readonly pool: Pool, private readonly evidence: EvidenceCapture,
     private readonly heads: TargetHeads, private readonly rules: RuleBasis,
-    private readonly effects?: ModerationEffects, private readonly reviews?: ReviewReportOwner) {}
+    private readonly effects?: ModerationEffects, private readonly reviews?: ReviewReportOwner) {
+    this.disclosure = new DisclosureStore(pool);
+  }
 
   /** Trusted media owner intake, never a public route. The durable screen job
    * identifies one report across retries; automation is disclosed as evidence. */

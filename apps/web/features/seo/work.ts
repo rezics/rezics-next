@@ -5,6 +5,7 @@ import type { WorkResolution } from '../work-page/read.ts';
 import { chapterHref, idOf, iriOf, parseContentsQuery, parseHistoryQuery, parseReaderLanguage, parseScope,
   parseVersionQuery, textHref, type WorkTab, workHref } from '../work-page/route.ts';
 import { localeAlternates, pageUrl } from './address.ts';
+import { mainApiWithToken } from '../api/main.ts';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -90,5 +91,14 @@ export function workMetadata(work: WorkResolution, view: WorkView, query: Search
 /** `workMetadata` at the current request's origin, for a page's `generateMetadata`. */
 export async function workPageMetadata(work: WorkResolution, view: WorkView, query: SearchParams,
   locale: UiLocale): Promise<Metadata> {
+  const undisclosed: Metadata = { title: { absolute: 'REZICS' }, description: null,
+    openGraph: null, twitter: null, robots: { index: false } };
+  if (work.kind === 'work') {
+    try {
+      // Metadata is an anonymous delivery even when the page has a signed-in reader.
+      const preview = await mainApiWithToken(undefined).v1['public-previews']({ resource: work.id }).get();
+      if (preview.error || !preview.data) return undisclosed;
+    } catch { return undisclosed; }
+  }
   return workMetadata(work, view, query, locale, (await pageUrl())?.origin ?? null);
 }

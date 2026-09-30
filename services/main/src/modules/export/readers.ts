@@ -16,6 +16,9 @@ import { attachRightsIdentities, canonicalExport, InvalidExportPlan, planExport,
   type ExportLoss, type ExportPlan, type ExportRightsIdentity, type LicenseScopeHook,
   type PortableValue, type VerifiedExportMember } from './planner.ts';
 import { planVndbSourceExport } from './vndb-source.ts';
+import { discloseInventory, type DisclosureTarget } from '../disclosure/read.ts';
+import { disclosureViewer } from '../disclosure/viewer.ts';
+import type { Viewer } from '../suitability/policy.ts';
 
 export class ExportStale extends Error {}
 export class ExportSourceNotFound extends Error {}
@@ -113,7 +116,7 @@ function portable(value: SemanticValue | { kind: 'unavailable-reference' }): Por
 }
 
 /** Exact readers decide the member payload. No caller-provided member or basis is trusted. */
-export async function readExportPlan(deps: ExportReaderDependencies, principal: VerifiedPrincipal,
+async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal: VerifiedPrincipal,
   actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope']): Promise<ExportPlan> {
   if (selection.kind === 'vndb-concept-run') {
     const runId = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(selection.reference)?.[1];
@@ -326,4 +329,47 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
     detail: { reason: 'No representative labelled calibration record was verified for this method' } });
   return planFromOwner({ targetProfile: 'rezics-verification-v1', useScope,
     members: [claimMember, assessmentMember], residuals }, deps.rights);
+}
+
+/** Retain an explicit, payload-free omission at each denied member ordinal.
+ * License notices covering a denied member cannot survive via the manifest. */
+export async function discloseExportPlan(env: WorkActivationEnvironment, plan: ExportPlan, viewer: Viewer): Promise<ExportPlan> {
+  const native = (value: unknown) => typeof value === 'string'
+    ? /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}/.exec(value)?.[0] ?? null : null;
+  const root = native(plan.members[0]?.data?.resource) ?? native(plan.members[0]?.data?.work);
+  const targets: DisclosureTarget[] = [], ranges: number[][] = [];
+  for (const member of plan.members) {
+    const identity = rightsIdentityFor(member);
+    const resource = native(identity.target.resource) ?? root;
+    const work = native(member.data?.work) ?? root;
+    const selected: DisclosureTarget[] = resource ? [{ owner: identity.target.owner, resource,
+      component: member.sourceOwner === 'content' ? 'body' : identity.target.component as DisclosureTarget['component'],
+      revision: identity.target.revision, work },
+    { owner: 'graph', resource: work ?? resource, component: 'name' }] : [];
+    ranges.push(selected.map((_, index) => targets.length + index));
+    targets.push(...selected);
+  }
+  const decisions = await discloseInventory(env, targets, viewer, 'export');
+  const denied = new Set(plan.members.filter((_, index) => !ranges[index]!.length
+    || ranges[index]!.some(ordinal => decisions[ordinal] !== 'visible')).map(member => member.ordinal));
+  if (!denied.size) return plan;
+  const members = plan.members.map(member => {
+    if (!denied.has(member.ordinal)) return member;
+    const { data: _data, value: _value, ...identity } = member;
+    return { ...identity, mapping: 'unmapped' as const, targetGrain: null,
+      refDigest: sha({ omitted: 'disclosure_restricted' }), data: { omitted: 'disclosure_restricted' } };
+  });
+  const residuals: ExportLoss[] = [...plan.residuals.filter(loss => loss.memberOrdinal === null
+    || !denied.has(loss.memberOrdinal)), ...[...denied].flatMap(memberOrdinal => [
+      { memberOrdinal, kind: 'private_dependency' as const, path: null, detail: { reason: 'disclosure_restricted' } },
+      { memberOrdinal, kind: 'unmapped_grain' as const, path: null, detail: { reason: 'omitted' } },
+    ])];
+  return planExport({ targetProfile: plan.targetProfile, useScope: plan.useScope, members, residuals },
+    async () => plan.bases.filter(basis => !basis.memberOrdinals.some(ordinal => denied.has(ordinal))));
+}
+
+export async function readExportPlan(deps: ExportReaderDependencies, principal: VerifiedPrincipal,
+  actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope']): Promise<ExportPlan> {
+  return discloseExportPlan(deps.env, await readExportPlanUnchecked(deps, principal, actingSubject, selection, useScope),
+    disclosureViewer(principal));
 }

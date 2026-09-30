@@ -4,6 +4,8 @@ import { controlRead } from '../access/topology-control.ts';
 import { followPrincipal } from '../follows/authority.ts';
 import { RealmReplyInvalid } from './content-store.ts';
 import { REALM_THREAD_COST } from './thread-contract.ts';
+import { DisclosureStore, DISCLOSURE_COST } from '../disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -41,9 +43,10 @@ const approved = (realm: string, reply: string, revision: string, review: string
 
 /**
  * The Content and Home-projection reads behind Realm threads. Every method is
- * one statement with a fixed bound, whatever the thread's size: a subtree
+ * one Content statement with a fixed bound, whatever the thread's size: a subtree
  * walks the parent index breadth first and stops at its limit, ancestors stop
  * at a fixed height, and admission, counts and votes take whole batches.
+ * Counts add at most 21 Access disclosure batches for 20 × 64 + 1 candidates.
  */
 export class RealmReplyThreadStore {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
@@ -133,16 +136,27 @@ export class RealmReplyThreadStore {
     const counts = new Map(threads.map(id => [id, 0]));
     if (!threads.length) return { counts, complete: true };
     const limit = threads.length * REALM_THREAD_COST.countPerThread;
-    const rows = await this.content.query<{ thread: string; visible: boolean }>(`WITH RECURSIVE tree AS (
+    const rows = await this.content.query<{ thread: string; id: string; root_target: string; visible: boolean }>(`WITH RECURSIVE tree AS (
         SELECT r.id AS thread, c.id, 1 AS depth FROM unnest($2::text[]) AS r(id)
           JOIN content.reply c ON c.parent_reply = r.id
         UNION ALL
         SELECT t.thread, c.id, t.depth + 1 FROM tree t JOIN content.reply c ON c.parent_reply = t.id
           WHERE t.depth < $3
       ), walked AS MATERIALIZED (SELECT thread, id FROM tree LIMIT $4)
-      SELECT thread, ${approved('$1', 'walked.id', 'any', null, null)} AS visible FROM walked`,
+      SELECT thread, walked.id, reply.root_target,
+        ${approved('$1', 'walked.id', 'any', null, null)} AS visible FROM walked
+        JOIN content.reply reply ON reply.id = walked.id`,
     [realm, [...threads], REALM_THREAD_COST.depth, limit + 1]);
-    for (const row of rows.rows) if (row.visible) counts.set(row.thread, (counts.get(row.thread) ?? 0) + 1);
+    const reader = new DisclosureStore(this.access);
+    const candidates = rows.rows.filter(row => row.visible);
+    for (let offset = 0; offset < candidates.length; offset += DISCLOSURE_COST.batch) {
+      const page = candidates.slice(offset, offset + DISCLOSURE_COST.batch);
+      const decisions = await reader.read(page.map(row => ({ owner: 'content', resource: row.id,
+        component: 'body', work: row.root_target, context: realm })), ANONYMOUS_VIEWER, 'count');
+      page.forEach((row, index) => {
+        if (decisions[index] === 'visible') counts.set(row.thread, (counts.get(row.thread) ?? 0) + 1);
+      });
+    }
     return { counts, complete: rows.rows.length <= limit };
   }
 

@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { NotificationStore } from './store.ts';
 
-/** One day and up to 50 event checks per tick. Account deduplicates the day
+/** One day and up to 51 event checks per tick. Account deduplicates the day
  * before its SMTP queue, so a lost HTTP acknowledgement can be retried. */
 export const DIGEST_COST = { candidatesPerDay: 50, daysPerTick: 1, intervalMs: 1_000 } as const;
 interface Day { principal_id: string; day: string; account_subject: string }
@@ -43,14 +43,16 @@ export class NotificationDigestWorker {
           WHERE c.principal_id = $1 AND c.day = $2
           ORDER BY c.source_event, c.topic LIMIT $3`,
         [day.principal_id, day.day, DIGEST_COST.candidatesPerDay + 1])).rows;
-        more = candidates.length > DIGEST_COST.candidatesPerDay;
-        for (const candidate of candidates.slice(0, DIGEST_COST.candidatesPerDay)) {
-          const subject = await this.notifications.resolveDigestSubject({ principalId: day.principal_id,
+        const disclosed = await this.notifications.resolveDigestSubjects(candidates.map(candidate => ({ principalId: day.principal_id,
             owner: candidate.subject_owner, ref: candidate.subject_ref,
             revision: candidate.subject_revision, disclosureBasis: candidate.disclosure_basis,
-            realm: candidate.realm });
+            realm: candidate.realm })));
+        for (const [index, candidate] of candidates.entries()) {
+          const subject = disclosed[index]!;
           if (subject.status === 'unavailable') throw new Error('digest subject unavailable');
-          if (subject.status === 'available') counts.set(candidate.topic,
+          if (subject.status !== 'available') continue;
+          if (index === DIGEST_COST.candidatesPerDay) { more = true; continue; }
+          counts.set(candidate.topic,
             (counts.get(candidate.topic) ?? 0) + 1);
         }
       }
