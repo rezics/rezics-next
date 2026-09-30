@@ -13,6 +13,7 @@ import { direction, readerLanguages, selectDisplayName, type DisplayName, type L
 import type { Base } from '../target/contract.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaUnavailable,
   type AvatarRow, type MediaStore } from './store.ts';
+import { propertyRevelationRecord } from '../reading-position/store.ts';
 
 export { direction } from '../display-language/select.ts';
 
@@ -33,6 +34,8 @@ export const summaryBases = { work: 'work', 'main-version': null, space: null,
 } as const satisfies Record<ResourceType, Base | null>;
 
 export interface SummaryReader {
+  /** Wiki read policy, applied after owner disclosure and before delivery. */
+  visibleRecords?: (records: readonly string[]) => Promise<ReadonlySet<string>>;
   /** Current approved membership, including its revocation generations. */
   realmReadProof?: (realm: string) => Promise<string | null>;
   /** Readable non-public Work, checked against current Access only after the graph read. */
@@ -129,7 +132,7 @@ async function readRelationDefinitionNames(env: WorkActivationEnvironment, resou
 
 /** Character and Role names from exact current semantic manifests in one graph read. */
 async function readSemanticResourceNames(env: WorkActivationEnvironment,
-  resources: ReadonlyMap<string, 'character' | 'role' | 'resource'>) {
+  resources: ReadonlyMap<string, 'character' | 'role' | 'resource'>, reader: SummaryReader) {
   const names = new Map<string, Map<string, string>>();
   if (!resources.size) return names;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?resource ?manifest WHERE {
@@ -150,9 +153,12 @@ async function readSemanticResourceNames(env: WorkActivationEnvironment,
       || !Array.isArray(state.properties)) continue;
     const labels = new Map<string, string>();
     const ambiguous = new Set<string>();
+    const visibleNames = reader.visibleRecords ? await reader.visibleRecords(state.properties.map(property =>
+      propertyRevelationRecord(row.resource!.value, property.predicate, property.value))) : null;
     for (const property of state.properties as Array<{ predicate?: string;
       value?: { kind?: string; lexical?: string; language?: string } }>) {
       if (property.predicate !== 'https://schema.org/name' || !property.value?.lexical?.trim()) continue;
+      if (visibleNames && !visibleNames.has(propertyRevelationRecord(row.resource.value, property.predicate, property.value))) continue;
       const language = property.value.kind === 'language-string' ? property.value.language?.toLowerCase()
         : property.value.kind === 'string' ? 'en' : undefined;
       if (!language || !languageTag.test(language)) continue;
@@ -416,7 +422,7 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     contextBatch.selectedNames);
   if (admittedRelations.length) cost.graphQueries++;
   const admittedResources = new Map([...semanticRefs].filter(([reference]) => admittedSemantics.has(reference)));
-  const semanticNames = await readSemanticResourceNames(env, admittedResources);
+  const semanticNames = await readSemanticResourceNames(env, admittedResources, reader);
   if (admittedResources.size) cost.graphQueries++;
   for (const [reference, row] of special) {
     if (row.type === 'collection') {
@@ -488,6 +494,10 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     const proof = realmProofs.get(realm);
     if (proof) { cost.accessChecks++; cost.accessQueries++; }
     if (!fencedNames.has(realm) || proof && await reader.realmReadProof!(realm) !== proof) readable.delete(realm);
+  }
+  if (reader.visibleRecords) {
+    const visible = await reader.visibleRecords([...readable.keys()]);
+    for (const reference of readable.keys()) if (!visible.has(reference)) readable.delete(reference);
   }
   const summaries = input.resources.map((reference): ResourceSummary => {
     const row = readable.get(reference);

@@ -1,5 +1,6 @@
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia';
 import { entityPageRoutes, setMountedReads } from './routes/entity-pages.ts';
+import { readingPositionsRoutes } from './routes/reading-positions.ts';
 import type { FusekiClient } from './infrastructure/fuseki.ts';
 import { accessAuthorityRoutes } from './routes/access-authority.ts';
 import { agentRoutes } from './routes/agents.ts';
@@ -167,6 +168,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(sessionsRoutes(work))
     .use(publicReportRoutes(work))
     .use(progressSummariesRoutes(work))
+    .use(readingPositionsRoutes(work))
     .use(queryRoutes(fuseki, work))
     .use(savedFilterRoutes(work))
     .use(reviewRoutes(work))

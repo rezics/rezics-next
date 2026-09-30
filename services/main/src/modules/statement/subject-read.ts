@@ -20,6 +20,8 @@ import {
   type WorkReadSession,
 } from '../work/read-session.ts';
 import { STATEMENT_LIMITS, type StatementValue } from './schema.ts';
+import { readingBoundary } from '../reading-position/boundary.ts';
+import { propertyRevelationRecord } from '../reading-position/store.ts';
 
 /** Bounded candidate/hydration batches fill a page from disclosed items, with one
  * disclosed lookahead. Withheld rows never produce a short continuing page.
@@ -146,6 +148,8 @@ export async function readSubjectStatements(
   context = GLOBAL_CLASSIFICATION_CONTEXT,
 ): Promise<Page> {
   await resolveTargets(session, [resource], 'discussion');
+  const boundary = readingBoundary(session);
+  await boundary.require(resource);
   const inherit = await acceptanceScope(session, context);
   const limit = session.options.limit ?? SUBJECT_STATEMENT_COST.pageSize;
   if (!Number.isInteger(limit) || limit < 1 || limit > SUBJECT_STATEMENT_COST.pageSize) {
@@ -157,6 +161,7 @@ export async function readSubjectStatements(
     context,
     session.principal,
     session.options.actingSubject ?? null,
+    await boundary.binding(),
   ];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   let after: { phase: 'component' | 'statement'; predicate?: string } = { phase: 'component' };
@@ -222,7 +227,11 @@ export async function readSubjectStatements(
           property.value.kind === 'resource' ? [property.value.ref] : [],
         ),
       );
+      const disclosedProperties = await boundary.visible(page.filter(({ property }) =>
+        property.value.kind !== 'resource' || allowed.has(property.value.ref)).map(({ property }) =>
+        propertyRevelationRecord(resource, property.predicate, property.value)));
       for (const { property } of page) {
+        if (!disclosedProperties.has(propertyRevelationRecord(resource, property.predicate, property.value))) continue;
         if (property.value.kind === 'resource' && !allowed.has(property.value.ref)) continue;
         items.push({
           kind: 'component-property',
@@ -310,6 +319,8 @@ export async function readSubjectStatements(
             ];
           }),
         );
+        const batchItems: Item[] = [];
+        const batchPositions: typeof positions = [];
         for (const candidate of page) {
           const row = byId.get(candidate.statement!.value);
           if (
@@ -364,7 +375,7 @@ export async function readSubjectStatements(
           if (!decision || !['local', 'global', 'inherited-global'].includes(source!)) {
             throw new WorkReadUnavailable('Statement acceptance is incomplete');
           }
-          items.push({
+          batchItems.push({
             kind: 'statement',
             statement: row.statement!.value,
             revision: row.head.value,
@@ -381,11 +392,17 @@ export async function readSubjectStatements(
               source: source as 'local' | 'global' | 'inherited-global',
             },
           });
-          positions.push({
+          batchPositions.push({
             phase: 'statement',
             key: row.statement!.value,
             predicate: row.predicate!.value,
           });
+        }
+        const disclosedStatements = await boundary.visible(batchPositions.map(position => position.key));
+        for (const [index, item] of batchItems.entries()) {
+          if (!disclosedStatements.has(batchPositions[index]!.key)) continue;
+          items.push(item);
+          positions.push(batchPositions[index]!);
         }
       }
       if (rows.length < batchSize) break;
@@ -413,6 +430,7 @@ export async function readSubjectStatements(
   for (const ctx of privateContexts)
     if (!(await canReadPrivate(ctx))) throw new WorkReadMissing('Context is unavailable');
   await resolveTargets(session, [resource], 'discussion');
+  await boundary.fence();
   const groups = new Map<string, Item[]>();
   for (const item of items)
     groups.set(item.predicate, [...(groups.get(item.predicate) ?? []), item]);

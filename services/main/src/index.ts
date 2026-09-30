@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import { CatalogueIntakeStore, unverifiedWorks } from './modules/catalogue-intake/store.ts';
 import { WikiQuotationStore } from './modules/wiki/quotation.ts';
 import { AdmittedTypeStore } from './modules/types/store.ts';
+import { ReadingPositionStore } from './modules/reading-position/store.ts';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { ContentComments, ContentCore, ContentProjectionCursor,
@@ -379,6 +380,7 @@ const app = createMainApp(fuseki, {
   semanticStages: new SemanticStageStore(contentPool, semanticStageObjects),
   account,
   progress: new StructureProgressStore(contentPool),
+  readingPositions: new ReadingPositionStore(contentPool),
   readingSettings: new ReadingSettingsStore(contentPool),
   access,
   contextSelections: rankingContextSelections,

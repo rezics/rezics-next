@@ -35,7 +35,7 @@ interface Resolved {
   bindings?: RelationBinding[];
   viewingRole?: string;
 }
-interface Cursor { resource: string; epoch: string; sequence: string; after: string }
+interface Cursor { resource: string; epoch: string; sequence: string; after: string; readingPosition?: string }
 
 async function position(env: WorkActivationEnvironment) {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence WHERE {
@@ -156,18 +156,23 @@ export async function readResourceRelations(env: WorkActivationEnvironment, inpu
   canRead: ReferenceCheck; canReadOccurrence: ReferenceCheck;
   canReadDraftPresentations?: ReferenceCheck;
   summarize: (references: string[]) => Promise<ResourceSummary[]>;
+  visibleRecords?: (records: readonly string[]) => Promise<ReadonlySet<string>>;
+  readingPosition?: string;
 }) {
   checkedNativeIri(input.resource);
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > RELATION_PAGE_COST.pageLimit) {
     throw new SemanticChangeRejected('invalid', 'relation page limit is invalid');
   }
   if (!await input.canRead(input.resource)) throw new SemanticTargetUnavailable('resource is unavailable');
+  if (input.visibleRecords && !(await input.visibleRecords([input.resource])).has(input.resource)) {
+    throw new SemanticTargetUnavailable('resource is unavailable');
+  }
   const snapshot = await position(env);
   let cursor: Cursor | undefined;
   if (input.after) {
     try {
       cursor = JSON.parse(Buffer.from(input.after, 'base64url').toString()) as Cursor;
-      if (!cursor || cursor.resource !== input.resource || typeof cursor.after !== 'string'
+      if (!cursor || cursor.resource !== input.resource || cursor.readingPosition !== input.readingPosition || typeof cursor.after !== 'string'
         || !/^(occurrence|derivation|collection|author-credit):https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(cursor.after)) throw new Error('invalid');
     } catch { throw new SemanticChangeRejected('invalid', 'relation cursor is invalid'); }
     if (cursor.epoch !== snapshot.epoch || cursor.sequence !== snapshot.sequence) throw new StaleSemanticHead('relation page changed');
@@ -184,17 +189,24 @@ export async function readResourceRelations(env: WorkActivationEnvironment, inpu
   let after = cursor?.after, hasNext = false, exhausted = false;
   for (let scan = 0; scan < RELATION_PAGE_COST.maxScans; scan++) {
     const candidates = await relationCandidates(env, input.resource, after);
-    for (const candidate of candidates) {
-      after = candidate.key;
-      const resolved = await resolveCandidate(env, candidate, input.resource, input.canRead, input.canReadOccurrence, definition);
-      if (!resolved) continue;
-      const added = resolved.references.filter(ref => !references.has(ref));
-      if (selected.length >= input.limit || references.size + added.length > RELATION_PAGE_COST.summaryReferences) {
-        hasNext = true;
-        break;
+    for (let offset = 0; offset < candidates.length && !hasNext; offset += RELATION_PAGE_COST.pageLimit) {
+      const disclosed: { candidate: Candidate; resolved: Resolved }[] = [];
+      for (const candidate of candidates.slice(offset, offset + RELATION_PAGE_COST.pageLimit)) {
+        after = candidate.key;
+        const resolved = await resolveCandidate(env, candidate, input.resource, input.canRead, input.canReadOccurrence, definition);
+        if (resolved) disclosed.push({ candidate, resolved });
       }
-      selected.push({ candidate, resolved });
-      added.forEach(ref => references.add(ref));
+      const revealed = input.visibleRecords ? await input.visibleRecords(disclosed.map(item => item.candidate.relation)) : null;
+      for (const { candidate, resolved } of disclosed) {
+        if (revealed && !revealed.has(candidate.relation)) continue;
+        const added = resolved.references.filter(ref => !references.has(ref));
+        if (selected.length >= input.limit || references.size + added.length > RELATION_PAGE_COST.summaryReferences) {
+          hasNext = true;
+          break;
+        }
+        selected.push({ candidate, resolved });
+        added.forEach(ref => references.add(ref));
+      }
     }
     if (hasNext) break;
     if (candidates.length < RELATION_PAGE_COST.scanLimit) { exhausted = true; break; }
@@ -235,6 +247,6 @@ export async function readResourceRelations(env: WorkActivationEnvironment, inpu
   if (end.epoch !== snapshot.epoch || end.sequence !== snapshot.sequence) throw new StaleSemanticHead('relation page changed');
   return { profile: 'resource-relations-v1' as const, resource: input.resource, items,
     next: hasNext ? Buffer.from(JSON.stringify({ resource: input.resource, ...snapshot,
-      after: selected.at(-1)!.candidate.key })).toString('base64url') : null,
+      after: selected.at(-1)!.candidate.key, readingPosition: input.readingPosition })).toString('base64url') : null,
     sourcePosition: { datasetId: 'product', dataEpoch: snapshot.epoch, sequence: snapshot.sequence } };
 }

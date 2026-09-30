@@ -153,6 +153,7 @@ export interface MainWorkDependencies {
   structureStages?: StructureStageStore;
   semanticStages?: SemanticStageStore;
   progress?: StructureProgressStore;
+  readingPositions?: import('../modules/reading-position/store.ts').ReadingPositionStore;
   readingSettings?: ReadingSettingsStore;
   account: Pick<AccountAssertionVerifier, 'verify'>;
   content?: Pick<ContentCore, 'owningResourceForRevision' | 'readExactBatch'>;

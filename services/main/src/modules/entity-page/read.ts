@@ -15,6 +15,7 @@ import {
   type WorkReadSession,
 } from '../work/read-session.ts';
 import { entitySection, type SectionId } from './contract.ts';
+import { readingBoundary } from '../reading-position/boundary.ts';
 
 // Stable anchors follow the Work hub order. Structural ownership binds sections;
 // descriptive types can only select the registry's explicit presentation slots.
@@ -102,6 +103,8 @@ export async function readEntityPage(
   mountedReads: ReadonlySet<string>,
 ) {
   const target = (await resolveTargets(session, [resource], 'discussion'))[0]!;
+  const boundary = readingBoundary(session);
+  await boundary.require(target.resource);
   // Resolve again after hydration: graph-position fences alone do not detect an
   // Access revocation. Use G-506's reader, including semantic/Context grants.
   const summaryBatch = await resolveSummary(session, target.resource);
@@ -146,6 +149,7 @@ export async function readEntityPage(
     }
   }
   await resolveTargets(session, [target.resource], 'discussion');
+  await boundary.fence();
   return {
     profile: 'entity-page-v1' as const,
     target,
@@ -163,7 +167,7 @@ export async function resolveSummary(session: WorkReadSession, resource: string)
   const result = await readResourceSummaries(
     session.deps.environment,
     session.deps.media?.store,
-    targetSummaryReader(session),
+    { ...targetSummaryReader(session), visibleRecords: records => readingBoundary(session).visible(records) },
     {
       resources: [resource],
       context: DEFAULT_MEDIA_CONTEXT,
@@ -197,6 +201,7 @@ export async function visibleResourceReferences(
       session.deps.media?.store,
       {
         ...reader,
+        visibleRecords: records => readingBoundary(session).visible(records),
         canReadPrivateContext: privateContext
           ? async (context) => {
               try {

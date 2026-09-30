@@ -20,6 +20,7 @@ import { readZonePublication } from './publication.ts';
 import { ZoneUnavailable } from './configuration.ts';
 import { parseZonePath } from './route-path.ts';
 import { ZONE_ROUTE_COST } from './route-cost.ts';
+import { ReadingBoundary } from '../reading-position/boundary.ts';
 export { ZONE_ROUTE_COST } from './route-cost.ts';
 
 export class ZoneRouteMissing extends Error {}
@@ -62,6 +63,10 @@ export async function zoneRouteViewer(work: MainWorkDependencies, request: Reque
 function summaryReader(work: MainWorkDependencies, viewer: ZoneRouteViewer): SummaryReader {
   const { principal, workPrincipal, actingSubject } = viewer;
   return {
+    ...(work.mediaAccess ? {
+      canReadSemantics: (resources: readonly string[]) => work.mediaAccess!.canReadSemantics(principal,
+        actingSubject ?? null, resources, work.environment.fuseki),
+    } : {}),
     ...(workPrincipal && actingSubject ? {
       canReadWork: (target: string) => work.access.canReadWork(workPrincipal, actingSubject, target),
     } : {}),
@@ -87,11 +92,15 @@ async function position(work: MainWorkDependencies): Promise<ReadPosition> {
 
 class RouteRead {
   readonly reader: SummaryReader;
+  readonly boundary: ReadingBoundary;
   readonly summaries = new Map<string, Available | null>();
   readonly requiredSemantics = new Set<string>();
   constructor(readonly work: MainWorkDependencies, readonly request: Request,
     readonly viewer: ZoneRouteViewer, readonly position: ReadPosition) {
-    this.reader = summaryReader(work, viewer);
+    const session = new WorkReadSession(work, request, { actingSubject: viewer.actingSubject }, position);
+    session.principal = viewer.workPrincipal;
+    this.boundary = new ReadingBoundary(session);
+    this.reader = { ...summaryReader(work, viewer), visibleRecords: records => this.boundary.visible(records) };
   }
   async targets(targets: readonly string[]) {
     if (!targets.length) return [];
@@ -156,6 +165,7 @@ async function boundedRead<T>(work: MainWorkDependencies, request: Request, acti
           throw error;
         }
         for (const resource of read.requiredSemantics) await read.semantic(resource);
+        await read.boundary.fence();
         const after = await position(work);
         if (before.sequence !== after.sequence) throw new WorkReadMoved('Zone population changed during the read');
         signal.throwIfAborted();
@@ -364,7 +374,7 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
     // Unrelated graph writes do not expire an immutable membership continuation.
     // A changed Collection head or recovery epoch still requires a fresh page.
     const binding = ['zone-route-v1', input.zone, input.path, input.actingSubject ?? null,
-      mount.target, header.structure];
+      mount.target, header.structure, await read.boundary.binding()];
     const collectionPosition = { dataEpoch: read.position.dataEpoch, sequence: header.head };
     const cursor = decodeReadCursor(input.cursor, binding, collectionPosition);
     const page = await readVisibleCompositionPage(work.environment, { structure: header.structure, header,

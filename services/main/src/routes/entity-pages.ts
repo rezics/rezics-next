@@ -16,6 +16,7 @@ import { workRead, WorkReadLimit } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
+import { readingPositionQuery } from './reading-positions.ts';
 
 export const openApiOperations = {
   '/v1/resources/{resource}/page': { get: { bearer: false } },
@@ -51,7 +52,7 @@ export function entityPageRoutes(work: MainWorkDependencies) {
       {
         params,
         detail,
-        query: t.Object(readQuery, { additionalProperties: false }),
+        query: t.Object({ ...readQuery, position: readingPositionQuery }, { additionalProperties: false }),
         response: { 200: entityPage, ...workReadProblems },
       },
       async ({ request, params: path, query }) => {
@@ -72,7 +73,7 @@ export function entityPageRoutes(work: MainWorkDependencies) {
         params,
         detail,
         query: t.Object(
-          { ...pageQuery, context: t.Optional(entityPageContext) },
+          { ...pageQuery, context: t.Optional(entityPageContext), position: readingPositionQuery },
           { additionalProperties: false },
         ),
         response: { 200: subjectStatementPage, ...workReadProblems },

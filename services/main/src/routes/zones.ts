@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { readingPositionQuery } from './reading-positions.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { bootstrapAdmittedStructureOwner } from '../modules/structure/bootstrap.ts';
 import { changeAdmittedComposition } from '../modules/structure/change-admitted.ts';
@@ -278,7 +279,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/zones/:id/routes', { params: t.Object({ id: groupUuid }),
       query: t.Object({ path: t.String({ maxLength: 256 }), cursor: t.Optional(t.String({ maxLength: 2048 })),
-        actingSubject: t.Optional(ref) }, { additionalProperties: false }),
+        actingSubject: t.Optional(ref), position: readingPositionQuery }, { additionalProperties: false }),
       response: { 200: routeRead, ...errors } }, async ({ request, params, query }) => {
       try { return Response.json(await resolveZoneRoute(work, request, {
         zone: `https://rezics.com/id/${params.id}`, ...query }), { headers: { 'cache-control': 'no-store' } }); }
