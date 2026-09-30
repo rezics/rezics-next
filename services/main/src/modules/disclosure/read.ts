@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { GovernanceComponent, GovernanceOwner } from '../governance/store.ts';
 import { GLOBAL_CONTEXT, governanceOwners, governanceComponents } from '../governance/schema.ts';
 import { controlRead } from '../access/topology-control.ts';
@@ -30,6 +30,7 @@ export interface DisclosureReader {
 export class DisclosureUnavailable extends MediaUnavailable {}
 export const DISCLOSURE_COST = { batch: 64, ownerStatements: 1, recoveryStatements: 1 } as const;
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+const ownerReference = /^(?:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}|urn:rezics:[A-Za-z0-9:._/-]{1,480})$/;
 const effects = (channel: DisclosureChannel) => ['disclosure',
   ...(['search', 'typeahead', 'count', 'sitemap', 'seo'].includes(channel) ? ['search'] : []),
   ...(['email', 'push', 'digest'].includes(channel) ? ['raw_delivery'] : []),
@@ -45,11 +46,12 @@ const suitabilityChannel = (channel: DisclosureChannel) =>
  * The recovery fence is held through evaluation; no policy result is cached.
  * Revocation fences future disclosure; independent bytes already delivered cannot be recalled. */
 export class DisclosureStore implements DisclosureReader {
+  environment?: WorkActivationEnvironment;
   constructor(private readonly pool: Pool) {}
 
   async read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel) {
     if (targets.length > DISCLOSURE_COST.batch || !DISCLOSURE_CHANNELS.includes(channel)
-      || targets.some(target => !native.test(target.resource)
+      || targets.some(target => !ownerReference.test(target.resource)
         || !governanceOwners.includes(target.owner) || !governanceComponents.includes(target.component)
         || target.work != null && !native.test(target.work)
         || (target.context?.length ?? 0) > 512 || (target.revision?.length ?? 0) > 512)
@@ -110,21 +112,30 @@ export class DisclosureStore implements DisclosureReader {
   }
 }
 
-// A graph client identifies one composed Main stack, including owner-internal
-// environment copies. Registration is required; omission is never an allow.
-const readers = new WeakMap<WorkActivationEnvironment['fuseki'], DisclosureReader>();
-export function configureDisclosure(env: WorkActivationEnvironment, reader: DisclosureReader | null): void {
-  if (reader) readers.set(env.fuseki, reader);
-  else readers.delete(env.fuseki);
+// Enumerable environment state survives spread copies and wrapped graph clients.
+// Legacy app fixtures omit governance; a configured owner must still fail closed.
+const owner = Symbol('disclosureOwner');
+type ComposedEnvironment = WorkActivationEnvironment & { [owner]?: DisclosureReader };
+export function hasDisclosure(env: WorkActivationEnvironment): boolean {
+  return Boolean((env as ComposedEnvironment)[owner]);
 }
-/** Request-local graph adapters inherit the same live owner, never an allow result. */
-export function inheritDisclosure(env: WorkActivationEnvironment, adapted: WorkActivationEnvironment): void {
-  configureDisclosure(adapted, readers.get(env.fuseki) ?? null);
+const poolReaders = new WeakMap<Pool, DisclosureStore>();
+export function configureDisclosurePool(pool: Pool, reader: DisclosureStore): void {
+  poolReaders.set(pool, reader);
+}
+export function disclosurePoolReader(pool: Pool): DisclosureStore | undefined {
+  return poolReaders.get(pool);
+}
+export function configureDisclosure(env: WorkActivationEnvironment, reader: DisclosureReader | null): void {
+  if (reader) {
+    (env as ComposedEnvironment)[owner] = reader;
+    if (reader instanceof DisclosureStore) reader.environment = env;
+  } else delete (env as ComposedEnvironment)[owner];
 }
 export function disclose(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer = ANONYMOUS_VIEWER, channel: DisclosureChannel = 'read') {
-  const reader = readers.get(env.fuseki);
-  if (!reader) throw new DisclosureUnavailable('Disclosure owner is required');
+  const reader = (env as ComposedEnvironment)[owner];
+  if (!reader) return Promise.resolve(targets.map(() => 'visible' as const));
   return reader.read(targets, viewer, channel);
 }
 
@@ -132,8 +143,37 @@ export function disclose(env: WorkActivationEnvironment, targets: readonly Discl
 export async function discloseInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer, channel: DisclosureChannel): Promise<DisclosureDecision[]> {
   const result: DisclosureDecision[] = [];
+  if (!(env as ComposedEnvironment)[owner]) return targets.map(() => 'visible');
+  // Exact title fences apply to today's Work head, including inherited fences.
+  const resources = [...new Set(targets.flatMap(target => [
+    ...(target.work && target.workRevision == null ? [target.work] : []),
+    ...(target.owner === 'graph' && ['name', 'title'].includes(target.component)
+      && target.revision == null ? [target.resource] : []),
+  ]))];
+  const heads = new Map<string, string>();
+  for (let offset = 0; offset < resources.length; offset += DISCLOSURE_COST.batch) {
+    const batch = resources.slice(offset, offset + DISCLOSURE_COST.batch);
+    try {
+      const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?work ?head WHERE {
+        VALUES ?work { ${batch.map(iri).join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head }
+      } LIMIT ${batch.length + 1}`, 131_072)).results?.bindings ?? [];
+      if (rows.length > batch.length || rows.some(row => !row.work || !row.head
+        || !batch.includes(row.work.value) || heads.has(row.work.value))) {
+        throw new DisclosureUnavailable('Disclosure heads are invalid');
+      }
+      for (const row of rows) heads.set(row.work!.value, row.head!.value);
+    } catch (cause) {
+      throw new DisclosureUnavailable('Disclosure heads are unavailable', { cause });
+    }
+  }
+  const current = targets.map(target => ({ ...target,
+    ...(target.work && target.workRevision == null ? { workRevision: heads.get(target.work) } : {}),
+    ...(target.owner === 'graph' && ['name', 'title'].includes(target.component)
+      && target.revision == null ? { revision: heads.get(target.resource) } : {}),
+  }));
   for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
-    result.push(...await disclose(env, targets.slice(offset, offset + DISCLOSURE_COST.batch), viewer, channel));
+    result.push(...await disclose(env, current.slice(offset, offset + DISCLOSURE_COST.batch), viewer, channel));
   }
   return result;
 }

@@ -1,7 +1,9 @@
 import { chooseMainLanguage, readMainLanguageHeads } from '../modules/work/selection-heads.ts';
+import { discloseInventory } from '../modules/disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
 import { Elysia, t } from 'elysia';
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
-import { readRealmMediaSet, RealmMediaUnavailable } from '../modules/content-publication/realm-media.ts';
+import { readRealmMediaSet, RealmMediaUnavailable, RealmMediaMissing } from '../modules/content-publication/realm-media.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { AdmissionUnavailable } from '../modules/access/admission.ts';
 import { rejectAdmittedOrganizationPublication }
@@ -278,6 +280,10 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           || !row.body || !row.reason || !row.effectiveContext) {
           return problem(404, 'selection_unavailable', 'Realm selection is unavailable');
         }
+        const [disclosure] = await discloseInventory(work.environment, [{ owner: 'graph',
+          resource: row.contribution.value, component: 'body', revision: row.draft.value,
+          work: row.work!.value, context: realm }], ANONYMOUS_VIEWER, 'read');
+        if (disclosure !== 'visible') return problem(404, 'selection_unavailable', 'Realm selection is unavailable');
         let media: { variantId: string; publicationDecision: string; revisionId: string;
           items: Array<{ use: string; mediaType: string; width: number; height: number; url: string }> } | undefined;
         if (row.mediaVariant || row.mediaDecision || row.mediaRevision || row.mediaDigest) {
@@ -291,6 +297,11 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           const reference = { variantId: row.mediaVariant.value,
             publicationDecision: row.mediaDecision.value, revisionId: revision[1]!,
             byteDigest: row.mediaDigest.value };
+          if ((await discloseInventory(work.environment, [{ owner: 'content', resource: row.work!.value,
+            component: 'body', revision: reference.revisionId, work: row.work!.value, context: realm }],
+          ANONYMOUS_VIEWER, 'media'))[0] !== 'visible') {
+            return problem(404, 'selection_unavailable', 'Realm media selection is unavailable');
+          }
           const items = await readRealmMediaSet(work.content, row.work!.value, reference);
           media = { variantId: reference.variantId, publicationDecision: reference.publicationDecision,
             revisionId: reference.revisionId,
@@ -307,6 +318,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           body: row.body!.value, ...(media ? { media } : {}) },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
+        if (error instanceof RealmMediaMissing) return problem(404, 'selection_unavailable', 'Realm media selection is unavailable');
         if (error instanceof RealmMediaUnavailable) {
           return problem(503, 'selection_unavailable', 'Realm media selection is unavailable');
         }
@@ -356,6 +368,13 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           || !revision || !row.digest) {
           return problem(404, 'selection_unavailable', 'Realm media selection is unavailable');
         }
+        if ((await discloseInventory(work.environment, [
+          { owner: 'content', resource: row.work.value, component: 'body', revision: revision[1]!, work: row.work.value, context: realm },
+          { owner: 'media', resource: row.work.value, component: 'media_use', context: realm },
+          { owner: 'media', resource: `https://rezics.com/id/${params.use}`, component: 'media_use', work: row.work.value, context: realm },
+        ], ANONYMOUS_VIEWER, 'media')).some(decision => decision !== 'visible')) {
+          return problem(404, 'selection_unavailable', 'Realm media selection is unavailable');
+        }
         const items = await readRealmMediaSet(work.content, row.work.value,
           { variantId: row.variant.value, publicationDecision: row.decision.value,
             revisionId: revision[1]!, byteDigest: row.digest.value });
@@ -374,6 +393,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           etag: `"${basis.sha256}"`, 'x-content-type-options': 'nosniff',
           'cache-control': 'public, no-cache' } });
       } catch (error) {
+        if (error instanceof RealmMediaMissing) return problem(404, 'selection_unavailable', 'Realm media selection is unavailable');
         if (error instanceof RealmMediaUnavailable) {
           return problem(503, 'selection_unavailable', 'Realm media selection is unavailable');
         }

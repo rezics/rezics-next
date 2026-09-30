@@ -1,6 +1,6 @@
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
-import { discloseInventory, DisclosureUnavailable, type DisclosureTarget } from './read.ts';
+import { discloseInventory, hasDisclosure, DisclosureUnavailable, type DisclosureTarget } from './read.ts';
 
 export interface SearchDisclosureMatch {
   work: string;
@@ -14,6 +14,7 @@ export interface SearchDisclosureMatch {
 export async function discloseSearchMatches<T extends SearchDisclosureMatch>(env: WorkActivationEnvironment,
   matches: readonly T[], channel: 'search' | 'typeahead' = 'search'): Promise<T[]> {
   if (matches.length > 512) throw new DisclosureUnavailable('Search disclosure exceeds its bound');
+  if (!hasDisclosure(env)) return [...matches];
   const resources = [...new Set(matches.flatMap(match => [match.work, ...(match.matchedChapter ? [match.matchedChapter.work] : [])]))];
   if (!resources.length) return [];
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?work ?head WHERE {

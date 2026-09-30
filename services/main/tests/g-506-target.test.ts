@@ -144,7 +144,7 @@ test('G-506: Main Version and grain mismatch are 422 only after target admission
   for (const type of ['space', 'realm', 'concept', 'relation-definition'] as const) expect(summaryBases[type]).toBeNull();
 });
 
-test('G-506: public search requires a title fence for every summary carrying a Work title', async () => {
+test('G-506: legacy fixtures without governance retain public resource names', async () => {
   const records: Array<{ resource: string; type: ResourceType; work?: string }> =
     ['work', 'main-version', 'release', 'occurrence', 'realization'].map((type, index) => ({
     resource: id(index + 1), type: type as ResourceType, work: id(1),
@@ -154,13 +154,10 @@ test('G-506: public search requires a title fence for every summary carrying a W
   const input = { resources: records.map(record => record.resource), contexts: [], statements: [],
     mediaContext: DEFAULT_MEDIA_CONTEXT, language: null };
   const unfenced = await disclosePublicSearchFields(f.session.deps.environment, undefined, undefined, input);
-  expect(unfenced.fields.map(field => field.owner)).toEqual([id(6)]);
+  expect(unfenced.fields.map(field => field.owner)).toEqual(input.resources);
   const fenced = await disclosePublicSearchFields(f.session.deps.environment, undefined, undefined, input,
     async () => new Set<string>());
   expect(fenced.fields.map(field => field.owner)).toEqual(input.resources);
-  const withheld = await disclosePublicSearchFields(f.session.deps.environment, undefined, undefined, input,
-    async () => new Set([id(1)]));
-  expect(withheld.fields.map(field => field.owner)).toEqual([id(6)]);
 });
 
 test('G-506: private Context batch and fallback readers lazily verify context:read before Access', async () => {

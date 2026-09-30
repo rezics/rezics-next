@@ -22,6 +22,7 @@ import { disclosureViewer } from '../../../services/main/src/modules/disclosure/
 import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
 import { NotificationDispatcher, type NotificationSubjectReader, type ProviderSend } from '../../../services/main/src/modules/notification/dispatcher.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
+import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 async function stopWeb(child: ChildProcess) {
@@ -83,8 +84,11 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     const title = `G-542 secret Work ${randomUUID()}`;
+    // Establish the existing represented Agent through its real graph owner.
+    await createAgentGraph(f.env, { id: randomUUID(), agent: f.actor, kind: 'person',
+      displayName: 'G-542 fixture author', digest: digest(`g542-agent-${f.actor}`) });
     const work = await json<{ work: string; workRevision: string; mainVersion: string }>(await call('POST', '/v1/works', {
-      profile: 'metadata-only-v1', title, language: 'en', semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor,
+      profile: 'metadata-only-v1', authoring: 'own-work', title, language: 'en', semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor,
     }, true), 201);
     await f.grant(`work:edit:${work.work}`, 'work.edit');
     await f.grant(`work:read:${work.work}`, 'work.read');
@@ -264,10 +268,31 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
         { actingSubject: f.actor, expectedRevision: revision, labels: [], basis: 'platform' }, randomUUID());
       expect(recovered.assessment.labels).toEqual([]);
     }
-    // Missing governance composition cannot silently revive an otherwise public title.
+    // Legacy fixtures may omit governance; configured owner outages are covered separately.
+    const processNotices = [
+      ['realm-invitation-v1', 'realm-invitation', 'realm_invitation'],
+      ['submission-decision-v1', 'submission-decision', 'submission_decision'],
+      ['moderation-outcome-v1', 'moderation-outcome', 'moderation_outcome'],
+      ['realm-role-change-v1', 'realm-role-change', 'realm_role_change'],
+    ] as const;
+    for (const [basis, topic, kind] of processNotices) {
+      const processSubjects: NotificationSubjectReader = { resolve: async () => ({ status: 'available',
+        subject: { private: false, fields: { excerpt: 'process outcome', linkTarget: work.work, title } } }) };
+      notifications.registerReadSubjectReader(basis, processSubjects);
+      dispatcher.registerSubjectReader(basis, processSubjects);
+      const notice = (await notifications.enqueue({ sourceOwner: 'access', sourceEvent: randomUUID(),
+        purpose: 'governance', topic, subject: { owner: 'access', ref: randomUUID(), revision: null },
+        disclosureBasis: basis, recipients: [f.principalId],
+        display: { kind, actorAgent: null, realm: null, groupKey: null } }))[0]!;
+      expect(notice.deliveries).toBe(2);
+      expect((await notifications.unreadCount(principal)).count).toBe(1);
+      expect((await notifications.readStream(principal, null)).items.find(item => item.id === notice.itemId)?.display).not.toBeNull();
+      expect((await dispatcher.runOnce()).delivered).toBe(2);
+      await notifications.markItemRead(principal, notice.itemId);
+    }
     createMainApp(f.env.fuseki, { ...deps, governance: undefined });
-    expect((await preview()).status).toBe(503);
-    expect(sent).toHaveLength(10);
+    expect((await preview()).status).toBe(200);
+    expect(sent).toHaveLength(18);
   } finally {
     if (browser) await browser.close();
     if (web) await stopWeb(web);

@@ -53,6 +53,7 @@ async function legacyChapterLabels(session: WorkReadSession,
       .catch(() => { throw new WorkReadUnavailable('Content owner is unavailable'); });
     for (const [index, exact] of exacts.entries()) {
       const item = batch[index]!;
+      if (exact?.status === 'denied') continue;
       if (exact?.status !== 'available' || exact.reference.resourceId !== item.target
         || exact.reference.variantId !== item.variant || exact.reference.language.kind !== 'tag'
         || exact.reference.language.tag.toLowerCase() !== item.language) {
@@ -258,10 +259,18 @@ export async function readContents(session: WorkReadSession, work: string,
     for (const item of items) if (item.selectedRevision && missingTitle(item.label)) {
       item.label = derived.get(item.selectedRevision) ?? item.label;
     }
+    const decisions = await session.disclosure(items.map(item => ({ owner: 'graph',
+      resource: item.target ?? item.occurrence, component: 'name',
+      work, ...(item.role === 'group' ? { revision: header.head } : {}) })), 'read');
+    const bodyDecisions = await session.disclosure(items.map(item => ({ owner: 'content',
+      resource: item.target ?? item.occurrence, component: 'body',
+      revision: item.selectedRevision, work })), 'read');
+    const visibleItems = items.filter((_item, index) => decisions[index] === 'visible'
+      && bodyDecisions[index] === 'visible');
     await fenceWorkBasis(session, basis);
     return { profile: 'work-contents-v1' as const, work, version: header.component,
       composition: header.structure, compositionRevision: header.head, language,
-      ...pageResult(session, items, page.next
+      ...pageResult(session, visibleItems, page.next
         ? encodeReadCursor(binding, session.position, page.next, header.head) : null) };
   } catch (error) { structureError(error); }
 }

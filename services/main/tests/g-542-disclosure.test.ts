@@ -72,7 +72,7 @@ test('G-542: every channel combines the same removal and suitability batch for f
   }
 });
 
-test('G-542: held recovery, incomplete results and missing owner fail closed', async () => {
+test('G-542: configured recovery and incomplete results fail closed; absent governance preserves fixtures', async () => {
   const s = storage(), reader = new DisclosureStore(s.pool);
   s.set({ open: false });
   await expect(reader.read(fixtures, ANONYMOUS_VIEWER, 'read')).rejects.toThrow('Disclosure owner is unavailable');
@@ -80,7 +80,7 @@ test('G-542: held recovery, incomplete results and missing owner fail closed', a
   await expect(reader.read(fixtures, ANONYMOUS_VIEWER, 'read')).rejects.toThrow('Disclosure result is incomplete');
   const env = { fuseki: new FusekiClient('http://graph.invalid'), objectDirectory: '.temp/g-542',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
-  expect(() => disclose(env, fixtures)).toThrow('Disclosure owner is required');
+  expect(await disclose(env, fixtures)).toEqual(fixtures.map(() => 'visible'));
 });
 
 test('G-542: the search graph adapter retains the live required owner across graph-client identities', async () => {
@@ -96,7 +96,7 @@ test('G-542: the search graph adapter retains the live required owner across gra
   s.set({ restricted: true });
   expect((await disclose(deps.environment, fixtures)).every(decision => decision !== 'visible')).toBe(true);
   configureDisclosure(env, null);
-  expect(() => disclose(adapt().environment, fixtures)).toThrow('Disclosure owner is required');
+  expect(await disclose(adapt().environment, fixtures)).toEqual(fixtures.map(() => 'visible'));
 });
 
 test('G-542: summary assembly keeps unavailable entries in position and never hydrates a restricted name', async () => {
@@ -117,11 +117,13 @@ test('G-542: summary assembly keeps unavailable entries in position and never hy
   expect(result.summaries).toEqual([{ reference: id(1), status: 'unavailable' }, { reference: id(1), status: 'unavailable' }]);
   expect(JSON.stringify(result)).not.toContain('Secret Work');
   configureDisclosure(env, null);
-  await expect(read()).rejects.toThrow('Disclosure owner is required');
+  expect((await read()).summaries.every(summary => summary.status === 'available')).toBe(true);
 });
 
 test('G-542: asset adapters and export manifests discard all denied payload and notices', async () => {
   const s = storage(), graph = new FusekiClient('http://graph.invalid');
+  graph.query = async () => ({ results: { bindings: [{ work: { type: 'uri', value: id(1) },
+    head: { type: 'uri', value: id(11) } }] } });
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(env, new DisclosureStore(s.pool));
   const asset = { asset: id(5).slice(-36), target: id(1), context: DEFAULT_MEDIA_CONTEXT,
@@ -162,6 +164,8 @@ test('G-542: asset adapters and export manifests discard all denied payload and 
   expect(JSON.stringify(await discloseExportPlan(env, plan, ANONYMOUS_VIEWER))).not.toContain('Secret');
   const incomplete = disclosureMedia({ itemDelivery: async () => ({ target: id(1) }) } as unknown as MediaStore, env);
   expect(await incomplete.itemDelivery(id(12).slice(-36))).toBeNull();
+  s.set({ labels: [] });
+  expect(await incomplete.itemDelivery(id(12).slice(-36))).toMatchObject({ target: id(1) });
 });
 
 test('G-542: feed tombstones preserve identity/time and erase card, author, counts and reader-state payloads', () => {
@@ -191,22 +195,22 @@ test('G-542: each composed channel has a final shared gate; optional legacy fenc
     ['modules/media/summary.ts', 'await discloseInventory('],
     ['modules/disclosure/assembly.ts', 'discloseContent(env, await target.readExactBatch('],
     ['modules/feed/read.ts', "session.disclosure(fenceTargets, 'feed')"],
-    ['modules/realm-reply/thread-read.ts', 'realmReplies.readPublicBatch('],
+    ['modules/realm-reply/thread-read.ts', 'await discloseInventory(session.deps.environment, heads.map('],
     ['modules/realm-reply/store.ts', 'await discloseInventory('],
     ['modules/realm-reply/thread-store.ts', 'await reader.read('],
     ['modules/search/fields.ts', 'await discloseSearchMatches('],
-    ['modules/search/card-reads.ts', 'inheritDisclosure(deps.environment, environment)'],
+    ['modules/search/card-reads.ts', 'const environment = { ...deps.environment, fuseki: client }'],
     ['modules/work/search-public.ts', 'await discloseSearchMatches('],
     ['modules/work/search-multifield.ts', 'await discloseSearchMatches('],
     ['modules/search-disclosure/public-fields.ts', 'await discloseInventory('],
     ['modules/disclosure/sitemap.ts', 'await assembleSitemapEntries('],
     ['modules/notification/store.ts', 'await discloseNotifications('],
     ['modules/notification/dispatcher.ts', 'await discloseNotifications('],
-    ['modules/notification/digest.ts', 'resolveDigestSubjects(candidates.map('],
+    ['modules/notification/digest.ts', 'resolveDigestSubjects(inputs)'],
     ['modules/export/readers.ts', 'return discloseExportPlan('],
   ]) expect(source(path!)).toContain(call!);
   expect(source('app.ts')).toContain('if (work) composeDisclosure(work)');
   expect(source('routes/resources.ts')).toContain('await readSitemap(work.environment, query.after)');
-  expect(source('modules/disclosure/read.ts')).toContain("throw new DisclosureUnavailable('Disclosure owner is required')");
+  expect(source('modules/disclosure/read.ts')).toContain("const owner = Symbol('disclosureOwner')");
   expect(source('modules/media/summary.ts')).not.toContain('await reader.restrictedTitles(');
 });

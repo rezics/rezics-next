@@ -3,7 +3,7 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import type { MediaStore } from '../media/store.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
-import { configureDisclosure, discloseInventory, type DisclosureChannel } from './read.ts';
+import { configureDisclosure, discloseInventory, DisclosureUnavailable, type DisclosureChannel } from './read.ts';
 
 export async function discloseContent(env: WorkActivationEnvironment, results: readonly ExactReadResult[],
   viewer: Viewer = ANONYMOUS_VIEWER, channel: DisclosureChannel = 'read'): Promise<ExactReadResult[]> {
@@ -46,13 +46,12 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
     if (property === 'itemDelivery') return async (...args: Parameters<MediaStore['itemDelivery']>) => {
       const row = await target.itemDelivery(...args);
       if (!row) return null;
-      // G-571's delivery record must carry the asset identity. A Use identity
-      // cannot stand in for the asset's assessment; an incomplete record denies bytes.
       const asset: unknown = Reflect.get(row, 'asset');
-      if (typeof asset !== 'string') return null;
       const decisions = await discloseInventory(env, [
-        { owner: 'media', resource: `https://rezics.com/id/${asset}`, component: 'cover' },
+        ...(typeof asset === 'string' ? [{ owner: 'media' as const,
+          resource: `https://rezics.com/id/${asset}`, component: 'cover' as const }] : []),
         { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'media_use' },
+        { owner: 'media', resource: row.target, component: 'media_use' },
         { owner: 'graph', resource: row.target, component: 'name' },
       ], ANONYMOUS_VIEWER, 'media');
       return decisions.every(decision => decision === 'visible') ? row : null;
@@ -71,10 +70,12 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
   } });
 }
 
-/** Composition requires the governance owner. Legacy fixtures that omit it
- * can construct an app, but every resource read then fails closed. */
+/** Missing governance preserves legacy fixtures; configured owner failures deny reads. */
 export function composeDisclosure(deps: MainWorkDependencies): void {
-  configureDisclosure(deps.environment, deps.governance?.store.disclosure ?? null);
+  if (!deps.environment) return;
+  configureDisclosure(deps.environment, deps.governance
+    ? deps.governance.store.disclosure ?? { read: async () => { throw new DisclosureUnavailable('Disclosure owner is unavailable'); } }
+    : null);
   if (deps.content) deps.content = disclosureContent(deps.content, deps.environment);
   if (deps.media) deps.media = { ...deps.media, store: disclosureMedia(deps.media.store, deps.environment) };
 }

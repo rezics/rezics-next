@@ -5,6 +5,8 @@ import type { Pool } from 'pg';
 import { readExactContributionDraft } from '../contribution/history.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from './activate.ts';
+import { discloseInventory } from '../disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f-]{36}$/;
@@ -15,6 +17,7 @@ const MAX_NATIVE_VARIANTS = 64;
 
 export class InvalidNativeVariant extends Error {}
 export class NativeVariantUnavailable extends Error {}
+export class NativeVariantMissing extends NativeVariantUnavailable {}
 export class NativeVariantLimit extends Error {}
 export class StaleReaderVariantPreference extends Error {}
 export class ReaderVariantIdempotencyConflict extends Error {}
@@ -145,6 +148,9 @@ export async function readEligibleNativeVariant(env: WorkActivationEnvironment,
     }
   }`);
   if (current.boolean !== true) return null;
+  const [decision] = await discloseInventory(env, [{ owner: 'graph', resource: contribution,
+    component: 'body', revision: variant.selectedDraft, work }], ANONYMOUS_VIEWER, 'read');
+  if (decision !== 'visible') return null;
   return { work, variant, body: exact.body };
 }
 
@@ -300,6 +306,9 @@ export async function readMainDefaultVariant(env: WorkActivationEnvironment,
     'draft', 'language', 'author', 'body'].some(key => current[0]?.[key]?.value !== row[key]?.value)) {
     throw new NativeVariantUnavailable('Main Version default changed during read');
   }
+  const [decision] = await discloseInventory(env, [{ owner: 'graph', resource: variant.contribution,
+    component: 'body', revision: variant.selectedDraft, work: row.work.value }], ANONYMOUS_VIEWER, 'read');
+  if (decision !== 'visible') throw new NativeVariantMissing('Main Version default is unavailable');
   return { work: row.work.value, selection: row.selection.value,
     variant, body: exact.body };
 }

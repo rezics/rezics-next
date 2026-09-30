@@ -4,7 +4,7 @@ import { controlRead } from '../access/topology-control.ts';
 import { followPrincipal } from '../follows/authority.ts';
 import { RealmReplyInvalid } from './content-store.ts';
 import { REALM_THREAD_COST } from './thread-contract.ts';
-import { DisclosureStore, DISCLOSURE_COST } from '../disclosure/read.ts';
+import { disclosurePoolReader, discloseInventory, DISCLOSURE_COST } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -147,12 +147,15 @@ export class RealmReplyThreadStore {
         ${approved('$1', 'walked.id', 'any', null, null)} AS visible FROM walked
         JOIN content.reply reply ON reply.id = walked.id`,
     [realm, [...threads], REALM_THREAD_COST.depth, limit + 1]);
-    const reader = new DisclosureStore(this.access);
+    const reader = disclosurePoolReader(this.access);
     const candidates = rows.rows.filter(row => row.visible);
     for (let offset = 0; offset < candidates.length; offset += DISCLOSURE_COST.batch) {
       const page = candidates.slice(offset, offset + DISCLOSURE_COST.batch);
-      const decisions = await reader.read(page.map(row => ({ owner: 'content', resource: row.id,
-        component: 'body', work: row.root_target, context: realm })), ANONYMOUS_VIEWER, 'count');
+      const targets = page.map(row => ({ owner: 'content' as const, resource: row.id,
+        component: 'body' as const, work: row.root_target, context: realm }));
+      const decisions = !reader ? page.map(() => 'visible') : reader.environment
+        ? await discloseInventory(reader.environment, targets, ANONYMOUS_VIEWER, 'count')
+        : await reader.read(targets, ANONYMOUS_VIEWER, 'count');
       page.forEach((row, index) => {
         if (decisions[index] === 'visible') counts.set(row.thread, (counts.get(row.thread) ?? 0) + 1);
       });

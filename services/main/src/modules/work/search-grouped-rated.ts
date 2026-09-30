@@ -1,4 +1,5 @@
 import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
+import { discloseSearchMatches } from '../disclosure/search.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE }
   from '../rating/context.ts';
 import { STANDING_RATING_OBSERVATION_PROFILE } from '../rating/observation.ts';
@@ -263,7 +264,7 @@ export async function queryPublicGroupedRatedCore(env: WorkActivationEnvironment
   if (new Set([...matches.values()].map(match => match.mainVersion)).size !== matches.size) {
     throw new PublicQueryUnavailable('rated grouped Main Version is ambiguous');
   }
-  const ordered = [...matches.values()].sort((a, b) => b.score - a.score
+  const ordered = (await discloseSearchMatches(env, [...matches.values()])).sort((a, b) => b.score - a.score
     || a.mainVersion.localeCompare(b.mainVersion) || a.matchUnit.localeCompare(b.matchUnit));
   return { phrase: { contractVersion: '1', resultGrain: 'mainVersion',
     context: { kind: 'realm-local', id: input.realm }, complete: true,

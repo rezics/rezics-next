@@ -12,6 +12,8 @@ import { REALM_THREAD_COST, type realmThread, type realmThreadReply, type realmT
   type threadSort, type threadWindow } from './thread-contract.ts';
 import type { PlacedHead, RealmReplyThreadStore, ThreadVote } from './thread-store.ts';
 import { resolveTargets, targetSummaries, TARGET_RESOLVE_COST } from '../target/resolve.ts';
+import { discloseInventory } from '../disclosure/read.ts';
+import { disclosureViewer } from '../disclosure/viewer.ts';
 
 type Sort = Static<typeof threadSort>;
 type Window = Static<typeof threadWindow>;
@@ -64,7 +66,11 @@ function head(row: ReadRow): Head {
 }
 
 /** Exact placed bodies, in Content's 64-revision batches. Unreadable bodies keep a neutral reply position. */
-async function bodies(session: WorkReadSession, heads: readonly Head[]) {
+async function bodies(session: WorkReadSession, heads: readonly Head[], realm: string) {
+  const decisions = await discloseInventory(session.deps.environment, heads.map(item => ({ owner: 'content',
+    resource: item.reply, component: 'body', revision: item.revisionId,
+    work: item.work, context: realm })), disclosureViewer(session.principal), 'thread');
+  heads = heads.filter((_item, index) => decisions[index] === 'visible');
   const revisions = [...new Set(heads.map(item => item.revisionId))];
   const read = new Map<string, { body: string; language: string | null }>();
   for (let start = 0; start < revisions.length; start += REALM_THREAD_COST.contentBatch) {
@@ -194,7 +200,7 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
       next = encodeReadCursor(binding, session.position, page.at(-1)!.placement, String(offset + limit));
     }
   }
-  const [texts, titles, named, counted] = await Promise.all([bodies(session, page),
+  const [texts, titles, named, counted] = await Promise.all([bodies(session, page, realm),
     works(session, page), authors(session, page.map(row => row.author)),
     threads.counts(realm, page.map(row => row.reply))]);
   const items: Summary[] = page.flatMap(row => {
@@ -262,12 +268,12 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     if (row && item.parent && shown.has(item.parent)) { shown.add(item.reply); below.push(row); }
   }
   const all = [...above, ...below];
-  const [texts, titles, named, votes, blocked] = await Promise.all([bodies(session, all), works(session, [focused]),
+  const [texts, titles, named, votes, blocked] = await Promise.all([bodies(session, all, realm), works(session, [focused]),
     authors(session, all.map(row => row.author)),
     threads.votes(session.position.dataEpoch, all.map(row => row.placement), reader(session)),
     blockedAuthors(session, all.map(row => row.author))]);
   const about = titles.get(focused.work);
-  if (!about) throw new WorkReadMissing('Reply is unavailable');
+  if (!about || !texts.has(focus)) throw new WorkReadMissing('Reply is unavailable');
   const reply = (row: Head): Reply[] => {
     const text = texts.get(row.reply);
     const { title, body } = !text ? { title: null, body: '' }
@@ -324,8 +330,12 @@ export async function readProfileContributions(session: WorkReadSession, author:
     cursor ? { time: cursor.order, reply: cursor.after } : undefined);
   const page = nodes.slice(0, PROFILE_CONTRIBUTION_COST.pageSize);
   const items = [];
-  const disclosed = await session.deps.realmReplies.readPublicBatch(page.map(node => node.reply),
-    session.principal ?? undefined, session.options.actingSubject);
+  const replies = session.deps.realmReplies;
+  const disclosed = typeof replies.readPublicBatch === 'function'
+    ? await replies.readPublicBatch(page.map(node => node.reply),
+      session.principal ?? undefined, session.options.actingSubject)
+    : await Promise.all(page.map(node => replies.readPublic(node.reply,
+      session.principal ?? undefined, session.options.actingSubject)));
   for (const [index, node] of page.entries()) {
     if (!node.origin) continue;
     const visible = disclosed[index];

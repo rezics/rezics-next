@@ -142,6 +142,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         if (current.boolean !== true) return problem(404, 'comment_unavailable', 'Comment is unavailable');
         const exact = (await work.content.readExactBatch([comment.revisionId],
           async ids => new Set(ids)))[0];
+        if (exact?.status === 'denied') return problem(404, 'comment_unavailable', 'Comment is unavailable');
         if (exact?.status !== 'available' || exact.reference.resourceId !== comment.resourceId
           || exact.reference.variantId !== comment.variantId
           || exact.reference.byteDigest !== comment.byteDigest) {
@@ -201,6 +202,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         }
         const exact = (await work.content.readExactBatch([params.revision],
           async ids => new Set(ids)))[0];
+        if (exact?.status === 'denied') return problem(404, 'comment_unavailable', 'Comments are unavailable');
         if (exact?.status !== 'available' || exact.reference.resourceId !== resourceId) {
           return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
         }
@@ -352,9 +354,6 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         const current = await fuseki.query(`PREFIX schema: <https://schema.org/>
           ASK { GRAPH <urn:rezics:graph:current> { ${iri(resourceId)} a schema:CreativeWork } }`);
         if (current.boolean !== true) return problem(404, 'revision_unavailable', 'Revision is unavailable');
-        if (await work.governance?.store.restrictedContentRevision(resourceId, params.revision)) {
-          return problem(404, 'revision_unavailable', 'Revision is unavailable');
-        }
         const exact = (await work.content.readExactBatch([params.revision],
           async ids => new Set(ids)))[0];
         if (exact?.status === 'available'

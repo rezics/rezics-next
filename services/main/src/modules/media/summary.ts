@@ -9,7 +9,7 @@ import { currentProfile } from '../realm-profile/schema.ts';
 import { checkedCollectionName } from '../collection/names.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import type { SemanticDisclosure } from '../access/semantic-disclosure.ts';
-import { discloseInventory, type DisclosureChannel, type DisclosureTarget } from '../disclosure/read.ts';
+import { discloseInventory, hasDisclosure, type DisclosureChannel, type DisclosureTarget } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 import { direction, readerLanguages, selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import type { Base } from '../target/contract.ts';
@@ -509,7 +509,7 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   }
   const decisions = await discloseInventory(env, targets, reader.viewer ?? ANONYMOUS_VIEWER,
     input.channel ?? 'summary');
-  cost.accessQueries += Math.ceil(targets.length / MAX_SUMMARY_BATCH);
+  if (hasDisclosure(env)) cost.accessQueries += Math.ceil(targets.length / MAX_SUMMARY_BATCH);
   for (const [reference] of entries) {
     if (decisions[nameIndexes.get(reference)!] !== 'visible') readable.delete(reference);
     const assetIndex = assetIndexes.get(reference);

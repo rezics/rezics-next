@@ -10,6 +10,7 @@ import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { assertContentProjectionProfiles, ContentProjectionUnavailable } from './relay.ts';
 import type { RightsStore } from '../rights/store.ts';
+import { discloseSearchMatches } from '../disclosure/search.ts';
 
 export class InvalidContentPhrase extends Error {}
 export class ContentSearchBudgetExceeded extends Error {}
@@ -250,8 +251,9 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
   if (new Set(matches.map(match => match.matchUnit)).size !== matches.length) {
     throw new ContentProjectionUnavailable('Content phrase result has duplicate units');
   }
-  const visible = (await visibleContentSearchRights(matches, rights))
-    .map(({ rightsBasis: _rightsBasis, assessment: _assessment, ...match }) => match);
+  const disclosed = await discloseSearchMatches(env, matches.map(match => ({ ...match, work: match.resource })));
+  const visible = (await visibleContentSearchRights(disclosed, rights))
+    .map(({ rightsBasis: _rightsBasis, assessment: _assessment, work: _work, ...match }) => match);
   const [sourceAfter, checkpointAfter] = await Promise.all([
     content.ownerPosition(), cursor.read(consumer),
   ]);

@@ -17,12 +17,14 @@ export interface RealmMediaItem { use: string; sha256: string; mediaType: string
   width: number; height: number }
 
 export class RealmMediaUnavailable extends Error {}
+export class RealmMediaMissing extends Error {}
 
 /** One exact Content read, bounded by the media-set owner's 16-item limit and 1 MiB body limit. */
 export async function readRealmMediaSet(content: Pick<ContentCore, 'readExactBatch'>,
   work: string, ref: RealmMediaReference): Promise<RealmMediaItem[]> {
   const exact = (await content.readExactBatch([ref.revisionId],
     async ids => new Set(ids)))[0];
+  if (exact?.status === 'denied') throw new RealmMediaMissing('Realm media selection is unavailable');
   if (!exact || exact.status !== 'available' || exact.reference.resourceId !== work
     || exact.reference.variantId !== ref.variantId || exact.reference.revisionId !== ref.revisionId
     || exact.reference.model !== 'media-set-v1' || exact.reference.byteDigest !== ref.byteDigest

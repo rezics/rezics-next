@@ -1,4 +1,5 @@
 import { mainSearchMatches } from './selection-search.ts';
+import { discloseSearchMatches } from '../disclosure/search.ts';
 import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
@@ -358,8 +359,9 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
     throw new PublicQueryUnavailable('joined public query has ambiguous results');
   }
   const byUnit = new Map(fields.map(row => [row.matchUnit, row]));
-  const selected = fields.length ? rankedSearchMatches(matches.map(match => ({ ...match,
-    ...byUnit.get(match.matchUnit) }))) : mainSearchMatches(matches);
+  const disclosed = await discloseSearchMatches(env, matches.map(match => ({ ...match,
+    ...byUnit.get(match.matchUnit) })));
+  const selected = fields.length ? rankedSearchMatches(disclosed) : mainSearchMatches(disclosed);
   const supports = cutover ? await readSearchDecisionSupports(env,
     { dataEpoch: first.epoch.value, sequence: first.sequence.value },
     selected.map(match => ({ mainVersion: match.mainVersion,

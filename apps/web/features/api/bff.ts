@@ -27,7 +27,7 @@ export function mainTarget(segments: readonly string[], search: string, mainOrig
 /** Request headers Main reads; cookies and anything else stay behind. */
 export const FORWARDED_REQUEST_HEADERS = ['accept', 'accept-language', 'content-type',
   'idempotency-key', 'if-match', 'if-none-match', 'if-range', 'range', 'x-session-key',
-  'x-rezics-display-languages', 'cf-ipcountry'] as const;
+  'x-rezics-display-languages'] as const;
 
 /** Response headers a browser caller needs. */
 export const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-language',

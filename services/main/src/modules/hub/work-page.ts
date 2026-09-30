@@ -1,6 +1,6 @@
 import { GRAPHS, iri } from '../work/activate.ts';
 import { fenceWorkBasis, readWorkBasis } from '../work/read-header.ts';
-import { WorkReadLimit, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { WorkReadLimit, WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 
 const revisionPrefix = 'urn:rezics:content:revision:';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -40,6 +40,7 @@ export async function readHubWorkPage(session: WorkReadSession, work: string) {
     throw new WorkReadUnavailable('Hub revision identity is invalid');
   }
   const exact = (await session.deps.content?.readExactBatch([revision], async ids => new Set(ids)))?.[0];
+  if (exact?.status === 'denied') throw new WorkReadMissing('Work is unavailable');
   if (exact?.status !== 'available' || exact.reference.resourceId !== work
     || exact.reference.variantId !== row.variant!.value
     || exact.reference.byteDigest !== row.digest!.value) {

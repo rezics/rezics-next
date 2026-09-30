@@ -43,10 +43,13 @@ export class NotificationDigestWorker {
           WHERE c.principal_id = $1 AND c.day = $2
           ORDER BY c.source_event, c.topic LIMIT $3`,
         [day.principal_id, day.day, DIGEST_COST.candidatesPerDay + 1])).rows;
-        const disclosed = await this.notifications.resolveDigestSubjects(candidates.map(candidate => ({ principalId: day.principal_id,
+        const inputs = candidates.map(candidate => ({ principalId: day.principal_id,
             owner: candidate.subject_owner, ref: candidate.subject_ref,
             revision: candidate.subject_revision, disclosureBasis: candidate.disclosure_basis,
-            realm: candidate.realm })));
+            realm: candidate.realm }));
+        const disclosed = typeof this.notifications.resolveDigestSubjects === 'function'
+          ? await this.notifications.resolveDigestSubjects(inputs)
+          : await Promise.all(inputs.map(input => this.notifications.resolveDigestSubject(input)));
         for (const [index, candidate] of candidates.entries()) {
           const subject = disclosed[index]!;
           if (subject.status === 'unavailable') throw new Error('digest subject unavailable');

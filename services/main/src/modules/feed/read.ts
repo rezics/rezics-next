@@ -33,7 +33,7 @@ export function feedTombstone(item: FeedItem): FeedItem {
     realm: null, card: { kind: 'activity' }, score: 0, vote: 0, voteRevision: null,
     reason: { kind: 'recommended', basis: 'all' }, viewerState: { status: 'unavailable' },
     group: { key: item.id, count: 1, actors: [actor] }, comments: { value: 0, kind: 'exact' },
-    target: { ...item.target, title: { value: '', language: 'en', direction: 'ltr', basis: 'fallback' },
+    target: { ...item.target, title: { ...item.target.title, value: '', basis: 'fallback' },
       cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: item.id, resourceType: 'work' },
       types: [], excerpt: null, language: null }, primaryAction: { kind: 'open', href: '#' },
     links: { target: '#', actor: '#', comments: '#', vote: '#' } };
@@ -416,8 +416,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     const groups = page.flatMap(row => {
       // The stable voting/group anchor must remain public. Never expose a hidden
       // anchor through a surviving sibling's card, count or timestamp.
-      if (!disclosed.some(item => item.id === row.id)) return [];
       let entries = disclosed.filter(item => row.group_members.includes(item.id));
+      if (!entries.length) return [];
+      const anchorVisible = entries.some(item => item.id === row.id);
       const followed = entries.filter(item => item.reason.kind === 'followed');
       if (scope === 'following' && followed.length) entries = followed;
       entries.sort((a, b) => b.time.localeCompare(a.time) || b.id.localeCompare(a.id));
@@ -427,10 +428,14 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
         - (b.card.kind === 'chapter' ? b.card.number ?? Number.POSITIVE_INFINITY : Number.POSITIVE_INFINITY))[0];
       const actors = [...new Map(entries.map(item => [item.actor.id, item.actor])).values()].slice(0, 3);
       const chapters = entries.flatMap(item => item.card.kind === 'chapter' && item.card.number !== undefined ? [item.card.number] : []);
-      return [{ ...latest, ...(start ? { primaryAction: start.primaryAction } : {}), id: row.id, time: row.occurred_at.toISOString(), timeBasis: row.time_basis,
-        score: row.score, vote: row.vote, voteRevision: row.vote_revision,
-        links: { ...latest.links, vote: `/v1/feed/${row.id.slice(-36)}/vote` },
-        group: { key: row.group_key, count: entries.length, actors,
+      return [{ ...latest, ...(start ? { primaryAction: start.primaryAction } : {}),
+        id: anchorVisible ? row.id : latest.id,
+        time: anchorVisible ? row.occurred_at.toISOString() : latest.time,
+        timeBasis: anchorVisible ? row.time_basis : latest.timeBasis,
+        score: anchorVisible ? row.score : 0, vote: anchorVisible ? row.vote : 0,
+        voteRevision: anchorVisible ? row.vote_revision : null,
+        links: { ...latest.links, vote: anchorVisible ? `/v1/feed/${row.id.slice(-36)}/vote` : '#' },
+        group: { key: anchorVisible ? row.group_key : digest(entries.map(item => item.id)), count: entries.length, actors,
           ...(chapters.length === entries.length && new Set(entries.map(item => item.card.kind === 'chapter' ? item.card.parent : null)).size === 1 ? { range: { kind: 'chapters' as const,
             from: Math.min(...chapters), to: Math.max(...chapters) } } : {}) } }];
     });
@@ -643,15 +648,13 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const policy = await session.disclosure(fenceTargets, 'feed');
   const hidden = new Set(disclosed.filter((_item, index) => policy[index * 2] !== 'visible'
     || policy[index * 2 + 1] !== 'visible').map(item => item.id));
-  const hiddenGroups = new Set(page.filter(row => row.group_members.some(id => hidden.has(id))).map(row => row.id));
-  const safe = disclosed.map((item, index) => policy[index * 2] === 'visible' && policy[index * 2 + 1] === 'visible'
-    ? item : feedTombstone(item));
+  const safe = disclosed.filter(item => !hidden.has(item.id));
   const { chosen: selected, seen, realms } = select(safe);
   followedSeen = seen; recentRealms = realms;
   const targets = viewerTargets(selected);
   const states = unwrap(await readViewer(targets));
   for (const item of selected) {
-    if (hidden.has(item.id) || hiddenGroups.has(item.id)) continue;
+    if (hidden.has(item.id)) continue;
     const rawState = states?.get(item.id) ?? { status: reader ? 'unavailable' : 'anonymous' };
     const state = rawState.status === 'available' && personSettings?.spoilerPolicy === 'show'
       ? { ...rawState, spoiler: { policy: 'show' as const, hidden: false } } : rawState;
@@ -699,7 +702,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       lastVisitedAt: unwrap(watermark)?.data_epoch === session.position.dataEpoch
         ? unwrap(watermark)!.updated_at.toISOString() : null,
       state: more ? 'more' as const : current ? 'caught-up' as const : 'projecting' as const } : null,
-    ...pageResult(session, selected.map(item => hidden.has(item.id) || hiddenGroups.has(item.id)
+    ...pageResult(session, selected.map(item => hidden.has(item.id)
       ? feedTombstone(item) : item), more && last
       ? encodeReadCursor(binding, session.position, last.id, JSON.stringify({ key: last.order_key,
         projection: checkpoint.revision, following: scope === 'following' ? following?.revision ?? null : null,
