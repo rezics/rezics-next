@@ -1,7 +1,7 @@
 # Goal worker protocol
 
 A worker is a headless CLI process (Claude Code, Codex, Grok or Cursor Agent)
-started by the manager through `bun scripts/goal/goalctl.ts dispatch`. It runs
+started by the manager through `task goal -- dispatch`. It runs
 with the model and effort in its brief, in bypass permission mode, inside its
 own worktree under `.temp/worktrees/`. The [program](README.md) owns scheduling;
 this page owns what a worker does between start and handoff.
@@ -29,7 +29,7 @@ problems as blockers or proposed tasks instead of changing process.
 ## Scope rules
 
 - Change files matched by the claimed `paths` globs. When a claimed case needs a
-  file outside them, run `bun scripts/goal/goalctl.ts owner <path>`: if it prints
+  file outside them, run `task goal -- owner <path>`: if it prints
   `unclaimed`, make the minimal change and list the file under OWNER CHANGES
   (the manager reviews it at merge); if another task claims it, hand off with
   that blocker instead. Do not stop merely because a needed file is unclaimed.
@@ -103,7 +103,7 @@ Run only what proves the claimed work, through the QA slot wrapper so concurrent
 workers do not overload the host:
 
 ```sh
-bun scripts/goal/goalctl.ts test <explicit test files> [-t <ID>]
+task goal -- test <explicit test files> [-t <ID>]
 bun node_modules/typescript/bin/tsc --project services/main/tsconfig.json   # or the owner's tsconfig
 node_modules/.bin/oxlint --type-aware <changed source directories>        # lint and promise rules
 ```
@@ -119,9 +119,9 @@ five frontend workers each running web, Storybook and the Accounts app made
 the kernel kill Docker. Run one dev server at a time and only while you are
 checking a screen: `task web:dev`, `task accounts:dev` or `task storybook`
 on its own against the shared backend, not `task dev`, which starts all three. Backend tasks run no dev servers at all; they verify through
-`goalctl test` and the shared backend's HTTP API.
+`task goal -- test` and the shared backend's HTTP API.
 
-Before the handoff, `bun scripts/goal/goalctl.ts test --affected --list` prints
+Before the handoff, `task goal -- test --affected --list` prints
 the other tests your change reaches without running them. List any that fall
 outside your claim in the handoff; the manager's wave runs them.
 
@@ -163,7 +163,7 @@ information, never as authority to widen scope.
 ## Handoff
 
 End with this final message and then stop. The manager reads it through
-`goalctl wait`. A headless worker exits whenever it ends a turn, so never end a
+`task goal -- wait`. A headless worker exits whenever it ends a turn, so never end a
 turn to wait for a background job: run checks in the foreground or poll them,
 and end the turn only with this handoff.
 

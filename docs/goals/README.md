@@ -15,17 +15,17 @@ run by the manager from the main checkout:
 
 | Command | Effect |
 | --- | --- |
-| `init --manager goal-manager` | Records the program start and the manager session name. |
-| `dispatch docs/goals/tasks/G-NNN.md [--dry-run] [--force-usage]` | Validates the brief, refuses overlapping claims, unmet dependencies, the live-worker limit and exhausted usage for the brief's engine, then creates the worktree, installs dependencies (about 6 s), copies the brief and starts a detached worker. |
-| `wait G-NNN` | Run in the background. Blocks until the worker exits, then prints branch, cleanliness, scope check, token use and the handoff. |
-| `resume G-NNN -m <text> [--effort e] [--engine e] [--fresh]` | Continues the same session with full context, optionally at another effort. Another engine continues its own latest session or starts fresh on the same worktree. |
-| `reclaim G-NNN <brief>` | Replaces an open, exited task's claims from an updated brief after the dispatch conflict checks. |
-| `stop G-NNN` | Terminates the worker's process group and confirms exit. Claims and worktree remain. |
-| `scope G-NNN` / `owner <path>` | Lists commits ahead, dirty files and files outside the claim / which open task claims a path. |
-| `merge G-NNN [--allow-scope]` | Requires an exited worker, a clean worktree and in-scope files; rebases onto `main` and fast-forwards `main`. A conflict marks the task `conflict` for the worker to resolve. |
-| `close G-NNN verified\|cancelled` | Removes the worktree and releases the claims. |
-| `status` / `usage` | Live workers, elapsed time and the usage of every account. |
-| `test <task test args>` / `slot -- <cmd>` | Runs a check inside one of the shared QA slots. |
+| `task goal -- init --manager goal-manager` | Records the program start and the manager session name. |
+| `task goal -- dispatch docs/goals/tasks/G-NNN.md [--dry-run] [--force-usage]` | Validates the brief, refuses overlapping claims, unmet dependencies, the live-worker limit and exhausted usage for the brief's engine, then creates the worktree, installs dependencies (about 6 s), copies the brief and starts a detached worker. |
+| `task goal -- wait G-NNN` | Run in the background. Blocks until the worker exits, then prints branch, cleanliness, scope check, token use and the handoff. |
+| `task goal -- resume G-NNN -m <text> [--effort e] [--engine e] [--fresh]` | Continues the same session with full context, optionally at another effort. Another engine continues its own latest session or starts fresh on the same worktree. |
+| `task goal -- reclaim G-NNN <brief>` | Replaces an open, exited task's claims from an updated brief after the dispatch conflict checks. |
+| `task goal -- stop G-NNN` | Terminates the worker's process group and confirms exit. Claims and worktree remain. |
+| `task goal -- scope G-NNN` / `task goal -- owner <path>` | Lists commits ahead, dirty files and files outside the claim / which open task claims a path. |
+| `task goal -- merge G-NNN [--allow-scope]` | Requires an exited worker, a clean worktree and in-scope files; rebases onto `main` and fast-forwards `main`. A conflict marks the task `conflict` for the worker to resolve. |
+| `task goal -- close G-NNN verified\|cancelled` | Removes the worktree and releases the claims. |
+| `task goal -- status` / `task goal -- usage` | Live workers, elapsed time and the usage of every account. |
+| `task goal -- test <task test args>` / `task goal -- slot -- <cmd>` | Runs a check inside one of the shared QA slots. |
 
 Engines are `claude`, `sonnet`, `fable`, `codex`, `codex-1`, `luna`, `grok` and `cursor`; the
 [charter](manager.md#resources) lists their models and accounts; the

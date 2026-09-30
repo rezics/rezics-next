@@ -257,6 +257,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task about:check` | Check the about site's types (Astro, TypeScript), lint, format and unit tests. |
 | `task about:e2e` | Build the about site, serve it with its Worker and a local D1 on 127.0.0.1:4322, and run the Playwright smoke and axe tests. |
 | `task ui:typecheck` | Type-check Rezics UI. |
+| `task goal` | Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to 5 when it is unset. |
 | `task check` | Run every static gate (types, generated contracts, docs, lint, format, code shape, unused files, imports). |
 | `task check:backend` | Run the static gates without UI and web sources. |
 | `task check:unused` | Report unused files, dependencies and exports with Knip. |
