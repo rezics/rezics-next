@@ -1,0 +1,13 @@
+{
+  "sha256": "305e68af3c289f9cd3560a814bc34f9ab7d79b7733a2682f08c944073664191b",
+  "binding": {
+    "required": [
+      "context",
+      "question"
+    ],
+    "optional": [],
+    "roles": [
+      "context"
+    ]
+  }
+}

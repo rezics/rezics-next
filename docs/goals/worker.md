@@ -54,7 +54,7 @@ conventions below come from the first backend Goal:
   manager regenerates them once per integration wave.
 - Add a model profile as a new `model/definitions/<name>-v1.ts`; the compiler
   discovers it. Do not edit other profiles unless the brief claims them. A new
-  profile is that file plus its entry appended to `model/accepted-profiles.json`.
+  profile is that file plus `model/accepted/profiles/<profile-id>.json`.
 - Use only your reserved migration numbers. Content migration versions may have
   gaps; Access and relay files apply in file-name order. Register a new Content
   receipt action with `INSERT INTO content.receipt_action ... ON CONFLICT DO

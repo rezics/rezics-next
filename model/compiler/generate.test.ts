@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { registryProbeDirectory, registryProbeFiles, registryProbeProfile }
   from '../tests/fixtures/registry-probe.ts';
@@ -398,11 +398,6 @@ test('G-071: ambiguous, duplicate or stale registry declarations fail generation
     .toThrow('unknown profile retired-profile-v1');
 });
 
-interface AcceptedLock {
-  profiles: Record<string, { sha256: string; binding?: unknown }>;
-  facets: Record<string, string>;
-}
-
 /** A temp project with this compiler, so a mutation cannot touch the worktree. */
 async function copiedProject(mutate: (root: string) => void): Promise<{ root: string; generate: typeof generate }> {
   mkdirSync(join(repo, '.temp'), { recursive: true });
@@ -412,11 +407,22 @@ async function copiedProject(mutate: (root: string) => void): Promise<{ root: st
     recursive: true, filter: source => !source.endsWith('generate.test.ts'),
   });
   cpSync(join(repo, 'model/definitions'), join(root, 'model/definitions'), { recursive: true });
-  cpSync(join(repo, 'model/accepted-profiles.json'), join(root, 'model/accepted-profiles.json'));
+  cpSync(join(repo, 'model/accepted'), join(root, 'model/accepted'), { recursive: true });
   symlinkSync(join(repo, 'infra'), join(root, 'infra'));
   mutate(root);
   const loaded = await import(join(root, 'model/compiler/generate.ts')) as { generate: typeof generate };
   return { root, generate: loaded.generate };
+}
+
+function acceptedFiles(root: string): Map<string, string> {
+  const files = new Map<string, string>();
+  for (const kind of ['profiles', 'facets']) {
+    const directory = join(root, 'model/accepted', kind);
+    for (const name of readdirSync(directory).filter(item => item.endsWith('.json')).sort()) {
+      files.set(`model/accepted/${kind}/${name}`, readFileSync(join(directory, name), 'utf8'));
+    }
+  }
+  return files;
 }
 
 function replaceIn(root: string, relative: string, from: string, to: string): void {
@@ -459,11 +465,10 @@ test('whitespace in an accepted definition still generates and leaves the lock u
     const path = join(copy, 'model/definitions/claim-v1.ts');
     writeFileSync(path, `${readFileSync(path, 'utf8')}\n`);
   });
-  const lockPath = join(root, 'model/accepted-profiles.json');
-  const lock = readFileSync(lockPath, 'utf8');
+  const lock = [...acceptedFiles(root)];
   expect(() => copied(root, false)).not.toThrow();
   expect(() => copied(root, true)).not.toThrow();
-  expect(readFileSync(lockPath, 'utf8')).toBe(lock);
+  expect([...acceptedFiles(root)]).toEqual(lock);
 });
 
 test('release-v2 is refused until its lock entry is appended', async () => {
@@ -488,13 +493,13 @@ export const releaseV2Profile = {
 `));
   let message = '';
   try { copied(root, false); } catch (error) { message = error instanceof Error ? error.message : String(error); }
-  const match = /^Unaccepted profile release-v2: append (\{.*\}) to model\/accepted-profiles.json$/.exec(message);
-  expect(match?.[1]).toBeDefined();
+  const file = 'model/accepted/profiles/release-v2.json';
+  const marker = `Unaccepted profile release-v2: add ${file} with exactly:\n`;
+  expect(message.startsWith(marker)).toBe(true);
+  const content = message.slice(marker.length);
+  expect(JSON.parse(content)).toEqual({ sha256: expect.any(String) });
   expect(existsSync(join(root, 'generated/model/manifest.json'))).toBe(false);
-  const lockPath = join(root, 'model/accepted-profiles.json');
-  const lock = JSON.parse(readFileSync(lockPath, 'utf8')) as AcceptedLock;
-  Object.assign(lock.profiles, JSON.parse(match![1]!) as AcceptedLock['profiles']);
-  writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+  writeFileSync(join(root, file), content);
   expect(() => copied(root, false)).not.toThrow();
   expect(() => copied(root, true)).not.toThrow();
 });
@@ -504,17 +509,22 @@ function gitText(args: string[]): string | undefined {
   catch { return undefined; }
 }
 
-function assertBaselineUnchanged(baseline: AcceptedLock, current: AcceptedLock): void {
-  for (const [id, entry] of Object.entries(baseline.profiles)) {
-    const now = current.profiles[id];
-    if (!now || now.sha256 !== entry.sha256
-      || JSON.stringify(now.binding ?? null) !== JSON.stringify(entry.binding ?? null)) {
-      throw new Error(`Accepted profile ${id} changed; the merge-base lock entry must stay unchanged`);
-    }
-  }
-  for (const [id, digest] of Object.entries(baseline.facets)) {
-    if (current.facets[id] !== digest) {
-      throw new Error(`Accepted facet ${id} changed; the merge-base lock entry must stay unchanged`);
+function assertBaselineUnchanged(baseline: readonly { path: string; text: string }[],
+  current: ReadonlyMap<string, string>): void {
+  for (const file of baseline) {
+    const id = file.path.split('/').pop()!.replace(/\.json$/, '');
+    const now = current.get(file.path);
+    if (file.path.includes('/profiles/')) {
+      const before = JSON.parse(file.text) as { sha256: string; binding?: unknown };
+      const after = now === undefined ? undefined : JSON.parse(now) as { sha256: string; binding?: unknown };
+      if (!after || after.sha256 !== before.sha256
+        || JSON.stringify(after.binding ?? null) !== JSON.stringify(before.binding ?? null)) {
+        throw new Error(`Accepted profile ${id} changed; the merge-base lock entry must stay unchanged`);
+      }
+    } else {
+      const before = JSON.parse(file.text) as string;
+      const after = now === undefined ? undefined : JSON.parse(now) as string;
+      if (after !== before) throw new Error(`Accepted facet ${id} changed; the merge-base lock entry must stay unchanged`);
     }
   }
 }
@@ -525,36 +535,49 @@ test('accepted lock entries recorded at the merge-base stay unchanged', () => {
     console.log('notice: skip accepted-lock merge-base guard; git or main is unavailable');
     return;
   }
-  const baselineText = gitText(['show', `${mergeBase}:model/accepted-profiles.json`]);
-  if (!baselineText) {
-    console.log('notice: skip accepted-lock merge-base guard; model/accepted-profiles.json is absent from the merge-base');
+  const listed = gitText(['ls-tree', '-r', '--name-only', mergeBase, 'model/accepted']);
+  if (listed === undefined) {
+    console.log('notice: skip accepted-lock merge-base guard; git or main is unavailable');
     return;
   }
-  const current = JSON.parse(readFileSync(join(repo, 'model/accepted-profiles.json'), 'utf8')) as AcceptedLock;
-  expect(() => assertBaselineUnchanged(JSON.parse(baselineText) as AcceptedLock, current)).not.toThrow();
+  const paths = listed.split('\n').filter(path => path.endsWith('.json'));
+  if (!paths.length) {
+    console.log('notice: skip accepted-lock merge-base guard; model/accepted is absent from the merge-base');
+    return;
+  }
+  const baseline = paths.map(path => {
+    const text = gitText(['show', `${mergeBase}:${path}`]);
+    if (text === undefined) throw new Error(`cannot read ${path} at the merge-base`);
+    return { path, text };
+  });
+  expect(() => assertBaselineUnchanged(baseline, acceptedFiles(repo))).not.toThrow();
 });
 
 test('rewriting an existing accepted lock entry fails the merge-base guard', () => {
-  const current = JSON.parse(readFileSync(join(repo, 'model/accepted-profiles.json'), 'utf8')) as AcceptedLock;
-  const rewritten = structuredClone(current);
-  rewritten.profiles['work-metadata-v1'] = { ...rewritten.profiles['work-metadata-v1']!, sha256: '0'.repeat(64) };
-  expect(() => assertBaselineUnchanged(current, rewritten))
+  const current = acceptedFiles(repo);
+  const baseline = [...current].map(([path, text]) => ({ path, text }));
+  const profilePath = 'model/accepted/profiles/work-metadata-v1.json';
+  const rewritten = new Map(current);
+  const profile = JSON.parse(rewritten.get(profilePath)!) as { sha256: string };
+  rewritten.set(profilePath, JSON.stringify({ ...profile, sha256: '0'.repeat(64) }));
+  expect(() => assertBaselineUnchanged(baseline, rewritten))
     .toThrow('Accepted profile work-metadata-v1 changed; the merge-base lock entry must stay unchanged');
-  const binding = structuredClone(current);
-  const roles = binding.profiles['classification-context-v1']!.binding as { roles: string[] };
-  roles.roles = ['global'];
-  expect(() => assertBaselineUnchanged(current, binding))
+  const binding = new Map(current);
+  const contextPath = 'model/accepted/profiles/classification-context-v1.json';
+  const context = JSON.parse(binding.get(contextPath)!) as { sha256: string; binding: { roles: string[] } };
+  binding.set(contextPath, JSON.stringify({ ...context, binding: { ...context.binding, roles: ['global'] } }));
+  expect(() => assertBaselineUnchanged(baseline, binding))
     .toThrow('Accepted profile classification-context-v1 changed; the merge-base lock entry must stay unchanged');
-  const facet = structuredClone(current);
-  facet.facets['facet-type-v1'] = '0'.repeat(64);
-  expect(() => assertBaselineUnchanged(current, facet))
+  const facet = new Map(current);
+  facet.set('model/accepted/facets/facet-type-v1.json', JSON.stringify('0'.repeat(64)));
+  expect(() => assertBaselineUnchanged(baseline, facet))
     .toThrow('Accepted facet facet-type-v1 changed; the merge-base lock entry must stay unchanged');
-  const removed = structuredClone(current);
-  delete removed.profiles['work-metadata-v1'];
-  expect(() => assertBaselineUnchanged(current, removed))
+  const removed = new Map(current);
+  removed.delete(profilePath);
+  expect(() => assertBaselineUnchanged(baseline, removed))
     .toThrow('Accepted profile work-metadata-v1 changed; the merge-base lock entry must stay unchanged');
-  const appended = structuredClone(current);
-  appended.profiles['release-v2'] = { sha256: 'a'.repeat(64) };
-  appended.facets['facet-release-v2'] = 'b'.repeat(64);
-  expect(() => assertBaselineUnchanged(current, appended)).not.toThrow();
+  const appended = new Map(current);
+  appended.set('model/accepted/profiles/release-v2.json', JSON.stringify({ sha256: 'a'.repeat(64) }));
+  appended.set('model/accepted/facets/facet-release-v2.json', JSON.stringify('b'.repeat(64)));
+  expect(() => assertBaselineUnchanged(baseline, appended)).not.toThrow();
 });

@@ -1,0 +1,17 @@
+{
+  "sha256": "0d9a0acbe78f4043628960ed5942b64bc7a90d915e5e1fe0cb40938bda5f6fe4",
+  "binding": {
+    "required": [
+      "context",
+      "revision",
+      "contextRevision",
+      "predecessor",
+      "aggregationPolicy"
+    ],
+    "optional": [],
+    "roles": [
+      "context",
+      "revision"
+    ]
+  }
+}

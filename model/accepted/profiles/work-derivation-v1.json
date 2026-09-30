@@ -1,0 +1,24 @@
+{
+  "sha256": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
+  "binding": {
+    "required": [
+      "derivation",
+      "target-work",
+      "target-main",
+      "target-revision",
+      "source-work",
+      "source-main",
+      "source-revision",
+      "kind",
+      "evidence",
+      "actor",
+      "receipt",
+      "scope",
+      "epoch"
+    ],
+    "optional": [],
+    "roles": [
+      "derivation"
+    ]
+  }
+}

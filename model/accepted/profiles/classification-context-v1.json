@@ -1,0 +1,15 @@
+{
+  "sha256": "41aa65a8f1f780d5902b858a8e9238d7e932afc88add4b23d731c51cfcd0bd20",
+  "binding": {
+    "required": [
+      "realm",
+      "context"
+    ],
+    "optional": [],
+    "roles": [
+      "global",
+      "realm",
+      "context"
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "sha256": "6f5ddc3f11cc7a0c31a859e7352d65ef7c9983161ae8d5ffde93eaa922a8e658",
+  "binding": {
+    "required": [
+      "realm",
+      "context",
+      "work",
+      "main",
+      "slot",
+      "observation",
+      "revision",
+      "availability",
+      "day",
+      "timeZone",
+      "periodStart",
+      "periodEnd"
+    ],
+    "optional": [
+      "value",
+      "predecessor"
+    ],
+    "roles": [
+      "realm",
+      "context",
+      "work",
+      "main",
+      "observation",
+      "revision"
+    ]
+  }
+}

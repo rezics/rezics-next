@@ -1,0 +1,20 @@
+{
+  "sha256": "22b3c0f677296e5c268514d0f87cb0dabdd2ae9900873e28b1540e27a87e01a6",
+  "binding": {
+    "required": [
+      "scheme",
+      "concept",
+      "path",
+      "expression",
+      "sense"
+    ],
+    "optional": [],
+    "roles": [
+      "scheme",
+      "concept",
+      "path",
+      "expression",
+      "sense"
+    ]
+  }
+}

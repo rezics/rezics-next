@@ -1,0 +1,25 @@
+{
+  "sha256": "369b1c406b627053c612fff0c97fe18353e633df2b8128746cb4463273369281",
+  "binding": {
+    "required": [
+      "credit",
+      "revision",
+      "work",
+      "work-head",
+      "key",
+      "ordinal",
+      "actor",
+      "receipt",
+      "scope",
+      "epoch",
+      "intent"
+    ],
+    "optional": [
+      "source-role"
+    ],
+    "roles": [
+      "credit",
+      "revision"
+    ]
+  }
+}
