@@ -98,6 +98,7 @@ try {
     ${iri(realm.realm)} rv:reviewMode ?mode } } INSERT { GRAPH ${iri(GRAPHS.current)} {
     ${iri(realm.realm)} rv:reviewMode "open" } } WHERE { OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
     ${iri(realm.realm)} rv:reviewMode ?mode } } }`);
+  await stack.accessPool.query('INSERT INTO access.realm_admin_revision (realm) VALUES ($1) ON CONFLICT DO NOTHING', [realm.realm]);
   await stack.accessPool.query(`INSERT INTO access.realm_admin_settings (realm, who_may_submit, visibility, review_mode, self_join)
     VALUES ($1, 'granted', 'public', 'open', false) ON CONFLICT (realm) DO UPDATE SET review_mode = 'open'`, [realm.realm]);
   await grantReader(`reply:place:${realm.realm}`, 'reply.place');
