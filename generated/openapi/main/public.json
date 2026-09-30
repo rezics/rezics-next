@@ -178699,441 +178699,29 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "completedParts": {
-                      "items": {
-                        "properties": {
-                          "available": {
-                            "type": "boolean"
-                          },
-                          "displayLabel": {
-                            "type": "string"
-                          },
-                          "inclusion": {
-                            "enum": [
-                              "required",
-                              "optional",
-                              "extra"
-                            ],
-                            "type": "string"
-                          },
-                          "occurrence": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
-                          },
-                          "work": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "occurrence",
-                          "work",
-                          "displayLabel",
-                          "inclusion",
-                          "available"
-                        ],
-                        "type": "object"
-                      },
-                      "maxItems": 100,
-                      "type": "array"
-                    },
-                    "continuation": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "groups": {
-                          "items": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
-                          },
-                          "type": "array"
-                        },
-                        "parts": {
-                          "~elyTyp": 7,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "releases": {
-                          "~elyTyp": 7,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "sessions": {
-                          "~elyTyp": 7,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "parts",
-                        "groups",
-                        "sessions",
-                        "releases"
-                      ],
-                      "type": "object"
-                    },
-                    "counts": {
-                      "properties": {
-                        "completed": {
-                          "type": "integer"
-                        },
-                        "completedRequired": {
-                          "type": "integer"
-                        },
-                        "required": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "completed",
-                        "required",
-                        "completedRequired"
-                      ],
-                      "type": "object"
-                    },
-                    "furthestCompleted": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "properties": {
-                        "locator": {
-                          "~elyTyp": 7,
-                          "additionalProperties": false,
-                          "nullable": true,
-                          "properties": {
-                            "current": {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            "furthest": {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            "target": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            },
-                            "unit": {
-                              "enum": [
-                                "page",
-                                "percentage",
-                                "media-time"
-                              ],
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "target",
-                            "unit",
-                            "current",
-                            "furthest"
-                          ],
-                          "type": [
-                            "object",
-                            "null"
-                          ]
-                        },
-                        "occurrence": {
-                          "~elyTyp": 7,
-                          "nullable": true,
-                          "properties": {
-                            "resource": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            },
-                            "revision": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "resource",
-                            "revision"
-                          ],
-                          "type": [
-                            "object",
-                            "null"
-                          ]
-                        },
-                        "part": {
-                          "properties": {
-                            "available": {
-                              "type": "boolean"
-                            },
-                            "displayLabel": {
-                              "type": "string"
-                            },
-                            "inclusion": {
-                              "enum": [
-                                "required",
-                                "optional",
-                                "extra"
-                              ],
-                              "type": "string"
-                            },
-                            "occurrence": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            },
-                            "work": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "occurrence",
-                            "work",
-                            "displayLabel",
-                            "inclusion",
-                            "available"
-                          ],
-                          "type": "object"
-                        }
-                      },
-                      "required": [
-                        "part",
-                        "occurrence",
-                        "locator"
-                      ],
-                      "type": [
-                        "object",
-                        "null"
-                      ]
-                    },
-                    "language": {
-                      "maxLength": 35,
-                      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                      "type": "string"
-                    },
-                    "next": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "properties": {
-                        "part": {
-                          "properties": {
-                            "available": {
-                              "type": "boolean"
-                            },
-                            "displayLabel": {
-                              "type": "string"
-                            },
-                            "inclusion": {
-                              "enum": [
-                                "required",
-                                "optional",
-                                "extra"
-                              ],
-                              "type": "string"
-                            },
-                            "occurrence": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            },
-                            "work": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "occurrence",
-                            "work",
-                            "displayLabel",
-                            "inclusion",
-                            "available"
-                          ],
-                          "type": "object"
-                        },
-                        "reason": {
-                          "enum": [
-                            "next_available_required_part",
-                            "awaiting_chosen_language",
-                            "optional_extra"
-                          ],
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "part",
-                        "reason"
-                      ],
-                      "type": [
-                        "object",
-                        "null"
-                      ]
-                    },
-                    "partial": {
-                      "type": "boolean"
-                    },
-                    "policy": {
-                      "const": "composition-progress-v2",
-                      "type": "string"
-                    },
-                    "preference": {
-                      "~elyTyp": 7,
-                      "additionalProperties": false,
-                      "nullable": true,
-                      "properties": {
-                        "edition": {
-                          "~elyTyp": 7,
-                          "additionalProperties": false,
-                          "nullable": true,
-                          "properties": {
-                            "kind": {
-                              "enum": [
-                                "realization",
-                                "release"
-                              ],
-                              "type": "string"
-                            },
-                            "resource": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            },
-                            "revision": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "resource",
-                            "revision"
-                          ],
-                          "type": [
-                            "object",
-                            "null"
-                          ]
-                        },
-                        "language": {
-                          "maxLength": 35,
-                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                          "type": "string"
-                        },
-                        "version": {
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        "work": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "work",
-                        "language",
-                        "edition",
-                        "version"
-                      ],
-                      "type": [
-                        "object",
-                        "null"
-                      ]
-                    },
-                    "primaryAction": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "properties": {
-                        "edition": {
-                          "~elyTyp": 7,
-                          "additionalProperties": false,
-                          "nullable": true,
-                          "properties": {
-                            "kind": {
-                              "enum": [
-                                "realization",
-                                "release"
-                              ],
-                              "type": "string"
-                            },
-                            "resource": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            },
-                            "revision": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "resource",
-                            "revision"
-                          ],
-                          "type": [
-                            "object",
-                            "null"
-                          ]
-                        },
-                        "language": {
-                          "maxLength": 35,
-                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                          "type": "string"
-                        },
-                        "work": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "work",
-                        "edition",
-                        "language"
-                      ],
-                      "type": [
-                        "object",
-                        "null"
-                      ]
-                    },
-                    "resource": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "revisions": {
-                      "properties": {
-                        "composition": {
-                          "properties": {
-                            "revision": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            },
-                            "structure": {
-                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "structure",
-                            "revision"
-                          ],
-                          "type": "object"
-                        },
-                        "graph": {
-                          "properties": {
-                            "dataEpoch": {
-                              "type": "string"
-                            },
-                            "sequence": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "dataEpoch",
-                            "sequence"
-                          ],
-                          "type": "object"
-                        },
-                        "library": {
+                        "completedParts": {
                           "items": {
                             "properties": {
-                              "version": {
-                                "type": "integer"
+                              "available": {
+                                "type": "boolean"
+                              },
+                              "displayLabel": {
+                                "type": "string"
+                              },
+                              "inclusion": {
+                                "enum": [
+                                  "required",
+                                  "optional",
+                                  "extra"
+                                ],
+                                "type": "string"
+                              },
+                              "occurrence": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
                               },
                               "work": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -179141,125 +178729,823 @@
                               }
                             },
                             "required": [
+                              "occurrence",
                               "work",
-                              "version"
+                              "displayLabel",
+                              "inclusion",
+                              "available"
                             ],
                             "type": "object"
                           },
                           "maxItems": 100,
                           "type": "array"
                         },
-                        "selections": {
-                          "items": {
-                            "properties": {
-                              "resource": {
+                        "continuation": {
+                          "properties": {
+                            "groups": {
+                              "items": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                 "type": "string"
                               },
-                              "revision": {
-                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                "type": "string"
-                              }
+                              "type": "array"
                             },
-                            "required": [
-                              "resource",
-                              "revision"
-                            ],
-                            "type": "object"
+                            "parts": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "releases": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "sessions": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
                           },
-                          "maxItems": 4096,
-                          "type": "array"
+                          "required": [
+                            "parts",
+                            "groups",
+                            "sessions",
+                            "releases"
+                          ],
+                          "type": "object"
                         },
-                        "sessions": {
-                          "items": {
-                            "properties": {
-                              "id": {
-                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                "type": "string"
-                              },
-                              "version": {
-                                "type": "integer"
-                              }
+                        "counts": {
+                          "properties": {
+                            "completed": {
+                              "type": "integer"
                             },
-                            "required": [
-                              "id",
-                              "version"
-                            ],
-                            "type": "object"
+                            "completedRequired": {
+                              "type": "integer"
+                            },
+                            "required": {
+                              "type": "integer"
+                            }
                           },
-                          "maxItems": 256,
-                          "type": "array"
+                          "required": [
+                            "completed",
+                            "required",
+                            "completedRequired"
+                          ],
+                          "type": "object"
+                        },
+                        "furthestCompleted": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "locator": {
+                              "~elyTyp": 7,
+                              "additionalProperties": false,
+                              "nullable": true,
+                              "properties": {
+                                "current": {
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "furthest": {
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "target": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "unit": {
+                                  "enum": [
+                                    "page",
+                                    "percentage",
+                                    "media-time"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "target",
+                                "unit",
+                                "current",
+                                "furthest"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "occurrence": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "resource": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "resource",
+                                "revision"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "part": {
+                              "properties": {
+                                "available": {
+                                  "type": "boolean"
+                                },
+                                "displayLabel": {
+                                  "type": "string"
+                                },
+                                "inclusion": {
+                                  "enum": [
+                                    "required",
+                                    "optional",
+                                    "extra"
+                                  ],
+                                  "type": "string"
+                                },
+                                "occurrence": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "work": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "occurrence",
+                                "work",
+                                "displayLabel",
+                                "inclusion",
+                                "available"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "part",
+                            "occurrence",
+                            "locator"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "language": {
+                          "maxLength": 35,
+                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                          "type": "string"
+                        },
+                        "next": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "part": {
+                              "properties": {
+                                "available": {
+                                  "type": "boolean"
+                                },
+                                "displayLabel": {
+                                  "type": "string"
+                                },
+                                "inclusion": {
+                                  "enum": [
+                                    "required",
+                                    "optional",
+                                    "extra"
+                                  ],
+                                  "type": "string"
+                                },
+                                "occurrence": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "work": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "occurrence",
+                                "work",
+                                "displayLabel",
+                                "inclusion",
+                                "available"
+                              ],
+                              "type": "object"
+                            },
+                            "reason": {
+                              "enum": [
+                                "next_available_required_part",
+                                "awaiting_chosen_language",
+                                "optional_extra"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "part",
+                            "reason"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "partial": {
+                          "type": "boolean"
+                        },
+                        "policy": {
+                          "const": "composition-progress-v2",
+                          "type": "string"
+                        },
+                        "preference": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "edition": {
+                              "~elyTyp": 7,
+                              "additionalProperties": false,
+                              "nullable": true,
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "realization",
+                                    "release"
+                                  ],
+                                  "type": "string"
+                                },
+                                "resource": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "resource",
+                                "revision"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "language": {
+                              "maxLength": 35,
+                              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                              "type": "string"
+                            },
+                            "version": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "work": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "work",
+                            "language",
+                            "edition",
+                            "version"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "primaryAction": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "edition": {
+                              "~elyTyp": 7,
+                              "additionalProperties": false,
+                              "nullable": true,
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "realization",
+                                    "release"
+                                  ],
+                                  "type": "string"
+                                },
+                                "resource": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "resource",
+                                "revision"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "language": {
+                              "maxLength": 35,
+                              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                              "type": "string"
+                            },
+                            "work": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "work",
+                            "edition",
+                            "language"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "resource": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "revisions": {
+                          "properties": {
+                            "composition": {
+                              "properties": {
+                                "revision": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "structure": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "structure",
+                                "revision"
+                              ],
+                              "type": "object"
+                            },
+                            "graph": {
+                              "properties": {
+                                "dataEpoch": {
+                                  "type": "string"
+                                },
+                                "sequence": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "dataEpoch",
+                                "sequence"
+                              ],
+                              "type": "object"
+                            },
+                            "library": {
+                              "items": {
+                                "properties": {
+                                  "version": {
+                                    "type": "integer"
+                                  },
+                                  "work": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 100,
+                              "type": "array"
+                            },
+                            "selections": {
+                              "items": {
+                                "properties": {
+                                  "resource": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "resource",
+                                  "revision"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 4096,
+                              "type": "array"
+                            },
+                            "sessions": {
+                              "items": {
+                                "properties": {
+                                  "id": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 256,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "composition",
+                            "sessions",
+                            "library",
+                            "selections",
+                            "graph"
+                          ],
+                          "type": "object"
+                        },
+                        "scope": {
+                          "const": "disclosed-composition",
+                          "type": "string"
+                        },
+                        "states": {
+                          "properties": {
+                            "caughtUpWithAvailableMaterial": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "boolean",
+                                "null"
+                              ]
+                            },
+                            "correspondenceUnresolved": {
+                              "type": "boolean"
+                            },
+                            "finishedPublishedParts": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "boolean",
+                                "null"
+                              ]
+                            },
+                            "seriesConcluded": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "boolean",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "caughtUpWithAvailableMaterial",
+                            "finishedPublishedParts",
+                            "seriesConcluded",
+                            "correspondenceUnresolved"
+                          ],
+                          "type": "object"
                         }
                       },
                       "required": [
-                        "composition",
-                        "sessions",
-                        "library",
-                        "selections",
-                        "graph"
+                        "resource",
+                        "scope",
+                        "policy",
+                        "language",
+                        "completedParts",
+                        "counts",
+                        "states",
+                        "next",
+                        "furthestCompleted",
+                        "partial",
+                        "preference",
+                        "primaryAction",
+                        "revisions",
+                        "continuation"
                       ],
                       "type": "object"
                     },
-                    "scope": {
-                      "const": "disclosed-composition",
-                      "type": "string"
-                    },
-                    "states": {
+                    {
                       "properties": {
-                        "caughtUpWithAvailableMaterial": {
+                        "continuation": {
+                          "properties": {
+                            "releases": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "sessions": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "sessions",
+                            "releases"
+                          ],
+                          "type": "object"
+                        },
+                        "counts": {
+                          "properties": {
+                            "completed": {
+                              "maximum": 1,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "completedRequired": {
+                              "maximum": 1,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "required": {
+                              "const": 1,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "completed",
+                            "required",
+                            "completedRequired"
+                          ],
+                          "type": "object"
+                        },
+                        "language": {
                           "~elyTyp": 7,
+                          "maxLength": 35,
                           "nullable": true,
+                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                           "type": [
-                            "boolean",
+                            "string",
                             "null"
                           ]
                         },
-                        "correspondenceUnresolved": {
+                        "partial": {
                           "type": "boolean"
                         },
-                        "finishedPublishedParts": {
+                        "policy": {
+                          "const": "composition-progress-v2",
+                          "type": "string"
+                        },
+                        "preference": {
                           "~elyTyp": 7,
+                          "additionalProperties": false,
                           "nullable": true,
+                          "properties": {
+                            "edition": {
+                              "~elyTyp": 7,
+                              "additionalProperties": false,
+                              "nullable": true,
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "realization",
+                                    "release"
+                                  ],
+                                  "type": "string"
+                                },
+                                "resource": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "resource",
+                                "revision"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "language": {
+                              "maxLength": 35,
+                              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                              "type": "string"
+                            },
+                            "version": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "work": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "work",
+                            "language",
+                            "edition",
+                            "version"
+                          ],
                           "type": [
-                            "boolean",
+                            "object",
                             "null"
                           ]
                         },
-                        "seriesConcluded": {
+                        "resource": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "revisions": {
+                          "properties": {
+                            "graph": {
+                              "properties": {
+                                "dataEpoch": {
+                                  "type": "string"
+                                },
+                                "sequence": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "dataEpoch",
+                                "sequence"
+                              ],
+                              "type": "object"
+                            },
+                            "library": {
+                              "items": {
+                                "properties": {
+                                  "version": {
+                                    "type": "integer"
+                                  },
+                                  "work": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "work",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 1,
+                              "type": "array"
+                            },
+                            "selections": {
+                              "items": {
+                                "properties": {
+                                  "resource": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "resource",
+                                  "revision"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 4096,
+                              "type": "array"
+                            },
+                            "sessions": {
+                              "items": {
+                                "properties": {
+                                  "id": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 256,
+                              "type": "array"
+                            },
+                            "work": {
+                              "properties": {
+                                "resource": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "resource",
+                                "revision"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "work",
+                            "sessions",
+                            "library",
+                            "selections",
+                            "graph"
+                          ],
+                          "type": "object"
+                        },
+                        "scope": {
+                          "const": "work",
+                          "type": "string"
+                        },
+                        "states": {
+                          "properties": {
+                            "correspondenceUnresolved": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "correspondenceUnresolved"
+                          ],
+                          "type": "object"
+                        },
+                        "status": {
                           "~elyTyp": 7,
+                          "enum": [
+                            "finished",
+                            "reading",
+                            "not-started"
+                          ],
                           "nullable": true,
                           "type": [
-                            "boolean",
+                            "string",
                             "null"
                           ]
                         }
                       },
                       "required": [
-                        "caughtUpWithAvailableMaterial",
-                        "finishedPublishedParts",
-                        "seriesConcluded",
-                        "correspondenceUnresolved"
+                        "resource",
+                        "scope",
+                        "policy",
+                        "language",
+                        "status",
+                        "counts",
+                        "states",
+                        "partial",
+                        "preference",
+                        "revisions",
+                        "continuation"
                       ],
                       "type": "object"
                     }
-                  },
-                  "required": [
-                    "resource",
-                    "scope",
-                    "policy",
-                    "language",
-                    "completedParts",
-                    "counts",
-                    "states",
-                    "next",
-                    "furthestCompleted",
-                    "partial",
-                    "preference",
-                    "primaryAction",
-                    "revisions",
-                    "continuation"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
