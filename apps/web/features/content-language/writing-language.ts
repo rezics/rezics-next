@@ -1,5 +1,4 @@
-import { direction, parseLanguage } from '@rezics/main/language';
-import { languageTag } from '../onboarding/languages.ts';
+import { canonicalLanguage, direction, parseLanguage } from '@rezics/main/language';
 
 // The language of what a person writes is theirs to state. The interface
 // locale never stands in for it: with nothing known, the text is sent as
@@ -24,7 +23,7 @@ export function writingLanguage(input: { chosen?: string | null; existing?: stri
 export function suggestedLanguages(input: { reading: readonly string[]; current?: string | null;
   original?: string | null }): string[] {
   const listed = [input.current, input.original, ...input.reading]
-    .flatMap(tag => tag && tag !== UNSPECIFIED ? [languageTag(tag) ?? tag] : []);
+    .flatMap(tag => tag && tag !== UNSPECIFIED ? [canonicalLanguage(tag) ?? tag] : []);
   return [...new Set([...listed, UNSPECIFIED])];
 }
 
@@ -34,7 +33,5 @@ export function textAttributes(language: string, text = ''): { lang: string | un
   return { lang: known ? language : undefined, dir: direction(known ? language : UNSPECIFIED, text) };
 }
 
-/** Whether `language` is a tag Main accepts for written content. */
-export function isWritingLanguage(language: string): boolean {
-  return languageTag(language) === language;
-}
+/** The tag in its canonical form (`zh-cn` → `zh-CN`), or null when it is not a language tag. */
+export const writingTag = canonicalLanguage;

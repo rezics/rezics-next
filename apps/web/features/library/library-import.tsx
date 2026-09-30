@@ -18,6 +18,8 @@ import { LIBRARY_IMPORT_COST, LibraryImportInvalid, parseLibraryImport, type Imp
 import { lookupImportedBook, lookupOpenLibraryBook, matchImportedBook, ReaderImportBudgetError,
   type ImportMatch, type OpenLibraryCandidate } from './import-match.ts';
 import type { LibraryMessages } from './messages.ts';
+import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
+import { writingLanguage } from '../content-language/writing-language.ts';
 import type { CustomShelf } from './types.ts';
 
 interface PreviewRow { book: ImportedBook; match: ImportMatch | null; lookupFailed: boolean;
@@ -40,6 +42,8 @@ export function LibraryImport({ agent, context, customShelves = [], locale, mess
   importBatch?: typeof submitReviewedBatch }) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
+  // Imported reviews are in a language the reader knows, not the page's: their first reading language, else unspecified.
+  const reviewLanguage = writingLanguage({ reading: useReadingLanguages(agent) });
   const run = useRef(0);
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [matching, setMatching] = useState(false);
@@ -138,7 +142,7 @@ export function LibraryImport({ agent, context, customShelves = [], locale, mess
       setSaved(progress.items.length);
     };
     try {
-      const progress = await importBatch(agent, context, locale, customShelves, reviewed, showProgress);
+      const progress = await importBatch(agent, context, reviewLanguage, customShelves, reviewed, showProgress);
       showProgress(progress);
       const issues = progress.items.filter(item => item.result.issues.length).length;
       setSummary({ done: progress.items.length - issues, issues });

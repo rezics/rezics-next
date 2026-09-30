@@ -157,6 +157,13 @@ describe('authoring in the author\u2019s language (G-515)', () => {
     expect(setRuleOriginal(unspecified, 'und')).toEqual(unspecified);
   });
 
+  test('private-use and grandfathered originals are valid, as Main keeps them', () => {
+    expect(ruleProblems([ruleFromText('a', 'Qapla\u2019', 'Body', 'x-klingon')])).toEqual([]);
+    // A non-canonical spelling is caught before sending; the editor offers canonical tags only.
+    expect(ruleProblems([ruleFromText('a', 'T', 'B', 'zh-cn')])).toContainEqual(
+      { index: 0, field: 'title', language: 'zh-cn', problem: 'invalid' });
+  });
+
   test('every authored rule payload names its original and keeps only what was written', () => {
     for (const rule of [ruleFromText('a', 'Title', 'Body', 'ko'), ruleFromText('b', 'عنوان', 'نص', 'ar')]) {
       expect(Object.keys(rule.title.labels)).toEqual([rule.title.original]);

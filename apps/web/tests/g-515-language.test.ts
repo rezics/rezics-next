@@ -6,6 +6,7 @@ import { communityNames } from '../features/communities/name-fields.ts';
 import { suggestedLanguages, textAttributes, UNSPECIFIED, writingLanguage } from '../features/content-language/writing-language.ts';
 import { mainThreadApi, replyProgress, type ReplyInput } from '../features/feed/thread-api.ts';
 import { newPostProgress, submitPost } from '../features/post-composer/api.ts';
+import { submitReviewedBatch } from '../features/library/import-api.ts';
 import { profileSaveInput, saveAgentProfile } from '../features/settings/profile-api.ts';
 
 // G-515: what a person writes is in the language they chose. The interface
@@ -118,6 +119,24 @@ describe('a bio is saved in the language its writer chose', () => {
   test('a language Main would not accept is refused before sending', async () => {
     expect((await saved('Hello', 'not a tag')).result).toBe('invalid');
   });
+
+  test('a stored tag in another spelling is saved canonical, so an unrelated edit still saves', async () => {
+    const stored = { ...profile, bio: { text: 'Old bio', language: 'zh-cn' } };
+    expect(await saved('Old bio', '', stored)).toEqual({ result: 'saved', bio: { text: 'Old bio', language: 'zh-CN' } });
+    expect((await saved('Old bio', 'x-klingon', stored)).bio?.language).toBe('x-klingon');
+  });
+});
+
+describe('imported reviews carry the language given, not the page\u2019s', () => {
+  test.each(['ko', 'und'])('%s', async language => {
+    let body: { language: string } | undefined;
+    const main = { v1: { me: { 'library-import': { batches: { post: async (sent: { language: string }) => {
+      body = sent;
+      return { data: { pending: false, items: [] } };
+    } } } } } };
+    await submitReviewedBatch('agent', null, language, [], [], () => undefined, (() => main) as never);
+    expect(body?.language).toBe(language);
+  });
 });
 
 describe('a community declares the language of its name, description and rules', () => {
@@ -136,7 +155,8 @@ const surfaces = ['features/post-composer/composer.tsx', 'features/post-composer
   'features/feed/thread-api.ts', 'features/realm/thread-view.tsx', 'features/work-page/reviews.tsx',
   'features/library/row-parts.tsx', 'features/settings/profile-api.ts', 'features/settings/profile-edit-form.tsx',
   'features/communities/create-form.tsx', 'features/manage/rules-editor.tsx', 'features/manage/rules.ts',
-  'features/manage/settings-view.tsx', 'app/[locale]/settings/profile/route.ts'];
+  'features/manage/settings-view.tsx', 'app/[locale]/settings/profile/route.ts', 'features/realm/thread-route.tsx',
+  'features/library/library-import.tsx', 'features/library/import-api.ts'];
 const stamps: Array<[string, RegExp]> = [
   ['language: locale', /\blanguage\s*:\s*(?:ui)?locale\b/i],
   ['language taken from a locale fallback', /\blanguage\b[^\n]*\?\?\s*(?:ui)?locale\b/i],
@@ -144,6 +164,10 @@ const stamps: Array<[string, RegExp]> = [
   ['values.locale as the language', /values\.locale/],
   ['the locale as a fixed direction', /direction:\s*'ltr'/],
   ['the UI locales as the language choices', /uiLocales/],
+  ['a state that starts in the locale', /useState[^\n]*\(\s*(?:ui)?locale\s*\)/],
+  ['the locale handed to a language helper', /(?:writingLanguage|emptyRule|ruleFromText|communityNames)\([^)]*\blocale\b/],
+  ['the locale as the existing, chosen or reading language', /\b(?:existing|chosen|reading)\s*:[^,}\n]*\blocale\b/],
+  ['language={locale}', /language=\{(?:ui)?locale\}/],
 ];
 
 describe('class guard: the interface locale never becomes the language of the text', () => {

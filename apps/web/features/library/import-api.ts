@@ -22,11 +22,11 @@ async function stableKey(parts: unknown[]): Promise<string> {
 
 /** One reviewed intent is sent to Main. Main resumes at most eight rows per
  * response and retains each row result; the browser only polls the same intent. */
-export async function submitReviewedBatch(agent: string, context: string | null, locale: string,
+export async function submitReviewedBatch(agent: string, context: string | null, language: string,
   existingShelves: readonly { name: string; id: string }[], rows: ReviewedBatchRow[],
   onProgress: (progress: ImportBatchProgress) => void = () => {},
   main: () => MainClient = browserMainApi): Promise<ImportBatchProgress> {
-  const body = { actingSubject: agent, context, language: locale,
+  const body = { actingSubject: agent, context, language,
     existingShelves: existingShelves.map(shelf => ({ name: shelf.name, id: shelf.id })), rows };
   const idempotencyKey = await stableKey(['reviewed-batch', body]);
   let last = -1, stalled = 0;

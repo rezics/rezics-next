@@ -122,3 +122,14 @@ export const EditingKeepsItsLanguage: Story = {
     await expect(suggested.getAllByRole('button')).toHaveLength(4);
   },
 };
+
+/** Tags Main keeps but `Intl` cannot name (private use, grandfathered) show as the tag rather than crashing. */
+export const PrivateUseTag: Story = {
+  args: { reading: ['x-klingon'], existing: 'i-klingon' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: 'Language of your post: i-klingon' })).toBeVisible();
+    await open(canvas, /^Language of your post: i-klingon/);
+    await expect(await body().findByRole('button', { name: /x-klingon/ })).toBeVisible();
+  },
+};

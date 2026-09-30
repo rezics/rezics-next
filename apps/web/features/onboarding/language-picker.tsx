@@ -18,10 +18,13 @@ const suggestion = cn('flex min-h-12 w-full items-center gap-3 rounded-2xl borde
 
 /** A language as its readers write it, with its name in the page's language beneath. */
 export function LanguageName({ tag, names }: { tag: string; names: Intl.DisplayNames }) {
-  const own = new Intl.DisplayNames([tag], { type: 'language', fallback: 'code' }).of(tag) ?? tag;
-  const local = names.of(tag);
+  // `Intl` refuses private-use (`x-…`) and grandfathered (`i-…`) tags, which Main keeps: show the tag itself.
+  const named = (display: () => string | undefined) => { try { return display(); } catch { return undefined; } };
+  const ownName = named(() => new Intl.DisplayNames([tag], { type: 'language', fallback: 'code' }).of(tag));
+  const own = ownName ?? tag;
+  const local = named(() => names.of(tag));
   return <span className="grid min-w-0 flex-1">
-    <span lang={tag} className="truncate">{own}</span>
+    <span lang={ownName ? tag : undefined} className="truncate">{own}</span>
     {local && local !== own ? <span className="truncate font-normal text-muted-foreground text-xs">{local}</span> : null}
   </span>;
 }

@@ -41,8 +41,12 @@ export function LanguageSelect({ value, onChange, locale, reading = [], original
   const [query, setQuery] = useState('');
   const typed = query.trim().length > 0;
   const results = typed ? matchingLanguages(query, locale, []) : suggestedLanguages({ reading, current: value, original }).filter(tag => tag !== UNSPECIFIED || value !== null);
-  const nameOf = (tag: string) => tag === UNSPECIFIED ? t.notSpecified
-    : new Intl.DisplayNames([tag], { type: 'language', fallback: 'code' }).of(tag) ?? tag;
+  // `Intl` refuses private-use (`x-…`) and grandfathered (`i-…`) tags, which Main keeps: show the tag itself.
+  const ownName = (tag: string) => {
+    try { return new Intl.DisplayNames([tag], { type: 'language', fallback: 'code' }).of(tag) ?? null; }
+    catch { return null; }
+  };
+  const nameOf = (tag: string) => tag === UNSPECIFIED ? t.notSpecified : ownName(tag) ?? tag;
   const pick = (tag: string) => { onChange(tag); setOpen(false); setQuery(''); };
   const caption = label ?? t.language;
   return <Popover open={open} onOpenChange={details => { setOpen(details.open); if (!details.open) setQuery(''); }}>
@@ -50,7 +54,7 @@ export function LanguageSelect({ value, onChange, locale, reading = [], original
       className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'max-w-full justify-between gap-2', className)}>
       {value === null ? <><PlusIcon aria-hidden="true" className="size-4 shrink-0" />
         <span className="truncate">{placeholder ?? caption}</span></>
-        : <><span lang={value === UNSPECIFIED ? undefined : value} className="truncate">{nameOf(value)}</span>
+        : <><span lang={value !== UNSPECIFIED && ownName(value) ? value : undefined} className="truncate">{nameOf(value)}</span>
           <ChevronsUpDownIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /></>}
     </PopoverTrigger>
     <PopoverContent className="w-80 max-w-[calc(100vw-2rem)]">

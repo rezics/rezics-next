@@ -1,3 +1,4 @@
+import { canonicalLanguage } from '@rezics/main/language';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { RealmRule, SettingsView } from './types.ts';
 
@@ -115,10 +116,7 @@ export function ruleProblems(draft: readonly RealmRule[]): RuleProblem[] {
     for (const field of ['title', 'body'] as const) {
       const text = rule[field];
       const entries = Object.entries(text.labels);
-      const canonical = (language: string) => {
-        try { return /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(language)
-          && Intl.getCanonicalLocales(language)[0] === language; } catch { return false; }
-      };
+      const canonical = (language: string) => canonicalLanguage(language) === language;
       if (!canonical(text.original) || entries.length > 20) {
         problems.push({ index, field, language: text.original, problem: 'invalid' });
       }

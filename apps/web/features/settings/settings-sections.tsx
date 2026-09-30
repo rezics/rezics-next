@@ -8,6 +8,7 @@ import { materializeData } from 'native-i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { LanguagePicker } from '../onboarding/language-picker.tsx';
 import { messages as onboardingMessages } from '../onboarding/messages.ts';
 import { useOptionalShell } from '../shell/shell-provider.tsx';
@@ -248,6 +249,8 @@ function PersonControls({ agent, locale, t, preview = false, previewLanguages = 
       const next = await write<PersonPreferences>('/v1/me/person-preferences', {
         actingSubject: agent, expectedVersion: current.version, ...prior, contentLanguages: languages, ...patch });
       setCurrent(next); setLanguages(next.contentLanguages); setStatus(t.personSaved);
+      // Writing surfaces suggest these languages first; the next one opened reads them again.
+      forgetReadingLanguages();
     } catch (error) {
       const conflict = String(error).includes('409');
       setStatus(conflict ? t.sectionStale : t.sectionFailed);

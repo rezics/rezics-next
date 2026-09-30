@@ -1,6 +1,6 @@
 import { serviceOrigin } from '../api/origins.ts';
 import type { PublicAgentProfile } from '../auth/agent-profile.ts';
-import { isWritingLanguage, UNSPECIFIED } from '../content-language/writing-language.ts';
+import { UNSPECIFIED, writingTag } from '../content-language/writing-language.ts';
 
 export type ProfileSaveResult = 'saved' | 'invalid' | 'conflict' | 'denied' | 'unavailable'
   | 'avatar-denied' | 'avatar-unavailable';
@@ -32,10 +32,11 @@ interface SaveInput {
 export async function saveAgentProfile(input: SaveInput, send: ProfileSender = fetch): Promise<ProfileSaveResult> {
   const id = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(input.agent)?.[1];
   const name = input.displayName.trim();
-  const bio = input.bio && { text: input.bio.text.trim(), language: input.bio.language };
+  // A stored tag in another spelling (zh-cn) is saved canonical, not refused.
+  const bio = input.bio && { text: input.bio.text.trim(), language: writingTag(input.bio.language) ?? input.bio.language };
   if (!id || !/^[0-9a-f-]{36}$/.test(input.key) || !input.expectedHead
     || !name || name.length > 200 || /\p{Cc}/u.test(name)
-    || bio && (!bio.text || bio.text.length > 500 || /\p{Cc}/u.test(bio.text) || !isWritingLanguage(bio.language))
+    || bio && (!bio.text || bio.text.length > 500 || /\p{Cc}/u.test(bio.text) || !writingTag(bio.language))
     || input.avatar && (input.avatar.size > avatarMaxBytes || !avatarTypes.has(input.avatar.type))
     || input.avatar && input.removeAvatar) return 'invalid';
   const origin = serviceOrigin('MAIN_ORIGIN');
