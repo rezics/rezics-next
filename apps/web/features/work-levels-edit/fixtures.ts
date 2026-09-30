@@ -39,6 +39,6 @@ export const works: WorkChoice[] = [
   { id: '01944100-0000-7000-8000-000000000032', title: 'New Testament 22', language: 'en' },
 ];
 export const loadWorks = async () => works;
-export const loadRealizations = async () => realizations;
+export const loadRealizations = async () => ({ title: 'New Testament 22 Reverse', items: realizations });
 
 export const editAction = 'work.edit';

@@ -172,7 +172,7 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   for (const volume of [volumeTwo, volumeThree]) {
     await release.getByRole('textbox', { name: 'Cover another Work’s realizations' }).fill(uuid(volume.work));
     await release.getByRole('button', { name: 'Load its realizations' }).click();
-    const group = release.getByRole('group', { name: `Realizations of ${uuid(volume.work).slice(0, 8)}` });
+    const group = release.getByRole('group', { name: `Realizations of ${volume.title}` });
     await group.getByRole('checkbox').check();
   }
   await shoot(page, 'editions-form', info);

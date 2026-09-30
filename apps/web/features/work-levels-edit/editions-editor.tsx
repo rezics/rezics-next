@@ -20,15 +20,19 @@ import { WorkPicker, type WorkLoader } from './work-picker.tsx';
 
 /** A realization a release can cover, with the exact revision the page read: Main pins coverage to it. */
 export interface CoverableRealization { id: string; revision: string; work: string; language: string }
-export type RealizationLoader = (work: string) => Promise<CoverableRealization[]>;
+/** Another Work's name and the realizations it offers for coverage. */
+export type RealizationLoader = (work: string) => Promise<{ title: string | null; items: CoverableRealization[] }>;
 
 type Action = (previous: WriteState, form: FormData) => Promise<WriteState>;
 
 /** Another Work's realizations, read as the editor's Agent: Main answers a signed-in read only for an acting Agent. */
 const browserRealizations = (actingSubject: string | undefined): RealizationLoader => async work => {
-  const { data, error } = await browserMainApi().v1.works({ id: work }).realizations.get({ query: { limit: 20, actingSubject } });
+  const main = browserMainApi();
+  const [{ data, error }, header] = await Promise.all([main.v1.works({ id: work }).realizations.get({ query: { limit: 20, actingSubject } }),
+    main.v1.works({ id: work }).get({ query: { actingSubject } })]);
   if (error || !data) throw new Error('unavailable');
-  return data.items.map(item => ({ id: item.id, revision: item.revision, work: item.work, language: item.language }));
+  return { title: header.data?.title.value ?? null,
+    items: data.items.map(item => ({ id: item.id, revision: item.revision, work: item.work, language: item.language })) };
 };
 
 const languageField = (t: Copy, name: string, value: string, invalid: boolean) => <Field invalid={invalid}>
@@ -96,15 +100,15 @@ function CoveragePicker({ work, own, locale, t, load, loadWorks, chosen }: {
   work: string; own: readonly CoverableRealization[]; locale: UiLocale; t: Copy; load: RealizationLoader;
   loadWorks?: WorkLoader; chosen: ReadonlySet<string>;
 }) {
-  const [others, setOthers] = useState<{ work: string; items: CoverableRealization[] }[]>([]);
+  const [others, setOthers] = useState<{ work: string; title: string | null; items: CoverableRealization[] }[]>([]);
   const [failed, setFailed] = useState<'none' | 'error' | null>(null);
   async function add(text: string) {
     const id = workIdFrom(text);
     if (!id || id === work || others.some(group => group.work === id)) return;
     try {
-      const items = await load(id);
+      const { title, items } = await load(id);
       setFailed(items.length ? null : 'none');
-      if (items.length) setOthers(groups => [...groups, { work: id, items }]);
+      if (items.length) setOthers(groups => [...groups, { work: id, title, items }]);
     } catch { setFailed('error'); }
   }
   const group = (heading: string, items: readonly CoverableRealization[]) => <fieldset className="grid gap-2">
@@ -116,7 +120,7 @@ function CoveragePicker({ work, own, locale, t, load, loadWorks, chosen }: {
   </fieldset>;
   return <div className="grid gap-3">
     {own.length ? group(t.coverageThisWork, own) : <p className="text-muted-foreground text-sm">{t.noRealizationsYet}</p>}
-    {others.map(entry => <div key={entry.work}>{group(t.coverageWorkHeading({ work: entry.work.slice(0, 8) }), entry.items)}</div>)}
+    {others.map(entry => <div key={entry.work}>{group(t.coverageWorkHeading({ work: entry.title ?? entry.work }), entry.items)}</div>)}
     <div className="grid gap-2 rounded-xl border border-border/60 p-3">
       <span className="font-medium text-sm">{t.coverageMore}</span>
       <WorkPicker name="coverageWork" locale={locale} t={t} load={loadWorks} initial="" label={t.coverageMore} />

@@ -115,7 +115,7 @@ export const RealizationAndRelease: Story = { args: { section: 'editions' },
     await userEvent.type(within(release).getByRole('textbox', { name: 'Cover another Work’s realizations' }),
       '01944100-0000-7000-8000-000000000031');
     await userEvent.click(within(release).getByRole('button', { name: 'Load its realizations' }));
-    await expect(await within(release).findByText('Realizations of 01944100')).toBeVisible();
+    await expect(await within(release).findByText('Realizations of New Testament 22 Reverse')).toBeVisible();
     await noOverflow();
   } };
 
