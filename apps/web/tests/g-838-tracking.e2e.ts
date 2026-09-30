@@ -178,7 +178,7 @@ test('attempts on two devices, series progress and the offered correspondence', 
   await expect(indexPanel.getByText('Saved.')).toBeVisible();
   await expect(indexPanel.locator('[data-state="caughtUpWithAvailableMaterial"]')).toHaveAttribute('data-value', 'true');
   await expect(indexPanel.locator('[data-state="finishedPublishedParts"]')).toHaveAttribute('data-value', 'false');
-  await expect(indexPanel.locator('[data-state]')).toHaveCount(4);
+  await expect(indexPanel.locator('dl > [data-state]')).toHaveCount(4);
   await expect(indexPanel).toContainText('Caught up with available material');
   await expect(indexPanel).toContainText('Finished the published parts');
   await expect(indexPanel).toContainText('The next required part, which has no text in this language yet.');
