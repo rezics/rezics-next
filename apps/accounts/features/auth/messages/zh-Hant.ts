@@ -24,6 +24,7 @@ export default {
   verificationSent: insert('如果 {{email}} 尚未完成驗證，我們已重新寄出連結。', { email: String }),
   tooManyAttempts: '嘗試次數過多。請等候一分鐘後再試。',
   unavailable: '目前無法登入。請稍後再試。',
+  challengeUnavailable: '安全驗證暫時無法使用。請重新整理頁面後再試。',
   requestExpired: '此登入要求已逾期。請返回應用程式並重新開始。',
   deletedNotice: '你的 REZICS 帳戶已刪除。',
   signUpTitle: '建立你的 REZICS 帳戶',

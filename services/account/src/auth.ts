@@ -1,7 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { createHash } from 'node:crypto';
 import { APIError } from 'better-auth/api';
-import { jwt, openAPI, twoFactor } from 'better-auth/plugins';
+import { captcha, jwt, openAPI, twoFactor } from 'better-auth/plugins';
 import { getAuthenticatorName, passkey } from '@better-auth/passkey';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { Pool } from 'pg';
@@ -29,6 +29,10 @@ export interface AccountConfig {
   email?: AccountEmail;
   /** The HTTP process requires verification. Embedded protocol fixtures without a sender can omit it. */
   requireEmailVerification?: boolean;
+  /** Required by the HTTP process; protocol fixtures without enrollment may omit it. */
+  turnstileSecretKey?: string;
+  /** Embedded tests can substitute a local verifier; never configured by the HTTP process. */
+  turnstileVerifyURL?: string;
   accessDeletionFence?: (accountSubject: string) => Promise<void>;
 }
 
@@ -113,6 +117,10 @@ export function accountAuthOptions(config: AccountConfig) {
       },
     } },
     plugins: [
+      ...(config.turnstileSecretKey ? [captcha({ provider: 'cloudflare-turnstile',
+        secretKey: config.turnstileSecretKey, siteVerifyURLOverride: config.turnstileVerifyURL,
+        endpoints: ['/sign-up/email', '/request-password-reset', '/send-verification-email'],
+      })] : []),
       openAPI({ disableDefaultReference: true }),
       twoFactor({ issuer: 'REZICS', allowPasswordless: true,
         backupCodeOptions: { storeBackupCodes: 'encrypted' } }),

@@ -5,10 +5,12 @@ import { pendingAutofill } from '../../.storybook/account-client.ts';
 import { chinese, dark, phone } from '../../.storybook/variants.ts';
 import { AuthFrame } from '../shell/auth-frame.tsx';
 import { AuthSkeleton } from '../shell/skeletons.tsx';
+import { turnstileFixture } from './turnstile.fixture.ts';
 
 const meta = {
   title: 'Accounts/Sign in', component: SignInFlow, args: { next: '/' },
   decorators: [Story => <AuthFrame><Story /></AuthFrame>],
+  beforeEach: () => turnstileFixture(),
 } satisfies Meta<typeof SignInFlow>;
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -24,6 +24,7 @@ export default {
   verificationSent: insert('Si {{email}} aún tiene que verificarse, recibirás otro enlace en breve.', { email: String }),
   tooManyAttempts: 'Has hecho demasiados intentos. Espera un minuto y vuelve a intentarlo.',
   unavailable: 'El inicio de sesión no está disponible ahora. Vuelve a intentarlo dentro de un momento.',
+  challengeUnavailable: 'La verificación de seguridad no está disponible. Recarga esta página para volver a intentarlo.',
   requestExpired: 'Esta solicitud de inicio de sesión ha caducado. Vuelve a la aplicación y empieza de nuevo.',
   deletedNotice: 'Se ha eliminado tu cuenta de REZICS.',
   signUpTitle: 'Crea tu cuenta de REZICS',

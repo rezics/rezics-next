@@ -13,6 +13,7 @@ import { autofocus, CodeField, EmailField, emailPattern, PasswordField } from '.
 import { autofillSupported, passkeysSupported } from './webauthn.ts';
 import { useTranslation } from '../../i18n/client.ts';
 import { authorizationAfterCreate } from './auth-query.ts';
+import { Turnstile } from './turnstile.tsx';
 
 export interface SignInFlowProps {
   /** Where to go after a plain sign-in; an OAuth request decides its own next step. */
@@ -26,15 +27,16 @@ export interface SignInFlowProps {
   /** Re-authentication of the signed-in account before a sensitive page. */
   reauthEmail?: string;
   notice?: 'deleted';
+  turnstileSiteKey?: string;
 }
 
 type Step = 'email' | 'password' | 'two-factor';
-type Notice = FailureKind | 'verification-sent' | 'passkey-failed' | 'two-factor-expired';
+type Notice = FailureKind | 'verification-sent' | 'passkey-failed' | 'two-factor-expired' | 'challenge-unavailable';
 
 /** Identifier first, then password, as Google does, with passkeys offered in
  * the email field's autofill and as a button. Neither step reveals whether an
  * account exists: every failure after the password is the same. */
-export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail, notice: initial }: SignInFlowProps) {
+export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail, notice: initial, turnstileSiteKey }: SignInFlowProps) {
   const { t } = useTranslation('auth');
   const { api, navigate } = useAccountClient();
   const [step, setStep] = useState<Step>(reauthEmail ? 'password' : 'email');
@@ -49,6 +51,9 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
   const [notice, setNotice] = useState<Notice>();
   const [busy, setBusy] = useState<'password' | 'passkey' | 'code' | 'resend'>();
   const [passkeys, setPasskeys] = useState(true);
+  const [verificationRequired, setVerificationRequired] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string>();
+  const [captchaAttempt, setCaptchaAttempt] = useState(0);
   const autofill = useRef<AbortController>(undefined);
   const suffix = carry ? `?${carry}` : '';
 
@@ -107,7 +112,7 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
     if (result.ok) return finish(result.data.redirect);
     setBusy(undefined);
     if (result.kind === 'invalid-credentials') setPasswordError(t.wrongPassword);
-    else setNotice(result.kind);
+    else { setNotice(result.kind); if (result.kind === 'email-not-verified') setVerificationRequired(true); }
   }
 
   async function submitCode(event: FormEvent) {
@@ -130,13 +135,17 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
   }
 
   async function resendVerification() {
+    if (!captchaToken) return setNotice('unavailable');
     setBusy('resend');
-    await api.sendVerificationEmail(email);
+    const result = await api.sendVerificationEmail(email, captchaToken);
+    setCaptchaToken(undefined);
+    setCaptchaAttempt(current => current + 1);
     setBusy(undefined);
-    setNotice('verification-sent');
+    setNotice(result.ok ? 'verification-sent' : result.kind);
   }
 
   const message = (kind: Notice) => kind === 'verification-sent' ? t.verificationSent({ email })
+    : kind === 'challenge-unavailable' ? t.challengeUnavailable
     : kind === 'email-not-verified' ? t.emailNotVerified
       : kind === 'rate-limited' ? t.tooManyAttempts
         : kind === 'expired-request' ? t.requestExpired
@@ -167,9 +176,14 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
     {notice ? <Alert role="alert" variant={notice === 'verification-sent' ? 'success' : 'destructive'}
       className="mb-6">
       <AlertDescription>{message(notice)}
-        {notice === 'email-not-verified' ? <Button variant="outline" size="sm" className="w-fit"
-          disabled={!!busy} onClick={() => void resendVerification()}>{t.sendVerification}</Button> : null}
       </AlertDescription></Alert> : null}
+    {verificationRequired && step === 'password' ? <div className="mb-6 flex flex-col gap-3">
+      <Turnstile siteKey={turnstileSiteKey} attempt={captchaAttempt} onToken={token => {
+        setCaptchaToken(token); if (token && notice === 'challenge-unavailable') setNotice(undefined);
+      }} onError={() => setNotice('challenge-unavailable')} />
+      <Button variant="outline" size="sm" className="w-fit" disabled={!!busy || !captchaToken}
+        onClick={() => void resendVerification()}>{t.sendVerification}</Button>
+    </div> : null}
     {step === 'email'
       ? <div className="flex flex-col gap-6">
         <form noValidate onSubmit={submitEmail} className="flex flex-col gap-6">

@@ -3,21 +3,23 @@ import { expect, fn, userEvent, within } from 'storybook/test';
 import { SignUpForm } from './sign-up-form.tsx';
 import { chinese, dark, phone } from '../../.storybook/variants.ts';
 import { AuthFrame } from '../shell/auth-frame.tsx';
+import { turnstileFixture } from './turnstile.fixture.ts';
 
 const meta = {
   title: 'Accounts/Create account', component: SignUpForm, args: { next: '/' },
   decorators: [Story => <AuthFrame><Story /></AuthFrame>],
+  beforeEach: () => turnstileFixture(),
 } satisfies Meta<typeof SignUpForm>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function fill(canvasElement: HTMLElement, password = 'long pass phrase', confirm = password) {
+async function fill(canvasElement: HTMLElement, password = 'long pass phrase', confirm = password, submit = true) {
   const canvas = within(canvasElement);
   await userEvent.type(await canvas.findByRole('textbox', { name: 'Name' }), 'Ada Lovelace');
   await userEvent.type(canvas.getByRole('textbox', { name: 'Email' }), 'ada@example.test');
   await userEvent.type(canvas.getByLabelText('Password'), password);
   await userEvent.type(canvas.getByLabelText('Confirm'), confirm);
-  await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
+  if (submit) await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
   return canvas;
 }
 
@@ -89,6 +91,21 @@ export const ForRezics: Story = {
 
 export const Dark: Story = { ...Form, globals: dark };
 export const Phone: Story = { ...Form, globals: phone };
+export const AwaitingChallenge: Story = {
+  beforeEach: () => turnstileFixture('pending'),
+  async play({ canvasElement }) {
+    const canvas = await fill(canvasElement, 'long pass phrase', 'long pass phrase', false);
+    await expect(canvas.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await expect(canvas.getByText('Security check')).toBeVisible();
+  },
+};
+export const ChallengeUnavailable: Story = {
+  beforeEach: () => turnstileFixture('error'),
+  async play({ canvasElement }) {
+    await expect(await within(canvasElement).findByRole('alert')).toHaveTextContent(
+      'The security check is unavailable. Reload this page to try again.');
+  },
+};
 export const Chinese: Story = {
   globals: chinese,
   async play({ canvasElement }) {

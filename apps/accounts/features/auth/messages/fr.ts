@@ -24,6 +24,7 @@ export default {
   verificationSent: insert('Si {{email}} doit encore être confirmée, un nouveau lien est en route.', { email: String }),
   tooManyAttempts: 'Trop de tentatives. Attendez une minute, puis réessayez.',
   unavailable: 'La connexion est momentanément indisponible. Réessayez dans quelques instants.',
+  challengeUnavailable: 'La vérification de sécurité est indisponible. Rechargez cette page pour réessayer.',
   requestExpired: 'Cette demande de connexion a expiré. Retournez dans l’application et recommencez.',
   deletedNotice: 'Votre compte REZICS a été supprimé.',
   signUpTitle: 'Créer votre compte REZICS',

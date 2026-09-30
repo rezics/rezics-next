@@ -5,10 +5,12 @@ import { ResetPasswordForm } from './reset-password-form.tsx';
 import { VerifyEmailResult } from './verify-email-result.tsx';
 import { chinese, dark, phone } from '../../.storybook/variants.ts';
 import { AuthFrame } from '../shell/auth-frame.tsx';
+import { turnstileFixture } from './turnstile.fixture.ts';
 
 const meta = {
   title: 'Accounts/Recovery', component: RecoveryForm, args: { email: 'ada@example.test' },
   decorators: [Story => <AuthFrame><Story /></AuthFrame>],
+  beforeEach: () => turnstileFixture(),
 } satisfies Meta<typeof RecoveryForm>;
 export default meta;
 type Story = StoryObj<typeof meta>;

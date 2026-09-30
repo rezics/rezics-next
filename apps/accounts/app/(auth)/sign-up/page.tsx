@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { accountsConfig } from '../../../features/config/env.ts';
 import { pendingAuthorization } from '../../../features/api/oauth-query.ts';
 import { readRequestingClient, readSession } from '../../../features/api/server.ts';
 import { authQuery } from '../../../features/auth/auth-query.ts';
@@ -12,5 +13,6 @@ export default async function SignUpPage({ searchParams }: { searchParams: PageS
   const pending = oauthQuery ? pendingAuthorization(oauthQuery) : undefined;
   const client = pending && oauthQuery ? await readRequestingClient(pending.clientId, oauthQuery) : undefined;
   return <AuthFrame><SignUpForm next={next} oauthQuery={oauthQuery} carry={carry}
+    turnstileSiteKey={accountsConfig().ACCOUNT_TURNSTILE_SITE_KEY}
     appName={client?.status === 'ok' ? client.data.name?.trim() || null : null} /></AuthFrame>;
 }

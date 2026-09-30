@@ -22,10 +22,10 @@ export interface AccountApi {
   Promise<Result<Continuation>>;
   /** `verify` means the account needs its email verified before signing in. */
   signUp(input: { name: string; email: string; password: string; locale: AccountLocale; oauthQuery?: string;
-    carry?: string }): Promise<Result<Continuation & { verify?: boolean }>>;
-  requestPasswordReset(email: string): Promise<Result<void>>;
+    carry?: string; captchaToken?: string }): Promise<Result<Continuation & { verify?: boolean }>>;
+  requestPasswordReset(email: string, captchaToken?: string): Promise<Result<void>>;
   resetPassword(token: string, newPassword: string): Promise<Result<void>>;
-  sendVerificationEmail(email: string): Promise<Result<void>>;
+  sendVerificationEmail(email: string, captchaToken?: string): Promise<Result<void>>;
   signOut(): Promise<Result<void>>;
   consent(accept: boolean, oauthQuery: string): Promise<Result<{ redirect: string }>>;
   /** Confirm it's you before a sensitive change; valid for five minutes. */
@@ -57,11 +57,12 @@ export interface AccountApi {
 
 type Body = Record<string, unknown>;
 
-async function call<T = unknown>(path: string, body?: Body): Promise<Result<T>> {
+async function call<T = unknown>(path: string, body?: Body, captchaToken?: string): Promise<Result<T>> {
   let response: Response;
   try {
     response = await fetch(path, { method: body ? 'POST' : 'GET', credentials: 'same-origin',
-      headers: { accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) },
+      headers: { accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}),
+        ...(captchaToken ? { 'x-captcha-response': captchaToken } : {}) },
       body: body ? JSON.stringify(body) : undefined });
   } catch {
     return { ok: false, kind: 'unavailable', status: 0 };
@@ -84,7 +85,7 @@ async function putDisplayPreferences(value: DisplayPreferences): Promise<Result<
   const parsed = parseDisplayPreferences(body);
   return parsed ? { ok: true, data: parsed } : { ok: false, kind: 'unavailable', status: response.status };
 }
-const auth = <T = unknown>(path: string, body?: Body) => call<T>(`/api/auth${path}`, body);
+const auth = <T = unknown>(path: string, body?: Body, captchaToken?: string) => call<T>(`/api/auth${path}`, body, captchaToken);
 const account = <T = unknown>(path: string, body?: Body) => call<T>(`/api/account${path}`, body);
 
 function continuation(data: unknown): Continuation {
@@ -143,25 +144,25 @@ export const browserAccountApi: AccountApi = {
       ...(oauthQuery ? { oauth_query: oauthQuery } : {}) });
     return result.ok ? { ok: true, data: continuation(result.data) } : result;
   },
-  async signUp({ name, email, password, locale, oauthQuery, carry }) {
+  async signUp({ name, email, password, locale, oauthQuery, carry, captchaToken }) {
     // The verification link returns to where this sign-up started.
     const result = await auth<{ token?: string | null }>('/sign-up/email', { name, email, password, locale,
       callbackURL: carry ? `${callbackPaths.verifyEmail}?${carry}` : callbackPaths.verifyEmail,
-      ...(oauthQuery ? { oauth_query: oauthQuery } : {}) });
+      ...(oauthQuery ? { oauth_query: oauthQuery } : {}) }, captchaToken);
     if (!result.ok) return result;
     const next = continuation(result.data);
     // Without a session token the account (or an existing one) waits for email
     // verification; the answer is the same either way.
     return { ok: true, data: next.redirect || result.data?.token ? next : { verify: true } };
   },
-  async requestPasswordReset(email) {
-    return done(await auth('/request-password-reset', { email, redirectTo: callbackPaths.resetPassword }));
+  async requestPasswordReset(email, captchaToken) {
+    return done(await auth('/request-password-reset', { email, redirectTo: callbackPaths.resetPassword }, captchaToken));
   },
   async resetPassword(token, newPassword) {
     return done(await auth('/reset-password', { token, newPassword }));
   },
-  async sendVerificationEmail(email) {
-    return done(await auth('/send-verification-email', { email, callbackURL: callbackPaths.verifyEmail }));
+  async sendVerificationEmail(email, captchaToken) {
+    return done(await auth('/send-verification-email', { email, callbackURL: callbackPaths.verifyEmail }, captchaToken));
   },
   async signOut() { return done(await auth('/sign-out', {})); },
   async consent(accept, oauthQuery) {

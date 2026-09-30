@@ -24,6 +24,7 @@ export default {
   verificationSent: insert('{{email}} の確認がまだの場合は、新しいリンクを送信しました。', { email: String }),
   tooManyAttempts: '試行回数が多すぎます。1 分ほど待ってからもう一度お試しください。',
   unavailable: '現在ログインできません。しばらくしてからもう一度お試しください。',
+  challengeUnavailable: 'セキュリティ確認を利用できません。ページを再読み込みして、もう一度お試しください。',
   requestExpired: 'このログイン リクエストの有効期限が切れました。アプリに戻り、最初からやり直してください。',
   deletedNotice: 'REZICS アカウントは削除されました。',
   signUpTitle: 'REZICS アカウントを作成',

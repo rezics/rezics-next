@@ -36,6 +36,7 @@ const deliveryTimer = setInterval(() => {
     .finally(() => { delivering = false; });
 }, 1_000);
 createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUserIds, email, requireEmailVerification: true,
+  turnstileSecretKey: config.ACCOUNT_TURNSTILE_SECRET_KEY,
   accessDeletionFence: access ? async subject => {
     const issuer = new URL('/api/auth', baseURL).toString();
     const fence = await access.strongDeactivateAccountSubject(issuer, subject);

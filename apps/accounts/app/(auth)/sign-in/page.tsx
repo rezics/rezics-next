@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { accountsConfig } from '../../../features/config/env.ts';
 import { pendingAuthorization } from '../../../features/api/oauth-query.ts';
 import { readRequestingClient, readSession } from '../../../features/api/server.ts';
 import { authQuery } from '../../../features/auth/auth-query.ts';
@@ -22,8 +23,10 @@ export default async function SignInPage({ searchParams }: { searchParams: PageS
   // A verified account may resume a signed request whose original prompt was
   // "create". The unsigned sign_in flag selects sign-in without altering it.
   return <AuthFrame>{wantsSignUp && query.get('sign_in') !== '1'
-    ? <SignUpForm next={next} oauthQuery={oauthQuery} carry={carry} appName={appName} />
+    ? <SignUpForm next={next} oauthQuery={oauthQuery} carry={carry} appName={appName}
+      turnstileSiteKey={accountsConfig().ACCOUNT_TURNSTILE_SITE_KEY} />
     : <SignInFlow next={next} oauthQuery={oauthQuery} carry={carry} appName={appName}
       reauthEmail={reauth ? signedIn?.user.email : undefined}
+      turnstileSiteKey={accountsConfig().ACCOUNT_TURNSTILE_SITE_KEY}
       notice={query.get('deleted') === '1' ? 'deleted' : undefined} />}</AuthFrame>;
 }

@@ -15,6 +15,8 @@ export const accountCoreSpec = {
 /** The Account HTTP process (`services/account/src/index.ts`). */
 export const accountSpec = {
   ...accountCoreSpec,
+  ACCOUNT_TURNSTILE_SECRET_KEY: str({ devDefault: '1x0000000000000000000000000000000AA',
+    desc: 'Cloudflare Turnstile secret key; production must supply a real key.' }),
   ACCOUNT_PORT: port({ default: 3002, desc: 'Port Account listens on at 127.0.0.1.' }),
   ACCOUNT_ACCESS_DATABASE_URL: url({ default: undefined,
     desc: 'Access owner URL; enables the account deletion fence. Requires ACCOUNT_RELAY_DATABASE_URL.',
@@ -38,6 +40,10 @@ export const accountSpec = {
 
 export function accountConfig(env: Record<string, string | undefined> = process.env) {
   const config = cleanEnv(env, accountSpec);
+  if (!config.ACCOUNT_TURNSTILE_SECRET_KEY.trim()
+    || (env.NODE_ENV === 'production' && /^[123]x0+AA$/.test(config.ACCOUNT_TURNSTILE_SECRET_KEY))) {
+    throw new Error('ACCOUNT_TURNSTILE_SECRET_KEY must be configured; test keys are development-only');
+  }
   if (config.ACCOUNT_ACCESS_DATABASE_URL && !config.ACCOUNT_RELAY_DATABASE_URL) {
     throw new Error('ACCOUNT_RELAY_DATABASE_URL is required when ACCOUNT_ACCESS_DATABASE_URL enables deletion');
   }

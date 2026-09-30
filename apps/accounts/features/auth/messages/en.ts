@@ -24,6 +24,7 @@ export default {
   verificationSent: insert('If {{email}} still needs verifying, a new link is on its way.', { email: String }),
   tooManyAttempts: 'Too many attempts. Wait a minute, then try again.',
   unavailable: 'Sign-in is unavailable right now. Try again in a moment.',
+  challengeUnavailable: 'The security check is unavailable. Reload this page to try again.',
   requestExpired: 'This sign-in request has expired. Go back to the app and start again.',
   deletedNotice: 'Your REZICS Account was deleted.',
   signUpTitle: 'Create your REZICS Account',

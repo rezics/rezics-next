@@ -24,6 +24,7 @@ export default {
   verificationSent: insert('如果 {{email}} 仍需验证，新的链接已在发送途中。', { email: String }),
   tooManyAttempts: '尝试次数过多。请稍等一分钟后重试。',
   unavailable: '暂时无法登录。请稍后重试。',
+  challengeUnavailable: '安全验证暂时不可用。请刷新页面后重试。',
   requestExpired: '此登录请求已过期。请返回应用重新开始。',
   deletedNotice: '您的 REZICS 账号已删除。',
   signUpTitle: '创建您的 REZICS 账号',

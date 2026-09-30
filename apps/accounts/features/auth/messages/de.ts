@@ -24,6 +24,7 @@ export default {
   verificationSent: insert('Falls {{email}} noch bestätigt werden muss, ist ein neuer Link unterwegs.', { email: String }),
   tooManyAttempts: 'Zu viele Versuche. Warten Sie eine Minute und versuchen Sie es dann noch einmal.',
   unavailable: 'Die Anmeldung ist momentan nicht verfügbar. Versuchen Sie es gleich noch einmal.',
+  challengeUnavailable: 'Die Sicherheitsprüfung ist nicht verfügbar. Laden Sie diese Seite neu und versuchen Sie es erneut.',
   requestExpired: 'Diese Anmeldeanfrage ist abgelaufen. Kehren Sie zur App zurück und starten Sie den Vorgang neu.',
   deletedNotice: 'Ihr REZICS Account wurde gelöscht.',
   signUpTitle: 'Erstellen Sie Ihren REZICS Account',

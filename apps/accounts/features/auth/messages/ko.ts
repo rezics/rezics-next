@@ -24,6 +24,7 @@ export default {
   verificationSent: insert('{{email}}의 인증이 아직 필요하다면 새 링크를 보내드렸습니다.', { email: String }),
   tooManyAttempts: '시도 횟수가 너무 많습니다. 1분 후 다시 시도하세요.',
   unavailable: '현재 로그인할 수 없습니다. 잠시 후 다시 시도하세요.',
+  challengeUnavailable: '보안 확인을 사용할 수 없습니다. 페이지를 새로고침한 후 다시 시도하세요.',
   requestExpired: '로그인 요청이 만료되었습니다. 앱으로 돌아가 처음부터 다시 시작하세요.',
   deletedNotice: 'REZICS Account가 삭제되었습니다.',
   signUpTitle: 'REZICS Account 만들기',

@@ -10,11 +10,12 @@ import { EmailField, emailPattern, NameField, PasswordField, passwordLength } fr
 import { AuthOutcome } from './auth-outcome.tsx';
 import type { AccountLocale } from '../api/account-data.ts';
 import { useLocale, useTranslation } from '../../i18n/client.ts';
+import { Turnstile } from './turnstile.tsx';
 
 type Errors = Partial<Record<'name' | 'email' | 'password' | 'confirm', string>>;
 
-export function SignUpForm({ next, oauthQuery, carry = '', appName }: { next: string; oauthQuery?: string;
-  carry?: string; appName?: string | null }) {
+export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSiteKey }: { next: string; oauthQuery?: string;
+  carry?: string; appName?: string | null; turnstileSiteKey?: string }) {
   const { t } = useTranslation('auth');
   // The account keeps the language it was created in, for its pages and emails.
   const locale = useLocale().current as AccountLocale;
@@ -24,6 +25,9 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName }: { next: st
   const [failure, setFailure] = useState<FailureKind>();
   const [busy, setBusy] = useState(false);
   const [sentTo, setSentTo] = useState<string>();
+  const [captchaToken, setCaptchaToken] = useState<string>();
+  const [attempt, setAttempt] = useState(0);
+  const [captchaFailed, setCaptchaFailed] = useState(false);
   const signInQuery = new URLSearchParams(carry);
   if (carry) signInQuery.set('sign_in', '1');
   const signInHref = `/sign-in${signInQuery.size ? `?${signInQuery}` : ''}`;
@@ -44,9 +48,12 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName }: { next: st
     setErrors(found);
     setFailure(undefined);
     if (Object.values(found).some(Boolean)) return;
+    if (!captchaToken) return setFailure('unavailable');
     setBusy(true);
     const result = await api.signUp({ name: values.name.trim(), email, password: values.password, locale, oauthQuery,
-      carry });
+      carry, captchaToken });
+    setCaptchaToken(undefined);
+    setAttempt(current => current + 1);
     if (result.ok) {
       if (result.data.verify) { setBusy(false); return setSentTo(email); }
       return navigate(result.data.redirect ?? next);
@@ -62,13 +69,13 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName }: { next: st
       action={<Button asChild variant="outline" size="lg"><a href={signInHref}>
         {t.backToSignIn}</a></Button>} />;
   }
-  const failureMessage = failure === 'rate-limited' ? t.tooManyAttempts
+  const failureMessage = captchaFailed ? t.challengeUnavailable : failure === 'rate-limited' ? t.tooManyAttempts
     : failure === 'expired-request' ? t.requestExpired
       : failure === 'unavailable' || failure === 'not-enabled' ? t.unavailable : t.signUpFailed;
   return <>
     <AuthHeading title={t.signUpTitle} subtitle={appName && appName !== 'REZICS'
       ? t.signUpForApp({ app: appName }) : t.signUpSubtitle} />
-    {failure ? <Alert role="alert" variant="destructive" className="mb-6">
+    {failure || captchaFailed ? <Alert role="alert" variant="destructive" className="mb-6">
       <AlertDescription>{failureMessage}</AlertDescription></Alert> : null}
     <form method="post" noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-5">
       <NameField label={t.nameLabel} value={values.name} error={errors.name} autoFocus disabled={busy}
@@ -84,10 +91,13 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName }: { next: st
           disabled={busy} onChange={change('confirm')} />
       </div>
       <p className="-mt-2 text-sm text-muted-foreground">{t.passwordHint}</p>
+      <Turnstile siteKey={turnstileSiteKey} attempt={attempt} onToken={token => {
+        setCaptchaToken(token); if (token) setCaptchaFailed(false);
+      }} onError={() => setCaptchaFailed(true)} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button variant="link" className="px-0" asChild>
           <a href={signInHref}>{t.signInInstead}</a></Button>
-        <Button type="submit" size="lg" isLoading={busy}>{busy ? t.creatingAccount : t.next}</Button>
+        <Button type="submit" size="lg" isLoading={busy} disabled={!captchaToken}>{busy ? t.creatingAccount : t.next}</Button>
       </div>
     </form>
   </>;
