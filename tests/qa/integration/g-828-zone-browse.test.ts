@@ -197,11 +197,11 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
     expect(await traverse('relevance', { q: 'Story 998' })).toEqual([works[998]!.work]);
     expect(await projection.tick()).toBe(0);
     await relay.query(`INSERT INTO relay.delivered_event (source,event_id,data_epoch,sequence,envelope)
-      SELECT 'https://rezics.com/services/main', 'urn:g828:burst:' || n, $1, 1003,
+      SELECT 'https://rezics.com/services/main', 'urn:g828:burst:' || n, $1, CASE WHEN n <= 80 THEN 1003 ELSE 1004 END,
         '{"type":"com.rezics.work.edited.v1"}'::jsonb FROM generate_series(1,160) AS n`, [stack.env.lineage.dataEpoch]);
     await relay.query(`INSERT INTO relay.delivered_batch (data_epoch,sequence,batch_id,routing_epoch,event_count)
-      VALUES ($1,1003,$2,$3,160)`, [stack.env.lineage.dataEpoch, id(), stack.env.lineage.routingEpoch]);
+      VALUES ($1,1003,$2,$3,80), ($1,1004,$4,$3,80)`, [stack.env.lineage.dataEpoch, id(), stack.env.lineage.routingEpoch, id()]);
     expect(await projection.catchUp()).toBe(160);
-    expect(projection.current({ dataEpoch: stack.env.lineage.dataEpoch, sequence: '1003' })).toBe(true);
+    expect(projection.current({ dataEpoch: stack.env.lineage.dataEpoch, sequence: '1004' })).toBe(true);
   } finally { await relay.end(); await stack.stop(); }
 }, 600_000);
