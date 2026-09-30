@@ -114,6 +114,7 @@ export const RESERVED_OWNER_TYPES: ReadonlySet<string> = new Set([
   `${RV}DefinitionRevision`, `${RV}ModelGeneration`, `${RV}ModelComponent`, `${RV}ExternalReference`,
   `${RV}DefinitionPresentation`, `${RV}PresentationRevision`,
   `${RV}Space`, `${RV}Realm`, `${RV}ClassificationContext`, `${RV}Decision`,
+  `${RV}CatalogueVerification`,
 ]);
 
 /** Predicates that another component owns on a shared Resource. */
@@ -123,6 +124,8 @@ export const RESERVED_OWNER_PREDICATES: ReadonlySet<string> = new Set([
   `${RV}participation`, `${RV}generationHead`, 'http://www.w3.org/2000/01/rdf-schema#label',
   `${RV}presentationHead`, `${RV}presentationDefinition`, `${RV}meaningRevision`,
   `${RV}fromRole`, `${RV}toRole`, `${RV}presentationLanguage`,
+  `${RV}catalogueVisible`, `${RV}provisional`, `${RV}declaredGrain`, `${RV}candidateSearch`,
+  `${RV}fieldProvenance`, `${RV}declaredParentComposition`, `${RV}catalogueVerification`,
 ]);
 
 const OWL = 'http://www.w3.org/2002/07/owl#';

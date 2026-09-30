@@ -9,8 +9,9 @@ export const unerased = (work: string) => `FILTER NOT EXISTS { GRAPH ${iri(GRAPH
   FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${work} rv:protectionHead ?protection } }`;
 
 /** Shared by public reads and baseline write authorization. Current reviewed
- * selection only; neither a draft nor an old public publication qualifies. */
-export const publicWork = (work: string, main: string) => `GRAPH ${iri(GRAPHS.current)} {
+ * publication or explicit catalogue visibility; a private draft and a retired
+ * publication do not qualify. Provisional visibility grants no trust. */
+export const publicWork = (work: string, main: string) => `{ { GRAPH ${iri(GRAPHS.current)} {
   ${work} a schema:CreativeWork ; rv:mainVersion ${main} .
   ${main} a rv:MainVersion ; rv:work ${work} ; rv:selectionHead ?publicSelection .
   ?publicContribution rv:work ${work} ; rv:publicationHead ?publicDecision . }
@@ -20,4 +21,7 @@ export const publicWork = (work: string, main: string) => `GRAPH ${iri(GRAPHS.cu
     ?publicDecision a rv:PublicationDecision ; rv:component ?publicContribution ; rv:work ${work} ;
       rv:contribution ?publicContribution ; rv:disclosure rv:Public ; rv:selectedDraft ?publicDraft .
     ?publicDraft a rv:RevisionAnchor ; rv:component ?publicContribution .
-    FILTER NOT EXISTS { ?publicDraft a rv:ErasedRevision } } ${unerased(work)}`;
+    FILTER NOT EXISTS { ?publicDraft a rv:ErasedRevision } } }
+  UNION { GRAPH ${iri(GRAPHS.current)} { ${work} a schema:CreativeWork ;
+    rv:mainVersion ${main} ; rv:catalogueVisible true . ${main} a rv:MainVersion ; rv:work ${work} } }
+  } ${unerased(work)}`;

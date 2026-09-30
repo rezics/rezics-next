@@ -110,6 +110,7 @@ async function publicCandidates(session: WorkReadSession, candidates: Candidate[
       VALUES ?sourceType { ${sourceTypes.map(type => `<${type}>`).join(' ')} }
       ${publicWork('?work', '?main')}
       GRAPH ${iri(GRAPHS.current)} { ?work a ?sourceType }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work rv:provisional true } }
     } LIMIT 21`, 20);
     for (const row of rows) if (row.work) visible.add(row.work.value);
   }

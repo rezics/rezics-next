@@ -9,6 +9,7 @@ import {
 import { readWorkTerminalReceipt } from './receipt.ts';
 import { sealMetadataWorkAdmission } from './seal.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
+import type { CatalogueIntakeStore } from '../catalogue-intake/store.ts';
 
 export interface AdmittedMetadataWorkInput {
   actingSubject: string;
@@ -21,6 +22,7 @@ export interface AdmittedMetadataWorkInput {
   localizedTitle?: { value: string; language: string };
   description?: { value: string; language: string };
   semanticTypes?: readonly string[];
+  catalogue?: import('./activate.ts').CreateMetadataWorkIntent['catalogue'];
 }
 
 type PendingPhase = 'work-activation' | 'work-edit' | 'work-address' | 'work-address-rename'
@@ -72,6 +74,7 @@ export async function createAdmittedMetadataWork(
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
   request: Request,
   input: AdmittedMetadataWorkInput,
+  catalogue?: Pick<CatalogueIntakeStore, 'reserve'>,
 ): Promise<WorkActivationReceipt> {
   const digest = metadataWorkRequestDigest(input.title, input.semanticTypes, input.language,
     input);
@@ -87,6 +90,14 @@ export async function createAdmittedMetadataWork(
     requestDigest: digest,
     workSemanticTypes: input.semanticTypes,
   });
+  // Reserve before claim/dispatch. A 429 may leave an undispatched Access
+  // admission; its normal expiry/sealer supplies the cancellation proof.
+  if (input.catalogue) {
+    if (!catalogue) throw new Error('Catalogue intake is unavailable');
+    await catalogue.reserve(registered, input.catalogue.candidateReceipt, input.title, input.language,
+      [...(input.catalogue.aliases ?? []), ...(input.catalogue.romanizations ?? []),
+        ...(input.localizedTitle ? [input.localizedTitle] : [])]);
+  }
   try {
     if (registered.state === 'sealed' || !registered.dispatchEligible) {
       return await reconcileExisting(env, access, registered, digest);
@@ -103,7 +114,7 @@ export async function createAdmittedMetadataWork(
     const result = await activateMetadataWork(env, { admission, title: input.title,
       language: input.language,
       localizedTitle: input.localizedTitle, description: input.description,
-      semanticTypes: input.semanticTypes, authorAgent: input.authorAgent });
+      semanticTypes: input.semanticTypes, authorAgent: input.authorAgent, catalogue: input.catalogue });
     const terminal = await readWorkTerminalReceipt(env.fuseki, admission.id);
     if (!terminal || terminal.outcome !== 'succeeded') {
       throw new PendingActivation('Work receipt needs Access reconciliation');

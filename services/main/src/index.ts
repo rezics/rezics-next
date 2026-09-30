@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { CatalogueIntakeStore, unverifiedWorks } from './modules/catalogue-intake/store.ts';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { ContentComments, ContentCore, ContentProjectionCursor,
@@ -262,6 +263,7 @@ const recommendations = recommendationRelayPool ? new RankingGenerations({ acces
   canReadWork: (principal, actingSubject, work) => access.canReadWork(principal, actingSubject, work),
   zeroSnapshot: () => graphZeroSnapshot(environment),
   zeroCandidates: graphZeroCandidates(environment),
+  unverifiedWorks: works => unverifiedWorks(environment, works),
   verifySemantic: (viewer, basis) => verifyRankingSemanticBasis(environment, pool, rankingContextSelections,
     viewer, basis) }) : undefined;
 const recommendationWorker = recommendations ? new RankingBuildWorker(pool, recommendations) : undefined;
@@ -459,6 +461,7 @@ const app = createMainApp(fuseki, {
   realmReplyThreads: new RealmReplyThreadStore(contentPool, pool),
   maintainers: new WorkMaintainers(pool, environment),
   verification: new VerificationStore(contentPool),
+  catalogueIntake: new CatalogueIntakeStore(pool, environment),
   content,
   editorialProtection: new ContentProtectionStore(contentPool),
   contentAuthoring: content,

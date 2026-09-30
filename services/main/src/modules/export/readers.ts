@@ -7,6 +7,7 @@ import { CompositionUnavailable } from '../structure/graph.ts';
 import { readCompositionSeal } from '../structure/seal-read.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readFixedRelease } from '../work/fixed-release.ts';
+import { unverifiedWorks } from '../catalogue-intake/store.ts';
 import { readAssessment, readClaimRevisions } from '../verification/graph.ts';
 import type { VerificationStore } from '../verification/store.ts';
 import type { SourceRunStore } from '../source/acquisition-run.ts';
@@ -134,6 +135,7 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
   if (selection.kind === 'fixed-release') {
     const release = await readFixedRelease(deps.env, selection.reference,
       work => deps.canReadWork(principal, actingSubject, work));
+    if ((await unverifiedWorks(deps.env, [release.work])).size) throw new ExportSourceNotFound('Work awaits catalogue verification');
     pinned(release.sourcePosition, selection.expectedPosition, deps.env.lineage.dataEpoch, 'fixed release');
     const { body: _body, externalReleases: links, ...metadata } = release;
     const exportedMetadata = { ...metadata, externalReleaseCount: links.length,
@@ -201,6 +203,7 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
     }
     const env = deps.structureObjects
       ? { ...deps.env, structureObjects: deps.structureObjects } : deps.env;
+    if ((await unverifiedWorks(deps.env, [work])).size) throw new ExportSourceNotFound('Work awaits catalogue verification');
     const pins: Awaited<ReturnType<typeof readCompositionSeal>>['pins'] = [];
     let cursor: string | undefined;
     let coverage: 'complete' | 'partial' | undefined;
@@ -228,6 +231,10 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
       structureRevision: revision!, coverage: coverage!,
       exportActor: actingSubject };
     const position = selection.expectedPosition;
+    for (let offset = 0; offset < pins.length; offset += 128) {
+      const targets = pins.slice(offset, offset + 128).flatMap(pin => pin.target ? [pin.target] : []);
+      if ((await unverifiedWorks(deps.env, targets)).size) throw new ExportSourceNotFound('Composition includes a Work awaiting catalogue verification');
+    }
     const root: VerifiedExportMember = { sourceOwner: 'graph', sourceNamespace: 'product',
       sourceGrain: 'structure_revision', exactRef: revision!, contentRevisionId: null,
       refDigest: sha(rootData), ownerDataEpoch: position.dataEpoch, ownerSequence: position.sequence,
@@ -249,6 +256,7 @@ export async function readExportPlan(deps: ExportReaderDependencies, principal: 
       residuals }, deps.rights);
   }
   if (selection.kind === 'semantic-revision') {
+    if ((await unverifiedWorks(deps.env, [selection.resource])).size) throw new ExportSourceNotFound('Work awaits catalogue verification');
     if (!deps.canReadSemantic || !await deps.canReadSemantic(principal, actingSubject, selection.resource, selection.reference)) {
       throw new ExportSourceNotFound('semantic resource is unavailable');
     }

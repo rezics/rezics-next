@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { createAdmittedMetadataWork } from '../modules/work/create-admitted.ts';
+import { candidateText, declaredGrain, grainOwner, CatalogueInvalid, CataloguePendingLimit, CatalogueUnavailable } from '../modules/catalogue-intake/schema.ts';
 import { createAdmittedTranslationLink, readTranslationLinks, validateTranslationLink }
   from '../modules/work/translation-links.ts';
 import { createAdmittedWorkDerivation, readWorkDerivations, validateWorkDerivation }
@@ -72,6 +73,11 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .post('/v1/works', {
       body: t.Object({
         profile: t.Literal('metadata-only-v1'),
+        grain: declaredGrain,
+        candidateReceipt: t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }),
+        aliases: t.Optional(t.Array(candidateText, { maxItems: 8 })),
+        romanizations: t.Optional(t.Array(candidateText, { maxItems: 8 })),
+        parentComposition: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
         authorityPath: t.Optional(t.Union([
           t.Literal('represented-agent'), t.Literal('direct-principal')])),
         title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
@@ -86,10 +92,12 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true })),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: workResult, 201: workResult, 202: pendingOperation,
+      response: { 200: t.Union([workResult, t.Object({ outcome: t.Literal('use-owner-api'),
+        grain: declaredGrain, ownerApi: t.Object({ method: t.String(), path: t.String() }) })]),
+        201: workResult, 202: pendingOperation,
         400: problemResult(400), 401: problemResult(401),
         403: problemResult(403), 409: problemResult(409),
-        500: problemResult(500), 503: problemResult(503) },
+        429: problemResult(429), 500: problemResult(500), 503: problemResult(503) },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)
@@ -97,13 +105,23 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
+        const ownerApi = grainOwner(body.grain);
+        if (ownerApi) {
+          await work.account.verify(request, ['work:create']);
+          return Response.json({ outcome: 'use-owner-api', grain: body.grain, ownerApi },
+            { headers: { 'cache-control': 'no-store' } });
+        }
+        if (!work.catalogueIntake) return problem(503, 'catalogue_unavailable', 'Catalogue intake is unavailable');
         const receipt = await createAdmittedMetadataWork(work.environment, work.account, work.access,
           request, { title: body.title, language: body.language ?? 'und',
             localizedTitle: body.localizedTitle, description: body.description,
             semanticTypes: body.semanticTypes,
             actingSubject: body.actingSubject,
             authorAgent: body.authoring === 'own-work' ? body.actingSubject : undefined,
-            authorityPath: body.authorityPath, idempotencyKey });
+            authorityPath: body.authorityPath, idempotencyKey,
+            catalogue: { candidateReceipt: body.candidateReceipt, grain: 'new-creative-scope',
+              aliases: body.aliases, romanizations: body.romanizations,
+              ...(body.parentComposition ? { parentComposition: body.parentComposition } : {}) } }, work.catalogueIntake);
         return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,
           workRevision: receipt.workRevision, mainRevision: receipt.mainRevision,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },
@@ -111,6 +129,13 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) {
+        if (error instanceof CataloguePendingLimit) {
+          const response = problem(429, 'pending_creation_limit', 'Three creations await verification; retry after one is reviewed');
+          response.headers.set('retry-after', '60');
+          return response;
+        }
+        if (error instanceof CatalogueInvalid) return problem(400, 'invalid_catalogue_intake', error.message);
+        if (error instanceof CatalogueUnavailable) return problem(503, 'catalogue_unavailable', error.message);
         if (error instanceof InvalidWorkTitleLanguage) {
           return problem(400, 'invalid_title_language', error.message);
         }

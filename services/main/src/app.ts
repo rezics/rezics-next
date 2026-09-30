@@ -72,6 +72,7 @@ import { sourceRunRoutes } from './routes/source-runs.ts';
 import { sourceSupportRoutes } from './routes/source-supports.ts';
 import { spaceRoutes } from './routes/spaces.ts';
 import { workRoutes } from './routes/works.ts';
+import { catalogueCandidateRoutes } from './routes/catalogue-candidates.ts';
 import { themeRoutes } from './routes/themes.ts';
 import { contentPrivateSearchRoutes } from './routes/content-private-search.ts';
 import { workReadRoutes } from './routes/work-reads.ts';
@@ -153,6 +154,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(catalogueCandidateRoutes(work))
     .use(suitabilityRoutes(work))
     .use(sessionsRoutes(work))
     .use(publicReportRoutes(work))

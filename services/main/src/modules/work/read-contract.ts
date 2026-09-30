@@ -24,6 +24,7 @@ export const scopeQuery = { scope: t.Optional(t.Union([t.Literal('global'), t.Li
 export const readScope = t.Object({ kind: t.Union([t.Literal('global'), t.Literal('realm'), t.Literal('mine')]),
   realm: t.Nullable(readId) });
 export const workCard = t.Object({ id: readId, revision: readId, mainVersion: readId,
+  verification: t.Optional(t.Union([t.Literal('unverified'), t.Literal('verified')])),
   title: readName, cover: readAvatar, types: t.Array(t.String(), { maxItems: 8 }),
   tagline: t.Nullable(readName),
   completionStatus: t.Nullable(t.Union([t.Literal('ongoing'), t.Literal('completed'), t.Literal('hiatus')])),
@@ -31,6 +32,9 @@ export const workCard = t.Object({ id: readId, revision: readId, mainVersion: re
   wordCount: t.Nullable(t.Integer({ minimum: 0 })),
   lastUpdatedAt: t.Nullable(t.String({ format: 'date-time' })) });
 export const workHeader = t.Object({ profile: t.Literal('work-read-v1'), ...workCard.properties,
+  fieldProvenance: t.Optional(t.Object({ basis: t.Literal('creation'), revision: readId,
+    contributor: t.String(), admission: t.String(),
+    candidateReceipt: t.String(), fields: t.Array(t.String()) })),
   disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]),
   originalTitle: t.Nullable(t.Object({ ...recordedText.properties,
     direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]) })),

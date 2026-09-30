@@ -17,12 +17,13 @@ export async function readWorkBasis(session: WorkReadSession, work: string, incl
   // UNION adds at most eight placement rows instead of multiplying each semantic
   // type by every placement. Other Work reads only need the original basis.
   const maximumRows = includeChapterPlace ? 17 : 9;
-  const rows = await session.query(`SELECT ?head ?main ?mainHead ?metadataHead ?type ?public
+  const rows = await session.query(`SELECT ?head ?main ?mainHead ?metadataHead ?type ?public ?provisional
     ${includeChapterPlace ? '?book ?occurrence ?declared' : ''} WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ${iri(work)} a schema:CreativeWork ; rv:head ?head ; rv:mainVersion ?main .
       ?main a rv:MainVersion ; rv:work ${iri(work)} ; rv:head ?mainHead .
       OPTIONAL { ${iri(work)} rv:descriptiveMetadataHead ?metadataHead }
+      OPTIONAL { ${iri(work)} rv:provisional ?provisional }
     }
     ${includeChapterPlace ? `{ ${types} } UNION { ${chapterPlaceQuery(work)} }` : types}
     ${unerased(iri(work))}
@@ -48,6 +49,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string, incl
   const selectedMetadataValue = selectedMetadata(metadata, session.options.language);
   const stats = (await session.deps?.serialStats?.batch([work], session.position.sequence))?.get(work);
   return { card: { id: work, revision: row.head.value, mainVersion: row.main.value,
+    ...(row.provisional ? { verification: row.provisional.value === 'true' ? 'unverified' as const : 'verified' as const } : {}),
     title: summary.name, cover: summary.avatar, types: [...new Set(rows.flatMap(item => item.type ? [item.type.value] : []))].sort(),
     tagline: selectedMetadataValue.tagline, completionStatus: metadata.completionStatus,
     chapterCount: stats?.chapterCount ?? null, wordCount: stats?.wordCount ?? null,
@@ -75,7 +77,13 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
   const partOf = basis.partOf;
   await fenceWorkBasis(session, basis);
   const path = `/v1/works/${work.slice(-36)}`;
+  const provenanceRows = await session.query(`SELECT ?provenance WHERE { GRAPH <urn:rezics:graph:current> {
+    ${iri(work)} rv:fieldProvenance ?provenance } } LIMIT 2`, 1);
+  const provenance = provenanceRows[0]?.provenance?.value;
   return { profile: 'work-read-v1' as const, ...basis.card, disclosure: basis.disclosure,
+    ...(provenance ? { fieldProvenance: JSON.parse(provenance) as { basis: 'creation'; revision: string;
+      contributor: string; admission: string;
+      candidateReceipt: string; fields: string[] } } : {}),
     title: selected.title ?? basis.card.title, description: selected.description,
     tagline: selected.tagline, completionStatus: metadata.completionStatus,
     metadataRevision: metadata.revision,

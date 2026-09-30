@@ -7,6 +7,7 @@ import type { WorkActivationEnvironment } from './activate.ts';
 import { sealMetadataWorkEditAdmission } from './edit.ts';
 import { cancelTitleControl } from './title-control.ts';
 import { sealMetadataWorkAdmission } from './seal.ts';
+import { sealCatalogueVerification } from '../catalogue-intake/verification.ts';
 import { sealTranslationLinkAdmission } from './translation-links.ts';
 import { sealWorkDerivationAdmission } from './derivations.ts';
 import { sealTextContributionAdmission } from '../contribution/draft.ts';
@@ -54,7 +55,9 @@ export async function strongRevokeWorkScope(
   const pending = await access.listUnsealed(scope, 100);
   for (const admission of pending) {
     try {
-      const terminal = admission.action === 'content.draft' && content
+      const terminal = admission.action === 'catalogue.verify'
+        ? await sealCatalogueVerification(env, admission)
+        : admission.action === 'content.draft' && content
         ? await sealContentDraftAdmission(content, admission)
         : admission.action === 'content.comment' && comments
           ? await sealContentCommentAdmission(comments, admission)
@@ -137,7 +140,9 @@ export async function strongRevokeWorkPrincipal(
   const pending = await access.listUnsealedPrincipal(principalId, 100);
   for (const admission of pending) {
     try {
-      const terminal = admission.action === 'content.draft' && content
+      const terminal = admission.action === 'catalogue.verify'
+        ? await sealCatalogueVerification(env, admission)
+        : admission.action === 'content.draft' && content
         ? await sealContentDraftAdmission(content, admission)
         : admission.action === 'content.comment' && comments
           ? await sealContentCommentAdmission(comments, admission)

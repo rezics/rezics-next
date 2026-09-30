@@ -53,6 +53,8 @@ export interface RankingOptions {
   zeroSnapshot?: () => Promise<string>;
   /** Ordered Work heads within the pinned graph checkpoint; absent in legacy synthetic fixtures. */
   zeroCandidates?: (after: string | null, snapshotTarget: string, limit: number) => Promise<string[]>;
+  /** Live trust fence covers both scored candidates and the zero-score tail. */
+  unverifiedWorks?: (works: readonly string[]) => Promise<ReadonlySet<string>>;
   leaseMs?: number;
   signalBatches?: number;
 }
@@ -619,6 +621,9 @@ export class RankingGenerations {
         WHERE generation_id = $1 AND candidate = ANY($2::text[])`, [window.generation, scoredZero])).rows))
       .map(row => row.candidate)) : new Set<string>();
     const erased = await this.erased(scanned.map(row => row.candidate));
+    let unverified: ReadonlySet<string> = new Set();
+    try { unverified = await this.options.unverifiedWorks?.(scanned.map(row => row.candidate)) ?? unverified; }
+    catch { throw new RecommendationUnavailable('candidate verification is unavailable'); }
     const items: { candidate: string }[] = [];
     let examined: { candidate: string; score: string } | undefined;
     for (const row of scanned) {
@@ -626,6 +631,7 @@ export class RankingGenerations {
       examined = row;
       if (row.score === '0' && scored.has(row.candidate)) continue;
       if (erased.has(row.candidate)) continue;
+      if (unverified.has(row.candidate)) continue;
       let visible: boolean;
       try {
         visible = await this.options.canReadWork(viewer.principal, viewer.actingSubject, row.candidate);

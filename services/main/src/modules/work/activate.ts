@@ -69,6 +69,10 @@ export interface CreateMetadataWorkIntent {
   semanticTypes?: readonly string[];
   /** Direct authoring only. Source adoption leaves attribution to source credits. */
   authorAgent?: string;
+  /** Intake evidence is separate from the title's authored spelling. */
+  catalogue?: { candidateReceipt: string; grain: 'new-creative-scope'; parentComposition?: string;
+    aliases?: readonly { value: string; language: string }[];
+    romanizations?: readonly { value: string; language: string }[] };
 }
 
 export interface WorkActivationReceipt {
@@ -113,7 +117,8 @@ export function assertNativeWorkTypeCombination(types: readonly string[]): void 
 export function metadataWorkRequestDigest(title: string,
   semanticTypes?: readonly string[], language = 'und',
   details: { localizedTitle?: { value: string; language: string };
-    description?: { value: string; language: string }; authorAgent?: string } = {}): string {
+    description?: { value: string; language: string }; authorAgent?: string;
+    catalogue?: CreateMetadataWorkIntent['catalogue'] } = {}): string {
   if (title.length < 1 || title.length > 200 || /[\u0000-\u001f\u007f]/.test(title)) {
     throw new Error('invalid title');
   }
@@ -133,11 +138,25 @@ export function metadataWorkRequestDigest(title: string,
   if (details.authorAgent && !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(details.authorAgent)) {
     throw new Error('invalid author Agent');
   }
+  if (details.catalogue) {
+    const evidence = details.catalogue;
+    if (!/^[0-9a-f-]{36}$/.test(evidence.candidateReceipt) || evidence.grain !== 'new-creative-scope'
+      || evidence.parentComposition && !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(evidence.parentComposition)) {
+      throw new Error('invalid catalogue evidence');
+    }
+    for (const texts of [evidence.aliases ?? [], evidence.romanizations ?? []]) {
+      if (texts.length > 8 || texts.some(text => !canonicalLanguage(text.language) || text.language.length > 35
+        || text.value.length < 1 || text.value.length > 500 || /[\u0000-\u001f\u007f]/.test(text.value))) {
+        throw new InvalidWorkTitleLanguage('Catalogue title or language is invalid');
+      }
+    }
+  }
   return hash(JSON.stringify({ family: 'create-metadata-work-v1', title, continuity: CONTINUITY,
     ...(language === 'en' ? {} : { language }),
     ...(details.localizedTitle ? { localizedTitle: details.localizedTitle } : {}),
     ...(details.description ? { description: details.description } : {}),
     ...(details.authorAgent ? { authorAgent: details.authorAgent } : {}),
+    ...(details.catalogue ? { catalogue: details.catalogue } : {}),
     ...(types.length ? { semanticTypes: types } : {}) }));
 }
 
@@ -247,6 +266,7 @@ function updateText(env: WorkActivationEnvironment, args: {
   admission: CreateMetadataWorkIntent['admission'];
   workManifest: string; mainManifest: string;
   credit?: { id: string; revision: string; agent: string };
+  catalogue?: CreateMetadataWorkIntent['catalogue'];
 }): string {
   const g = GRAPHS;
   const outbox = `urn:rezics:outbox:${hash(args.receipt)}`;
@@ -259,6 +279,18 @@ function updateText(env: WorkActivationEnvironment, args: {
     `  ${iri(args.work)} a schema:CreativeWork${args.semanticTypes.map(type => `, <${type}>`).join('')} ; rv:mainVersion ${iri(args.main)} ; rv:continuityProfile ${iri(CONTINUITY)} ; rdfs:label ${lit(args.title)}@${args.language} ; rv:head ${iri(args.workRevision)} .\n` +
     (args.localizedTitle ? `  ${iri(args.work)} schema:alternateName ${lit(args.localizedTitle.value)}@${args.localizedTitle.language} .\n` : '') +
     (args.description ? `  ${iri(args.work)} schema:description ${lit(args.description.value)}@${args.description.language} .\n` : '') +
+    (args.catalogue ? `  ${iri(args.work)} rv:catalogueVisible true ; rv:provisional true ;
+      rv:declaredGrain "new-creative-scope" ; rv:candidateSearch ${iri(`urn:rezics:catalogue-search:${args.catalogue.candidateReceipt}`)} ;
+      rv:fieldProvenance ${lit(JSON.stringify({ basis: 'creation', revision: args.workRevision,
+        contributor: args.admission.actingSubject,
+        admission: args.admission.id, candidateReceipt: args.catalogue.candidateReceipt,
+        fields: ['title', 'language', 'grain', ...(args.catalogue.parentComposition ? ['parentComposition'] : []),
+          ...(args.localizedTitle ? ['localizedTitle'] : []),
+          ...(args.description ? ['description'] : []), ...(args.semanticTypes.length ? ['semanticTypes'] : []),
+          ...(args.catalogue.aliases?.length ? ['aliases'] : []), ...(args.catalogue.romanizations?.length ? ['romanizations'] : [])] }))} .\n`
+      + [...(args.catalogue.aliases ?? []), ...(args.catalogue.romanizations ?? [])]
+        .map(title => `  ${iri(args.work)} schema:alternateName ${lit(title.value)}@${canonicalLanguage(title.language)} .\n`).join('')
+      + (args.catalogue.parentComposition ? `  ${iri(args.work)} rv:declaredParentComposition ${iri(args.catalogue.parentComposition)} .\n` : '') : '') +
     (args.credit ? `  ${iri(args.credit.id)} a rv:NativeAgentCredit ; rv:creditRevision ${iri(args.credit.revision)} ; rv:work ${iri(args.work)} ; rv:agent ${iri(args.credit.agent)} ; schema:roleName "author" .\n` : '') +
     `  ${iri(args.main)} a rv:MainVersion ; rv:work ${iri(args.work)} ; rv:hostingPolicy rv:MetadataOnly ; rv:head ${iri(args.mainRevision)} .\n` +
     ` }\n` +
@@ -346,7 +378,7 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
   const workState = { mainVersion: main, continuityProfile: CONTINUITY, title: intent.title,
     language, ...(intent.localizedTitle ? { localizedTitle: intent.localizedTitle } : {}),
     ...(intent.description ? { description: intent.description } : {}),
-    ...(semanticTypes.length ? { semanticTypes } : {}) };
+    ...(semanticTypes.length ? { semanticTypes } : {}), ...(intent.catalogue ? { catalogue: intent.catalogue } : {}) };
   const mainState = { work, hostingPolicy: 'metadata-only' };
   const candidates = stagedWorkObjectCandidates();
   let workManifest: string;
@@ -373,7 +405,8 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
     commandResult = await validatedCommand(env, { receipt, digest,
       update: updateText(env, { work, main, workRevision, mainRevision, operation, receipt,
         digest, title: intent.title, language, localizedTitle: intent.localizedTitle,
-        description: intent.description, semanticTypes, admission, workManifest, mainManifest, credit }),
+        description: intent.description, semanticTypes, admission, workManifest, mainManifest, credit,
+        catalogue: intent.catalogue }),
       validations, deadlineMs: 10_000 }, admission);
     if (commandResult.status === 'invalid' || commandResult.status === 'unknown-profile'
       || commandResult.status === 'conflict') throw new CommandRejected(commandResult);
