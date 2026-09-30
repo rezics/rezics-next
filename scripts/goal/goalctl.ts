@@ -2,10 +2,9 @@
 // The manager is the only caller of the state-changing commands; see docs/goals/README.md.
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync,
-  readlinkSync, rmSync, statSync,
-  writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync,
+  renameSync, readlinkSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
@@ -781,8 +780,210 @@ async function stopTask(id: string): Promise<void> {
   console.log(`${id.toUpperCase()} stopped; its worktree and claims remain until close`);
 }
 
+// Main's union-merged composition roots (.gitattributes). `normalize-app.ts` is not used: it rebuilds
+// function signatures and dropped `mountedReads` after the G-629 rebase (ee678f81, 2026-10-01).
+export const COMPOSITION_ROOTS = [
+  'services/main/src/app.ts',
+  'services/main/src/index.ts',
+  'services/main/src/routes/dependencies.ts',
+] as const;
+
+interface Lex {
+  depth: number; block: boolean; single: boolean; double: boolean; template: boolean;
+}
+
+function freshLex(): Lex {
+  return { depth: 0, block: false, single: false, double: false, template: false };
+}
+
+// One scanner for chain splitting and semicolon stripping, so both agree on where a call ends.
+// Strings and comments are opaque; composition roots do not put `${}` braces in these chains.
+function lexAdvance(text: string, lex: Lex, keep: boolean): { lex: Lex; text: string } {
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    const next = text[i + 1];
+    const copy = (value: string) => { if (keep) out += value; };
+    if (lex.block) {
+      copy(c);
+      if (c === '*' && next === '/') { copy('/'); i++; lex.block = false; }
+      continue;
+    }
+    if (lex.single || lex.double || lex.template) {
+      copy(c);
+      const quote = lex.single ? "'" : lex.double ? '"' : '`';
+      if (c === '\\' && next !== undefined) { copy(next); i++; continue; }
+      if (c === quote) { lex.single = lex.double = lex.template = false; }
+      continue;
+    }
+    if (c === '/' && next === '/') {
+      const nl = text.indexOf('\n', i);
+      if (nl < 0) { copy(text.slice(i)); break; }
+      copy(text.slice(i, nl));
+      i = nl - 1;
+      continue;
+    }
+    if (c === '/' && next === '*') { copy('/*'); i++; lex.block = true; continue; }
+    if (c === "'") { copy(c); lex.single = true; continue; }
+    if (c === '"') { copy(c); lex.double = true; continue; }
+    if (c === '`') { copy(c); lex.template = true; continue; }
+    if (c === '(' || c === '{' || c === '[') { copy(c); lex.depth++; continue; }
+    if (c === ')' || c === '}' || c === ']') { copy(c); lex.depth = Math.max(0, lex.depth - 1); continue; }
+    if (c === ';' && lex.depth === 0) continue;
+    copy(c);
+  }
+  return { lex, text: out };
+}
+
+function stripDepth0Semicolons(text: string): string {
+  return lexAdvance(text, freshLex(), true).text;
+}
+
+interface UseCall { lines: string[]; use: boolean }
+
+function splitFluent(lines: string[]): { head: string[]; calls: UseCall[] } {
+  const head: string[] = [];
+  const calls: UseCall[] = [];
+  let current: string[] | null = null;
+  let use = false;
+  let lex = freshLex();
+  const push = () => {
+    if (!current) return;
+    calls.push({ lines: current, use });
+    current = null;
+  };
+  for (const line of lines) {
+    if (lex.depth === 0 && !lex.block && /^\s*\.\w+/.test(line)) {
+      push();
+      current = [line];
+      use = /^\s*\.use\(/.test(line);
+    } else if (current) current.push(line);
+    else head.push(line);
+    lex = lexAdvance(line, lex, false).lex;
+  }
+  push();
+  return { head, calls };
+}
+
+function insertSemicolon(line: string): string {
+  const comment = /[ \t]*\/\/.*$/.exec(line);
+  const code = comment ? line.slice(0, comment.index) : line;
+  return `${code.trimEnd()};${comment ? comment[0] : ''}`;
+}
+
+function renderCall(lines: string[], terminate: boolean): string[] {
+  const stripped = stripDepth0Semicolons(lines.join('\n')).split('\n');
+  if (!terminate) return stripped;
+  const last = stripped.length - 1;
+  stripped[last] = insertSemicolon(stripped[last] ?? '');
+  return stripped;
+}
+
+const ELYSIA_HEAD = /^\s*(?:const|let)\s+\w+\s*=\s*new\s+Elysia\(\)\s*;?\s*$/;
+const RETURN_ELYSIA = /^\s*return\s+new\s+Elysia\(\)\s*;?\s*$/;
+const RETURN_IDENT = /^\s*return\s+[A-Za-z_$][\w$]*\s*;?\s*$/;
+
+function isChainHead(line: string, next: string | undefined): boolean {
+  if (ELYSIA_HEAD.test(line) || RETURN_ELYSIA.test(line)) return true;
+  return RETURN_IDENT.test(line) && !!next && /^\s*\.\w+/.test(next);
+}
+
+function collectChain(lines: string[], start: number): { chain: string[]; next: number } {
+  const chain = [lines[start]!];
+  let lex = lexAdvance(lines[start]!, freshLex(), false).lex;
+  let i = start + 1;
+  while (i < lines.length) {
+    const line = lines[i]!;
+    if (lex.depth === 0 && !lex.block && !/^\s*\.\w+/.test(line)) break;
+    chain.push(line);
+    lex = lexAdvance(line, lex, false).lex;
+    i++;
+  }
+  return { chain, next: i };
+}
+
+function renderChain(lines: string[]): string[] {
+  const { head, calls } = splitFluent(lines);
+  if (!calls.length) return lines;
+  const seen = new Set<string>();
+  const kept: UseCall[] = [];
+  for (const call of calls) {
+    if (call.use) {
+      const key = stripDepth0Semicolons(call.lines.join('\n')).trim();
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
+    kept.push(call);
+  }
+  return [
+    ...stripDepth0Semicolons(head.join('\n')).split('\n'),
+    ...kept.flatMap((call, index) => renderCall(call.lines, index === kept.length - 1)),
+  ];
+}
+
+/** Drop exact duplicate `.use(…)` calls inside each chain and leave one terminating semicolon.
+ * Function signatures and every other line are copied through. */
+export function normalizeUseChains(source: string): string {
+  const lines = source.split('\n');
+  const out: string[] = [];
+  for (let i = 0; i < lines.length;) {
+    if (!isChainHead(lines[i] ?? '', lines[i + 1])) {
+      out.push(lines[i] ?? '');
+      i++;
+      continue;
+    }
+    const collected = collectChain(lines, i);
+    out.push(...renderChain(collected.chain));
+    i = collected.next;
+  }
+  return out.join('\n');
+}
+
+/** Parse diagnostics only (`bun build --no-bundle`). TypeScript 7 no longer exports `createSourceFile`.
+ * Empty when the file parses. The message carries the repository path, line and error. */
+export function compositionSyntaxFailure(file: string, source: string): string | undefined {
+  const dir = mkdtempSync(join(tmpdir(), 'goalctl-parse-'));
+  try {
+    const path = join(dir, basename(file));
+    writeFileSync(path, source);
+    const run = spawnSync('bun', ['build', '--no-bundle', path, '--outdir', join(dir, 'out')],
+      { encoding: 'utf8', timeout: 30_000 });
+    if (run.status === 0) return undefined;
+    const blob = `${run.stderr ?? ''}\n${run.stdout ?? ''}\n${run.error?.message ?? ''}`.trim();
+    const message = /error: ([^\n]+)/.exec(blob)?.[1]?.trim()
+      ?? blob.split('\n').map(line => line.trim()).filter(Boolean).at(-1)
+      ?? 'parse failed';
+    const at = /\bat [^\n]*:(\d+):(\d+)/.exec(blob);
+    return `${file}:${at ? `${at[1]}:${at[2]}` : '1:1'}: ${message}`;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+export interface CompositionMerge {
+  files: { file: string; source: string }[];
+  /** False means the task is `conflict` and main must not be fast-forwarded. */
+  fastForward: boolean;
+  state?: 'conflict';
+  /** Each failing composition root's path and parse error. */
+  error?: string;
+}
+
+/** Normalize, then parse. A failure here is the merge refusal: do not fast-forward `main`. */
+export function prepareCompositionMerge(files: readonly { file: string; source: string }[]): CompositionMerge {
+  const normalized = files.map(file => ({ file: file.file, source: normalizeUseChains(file.source) }));
+  const failures = normalized.flatMap(file => {
+    const failure = compositionSyntaxFailure(file.file, file.source);
+    return failure ? [failure] : [];
+  });
+  if (!failures.length) return { files: normalized, fastForward: true };
+  return { files: normalized, fastForward: false, state: 'conflict', error: failures.join('\n  ') };
+}
+
 async function mergeTask(id: string, flags: Set<string>): Promise<void> {
-  await withLedger(ledger => {
+  // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
+  // callback would discard the state change, and main would stay eligible for a fast-forward retry.
+  const failure = await withLedger((ledger): string | undefined => {
     const task = taskOf(ledger, id);
     if (running(task)) throw new Error(`${task.id} is still running`);
     if (!['exited', 'conflict', 'stopped'].includes(task.state)) throw new Error(`${task.id} is ${task.state}`);
@@ -820,11 +1021,38 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
       task.state = 'conflict';
       throw new Error(`${task.id} does not rebase onto main; conflicts:\n  ${conflicted.split('\n').join('\n  ')}`);
     }
-    // Union-merged composition roots can keep a stale chain after the rebase; normalize them on the task
-    // branch itself so main and the worktree end up identical.
-    for (const script of ['scripts/goal/normalize-app.ts', 'scripts/goal/dedupe-imports.ts']) {
-      const run = spawnSync('bun', [join(root, script)], { cwd: task.worktree, encoding: 'utf8' });
-      if (run.status !== 0) throw new Error(`${script} failed in ${task.worktree}:\n${run.stderr.slice(-2000)}`);
+    // Union merge concatenates both sides. Drop duplicate `.use()` lines and a mid-chain `;` on the task
+    // branch, then parse. A composition root that still does not parse is `conflict` and is not merged.
+    const originals = new Map<string, string>();
+    for (const file of COMPOSITION_ROOTS) {
+      const path = join(task.worktree, file);
+      if (existsSync(path)) originals.set(file, readFileSync(path, 'utf8'));
+    }
+    const prepared = prepareCompositionMerge([...originals].map(([file, source]) => ({ file, source })));
+    if (!prepared.fastForward) {
+      task.state = 'conflict';
+      return `${task.id} composition root does not parse; not merging:\n  ${prepared.error}`;
+    }
+    for (const file of prepared.files) {
+      const path = join(task.worktree, file.file);
+      if (readFileSync(path, 'utf8') !== file.source) writeFileSync(path, file.source);
+    }
+    const imports = spawnSync('bun', [join(root, 'scripts/goal/dedupe-imports.ts')],
+      { cwd: task.worktree, encoding: 'utf8' });
+    if (imports.status !== 0) {
+      for (const [file, source] of originals) writeFileSync(join(task.worktree, file), source);
+      throw new Error(`scripts/goal/dedupe-imports.ts failed in ${task.worktree}:\n${imports.stderr.slice(-2000)}`);
+    }
+    // Parse the bytes about to be committed. dedupe-imports runs after normalization and must not
+    // be approved from a second, in-memory rewrite of those bytes.
+    const failures = [...originals.keys()].flatMap(file => {
+      const failure = compositionSyntaxFailure(file, readFileSync(join(task.worktree, file), 'utf8'));
+      return failure ? [failure] : [];
+    });
+    if (failures.length) {
+      for (const [file, source] of originals) writeFileSync(join(task.worktree, file), source);
+      task.state = 'conflict';
+      return `${task.id} composition root does not parse; not merging:\n  ${failures.join('\n  ')}`;
     }
     if (git(task.worktree, ['status', '--porcelain', '--', 'services/main/src'], true)) {
       git(task.worktree, ['commit', '-q', '-am', 'Normalize Main composition roots after rebase (goalctl)']);
@@ -836,7 +1064,9 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
 
     console.log(`${task.id} merged at ${task.mergedCommit.slice(0, 12)}; ${committed.length} file(s):`);
     console.log(`  ${committed.join('\n  ')}`);
+    return undefined;
   });
+  if (failure) throw new Error(failure);
 }
 
 // Re-read an updated brief for an open task (for example a schema task continuing to its template) and

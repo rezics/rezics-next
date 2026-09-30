@@ -1,6 +1,9 @@
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
-import { claimConflicts, launchCommand, outOfScope, parseBrief, parseCodexUsage, pathsOverlap, rangesOverlap, SONNET_MODEL,
-  type Task, usageLevel, validateBrief } from './goalctl.ts';
+import { claimConflicts, compositionSyntaxFailure, launchCommand, normalizeUseChains, outOfScope, parseBrief,
+  parseCodexUsage, pathsOverlap, prepareCompositionMerge, rangesOverlap, SONNET_MODEL, type Task, usageLevel,
+  validateBrief } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -215,5 +218,79 @@ describe('goalctl runtime policy', () => {
     expect(validateBrief(brief('luna', 'ultra')).join()).toContain('luna effort');
     expect(validateBrief(brief('grok', 'xhigh')).join()).toContain('grok effort');
     expect(validateBrief(brief('gemini', 'high')).join()).toContain('engine must be one of');
+  });
+});
+
+function gitShow(rev: string, path: string): string {
+  const result = spawnSync('git', ['show', `${rev}:${path}`], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(result.stderr);
+  return result.stdout;
+}
+
+describe('goalctl composition merge', () => {
+  const signatures = (source: string) => source.split('\n').filter(line => /^(export )?function /.test(line));
+
+  test('normalizes the G-629 union chain without rewriting signatures', () => {
+    // fdcb726e is the rebased app.ts goalctl then rewrote in ee678f81: realmAdminRoutes twice, a `;`
+    // in the middle of the chain, and the mountedReads parameter still present.
+    const input = gitShow('fdcb726e', 'services/main/src/app.ts');
+    const broken = [
+      '    .use(realmAdminRoutes(work));',
+      '    .use(realmAdminRoutes(work))',
+      '    .use(memberReplyRoutes(work))',
+      '    .use(entityPageRoutes(work, mountedReads));',
+    ].join('\n');
+    const fixed = [
+      '    .use(realmAdminRoutes(work))',
+      '    .use(memberReplyRoutes(work))',
+      '    .use(entityPageRoutes(work, mountedReads));',
+    ].join('\n');
+    expect(input).toContain(broken);
+    expect(input).toContain('function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies, mountedReads: () => ReadonlySet<string>)');
+    expect(compositionSyntaxFailure('services/main/src/app.ts', input)).toContain('services/main/src/app.ts');
+
+    const decision = prepareCompositionMerge([{ file: 'services/main/src/app.ts', source: input }]);
+    expect(decision.fastForward).toBe(true);
+    expect(decision.files[0]!.source).toBe(input.replace(broken, fixed));
+    expect(signatures(decision.files[0]!.source)).toEqual(signatures(input));
+    expect(decision.files[0]!.source).toContain('.use(domainRoutes(fuseki, work, () => new Set(app.routes');
+    expect(normalizeUseChains(decision.files[0]!.source)).toBe(decision.files[0]!.source);
+    // ee678f81 is the normalization that dropped the parameter. That rewrite must not come back.
+    const dropped = gitShow('ee678f81', 'services/main/src/app.ts');
+    expect(dropped).toContain('function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {');
+    expect(decision.files[0]!.source).not.toBe(dropped);
+  });
+
+  test('keeps .use() calls that differ and leaves a clean composition root unchanged', () => {
+    const distinct = [
+      'function domainRoutes(work: SearchRouteDependencies, mountedReads: () => ReadonlySet<string>) {',
+      '  return new Elysia()',
+      '    .use(entityPageRoutes(work))',
+      '    .use(entityPageRoutes(work, mountedReads));',
+      '}',
+      '',
+    ].join('\n');
+    expect(normalizeUseChains(distinct)).toBe(distinct);
+    const current = readFileSync('services/main/src/app.ts', 'utf8');
+    expect(normalizeUseChains(current)).toBe(current);
+    expect(prepareCompositionMerge([{ file: 'services/main/src/app.ts', source: current }]).fastForward).toBe(true);
+  });
+
+  test('refuses the merge when a composition root still does not parse', () => {
+    const source = [
+      'function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies, mountedReads: () => ReadonlySet<string>) {',
+      '  return new Elysia()',
+      '    .use(realmAdminRoutes(work))',
+      '    .use(entityPageRoutes(work, mountedReads)',
+      '}',
+      '',
+    ].join('\n');
+    const decision = prepareCompositionMerge([{ file: 'services/main/src/app.ts', source }]);
+    expect(decision.fastForward).toBe(false);
+    expect(decision.state).toBe('conflict');
+    expect(decision.error).toContain('services/main/src/app.ts');
+    expect(decision.error).toMatch(/:\d+:\d+:/);
+    expect(decision.files[0]!.source).toContain('mountedReads: () => ReadonlySet<string>');
+    expect(signatures(decision.files[0]!.source)).toEqual(signatures(source));
   });
 });
