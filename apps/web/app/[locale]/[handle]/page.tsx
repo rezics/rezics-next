@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { notFound, redirect } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { profileJsonLd, profileMetadata } from '../../../features/profile/metadata.ts';
 import { ProfilePage, ProfileUnavailable } from '../../../features/profile/profile-page.tsx';
 import { profileReader, readFollowState, readLibrary, readProfileWorks, readReaderState, resolveProfile }
@@ -30,8 +30,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  * `/@{handle}` for every Agent kind. Any other single segment under a locale
  * lands here too (see `features/profile/route.ts`) and is a 404. A retired,
  * native or differently cased handle moves to the current one with a
- * temporary redirect: handles are renamed and retired ones lapse, so no
- * browser or index should keep the old address as permanent.
+ * permanent redirect: a retired name stays with its Agent and cannot be
+ * claimed by someone else.
  */
 export default async function ProfileRoute({ params }: Props) {
   const handle = parseHandleSegment((await params).handle);
@@ -39,7 +39,7 @@ export default async function ProfileRoute({ params }: Props) {
   const locale = await requestLocale();
   const [resolved, messages] = await Promise.all([resolveProfile(handle, locale), getMessages('profile', locale)]);
   if (resolved.kind === 'missing') notFound();
-  if (resolved.kind === 'moved') redirect(localizedPath(profileHref(resolved.handle), locale));
+  if (resolved.kind === 'moved') permanentRedirect(localizedPath(profileHref(resolved.handle), locale));
   if (resolved.kind === 'unavailable') return <ProfileUnavailable handle={handle} locale={locale} messages={messages} />;
   const { profile } = resolved;
   const [works, follow, library, reader] = await Promise.all([

@@ -21,7 +21,7 @@ export default {
   avatarDenied: 'Vous ne pouvez pas encore définir d’avatar pour ce profil. Vos modifications sont conservées.',
   avatarUnavailable: 'Le service d’avatar est indisponible. Vos modifications sont conservées ; réessayez.',
   handleTitle: 'Nom d’utilisateur',
-  handleHelp: 'Vous pouvez changer de nom d’utilisateur une fois tous les 30 jours. Votre ancien nom restera lié au nouveau pendant 90 jours.',
+  handleHelp: 'Vous pouvez changer de nom d’utilisateur une fois tous les 30 jours. Vos anciens noms vous restent réservés et continuent de mener à votre profil.',
   save: 'Changer de nom d’utilisateur',
   saved: 'Votre nom d’utilisateur a été modifié.',
   cooldown: 'Vous pourrez changer à nouveau de nom d’utilisateur 30 jours après votre dernier changement.',

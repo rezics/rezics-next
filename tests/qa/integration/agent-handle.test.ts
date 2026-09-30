@@ -116,15 +116,31 @@ test('G284: first sign-in and vanity handles preserve authority, claims and reti
       canonical: '/@new_name' });
     expect((await change(holder === agent ? b.token : a.token,
       holder === agent ? otherAgent : agent, 'lin_mei', null)).status).toBe(409);
-    await stack.accessPool.query(`UPDATE access.agent_handle SET retired_until = now() - interval '1 second'
+    expect((await stack.accessPool.query(`SELECT retired_until::text AS until FROM access.agent_handle
+      WHERE handle = 'lin_mei'`)).rows[0]?.until).toBe('infinity');
+    // A century-old alias remains an address and cannot become another Agent's brand.
+    await stack.accessPool.query(`UPDATE access.agent_handle SET claimed_at = now() - interval '100 years'
       WHERE handle = 'lin_mei'`);
-    expect((await call('GET', '/v1/handles/lin_mei')).status).toBe(404);
-    expect((await json(await call('GET', '/v1/handles/lin_mei/availability'), 200)).available).toBe(true);
+    expect((await json(await call('GET', '/v1/handles/lin_mei'), 200)).id).toBe(holder);
+    expect((await json(await call('GET', '/v1/handles/lin_mei/availability'), 200)).available).toBe(false);
     const otherTarget = holder === agent ? otherAgent : agent;
     const otherToken = holder === agent ? b.token : a.token;
-    expect((await change(otherToken, otherTarget, 'lin_mei', null)).status).toBe(201);
+    expect((await json(await change(otherToken, otherTarget, 'lin_mei', null), 409)).title)
+      .toBe('handle unavailable');
+    expect((await json(await change(otherToken, otherTarget, '1in_mei', null), 409)).title)
+      .toBe('handle confusable');
+    expect((await json(await call('GET', '/v1/handles/1in_mei/availability'), 200)).reason)
+      .toBe('confusable');
+    await stack.accessPool.query(`UPDATE access.agent_handle SET claimed_at = now() - interval '31 days'
+      WHERE handle = 'new_name'`);
+    expect((await json(await change(holderToken, holder, 'lin_mei', 'new_name', 'reclaim-old'), 201)).previousHandle)
+      .toBe('new_name');
+    expect((await json(await call('GET', '/v1/handles/new_name'), 200)).resolution)
+      .toMatchObject({ state: 'retired', canonical: '/@lin_mei' });
+    expect((await json(await change(holderToken, holder, 'lin_mei', 'new_name', 'reclaim-old'), 200)).replayed)
+      .toBe(true);
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
-    expect((await change(holderToken, holder, 'held_name', 'new_name')).status).toBe(503);
+    expect((await change(holderToken, holder, 'held_name', 'lin_mei')).status).toBe(503);
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
     expect(url).toContain(short(agent));
   } finally { await stack.stop(); }

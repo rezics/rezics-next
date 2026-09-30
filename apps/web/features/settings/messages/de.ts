@@ -21,7 +21,7 @@ export default {
   avatarDenied: 'Für dieses Profil kann noch kein Profilbild festgelegt werden. Deine Eingaben sind weiterhin vorhanden.',
   avatarUnavailable: 'Der Profilbilddienst ist nicht verfügbar. Deine Eingaben sind weiterhin vorhanden. Versuche es erneut.',
   handleTitle: 'Benutzername',
-  handleHelp: 'Du kannst deinen Benutzernamen alle 30 Tage ändern. Dein alter Benutzername bleibt 90 Tage lang mit dem neuen verknüpft.',
+  handleHelp: 'Du kannst deinen Benutzernamen alle 30 Tage ändern. Deine bisherigen Benutzernamen bleiben dir vorbehalten und führen weiterhin zu deinem Profil.',
   save: 'Benutzernamen ändern',
   saved: 'Dein Benutzername wurde geändert.',
   cooldown: 'Du kannst deinen Benutzernamen 30 Tage nach der letzten Änderung wieder ändern.',

@@ -64,6 +64,7 @@ const headId = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-
 const key = /^[A-Za-z0-9:_./-]{1,128}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const controls = /\p{Cc}/u;
+const nameControls = /[\p{Cc}\u202a-\u202e\u2066-\u2069]/u;
 export const AGENT_PROFILE_COST = { graphQueries: 8, graphCommands: 1, mediaPointReads: 1,
   accessQueries: 4, nameCharacters: 200, bioCharacters: 500 } as const;
 
@@ -72,9 +73,10 @@ export function checkedAgentProfile(input: AgentProfileInput): AgentProfileInput
   const bio = input.bio && { text: input.bio.text.trim(), language: input.bio.language };
   if (!native.test(input.agent) || !headId.test(input.expectedHead) || !key.test(input.idempotencyKey)
     || !displayName || displayName.length > AGENT_PROFILE_COST.nameCharacters
-    || controls.test(displayName) || (input.avatarSelection !== null && !uuid.test(input.avatarSelection))
+    || nameControls.test(displayName) || (input.avatarSelection !== null && !uuid.test(input.avatarSelection))
     || (input.localizedName && (!validLocalizedText(input.localizedName, AGENT_PROFILE_COST.nameCharacters)
-      || input.localizedName.labels[input.localizedName.original] !== displayName))
+      || input.localizedName.labels[input.localizedName.original] !== displayName
+      || Object.values(input.localizedName.labels).some(label => nameControls.test(label))))
     || (bio && (!bio.text || bio.text.length > AGENT_PROFILE_COST.bioCharacters
       || controls.test(bio.text) || bio.language.length > 35
       || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(bio.language)))) {

@@ -1,0 +1,56 @@
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { expect, test } from '@playwright/test';
+import { Pool } from 'pg';
+import { signInAtAccounts } from './account-sign-in.ts';
+
+test('G525: retired profile addresses answer 308 and retain works and shelf paths', async ({ page }, info) => {
+  test.setTimeout(180_000);
+  const fixturePath = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
+  if (!fixturePath || !process.env.ACCESS_DATABASE_URL) throw new Error('Run against the isolated QA e2e stack');
+  const { member } = JSON.parse(readFileSync(fixturePath, 'utf8')) as {
+    member: { email: string; password: string } };
+  await signInAtAccounts(page, '/en/settings', member);
+  const help = page.getByText('You can change your handle once every 30 days. Your previous handles stay yours and keep leading to your profile.',
+    { exact: true });
+  await expect(help).toBeVisible();
+  await help.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath('permanent-handle-settings.png') });
+  const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
+  const displayName = `Durable Reader ${suffix}`;
+  const created = await page.request.post('/api/main/v1/agents', {
+    headers: { 'idempotency-key': randomUUID() },
+    data: { profile: 'agent-provision-v1', kind: 'person', displayName },
+  });
+  expect(created.status()).toBe(201);
+  const { agent } = await created.json() as { agent: string };
+  const oldHandle = `past_${suffix}`;
+  const newHandle = `present_${suffix}`;
+  const change = (handle: string, expectedHandle: string | null) =>
+    page.request.put(`/api/main/v1/agents/${agent.slice(-36)}/handle`, {
+      headers: { 'idempotency-key': randomUUID() },
+      data: { profile: 'agent-handle-v1', handle, expectedHandle },
+    });
+  expect((await change(oldHandle, null)).status()).toBe(201);
+  const pool = new Pool({ connectionString: process.env.ACCESS_DATABASE_URL });
+  try {
+    // Only the isolated fixture's clock is advanced; both changes use the real API.
+    await pool.query(`UPDATE access.agent_handle SET claimed_at = now() - interval '31 days'
+      WHERE handle = $1 AND agent_id = $2`, [oldHandle, agent]);
+  } finally { await pool.end(); }
+  expect((await change(newHandle, oldHandle)).status()).toBe(201);
+  for (const path of ['', '/works', '/works?cursor=a+b', '/shelves/read',
+    '/shelves/want-to-read?cursor=a+b']) {
+    const response = await page.request.get(`/en/@${oldHandle}${path}`, { maxRedirects: 0 });
+    expect(response.status()).toBe(308);
+    const target = new URL(response.headers().location!, page.url());
+    expect(target.pathname + target.search).toBe(`/en/@${newHandle}${path}`);
+  }
+  // Follow the redirect in Chromium too, with the real SSR profile read.
+  await page.goto(`/en/@${oldHandle}`);
+  await expect(page).toHaveURL(new RegExp(`/en/@${newHandle}$`));
+  await expect(page.getByRole('heading', { name: displayName, exact: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath('renamed-profile.png'), fullPage: true });
+  await page.goto(`/en/@${oldHandle}/works`);
+  await expect(page).toHaveURL(new RegExp(`/en/@${newHandle}/works$`));
+});

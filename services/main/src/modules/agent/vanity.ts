@@ -5,7 +5,6 @@ import { agentForHandle } from './handle.ts';
 
 export const VANITY_HANDLE_PATTERN = '^[a-z0-9_]{3,30}$';
 export const HANDLE_COOLDOWN_DAYS = 30;
-export const HANDLE_REDIRECT_DAYS = 90;
 // Include every current web top-level segment and names that imply site authority.
 export const RESERVED_HANDLES = new Set([
   'api', 'auth', 'identity', 'discover', 'search', 'w', 'works', 'sign_in',
@@ -38,17 +37,18 @@ export function suggestVanity(displayName: string): string {
   return base.length >= 3 && !RESERVED_HANDLES.has(base) ? base : 'reader';
 }
 interface HandleRow { handle: string; agent_id: string; state: 'current' | 'retired';
-  claimed_at: Date; retired_until: Date | null }
+  claimed_at: Date }
 export interface HandleResolution { agent: string; handle: string; currentHandle: string;
   state: 'current' | 'retired' | 'native'; redirect: boolean }
 export interface HandleChange { profile: 'agent-handle-v1'; agent: string; handle: string;
   previousHandle: string | null; changedAt: string; replayed: boolean }
 export interface HandleAvailability { profile: 'agent-handle-availability-v1';
-  handle: string; available: boolean; reason: 'available' | 'invalid' | 'reserved' | 'claimed' | 'retained' }
+  handle: string; available: boolean; reason: 'available' | 'invalid' | 'reserved' | 'claimed' | 'retained' | 'confusable' }
 
-/** Each read uses at most two primary-key/index probes. A write locks one
- * principal and one Agent, then probes at most two handle keys and one receipt.
- * Work is O(1), independent of the number of Accounts and retained aliases. */
+/** Each read uses at most three primary-key/index probes. A write locks one
+ * principal, one Agent and one skeleton, then probes the current handle, two
+ * skeleton/Agent ranges, the handle key and one receipt. Fixed round trips and
+ * O(log N) index seeks; no scan of an Agent's growing retained-alias inventory. */
 export class AgentVanityHandles {
   constructor(private readonly pool: Pool) {}
 
@@ -75,9 +75,9 @@ export class AgentVanityHandles {
         state: 'native', redirect: currentHandle !== null };
     }
     if (!new RegExp(VANITY_HANDLE_PATTERN).test(handle)) return null;
-    const row = (await this.pool.query<HandleRow>(`SELECT handle, agent_id, state, retired_until
+    const row = (await this.pool.query<HandleRow>(`SELECT handle, agent_id, state
       FROM access.agent_handle WHERE handle = $1`, [handle])).rows[0];
-    if (!row || (row.state === 'retired' && (!row.retired_until || row.retired_until <= new Date()))) return null;
+    if (!row) return null;
     const currentHandle = row.state === 'current' ? handle : (await this.current(row.agent_id))
       ?? `agent-${row.agent_id.slice(-36)}`;
     return { agent: row.agent_id, handle, currentHandle, state: row.state,
@@ -86,13 +86,17 @@ export class AgentVanityHandles {
 
   async availability(input: string): Promise<HandleAvailability> {
     const handle = input.toLowerCase();
-    const reason = !new RegExp(VANITY_HANDLE_PATTERN).test(handle) || agentForHandle(handle)
-      ? 'invalid' : RESERVED_HANDLES.has(handle) ? 'reserved'
-        : (await this.pool.query<Pick<HandleRow, 'state' | 'retired_until'>>(`SELECT state, retired_until
-          FROM access.agent_handle WHERE handle = $1`, [handle])).rows[0];
-    const verdict = typeof reason === 'string' ? reason
-      : !reason || (reason.state === 'retired' && reason.retired_until! <= new Date())
-        ? 'available' : reason.state === 'current' ? 'claimed' : 'retained';
+    let verdict: HandleAvailability['reason'];
+    if (!new RegExp(VANITY_HANDLE_PATTERN).test(handle) || agentForHandle(handle)) verdict = 'invalid';
+    else if (RESERVED_HANDLES.has(handle)) verdict = 'reserved';
+    else {
+      const exact = (await this.pool.query<Pick<HandleRow, 'state'>>(`SELECT state
+        FROM access.agent_handle WHERE handle = $1`, [handle])).rows[0];
+      verdict = exact ? exact.state === 'current' ? 'claimed' : 'retained'
+        : (await this.pool.query(`SELECT 1 FROM access.agent_handle
+          WHERE skeleton = access.handle_skeleton($1) LIMIT 1`, [handle])).rowCount
+          ? 'confusable' : 'available';
+    }
     return { profile: 'agent-handle-availability-v1', handle,
       available: verdict === 'available', reason: verdict };
   }
@@ -145,14 +149,27 @@ export class AgentVanityHandles {
         throw new VanityCooldown(new Date(previous.claimed_at.getTime()
           + HANDLE_COOLDOWN_DAYS * 86400_000).toISOString());
       }
+      // An absent handle has no row to lock. All claims of equivalent spellings
+      // share this transaction lock, including when different Agents race.
+      await client.query(`SELECT pg_advisory_xact_lock(hashtextextended(
+        'agent-handle:' || access.handle_skeleton($1), 0))`, [handle]);
+      const foreign = (await client.query(`SELECT 1 WHERE
+        EXISTS (SELECT 1 FROM access.agent_handle WHERE skeleton = access.handle_skeleton($1)
+          AND agent_id < $2) OR
+        EXISTS (SELECT 1 FROM access.agent_handle WHERE skeleton = access.handle_skeleton($1)
+          AND agent_id > $2)`, [handle, agent])).rowCount;
+      if (foreign) {
+        const exact = (await client.query(`SELECT 1 FROM access.agent_handle
+          WHERE handle = $1 AND agent_id <> $2`, [handle, agent])).rowCount;
+        throw new VanityConflict(exact ? 'handle unavailable' : 'handle confusable');
+      }
       if (previous) await client.query(`UPDATE access.agent_handle SET state = 'retired',
-        retired_until = clock_timestamp() + $2 * interval '1 day' WHERE handle = $1`,
-        [previous.handle, HANDLE_REDIRECT_DAYS]);
+        retired_until = 'infinity' WHERE handle = $1`, [previous.handle]);
       const claimed = await client.query<Pick<HandleRow, 'claimed_at'>>(`INSERT INTO access.agent_handle
         (handle, agent_id, state) VALUES ($1,$2,'current')
-        ON CONFLICT (handle) DO UPDATE SET agent_id = EXCLUDED.agent_id,
-          state = 'current', claimed_at = clock_timestamp(), retired_until = NULL
-        WHERE access.agent_handle.state = 'retired' AND access.agent_handle.retired_until <= clock_timestamp()
+        ON CONFLICT (handle) DO UPDATE SET state = 'current',
+          claimed_at = clock_timestamp(), retired_until = NULL
+        WHERE access.agent_handle.state = 'retired' AND access.agent_handle.agent_id = EXCLUDED.agent_id
         RETURNING claimed_at`, [handle, agent]);
       if (!claimed.rowCount) throw new VanityConflict('handle unavailable');
       const changedAt = claimed.rows[0]!.claimed_at;

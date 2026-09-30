@@ -26,7 +26,7 @@ interface ProvisionRow { id: string; principal_id: string; request_digest: strin
 export function agentProvisionDigest(input: AgentProvisionInput): string {
   if (!['person', 'organization', 'service'].includes(input.kind)
     || input.displayName.length < 1 || input.displayName.length > 200
-    || /[\u0000-\u001f\u007f]/.test(input.displayName)) {
+    || /[\p{Cc}\u202a-\u202e\u2066-\u2069]/u.test(input.displayName)) {
     throw new AgentProvisionInvalid('invalid Agent creation intent');
   }
   return createHash('sha256').update(JSON.stringify({ family: 'agent-provision-v1',

@@ -101,7 +101,7 @@ export default {
   avatarDenied: '目前无法为此资料设置头像。您填写的内容仍在此处。',
   avatarUnavailable: '头像服务暂时不可用。您填写的内容仍在此处，请重试。',
   handleTitle: '用户名',
-  handleHelp: '每 30 天可以修改一次用户名。旧用户名会在 90 天内关联到新用户名。',
+  handleHelp: '每 30 天可以修改一次用户名。旧用户名始终归您所有，并继续指向您的个人资料。',
   save: '修改用户名',
   saved: '用户名已修改。',
   cooldown: '上次修改用户名后，需等待 30 天才能再次修改。',

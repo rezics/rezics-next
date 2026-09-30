@@ -104,7 +104,7 @@ const en = {
   avatarDenied: 'An avatar cannot be set for this profile yet. Your edits are still here.',
   avatarUnavailable: 'Avatar service is unavailable. Your edits are still here; try again.',
   handleTitle: 'Handle',
-  handleHelp: 'You can change your handle once every 30 days. Your old handle stays linked to the new one for 90 days.',
+  handleHelp: 'You can change your handle once every 30 days. Your previous handles stay yours and keep leading to your profile.',
   save: 'Change handle',
   saved: 'Your handle was changed.',
   cooldown: 'You can change your handle again 30 days after your last change.',

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { materializeData } from 'native-i18n';
-import { notFound, redirect } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { ProfileShelfPage, ProfileUnavailable, shelfLabel } from '../../../../../features/profile/profile-page.tsx';
 import { profileReader, readReaderState, readShelfPage, resolveProfile }
   from '../../../../../features/profile/read.ts';
@@ -38,7 +38,7 @@ export default async function ProfileShelfRoute({ params, searchParams }: Props)
   const [resolved, messages] = await Promise.all([resolveProfile(handle, locale), getMessages('profile', locale)]);
   if (resolved.kind === 'missing') notFound();
   if (resolved.kind === 'moved') {
-    redirect(localizedPath(profileHref(resolved.handle, { kind: 'shelf', status }), locale));
+    permanentRedirect(localizedPath(profileHref(resolved.handle, { kind: 'shelf', status }, cursor), locale));
   }
   if (resolved.kind === 'unavailable') return <ProfileUnavailable handle={handle} locale={locale} messages={messages} />;
   const { profile } = resolved;

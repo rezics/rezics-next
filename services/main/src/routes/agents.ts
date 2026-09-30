@@ -31,7 +31,8 @@ const handleChangeResult = t.Object({ profile: t.Literal('agent-handle-v1'),
   changedAt: t.String(), replayed: t.Boolean() });
 const availabilityResult = t.Object({ profile: t.Literal('agent-handle-availability-v1'),
   handle: t.String(), available: t.Boolean(), reason: t.Union([t.Literal('available'),
-    t.Literal('invalid'), t.Literal('reserved'), t.Literal('claimed'), t.Literal('retained')]) });
+    t.Literal('invalid'), t.Literal('reserved'), t.Literal('claimed'), t.Literal('retained'),
+    t.Literal('confusable')]) });
 const profileChangeFields = {
   expectedHead: t.String(), displayName: t.String({ minLength: 1, maxLength: 200 }),
   avatarSelection: t.Nullable(t.String()), bio: t.Nullable(t.Object({
