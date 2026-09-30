@@ -1,7 +1,7 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { creditItem, pageFields, pageQuery, readId, readName, readPosition, readScope, readUuid, scopeQuery, workCard } from '../work/read-contract.ts';
-import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
+import { workSemanticTypeOptions } from '../types/registry.ts';
 
 /** Per GET: one B-tree seek + P+1 projected candidates, two Work summary batches,
  * up to two Concept summary batches and graph/Access position fences. Build work
@@ -10,7 +10,7 @@ import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
  * envelope; it is not claimed to have the PostgreSQL seek complexity. */
 export const DISCOVERY_COST = { pageSize: 20, buildWorks: 250, termsPerWork: 20, cardTags: 3, primaryCredits: 3,
   entriesPerWork: 84, reuseEntries: 20_000, projectionBytes: 256 * 1024, leaseMs: 30_000 } as const;
-export const discoveryType = t.Union(WORK_SEMANTIC_TYPES.map(value => t.Literal(value)));
+export const discoveryType = t.Union(workSemanticTypeOptions.map(value => t.Literal(value)));
 export const discoveryQuery = t.Object({ ...pageQuery, ...scopeQuery,
   sort: t.Optional(t.Union([t.Literal('recent'), t.Literal('top-rated')])),
   type: t.Optional(discoveryType), term: t.Optional(readId), context: t.Optional(readId),

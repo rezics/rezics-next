@@ -100,6 +100,7 @@ import { onboardingInterestsRoutes } from './routes/onboarding-interests.ts';
 import { ratingContextReadRoutes } from './routes/rating-contexts.ts';
 import { managementReadRoutes } from './routes/management-reads.ts';
 import { facetRoutes } from './routes/facets.ts';
+import { typeRoutes } from './routes/types.ts';
 import { queryRoutes } from './routes/query.ts';
 import { savedFilterRoutes } from './routes/saved-filters.ts';
 
@@ -251,6 +252,9 @@ function extraRoutes7(fuseki: FusekiClient, work: SearchRouteDependencies) {
 function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(facetRoutes());
+    .use(workStatsRoutes(work))
+    .use(facetRoutes())
+    .use(typeRoutes());
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */

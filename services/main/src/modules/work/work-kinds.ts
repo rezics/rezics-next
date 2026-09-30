@@ -1,32 +1,17 @@
+import { workTypeEntries, workSemanticTypeOptions } from '../types/registry.ts';
 import type { FeedKind } from '../feed/contract.ts';
 import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
 
-export type WorkPrimaryAction = 'read' | 'install' | 'copy' | 'watch' | 'visit';
-type WorkKind = { interest: Exclude<HomeInterestKind, 'discussions'> | null;
-  primaryAction: WorkPrimaryAction; creation: 'administrator' | 'contributor' };
+export type WorkPrimaryAction = typeof workTypeEntries[number]['primaryAction'];
 
-/** Native and source-adopted Work types share the same catalogue meaning.
+/** Native and source-adopted Works share the compiled catalogue metadata.
  * A bare DigitalDocument has no human kind until a classification is accepted. */
-export const workKinds = {
-  'https://schema.org/Book': { interest: 'books', primaryAction: 'read', creation: 'contributor' },
-  'https://schema.org/BookSeries': { interest: 'books', primaryAction: 'read', creation: 'contributor' },
-  'https://schema.org/DigitalDocument': { interest: null, primaryAction: 'read', creation: 'contributor' },
-  'https://schema.org/Recipe': { interest: 'recipes', primaryAction: 'read', creation: 'contributor' },
-  'https://schema.org/SoftwareApplication': { interest: 'software', primaryAction: 'install', creation: 'administrator' },
-  'https://schema.org/SoftwareSourceCode': { interest: 'software', primaryAction: 'install', creation: 'administrator' },
-  'https://schema.org/VideoGame': { interest: 'media', primaryAction: 'visit', creation: 'contributor' },
-  'https://rezics.com/vocab/ModPackage': { interest: 'software', primaryAction: 'install', creation: 'administrator' },
-  'https://rezics.com/vocab/SkillPackage': { interest: 'ai', primaryAction: 'install', creation: 'contributor' },
-  'https://rezics.com/vocab/PromptTemplate': { interest: 'ai', primaryAction: 'copy', creation: 'contributor' },
-  'https://schema.org/Movie': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
-  'https://schema.org/TVSeries': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
-  'https://schema.org/VideoObject': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
-  'https://schema.org/AudioObject': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
-  'https://schema.org/MusicRecording': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
-  'https://schema.org/MusicAlbum': { interest: 'media', primaryAction: 'watch', creation: 'contributor' },
-} as const satisfies Record<string, WorkKind>;
+export const workKinds = Object.fromEntries(workTypeEntries.map(entry => [entry.type,
+  { interest: entry.interest, primaryAction: entry.primaryAction, creation: entry.creation }])) as {
+  [Entry in typeof workTypeEntries[number] as Entry['type']]: Pick<Entry, 'interest' | 'primaryAction' | 'creation'>;
+};
 
-export const workSemanticTypes = Object.keys(workKinds) as (keyof typeof workKinds)[];
+export const workSemanticTypes = workSemanticTypeOptions;
 export const interestKinds = ['books', 'software', 'ai', 'recipes', 'media', 'discussions'] as const satisfies readonly HomeInterestKind[];
 
 export interface InterestSources {

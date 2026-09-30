@@ -1,16 +1,11 @@
+import { creatableWorkTypeOptions } from '../types/registry.ts';
 import { assertNativeWorkTypeCombination, InvalidWorkSemanticTypes,
   normalizeWorkSemanticTypes } from './activate.ts';
 
 export const WORK_TYPE_PROFILE = 'https://rezics.com/definition/work-type-v2';
 export class WorkTypeConflict extends Error {}
 /** The command admits only types with a reviewed structural or operational role. */
-export const WORK_TYPE_OPTIONS = [
-  'https://schema.org/Book', 'https://schema.org/DigitalDocument', 'https://schema.org/Recipe',
-  'https://schema.org/SoftwareApplication', 'https://schema.org/SoftwareSourceCode',
-  'https://schema.org/VideoGame',
-  'https://rezics.com/vocab/ModPackage', 'https://rezics.com/vocab/SkillPackage',
-  'https://rezics.com/vocab/PromptTemplate',
-] as const;
+export const WORK_TYPE_OPTIONS = creatableWorkTypeOptions;
 export const WORK_TYPE_OPTIONS_V1 = WORK_TYPE_OPTIONS.filter(type => type !== 'https://schema.org/VideoGame');
 export const WORK_TYPE_COST = { types: 3, graphCalls: 16, graphBytes: 2 * 1024 * 1024,
   deadlineMs: 10_000 } as const;
