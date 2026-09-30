@@ -124,13 +124,13 @@ test('G-845: Pride and Prejudice API matches scoped names and previews bounded, 
     expect(nameRecordQueries).toBe(1);
     f.nativeFuseki.query = graphQuery;
     expect(candidates.items.map(item => item.status)).toEqual([
-      'matched', 'new', 'ambiguous', 'unavailable', 'matched', 'matched', 'matched', 'ambiguous', 'unavailable', 'matched']);
+      'matched', 'new', 'ambiguous', 'new', 'matched', 'matched', 'matched', 'ambiguous', 'new', 'matched']);
     expect(candidates.items[0]!.candidates).toEqual([elizabeth.component]);
     expect(candidates.items[2]!.candidates.sort()).toEqual([elizabeth.component, jane.component].sort());
-    expect(candidates.items[3]).toEqual({ index: 3, status: 'unavailable', candidates: [] });
+    expect(candidates.items[3]).toEqual({ index: 3, status: 'new', candidates: [] });
     for (const index of [5, 6, 9]) expect(candidates.items[index]!.candidates).toEqual([elizabeth.component]);
     expect(candidates.items[7]!.candidates.sort()).toEqual([elizabeth.component, jane.component].sort());
-    expect(candidates.items[8]).toEqual({ index: 8, status: 'unavailable', candidates: [] });
+    expect(candidates.items[8]).toEqual({ index: 8, status: 'new', candidates: [] });
     expect(JSON.stringify(candidates)).not.toContain('Restricted Character');
     expect(JSON.stringify(candidates)).not.toContain(hidden.component);
     expect(JSON.stringify(candidates)).not.toContain(outside.component);

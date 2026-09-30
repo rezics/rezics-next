@@ -233,7 +233,7 @@ test('G-845: names use exact NFKC comparison, including width variants and langu
   expect(wikiLabel('エリザベス')).not.toBe(wikiLabel('Elizabeth'));
 });
 
-test('G-845: candidate/evidence bounds fail explicitly, preserving complete 64 × 16 results and withholding restricted sets', () => {
+test('G-845: candidate/evidence bounds fail explicitly, preserving complete 64 × 16 disclosed results', () => {
   const matches = Array.from({ length: 64 }, (_, name) => new Set(Array.from({ length: 16 }, (_, item) => id(name * 16 + item))));
   const availability = new Map<string, boolean>(matches.flatMap(match => [...match].map(target => [target, true] as const)));
   expect(candidateItems(matches, availability)).toHaveLength(64);
@@ -242,7 +242,8 @@ test('G-845: candidate/evidence bounds fail explicitly, preserving complete 64 �
   matches[0]!.add(id(1024)); availability.set(id(1024), true);
   expect(() => candidateItems(matches, availability)).toThrow('wiki_query_budget');
   availability.set(id(1024), false);
-  expect(candidateItems(matches, availability)[0]).toEqual({ index: 0, status: 'unavailable', candidates: [] });
+  expect(candidateItems(matches, availability)[0]).toEqual({ index: 0, status: 'ambiguous',
+    candidates: [...matches[0]!].filter(target => target !== id(1024)).sort() });
   const request = { target: id(1), zone: id(2), names: Array.from({ length: 64 }, () => ({ value: 'Elizabeth', language: 'en' })) };
   expect(Value.Check(WikiCandidatesSchema, request)).toBe(true);
   request.names.push({ value: 'Jane', language: 'en' });

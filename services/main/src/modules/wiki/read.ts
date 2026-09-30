@@ -73,10 +73,9 @@ export async function wikiScope(read: WikiRead, target: string, zone: string) {
   return { target: workTarget, collections };
 }
 
-/** Read immutable Collection member records, including nested groups. This is a
- * trusted matching scan: unreadable members stay internal and are redacted by
- * the target resolver before returning any candidate metadata. A truncated
- * inventory fails explicitly; it can never turn an unseen match into `new`. */
+/** Read only disclosed Collection members, including nested groups. Hidden
+ * members never enter name matching or its inventory budget. A truncated
+ * disclosed inventory fails explicitly, rather than inventing a `new` name. */
 export async function wikiMembers(read: WikiRead, collections: ReadonlyMap<string, CompositionHeader>) {
   const targets = new Set<string>();
   let records = 0, pages = 0;
@@ -87,7 +86,9 @@ export async function wikiMembers(read: WikiRead, collections: ReadonlyMap<strin
       if (++pages > WIKI_READ_COST.pages) throw new WikiRejected('wiki_query_budget');
       const scan = queue.shift()!;
       const page = await readVisibleCompositionPage(read.work.environment, { structure: header.structure, header,
-        parent: scan.parent, after: scan.after, limit: 100, canReadTarget: async () => true,
+        parent: scan.parent, after: scan.after, limit: 100,
+        canReadTarget: target => Promise.resolve(read.work.access.canReadSemanticResource?.(
+          read.principal, read.actingSubject, target) ?? false),
         visible: item => item.role === 'member' || item.role === 'group' });
       records += page.occurrences.length;
       if (records > WIKI_READ_COST.inventory) throw new WikiRejected('wiki_query_budget');

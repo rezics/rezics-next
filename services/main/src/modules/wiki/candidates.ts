@@ -5,7 +5,7 @@ import { readWorkComponentState } from '../work/history.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { PROFILES, semanticTypeOutcome } from '../semantic/schema.ts';
 import { CANONICAL_TYPES } from '../semantic/change.ts';
-import { resolveTargets, targetSummaries } from '../target/resolve.ts';
+import { targetSummaries } from '../target/resolve.ts';
 import { WikiCandidatesSchema, WikiNativeResourceSchema, type WikiCandidates, WIKI_EXTRACTION_LIMITS } from './protocol.ts';
 import { WikiRejected } from './errors.ts';
 import { wikiMembers, wikiScope, WIKI_READ_COST, type WikiRead } from './read.ts';
@@ -18,15 +18,15 @@ export const wikiTypes: ReadonlySet<string> = new Set(admittedTypes.filter(entry
   && !CANONICAL_TYPES.has(entry.type)).map(entry => entry.type));
 export const wikiLabel = (value: string) => value.normalize('NFKC').trim().toLowerCase();
 
-/** A complete match set must fit the wire bound; never silently truncate it.
- * One restricted match makes the entire name unavailable, with no hidden count. */
+/** Bound the complete disclosed match set. A match that loses read authority
+ * is indistinguishable from its absence, including a collision with a public alias. */
 export function candidateItems(matches: readonly ReadonlySet<string>[], availability: ReadonlyMap<string, boolean>) {
   if (matches.length > WIKI_EXTRACTION_LIMITS.namesPerLookup) throw new WikiRejected('invalid_wiki_candidates', 400);
   return matches.map((match, index) => {
-    if ([...match].some(target => !availability.get(target))) return { index, status: 'unavailable' as const, candidates: [] };
-    if (match.size > WIKI_EXTRACTION_LIMITS.candidatesPerName) throw new WikiRejected('wiki_query_budget');
-    return { index, status: match.size === 0 ? 'new' as const : match.size === 1 ? 'matched' as const : 'ambiguous' as const,
-      candidates: [...match].sort() };
+    const candidates = [...match].filter(target => availability.get(target)).sort();
+    if (candidates.length > WIKI_EXTRACTION_LIMITS.candidatesPerName) throw new WikiRejected('wiki_query_budget');
+    return { index, status: candidates.length === 0 ? 'new' as const : candidates.length === 1 ? 'matched' as const : 'ambiguous' as const,
+      candidates };
   });
 }
 
@@ -101,16 +101,12 @@ export async function wikiCandidates(read: WikiRead, input: WikiCandidates) {
     });
   }
   const availability = new Map<string, boolean>();
-  // Resolution alone owns current disclosure; restricted candidate identities
-  // and their stored names never cross this response boundary.
+  // Recheck current disclosure after matching: a revoked member cannot alter
+  // either the status or the candidate list, even when it shares a readable alias.
   const matched = [...new Set(matches.flatMap(match => [...match]))];
   for (let start = 0; start < matched.length; start += WIKI_READ_COST.targetBatch) {
     const summaries = await targetSummaries(read.session, matched.slice(start, start + WIKI_READ_COST.targetBatch));
-    const available = summaries.summaries.flatMap(summary => summary.status === 'available' ? [summary.reference] : []);
-    for (const target of await (available.length ? resolveTargets(read.session, available, 'collection-member') : [])) {
-      availability.set(target.resource, true);
-    }
-    for (const summary of summaries.summaries) if (summary.status !== 'available') availability.set(summary.reference, false);
+    for (const summary of summaries.summaries) availability.set(summary.reference, summary.status === 'available');
   }
   return { profile: 'wiki-candidates-v1' as const, items: candidateItems(matches, availability) };
 }
