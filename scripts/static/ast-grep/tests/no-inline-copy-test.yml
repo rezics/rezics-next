@@ -1,0 +1,12 @@
+id: no-inline-copy
+valid:
+  - 'const label = "Close"; const x = <button aria-label={label}>{label}</button>;'
+  - 'const x = <button aria-label="REZICS" title="UTC" placeholder="Esc" alt="Minecraft" />;'
+  - 'const x = <time>UTC</time>; const y = <strong>Minecraft</strong>; const z = <span>REZICS</span>; const c = <span>©</span>; const k = <kbd>Esc</kbd>;'
+  - 'const copy = { en: "Hello", ja: "こんにちは" };'
+  - 'const x = <button aria-label="" placeholder="…" />;'
+invalid:
+  - 'const x = <button aria-label="Close" />;'
+  - 'const x = <span>Close</span>;'
+  - 'const x = <img alt="Cover" />; const y = <input placeholder="Search" title="Search" />;'
+  - 'const copy = { en: "Hello", "zh-Hans": "你好" };'

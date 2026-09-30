@@ -1,4 +1,4 @@
-import { defineMessages } from '../../i18n/define.ts';
+import { defineMessages, withEnglish } from '../../i18n/define.ts';
 import zhHans from './messages/zh-Hans.ts';
 
 
@@ -44,6 +44,7 @@ const en = {
   blockedPeople: 'Blocked people',
   blockedPeopleHelp: 'Posts by these people are hidden from your Home. Enter a profile handle to block someone.',
   blockPerson: 'Block person',
+  blockPlaceholder: '@handle',
   unblockPerson: 'Unblock',
   blockedPersonId: 'Profile',
   noBlockedPeople: 'No blocked people.',
@@ -115,6 +116,15 @@ const en = {
 
 export const englishMessages = en;
 
-export const messages = defineMessages({ en, 'zh-Hans': zhHans });
+export const messages = defineMessages({
+  en,
+  'zh-Hant': withEnglish(en, undefined),
+  'zh-Hans': withEnglish(en, zhHans),
+  ja: withEnglish(en, undefined),
+  ko: withEnglish(en, undefined),
+  de: withEnglish(en, undefined),
+  fr: withEnglish(en, undefined),
+  es: withEnglish(en, undefined),
+});
 
 export type SettingsMessages = typeof en;

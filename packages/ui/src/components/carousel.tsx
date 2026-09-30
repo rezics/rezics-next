@@ -3,6 +3,7 @@
 import { Carousel as ArkCarousel, useCarouselContext } from '@ark-ui/react/carousel';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import type React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 
@@ -44,6 +45,7 @@ export const CarouselControl = (props: React.ComponentProps<typeof ArkCarousel.C
 
 export const CarouselPrevious = (props: React.ComponentProps<typeof ArkCarousel.PrevTrigger>) => {
   const { className, ...rest } = props;
+  const copy = useUiCopy();
 
   return (
     <ArkCarousel.PrevTrigger
@@ -58,7 +60,7 @@ export const CarouselPrevious = (props: React.ComponentProps<typeof ArkCarousel.
       asChild
     >
       <Button
-        aria-label="Previous"
+        aria-label={copy.previous}
         className="shadow-[var(--aura-shadow-card)] transition-all duration-300 hover:scale-105 hover:shadow-[var(--aura-shadow-card-hover)]"
         clickEffect={false}
         pill
@@ -73,6 +75,7 @@ export const CarouselPrevious = (props: React.ComponentProps<typeof ArkCarousel.
 
 export const CarouselNext = (props: React.ComponentProps<typeof ArkCarousel.NextTrigger>) => {
   const { className, ...rest } = props;
+  const copy = useUiCopy();
 
   return (
     <ArkCarousel.NextTrigger
@@ -87,7 +90,7 @@ export const CarouselNext = (props: React.ComponentProps<typeof ArkCarousel.Next
       data-slot="carousel-next"
     >
       <Button
-        aria-label="Next"
+        aria-label={copy.next}
         className="shadow-[var(--aura-shadow-card)] transition-all duration-300 hover:scale-105 hover:shadow-[var(--aura-shadow-card-hover)]"
         clickEffect={false}
         pill

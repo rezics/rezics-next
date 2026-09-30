@@ -109,4 +109,5 @@ export default {
   saveSection: "Guardar cambios",
   sectionFailed: "No se pudo guardar esta opción. Recarga la página e inténtalo de nuevo.",
   sectionStale: "Esta opción cambió en otro lugar. Recarga la página para revisarla.",
+  blockPlaceholder: '@handle',
 } satisfies Partial<SettingsMessages>;

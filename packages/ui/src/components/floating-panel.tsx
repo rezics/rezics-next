@@ -8,6 +8,7 @@ import {
 import { Portal } from '@ark-ui/react/portal';
 import { Maximize, MaximizeIcon, MinimizeIcon, MinusIcon } from 'lucide-react';
 import type React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { Button, type ButtonProps } from './button.tsx';
 import { ScrollArea } from './scroll-area.tsx';
@@ -142,10 +143,11 @@ interface FloatingPanelStageTriggerProps
 
 export const FloatingPanelMinimize = (props: FloatingPanelStageTriggerProps) => {
   const { size = 'icon-xs', variant = 'ghost', ...rest } = props;
+  const copy = useUiCopy();
 
   return (
     <ArkFloatingPanel.StageTrigger {...rest} asChild stage="minimized">
-      <Button aria-label="Minimize" size={size} variant={variant}>
+      <Button aria-label={copy.minimize} size={size} variant={variant}>
         <MinusIcon />
       </Button>
     </ArkFloatingPanel.StageTrigger>
@@ -154,10 +156,11 @@ export const FloatingPanelMinimize = (props: FloatingPanelStageTriggerProps) => 
 
 export const FloatingPanelMaximize = (props: FloatingPanelStageTriggerProps) => {
   const { size = 'icon-xs', variant = 'ghost', ...rest } = props;
+  const copy = useUiCopy();
 
   return (
     <ArkFloatingPanel.StageTrigger {...rest} asChild stage="maximized">
-      <Button aria-label="Maximize" size={size} variant={variant}>
+      <Button aria-label={copy.maximize} size={size} variant={variant}>
         <Maximize />
       </Button>
     </ArkFloatingPanel.StageTrigger>
@@ -166,10 +169,11 @@ export const FloatingPanelMaximize = (props: FloatingPanelStageTriggerProps) => 
 
 export const FloatingPanelRestore = (props: FloatingPanelStageTriggerProps) => {
   const { size = 'icon-xs', variant = 'outline', ...rest } = props;
+  const copy = useUiCopy();
 
   return (
     <ArkFloatingPanel.StageTrigger {...rest} asChild stage="default">
-      <Button aria-label="Restore" size={size} variant={variant}>
+      <Button aria-label={copy.restore} size={size} variant={variant}>
         <MinimizeIcon className="hidden group-data-maximized/floating-panel:block" />
         <MaximizeIcon className="hidden group-data-minimized/floating-panel:block" />
       </Button>

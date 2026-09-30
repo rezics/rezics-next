@@ -276,7 +276,7 @@ function PersonControls({ agent, t, preview = false }: { agent: string; t: Setti
         <p className="text-muted-foreground text-sm">{t.blockedPeopleHelp}</p>
         <form className="flex flex-wrap gap-2" onSubmit={event => { event.preventDefault(); void block(blockName, true); }}>
           <input className="min-w-48 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
-            aria-label={t.blockPerson} placeholder="@handle" value={blockName} disabled={busy || preview}
+            aria-label={t.blockPerson} placeholder={t.blockPlaceholder} value={blockName} disabled={busy || preview}
             onChange={event => setBlockName(event.target.value)} />
           <Button type="submit" disabled={busy || preview || !blockName.trim()}>{t.blockPerson}</Button>
         </form>

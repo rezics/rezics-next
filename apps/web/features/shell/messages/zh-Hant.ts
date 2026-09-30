@@ -74,4 +74,10 @@ export default {
   newChapterOn: insert('《{{title}}》有新章節', { title: String }),
   votedOnPost: insert('{{name}}投票支持了你關於《{{title}}》的貼文', { name: String, title: String }),
   votedOnYourPost: insert('{{name}}投票支持了你的貼文', { name: String }),
+  navHome: '首頁',
+  navDiscover: '探索',
+  navCreate: '創作',
+  navAlerts: '通知',
+  navLibrary: '書架',
+  navLibraryShort: '書架',
 } satisfies Partial<ShellMessages>;

@@ -75,4 +75,5 @@ export default {
   accountLink: 'Accounts を開く', saveSection: '変更を保存',
   sectionFailed: '設定を保存できませんでした。再読み込みしてもう一度お試しください。',
   sectionStale: '設定が別の場所で変更されました。再読み込みして最新の内容をご確認ください。',
+  blockPlaceholder: '@handle',
 } satisfies Partial<SettingsMessages>;

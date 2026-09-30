@@ -1,6 +1,29 @@
 import { Bell, Compass, House, LibraryBig, Plus, type LucideIcon } from 'lucide-react';
-import { localeText, type UiLocale } from '../../i18n/define.ts';
+import type { UiLocale } from '../../i18n/define.ts';
 import { withoutLocale } from '../../i18n/locale.ts';
+import de from './messages/de.ts';
+import es from './messages/es.ts';
+import fr from './messages/fr.ts';
+import ja from './messages/ja.ts';
+import ko from './messages/ko.ts';
+import { messages as en } from './messages.ts';
+import zhHans from './messages/zh-Hans.ts';
+import zhHant from './messages/zh-Hant.ts';
+
+type NavKey = 'navHome' | 'navDiscover' | 'navCreate' | 'notifications' | 'navAlerts' | 'navLibrary' | 'navLibraryShort';
+
+function navLabel(key: NavKey): Record<UiLocale, string> {
+  return {
+    en: en[key],
+    'zh-Hant': zhHant[key] ?? en[key],
+    'zh-Hans': zhHans[key] ?? en[key],
+    ja: ja[key] ?? en[key],
+    ko: ko[key] ?? en[key],
+    de: de[key] ?? en[key],
+    fr: fr[key] ?? en[key],
+    es: es[key] ?? en[key],
+  };
+}
 
 export interface NavigationItem {
   href: string;
@@ -19,16 +42,14 @@ export interface NavigationItem {
 // The navigation, in display order. A feature adds its entry as one line; git
 // merges this file with the union driver (see .gitattributes).
 export const navigation: readonly NavigationItem[] = [
-  { href: '/', icon: House, bottom: true, label: localeText({ en: 'Home', 'zh-Hant': '首頁', 'zh-Hans': '首页', ja: 'ホーム', ko: '홈', de: 'Startseite', fr: 'Accueil', es: 'Inicio' }) },
-  { href: '/discover', icon: Compass, bottom: true, label: localeText({ en: 'Discover', 'zh-Hant': '探索', 'zh-Hans': '探索', ja: '見つける', ko: '둘러보기', de: 'Entdecken', fr: 'Découvrir', es: 'Explorar' }) },
-  { href: '/submit', icon: Plus, bottom: true, emphasized: true, label: localeText({ en: 'Create', 'zh-Hant': '創作', 'zh-Hans': '创作', ja: '作る', ko: '만들기', de: 'Erstellen', fr: 'Créer', es: 'Crear' }) },
+  { href: '/', icon: House, bottom: true, label: navLabel('navHome') },
+  { href: '/discover', icon: Compass, bottom: true, label: navLabel('navDiscover') },
+  { href: '/submit', icon: Plus, bottom: true, emphasized: true, label: navLabel('navCreate') },
   { href: '/notifications', icon: Bell, bottom: true,
-    label: localeText({ en: 'Notifications', 'zh-Hant': '通知', 'zh-Hans': '通知', ja: '通知', ko: '알림', de: 'Benachrichtigungen', fr: 'Notifications', es: 'Notificaciones' }),
-    bottomLabel: localeText({ en: 'Alerts', 'zh-Hant': '通知', 'zh-Hans': '通知', ja: '通知', ko: '알림', de: 'Meldungen', fr: 'Alertes', es: 'Avisos' }) },
+    label: navLabel('notifications'), bottomLabel: navLabel('navAlerts') },
   // The reader's own shelves, progress and read history (app/[locale]/library).
   { href: '/library', icon: LibraryBig, bottom: true,
-    label: localeText({ en: 'Library', 'zh-Hant': '書架', 'zh-Hans': '书架', ja: '本棚', ko: '서재', de: 'Bibliothek', fr: 'Bibliothèque', es: 'Biblioteca' }),
-    bottomLabel: localeText({ en: 'Library', 'zh-Hant': '書架', 'zh-Hans': '书架', ja: '本棚', ko: '서재', de: 'Bücher', fr: 'Livres', es: 'Libros' }) },
+    label: navLabel('navLibrary'), bottomLabel: navLabel('navLibraryShort') },
 ];
 
 /** Whether `pathname` is at or below the item's route. Home matches only itself. */

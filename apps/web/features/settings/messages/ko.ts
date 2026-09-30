@@ -74,4 +74,5 @@ export default {
   accountLink: 'Accounts 열기', saveSection: '변경 사항 저장',
   sectionFailed: '설정을 저장하지 못했어요. 새로고침한 뒤 다시 시도해 주세요.',
   sectionStale: '다른 곳에서 설정이 변경됐어요. 새로고침해 최신 내용을 확인해 주세요.',
+  blockPlaceholder: '@handle',
 } satisfies Partial<SettingsMessages>;

@@ -8,6 +8,7 @@ import {
 } from '@ark-ui/react/tags-input';
 import { XIcon } from 'lucide-react';
 import type React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import {
   InputGroup,
@@ -81,6 +82,7 @@ export const TagsInputControl = (props: TagsInputControlProps) => {
   const { size, showClear = true, className, children, ...rest } = props;
 
   const api = useTagsInputContext();
+  const copy = useUiCopy();
 
   return (
     <ArkTagsInput.Control asChild data-slot="tags-input-control">
@@ -96,7 +98,7 @@ export const TagsInputControl = (props: TagsInputControlProps) => {
         {...rest}
       >
         {children}
-        {showClear && api.value.length > 0 && <TagsInputClearTrigger aria-label="Clear all tags" />}
+        {showClear && api.value.length > 0 && <TagsInputClearTrigger aria-label={copy.clearAllTags} />}
       </InputGroup>
     </ArkTagsInput.Control>
   );

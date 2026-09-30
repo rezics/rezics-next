@@ -164,6 +164,8 @@ const translations: Record<string, Partial<Strings>> = {
   },
 };
 
+export const localeStrings = translations;
+
 export function strings(locale: string): Strings {
   return { ...en, ...translations[locale] };
 }

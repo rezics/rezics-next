@@ -7,6 +7,7 @@ import {
 } from '@ark-ui/react/date-input';
 import { XIcon } from 'lucide-react';
 import type React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { FieldLabel } from './field.tsx';
 import type { InputProps } from './input.tsx';
@@ -104,6 +105,7 @@ const DateInputControl = (props: DateInputControlProps) => {
   const { size = 'md', showClear, children } = props;
 
   const dateInput = useArkDateInputContext();
+  const copy = useUiCopy();
   const hasValue = dateInput.value.length > 0;
 
   return (
@@ -126,7 +128,7 @@ const DateInputControl = (props: DateInputControlProps) => {
         {showClear && hasValue && !dateInput.disabled && (
           <InputGroupAddon align="inline-end">
             <InputGroupButton
-              aria-label="Clear date"
+              aria-label={copy.clearDate}
               data-slot="date-input-clear"
               onClick={() => dateInput.clearValue()}
               size="icon-xs"

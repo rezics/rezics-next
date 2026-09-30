@@ -109,4 +109,5 @@ export default {
   saveSection: "Änderungen speichern",
   sectionFailed: "Einstellung konnte nicht gespeichert werden. Lade die Seite neu und versuche es noch einmal.",
   sectionStale: "Diese Einstellung wurde anderswo geändert. Lade die Seite neu, um sie zu prüfen.",
+  blockPlaceholder: '@handle',
 } satisfies Partial<SettingsMessages>;

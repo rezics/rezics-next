@@ -76,6 +76,12 @@ export const messages = {
   correctionMade: 'A correction was made to something you follow',
   moreLikeThis: plural({ one: insert('and {{count}} more like this'), other: insert('and {{count}} more like this') },
     { count: asValue(number()) }),
+  navHome: 'Home',
+  navDiscover: 'Discover',
+  navCreate: 'Create',
+  navAlerts: 'Alerts',
+  navLibrary: 'Library',
+  navLibraryShort: 'Library',
 };
 
 export type ShellMessages = typeof messages;

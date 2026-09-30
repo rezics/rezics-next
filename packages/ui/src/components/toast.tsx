@@ -10,6 +10,7 @@ import {
 import { CircleAlertIcon, CircleCheckIcon, InfoIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import type React from 'react';
 import { cn } from '../utils.ts';
+import { useUiCopy } from '../i18n/copy.ts';
 import { Button } from './button.tsx';
 import { Spinner } from './spinner.tsx';
 
@@ -75,6 +76,7 @@ interface ToastItemProps extends React.ComponentProps<typeof ArkToast.Root> {
 
 export const ToastItem = (props: ToastItemProps) => {
   const { toast: toastData, className, ...rest } = props;
+  const copy = useUiCopy();
 
   const ToastIcon = toastData.type ? TOAST_ICONS[toastData.type as keyof typeof TOAST_ICONS] : null;
 
@@ -150,7 +152,7 @@ export const ToastItem = (props: ToastItemProps) => {
         {!isExplicitClosable && (
           <ArkToast.CloseTrigger asChild data-slot="toast-close-trigger">
             <Button
-              aria-label="Close"
+              aria-label={copy.close}
               className="opacity-64 hover:opacity-100"
               size="icon-xs"
               variant="ghost"

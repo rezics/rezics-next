@@ -1,21 +1,10 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@rezics/ui/tabs';
 import { WorkCover } from '@rezics/ui/work-cover';
-import { type HeaderSlotProps, type HeroSlotProps, type ModuleSlotProps, type RankingInterval,
+import { type HeaderSlotProps, type HeroSlotProps, type ModuleSlotProps,
   type WorkCardSlotProps, workCoverProps, type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
 import { strings } from './strings.ts';
 
 // Slots render only platform data and retain controls and each public Decision stamp.
-
-const intervalLabels: Record<string, Record<RankingInterval, string>> = {
-  en: { day: 'Today', week: 'This week', month: 'This month' },
-  'zh-Hans': { day: '日榜', week: '周榜', month: '月榜' },
-  'zh-Hant': { day: '日榜', week: '週榜', month: '月榜' },
-  ja: { day: '今日', week: '今週', month: '今月' },
-  ko: { day: '오늘', week: '이번 주', month: '이번 달' },
-  de: { day: 'Heute', week: 'Diese Woche', month: 'Diesen Monat' },
-  fr: { day: 'Aujourd’hui', week: 'Cette semaine', month: 'Ce mois-ci' },
-  es: { day: 'Hoy', week: 'Esta semana', month: 'Este mes' },
-};
 
 /** The shared Zone header puts the publication's name ahead of its lists. */
 export function FictionHeader({ zone, actions, members }: HeaderSlotProps) {
@@ -110,7 +99,6 @@ export function FictionShelf({ zone, module, data, card, Link, whyHere, fallback
 /** Each ranking row exposes the measured signal and comparable serial facts. */
 export function FictionRanking({ zone, module, data, card, Link }: ModuleSlotProps<'ranking'>) {
   const t = strings(zone.locale);
-  const labels = intervalLabels[zone.locale] ?? intervalLabels.en!;
   const tabs = data.tabs.filter(tab => tab.items.length);
   const heading = `fz-ranking-${module.id}`;
   return <section aria-labelledby={heading} data-zone-module="ranking" className="zone-module fz-ranking">
@@ -122,7 +110,7 @@ export function FictionRanking({ zone, module, data, card, Link }: ModuleSlotPro
     <Tabs defaultValue={tabs[0]?.interval} className="gap-4">
       <TabsList variant="underline" aria-label={module.title} className="justify-start">
         {tabs.map(tab => <TabsTrigger key={tab.interval} value={tab.interval} className="grow-0 px-4">
-          {labels[tab.interval]}</TabsTrigger>)}
+          {t[tab.interval]}</TabsTrigger>)}
       </TabsList>
       {tabs.map(tab => <TabsContent key={tab.interval} value={tab.interval} className="grid grid-cols-1 gap-5">
         <ol aria-label={t.podium} className="fz-podium">

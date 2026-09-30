@@ -1,5 +1,5 @@
 import { asValue, insert, number, plural } from 'native-i18n';
-import { defineMessages } from '../../i18n/define.ts';
+import { defineMessages, withEnglish } from '../../i18n/define.ts';
 import de from './messages/de.ts';
 import es from './messages/es.ts';
 import fr from './messages/fr.ts';
@@ -45,6 +45,15 @@ const en = {
 
 export const englishMessages = en;
 
-export const messages = defineMessages({ en, 'zh-Hans': zhHans, 'zh-Hant': zhHant, ja, ko, de, fr, es });
+export const messages = defineMessages({
+  en,
+  'zh-Hans': withEnglish(en, zhHans),
+  'zh-Hant': withEnglish(en, zhHant),
+  ja: withEnglish(en, ja),
+  ko: withEnglish(en, ko),
+  de: withEnglish(en, de),
+  fr: withEnglish(en, fr),
+  es: withEnglish(en, es),
+});
 
 export type CatalogueMessages = typeof en;

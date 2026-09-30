@@ -3,6 +3,7 @@
 import { Splitter as ArkSplitter, useSplitterContext } from '@ark-ui/react/splitter';
 import { GripVertical } from 'lucide-react';
 import type React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 
 export const useResizable = useSplitterContext;
@@ -31,10 +32,11 @@ interface ResizableResizeTriggerProps
 
 export const ResizableResizeTrigger = (props: ResizableResizeTriggerProps) => {
   const { withHandle = false, className, ...rest } = props;
+  const copy = useUiCopy();
 
   return (
     <ArkSplitter.ResizeTrigger
-      aria-label="Resize"
+      aria-label={copy.resize}
       className={cn(
         'relative bg-border/60',
         'flex w-px items-center justify-center',

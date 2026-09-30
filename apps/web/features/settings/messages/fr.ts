@@ -109,4 +109,5 @@ export default {
   saveSection: "Enregistrer les modifications",
   sectionFailed: "Impossible d’enregistrer ce choix. Rechargez la page et réessayez.",
   sectionStale: "Ce choix a changé ailleurs. Rechargez la page pour le vérifier.",
+  blockPlaceholder: '@handle',
 } satisfies Partial<SettingsMessages>;

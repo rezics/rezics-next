@@ -6,6 +6,7 @@ import { Presence } from '@ark-ui/react/presence';
 import React from 'react';
 import { tv } from 'tailwind-variants';
 import { cn } from '../utils.ts';
+import { useUiCopy } from '../i18n/copy.ts';
 import { Badge } from './badge.tsx';
 import { Separator } from './separator.tsx';
 
@@ -262,6 +263,7 @@ export interface ActionBarCloseProps extends React.ComponentProps<typeof ark.but
 
 export const ActionBarClose = (props: ActionBarCloseProps) => {
   const { className, onClick, ...rest } = props;
+  const copy = useUiCopy();
 
   const { onClose, isOpen } = _useActionBar();
 
@@ -272,7 +274,7 @@ export const ActionBarClose = (props: ActionBarCloseProps) => {
 
   return (
     <ark.button
-      aria-label="Close"
+      aria-label={copy.close}
       className={cn(
         'opacity-64 transition-opacity',
         'hover:opacity-100',

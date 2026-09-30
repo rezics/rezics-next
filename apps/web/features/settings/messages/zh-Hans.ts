@@ -109,4 +109,5 @@ export default {
   denied: '您已不能修改此资料，请选择其他身份。',
   failed: '无法保存更改，请重试。',
   choose: '选择身份',
+  blockPlaceholder: '@handle',
 } satisfies Partial<SettingsMessages>;

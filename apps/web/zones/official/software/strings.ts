@@ -9,4 +9,6 @@ const translations: Record<string, Partial<Strings>> = {
     alternatives: '个替代选择', more: '查看全部', untitled: '未命名应用',
     platforms: '平台', maintainedBy: '维护者' },
 };
+export const localeStrings = translations;
+
 export const strings = (locale: string): Strings => ({ ...en, ...translations[locale] });

@@ -1,5 +1,5 @@
 import { asValue, insert, number, plural } from 'native-i18n';
-import { defineMessages } from '../../i18n/define.ts';
+import { defineMessages, withEnglish } from '../../i18n/define.ts';
 import zhHans from './messages/zh-Hans.ts';
 
 const en = {
@@ -242,10 +242,20 @@ const en = {
   progressSignIn: 'Sign in to keep your place', progressIdentity: 'Choose who you’re acting as to keep your place',
   progressUnavailable: 'Progress isn’t kept for this Work yet.',
   progressFailed: 'Progress couldn’t be saved. Try again.',
+  unknownLanguage: 'Unknown language',
 };
 
 export const englishMessages = en;
 
-export const messages = defineMessages({ en, 'zh-Hans': zhHans });
+export const messages = defineMessages({
+  en,
+  'zh-Hant': withEnglish(en, undefined),
+  'zh-Hans': withEnglish(en, zhHans),
+  ja: withEnglish(en, undefined),
+  ko: withEnglish(en, undefined),
+  de: withEnglish(en, undefined),
+  fr: withEnglish(en, undefined),
+  es: withEnglish(en, undefined),
+});
 
 export type WorkPageMessages = typeof en;

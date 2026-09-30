@@ -1,0 +1,53 @@
+id: no-inline-copy
+language: Tsx
+severity: error
+message: Interface text belongs in a per-locale catalog, not in the component.
+files:
+  - apps/web/**/*.js
+  - apps/web/**/*.jsx
+  - apps/web/**/*.ts
+  - apps/web/**/*.tsx
+  - apps/accounts/**/*.js
+  - apps/accounts/**/*.jsx
+  - apps/accounts/**/*.ts
+  - apps/accounts/**/*.tsx
+  - packages/ui/**/*.js
+  - packages/ui/**/*.jsx
+  - packages/ui/**/*.ts
+  - packages/ui/**/*.tsx
+ignores:
+  - "**/*.stories.ts"
+  - "**/*.stories.tsx"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/*.e2e.ts"
+  - "**/tests/**"
+  # Story fixtures, not a screen. G-522 owns this file.
+  - "**/story-support.tsx"
+  - "**/messages.ts"
+  - "**/messages/**"
+  - "**/strings.ts"
+  - "**/i18n/**"
+rule:
+  # A word is three or more ASCII letters, or any non-ASCII letter. Units ("px"),
+  # single shortcut glyphs ("Z", "K") and punctuation ("…") are not sentences.
+  any:
+    - kind: jsx_text
+      regex: '(?:[A-Za-z]{3,}|[\p{L}&&[^\x00-\x7F]])'
+      not:
+        regex: '^\s*(?:(?:REZICS|UTC|Esc|Minecraft|©)[\s,]*)+$'
+    - all:
+        - kind: string
+          regex: '(?:[A-Za-z]{3,}|[\p{L}&&[^\x00-\x7F]])'
+          not:
+            regex: "^['\\\"]\\s*(?:(?:REZICS|UTC|Esc|Minecraft|©)[\\s,]*)+['\\\"]$"
+        - inside:
+            kind: jsx_attribute
+            has:
+              kind: property_identifier
+              regex: '^(?:aria-label|title|placeholder|alt)$'
+    - kind: pair
+      has:
+        field: key
+        kind: string
+        regex: "^['\\\"]zh-Hans['\\\"]$"

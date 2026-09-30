@@ -3,6 +3,7 @@
 import { ark } from '@ark-ui/react/factory';
 import { ChevronRightIcon, MoreHorizontalIcon } from 'lucide-react';
 import type React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 
 interface BreadcrumbProps extends React.ComponentProps<typeof ark.nav> {
@@ -21,7 +22,8 @@ interface BreadcrumbProps extends React.ComponentProps<typeof ark.nav> {
  * screens rather than letting the trail wrap onto several lines.
  */
 export const Breadcrumb = (props: BreadcrumbProps) => {
-  const { 'aria-label': ariaLabel = 'Breadcrumb', ...rest } = props;
+  const copy = useUiCopy();
+  const { 'aria-label': ariaLabel = copy.breadcrumb, ...rest } = props;
 
   return <ark.nav aria-label={ariaLabel} data-slot="breadcrumb" {...rest} />;
 };

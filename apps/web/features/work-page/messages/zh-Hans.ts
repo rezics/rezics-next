@@ -254,4 +254,5 @@ export default {
   reviewerFallback: '一位读者',
   edited: '已编辑',
   ratedValue: insert('评分 {{value}}/{{max}}', { value: String, max: String }),
+  unknownLanguage: '未知语言',
 } satisfies Partial<WorkPageMessages>;

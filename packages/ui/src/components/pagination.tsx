@@ -4,6 +4,7 @@ import { ark } from '@ark-ui/react/factory';
 import { Pagination as ArkPagination, usePaginationContext } from '@ark-ui/react/pagination';
 import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
 import React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { Button, buttonVariants } from './button.tsx';
 
@@ -70,7 +71,8 @@ export const Pagination = (props: PaginationProps) => {
 export const PaginationPrevious = (
   props: React.ComponentProps<typeof ArkPagination.PrevTrigger>,
 ) => {
-  const { children = 'Previous', ...rest } = props;
+  const copy = useUiCopy();
+  const { children = copy.previous, ...rest } = props;
 
   return (
     <ArkPagination.PrevTrigger asChild data-slot="pagination-previous" {...rest}>
@@ -83,7 +85,8 @@ export const PaginationPrevious = (
 };
 
 export const PaginationNext = (props: React.ComponentProps<typeof ArkPagination.NextTrigger>) => {
-  const { children = 'Next', ...rest } = props;
+  const copy = useUiCopy();
+  const { children = copy.next, ...rest } = props;
 
   return (
     <ArkPagination.NextTrigger asChild data-slot="pagination-next" {...rest}>

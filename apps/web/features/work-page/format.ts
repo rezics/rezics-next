@@ -1,5 +1,5 @@
 import type { UiLocale } from '../../i18n/define.ts';
-import type { WorkPageMessages } from './messages.ts';
+import { messages, type WorkPageMessages } from './messages.ts';
 
 /** Content text keeps one paragraph per line; blank lines separate nothing. */
 export const paragraphs = (text: string) => text.split('\n').filter(line => line.trim());
@@ -8,12 +8,9 @@ export const paragraphs = (text: string) => text.split('\n').filter(line => line
 const unstated = new Set(['und', 'mul', 'zxx']);
 const primary = (tag: string) => tag.toLowerCase().split('-')[0]!;
 
-/** CLDR's name for `und`; ICU names it after its root locale, "root", which no reader should see. */
-const unknownLanguage: Partial<Record<UiLocale, string>> = { en: 'Unknown language', 'zh-Hans': '未知语言' };
-
 /** A BCP 47 tag's name in the interface language ("zh-Hant" → "繁体中文"), or the tag itself. */
 export function languageName(tag: string, locale: UiLocale): string {
-  if (primary(tag) === 'und') return unknownLanguage[locale] ?? unknownLanguage.en!;
+  if (primary(tag) === 'und') return messages[locale].unknownLanguage;
   try {
     return new Intl.DisplayNames([locale], { type: 'language', fallback: 'code' }).of(tag) ?? tag;
   } catch {

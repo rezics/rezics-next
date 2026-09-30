@@ -10,6 +10,7 @@ import {
 } from '@ark-ui/react/tour';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import {
@@ -153,6 +154,7 @@ interface TourContentProps extends React.ComponentProps<typeof ArkTour.Content> 
 
 export const TourContent = (props: TourContentProps) => {
   const { showCloseButton = true, className, children, ...rest } = props;
+  const copy = useUiCopy();
 
   return (
     <Portal>
@@ -188,7 +190,7 @@ export const TourContent = (props: TourContentProps) => {
               >
                 <X />
 
-                <span className="sr-only">Close</span>
+                <span className="sr-only">{copy.close}</span>
               </Button>
             </TourClose>
           )}

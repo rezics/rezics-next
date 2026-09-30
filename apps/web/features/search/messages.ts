@@ -1,5 +1,5 @@
 import { asValue, insert, number, plural } from 'native-i18n';
-import { defineMessages } from '../../i18n/define.ts';
+import { defineMessages, withEnglish } from '../../i18n/define.ts';
 import zhHans from './messages/zh-Hans.ts';
 
 const en = {
@@ -69,10 +69,29 @@ const en = {
   badLinkTitle: 'This search link is malformed',
   badLinkHelp: 'Something in the address isn’t a filter search knows.',
   titlesUnavailable: 'Titles couldn’t be loaded, so some results show a short ID.',
+  conditionHeading: 'Conditions', conditionFacet: 'Tags', conditionMatch: 'Match',
+  conditionAll: 'All', conditionAny: 'Any', conditionSearch: 'Search tags',
+  conditionSearching: 'Searching…', conditionEmpty: 'No tags found',
+  conditionFailed: 'Tags could not be searched', conditionClear: 'Clear Conditions',
+  conditionRemove: insert('Remove {{name}}', { name: String }),
+  conditionFixed: insert('{{name}}, this page’s tag', { name: String }),
+  conditionFull: insert('Choose up to {{count}} tags here.', { count: String }),
+  conditionAlsoOn: 'Also on these works',
+  conditionIncludeName: insert('Include {{name}}', { name: String }),
+  conditionExcludeName: insert('Exclude {{name}}', { name: String }),
 };
 
 export const englishMessages = en;
 
-export const messages = defineMessages({ en, 'zh-Hans': zhHans });
+export const messages = defineMessages({
+  en,
+  'zh-Hant': withEnglish(en, undefined),
+  'zh-Hans': withEnglish(en, zhHans),
+  ja: withEnglish(en, undefined),
+  ko: withEnglish(en, undefined),
+  de: withEnglish(en, undefined),
+  fr: withEnglish(en, undefined),
+  es: withEnglish(en, undefined),
+});
 
 export type SearchMessages = typeof en;

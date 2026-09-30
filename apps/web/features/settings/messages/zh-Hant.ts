@@ -74,4 +74,5 @@ export default {
   saveSection: '儲存變更',
   sectionFailed: '無法儲存此設定。請重新載入後再試。',
   sectionStale: '此設定已在其他地方變更。請重新載入以確認最新內容。',
+  blockPlaceholder: '@handle',
 } satisfies Partial<SettingsMessages>;

@@ -5,6 +5,7 @@ import { Combobox as ArkCombobox } from '@ark-ui/react/combobox';
 import { Dialog as ArkDialog } from '@ark-ui/react/dialog';
 import { SearchIcon } from 'lucide-react';
 import type React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import {
   Combobox,
@@ -102,9 +103,11 @@ export const Command: ArkCombobox.RootComponent = (props) => {
     unmountOnExit = true,
     className,
     children,
-    'aria-label': ariaLabel = 'Command palette',
+    'aria-label': ariaLabelProp,
     ...rest
   } = props;
+  const copy = useUiCopy();
+  const ariaLabel = ariaLabelProp ?? copy.commandPalette;
 
   return (
     <Combobox
@@ -144,13 +147,14 @@ interface CommandInputProps extends Omit<React.ComponentProps<typeof ArkCombobox
 
 export const CommandContent = (props: React.ComponentProps<typeof ArkCombobox.Content>) => {
   const { className, ...rest } = props;
+  const copy = useUiCopy();
 
   // An empty listbox is invalid ARIA; hide it and let CommandEmpty, placed beside it, speak.
   const empty = useCombobox().collection.size === 0;
 
   return (
     <ArkCombobox.Content
-      aria-label="Command results"
+      aria-label={copy.commandResults}
       hidden={empty || undefined}
       className={cn(
         'flex flex-1 flex-col',
@@ -188,12 +192,13 @@ export const CommandInput = (props: CommandInputProps) => {
 // Ark renders CommandContent as a dialog; the options need a listbox parent.
 export const CommandList = (props: React.ComponentProps<'div'>) => {
   const { className, ...rest } = props;
+  const copy = useUiCopy();
 
   return (
     <div className="max-h-72 min-h-0 flex-1">
       <div
         className={cn('flex flex-1 flex-col pr-2.5', className)}
-        aria-label="Commands"
+        aria-label={copy.commands}
         data-slot="command-list"
         role="listbox"
         {...rest}

@@ -3,6 +3,7 @@
 import { DatePicker as ArkCalendar } from '@ark-ui/react/date-picker';
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import type React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { nativeSelectVariants } from './native-select.tsx';
@@ -61,7 +62,8 @@ export const CalendarViewDate = (props: React.ComponentProps<typeof ArkCalendar.
 };
 
 export const CalendarTodayTrigger = (props: React.ComponentProps<typeof Button>) => {
-  const { variant = 'outline', size = 'lg', children = 'Today', ...rest } = props;
+  const copy = useUiCopy();
+  const { variant = 'outline', size = 'lg', children = copy.today, ...rest } = props;
 
   return (
     <CalendarContext>

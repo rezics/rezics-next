@@ -11,6 +11,7 @@ import {
   useDialogContentRef,
   useDialogOpen,
 } from '../hooks/use-dialog-behavior.ts';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { ScrollArea } from './scroll-area.tsx';
@@ -312,6 +313,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
     ...rest
   } = props;
   const { contentRef, pending } = _useDrawerModal();
+  const copy = useUiCopy();
   const mergedRef = useDialogContentRef(contentRef, ref);
 
   return (
@@ -343,7 +345,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
                 {!!showCloseButton && (
                   <DrawerClose asChild>
                     <Button
-                      aria-label="Close"
+                      aria-label={copy.close}
                       className="absolute inset-e-4 top-4 opacity-64 hover:opacity-100 group-data-[swipe-direction=up]/drawer:top-[calc(1rem+env(safe-area-inset-top,0))]"
                       disabled={pending}
                       size="icon-sm"

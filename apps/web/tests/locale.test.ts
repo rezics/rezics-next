@@ -46,10 +46,21 @@ describe('interface locale', () => {
     expect(library.bottomLabel?.fr).toBe('Livres');
   });
 
-  test('missing translated keys fall back to English one key at a time', () => {
-    const catalog = defineMessages({ en: { heading: 'Hello', action: 'Continue' }, de: { heading: 'Hallo' } });
-    expect(catalog.de).toEqual({ heading: 'Hallo', action: 'Continue' });
-    expect(catalog.fr).toEqual(catalog.en);
+  test('every supplied locale is returned as given', () => {
+    const en = { heading: 'Hello', action: 'Continue' };
+    const catalog = defineMessages({
+      en,
+      'zh-Hant': en,
+      'zh-Hans': { heading: '你好', action: '继续' },
+      ja: en,
+      ko: en,
+      de: { heading: 'Hallo', action: 'Weiter' },
+      fr: en,
+      es: en,
+    });
+    expect(catalog.de).toEqual({ heading: 'Hallo', action: 'Weiter' });
+    expect(catalog.fr).toEqual(en);
+    expect(catalog['zh-Hans'].heading).toBe('你好');
   });
 
   test('page paths keep one locale prefix while preserving query and fragments', () => {

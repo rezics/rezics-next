@@ -6,6 +6,7 @@ import { XIcon } from 'lucide-react';
 import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
 import { cn } from '../utils.ts';
+import { useUiCopy } from '../i18n/copy.ts';
 import { Button } from './button.tsx';
 import {
   Dialog,
@@ -163,6 +164,7 @@ export const SheetContent = (props: SheetContentProps) => {
     ref,
     ...rest
   } = props;
+  const copy = useUiCopy();
   const { pending, ref: mergedRef } = useDialogContentBehavior(ref);
 
   return (
@@ -181,7 +183,7 @@ export const SheetContent = (props: SheetContentProps) => {
           {!!showCloseButton && (
             <SheetClose asChild>
               <Button
-                aria-label="Close"
+                aria-label={copy.close}
                 className="absolute inset-e-2 top-2 opacity-64 hover:opacity-100"
                 disabled={pending}
                 size="icon-sm"

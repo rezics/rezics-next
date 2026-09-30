@@ -208,6 +208,8 @@ const translations: Record<string, Strings> = {
   },
 };
 
+export const localeStrings = translations;
+
 export function strings(locale: string): Strings {
   return translations[locale] ?? en;
 }

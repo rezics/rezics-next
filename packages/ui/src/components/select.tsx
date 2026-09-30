@@ -6,6 +6,7 @@ import { Select as ArkSelect, createListCollection, useSelectContext } from '@ar
 import { CheckIcon, ChevronDownIcon, XIcon } from 'lucide-react';
 import type React from 'react';
 import type { VariantProps } from 'tailwind-variants';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { FieldLabel } from './field.tsx';
 import { inputVariants } from './input.tsx';
@@ -246,10 +247,11 @@ export const SelectItem = (props: React.ComponentProps<typeof ArkSelect.Item>) =
 
 export const SelectClearTrigger = (props: React.ComponentProps<typeof ArkSelect.ClearTrigger>) => {
   const { className, ...rest } = props;
+  const copy = useUiCopy();
 
   return (
     <ArkSelect.ClearTrigger
-      aria-label="Clear selected value(s)"
+      aria-label={copy.clearSelected}
       className={cn(
         '[&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-muted-foreground',
         'transition-opacity',

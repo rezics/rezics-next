@@ -12,6 +12,7 @@ import {
   useDialogOpen,
 } from '../hooks/use-dialog-behavior.ts';
 import { cn } from '../utils.ts';
+import { useUiCopy } from '../i18n/copy.ts';
 import { Button } from './button.tsx';
 import { ScrollArea } from './scroll-area.tsx';
 
@@ -217,6 +218,7 @@ export const DialogContent = (props: DialogContentProps) => {
     ref,
     ...rest
   } = props;
+  const copy = useUiCopy();
   const { pending, ref: mergedRef } = useDialogContentBehavior(ref);
 
   return (
@@ -237,7 +239,7 @@ export const DialogContent = (props: DialogContentProps) => {
           {!!showCloseButton && (
             <DialogClose asChild>
               <Button
-                aria-label="Close"
+                aria-label={copy.close}
                 className="absolute inset-e-2 top-2 opacity-64 hover:opacity-100"
                 disabled={pending}
                 size="icon-sm"

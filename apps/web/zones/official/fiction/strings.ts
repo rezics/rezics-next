@@ -20,6 +20,7 @@ const en = {
   chapters: (count: string) => `${count} chapters`,
   words: (count: string) => `${count} words`,
   latestChapter: 'Latest chapter',
+  day: 'Today', week: 'This week', month: 'This month',
 };
 
 type Strings = typeof en;
@@ -45,6 +46,7 @@ const translations: Record<string, Partial<Strings>> = {
     chapters: (count: string) => `${count} 章`,
     words: (count: string) => `${count} 词`,
     latestChapter: '最新章节',
+    day: '日榜', week: '周榜', month: '月榜',
   },
   'zh-Hant': {
     tagline: '網路連載、輕小說與原創作品，由小說編輯部公開甄選。',
@@ -61,6 +63,7 @@ const translations: Record<string, Partial<Strings>> = {
     ongoing: '連載中', completed: '已完結', hiatus: '暫停更新',
     chapters: (count: string) => `${count} 章`, words: (count: string) => `${count} 字`,
     latestChapter: '最新章節',
+    day: '日榜', week: '週榜', month: '月榜',
   },
   ko: {
     tagline: '웹 연재물, 라이트 노벨, 오리지널 작품을 소설 편집진이 공개적으로 선정합니다.',
@@ -77,6 +80,7 @@ const translations: Record<string, Partial<Strings>> = {
     ongoing: '연재 중', completed: '완결', hiatus: '휴재 중',
     chapters: (count: string) => `${count}화`, words: (count: string) => `단어 ${count}개`,
     latestChapter: '최신 회차',
+    day: '오늘', week: '이번 주', month: '이번 달',
   },
   de: {
     tagline: 'Die Redaktion für Geschichten wählt Webserien, Light Novels und Originalwerke öffentlich aus.',
@@ -93,6 +97,7 @@ const translations: Record<string, Partial<Strings>> = {
     ongoing: 'Laufend', completed: 'Abgeschlossen', hiatus: 'Pausiert',
     chapters: (count: string) => `${count} Kapitel`, words: (count: string) => `${count} Wörter`,
     latestChapter: 'Neuestes Kapitel',
+    day: 'Heute', week: 'Diese Woche', month: 'Diesen Monat',
   },
   ja: {
     tagline: 'ウェブ連載やライトノベル、オリジナル作品を、小説編集チームが公開の場で選び抜きます。',
@@ -109,6 +114,7 @@ const translations: Record<string, Partial<Strings>> = {
     ongoing: '連載中', completed: '完結', hiatus: '休載中',
     chapters: (count: string) => `${count}章`, words: (count: string) => `${count}語`,
     latestChapter: '最新話',
+    day: '今日', week: '今週', month: '今月',
   },
   fr: {
     tagline: 'Séries en ligne, light novels et œuvres originales, sélectionnés publiquement par l’équipe éditoriale de Fiction.',
@@ -125,6 +131,7 @@ const translations: Record<string, Partial<Strings>> = {
     ongoing: 'En cours', completed: 'Terminée', hiatus: 'En pause',
     chapters: (count: string) => `${count} chapitres`, words: (count: string) => `${count} mots`,
     latestChapter: 'Dernier chapitre',
+    day: 'Aujourd’hui', week: 'Cette semaine', month: 'Ce mois-ci',
   },
   es: {
     tagline: 'Novelas por entregas, novelas ligeras y obras originales, seleccionadas públicamente por el equipo editorial de Ficción.',
@@ -141,8 +148,11 @@ const translations: Record<string, Partial<Strings>> = {
     ongoing: 'En curso', completed: 'Completada', hiatus: 'En pausa',
     chapters: (count: string) => `${count} capítulos`, words: (count: string) => `${count} palabras`,
     latestChapter: 'Último capítulo',
+    day: 'Hoy', week: 'Esta semana', month: 'Este mes',
   },
 };
+
+export const localeStrings = translations;
 
 export function strings(locale: string): Strings {
   return { ...en, ...translations[locale] };

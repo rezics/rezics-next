@@ -6,6 +6,7 @@ import { Portal } from '@ark-ui/react/portal';
 import { XIcon } from 'lucide-react';
 import React from 'react';
 import { cn } from '../utils.ts';
+import { useUiCopy } from '../i18n/copy.ts';
 import { Button } from './button.tsx';
 import { ScrollArea } from './scroll-area.tsx';
 
@@ -78,6 +79,7 @@ interface PopoverContentProps extends React.ComponentProps<typeof ArkPopover.Con
 
 export const PopoverContent = (props: PopoverContentProps) => {
   const { showCloseButton = false, className, children, ...rest } = props;
+  const copy = useUiCopy();
 
   const content = React.useRef<HTMLDivElement>(null);
   const labelling = usePopoverLabelling(content);
@@ -117,7 +119,7 @@ export const PopoverContent = (props: PopoverContentProps) => {
           {!!showCloseButton && (
             <PopoverClose asChild>
               <Button
-                aria-label="Close"
+                aria-label={copy.close}
                 className="absolute inset-e-2 top-2 opacity-64 hover:opacity-100"
                 size="icon-sm"
                 variant="ghost"

@@ -3,6 +3,7 @@
 import { ark } from '@ark-ui/react/factory';
 import { Timer as ArkTimer, useTimerContext as useArkTimer } from '@ark-ui/react/timer';
 import type React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 
 export const useTimer = useArkTimer;
@@ -129,30 +130,37 @@ export const TimerActionTrigger = (props: React.ComponentProps<typeof ArkTimer.A
 interface TimerActionProps
   extends Omit<React.ComponentProps<typeof ArkTimer.ActionTrigger>, 'action'> {}
 
-export const TimerPause = (props: TimerActionProps) => (
-  <ArkTimer.ActionTrigger aria-label="Pause" data-slot="timer-pause" {...props} action="pause" />
-);
+export const TimerPause = (props: TimerActionProps) => {
+  const copy = useUiCopy();
+  return <ArkTimer.ActionTrigger aria-label={copy.pause} data-slot="timer-pause" {...props} action="pause" />;
+};
 
-export const TimerResume = (props: TimerActionProps) => (
-  <ArkTimer.ActionTrigger aria-label="Resume" data-slot="timer-resume" {...props} action="resume" />
-);
+export const TimerResume = (props: TimerActionProps) => {
+  const copy = useUiCopy();
+  return <ArkTimer.ActionTrigger aria-label={copy.resume} data-slot="timer-resume" {...props} action="resume" />;
+};
 
-export const TimerStart = (props: TimerActionProps) => (
-  <ArkTimer.ActionTrigger aria-label="Start" data-slot="timer-start" {...props} action="start" />
-);
+export const TimerStart = (props: TimerActionProps) => {
+  const copy = useUiCopy();
+  return <ArkTimer.ActionTrigger aria-label={copy.start} data-slot="timer-start" {...props} action="start" />;
+};
 
-export const TimerReset = (props: TimerActionProps) => (
-  <ArkTimer.ActionTrigger aria-label="Reset" data-slot="timer-reset" {...props} action="reset" />
-);
+export const TimerReset = (props: TimerActionProps) => {
+  const copy = useUiCopy();
+  return <ArkTimer.ActionTrigger aria-label={copy.reset} data-slot="timer-reset" {...props} action="reset" />;
+};
 
-export const TimerRestart = (props: TimerActionProps) => (
-  <ArkTimer.ActionTrigger
-    aria-label="Restart"
-    data-slot="timer-restart"
-    {...props}
-    action="restart"
-  />
-);
+export const TimerRestart = (props: TimerActionProps) => {
+  const copy = useUiCopy();
+  return (
+    <ArkTimer.ActionTrigger
+      aria-label={copy.restart}
+      data-slot="timer-restart"
+      {...props}
+      action="restart"
+    />
+  );
+};
 
 export const TimerPlay = (props: TimerActionProps) => {
   const { paused } = useArkTimer();

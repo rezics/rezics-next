@@ -6,6 +6,7 @@ import {
 } from '@ark-ui/react/signature-pad';
 import { RotateCcw } from 'lucide-react';
 import type React from 'react';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 
@@ -73,6 +74,7 @@ const SignaturePadSegment = (props: React.ComponentProps<typeof ArkSignaturePad.
 
 const SignaturePadClear = (props: React.ComponentProps<typeof ArkSignaturePad.ClearTrigger>) => {
   const { className, ...rest } = props;
+  const copy = useUiCopy();
 
   return (
     <ArkSignaturePad.ClearTrigger
@@ -83,7 +85,7 @@ const SignaturePadClear = (props: React.ComponentProps<typeof ArkSignaturePad.Cl
     >
       <Button size="icon-md" variant="ghost">
         <RotateCcw />
-        <span className="sr-only">Clear signature</span>
+        <span className="sr-only">{copy.clearSignature}</span>
       </Button>
     </ArkSignaturePad.ClearTrigger>
   );

@@ -75,4 +75,10 @@ export default {
   correctionOn: insert('《{{title}}》有一处更正', { title: String }),
   correctionMade: '你关注的内容有一处更正',
   moreLikeThis: plural({ other: insert('另有 {{count}} 条类似通知') }, { count: asValue(number()) }),
+  navHome: '首页',
+  navDiscover: '探索',
+  navCreate: '创作',
+  navAlerts: '通知',
+  navLibrary: '书架',
+  navLibraryShort: '书架',
 } satisfies Partial<ShellMessages>;

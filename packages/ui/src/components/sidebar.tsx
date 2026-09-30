@@ -4,6 +4,7 @@ import { ark } from '@ark-ui/react/factory';
 import { PanelLeftIcon } from 'lucide-react';
 import React from 'react';
 import type { VariantProps } from 'tailwind-variants';
+import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { Button, buttonVariants } from './button.tsx';
 import { Input } from './input.tsx';
@@ -163,6 +164,7 @@ export const Sidebar = (props: SidebarProps) => {
     ...rest
   } = props;
 
+  const copy = useUiCopy();
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
 
   if (collapsible === 'none') {
@@ -206,8 +208,8 @@ export const Sidebar = (props: SidebarProps) => {
         >
           <SheetHeader
             className="sr-only"
-            description="Displays the mobile sidebar."
-            title="Sidebar"
+            description={copy.sidebarDescription}
+            title={copy.sidebar}
           />
           <ark.div className="flex size-full flex-col">{children}</ark.div>
         </SheetContent>
@@ -285,7 +287,8 @@ interface SidebarTriggerProps extends React.ComponentProps<typeof Button> {
 }
 
 export const SidebarTrigger = (props: SidebarTriggerProps) => {
-  const { label = 'Toggle Sidebar', className, onClick, ...rest } = props;
+  const copy = useUiCopy();
+  const { label = copy.toggleSidebar, className, onClick, ...rest } = props;
 
   const { toggleSidebar } = useSidebar();
 
@@ -310,12 +313,13 @@ export const SidebarTrigger = (props: SidebarTriggerProps) => {
 
 export const SidebarRail = (props: React.ComponentProps<typeof ark.button>) => {
   const { className, ...rest } = props;
+  const copy = useUiCopy();
 
   const { toggleSidebar } = useSidebar();
 
   return (
     <ark.button
-      aria-label="Toggle Sidebar"
+      aria-label={copy.toggleSidebar}
       className={cn(
         'absolute inset-y-0 z-20 -translate-x-1/2',
         'w-4',
@@ -336,7 +340,7 @@ export const SidebarRail = (props: React.ComponentProps<typeof ark.button>) => {
       data-slot="sidebar-rail"
       onClick={toggleSidebar}
       tabIndex={-1}
-      title="Toggle Sidebar"
+      title={copy.toggleSidebar}
       type="button"
       {...rest}
     />

@@ -74,4 +74,10 @@ export default {
   newChapterOn: insert('「{{title}}」に新しい章が追加されました', { title: String }),
   votedOnPost: insert('{{name}}さんが「{{title}}」についてのあなたの投稿に投票しました', { name: String, title: String }),
   votedOnYourPost: insert('{{name}}さんがあなたの投稿に投票しました', { name: String }),
+  navHome: 'ホーム',
+  navDiscover: '見つける',
+  navCreate: '作る',
+  navAlerts: '通知',
+  navLibrary: '本棚',
+  navLibraryShort: '本棚',
 } satisfies Partial<ShellMessages>;

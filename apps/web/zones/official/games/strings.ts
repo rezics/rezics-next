@@ -13,4 +13,6 @@ const translations: Record<string, Partial<Strings>> = {
     released: '已發行', upcoming: '即將推出', more: '查看全部', mods: '瀏覽模組', platforms: '平台',
     languages: '語言', releaseUnknown: '暫無發行日期', untitled: '未命名遊戲', tags: '標籤', reviews: '則評論' },
 };
+export const localeStrings = translations;
+
 export const strings = (locale: string): Strings => ({ ...en, ...translations[locale] });

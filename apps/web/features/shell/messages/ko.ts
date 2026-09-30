@@ -77,4 +77,10 @@ export default {
   newChapterOn: insert('“{{title}}”에 새 챕터가 올라왔어요', { title: String }),
   votedOnPost: insert('{{name}}님이 “{{title}}”에 관한 내 게시물에 투표했어요', { name: String, title: String }),
   votedOnYourPost: insert('{{name}}님이 내 게시물에 투표했어요', { name: String }),
+  navHome: '홈',
+  navDiscover: '둘러보기',
+  navCreate: '만들기',
+  navAlerts: '알림',
+  navLibrary: '서재',
+  navLibraryShort: '서재',
 } satisfies Partial<ShellMessages>;

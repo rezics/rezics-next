@@ -77,4 +77,10 @@ export default {
   newChapter: "Una obra que sigues tiene un capítulo nuevo",
   votedOnPost: insert("{{name}} votó tu publicación sobre «{{title}}»", { name: String, title: String }),
   votedOnYourPost: insert("{{name}} votó tu publicación", { name: String }),
+  navHome: 'Inicio',
+  navDiscover: 'Explorar',
+  navCreate: 'Crear',
+  navAlerts: 'Avisos',
+  navLibrary: 'Biblioteca',
+  navLibraryShort: 'Libros',
 } satisfies Partial<ShellMessages>;
