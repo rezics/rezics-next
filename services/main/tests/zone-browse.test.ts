@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { ModListing } from '../src/modules/package/mod-release.ts';
-import { ModResolutionUnavailable } from '../src/modules/package/mod-resolution.ts';
+import { QueryRejected } from '../src/modules/query/compile.ts';
 import { RecommendationUnavailable } from '../src/modules/recommendation/derived-generation.ts';
 import { type BrowseCandidate, browseWindow, filterDocument, readZoneBrowse, textRelevance }
   from '../src/modules/zone-modules/browse.ts';
@@ -11,40 +10,31 @@ const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${Strin
 const MOD = 'https://rezics.com/vocab/ModPackage', DOC = 'https://schema.org/DigitalDocument';
 const BOOK = 'https://schema.org/Book';
 const fabric = id(900), forge = id(901);
-const listing = (loader: 'Fabric' | 'Forge', versions: string[], environment: ModListing['environment'],
-  updatedAt: string): ModListing => ({ profile: 'mod-work-card-v2', game: 'Minecraft', gameVersions: versions,
-  loaders: [loader], environment, latestRelease: '1.0.0', updatedAt });
 const candidates: BrowseCandidate[] = [
   { work: id(1), order: 0, title: 'Lumen Lanterns', types: [MOD], concepts: [fabric], status: null, words: null,
-    listing: listing('Fabric', ['1.21.1'], 'client', '2026-09-20T00:00:00Z'), updatedAt: '2026-09-20T00:00:00Z' },
+    updatedAt: '2026-09-20T00:00:00Z' },
   { work: id(2), order: 1, title: 'Chunk Weaver', types: [MOD], concepts: [forge], status: null, words: null,
-    listing: listing('Forge', ['1.21.1', '1.20.1'], 'client-and-server', '2026-09-27T00:00:00Z'),
     updatedAt: '2026-09-27T00:00:00Z' },
   { work: id(3), order: 2, title: 'Tidy Inventory', types: [MOD], concepts: [fabric], status: null, words: null,
-    listing: listing('Fabric', ['1.20.1'], 'server', '2026-09-01T00:00:00Z'), updatedAt: '2026-09-01T00:00:00Z' },
+    updatedAt: '2026-09-01T00:00:00Z' },
   { work: id(4), order: 3, title: 'Minecraft shaders: a gentle first setup', types: [DOC], concepts: [],
-    status: 'completed', words: 1200, listing: null, updatedAt: null },
+    status: 'completed', words: 1200, updatedAt: null },
   { work: id(5), order: 4, title: '末班地铁', types: [BOOK], concepts: [], status: 'ongoing', words: 450_000,
-    listing: null, updatedAt: '2026-09-25T00:00:00Z' },
+    updatedAt: '2026-09-25T00:00:00Z' },
 ];
 const titles = (items: readonly BrowseCandidate[]) => items.map(item => item.title);
 
 test('Conditions within a Facet match any value and Facets match all, with self-excluding counts', () => {
-  const { found, facets } = browseWindow(candidates, { modLoader: ['Fabric'], modGameVersion: ['1.21.1'] },
-    null, 'newest');
-  expect(titles(found)).toEqual(['Lumen Lanterns']);
-  // Loader counts ignore the loader Condition but keep the game version: what choosing Forge would add.
-  expect(facets.modLoader).toEqual([{ value: 'Fabric', count: 1 }, { value: 'Forge', count: 1 }]);
-  expect(facets.modGameVersion).toEqual([{ value: '1.20.1', count: 1 }, { value: '1.21.1', count: 1 }]);
-  // A mod for both sides counts for, and matches, either side.
-  expect(titles(browseWindow(candidates, { modEnvironment: ['server'] }, null, 'newest').found))
-    .toEqual(['Chunk Weaver', 'Tidy Inventory']);
-  expect(titles(browseWindow(candidates, { concept: [forge] }, null, 'newest').found)).toEqual(['Chunk Weaver']);
+  const { found, facets } = browseWindow(candidates, { type: [MOD], concept: [fabric] }, null, 'newest');
+  expect(titles(found)).toEqual(['Lumen Lanterns', 'Tidy Inventory']);
+  expect(facets.concept).toEqual([{ value: fabric, count: 2 }, { value: forge, count: 1 }]);
   expect(titles(browseWindow(candidates, { conceptExclude: [fabric] }, null, 'newest').found))
     .toEqual(['Chunk Weaver', 'Minecraft shaders: a gentle first setup', '末班地铁']);
-  // A chosen value nothing matches stays listed at zero, so it can be cleared.
-  expect(browseWindow(candidates, { modLoader: ['NeoForge'] }, null, 'newest').facets.modLoader)
-    .toContainEqual({ value: 'NeoForge', count: 0 });
+  expect(browseWindow(candidates, { status: ['hiatus'] }, null, 'newest').facets.status)
+    .toContainEqual({ value: 'hiatus', count: 0 });
+  const excluded = browseWindow(candidates, { statusExclude: ['completed'] }, null, 'newest');
+  expect(titles(excluded.found)).not.toContain('Minecraft shaders: a gentle first setup');
+  expect(excluded.facets.status).toContainEqual({ value: 'completed', count: 1 });
 });
 
 test('status and length bands filter serials, and length bands keep their own order', () => {
@@ -53,13 +43,23 @@ test('status and length bands filter serials, and length bands keep their own or
   expect(facets.status).toEqual([{ value: 'completed', count: 1 }, { value: 'ongoing', count: 1 }]);
   expect(browseWindow(candidates, {}, null, 'newest').facets.length)
     .toEqual([{ value: '0-99999', count: 1 }, { value: '300000-999999', count: 1 }]);
-  expect(titles(browseWindow(candidates, { length: ['100000-'] }, null, 'newest').found)).toEqual(['末班地铁']);
-  expect(filterDocument({ length: ['100000-299999'], modLoader: ['Fabric'] })).toEqual({ all: [
-    { facet: 'length', range: { min: '100000', max: '299999' } }, { facet: 'modLoader', any: ['Fabric'] }] });
-  expect(filterDocument({ modRequiredDependency: ['fabric-api'] })).toEqual({ all: [
-    { facet: 'modRequiredDependency', any: ['fabric-api'] }] });
+  expect(titles(browseWindow(candidates, { length: { min: '100000' } }, null, 'newest').found)).toEqual(['末班地铁']);
+  expect(filterDocument({ length: { min: '100000', max: '299999' }, status: ['completed'] }))
+    .toEqual({ all: [{ facet: 'status', any: ['completed'] },
+      { facet: 'length', range: { min: '100000', max: '299999' } }] });
   expect(filterDocument({ concept: [forge], conceptExclude: [fabric] })).toEqual({ all: [
     { facet: 'concept', any: [forge] }, { facet: 'concept', none: [fabric] }] });
+});
+
+test('length ranges preserve inclusive bounds, zero and unknown counts independently of buckets', () => {
+  const items = [{ ...candidates[0]!, words: 0 }, { ...candidates[1]!, words: null },
+    { ...candidates[2]!, words: 123 }];
+  expect(browseWindow(items, { length: { max: '0' } }, null, 'newest').found.map(item => item.work))
+    .toEqual([id(1)]);
+  const exact = browseWindow(items, { length: { min: '123', max: '123' } }, null, 'newest');
+  expect(exact.found.map(item => item.work)).toEqual([id(3)]);
+  expect(exact.facets.length).toEqual([{ value: '0-99999', count: 2 }]);
+  expect(browseWindow(items, { length: { min: '124' } }, null, 'newest').found).toEqual([]);
 });
 
 test('text ranks whole titles, starts and words before inner matches; sorts break ties by adoption', () => {
@@ -111,15 +111,8 @@ function session(count: number, options: { cursor?: string; limit?: number; tags
         avatar: { kind: 'fallback', policy: 'test', key: resource, resourceType: 'work' } }));
     },
     deps: {
-      packageModResolutions: { readBrowseListings: async (ids: string[]) => {
-        calls.push(`listings:${ids.length}`);
-        return new Map(ids.map((work, n) => {
-          const publishedAt = `2026-09-${String(1 + (n % 28)).padStart(2, '0')}T00:00:00Z`;
-          const card = listing(n % 2 ? 'Forge' : 'Fabric', ['1.21.1'], 'client', publishedAt);
-          return [work, { listing: card, releases: [{ version: card.latestRelease,
-            gameVersions: card.gameVersions, loaders: card.loaders, environment: card.environment,
-            dependencies: [], publishedAt }] }];
-        }));
+      packageModResolutions: { readBrowseListings: async () => {
+        throw new Error('Zone browse must not read package listings');
       } },
       serialStats: { batch: async (ids: string[]) => { calls.push(`stats:${ids.length}`); return new Map(); } },
       discovery: options.tags === 'none' ? undefined : {
@@ -135,16 +128,16 @@ function session(count: number, options: { cursor?: string; limit?: number; tags
 
 test('a browse page reads one window and hydrates one page within its budget', async () => {
   const first = session(ZONE_BROWSE_COST.windowRows + 5, { limit: 20 });
-  const page = await readZoneBrowse(first.read, realm, { loader: ['Fabric'] });
+  const page = await readZoneBrowse(first.read, realm, { concept: [fabric] });
   expect(page.items).toHaveLength(20);
   expect(page.matches).toEqual({ value: 30, kind: 'lower-bound' });
   expect(page.window).toEqual({ scanned: ZONE_BROWSE_COST.windowRows, complete: false });
-  expect(page.query.filter).toEqual({ all: [{ facet: 'modLoader', any: ['Fabric'] }] });
+  expect(page.query.filter).toEqual({ all: [{ facet: 'concept', any: [fabric] }] });
   expect(page.facets.concept).toEqual([{ value: fabric, count: 30,
     name: { value: 'Fabric', language: 'en', direction: 'ltr', basis: 'requested' } }]);
   const count = (prefix: string) => first.calls.filter(call => call.startsWith(prefix)).length;
   expect([count('candidates'), count('types'), count('listings'), count('stats'), count('tags:6'), count('realm')])
-    .toEqual([1, 1, 1, 2, 1, 2]);
+    .toEqual([1, 1, 0, 2, 1, 2]);
   // Window, Concept names and the page fence; never more than three summary batches of at most 60.
   expect(first.calls.filter(call => call.startsWith('summaries'))).toEqual(['summaries:60', 'summaries:1', 'summaries:20']);
   // The window's statistics, then the page's with its summaries; one serial head query and one metadata
@@ -152,37 +145,13 @@ test('a browse page reads one window and hydrates one page within its budget', a
   expect(count('graph')).toBeLessThanOrEqual(1 + 2 * 20 + 20);
 
   const next = session(ZONE_BROWSE_COST.windowRows + 5, { limit: 20, cursor: page.nextCursor! });
-  const second = await readZoneBrowse(next.read, realm, { loader: ['Fabric'] });
+  const second = await readZoneBrowse(next.read, realm, { concept: [fabric] });
   expect(second.items).toHaveLength(10);
   expect(second.nextCursor).toBeNull();
   expect(new Set([...page.items, ...second.items].map(item => item.id)).size).toBe(30);
   // A cursor is bound to its Query: another filter cannot reuse it.
-  await expect(readZoneBrowse(session(10, { cursor: page.nextCursor! }).read, realm, { loader: ['Forge'] }))
+  await expect(readZoneBrowse(session(10, { cursor: page.nextCursor! }).read, realm, { concept: [forge] }))
     .rejects.toBeInstanceOf(WorkReadInvalid);
-});
-
-test('one release must satisfy version, loader and side together; counts use that same release', () => {
-  const newer = { version: '2.0.0-beta.1', gameVersions: ['1.21.1'], loaders: ['Fabric'] as const,
-    environment: 'client' as const, dependencies: [{ id: 'fabric-api', requirement: 'required' as const,
-      range: null, side: 'client' as const }], publishedAt: '2026-09-28T00:00:00Z' };
-  const older = { version: '1.4.0', gameVersions: ['1.20.1'], loaders: ['Forge'] as const,
-    environment: 'client-and-server' as const, dependencies: [{ id: 'forge-config-api', requirement: 'required' as const,
-      range: null, side: null }], publishedAt: '2026-08-01T00:00:00Z' };
-  const item: BrowseCandidate = { ...candidates[0]!, listing: { ...candidates[0]!.listing!,
-    gameVersions: ['1.21.1', '1.20.1'], loaders: ['Fabric', 'Forge'] },
-  releases: [{ ...newer, loaders: [...newer.loaders] }, { ...older, loaders: [...older.loaders] }] };
-  expect(browseWindow([item], { modGameVersion: ['1.20.1'], modLoader: ['Fabric'] }, null, 'newest').found)
-    .toEqual([]);
-  expect(browseWindow([item], { modGameVersion: ['1.20.1'], modLoader: ['Forge'],
-    modEnvironment: ['server'] }, null, 'newest').found).toHaveLength(1);
-  expect(browseWindow([item], { modGameVersion: ['1.20.1'] }, null, 'newest').facets.modLoader)
-    .toEqual([{ value: 'Forge', count: 1 }]);
-  expect(browseWindow([item], { modGameVersion: ['1.20.1'], modRequiredDependency: ['forge-config-api'] },
-    null, 'newest').found).toHaveLength(1);
-  expect(browseWindow([item], { modGameVersion: ['1.20.1'], modRequiredDependency: ['fabric-api'] },
-    null, 'newest').found).toHaveLength(0);
-  expect(browseWindow([item], { modGameVersion: ['1.20.1'] }, null, 'newest').facets.modRequiredDependency)
-    .toEqual([{ value: 'forge-config-api', count: 1 }]);
 });
 
 test('Tags built before the latest change withhold Tag-filtered Works; missing Tags refuse Tag Conditions', async () => {
@@ -206,22 +175,18 @@ test('Tags built before the latest change withhold Tag-filtered Works; missing T
 
 test('relevance needs text, and an empty length range is refused before any graph read', async () => {
   const read = session(3);
-  await expect(readZoneBrowse(read.read, realm, { sort: 'relevance' })).rejects.toBeInstanceOf(WorkReadInvalid);
-  await expect(readZoneBrowse(read.read, realm, { length: '500-100' })).rejects.toBeInstanceOf(WorkReadInvalid);
+  await expect(readZoneBrowse(read.read, realm, { sort: 'relevance' })).rejects.toBeInstanceOf(QueryRejected);
+  await expect(readZoneBrowse(read.read, realm, { length: '500-100' })).rejects.toBeInstanceOf(QueryRejected);
   expect(read.calls.filter(call => call !== 'realm')).toEqual([]);
   expect((await readZoneBrowse(session(3).read, realm, { q: 'Mod 2' })).items.map(item => item.title.value))
     .toEqual(['Mod 2']);
 });
 
-test('a compatibility read that exceeds its release budget is unavailable, not a broadened result', async () => {
-  const read = session(2);
-  (read.read.deps.packageModResolutions as unknown as {
-    readBrowseListings: (works: string[]) => Promise<never> }).readBrowseListings =
-    async () => { throw new ModResolutionUnavailable('too many releases'); };
-  await expect(readZoneBrowse(read.read, realm, { loader: ['Forge'], gameVersion: ['1.20.1'] }))
-    .rejects.toBeInstanceOf(WorkReadUnavailable);
-  const missing = session(2);
-  delete (missing.read.deps as { packageModResolutions?: unknown }).packageModResolutions;
-  await expect(readZoneBrowse(missing.read, realm, { loader: ['Forge'] }))
-    .rejects.toBeInstanceOf(WorkReadUnavailable);
+test('unknown and removed Conditions refuse before any owner read', async () => {
+  for (const query of [{ type: ['https://example.com/Unknown'] }, { loader: ['Fabric'] }]) {
+    const read = session(2);
+    // The HTTP schema closes query parameters; the direct adapter also refuses unknown fields.
+    await expect(readZoneBrowse(read.read, realm, query as never)).rejects.toBeInstanceOf(QueryRejected);
+    expect(read.calls).toEqual([]);
+  }
 });

@@ -22,6 +22,7 @@ const facetStep = t.Union([
   t.Object({ kind: t.Literal('triple'), predicate: iri, inverse: t.Optional(t.Literal(true)),
     graph: t.Optional(t.Literal('revisions')), types: t.Optional(t.Array(iri, { minItems: 1 })) }, closed),
   t.Object({ kind: t.Literal('selection') }, closed),
+  t.Object({ kind: t.Literal('units'), unit: iri }, closed),
   t.Object({ kind: t.Literal('credit'), role: t.String() }, closed),
   t.Object({ kind: t.Literal('statement'), predicate: t.Optional(iri), relation: t.Optional(iri) }, closed),
   t.Object({ kind: t.Literal('occurrence') }, closed),

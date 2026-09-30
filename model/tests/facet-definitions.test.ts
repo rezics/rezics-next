@@ -4,6 +4,7 @@ import { compileFacet, facetId, facetLocales, facetRef, renderFacetRegistry, typ
   from '../compiler/facet.ts';
 import { authoredFacets, authoredProfiles, buildArtifacts } from '../compiler/generate.ts';
 import { ratingFacet } from '../definitions/facet-rating-v1.ts';
+import { lengthFacet } from '../definitions/facet-length-v1.ts';
 import { typeFacet } from '../definitions/facet-type-v1.ts';
 
 const repo = new URL('../..', import.meta.url).pathname;
@@ -19,11 +20,13 @@ const admittedMeanings: Record<string, string> = {
   'facet-concept-v1': '6a2438d45d2616af705374094389676616c09e0fbbc8eda2330754b4d325a5d5',
   'facet-contributor-v1': '93579a0f6b18f88af7560a8e0ca63bd8673cfcf0049690144b1d5e951564ea97',
   'facet-language-v1': '6fccc1a9beb900132c2a247a691b5fbef7df2572fc62e3000a87d6722f83a9f5',
+  'facet-length-v1': 'e9e5794ed99df79c9599e318717da495e6ebcc14422137a67f88433a14055208',
   'facet-rating-v1': '22962ff8e656c18b6bc7e3b40de8a49bf42022b45161a27b45a730664e7aa074',
   'facet-realm-v1': '1eef10945c692bf3f4a15d74a6222ac454023f81831710de16b986f78a05ee65',
   'facet-relation-v1': '34681c142eb5ce28e53f81618a125bf66e26c49fa89739c1675d3ebf2a1dad89',
   'facet-role-v1': '50a1601af2fce441d8eb60d8f56b6a98b7492e64569836477536dbeec4c18229',
   'facet-statement-v1': '834feca0b51901b385dad5fd3e6a78195c048e391ad4ece66c87b64850ec2986',
+  'facet-status-v1': '51275e8dc39d61531d594b5806b7e620d3bc8111bd366a85bb0759b188b12375',
   'facet-type-v1': '053c6b68d9822f3089323503b30c71269c0dd9a52cab3384ac8a35949e9405c5',
 };
 
@@ -75,8 +78,8 @@ test('Facets: the compiler refuses a Facet whose parts do not fit together', () 
 });
 
 test('Facets: the admitted set covers what readers filter by today', () => {
-  expect([...compiled.keys()].sort()).toEqual(['author', 'concept', 'contributor', 'language', 'rating', 'realm',
-    'relation', 'role', 'statement', 'type']);
+  expect([...compiled.keys()].sort()).toEqual(['author', 'concept', 'contributor', 'language', 'length', 'rating', 'realm',
+    'relation', 'role', 'statement', 'status', 'type']);
   const rv = 'https://rezics.com/vocab/';
   expect(facet('type')).toMatchObject({ source: 'global', operators: ['any', 'all', 'none'],
     path: [{ kind: 'triple', predicate: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type' }],
@@ -94,6 +97,12 @@ test('Facets: the admitted set covers what readers filter by today', () => {
     parameters: [{ key: 'ratingContext' }], values: [{ datatype: 'http://www.w3.org/2001/XMLSchema#decimal', min: '1', max: '10' }],
     path: [{}, { kind: 'rating', scale: { min: 1, max: 10 },
       population: 'https://rezics.com/definition/rating-account-principal-population-v1' }] });
+  expect(facet('status')).toMatchObject({ source: 'global', operators: ['any', 'none'],
+    path: [{ kind: 'triple', predicate: `${rv}completionStatus` }],
+    values: [{ datatype: 'http://www.w3.org/2001/XMLSchema#string', pattern: '^(ongoing|completed|hiatus)$' }] });
+  expect(facet('length')).toMatchObject({ source: 'global', operators: ['range'],
+    path: [{ kind: 'units', unit: `${rv}Word` }],
+    values: [{ datatype: 'http://www.w3.org/2001/XMLSchema#integer', min: '0' }] });
   expect(facet('relation')).toMatchObject({ occurrence: true, appliesTo: 'resource',
     parameters: [{ key: 'definition' }, { key: 'role' }] });
   expect(facet('role')).toMatchObject({ appliesTo: 'participation', values: [{ kind: 'role' }], operators: ['any', 'none'] });
@@ -113,4 +122,13 @@ test('Facets: Facets define queries and no stored data references them', () => {
     if (path === 'packages/model/src/generated/facets.ts') continue;
     expect(`${path}\n${content}`).not.toMatch(/facet/i);
   }
+});
+
+test('Facets: units are generic, expanded and constrained to composition counts', () => {
+  expect(compileFacet({ ...lengthFacet, path: [{ kind: 'units', unit: 'rv:Chapter' }] }).path)
+    .toEqual([{ kind: 'units', unit: 'https://rezics.com/vocab/Chapter' }]);
+  expect(() => compileFacet({ ...lengthFacet, path: [{ kind: 'units', unit: 'missing:Word' }] }))
+    .toThrow('Cannot expand model term');
+  expect(() => compileFacet({ ...lengthFacet, values: [{ kind: 'datatype', datatype: 'xsd:decimal' }] }))
+    .toThrow('units must count nonnegative integers');
 });

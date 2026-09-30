@@ -4,7 +4,9 @@ import { readZoneReplies } from '../modules/zone-modules/replies.ts';
 import { readZoneGenres } from '../modules/zone-modules/genres.ts';
 import { discoveryError } from '../modules/discovery/management.ts';
 import { readZoneEditorLists } from '../modules/zone-modules/editor-lists.ts';
-import { readZoneBrowse } from '../modules/zone-modules/browse.ts';
+import { compileZoneBrowse, readZoneBrowse } from '../modules/zone-modules/browse.ts';
+import { QueryRejected } from '../modules/query/compile.ts';
+import { problem } from './problems.ts';
 import { publicLanguageRequest } from '../modules/display-language/public-request.ts';
 import { zoneBrowsePage, zoneBrowseQuery, zoneChapterPage, zoneDecisionPage, zoneEditorLists, zoneGenrePage,
   zoneReplyPage, zoneWorkPage } from '../modules/zone-modules/contract.ts';
@@ -94,9 +96,14 @@ export function zoneModuleRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/modules/browse', { params, query: zoneBrowseQuery,
       response: { 200: zoneBrowsePage, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await workRead(work, publicLanguageRequest(request), { language: options.language,
-        limit: options.limit, cursor: options.cursor },
-      session => readZoneBrowse(session, id(path.realm), options)), { headers }); }
-      catch (error) { return discoveryError(error); }
+      try {
+        compileZoneBrowse(id(path.realm), options);
+        return Response.json(await workRead(work, publicLanguageRequest(request), { language: options.language,
+          limit: options.limit, cursor: options.cursor },
+        session => readZoneBrowse(session, id(path.realm), options)), { headers });
+      } catch (error) {
+        if (error instanceof QueryRejected) return problem(400, error.refusal, error.message);
+        return discoveryError(error);
+      }
     });
 }

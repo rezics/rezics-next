@@ -133,16 +133,12 @@ export async function readZoneWorks(session: WorkReadSession, realm: string, kin
       sequence: row.sequence!.value };
   }));
   const visible = hydrated.filter((item): item is NonNullable<typeof item> => item !== null);
-  const [mods, hub] = await Promise.all([
-    session.deps.packageModResolutions
-      ? session.deps.packageModResolutions.readListings(visible.map(item => item.id)) : new Map(),
-    session.deps.hub && session.deps.content
-      ? readPublicHubCards(session, visible.map(item => item.id)) : new Map(),
-  ]);
+  const hub = session.deps.hub && session.deps.content
+    ? await readPublicHubCards(session, visible.map(item => item.id)) : new Map();
   const names = await zoneCreditNames(session, visible.flatMap(item => item.primaryCredits));
   const items = visible.map(item => ({ ...item, primaryCredits: displayZoneCredits(item.primaryCredits,
     names.agents, names.sources),
-    mod: mods.get(item.id) ?? null, hub: hub.get(item.id) ?? null }));
+    hub: hub.get(item.id) ?? null }));
   await readRealmBasis(session, realm);
   const last = page.at(-1);
   return { profile: status ? 'zone-recently-completed-v1' as const : 'zone-new-adoptions-v1' as const,

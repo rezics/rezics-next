@@ -38,6 +38,8 @@ type FacetStep =
   | { kind: 'triple'; predicate: Term; inverse?: true; graph?: 'revisions'; types?: readonly Term[] }
   /** The Main Version's public selection in the Query's Context: a Realm's local selection, else Main's default. */
   | { kind: 'selection' }
+  /** Count of this unit over the Work's published composition. */
+  | { kind: 'units'; unit: Term }
   /** The Work's current, unerased primary credits in `role`: a native Agent, or a human-confirmed source author. */
   | { kind: 'credit'; role: string }
   /** Objects of Statements about the node reached, accepted in the Query's Context. A term left out
@@ -165,6 +167,9 @@ function step(value: FacetStep, location: string): Record<string, unknown> {
     case 'occurrence':
       knownFields(value, ['kind'], location);
       return { kind: value.kind };
+    case 'units':
+      knownFields(value, ['kind', 'unit'], location);
+      return { kind: 'units', unit: iri(value.unit, location) };
     case 'credit':
       knownFields(value, ['kind', 'role'], location);
       if (!/^[a-z]+$/.test(value.role)) throw new Error(`${location} has an invalid credit role`);
@@ -239,6 +244,14 @@ export function compileFacet(facet: FacetDefinition): Record<string, unknown> {
   if (rating && facet.values.some(value => value.kind !== 'datatype'
     || value.min !== String(rating.scale.min) || value.max !== String(rating.scale.max))) {
     throw new Error(`${id} values must span its rating scale`);
+  }
+  if (facet.path.some(item => item.kind === 'units')
+    && (facet.path.length !== 1 || facet.appliesTo !== 'resource'
+      || facet.subject !== 'schema:CreativeWork' || facet.source !== 'global'
+      || facet.operators.join() !== 'range' || facet.values.length !== 1
+      || facet.values[0]?.kind !== 'datatype' || facet.values[0].datatype !== 'xsd:integer'
+      || facet.values[0].min !== '0')) {
+    throw new Error(`${id} units must count nonnegative integers over a Work's composition`);
   }
   const occurrence = facet.path.at(-1)?.kind === 'occurrence';
   if (!!facet.occurrence !== occurrence || facet.path.slice(0, -1).some(item => item.kind === 'occurrence')

@@ -27,7 +27,9 @@ type SearchRequest = { profile: string; phrase?: string; titleTerm?: string; bod
   ratingContext?: string; minimumMeanTimes10?: number; pageSize?: number; continuation?: unknown };
 
 type ZoneRequest = { q?: string; sort: 'relevance' | 'newest' | 'updated'; type?: string[];
-  concept?: string[]; language?: string; limit: number; cursor?: string };
+  concept?: string[]; excludeConcept?: string[];
+  status?: ('ongoing' | 'completed' | 'hiatus')[]; excludeStatus?: ('ongoing' | 'completed' | 'hiatus')[];
+  length?: string; language?: string; limit: number; cursor?: string };
 type ConceptSelection = { operator: 'include' | 'exclude'; value: string; revision?: string };
 
 export type CompiledQuery =
@@ -46,7 +48,7 @@ const simple = (node: FilterNode): node is FilterCondition => 'facet' in node;
 const fail = (message: string): never => { throw new QueryRejected('unsupported_query_shape', message); };
 
 /** No terms are executed until the entire document and its cost pass admission. */
-function admit(filter: FilterDocument | undefined): { conditions: FilterCondition[]; facets: string[];
+function admit(filter: FilterDocument | undefined, zone = false): { conditions: FilterCondition[]; facets: string[];
   graphReads: number } {
   if (filter === undefined) return { conditions: [], facets: [], graphReads: 0 };
   if (typeof filter !== 'object' || filter === null || Array.isArray(filter)) {
@@ -62,7 +64,8 @@ function admit(filter: FilterDocument | undefined): { conditions: FilterConditio
   try { facets = checkedFilter(filter as Parameters<typeof checkedFilter>[0]); }
   catch (error) {
     if (error instanceof InvalidFilter) {
-      throw new QueryRejected(error.refusal === 'filter_too_large' ? 'query_budget_exceeded' : 'invalid_query',
+      throw new QueryRejected(error.refusal === 'filter_too_large' ? 'query_budget_exceeded'
+          : zone && error.refusal === 'unknown_facet' ? 'unsupported_query_shape' : 'invalid_query',
         `${error.refusal}: ${error.message}`);
     }
     throw error;
@@ -77,8 +80,10 @@ function admit(filter: FilterDocument | undefined): { conditions: FilterConditio
     if (condition.where) fail('No admitted template binds this occurrence group');
     if (!conditions.some(existing => JSON.stringify(existing) === JSON.stringify(condition))) conditions.push(condition);
   }
+  // Zone include/exclude Conditions share the same bounded batch for each Facet.
   let graphReads = 0;
-  for (const condition of conditions) {
+  for (const condition of zone ? [...new Map(conditions.map(item =>
+    [resolveFacet(item.facet)!.id, item])).values()] : conditions) {
     const facet = resolveFacet(condition.facet)!;
     graphReads += facet.cost.graphReads;
   }
@@ -167,7 +172,7 @@ export function compileQuery(query: AdmittedQuery): CompiledQuery {
   if (query.sourcePolicy !== undefined || query.asOf !== undefined) {
     throw new QueryRejected('unsupported_query_source', 'Only the current product source is admitted');
   }
-  const admitted = admit(query.filter);
+  const admitted = admit(query.filter, query.scope.kind === 'realm');
   const { conditions, facets, graphReads } = admitted;
   if (!Number.isInteger(query.page?.size) || query.page.size < 1) {
     throw new QueryRejected('invalid_query', 'Page size must be positive');
@@ -191,22 +196,37 @@ export function compileQuery(query: AdmittedQuery): CompiledQuery {
     }
     for (const condition of conditions) {
       const facet = resolveFacet(condition.facet)!;
-      if (facet.name !== 'type' && facet.name !== 'concept') fail(`${facet.name} has no Zone browse template`);
-      if (condition.interpretation || condition.applicability || condition.bind || condition.range) {
+      if (!['type', 'concept', 'status', 'length'].includes(facet.name)) {
+        fail(`${facet.name} has no Zone browse template`);
+      }
+      if (condition.interpretation || condition.applicability || condition.bind) {
         fail(`${facet.name} qualifiers have no Zone browse template`);
       }
-      if (!condition.any) fail(`${facet.name} ${condition.all ? 'all' : 'none'} has no Zone browse template`);
-      const chosen = values(condition, 'any');
+      if (facet.name === 'length') {
+        if (!condition.range || request.length !== undefined) fail('Length needs one range');
+        request.length = `${condition.range!.min ?? ''}-${condition.range!.max ?? ''}`;
+        continue;
+      }
+      const operator = condition.any ? 'any' : condition.none ? 'none' : fail(`${facet.name} all has no Zone browse template`);
+      const chosen = values(condition, operator);
+      if (chosen.length > ZONE_BROWSE_COST.filterValues) {
+        throw new QueryRejected('query_budget_exceeded', 'Zone Condition exceeds its value bound');
+      }
       if (facet.name === 'type') {
-        if (request.type?.length) fail('Type has multiple Zone Conditions');
+        if (operator !== 'any' || request.type?.length) fail('Type needs one any Zone Condition');
         if (chosen.some(type => !(WORK_SEMANTIC_TYPES as readonly string[]).includes(type))) {
           fail('Zone browse does not admit this Work type');
         }
         request.type = chosen;
-      } else {
-        if (request.concept?.length) fail('Concept has multiple Zone Conditions');
+      } else if (facet.name === 'concept') {
+        const key = operator === 'any' ? 'concept' : 'excludeConcept';
+        if (request[key]?.length) fail('Concept has multiple Zone Conditions with the same operator');
         if (chosen.some(value => !nativeId.test(value))) fail('Zone browse needs native Concept IDs');
-        request.concept = chosen;
+        request[key] = chosen;
+      } else {
+        const key = operator === 'any' ? 'status' : 'excludeStatus';
+        if (request[key]?.length) fail('Status has multiple Zone Conditions with the same operator');
+        request[key] = chosen as NonNullable<ZoneRequest['status']>;
       }
     }
     if (query.sort === 'relevance' && !query.text) fail('Relevance needs text');
