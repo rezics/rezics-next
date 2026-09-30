@@ -17,7 +17,7 @@ const labels = (
   ) as TypeMetadata['labels'];
 
 // Catalogue nouns and onboarding plurals, authored in all eight interface locales.
-// Creation policy is descriptive: Access still authorizes every operation.
+// Creation policy feeds Access's baseline gate; Access authorizes every operation.
 export const typesV1 = {
   id: 'types-v1',
   defaults: { work: 'schema:CreativeWork', resource: 'rdfs:Resource', record: 'rv:Record' },
@@ -29,6 +29,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'book',
       cover: 'portrait',
+      priority: 5,
       labels: labels(
         ['Book', 'Books'],
         '書籍',
@@ -47,6 +48,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'book',
       cover: 'portrait',
+      priority: 6,
       labels: labels(
         ['Book', 'Books'],
         '書籍',
@@ -65,6 +67,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'guide',
       cover: 'document',
+      priority: 15,
       labels: labels(
         ['Guide', 'Guides'],
         '指南',
@@ -83,6 +86,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'recipe',
       cover: 'square',
+      priority: 3,
       labels: labels(
         ['Recipe', 'Recipes'],
         '食譜',
@@ -101,6 +105,7 @@ export const typesV1 = {
       creation: 'administrator',
       presentation: 'default',
       cover: 'square',
+      priority: 7,
       labels: labels(
         'Software',
         '軟體',
@@ -119,6 +124,7 @@ export const typesV1 = {
       creation: 'administrator',
       presentation: 'default',
       cover: 'square',
+      priority: 8,
       labels: labels(
         'Software',
         '軟體',
@@ -137,6 +143,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'game',
       cover: 'landscape',
+      priority: 4,
       labels: labels(
         ['Game', 'Games'],
         '遊戲',
@@ -155,6 +162,7 @@ export const typesV1 = {
       creation: 'administrator',
       presentation: 'default',
       cover: 'square',
+      priority: 0,
       labels: labels(
         ['Mod', 'Mods'],
         '模組',
@@ -173,6 +181,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'skill',
       cover: 'square',
+      priority: 1,
       labels: labels(
         ['Skill', 'Skills'],
         '技能',
@@ -191,6 +200,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'prompt',
       cover: 'document',
+      priority: 2,
       labels: labels(
         ['Prompt', 'Prompts'],
         '提示詞',
@@ -209,6 +219,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'media',
       cover: 'portrait',
+      priority: 9,
       labels: labels(
         ['Film', 'Films'],
         '電影',
@@ -227,6 +238,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'media',
       cover: 'portrait',
+      priority: 10,
       labels: labels(
         'TV series',
         '電視影集',
@@ -245,6 +257,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'media',
       cover: 'landscape',
+      priority: 11,
       labels: labels(
         ['Video', 'Videos'],
         '影片',
@@ -263,6 +276,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'media',
       cover: 'square',
+      priority: 14,
       labels: labels('Audio', '音訊', '音频', '音声', '오디오', 'Audio', 'Audio', 'Audio'),
     },
     'schema:MusicRecording': {
@@ -272,6 +286,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'media',
       cover: 'square',
+      priority: 13,
       labels: labels('Music', '音樂', '音乐', '音楽', '음악', 'Musik', 'Musique', 'Música'),
     },
     'schema:MusicAlbum': {
@@ -281,6 +296,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'media',
       cover: 'square',
+      priority: 12,
       labels: labels('Music', '音樂', '音乐', '音楽', '음악', 'Musik', 'Musique', 'Música'),
     },
     'schema:CreativeWork': {
@@ -290,6 +306,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'default',
       cover: 'document',
+      priority: 100,
       labels: labels(
         ['Work', 'Works'],
         '作品',
@@ -308,6 +325,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'default',
       cover: 'document',
+      priority: 100,
       labels: labels(
         ['Resource', 'Resources'],
         '資源',
@@ -326,6 +344,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'default',
       cover: 'document',
+      priority: 100,
       labels: labels(
         ['Record', 'Records'],
         '記錄',
@@ -344,6 +363,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'default',
       cover: 'document',
+      priority: 100,
       labels: labels(
         ['Character', 'Characters'],
         '角色',
@@ -362,6 +382,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'default',
       cover: 'document',
+      priority: 100,
       labels: labels(
         ['Role', 'Roles'],
         '角色職能',
@@ -380,6 +401,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'default',
       cover: 'document',
+      priority: 100,
       labels: labels(
         ['Release', 'Releases'],
         '發行版',
@@ -398,6 +420,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'default',
       cover: 'document',
+      priority: 100,
       labels: labels(
         ['Fixed release', 'Fixed releases'],
         '固定發行版',
@@ -416,6 +439,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'default',
       cover: 'document',
+      priority: 100,
       labels: labels(
         ['List item', 'List items'],
         '清單項目',
@@ -434,6 +458,7 @@ export const typesV1 = {
       creation: 'contributor',
       presentation: 'default',
       cover: 'document',
+      priority: 100,
       labels: labels(
         ['Text contribution', 'Text contributions'],
         '文字投稿',

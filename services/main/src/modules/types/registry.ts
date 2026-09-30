@@ -20,6 +20,10 @@ export const workTypeEntries = admittedTypes
   .filter((entry) => entry.base === 'work' && !entry.default)
   .sort((a, b) => workSemanticTypeOrder.indexOf(a.type) - workSemanticTypeOrder.indexOf(b.type));
 export const workSemanticTypeOptions = workTypeEntries.map((entry) => entry.type);
+/** Presentation precedence is registry metadata, shared by onboarding's grouping. */
+export const choiceWorkTypeOptions = [...workTypeEntries]
+  .sort((a, b) => a.priority - b.priority || a.type.localeCompare(b.type))
+  .map((entry) => entry.type);
 /** Native type edits use the narrower set compiled from work-type-v2. */
 export const creatableWorkTypeOptions = admittedTypes
   .filter((entry) => entry.creatable)

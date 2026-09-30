@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { workSemanticTypeOptions } from './modules/types/registry.ts';
 import { discoveryCredit, discoveryRating } from './modules/discovery/contract.ts';
 import { readAvatar, readName } from './modules/work/read-contract.ts';
 
@@ -106,13 +107,11 @@ const phraseFacets = t.Object({ populationBasis: t.Literal('all-filters'), resul
   terms: t.Object({ precision: t.Literal('lower-bound'), values: facetValues }),
   types: t.Object({ precision: t.Literal('exact'), values: facetValues }),
 });
+const workTypeFilter = t.Array(t.Union(workSemanticTypeOptions.map(type => t.Literal(type))),
+  { maxItems: 3, uniqueItems: true });
 export const workTypeFilters = {
-  includeTypes: t.Optional(t.Array(t.Union([
-    t.Literal('https://schema.org/Book'), t.Literal('https://schema.org/DigitalDocument'),
-    t.Literal('https://schema.org/Recipe')]), { maxItems: 3, uniqueItems: true })),
-  excludeTypes: t.Optional(t.Array(t.Union([
-    t.Literal('https://schema.org/Book'), t.Literal('https://schema.org/DigitalDocument'),
-    t.Literal('https://schema.org/Recipe')]), { maxItems: 3, uniqueItems: true })),
+  includeTypes: t.Optional(workTypeFilter),
+  excludeTypes: t.Optional(workTypeFilter),
 };
 const realmPhraseMatch = t.Object({ ...phraseMatch.properties, reason: t.String() });
 const classification = t.Object({ sense: t.String(), decision: t.String(),

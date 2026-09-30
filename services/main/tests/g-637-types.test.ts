@@ -11,10 +11,13 @@ import {
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { baselineWorkTypesAllowed } from '../src/modules/access/baseline.ts';
+import { workTypeFilters } from '../src/api-contract.ts';
+import { choiceTypes, primaryType } from '../src/modules/onboarding/choices.ts';
 import { discoveryType } from '../src/modules/discovery/contract.ts';
 import { TYPES_READ_COST, typeList } from '../src/modules/types/contract.ts';
 import {
   creatableWorkTypeOptions,
+  choiceWorkTypeOptions,
   typeListBody,
   workSemanticTypeOptions,
 } from '../src/modules/types/registry.ts';
@@ -60,6 +63,52 @@ test('G-637: public GET /v1/types serves every admitted type once with defaults 
   for (const base of typeBases)
     expect(body.types.filter((entry) => entry.base === base && entry.default)).toHaveLength(1);
   expect(openApiOperations['/v1/types'].get.bearer).toBe(false);
+});
+
+test('G-637: onboarding derives every Work kind in its existing presentation precedence', () => {
+  expect(choiceTypes).toBe(choiceWorkTypeOptions);
+  expect(choiceTypes as string[]).toEqual([
+    'https://rezics.com/vocab/ModPackage',
+    'https://rezics.com/vocab/SkillPackage',
+    'https://rezics.com/vocab/PromptTemplate',
+    'https://schema.org/Recipe',
+    'https://schema.org/VideoGame',
+    'https://schema.org/Book',
+    'https://schema.org/BookSeries',
+    'https://schema.org/SoftwareApplication',
+    'https://schema.org/SoftwareSourceCode',
+    'https://schema.org/Movie',
+    'https://schema.org/TVSeries',
+    'https://schema.org/VideoObject',
+    'https://schema.org/MusicAlbum',
+    'https://schema.org/MusicRecording',
+    'https://schema.org/AudioObject',
+    'https://schema.org/DigitalDocument',
+  ]);
+  expect([...choiceTypes].sort()).toEqual([...workSemanticTypeOptions].sort());
+  expect(
+    primaryType(['https://schema.org/SoftwareApplication', 'https://rezics.com/vocab/ModPackage']),
+  ).toBe('https://rezics.com/vocab/ModPackage');
+  expect(primaryType(['https://schema.org/Book', 'https://schema.org/VideoGame'])).toBe(
+    'https://schema.org/VideoGame',
+  );
+});
+
+test('G-637: search include and exclude filters admit the full registry Work set within existing bounds', () => {
+  for (const filter of [workTypeFilters.includeTypes, workTypeFilters.excludeTypes]) {
+    for (const type of workSemanticTypeOptions) expect(Value.Check(filter, [type])).toBe(true);
+    for (const type of Object.values(typeRegistry).filter(
+      (entry) => entry.default || entry.base !== 'work',
+    )) {
+      expect(Value.Check(filter, [type.type])).toBe(false);
+    }
+    expect(Value.Check(filter, [])).toBe(true);
+    expect(Value.Check(filter, ['https://schema.org/Unknown'])).toBe(false);
+    expect(Value.Check(filter, [workSemanticTypeOptions[0], workSemanticTypeOptions[0]])).toBe(
+      false,
+    );
+    expect(Value.Check(filter, workSemanticTypeOptions.slice(0, 4))).toBe(false);
+  }
 });
 
 test('G-637: conditional reads return an empty 304 for matching, weak, wildcard or list ETags', async () => {

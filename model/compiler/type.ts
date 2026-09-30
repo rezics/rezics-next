@@ -26,6 +26,8 @@ export interface TypeMetadata {
   primaryAction: (typeof typePrimaryActions)[number];
   presentation: (typeof typePresentations)[number];
   cover: (typeof typeCovers)[number];
+  /** Lower values select the more specific presentation when a Work has multiple types. */
+  priority: number;
   labels: Readonly<Record<(typeof typeLocales)[number], { one: string; other: string }>>;
 }
 
@@ -88,7 +90,16 @@ export function compileTypes(
       const type = iri(term as Term);
       knownFields(
         metadata,
-        ['base', 'creation', 'interest', 'primaryAction', 'presentation', 'cover', 'labels'],
+        [
+          'base',
+          'creation',
+          'interest',
+          'primaryAction',
+          'presentation',
+          'cover',
+          'priority',
+          'labels',
+        ],
         type,
       );
       if (
@@ -97,7 +108,9 @@ export function compileTypes(
         (metadata.interest !== null && !typeInterests.includes(metadata.interest)) ||
         !typePrimaryActions.includes(metadata.primaryAction) ||
         !typePresentations.includes(metadata.presentation) ||
-        !typeCovers.includes(metadata.cover)
+        !typeCovers.includes(metadata.cover) ||
+        !Number.isSafeInteger(metadata.priority) ||
+        metadata.priority < 0
       )
         throw new Error(`Invalid Type metadata for ${type}`);
       knownFields(metadata.labels, typeLocales, `${type} labels`);
@@ -127,6 +140,7 @@ export function compileTypes(
         primaryAction: metadata.primaryAction,
         presentation: metadata.presentation,
         cover: metadata.cover,
+        priority: metadata.priority,
         labels: Object.fromEntries(
           typeLocales.map((locale) => [locale, metadata.labels[locale]]),
         ) as TypeMetadata['labels'],
@@ -146,42 +160,9 @@ export function compileTypes(
   if ([...authoredWorkTypes].sort().join() !== [...workTypes].sort().join()) {
     throw new Error('Type metadata and Work profile differ');
   }
-  // These resource/record descriptions are the admitted non-Work vocabulary in this revision.
-  const otherTypes = [
-    'rv:Character',
-    'rv:Role',
-    'rv:Release',
-    'rv:FixedRelease',
-    'schema:ListItem',
-    'rv:TextContribution',
-  ].map((term) => iri(term as Term));
-  const expectedOther = new Set([
-    ...otherTypes,
-    ...[...defaults].filter(([base]) => base !== 'work').map(([, type]) => type),
-  ]);
-  const actualOther = entries.filter((entry) => entry.base !== 'work');
-  if (
-    actualOther.length !== expectedOther.size ||
-    actualOther.some((entry) => !expectedOther.has(entry.type))
-  ) {
-    throw new Error('Type metadata and non-Work vocabulary differ');
-  }
   if (defaults.get('work') !== iri('schema:CreativeWork'))
     throw new Error('Work default must be CreativeWork');
   return entries;
-}
-
-/** Structural meaning is accepted separately from refinable labels and visual defaults. */
-export function typeRegistryMeaningDigest(types: ReturnType<typeof compileTypes>): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify(
-        types.map(
-          ({ labels: _labels, presentation: _presentation, cover: _cover, ...meaning }) => meaning,
-        ),
-      ),
-    )
-    .digest('hex');
 }
 
 export function renderTypeRegistry(

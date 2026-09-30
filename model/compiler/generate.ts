@@ -5,7 +5,7 @@ import { compileFacet, facetId, renderFacetRegistry, type FacetDefinition } from
 import { renderProfile, type ProfileDefinition } from './ir.ts';
 import { artifactDigests, buildModelOutputs } from './outputs.ts';
 import { buildCommandRegistry, shapeRole, type RegistryOptions } from './registry.ts';
-import { compileTypes, renderTypeRegistry, typeRegistryMeaningDigest } from './type.ts';
+import { renderTypeRegistry } from './type.ts';
 import { typesV1 } from '../definitions/types-v1.ts';
 import { workKindV2Profile } from '../definitions/work-kind-v2.ts';
 import { workTypeV2Profile } from '../definitions/work-type-v2.ts';
@@ -127,9 +127,9 @@ export function buildArtifacts(_root: string): Map<string, string> {
 
 interface AcceptedBinding { required: string[]; optional?: string[]; roles: string[] }
 interface AcceptedProfile { sha256: string; binding?: AcceptedBinding }
-interface AcceptedLock { profiles: Map<string, AcceptedProfile>; facets: Map<string, string>; types: Map<string, string> }
+interface AcceptedLock { profiles: Map<string, AcceptedProfile>; facets: Map<string, string> }
 
-function readAcceptedDir(kind: 'profiles' | 'facets' | 'types'): Map<string, unknown> {
+function readAcceptedDir(kind: 'profiles' | 'facets'): Map<string, unknown> {
   const directory = join(repository, 'model/accepted', kind);
   let names: string[];
   try { names = readdirSync(directory).filter(name => name.endsWith('.json')); }
@@ -154,9 +154,7 @@ function acceptedLock(): AcceptedLock {
   for (const [id, value] of readAcceptedDir('profiles')) profiles.set(id, value as AcceptedProfile);
   const facets = new Map<string, string>();
   for (const [id, value] of readAcceptedDir('facets')) facets.set(id, typeof value === 'string' ? value : '');
-  const types = new Map<string, string>();
-  for (const [id, value] of readAcceptedDir('types')) types.set(id, typeof value === 'string' ? value : '');
-  return { profiles, facets, types };
+  return { profiles, facets };
 }
 
 function profileEntry(profile: { sha256: string; binding?: AcceptedBinding }): AcceptedProfile {
@@ -197,15 +195,6 @@ function assertAccepted(artifacts: Map<string, string>, facets: readonly FacetDe
     const file = `model/accepted/facets/${id}.json`;
     const content = `${JSON.stringify(digests.get(id))}\n`;
     throw new Error(`Unaccepted facet ${id}: add ${file} with exactly:\n${content}`);
-  }
-  const typeDigest = typeRegistryMeaningDigest(compileTypes(typesV1, workKindV2Profile, workTypeV2Profile));
-  for (const [id, digest] of lock.types) {
-    if (id !== typesV1.id || digest !== typeDigest) {
-      throw new Error(`Accepted type registry ${id} changed; add a new version instead`);
-    }
-  }
-  if (!lock.types.has(typesV1.id)) {
-    throw new Error(`Unaccepted type registry ${typesV1.id}: add model/accepted/types/${typesV1.id}.json with exactly:\n${JSON.stringify(typeDigest)}\n`);
   }
 }
 

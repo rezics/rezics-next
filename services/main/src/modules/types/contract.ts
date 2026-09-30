@@ -27,6 +27,8 @@ export const typeDefinition = t.Object(
     primaryAction: t.String({ enum: typePrimaryActions }),
     presentation: t.String({ enum: typePresentations }),
     cover: t.String({ enum: typeCovers }),
+    /** Lower values win when choosing one presentation for a multiply typed Work. */
+    priority: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
     labels: t.Object(
       Object.fromEntries(typeLocales.map((locale) => [locale, forms])) as Record<
         (typeof typeLocales)[number],

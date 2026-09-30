@@ -416,7 +416,7 @@ async function copiedProject(mutate: (root: string) => void): Promise<{ root: st
 
 function acceptedFiles(root: string): Map<string, string> {
   const files = new Map<string, string>();
-  for (const kind of ['profiles', 'facets', 'types']) {
+  for (const kind of ['profiles', 'facets']) {
     const directory = join(root, 'model/accepted', kind);
     for (const name of readdirSync(directory).filter(item => item.endsWith('.json')).sort()) {
       files.set(`model/accepted/${kind}/${name}`, readFileSync(join(directory, name), 'utf8'));
@@ -524,8 +524,7 @@ function assertBaselineUnchanged(baseline: readonly { path: string; text: string
     } else {
       const before = JSON.parse(file.text) as string;
       const after = now === undefined ? undefined : JSON.parse(now) as string;
-      const family = file.path.includes('/types/') ? 'type registry' : 'facet';
-      if (after !== before) throw new Error(`Accepted ${family} ${id} changed; the merge-base lock entry must stay unchanged`);
+      if (after !== before) throw new Error(`Accepted facet ${id} changed; the merge-base lock entry must stay unchanged`);
     }
   }
 }

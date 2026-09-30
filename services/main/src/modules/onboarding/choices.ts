@@ -1,3 +1,4 @@
+import { choiceWorkTypeOptions } from '../types/registry.ts';
 import type { Static } from 'typebox';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { VOCABULARY_PROFILE } from '../classification/vocabulary.ts';
@@ -10,14 +11,7 @@ import { CHOICES_COST, type choiceConcept, contentLanguages, type OnboardingChoi
  * The type a Work is grouped under when it has several: the most specific
  * first, so a mod is a mod before it is software and a web novel a book.
  */
-export const choiceTypes = [
-  'https://rezics.com/vocab/ModPackage', 'https://rezics.com/vocab/SkillPackage',
-  'https://rezics.com/vocab/PromptTemplate', 'https://schema.org/Recipe', 'https://schema.org/VideoGame',
-  'https://schema.org/Book', 'https://schema.org/BookSeries', 'https://schema.org/SoftwareApplication',
-  'https://schema.org/SoftwareSourceCode', 'https://schema.org/Movie', 'https://schema.org/TVSeries',
-  'https://schema.org/VideoObject', 'https://schema.org/MusicAlbum', 'https://schema.org/MusicRecording',
-  'https://schema.org/AudioObject', 'https://schema.org/DigitalDocument',
-] as const;
+export const choiceTypes = choiceWorkTypeOptions;
 
 export const primaryType = (types: readonly string[]) => choiceTypes.find(type => types.includes(type)) ?? null;
 

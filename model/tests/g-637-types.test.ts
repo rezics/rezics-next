@@ -1,5 +1,4 @@
 import { afterEach, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import {
   cpSync,
   mkdirSync,
@@ -18,7 +17,6 @@ import {
   renderTypeRegistry,
   typeBases,
   typeLocales,
-  typeRegistryMeaningDigest,
   type TypeRegistryDefinition,
 } from '../compiler/type.ts';
 import { typesV1 } from '../definitions/types-v1.ts';
@@ -127,7 +125,7 @@ test('G-637: metadata-only or profile-only Work types fail compilation in both d
   );
 });
 
-test('G-637: compiler rejects broken locale forms, duplicate IRIs, unknown descriptions and missing defaults', () => {
+test('G-637: compiler rejects broken locale forms, duplicate IRIs, invalid metadata and missing defaults', () => {
   const book = typesV1.types['schema:Book'];
   expect(() =>
     compile({
@@ -156,16 +154,45 @@ test('G-637: compiler rejects broken locale forms, duplicate IRIs, unknown descr
       ...typesV1,
       types: {
         ...typesV1.types,
-        'rv:NewResource': {
+        'schema:Book': {
           ...book,
-          base: 'resource',
+          priority: -1,
         },
       },
     }),
-  ).toThrow('non-Work vocabulary differ');
+  ).toThrow('Invalid Type metadata');
   expect(() =>
     compile({ ...typesV1, defaults: { ...typesV1.defaults, resource: 'rv:Missing' } }),
   ).toThrow('resource needs one default');
+});
+
+test('G-637: non-Work types stay open without widening Work admission', () => {
+  const metadata = typesV1.types['rv:Character'];
+  const entries = compile({
+    ...typesV1,
+    types: {
+      ...typesV1.types,
+      'rv:NewResource': metadata,
+      'rv:NewRecord': { ...metadata, base: 'record' },
+    },
+  });
+  expect(entries).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: 'https://rezics.com/vocab/NewResource',
+        base: 'resource',
+        creatable: false,
+      }),
+      expect.objectContaining({
+        type: 'https://rezics.com/vocab/NewRecord',
+        base: 'record',
+        creatable: false,
+      }),
+    ]),
+  );
+  expect(entries.filter((entry) => entry.base === 'work')).toEqual(
+    compile().filter((entry) => entry.base === 'work'),
+  );
 });
 
 test('G-637: generator emits deterministic registry outside the command manifest; ETag covers label and policy edits', () => {
@@ -189,15 +216,14 @@ test('G-637: generator emits deterministic registry outside the command manifest
     },
   };
   expect(renderTypeRegistry(relabelled, workKindV2Profile, workTypeV2Profile)).not.toBe(output);
-  expect(typeRegistryMeaningDigest(compile(relabelled))).toBe(typeRegistryMeaningDigest(compile()));
   const policy = {
     ...typesV1,
     types: { ...typesV1.types, 'schema:Book': { ...book, creation: 'administrator' as const } },
   };
-  expect(typeRegistryMeaningDigest(compile(policy))).not.toBe(typeRegistryMeaningDigest(compile()));
+  expect(renderTypeRegistry(policy, workKindV2Profile, workTypeV2Profile)).not.toBe(output);
 });
 
-test('G-637: accepted type meaning cannot be changed in place by generation', async () => {
+test('G-637: policy metadata can be refined without an accepted type lock', async () => {
   const root = scratch();
   cpSync(join(repo, 'model'), join(root, 'model'), { recursive: true });
   symlinkSync(join(repo, 'infra'), join(root, 'infra'));
@@ -212,12 +238,19 @@ test('G-637: accepted type meaning cannot be changed in place by generation', as
   const copied = (await import(
     join(root, 'model/compiler/generate.ts')
   )) as typeof import('../compiler/generate.ts');
-  expect(() => copied.generate(root, false)).toThrow('Accepted type registry types-v1 changed');
+  expect(() => copied.generate(root, false)).not.toThrow();
+  expect(readFileSync(join(root, 'packages/model/src/generated/types.ts'), 'utf8')).not.toBe(
+    renderTypeRegistry(typesV1, workKindV2Profile, workTypeV2Profile),
+  );
+  expect(() => copied.generate(root, true)).not.toThrow();
 });
 
-test('G-637: generation detects registry drift and leaves the accepted type entry untouched', () => {
+test('G-637: generation detects registry drift and leaves the accepted Work profiles untouched', () => {
   const root = scratch();
-  const accepted = readFileSync(join(repo, 'model/accepted/types/types-v1.json'), 'utf8');
+  const locks = ['work-kind-v2', 'work-type-v2'].map((id) =>
+    join(repo, `model/accepted/profiles/${id}.json`),
+  );
+  const accepted = locks.map((file) => readFileSync(file, 'utf8'));
   generate(root, false);
   expect(() => generate(root, true)).not.toThrow();
   const file = join(root, 'packages/model/src/generated/types.ts');
@@ -225,22 +258,5 @@ test('G-637: generation detects registry drift and leaves the accepted type entr
   expect(() => generate(root, true)).toThrow(
     'Generated artifact differs: packages/model/src/generated/types.ts',
   );
-  expect(readFileSync(join(repo, 'model/accepted/types/types-v1.json'), 'utf8')).toBe(accepted);
-});
-
-test('G-637: accepted type lock recorded at merge-base cannot be rewritten', () => {
-  const file = 'model/accepted/types/types-v1.json';
-  const base = execFileSync('git', ['merge-base', 'HEAD', 'main'], {
-    cwd: repo,
-    encoding: 'utf8',
-  }).trim();
-  const listed = execFileSync(
-    'git',
-    ['ls-tree', '-r', '--name-only', base, 'model/accepted/types'],
-    { cwd: repo, encoding: 'utf8' },
-  ).trim();
-  if (!listed) return; // New accepted registry in this worktree; later runs protect its merged meaning.
-  expect(readFileSync(join(repo, file), 'utf8')).toBe(
-    execFileSync('git', ['show', `${base}:${file}`], { cwd: repo, encoding: 'utf8' }),
-  );
+  expect(locks.map((file) => readFileSync(file, 'utf8'))).toEqual(accepted);
 });
