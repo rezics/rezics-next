@@ -2,6 +2,8 @@
 // processes. Task is the human and agent facade; code calls the scripts directly
 // so it depends on neither Task nor Yarn at runtime.
 const entries: Record<string, string[]> = {
+  'ops:backup': ['scripts/ops/backup.ts'],
+  'ops:restore': ['scripts/ops/restore.ts'],
   'stack:up': ['scripts/dev/cli.ts', 'stack:up'],
   'stack:down': ['scripts/dev/cli.ts', 'stack:down'],
   'stack:reset': ['scripts/dev/cli.ts', 'stack:reset'],

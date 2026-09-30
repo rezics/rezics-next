@@ -169,8 +169,12 @@ function testWall(runs: ShardRun[]): number {
 // order-dependent, and the fresh result replaces the shared-project result.
 async function runStackTier(tier: StackTier): Promise<void> {
   const artifact = tierArtifactName(tier);
-  const budget = tier === 'integration' ? 480_000 : 360_000;
   const { paths, flags } = splitTestArgs(testArgs(tier, selection, chosen));
+  // Only the explicitly selected exclusive drill times both 600-second commands.
+  // Routine tier selections retain their existing wall and command deadlines.
+  const exclusiveRecovery = tier === 'fault/recovery' && paths.length === 1
+    && paths[0] === 'tests/qa/fault-recovery/g-727-launch-drill.test.ts';
+  const budget = exclusiveRecovery ? 1_320_000 : tier === 'integration' ? 480_000 : 360_000;
   const recorded = recordedFileDurations(artifactRoots(root), tier);
   const local = tier === 'fault/recovery'
     ? recordedFileDurations([join(root, '.artifacts', 'qa')], tier, 60, 1) : new Map<string, number>();

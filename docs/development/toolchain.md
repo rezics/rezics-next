@@ -353,8 +353,20 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task main:test` | Run Main unit tests. |
 | `task model:typecheck` | Type-check the model package. |
 | `task model:test` | Run model package tests. |
+| `task ops:backup` | Fence a persistent stack and encrypt one signed recovery set to an off-host recipient. |
+| `task ops:restore` | Verify and restore a signed recovery set into new isolated volumes; hold until checks pass. |
 
 <!-- toolchain-inventory:end -->
+
+## Recovery encryption
+
+`task ops:backup` and `task ops:restore` use host GnuPG 2.4.9 (verified by
+`gpg --version` on 2026-10-01), with libgcrypt 1.12.2 on this host. Provision the
+same tool on the recovery host and use standard recipient encryption/decryption;
+no application cryptography replaces it. The capture host receives only the
+public recipient key. Keep its private key off-host and keep the recovery HMAC
+key in independent custody. The [recovery procedure](../operations/recovery.md)
+owns keyring setup, serving holds and qualification limits.
 
 ## Agent orchestration
 

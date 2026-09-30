@@ -492,3 +492,13 @@ tasks:
     dir: packages/model
     cmds:
       - bun test {{.CLI_ARGS}}
+
+  ops:backup:
+    desc: Fence a persistent stack and encrypt one signed recovery set to an off-host recipient.
+    cmds:
+      - bun scripts/ops/backup.ts {{.CLI_ARGS}}
+
+  ops:restore:
+    desc: Verify and restore a signed recovery set into new isolated volumes; hold until checks pass.
+    cmds:
+      - bun scripts/ops/restore.ts {{.CLI_ARGS}}

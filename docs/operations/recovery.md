@@ -7,43 +7,58 @@ copying them; a live recursive copy or a second JVM is not a backup.
 
 ## Recovery set and positions
 
-1. Choose and record a recovery cut. Pause admission, outbound effects and
-   workers; drain in-flight commands. Record the graph `{datasetId, dataEpoch,
-   sequence}` (sequence as decimal text), each owner's PostgreSQL/WAL position,
-   the relay checkpoint and object cut separately. Independent stores have no
-   global atomic snapshot. Preserve an independently retained **current**
-   authority, deletion and erasure frontier; an old backup cannot prove that
-   later restrictions did not happen.
-2. Stop Fuseki and capture its entire TDB2 database root, Lucene directory,
-   assembler, exact Jena archive/checksum, Java build and index/analyzer pins.
-   Include Content, Account, Access and operations PostgreSQL backups and WAL;
-   exact Content revision bytes/manifests and publication pins; immutable
-   manifests/payloads; receipts/outbox, consumer positions, source observations,
-   authority/erasure journals, model/configuration and protected keys. TDB2
-   alone cannot recover bodies or authority. Lucene is derived.
-3. Keep backups, checksums and signed coverage in protected off-host custody.
-   Keep `RECOVERY_MANIFEST_HMAC_KEY` (an independent random 32-byte hex key)
-   separately from both manifests and backups. Keep continuous WAL from before
-   the base backup through the chosen cut. Record custody and expiry under the
-   [erasure procedure](erasure.md). A local staging copy is not host-loss
-   protection.
+Stop Main, Account, relay and outbound workers for a maintenance window. Keep
+storage running while the command fences owner logins, drains active transactions
+and holds Access admission. An unresolved admission needs receipt reconciliation
+before capture. The command then records one signed graph/owner cut, takes a
+physical PostgreSQL base backup with streamed WAL, stops storage and captures
+TDB2, Lucene and both filesystem and S3 immutable objects. Account, Access,
+Content and relay share the local PostgreSQL cluster; operations state belongs
+to relay. An undeclared database or an owner table without a primary key or an
+explicit coverage exclusion fails capture.
 
-The [graph coverage capture](../../services/main/src/graph-recovery-coverage.ts)
-requires `CONTENT_RECOVERY_DATABASE_URL` even for a graph without Content
-references. Stop Account, Access, Content, graph and relay writers, let relay
-catch up and drain retained Account deletion intents. Hold the
-[Access capture fence](../../services/main/src/access-capture-fence.ts), then
-capture signed graph coverage with the retained relay database and object-store
-credentials. Save the fence generation and release the **source** fence
-only after the stopped backup finishes. The capture compares owner rows,
-receipts, relay handoff, exact graph references and immutable objects. Its
-[Content](../../services/main/src/modules/work/content-recovery-coverage.ts)
-and [Access](../../services/main/src/modules/work/access-recovery-coverage.ts)
-scanners discover owner tables from the PostgreSQL catalog; the
-[discovery drill](../../tests/qa/fault-recovery/recovery-coverage-discovery.test.ts)
-checks new tables, row references, exclusions and keyset paging. A version-four
-or older owner digest needs a new fenced capture. Match the schema generation
-and PostgreSQL major version when comparing row digests.
+```sh
+export RECOVERY_MANIFEST_HMAC_KEY=<independently-retained-64-hex-key>
+export OPS_RECOVERY_FRONTIER=<protected-current-frontier-file-outside-the-set>
+task ops:backup -- --out <new-directory> --recipient <full-public-key-fingerprint>
+# For an isolated persistent QA source, append:
+# --profile qa --run-id <source-id> --persistent
+```
+
+The [backup command](../../scripts/ops/backup.ts) uses the existing Access fence,
+[graph coverage capture](../../services/main/src/graph-recovery-coverage.ts),
+two-owner deletion sets and catalog scanners. It encrypts each standard archive,
+configuration and signed manifest with
+[GnuPG recipient encryption](https://www.gnupg.org/documentation/manuals/gnupg26/gpg.1.html).
+The source may hold the recipient's public key only; its private key lives
+off-host. `RECOVERY_MANIFEST_HMAC_KEY` never belongs in stack configuration or
+the set. The authenticated `set.json` binds encrypted artifact checksums to the
+manifest. Release image identities, schema and assembler digests accompany it.
+[PostgreSQL 18's streamed WAL backup](https://www.postgresql.org/docs/18/app-pgbasebackup.html)
+provides the complete physical replay boundary; `pg_verifybackup` checks it
+before packaging and restoration.
+
+The current frontier file is atomically replaced only after every encrypted
+artifact is complete. Retain it independently with the current authority,
+deletion and erasure journals, refresh it after restrictions, and keep its
+custody separate from backup custody. Copying an old frontier beside an old set
+cannot establish current authority. An older or different supplied frontier
+fails closed; the command does not guess which newer restrictions to replay.
+Keep encrypted sets and checksums in protected off-host custody with expiry
+under the [erasure procedure](erasure.md). Local encryption is staging, not
+host-loss protection; transfer and scheduling belong to deployment.
+
+Successful capture briefly restarts only PostgreSQL to release the source
+Access/login fences, then stops it again. It leaves product processes and graph
+storage stopped. Failed capture leaves owner logins and Access held and attempts
+to stop storage. Repair unresolved receipts, custody, keys or coverage before
+trying a new output directory; never reopen an inherited hold to retry capture.
+
+The [discovery drill](../../tests/qa/fault-recovery/recovery-coverage-discovery.test.ts)
+checks new tables, row references, exclusions and keyset paging. The whole-set
+scanner applies the same catalog checks to Account and relay as well. A
+version-four or older owner digest needs a new fenced capture. Match the schema
+generation and PostgreSQL major version when comparing row digests.
 
 ## PostgreSQL WAL recovery boundary
 
@@ -75,45 +90,82 @@ Access fence closed. Do not edit it to clear a pending closure.
 
 ## Isolated restoration
 
-1. Verify the backup checksum and release pins. Restore into **new empty**
-   volumes/clusters, never over a running or failed owner. Keep the original
-   fenced and do not serve it beside its restored successor. Check assembler
-   paths so a restored Fuseki cannot open the original state. Start restored
-   services privately, with reads, writes, delivery and workers held.
-2. Apply the current authority, deletion and erasure journals before user reads.
-   Compare restored Account, Access, Content, relay and immutable-object cuts
-   against the separately retained signed coverage. Reconcile unknown outcomes
-   using owner/provider receipts, retain pins for unresolved work, and keep
-   missing required data unavailable. A newer graph cannot use an older Content
-   body; newer unused Content revisions are not publication authority.
-3. On the fenced graph restore, use the internal
-   [lineage cutover](../../services/main/src/modules/work/restore-lineage.ts)
-   to allocate a fresh `dataEpoch` with sequence zero and `rv:restoreHold`.
-   Existing receipts retain their old positions. This invalidates old cursors,
-   handles, caches and workers. Supply the signed coverage and any deletion
-   sets to `POST /v1/owners/reconciliations` with `kind: "restore"`,
-   `profile: "owner-reconciliation-v1"`, `sealedCoverage`, `Idempotency-Key`
-   and an `owner:operate` bearer token. A held result needs repair and a new
-   idempotency key; do not reopen Access while graph release is held.
-4. Rebuild derived projections and text from exact revisions and approved
-   recipes after authority/erasure reconciliation. Check known graph values,
-   named graphs, retained deletions, Content bytes, object hashes, receipt and
-   outbox positions, search additions/deletions and authorized/denied reads.
-   Release the graph hold only on matching retained coverage, then reopen
-   Access, resume consumers at verified checkpoints and route traffic.
+On the recovery host, make the recipient private key available through GnuPG's
+protected keyring or agent and supply the independent HMAC key and **current**
+frontier. Fence the original project; it cannot run alongside its successor.
 
-The retained relay head and signed envelope reject older captures and mixed
-cuts, but they cannot prove the supplied external frontier includes every later
-authority, erasure or external effect. If custody or coverage is incomplete,
-keep affected reads and outbound effects offline. The
-[local graph drill](../../services/main/tests/evidence/2026-09-24-relay-recovery-coverage.xml)
-and [Work replay drill](../../services/main/tests/evidence/2026-09-24-work-outcome-reconcile.xml)
-exercise selected held restores; they do not qualify a coordinated production
-restore. Editorial protection decisions and applications also need exact owner
-and graph coverage before adoption resumes; the pending
-[protection cases](../../scripts/qa/cases/editorial-protection.ts) do not yet
-qualify backup-before-protection or interrupted replay. An absent restored
-protection record must not be interpreted as an open protection state.
+```sh
+task ops:restore -- --set <directory> --project rezics-qa-<new-id>
+```
+
+The [restore command](../../scripts/ops/restore.ts) checks authenticated inventory,
+all encrypted checksums, the independent frontier, release pins and safe archive
+paths before creating storage. It refuses the original project, existing
+configuration, existing containers and existing volumes. It restores one physical
+PostgreSQL cluster into new volumes, verifies WAL replay and every discovered
+owner's exact rows, checks graph Content references, immutable object hashes and
+required signed deletion sets, then allocates a fresh graph `dataEpoch` with
+sequence zero and `rv:restoreHold`. Existing receipts retain their old positions;
+old cursors, handles, caches and workers cannot cross that boundary. Owner login
+roles and Access remain closed throughout. It rebuilds Lucene offline with the
+pinned assembler and erasure-aware indexer.
+
+Serving release needs deployment adapters: `OPS_RECOVERY_VERIFY_TASK` names the
+Task that takes `--apps-env <isolated-apps.env>` and checks exact samples,
+authorized and denied reads, retained deletions/revocations, representative
+search additions/deletions and both Account and library takeout. That task also
+provides the private maintenance Main endpoint for the target configuration.
+`OPS_RECOVERY_OPERATOR_TOKEN` supplies a current Account-issued `owner:operate`
+bearer token. The command invokes `POST /v1/owners/reconciliations` with
+`kind: "restore"`, `profile: "owner-reconciliation-v1"`, signed coverage,
+required deletion sets and a unique `Idempotency-Key`. Only a matched reconciled
+response permits Access and login release. Account authentication is never
+replaced by a recovery-command assertion.
+
+These deployment adapters are not provided by the local stack today. Without
+them, restore performs physical verification and text rebuild, records a held
+result and stops storage. A newer authority/erasure frontier also requires its
+owner's journal replay and a new matching capture before release. The commands
+currently reject that mismatch; they do not automate arbitrary later journal
+application. Missing required data stays unavailable. A held result needs repair
+and a new project/idempotency key, not a forced Access reopen. Failed copies
+preserve their stopped volumes and `recovery-evidence.json` for diagnosis;
+remove only that failed target when discarding it.
+
+### Timed recovery drill
+
+Each backup and each complete restore has a 600-second command deadline. Restore
+includes decryption, copying, startup, WAL replay, full owner comparison, lineage
+cutover, Lucene rebuild, samples and serving verification. Phase durations and
+elapsed time are recorded in `backup-evidence.json` and `recovery-evidence.json`.
+This is the acceptance ceiling, not a demonstrated launch-scale RTO. The
+[small command drill](../../tests/qa/fault-recovery/g-727-recovery-set.test.ts)
+checks encryption with a public-only capture keyring, two-owner deletion,
+revocation, exact available/denied Content reads, search, Account archive and
+release ordering. Its test authentication adapter does not qualify deployment
+OAuth or library takeout.
+The small run `20260930t171746-a0c545` passed on 2026-10-01: the verified
+restore took 33.7 seconds and the complete harness took 113.3 seconds, including
+preparation, capture and a separate intentionally held restore. This one-Work
+command fixture is evidence of composition, not launch-data performance.
+
+With exclusive host capacity, prepare an isolated launch stack with complete
+receipts and relay handoff, set `G727_LAUNCH_SOURCE_RUN_ID` and
+`G727_LAUNCH_EXPECTED_WORKS` from G-724's recorded catalogue counts, and configure
+the custody and deployment-check variables above. Set `OPS_RECOVERY_RECIPIENT`
+and `OPS_RECOVERY_OFFHOST_GNUPGHOME` for the public-only capture and separate
+recovery keyrings. Run:
+
+```sh
+bun scripts/goal/goalctl.ts test tests/qa/fault-recovery/g-727-launch-drill.test.ts
+```
+
+The drill checks the actual Work count, captures the prepared source and times
+restoration with deployment probes. It records `g-727-launch-restore.json` in the
+QA artifacts and removes only its generated target. It skips when the launch
+source is absent, so a routine small run cannot be mistaken for a scale result.
+The launch plan cited by G-727 (`tests/fixtures/launch/plan.yaml`) and G-724's
+counts are absent in this checkout. No launch-scale RPO/RTO is qualified yet.
 
 ## Offline Lucene rebuild
 

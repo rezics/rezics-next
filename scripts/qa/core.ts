@@ -451,6 +451,8 @@ export const selfManagedFaultFiles = new Set([
   'tests/qa/fault-recovery/content-rebuild-positive.test.ts',
   'tests/qa/fault-recovery/content-rebuild.test.ts',
   'tests/qa/fault-recovery/coordinated-owner-cut.test.ts',
+  'tests/qa/fault-recovery/g-727-recovery-set.test.ts',
+  'tests/qa/fault-recovery/g-727-launch-drill.test.ts',
   'tests/qa/fault-recovery/erasure-graph-purge.test.ts',
   'tests/qa/fault-recovery/erasure-restore.test.ts',
   'tests/qa/fault-recovery/erasure-search-command.test.ts',
