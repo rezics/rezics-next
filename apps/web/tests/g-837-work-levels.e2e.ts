@@ -74,7 +74,7 @@ test('parts, connections and editions read from Main for the franchise records',
 
   // Genesis Testament restarts at 1.
   await page.goto(at(index.genesisTestament, 'connections'));
-  await expect(page.getByRole('list', { name: 'Parts in publication order' }).getByRole('listitem')).toHaveText([/^1\s/, /^2\s/]);
+  await expect(page.getByRole('list', { name: 'Parts in publication order' }).getByRole('listitem')).toHaveText([/^1\s*Genesis Testament 1$/, /^2\s*Genesis Testament 2$/]);
   await expect(page.locator('[data-relation-row]').filter({ hasText: 'Sequel to' })).toContainText('New Testament');
 
   // Sword Art Online: the franchise switches between series and volumes, visibly.
