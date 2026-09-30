@@ -9,6 +9,7 @@ import { AccessActingContexts } from '../../../services/main/src/modules/access/
 import { AccessSessionAgents } from '../../../services/main/src/modules/access/session-agent.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
+import { OnboardingPersons } from '../../../services/main/src/modules/onboarding/persons.ts';
 
 const short = (agent: string) => agent.slice(-36);
 async function json(response: Response, status: number) {
@@ -24,9 +25,9 @@ test('G284: first sign-in and vanity handles preserve authority, claims and reti
     const b = await stack.member('other-person');
     const c = await stack.member('recovered-person');
     const principals = new Map([
-      [a.token, { ...a.principal, emailVerified: true, accountDisplayName: 'Lin Mei 林梅' }],
-      [b.token, { ...b.principal, emailVerified: true, accountDisplayName: 'Other Reader' }],
-      [c.token, { ...c.principal, emailVerified: true, accountDisplayName: 'Recovered Reader' }],
+      [a.token, { ...a.principal, emailVerified: true }],
+      [b.token, { ...b.principal, emailVerified: true }],
+      [c.token, { ...c.principal, emailVerified: true }],
     ]);
     const account = { verify: async (request: Request) => {
       const principal = principals.get(request.headers.get('authorization')?.replace('Bearer ', '') ?? '');
@@ -37,6 +38,7 @@ test('G284: first sign-in and vanity handles preserve authority, claims and reti
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, account,
       profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
+      onboardingPersons: new OnboardingPersons(stack.accessPool),
       agentHandles: new AgentVanityHandles(stack.accessPool),
       sessionAgents: new AccessSessionAgents(stack.accessPool, contexts) });
     const call = (method: string, path: string, token?: string, body?: unknown,
@@ -46,7 +48,7 @@ test('G284: first sign-in and vanity handles preserve authority, claims and reti
         ...(sessionKey ? { 'x-session-key': sessionKey } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}) }));
     const sessionKey = randomUUID();
-    const onboarding = { profile: 'person-onboarding-v1' };
+    const onboarding = { profile: 'person-onboarding-v1', displayName: 'Lin Mei 林梅' };
     const first = await json(await call('POST', '/v1/me/onboarding', a.token, onboarding,
       'first-attempt', sessionKey), 201);
     const agent = first.agent as string;
@@ -56,7 +58,8 @@ test('G284: first sign-in and vanity handles preserve authority, claims and reti
     expect(second).toMatchObject({ agent, sessionAgent: agent, replayed: true });
     expect((await stack.accessPool.query(`SELECT count(*)::int AS count FROM access.agent_provision
       WHERE principal_id = $1 AND agent_kind = 'person'`, [a.principalId])).rows[0]?.count).toBe(1);
-    const other = await json(await call('POST', '/v1/me/onboarding', b.token, onboarding,
+    const other = await json(await call('POST', '/v1/me/onboarding', b.token,
+      { ...onboarding, displayName: 'Other Reader' },
       'other-attempt', randomUUID()), 201);
     const otherAgent = other.agent as string;
     // A compensated first attempt does not strand the next signed-in session.
@@ -67,7 +70,7 @@ test('G284: first sign-in and vanity handles preserve authority, claims and reti
     [randomUUID(), c.principalId, `system:person-onboarding:${randomUUID()}`,
       'a'.repeat(64), `https://rezics.com/id/${randomUUID()}`]);
     const recovered = await json(await call('POST', '/v1/me/onboarding', c.token,
-      onboarding, 'recovered-attempt', randomUUID()), 201);
+      { ...onboarding, displayName: 'Recovered Reader' }, 'recovered-attempt', randomUUID()), 201);
     expect(recovered.state).toBe('active');
 
     const url = `/v1/agents/${short(agent)}/handle`;

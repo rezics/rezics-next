@@ -32,6 +32,7 @@ import { SemanticStageStore } from './modules/semantic/staging.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccessDownloadLeases } from './modules/access/download-leases.ts';
 import { AgentProvisioning } from './modules/agent/provision.ts';
+import { OnboardingPersons } from './modules/onboarding/persons.ts';
 import { AgentVanityHandles } from './modules/agent/vanity.ts';
 import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
@@ -338,6 +339,7 @@ const app = createMainApp(fuseki, {
   workStats: new WorkReaderStats(contentPool, pool),
   libraryRatings: new ReaderLibraryRatings(pool),
   agentProvisioning: new AgentProvisioning(pool, environment),
+  onboardingPersons: new OnboardingPersons(pool),
   environment,
   structureObjects,
   structureStages: new StructureStageStore(contentPool, structureObjects),

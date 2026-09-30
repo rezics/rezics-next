@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
-import { AccountAssertionUnavailable, type VerifiedAccountAssertion }
-  from '../account/verify-assertion.ts';
+import { AccountAssertionUnavailable } from '../account/verify-assertion.ts';
 import { ActingContextStale } from '../access/contexts.ts';
 import { suggestVanity } from '../agent/vanity.ts';
 
@@ -10,18 +9,23 @@ export interface PersonOnboardingResult {
   suggestedHandle: string; sessionAgent: string | null; replayed: boolean;
 }
 
+export class PublicNameRequired extends Error {
+  readonly code = 'public_name_required';
+  constructor() { super('Choose a public name to create your Person'); }
+}
+
 /** A principal-key provision is O(1); the existing Session Agent discovery is
- * bounded to 50 contexts and the preference write checks one eligible Agent. */
+ * bounded to 50 contexts and the preference write checks one eligible Agent.
+ * Name discovery uses at most two indexed reads and never writes. */
 export async function ensurePersonOnboarding(work: MainWorkDependencies, request: Request,
-  sessionKey: string): Promise<PersonOnboardingResult> {
-  if (!work.agentProvisioning || !work.sessionAgents) {
+  sessionKey: string, publicName?: string): Promise<PersonOnboardingResult> {
+  if (!work.agentProvisioning || !work.sessionAgents || !work.onboardingPersons) {
     throw new AccountAssertionUnavailable('onboarding owner is unavailable');
   }
-  const principal = await work.account.verify(request, ['agent:create', 'work:create']) as VerifiedAccountAssertion;
-  const displayName = principal.accountDisplayName?.trim();
-  if (!displayName || displayName.length > 200 || /[\u0000-\u001f\u007f]/.test(displayName)) {
-    throw new AccountAssertionUnavailable('Account display name is unavailable');
-  }
+  const principal = await work.account.verify(request, ['agent:create', 'work:create']);
+  const displayName = await work.onboardingPersons.activeName(principal) ?? publicName;
+  // This guard precedes the saga: an unnamed first sign-in has no public effect.
+  if (displayName === undefined) throw new PublicNameRequired();
   const provision = await work.agentProvisioning.provision(work.account, request,
     { kind: 'person', displayName }, `system:person-onboarding:${randomUUID()}`, true);
   let selected: string | null = null;
@@ -41,7 +45,9 @@ export async function ensurePersonOnboarding(work: MainWorkDependencies, request
       }
     }
   }
+  const savedName = await work.onboardingPersons.provisionName(provision.agent);
+  if (savedName === null) throw new AccountAssertionUnavailable('Person provision is unavailable');
   return { profile: 'person-onboarding-v1', agent: provision.agent, state: provision.state,
-    suggestedHandle: suggestVanity(displayName), sessionAgent: selected,
+    suggestedHandle: suggestVanity(savedName), sessionAgent: selected,
     replayed: provision.replayed };
 }

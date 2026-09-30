@@ -190,7 +190,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
       headers: { authorization: bearer } });
     const principal = await account.verify(request, ['work:create']);
     expect(principal).toEqual({ issuer: `${base}/api/auth`, subject: member.id,
-      accountDisplayName: undefined, currentAssertion: expect.any(Function),
+      currentAssertion: expect.any(Function),
       accountAudiences: [apps.ACCOUNT_MAIN_RESOURCE!, `${base}/api/auth/oauth2/userinfo`],
       accountAuthMode: 'trusted', accountClientId: browserClient.client_id,
       accountConsentGeneration: undefined, accountConsentId: undefined,

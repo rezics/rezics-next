@@ -154,10 +154,13 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
       body: new URLSearchParams({ token: value,
         client_id: introspector.client_id, client_secret: introspector.client_secret! }),
     }).then(response => response.json() as Promise<Record<string, unknown>>);
-    const expectActive = async (tokens: Tokens, rp: RelyingParty) =>
-      expect(await introspect(tokens.access_token)).toMatchObject({ active: true,
-        iss: issuer, sub: member.id, client_id: rp.clientId,
-        rezics_account_name: 'member' });
+    const expectActive = async (tokens: Tokens, rp: RelyingParty) => {
+      const current = await introspect(tokens.access_token);
+      expect(current).toMatchObject({ active: true,
+        iss: issuer, sub: member.id, client_id: rp.clientId });
+      expect(current).not.toHaveProperty('rezics_account_name');
+      expect(current).not.toHaveProperty('name');
+    };
 
     // The first authorization of each client passes through explicit consent.
     const consented = async (rp: RelyingParty) => {
@@ -272,9 +275,10 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
     for (const tokens of [alphaFirst.tokens, betaFirst.tokens]) {
       const assertion = new Request(`${resource}/v1/works`, {
         headers: { authorization: `Bearer ${tokens.access_token}` } });
-      expect(await new AccountAssertionVerifier(verifierConfig)
-        .verify(assertion, ['work:create'])).toMatchObject({
-          subject: member.id, accountDisplayName: 'member' });
+      const principal = await new AccountAssertionVerifier(verifierConfig)
+        .verify(assertion, ['work:create']);
+      expect(principal).toMatchObject({ subject: member.id });
+      expect(principal).not.toHaveProperty('accountDisplayName');
       await unchanged(async () => {
         for (const mismatch of [
           { issuer: 'https://wrong-issuer.example.test' },
