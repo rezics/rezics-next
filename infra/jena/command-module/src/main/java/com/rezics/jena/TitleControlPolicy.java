@@ -28,8 +28,8 @@ final class TitleControlPolicy {
         RECEIPTS = uri(CommandPolicy.RECEIPTS), SOURCE = uri(CommandPolicy.SOURCE);
     private static final Node LABEL = uri("http://www.w3.org/2000/01/rdf-schema#label");
     record Snapshot(Node work, Node before, Node control, Node oldControl, BigInteger epoch,
-                    String action, JsonObject intent, String error) {}
-    private static Snapshot error(String reason) { return new Snapshot(null, null, null, null, null, null, null, reason); }
+                    String action, JsonObject intent, String language, String error) {}
+    private static Snapshot error(String reason) { return new Snapshot(null, null, null, null, null, null, null, null, reason); }
 
     static Snapshot capture(DatasetGraph data, CommandPolicy.Plan plan, String receipt,
                             String digest, String update, JsonValue proof, byte[] key,
@@ -55,7 +55,7 @@ final class TitleControlPolicy {
                 || data.contains(CURRENT, q.getSubject(), rv("protectionHead"), Node.ANY)))
                 protectedTitle = true;
             if (REVISIONS.equals(q.getGraph()) && q.getPredicate().equals(rv("controlField"))
-                && "title:en".equals(text(q.getObject()))) protectedTitle = true;
+                && ("title".equals(text(q.getObject())) || "title:en".equals(text(q.getObject())))) protectedTitle = true;
         }
         if (control == null && !protectedTitle) return null;
         if (control == null || !control.isURI()) return error("title control expectation and successor required");
@@ -140,7 +140,16 @@ final class TitleControlPolicy {
                     }
                 } else if (old == null) return error("return requires an established control head");
             }
-            return new Snapshot(work, head, control, old, epoch, action, intent, null);
+            String language = intent.hasKey("language") ? ProfileRegistry.required(intent, "language")
+                : one(data, CURRENT, work, LABEL).getLiteralLanguage();
+            if (language.isEmpty()) language = "und";
+            if (!validLanguage(language)) return error("invalid title language");
+            Node field = template(modify.getInsertQuads(), REVISIONS, control, rv("controlField"));
+            Node declared = template(modify.getInsertQuads(), REVISIONS, control, rv("controlLanguage"));
+            if (!("title".equals(text(field)) && language.equalsIgnoreCase(text(declared))
+                || "title:en".equals(text(field)) && language.equalsIgnoreCase("en") && declared == null))
+                return error("title control language differs from intent");
+            return new Snapshot(work, head, control, old, epoch, action, intent, language, null);
         } catch (Exception ex) { return error("invalid title admission or control basis"); }
     }
 
@@ -162,9 +171,15 @@ final class TitleControlPolicy {
         if (snapshot.action().equals("work.title.return") && !revision.equals(snapshot.before())) return "return changed content";
         if (!snapshot.action().equals("work.title.return") && revision.equals(snapshot.before())) return "edit requires a successor even for equal bytes";
         Node title = one(data, CURRENT, work, LABEL);
-        if (title == null || !title.isLiteral() || !title.getLiteralLanguage().equals("en")
+        if (title == null || !title.isLiteral() || !title.getLiteralLanguage().equalsIgnoreCase(snapshot.language())
             || !title.getLiteralLexicalForm().equals(ProfileRegistry.required(snapshot.intent(), "title"))) return "title value differs from intent";
         return null;
+    }
+
+    static boolean validLanguage(String value) {
+        if (value == null || value.length() > 35 || !value.matches("[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*")) return false;
+        try { new java.util.Locale.Builder().setLanguageTag(value).build(); return true; }
+        catch (java.util.IllformedLocaleException ex) { return false; }
     }
 
     private static Node template(List<Quad> quads, Node graph, Node subject, Node predicate) {

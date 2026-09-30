@@ -13,8 +13,10 @@ import { sameScalar, scalarFromBinding, SCALAR_PREDICATE } from './scalar-value.
 import { validEditorialControlBasis, type EditorialControlBasis } from '../protection/field-control.ts';
 import { publicTitleProjection } from '../content-publication/projection-recipes.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
+import { canonicalLanguage } from '../display-language/select.ts';
 
-export const TITLE_PROFILE = 'https://rezics.com/definition/work-title-control-v1';
+export const TITLE_PROFILE_V1 = 'https://rezics.com/definition/work-title-control-v1';
+export const TITLE_PROFILE = 'https://rezics.com/definition/work-title-control-v2';
 const NATIVE = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export interface TitleControlBasis extends EditorialControlBasis {}
 export interface TitleSourceBasis {
@@ -24,6 +26,8 @@ export interface TitleSourceBasis {
 export interface TitleControlIntent {
   work: string; expectedHead: string; basis: TitleControlBasis;
   action: TitleAction; title: string; source: TitleSourceBasis | null;
+  /** Omission preserves the exact expected Work head's language. */
+  language?: string;
 }
 export interface TitleControlState {
   work: string; contentHead: string; basis: TitleControlBasis;
@@ -51,7 +55,8 @@ export function titleControlDigest(intent: TitleControlIntent): string {
     || (intent.basis.protection !== null && !NATIVE.test(intent.basis.protection))) {
     throw new TitleControlInvalid('exact title control and absent protection expectations are required');
   }
-  metadataWorkRequestDigest(intent.title);
+  try { metadataWorkRequestDigest(intent.title, undefined, intent.language ?? 'und'); }
+  catch { throw new TitleControlInvalid('invalid title or declared language'); }
   if (!['work.edit', 'work.title.apply', 'work.title.return'].includes(intent.action)
     || (intent.action === 'work.edit' ? intent.source !== null : !intent.source)) {
     throw new TitleControlInvalid('title origin differs from the admitted operation');
@@ -62,10 +67,11 @@ export function titleControlDigest(intent: TitleControlIntent): string {
     throw new TitleControlInvalid('exact source basis is required');
   }
   // Canonicalize explicitly: JSON property order from an HTTP client is not an identity.
-  return hash(JSON.stringify({ profile: 'work-title-control-v1', work: intent.work,
+  // Keep the digest of old, language-omitting receipts replayable.
+  return hash(JSON.stringify({ profile: intent.language === undefined ? 'work-title-control-v1' : 'work-title-control-v2', work: intent.work,
     expectedHead: intent.expectedHead, basis: { head: intent.basis.head, epoch: intent.basis.epoch,
       protection: intent.basis.protection },
-    action: intent.action, title: intent.title, source: intent.source ? {
+    action: intent.action, title: intent.title, ...(intent.language === undefined ? {} : { language: intent.language }), source: intent.source ? {
       binding: intent.source.binding, record: intent.source.record, observation: intent.source.observation,
       conversion: intent.source.conversion, proposal: intent.source.proposal,
       mapping: intent.source.mapping, initialHead: intent.source.initialHead } : null }));
@@ -176,7 +182,8 @@ export async function cancelTitleControl(env: WorkActivationEnvironment, admissi
 }
 
 export async function titleControlCommand(env: WorkActivationEnvironment, admission: RegisteredAdmission,
-  intent: TitleControlIntent, retained?: TitleControlReceipt): Promise<CommandEnvelope> {
+  intent: TitleControlIntent, retained?: TitleControlReceipt,
+  controlProfile: typeof TITLE_PROFILE | typeof TITLE_PROFILE_V1 = TITLE_PROFILE): Promise<CommandEnvelope> {
   const digest = titleControlDigest(intent);
   if (digest !== admission.requestDigest || intent.action !== admission.action) throw new IdempotencyConflict('title admission differs');
   const current = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?main ?type ?scalar ?workManifest WHERE {
@@ -197,6 +204,12 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
     throw new TitleControlUnavailable('Work scalar state is ambiguous');
   }
   const prior = await readWorkPayloadForRevision(env, priorManifests.values().next().value!, intent.work);
+  const language = intent.language ?? prior.language;
+  if (!canonicalLanguage(language)) throw new TitleControlInvalid('invalid title language');
+  if (intent.action === 'work.title.return' && (intent.title !== prior.title
+    || language.toLowerCase() !== prior.language.toLowerCase())) {
+    throw new TitleControlInvalid('return must preserve the current title and language');
+  }
   let currentScalar;
   try { currentScalar = scalarFromBinding(scalarBindings[0]); }
   catch { throw new RevisionCorrupt('Work scalar graph term is invalid'); }
@@ -210,9 +223,11 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
   const put = (state: object, profile: string) => env.workObjects
     ? prepareWorkComponent(env.workObjects, intent.work, state, profile)
     : Promise.resolve(prepareComponent(env.objectDirectory, intent.work, state, profile));
-  const manifest = retained?.controlManifest?.slice(-64) ?? await put({ intent, control, revision, operation }, TITLE_PROFILE);
+  const manifest = retained?.controlManifest?.slice(-64) ?? await put({ intent, language, control, revision, operation }, controlProfile);
   const workManifest = intent.action === 'work.title.return' ? null : retained?.workManifest?.slice(-64) ?? await put({ mainVersion: main,
-    continuityProfile: CONTINUITY, title: intent.title, language: 'en', ...(semanticTypes.length ? { semanticTypes } : {}),
+    continuityProfile: CONTINUITY, title: intent.title, language, ...(semanticTypes.length ? { semanticTypes } : {}),
+    ...(prior.localizedTitle ? { localizedTitle: prior.localizedTitle } : {}),
+    ...(prior.description ? { description: prior.description } : {}),
     ...(prior.scalarValue === undefined ? {} : { scalarValue: prior.scalarValue }) }, PROFILE);
   const expected = intent.basis.head ? iri(intent.basis.head) : 'rv:Absent';
   const expectedProtection = intent.basis.protection ? iri(intent.basis.protection) : 'rv:Absent';
@@ -223,14 +238,14 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
       ${workManifest ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?titleUnit rv:publicTitle ?oldPublicTitle . }` : ''} }
     INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:titleControlHead ${iri(control)} .
-        ${workManifest ? `${iri(intent.work)} rv:head ${iri(revision)} ; rdfs:label ${lit(intent.title)}@en .` : ''} }
-      ${workManifest ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?titleUnit rv:publicTitle ${publicTitleProjection(intent.title)} . }` : ''}
+        ${workManifest ? `${iri(intent.work)} rv:head ${iri(revision)} ; rdfs:label ${lit(intent.title)}@${language} .` : ''} }
+      ${workManifest ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?titleUnit rv:publicTitle ${publicTitleProjection(intent.title, language)} . }` : ''}
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(control)} a rv:RevisionAnchor, rv:EditorialControlRevision ;
-        rv:component ${iri(intent.work)} ; rv:controlField "title:en" ; rv:controlMode rv:${intent.action === 'work.edit' ? 'HumanControlled' : 'SourceManaged'} ;
+        rv:component ${iri(intent.work)} ; rv:controlField ${controlProfile === TITLE_PROFILE_V1 ? '"title:en"' : `"title" ; rv:controlLanguage ${lit(language)}`} ; rv:controlMode rv:${intent.action === 'work.edit' ? 'HumanControlled' : 'SourceManaged'} ;
         rv:controlEpoch ${BigInt(intent.basis.epoch) + 1n} ; rv:workRevision ${iri(revision)} ; rv:operation ${iri(operation)} ;
         ${intent.basis.head ? `rv:predecessor ${iri(intent.basis.head)} ;` : ''}
         rv:controlIntent ${lit(JSON.stringify(intent))} ; rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
-        rv:modelRevision ${iri(TITLE_PROFILE)} ; rv:shapeRevision ${iri(TITLE_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+        rv:modelRevision ${iri(controlProfile)} ; rv:shapeRevision ${iri(controlProfile)} ; rv:datasetId ${iri(DATASET)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
         ${workManifest ? `${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(intent.work)} ; rv:predecessor ${iri(intent.expectedHead)} ;
           rv:operation ${iri(operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${workManifest}`)} ; rv:modelRevision ${iri(PROFILE)} ;
@@ -279,8 +294,8 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
     if (update.includes('?next')) throw new Error('title recovery position was not fully substituted');
   }
   const validations = await workMetadataValidations(env, intent.work, main);
-  validations.push(...await profileValidations(env.fuseki, 'work-title-control-v1', [
-    { shape: `${TITLE_PROFILE}/control-shape`, focus: [control], graphs: [GRAPHS.current, GRAPHS.revisions] },
+  validations.push(...await profileValidations(env.fuseki, controlProfile === TITLE_PROFILE ? 'work-title-control-v2' : 'work-title-control-v1', [
+    { shape: `${controlProfile}/control-shape`, focus: [control], graphs: [GRAPHS.current, GRAPHS.revisions] },
   ]));
   return { receipt, digest, update, validations, deadlineMs: 10_000 };
 }
@@ -290,8 +305,9 @@ export async function changeTitleControl(env: WorkActivationEnvironment,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'issueTitleAdmission'>,
   request: Request, input: TitleControlIntent & { actingSubject: string; idempotencyKey: string }): Promise<TitleControlReceipt> {
   // Do not retain transport identities in the public control record.
-  const { work, expectedHead, basis, action, title, source } = input;
-  const intent: TitleControlIntent = { work, expectedHead, basis, action, title, source };
+  const { work, expectedHead, basis, action, title, source, language } = input;
+  const intent: TitleControlIntent = { work, expectedHead, basis, action, title,
+    ...(language === undefined ? {} : { language }), source };
   const digest = titleControlDigest(intent);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);

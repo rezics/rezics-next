@@ -152,7 +152,7 @@ export async function continueChapters(session: WorkReadSession, principal: Veri
     if (!publication || item.record.selection?.mode === 'fixed-revision'
       && item.record.selection.revision !== publication.revision) return [];
     const label = chapterLabel(item.record, item.language);
-    return label && !/^(?:untitled chapter|未命名章节)$/iu.test(label.value.trim()) ? []
+    return label ? []
       : [{ item, publication }];
   });
   if (legacy.length) {

@@ -16,6 +16,7 @@ export interface AdmittedMetadataEditInput {
   work: string;
   expectedHead: string;
   title: string;
+  language?: string;
   actingSubject: string;
   idempotencyKey: string;
   titleControl?: TitleControlBasis;
@@ -104,6 +105,9 @@ export async function editAdmittedMetadataWork(
   request: Request,
   input: AdmittedMetadataEditInput,
 ): Promise<WorkEditReceipt> {
+  if (input.language !== undefined && !input.titleControl) {
+    throw new TitleControlInvalid('declared title language requires title control and protection expectations');
+  }
   if (input.titleControl) {
     if (!access.issueTitleAdmission) throw new WorkEditUnavailable('title admission signer unavailable');
     const receipt = await changeTitleControl(env, account,

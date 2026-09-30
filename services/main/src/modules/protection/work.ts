@@ -15,7 +15,7 @@ import { protectionReceiptIri, workReceiptFamilies, type WorkProtectionAdmission
 const PROTECTION_PROFILE = 'https://rezics.com/definition/protection-revision-v1';
 const PROPOSAL_PROFILE = 'https://rezics.com/definition/correction-proposal-v1';
 const DECISION_PROFILE = 'https://rezics.com/definition/correction-decision-v1';
-const CONTROL_PROFILE = 'https://rezics.com/definition/work-title-control-v1';
+const CONTROL_PROFILE = 'https://rezics.com/definition/work-title-control-v2';
 const NATIVE = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAX_EVIDENCE = 32;
 const JSON_LIMIT = 16_000;
@@ -26,7 +26,7 @@ export interface WorkEditorialBasis {
   actingSubject: string; reason: string; evidence: string[]; idempotencyKey: string;
 }
 export interface WorkProtectionChange extends WorkEditorialBasis { action: 'tighten' | 'confirm' | 'relax' }
-export interface WorkCorrectionProposal extends WorkEditorialBasis { title: string; predecessor: string | null }
+export interface WorkCorrectionProposal extends WorkEditorialBasis { title: string; language?: string; predecessor: string | null }
 export interface WorkCorrectionReview extends WorkEditorialBasis {
   proposalRevision: string; candidateDigest: string; expectedDecisionHead: null; outcome: 'approved' | 'rejected';
 }
@@ -76,7 +76,7 @@ function digest(profile: string, value: WorkProtectionChange | WorkCorrectionPro
     expectedControlEpoch: value.expectedControlEpoch, expectedRuleRevision: value.expectedRuleRevision,
     actingSubject: value.actingSubject, reason: value.reason, evidence: [...value.evidence].sort() };
   return hash(JSON.stringify('action' in value ? { ...basis, action: value.action }
-    : 'title' in value ? { ...basis, title: value.title, predecessor: value.predecessor }
+    : 'title' in value ? { ...basis, title: value.title, ...(value.language === undefined ? {} : { language: value.language }), predecessor: value.predecessor }
       : { ...basis, proposalRevision: value.proposalRevision, candidateDigest: value.candidateDigest,
         expectedDecisionHead: value.expectedDecisionHead, outcome: value.outcome }));
 }
@@ -204,7 +204,7 @@ async function changeCommand(env: WorkActivationEnvironment, admission: Register
   const protection = ID + Bun.randomUUIDv7();
   const control = input.action === 'confirm' ? ID + Bun.randomUUIDv7() : null;
   const operation = operationId(admission);
-  const intent = { ...input, action: admission.action, operation };
+  const intent = { ...input, action: admission.action, titleLanguage: prior.language, operation };
   if (JSON.stringify(intent).length > JSON_LIMIT) throw new WorkProtectionInvalid('protection intent exceeds its bound');
   const manifest = await put(env, input.work, { intent, protection, control }, PROTECTION_PROFILE);
   const controlManifest = control ? await put(env, input.work,
@@ -221,7 +221,7 @@ async function changeCommand(env: WorkActivationEnvironment, admission: Register
   const deleteControl = control ? `${iri(input.work)} rv:titleControlHead ?oldControl .` : '';
   const insertControl = control ? `${iri(input.work)} rv:titleControlHead ${iri(control)} .` : '';
   const controlTriples = control ? `${iri(control)} a rv:RevisionAnchor, rv:EditorialControlRevision ;
-    rv:component ${iri(input.work)} ; rv:controlField "title:en" ; rv:controlMode rv:HumanControlled ;
+    rv:component ${iri(input.work)} ; rv:controlField "title" ; rv:controlLanguage ${lit(prior.language)} ; rv:controlMode rv:HumanControlled ;
     rv:controlEpoch ${BigInt(input.expectedControlEpoch) + 1n} ; rv:workRevision ${iri(input.expectedHead)} ;
     rv:operation ${iri(operation)} ; ${controlPredecessor} rv:controlIntent ${lit(JSON.stringify(intent))} ;
     rv:manifest ${iri(`urn:rezics:sha256:${controlManifest}`)} ; rv:modelRevision ${iri(CONTROL_PROFILE)} ;
@@ -255,7 +255,7 @@ async function changeCommand(env: WorkActivationEnvironment, admission: Register
     { shape: `${PROTECTION_PROFILE}/target-shape`, focus: [input.work], graphs: [GRAPHS.current, GRAPHS.revisions] },
     { shape: `${PROTECTION_PROFILE}/protection-shape`, focus: [protection], graphs: [GRAPHS.current, GRAPHS.revisions] },
   ]);
-  if (control) validations.push(...await profileValidations(env.fuseki, 'work-title-control-v1', [
+  if (control) validations.push(...await profileValidations(env.fuseki, 'work-title-control-v2', [
     { shape: `${CONTROL_PROFILE}/control-shape`, focus: [control], graphs: [GRAPHS.current, GRAPHS.revisions] },
   ]));
   // A protection decision leaves the exact Work payload unchanged.
@@ -270,7 +270,7 @@ function applicationId(proposal: string) { return `urn:rezics:correction-applica
 async function proposeCommand(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: WorkCorrectionProposal): Promise<CommandEnvelope> {
   const prior = await currentWork(env, input.work, input.expectedHead);
-  metadataWorkRequestDigest(input.title);
+  metadataWorkRequestDigest(input.title, undefined, input.language);
   if (input.predecessor !== null) throw new WorkProtectionInvalid('amendment requires a separate proposal profile');
   const proposal = ID + Bun.randomUUIDv7(), candidate = ID + Bun.randomUUIDv7();
   const operation = operationId(admission), log = correctionLog(input.work);
@@ -282,11 +282,15 @@ async function proposeCommand(env: WorkActivationEnvironment, admission: Registe
   const logHead = logRows[0]?.head?.value ?? null;
   const logCount = logRows[0]?.count?.value ?? '0';
   if (!/^(0|[1-9][0-9]{0,17})$/.test(logCount)) throw new WorkProtectionUnavailable('correction log count is invalid');
-  const intent = { ...input, action: admission.action, proposal, candidate, operation };
+  const language = input.language ?? prior.language;
+  metadataWorkRequestDigest(input.title, undefined, language);
+  const intent = { ...input, action: admission.action, titleLanguage: language, proposal, candidate, operation };
   if (JSON.stringify(intent).length > JSON_LIMIT) throw new WorkProtectionInvalid('proposal intent exceeds its bound');
-  const candidateDigest = hash(input.title);
+  const candidateDigest = hash(JSON.stringify({ title: input.title, language }));
   const candidateManifest = await put(env, input.work, { mainVersion: prior.mainVersion,
-    continuityProfile: CONTINUITY, title: input.title, language: 'en',
+    continuityProfile: CONTINUITY, title: input.title, language,
+    ...(prior.localizedTitle ? { localizedTitle: prior.localizedTitle } : {}),
+    ...(prior.description ? { description: prior.description } : {}),
     ...(prior.semanticTypes.length ? { semanticTypes: prior.semanticTypes } : {}),
     ...(prior.scalarValue === undefined ? {} : { scalarValue: prior.scalarValue }) }, PROFILE);
   const proposalManifest = await put(env, input.work, { intent, proposal, candidate, candidateDigest }, PROPOSAL_PROFILE);
@@ -341,7 +345,7 @@ async function proposeCommand(env: WorkActivationEnvironment, admission: Registe
 interface StoredProposal {
   work: string; baseHead: string; baseProtection: string | null; baseControl: string | null;
   baseControlEpoch: string; candidate: string; candidateDigest: string; candidateManifest: string;
-  proposerAdmissionId: string; title: string; proposal: string;
+  proposerAdmissionId: string; title: string; language: string; proposal: string;
 }
 
 export async function readWorkCorrectionProposal(env: WorkActivationEnvironment,
@@ -360,18 +364,19 @@ export async function readWorkCorrectionProposal(env: WorkActivationEnvironment,
     || !row.candidate || !row.digest || !row.manifest || !row.admission || !row.intent) {
     throw new WorkProtectionUnavailable('correction proposal is incomplete');
   }
-  let intent: { title?: string };
+  let intent: { title?: string; titleLanguage?: string };
   try { intent = JSON.parse(row.intent.value); }
   catch { throw new WorkProtectionUnavailable('correction proposal intent is invalid'); }
-  if (!intent.title || hash(intent.title) !== row.digest.value) throw new WorkProtectionUnavailable('candidate title digest differs');
+  if (!intent.title || (intent.titleLanguage === undefined ? hash(intent.title)
+    : hash(JSON.stringify({ title: intent.title, language: intent.titleLanguage }))) !== row.digest.value) throw new WorkProtectionUnavailable('candidate title digest differs');
   const stored = await readWorkPayloadForRevision(env, row.manifest.value, row.work.value);
-  if (stored.title !== intent.title) throw new WorkProtectionUnavailable('candidate Work payload differs');
+  if (stored.title !== intent.title || stored.language !== (intent.titleLanguage ?? 'en')) throw new WorkProtectionUnavailable('candidate Work payload differs');
   return { proposal, work: row.work.value, baseHead: row.head.value,
     baseProtection: row.protection.value === `${RV}Absent` ? null : row.protection.value,
     baseControl: row.control.value === `${RV}Absent` ? null : row.control.value,
     baseControlEpoch: row.controlEpoch.value, candidate: row.candidate.value,
     candidateDigest: row.digest.value, candidateManifest: row.manifest.value,
-    proposerAdmissionId: row.admission.value, title: intent.title };
+    proposerAdmissionId: row.admission.value, title: intent.title, language: stored.language };
 }
 
 async function reviewCommand(env: WorkActivationEnvironment, admission: RegisteredAdmission,
@@ -388,7 +393,7 @@ async function reviewCommand(env: WorkActivationEnvironment, admission: Register
   const control = approved ? ID + Bun.randomUUIDv7() : null;
   const operation = operationId(admission);
   const intent = { ...input, action: admission.action, decision, application: approved ? application : null,
-    control, title: proposal.title, operation };
+    control, title: proposal.title, titleLanguage: proposal.language, operation };
   if (JSON.stringify(intent).length > JSON_LIMIT) throw new WorkProtectionInvalid('decision intent exceeds its bound');
   const decisionManifest = await put(env, input.work, { intent, proposal: input.proposalRevision, decision }, DECISION_PROFILE);
   const applicationManifest = approved ? await put(env, input.work,
@@ -406,7 +411,7 @@ async function reviewCommand(env: WorkActivationEnvironment, admission: Register
   const deleted = approved ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.work)} rv:head ${iri(input.expectedHead)} ;
     <http://www.w3.org/2000/01/rdf-schema#label> ?oldTitle ; rv:titleControlHead ?oldControl . }` : '';
   const inserted = approved ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.work)} rv:head ${iri(proposal.candidate)} ;
-    <http://www.w3.org/2000/01/rdf-schema#label> ${lit(proposal.title)}@en ; rv:titleControlHead ${iri(control!)} . }` : '';
+    <http://www.w3.org/2000/01/rdf-schema#label> ${lit(proposal.title)}@${proposal.language} ; rv:titleControlHead ${iri(control!)} . }` : '';
   const extraRevisions = approved ? `${iri(application)} a rv:RevisionAnchor, rv:CorrectionApplication ;
     rv:proposalRevision ${iri(input.proposalRevision)} ; rv:decision ${iri(decision)} ;
     rv:component ${iri(input.work)} ; rv:baseRevision ${iri(input.expectedHead)} ;
@@ -416,7 +421,7 @@ async function reviewCommand(env: WorkActivationEnvironment, admission: Register
     rv:modelRevision ${iri(DECISION_PROFILE)} ; rv:shapeRevision ${iri(DECISION_PROFILE)} ;
     rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
     ${iri(control!)} a rv:RevisionAnchor, rv:EditorialControlRevision ;
-    rv:component ${iri(input.work)} ; rv:controlField "title:en" ; rv:controlMode rv:HumanControlled ;
+    rv:component ${iri(input.work)} ; rv:controlField "title" ; rv:controlLanguage ${lit(proposal.language)} ; rv:controlMode rv:HumanControlled ;
     rv:controlEpoch ${BigInt(input.expectedControlEpoch) + 1n} ; rv:workRevision ${iri(proposal.candidate)} ;
     ${input.expectedControl ? `rv:predecessor ${iri(input.expectedControl)} ;` : ''}
     rv:operation ${iri(operation)} ; rv:controlIntent ${lit(JSON.stringify(intent))} ;
@@ -453,7 +458,7 @@ async function reviewCommand(env: WorkActivationEnvironment, admission: Register
     ...(approved ? [{ shape: `${DECISION_PROFILE}/application-shape`, focus: [application],
       graphs: [GRAPHS.current, GRAPHS.revisions] }] : []),
   ]);
-  if (control) validations.push(...await profileValidations(env.fuseki, 'work-title-control-v1', [
+  if (control) validations.push(...await profileValidations(env.fuseki, 'work-title-control-v2', [
     { shape: `${CONTROL_PROFILE}/control-shape`, focus: [control], graphs: [GRAPHS.current, GRAPHS.revisions] },
   ]));
   if (approved) validations.push(...await workMetadataValidations(env, input.work, current.mainVersion));
@@ -527,7 +532,8 @@ export async function changeWorkProtection(env: WorkActivationEnvironment, accou
 export async function proposeWorkCorrection(env: WorkActivationEnvironment, account: Account, access: Access,
   signer: ProtectionAdmissionSigner, request: Request, input: WorkCorrectionProposal): Promise<WorkProtectionReceipt> {
   validateBasis(input);
-  metadataWorkRequestDigest(input.title);
+  try { metadataWorkRequestDigest(input.title, undefined, input.language); }
+  catch { throw new WorkProtectionInvalid('invalid title or declared language'); }
   const requestDigest = digest('work-title-correction-v1', input);
   return dispatch(env, account, access, signer, request, input, 'work.correction.propose', 'work:correct',
     requestDigest, async admission => ({ command: await proposeCommand(env, admission, input), proposerAdmissionId: null }));

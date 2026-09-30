@@ -2,12 +2,14 @@ import { CommandRejected, type CommandValidation } from '../../infrastructure/fu
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
+import { canonicalLanguage } from '../display-language/select.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 
 export const SPACE_REALM_PROFILE_V1 = 'https://rezics.com/definition/space-realm-v1';
-export const SPACE_REALM_PROFILE = 'https://rezics.com/definition/space-realm-v2';
+export const SPACE_REALM_PROFILE_V2 = 'https://rezics.com/definition/space-realm-v2';
+export const SPACE_REALM_PROFILE = 'https://rezics.com/definition/space-realm-v3';
 export const SELECTION_POLICY = 'https://rezics.com/definition/realm-manager-fixed-main-fallback-v1';
 export const MEMBERSHIP_POLICY = 'https://rezics.com/definition/realm-closed-v1';
 export const REVIEW_POLICY = 'https://rezics.com/definition/realm-manager-reviewed-v1';
@@ -21,6 +23,7 @@ export class InvalidSpaceInput extends Error {}
 
 export interface CreateRealmSpaceInput {
   name: string;
+  language?: string;
   actingSubject: string;
   /** A person-created Realm's stable public address. Older API clients omit it. */
   handle?: string;
@@ -45,9 +48,10 @@ export interface SpaceCreationReceipt {
 }
 
 export function spaceCreationDigest(input: CreateRealmSpaceInput): string {
+  const language = input.language ?? 'und';
   if (input.name.length < 1 || input.name.length > 120
     || /[\u0000-\u001f\u007f]/u.test(input.name)
-    || !nativeId.test(input.actingSubject)
+    || !nativeId.test(input.actingSubject) || !canonicalLanguage(language) || language.length > 35
     || input.handle !== undefined && !COMMUNITY_HANDLE.test(input.handle)
     || input.topics !== undefined && (input.topics.length > SPACE_CREATE_COST.topics
       || input.topics.some(topic => !nativeId.test(topic))
@@ -55,6 +59,7 @@ export function spaceCreationDigest(input: CreateRealmSpaceInput): string {
     throw new InvalidSpaceInput('invalid Space creation request');
   }
   return hash(JSON.stringify({ family: 'create-space-realm-v1', name: input.name,
+    ...(language === 'en' ? {} : { language }),
     capabilities: ['realm'], owner: input.actingSubject,
     selectionPolicy: SELECTION_POLICY, membershipPolicy: MEMBERSHIP_POLICY,
     reviewPolicy: REVIEW_POLICY, ...input.handle ? { handle: input.handle } : {},
@@ -143,7 +148,7 @@ function checked(receipt: SpaceCreationReceipt, admission: RegisteredAdmission,
 async function validateCandidate(env: WorkActivationEnvironment, space: string, realm: string,
   input: CreateRealmSpaceInput): Promise<CommandValidation[]> {
   iri(space); iri(realm); spaceCreationDigest(input);
-  return profileValidations(env.fuseki, 'space-realm-v2', [
+  return profileValidations(env.fuseki, 'space-realm-v3', [
     { shape: `${SPACE_REALM_PROFILE}/space-shape`, focus: [space], graphs: [GRAPHS.current] },
     { shape: `${SPACE_REALM_PROFILE}/realm-shape`, focus: [realm], graphs: [GRAPHS.current] },
   ]);
@@ -172,7 +177,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   const operation = ID + Bun.randomUUIDv7();
   const validations = await validateCandidate(env, space, realm, input);
   const spaceManifest = prepareComponent(env.objectDirectory, space,
-    { name: input.name, owner: input.actingSubject, realmCapability: realm,
+    { name: input.name, language: input.language ?? 'und', owner: input.actingSubject, realmCapability: realm,
       capabilities: ['realm'], disclosure: 'public' }, SPACE_REALM_PROFILE);
   const realmManifest = prepareComponent(env.objectDirectory, realm,
     { space, state: 'active', selectionPolicy: SELECTION_POLICY,
@@ -195,7 +200,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
         ${iri(space)} a rv:Space ; rv:owner ${iri(input.actingSubject)} ;
           rv:definitionProfile ${iri(SPACE_REALM_PROFILE)} ;
           rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public ;
-          rdfs:label ${lit(input.name)}@en ; rv:head ${iri(spaceRevision)} .
+          rdfs:label ${lit(input.name)}@${input.language ?? 'und'} ; rv:head ${iri(spaceRevision)} .
         ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ;
           rv:definitionProfile ${iri(SPACE_REALM_PROFILE)} ;
           ${input.handle ? `rv:communityHandle ${lit(input.handle)} ;` : ''}

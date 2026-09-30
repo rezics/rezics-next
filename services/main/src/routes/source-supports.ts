@@ -180,7 +180,7 @@ const sourceAttachmentResult = t.Object({
   binding: t.String(), supportIdentity: t.String(), originalBinding: t.String(), work: t.String(),
   proposal: t.String(), sourceRecord: t.String(), sourceObservation: t.String(),
   sourceConversion: t.String(), sourceGraphReceipt: t.String(), title: t.String(),
-  titleLanguage: t.Literal('en'), verifiedHead: t.String(),
+  titleLanguage: t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' }), verifiedHead: t.String(),
   headGuarantee: t.Literal('verified-before-commit'),
   authority: t.Object({ principalId: t.String(), principalEpoch: t.String(),
     actingSubject: t.String(), subjectGeneration: t.String(), scope: t.String(), action: t.Literal('work.edit'),
@@ -656,7 +656,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
       params: t.Object({ id: groupUuid }),
       body: t.Object({ profile: t.Literal('native-work-source-title-attachment-v2'),
         proposal: groupAgent, expectedHead: groupAgent, actingSubject: groupAgent,
-        confirmedTitle: t.String({ minLength: 1, maxLength: 200 }), titleLanguage: t.Literal('en'),
+        confirmedTitle: t.String({ minLength: 1, maxLength: 200 }), titleLanguage: t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' }),
       }, { additionalProperties: false }),
       response: { 200: sourceAttachmentWriteResult, 201: sourceAttachmentWriteResult,
         ...writeProblems, 404: problemResult(404) },
@@ -820,6 +820,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
       params: t.Object({ id: groupUuid, candidateProposal: groupUuid }),
       body: t.Object({ profile: t.Literal('native-work-source-title-application-v1'),
         expectedHead: groupAgent, actingSubject: groupAgent, titleControl: titleControlBasis,
+        language: t.Optional(t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' })),
         confirmedTitle: t.String({ minLength: 1, maxLength: 200 }),
       }, { additionalProperties: false }),
       response: { 200: sourceTitleApplicationWriteResult,
@@ -835,7 +836,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         const result = await work.sourceAdoptions.applyTitle(principalId, request,
           `https://rezics.com/id/${params.id}`, params.candidateProposal,
           { expectedHead: body.expectedHead, actingSubject: body.actingSubject,
-            confirmedTitle: body.confirmedTitle, titleControl: body.titleControl });
+            confirmedTitle: body.confirmedTitle, language: body.language, titleControl: body.titleControl });
         if (!result) return problem(404, 'source_title_application_unavailable',
           'Source title proposal or Work binding is unavailable');
         return Response.json(result, { status: result.replayed ? 200 : 201,

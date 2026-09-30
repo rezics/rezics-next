@@ -308,6 +308,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         expectedHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
+        language: t.Optional(t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' })),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
       response: { 200: contentEditWriteResult, 202: pendingOperation,
@@ -319,7 +320,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       }
       try {
         const receipt = await editAdmittedMetadataWork(work.environment, work.account, work.access,
-          request, { work: body.work, expectedHead: body.expectedHead, title: body.title,
+          request, { work: body.work, expectedHead: body.expectedHead, title: body.title, language: body.language,
             actingSubject: body.actingSubject, idempotencyKey, titleControl: body.titleControl });
         return Response.json({ work: receipt.work, revision: receipt.revision,
           predecessor: receipt.predecessor,

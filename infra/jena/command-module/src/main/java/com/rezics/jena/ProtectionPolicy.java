@@ -216,6 +216,7 @@ final class ProtectionPolicy {
                 && (before == null || rv("Open").equals(one(data, REVISIONS, before, rv("protectionMode"))));
             case "work.protection.confirm" -> rv("Confirm").equals(kind) && rv("ReviewRequired").equals(mode)
                 && (before == null || rv("Open").equals(one(data, REVISIONS, before, rv("protectionMode"))))
+                && confirmationLanguage(data, modify, work)
                 && controlSuccessor(modify, work, head, control,
                     template(modify.getInsertQuads(), CURRENT, work, rv("titleControlHead")), data);
             case "work.protection.relax" -> before != null && rv("Relax").equals(kind) && rv("Open").equals(mode)
@@ -224,10 +225,19 @@ final class ProtectionPolicy {
         };
     }
 
+    private static boolean confirmationLanguage(DatasetGraph data, UpdateModify modify, Node work) {
+        try {
+            Node control = template(modify.getInsertQuads(), CURRENT, work, rv("titleControlHead"));
+            JsonObject intent = JSON.parse(text(template(modify.getInsertQuads(), REVISIONS, control, rv("controlIntent"))));
+            return matchesTitleLanguage(intent, one(data, CURRENT, work, LABEL));
+        } catch (Exception ex) { return false; }
+    }
+
     private static boolean controlSuccessor(UpdateModify modify, Node work, Node revision, Node before,
                                             Node next, DatasetGraph data) {
         if (next == null || !next.isURI() || data.contains(REVISIONS, next, Node.ANY, Node.ANY)) return false;
         BigInteger prior = before == null ? BigInteger.ZERO : number(one(data, REVISIONS, before, rv("controlEpoch")));
+        if (!controlLanguage(modify, next)) return false;
         return prior != null && work.equals(template(modify.getInsertQuads(), REVISIONS, next, rv("component")))
             && revision.equals(template(modify.getInsertQuads(), REVISIONS, next, rv("workRevision")))
             && rv("HumanControlled").equals(template(modify.getInsertQuads(), REVISIONS, next, rv("controlMode")))
@@ -238,6 +248,15 @@ final class ProtectionPolicy {
 
     private static boolean proposalBasis(DatasetGraph data, UpdateModify modify, Node work, Node head,
                                          Node protection, Node control, Node effect) {
+        try {
+            JsonObject intent = JSON.parse(text(template(modify.getInsertQuads(), REVISIONS, effect, rv("proposalIntent"))));
+            String language = intent.hasKey("titleLanguage") ? ProfileRegistry.required(intent, "titleLanguage") : "en";
+            Node title = one(data, CURRENT, work, LABEL);
+            String requested = intent.hasKey("language") ? ProfileRegistry.required(intent, "language")
+                : intent.hasKey("titleLanguage") && title != null ? title.getLiteralLanguage() : "en";
+            if (requested.isEmpty()) requested = "und";
+            if (!TitleControlPolicy.validLanguage(language) || !language.equalsIgnoreCase(requested)) return false;
+        } catch (Exception ex) { return false; }
         return work.equals(template(modify.getInsertQuads(), REVISIONS, effect, rv("component")))
             && head.equals(template(modify.getInsertQuads(), REVISIONS, effect, rv("baseRevision")))
             && (protection == null ? rv("Absent").equals(template(modify.getInsertQuads(), REVISIONS, effect, rv("baseProtection")))
@@ -282,11 +301,31 @@ final class ProtectionPolicy {
             Node title = template(modify.getInsertQuads(), CURRENT, work, LABEL);
             try {
                 JsonObject intent = JSON.parse(text(one(data, REVISIONS, proposal, rv("proposalIntent"))));
-                if (title == null || !title.isLiteral() || !title.getLiteralLanguage().equals("en")
+                if (title == null || !title.isLiteral() || !matchesTitleLanguage(intent, title)
                     || !title.getLiteralLexicalForm().equals(ProfileRegistry.required(intent, "title"))) return false;
+                JsonObject controlIntent = JSON.parse(text(template(modify.getInsertQuads(), REVISIONS, successor, rv("controlIntent"))));
+                if (!matchesTitleLanguage(controlIntent, title)) return false;
             } catch (Exception ex) { return false; }
         } else if (template(modify.getInsertQuads(), CURRENT, work, rv("head")) != null) return false;
         return true;
+    }
+
+    static boolean matchesTitleLanguage(JsonObject intent, Node title) {
+        String language = intent.hasKey("titleLanguage") ? ProfileRegistry.required(intent, "titleLanguage") : "en";
+        return title != null && title.isLiteral() && TitleControlPolicy.validLanguage(language)
+            && title.getLiteralLanguage().equalsIgnoreCase(language);
+    }
+
+    private static boolean controlLanguage(UpdateModify modify, Node control) {
+        try {
+            JsonObject intent = JSON.parse(text(template(modify.getInsertQuads(), REVISIONS, control, rv("controlIntent"))));
+            String language = intent.hasKey("titleLanguage") ? ProfileRegistry.required(intent, "titleLanguage") : "en";
+            Node field = template(modify.getInsertQuads(), REVISIONS, control, rv("controlField"));
+            Node declared = template(modify.getInsertQuads(), REVISIONS, control, rv("controlLanguage"));
+            return TitleControlPolicy.validLanguage(language) && ("title".equals(text(field))
+                && language.equalsIgnoreCase(text(declared)) || "title:en".equals(text(field))
+                && language.equals("en") && declared == null);
+        } catch (Exception ex) { return false; }
     }
 
     static String check(DatasetGraph data, String receipt, Snapshot snapshot) {

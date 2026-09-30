@@ -19,7 +19,7 @@ const localizedLabel = (labels: readonly { value: string; language: string }[], 
   ?? labels.find(label => label.language.toLowerCase().split('-')[0] === language.toLowerCase().split('-')[0])
   ?? labels[0] ?? null;
 const missingTitle = (label: { value: string; language: string } | null) =>
-  !label || /^(?:untitled chapter|未命名章节)$/iu.test(label.value.trim());
+  !label;
 
 /** Legacy imports put a chapter heading in the body but saved a placeholder label. */
 export function firstChapterHeading(body: Record<string, unknown>): string | null {

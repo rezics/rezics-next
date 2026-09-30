@@ -11,6 +11,7 @@ import { readWorkProtectionReceipt, workProtectionDigest,
   type WorkEditorialBasis, type WorkCorrectionProposal, type WorkCorrectionReview,
   type WorkProtectionChange } from './work.ts';
 import type { RecoveryTerm, RecoveryTriple } from './recovery-evidence.ts';
+import { canonicalLanguage } from '../display-language/select.ts';
 
 const markerFor = (epoch: string) => `urn:rezics:restore:${epoch}`;
 const safeIri = (value: string) => {
@@ -49,7 +50,7 @@ function subjectTriples(triples: RecoveryTriple[], graph: string): string {
 }
 type Intent = WorkEditorialBasis & {
   action: WorkProtectionAdmissionAction; operation: string; proposal?: string; candidate?: string;
-  decision?: string; control?: string | null; application?: string | null; title?: string;
+  decision?: string; control?: string | null; application?: string | null; title?: string; language?: string; titleLanguage?: string;
   predecessor?: string | null; proposalRevision?: string; candidateDigest?: string;
   expectedDecisionHead?: null; outcome?: 'approved' | 'rejected';
 };
@@ -123,6 +124,9 @@ export async function reconcileRetainedWorkProtection(env: WorkActivationEnviron
   let intent: Intent;
   try { intent = JSON.parse(intentRows[0]!.object.value) as Intent; }
   catch { throw new RetainedEffectConflict('retained Work protection intent is invalid'); }
+  if (intent.titleLanguage !== undefined && !canonicalLanguage(intent.titleLanguage)) {
+    throw new RetainedEffectConflict('retained Work title language is invalid');
+  }
   const profile = effect.action.startsWith('work.protection.') ? 'work-title-protection-v1'
     : effect.action === 'work.correction.propose' ? 'work-title-correction-v1'
       : 'work-title-correction-review-v1';
@@ -134,7 +138,7 @@ export async function reconcileRetainedWorkProtection(env: WorkActivationEnviron
   const request = effect.action.startsWith('work.protection.')
     ? { ...basis, action: effect.action.slice('work.protection.'.length) } as WorkProtectionChange
     : effect.action === 'work.correction.propose'
-      ? { ...basis, title: intent.title!, predecessor: intent.predecessor ?? null } as WorkCorrectionProposal
+      ? { ...basis, title: intent.title!, ...(intent.language === undefined ? {} : { language: intent.language }), predecessor: intent.predecessor ?? null } as WorkCorrectionProposal
       : { ...basis, proposalRevision: intent.proposalRevision!,
         candidateDigest: intent.candidateDigest!, expectedDecisionHead: null,
         outcome: intent.outcome! } as WorkCorrectionReview;
@@ -221,7 +225,7 @@ export async function reconcileRetainedWorkProtection(env: WorkActivationEnviron
           deleteCurrent = `${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ;
             <http://www.w3.org/2000/01/rdf-schema#label> ?oldTitle ; rv:titleControlHead ?oldControl .`;
           insertCurrent = `${iri(intent.work)} rv:head ${iri(revision)} ;
-            <http://www.w3.org/2000/01/rdf-schema#label> ${lit(intent.title!)}@en ;
+            <http://www.w3.org/2000/01/rdf-schema#label> ${lit(intent.title!)}@${intent.titleLanguage ?? 'en'} ;
             rv:titleControlHead ${iri(control)} .`;
         }
       }
@@ -246,7 +250,12 @@ export async function reconcileRetainedWorkProtection(env: WorkActivationEnviron
       const protectionProfile = 'https://rezics.com/definition/protection-revision-v1';
       const proposalProfile = 'https://rezics.com/definition/correction-proposal-v1';
       const decisionProfile = 'https://rezics.com/definition/correction-decision-v1';
-      const controlProfile = 'https://rezics.com/definition/work-title-control-v1';
+      const control = value(triples, GRAPHS.receipts, effect.id, 'titleControl');
+      const controlProfile = control ? value(triples, GRAPHS.revisions, control, 'modelRevision') : null;
+      if (control && !['https://rezics.com/definition/work-title-control-v1',
+        'https://rezics.com/definition/work-title-control-v2'].includes(controlProfile ?? '')) {
+        throw new RetainedEffectConflict('retained title control profile is invalid');
+      }
       let validations;
       if (effect.action.startsWith('work.protection.')) {
         const protection = value(triples, GRAPHS.receipts, effect.id, 'protectionRevision')!;
@@ -275,8 +284,7 @@ export async function reconcileRetainedWorkProtection(env: WorkActivationEnviron
             graphs: [GRAPHS.current, GRAPHS.revisions] }] : []),
         ]);
       }
-      const control = value(triples, GRAPHS.receipts, effect.id, 'titleControl');
-      if (control) validations.push(...await profileValidations(env.fuseki, 'work-title-control-v1', [
+      if (control) validations.push(...await profileValidations(env.fuseki, controlProfile!.endsWith('-v2') ? 'work-title-control-v2' : 'work-title-control-v1', [
         { shape: `${controlProfile}/control-shape`, focus: [control],
           graphs: [GRAPHS.current, GRAPHS.revisions] },
       ]));

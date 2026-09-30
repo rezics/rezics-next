@@ -69,4 +69,23 @@ public class ProtectionPolicyTest {
             } finally { data.abort(); data.end(); data.close(); }
         }
     }
+    @Test public void g512ReviewedTitleLanguageMustMatchTheRetainedProposal() {
+        for (String language : new String[] { "ja", "zh-Hant", "ar", "und" }) {
+            var intent = new org.apache.jena.atlas.json.JsonObject();
+            intent.put("titleLanguage", language);
+            org.junit.Assert.assertTrue(ProtectionPolicy.matchesTitleLanguage(intent,
+                NodeFactory.createLiteralLang("a title", language)));
+            org.junit.Assert.assertFalse(ProtectionPolicy.matchesTitleLanguage(intent,
+                NodeFactory.createLiteralLang("a title", "en")));
+        }
+        var legacy = new org.apache.jena.atlas.json.JsonObject();
+        org.junit.Assert.assertTrue(ProtectionPolicy.matchesTitleLanguage(legacy,
+            NodeFactory.createLiteralLang("legacy title", "en")));
+        org.junit.Assert.assertFalse(ProtectionPolicy.matchesTitleLanguage(legacy,
+            NodeFactory.createLiteralLang("legacy title", "ja")));
+        legacy.put("titleLanguage", "ja--JP");
+        org.junit.Assert.assertFalse(ProtectionPolicy.matchesTitleLanguage(legacy,
+            NodeFactory.createLiteralLang("invalid", "ja")));
+    }
+
 }

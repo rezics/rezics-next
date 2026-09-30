@@ -12,6 +12,7 @@ import { discardUnpublishedWorkObjects, stagedWorkObjectCandidates,
   type StagedWorkObjectCandidates } from './object-gc.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 import { workKinds, workSemanticTypes } from './work-kinds.ts';
+import { canonicalLanguage } from '../display-language/select.ts';
 
 export const RV = 'https://rezics.com/vocab/';
 export const ID = 'https://rezics.com/id/';
@@ -86,6 +87,7 @@ export class IdempotencyConflict extends Error {}
 export class PendingActivation extends Error {}
 export class CancelledActivation extends Error {}
 export class InvalidWorkSemanticTypes extends Error {}
+export class InvalidWorkTitleLanguage extends Error {}
 export class AuthorAgentUnavailable extends Error {}
 
 export function hash(value: string | Uint8Array): string {
@@ -109,7 +111,7 @@ export function assertNativeWorkTypeCombination(types: readonly string[]): void 
 }
 
 export function metadataWorkRequestDigest(title: string,
-  semanticTypes?: readonly string[], language = 'en',
+  semanticTypes?: readonly string[], language = 'und',
   details: { localizedTitle?: { value: string; language: string };
     description?: { value: string; language: string }; authorAgent?: string } = {}): string {
   if (title.length < 1 || title.length > 200 || /[\u0000-\u001f\u007f]/.test(title)) {
@@ -117,8 +119,8 @@ export function metadataWorkRequestDigest(title: string,
   }
   const types = normalizeWorkSemanticTypes(semanticTypes);
   assertNativeWorkTypeCombination(types);
-  if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(language) || language.length > 35) {
-    throw new Error('invalid title language');
+  if (!canonicalLanguage(language) || language.length > 35) {
+    throw new InvalidWorkTitleLanguage('Title language is invalid');
   }
   for (const [name, value, maximum] of [['localized title', details.localizedTitle, 500],
     ['description', details.description, 4000]] as const) {
@@ -288,16 +290,19 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
     throw new Error('invalid Work admission');
   }
   const semanticTypes = normalizeWorkSemanticTypes(intent.semanticTypes);
-  // Internal legacy and source fixtures still activate without an author-facing request.
-  // The public Work creation route requires the author to state this field.
-  const language = intent.language ?? 'en';
+  // A missing declaration records an undetermined language; no interface locale
+  // can supply the authored title's language.
+  const language = intent.language ?? 'und';
   const digest = metadataWorkRequestDigest(intent.title, semanticTypes, language, intent);
-  if (admission.requestDigest !== digest) throw new IdempotencyConflict('admission digest does not match Work intent');
   const receipt = workReceiptIri(admission.id);
   await assertNotInvalidProfileReceipt(env.fuseki, workReceiptIri(admission.id));
   const existing = await readWorkTerminalReceipt(env.fuseki, admission.id);
   if (existing) {
-    if (existing.requestDigest !== digest || existing.admissionId !== admission.id
+    // A language-omitting legacy admission meant English. Replay its recorded
+    // receipt, while every new omitted-language activation still writes und.
+    const replayDigest = intent.language === undefined && existing.requestDigest ===
+      metadataWorkRequestDigest(intent.title, semanticTypes, 'en', intent) ? existing.requestDigest : digest;
+    if (admission.requestDigest !== replayDigest || existing.requestDigest !== replayDigest || existing.admissionId !== admission.id
       || existing.authorityEpoch !== admission.authorityEpoch || existing.scope !== admission.scope) {
       throw new IdempotencyConflict('admission does not match stored receipt');
     }
@@ -306,6 +311,7 @@ export async function activateMetadataWork(env: WorkActivationEnvironment, inten
       workRevision: existing.workRevision!, mainRevision: existing.mainRevision!, receipt, admissionId: admission.id,
       dataEpoch: existing.dataEpoch, sequence: existing.sequence, replayed: true };
   }
+  if (admission.requestDigest !== digest) throw new IdempotencyConflict('admission digest does not match Work intent');
   if (!Number.isFinite(Date.parse(admission.expiresAt)) || Date.parse(admission.expiresAt) <= Date.now()) {
     throw new PendingActivation('admission expired before dispatch');
   }

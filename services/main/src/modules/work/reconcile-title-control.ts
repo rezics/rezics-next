@@ -2,11 +2,11 @@ import type { Pool } from 'pg';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { signTitleAdmission } from '../access/title-admission.ts';
 import { hash, type WorkActivationEnvironment } from './activate.ts';
-import { readWorkComponentState, readWorkPayloadForRevision } from './history.ts';
+import { readWorkComponentState, readWorkPayloadForRevision, RevisionCorrupt } from './history.ts';
 import { relayRetainedEventAt, type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
 import { reconciledCursor, RetainedEffectConflict } from './reconcile-restored.ts';
 import { readTitleControlReceipt, titleControlCommand, titleControlDigest, titleControlReceiptIri,
-  TitleControlUnavailable, TITLE_PROFILE, type TitleControlIntent } from './title-control.ts';
+  TitleControlUnavailable, TITLE_PROFILE, TITLE_PROFILE_V1, type TitleControlIntent } from './title-control.ts';
 
 /** Reconstruct the exact title/control effect while both owners remain held.
  * Source records are restored first. Current withdrawal is never undone by replay. */
@@ -31,13 +31,25 @@ export async function reconcileRetainedTitleControl(env: WorkActivationEnvironme
     || envelope.data.batchId !== `urn:rezics:outbox:${hash(effect.receipt)}`
     || retained.batch.batchId !== envelope.data.batchId || retained.batch.eventCount !== 1
     || retained.batch.routingEpoch !== envelope.data.routingEpoch) throw new RetainedEffectConflict('retained title effect differs');
-  const state = await readWorkComponentState(env, effect.controlManifest, effect.work, TITLE_PROFILE);
+  let controlProfile: typeof TITLE_PROFILE | typeof TITLE_PROFILE_V1 = TITLE_PROFILE;
+  let state;
+  try { state = await readWorkComponentState(env, effect.controlManifest, effect.work, controlProfile); }
+  catch (error) {
+    if (!(error instanceof RevisionCorrupt)) throw error;
+    controlProfile = TITLE_PROFILE_V1;
+    state = await readWorkComponentState(env, effect.controlManifest, effect.work, controlProfile);
+  }
   if (state.control !== effect.control || state.revision !== effect.revision || state.operation !== effect.operation
     || titleControlDigest(state.intent as TitleControlIntent) !== titleControlDigest(effect.intent)) {
     throw new RetainedEffectConflict('immutable title envelope differs');
   }
   const content = await readWorkPayloadForRevision(env, effect.workManifest, effect.work);
-  if (content.title !== effect.intent.title) throw new RetainedEffectConflict('immutable title content differs');
+  if (content.title !== effect.intent.title || (controlProfile === TITLE_PROFILE
+    && state.language !== content.language) || (effect.intent.language !== undefined
+    && effect.intent.language !== content.language)
+    || controlProfile === TITLE_PROFILE_V1 && content.language !== 'en') {
+    throw new RetainedEffectConflict('immutable title content differs');
+  }
   const client = await accessPool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
@@ -59,7 +71,7 @@ export async function reconcileRetainedTitleControl(env: WorkActivationEnvironme
         authorityEpoch: row.authority_epoch, idempotencyKey: row.idempotency_key, state: 'sealed',
         expiresAt: new Date(Date.now() + 10_000).toISOString(), dispatchEligible: false, replayed: true };
       let command;
-      try { command = await titleControlCommand(env, admission, effect.intent, effect); }
+      try { command = await titleControlCommand(env, admission, effect.intent, effect, controlProfile); }
       catch (error) {
         if (error instanceof TitleControlUnavailable) throw new RetainedEffectConflict(error.message);
         throw error;

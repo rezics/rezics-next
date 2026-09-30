@@ -81,7 +81,7 @@ const graphWriteResponses = { 200: graphReceipt, 201: graphReceipt,
 const workCorrectionRecord = t.Object({ proposal: t.Object({
   proposal: t.String(), work: t.String(), baseHead: t.String(), baseProtection: nullableRef,
   baseControl: nullableRef, baseControlEpoch: t.String(), candidate: t.String(), candidateDigest: t.String(),
-  candidateManifest: t.String(), proposerAdmissionId: t.String(), title: t.String(),
+  candidateManifest: t.String(), proposerAdmissionId: t.String(), title: t.String(), language: t.String(),
 }), decision: t.Nullable(t.Object({ decision: t.String(),
   outcome: t.Union([t.Literal('approved'), t.Literal('rejected')]),
   operation: t.String(), agent: t.String() })) });
@@ -296,7 +296,9 @@ export function protectionRoutes(work: ProtectionDependencies) {
     })
     .post('/v1/work-title-corrections', {
       body: t.Object({ profile: t.Literal('work-title-correction-v1'),
-        title: t.String({ minLength: 1, maxLength: 200 }), predecessor: t.Null(), ...workBasis },
+        title: t.String({ minLength: 1, maxLength: 200 }),
+        language: t.Optional(t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' })),
+        predecessor: t.Null(), ...workBasis },
       { additionalProperties: false }), response: graphWriteResponses,
     }, async ({ request, body }) => {
       if (!work.protectionSigner) return unavailable();

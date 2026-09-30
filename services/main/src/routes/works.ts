@@ -12,7 +12,7 @@ import { readExactMainRevision, readExactWorkRevision, RevisionCorrupt }
 import { sameScalar, scalarExport, scalarFromBinding, SCALAR_PREDICATE }
   from '../modules/work/scalar-value.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
-import { iri, InvalidWorkSemanticTypes, MAX_WORK_SEMANTIC_TYPES } from '../modules/work/activate.ts';
+import { iri, InvalidWorkSemanticTypes, InvalidWorkTitleLanguage, MAX_WORK_SEMANTIC_TYPES } from '../modules/work/activate.ts';
 import { workSemanticTypes } from '../modules/work/work-kinds.ts';
 import { exactMainRevision, exactWorkRevision, pendingOperation, problemResult, workResult,
   workScalarRead, workScalarValue, workScalarWrite } from '../api-contract.ts';
@@ -75,8 +75,8 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         authorityPath: t.Optional(t.Union([
           t.Literal('represented-agent'), t.Literal('direct-principal')])),
         title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
-        language: t.String({ minLength: 2, maxLength: 35,
-          pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }),
+        language: t.Optional(t.String({ minLength: 2, maxLength: 35,
+          pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' })),
         localizedTitle: t.Optional(t.Object({ value: t.String({ minLength: 1, maxLength: 500 }),
           language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false })),
         description: t.Optional(t.Object({ value: t.String({ minLength: 1, maxLength: 4000 }),
@@ -98,7 +98,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       }
       try {
         const receipt = await createAdmittedMetadataWork(work.environment, work.account, work.access,
-          request, { title: body.title, language: body.language,
+          request, { title: body.title, language: body.language ?? 'und',
             localizedTitle: body.localizedTitle, description: body.description,
             semanticTypes: body.semanticTypes,
             actingSubject: body.actingSubject,
@@ -111,6 +111,9 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) {
+        if (error instanceof InvalidWorkTitleLanguage) {
+          return problem(400, 'invalid_title_language', error.message);
+        }
         if (error instanceof InvalidWorkSemanticTypes) {
           return problem(400, 'invalid_work_semantic_types', 'Work types conflict');
         }

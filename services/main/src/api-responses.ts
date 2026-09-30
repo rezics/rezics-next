@@ -255,7 +255,8 @@ export const spaceWriteResult = t.Object({
   owner: ref, capabilities: t.Tuple([t.Literal('realm')]), ...replay,
 });
 export const spaceReadResult = t.Object({
-  space: ref, realm: ref, owner: ref, name: t.String(),
+  space: ref, realm: ref, owner: ref, name: t.String(), language: t.String(),
+  direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]),
   capabilities: t.Tuple([t.Literal('realm')]), state: t.Literal('active'),
   spaceRevision: ref, realmRevision: ref, selectionPolicy: ref,
   membershipPolicy: ref, reviewPolicy: ref,

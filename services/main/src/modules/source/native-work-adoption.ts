@@ -557,7 +557,7 @@ export class SourceNativeWorkAdoptionStore {
 
   async applyTitle(principalId: string, request: Request, work: string,
     candidateProposalId: string, input: { expectedHead: string; actingSubject: string;
-      confirmedTitle: string; titleControl: TitleControlBasis }):
+      confirmedTitle: string; language?: string; titleControl: TitleControlBasis }):
     Promise<{ application: NativeWorkSourceTitleApplication; replayed: boolean } | null> {
     if (!UUID.test(principalId) || !UUID.test(candidateProposalId)
       || !ACTOR.test(work) || !ACTOR.test(input.expectedHead)
@@ -596,7 +596,7 @@ export class SourceNativeWorkAdoptionStore {
         throw new SourceAdoptionConflict('candidate is not a later title change in this source epoch');
       }
       const nativeIntent: TitleControlIntent = { work, expectedHead: input.expectedHead, basis: input.titleControl,
-        action: 'work.title.apply', title: input.confirmedTitle, source: { binding: support.binding,
+        action: 'work.title.apply', title: input.confirmedTitle, ...(input.language === undefined ? {} : { language: input.language }), source: { binding: support.binding,
           record: candidate.record, observation: candidate.observation, conversion: candidate.conversion,
           proposal: candidate.proposal, mapping: 'open-library-work-map-v1', initialHead: support.adoptedAtRevision } };
       const keyDigest = hash(`${work}\0${candidateProposalId}`);
@@ -621,7 +621,7 @@ export class SourceNativeWorkAdoptionStore {
     if (!intent || intent.expected_head !== input.expectedHead
       || intent.acting_subject !== input.actingSubject
       || intent.confirmed_title !== input.confirmedTitle || !intent.control_intent
-      || titleControlDigest({ ...intent.control_intent, basis: input.titleControl }) !== titleControlDigest(intent.control_intent)) {
+      || titleControlDigest({ ...intent.control_intent, language: input.language, basis: input.titleControl }) !== titleControlDigest(intent.control_intent)) {
       throw new SourceAdoptionConflict('proposal is reserved for another title application');
     }
     const existing = (await this.pool.query<TitleApplicationRow>(

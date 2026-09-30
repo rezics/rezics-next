@@ -1,3 +1,4 @@
+import { canonicalLanguage } from '../display-language/select.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../access/admission.ts';
 import type { WorkEditAuthorityProof } from '../access/work-edit-authority.ts';
@@ -19,7 +20,7 @@ export interface NativeWorkSourceAttachment {
   profile: 'native-work-source-title-attachment-v2'; state: 'attached';
   binding: string; supportIdentity: string; originalBinding: string; work: string;
   proposal: string; sourceRecord: string; sourceObservation: string; sourceConversion: string;
-  sourceGraphReceipt: string; title: string; titleLanguage: 'en';
+  sourceGraphReceipt: string; title: string; titleLanguage: string;
   verifiedHead: string; headGuarantee: 'verified-before-commit';
   authority: WorkEditAuthorityProof; rightsEvidence: NativeWorkSourceProposal['rightsEvidence'];
   rightsStatus: 'undetermined'; createdAt: string;
@@ -58,7 +59,7 @@ interface WithdrawalRow {
 }
 export interface AttachSourceTitleInput {
   proposal: string; expectedHead: string; confirmedTitle: string;
-  titleLanguage: 'en'; actingSubject: string;
+  titleLanguage: string; actingSubject: string;
 }
 
 export function attachmentConstraint(error: unknown): never {
@@ -107,14 +108,14 @@ export class SourceNativeWorkAttachmentStore {
       async work => work === row.work).catch(() => {
       throw new SourceAdoptionUnavailable('attachment native revision is unavailable');
     });
-    if (revision.title !== row.title || revision.language !== 'en') {
+    if (revision.title !== row.title) {
       throw new SourceAdoptionUnavailable('attachment differs from native revision');
     }
     return { profile: 'native-work-source-title-attachment-v2', state: 'attached',
       binding: url(row.id), supportIdentity: url(row.id), originalBinding,
       work: row.work, proposal: proposal.proposal, sourceRecord: proposal.record,
       sourceObservation: proposal.observation, sourceConversion: proposal.conversion,
-      sourceGraphReceipt: proposal.graphReceipt, title: row.title, titleLanguage: 'en',
+      sourceGraphReceipt: proposal.graphReceipt, title: row.title, titleLanguage: revision.language,
       verifiedHead: row.work_revision, headGuarantee: 'verified-before-commit', authority: proof,
       rightsEvidence: proposal.rightsEvidence, rightsStatus: 'undetermined',
       createdAt: row.created_at.toISOString() };
@@ -125,7 +126,7 @@ export class SourceNativeWorkAttachmentStore {
     Promise<{ attachment: NativeWorkSourceAttachment; replayed: boolean } | null> {
     if (!UUID.test(principalId) || !NATIVE.test(work) || !KEY.test(key)
       || ![input.proposal, input.expectedHead, input.actingSubject].every(value => NATIVE.test(value))
-      || input.titleLanguage !== 'en') throw new SourceAdoptionInvalid('invalid attachment intent');
+      || !canonicalLanguage(input.titleLanguage) || input.titleLanguage.length > 35) throw new SourceAdoptionInvalid('invalid attachment intent');
     const original = await this.adoptions.readSupport(principalId, work);
     const proposal = await this.proposals.read(principalId, id(input.proposal));
     if (!original || !proposal) return null;
@@ -134,7 +135,11 @@ export class SourceNativeWorkAttachmentStore {
       [work, principalId])).rows[0];
     if (prior) {
       sameIntent(prior, principalId, work, key, input);
-      return { attachment: await this.receipt(prior, original.binding), replayed: true };
+      const attachment = await this.receipt(prior, original.binding);
+      if (attachment.titleLanguage.toLowerCase() !== input.titleLanguage.toLowerCase()) {
+        throw new SourceAdoptionConflict('source attachment language changed');
+      }
+      return { attachment, replayed: true };
     }
     if (original.currentHead !== input.expectedHead || proposal.record === original.sourceRecord
       || proposal.candidateTitle !== input.confirmedTitle) {
@@ -142,7 +147,7 @@ export class SourceNativeWorkAttachmentStore {
     }
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
     const revision = await readExactWorkRevision(this.env, input.expectedHead, async target => target === work);
-    if (revision.title !== input.confirmedTitle || revision.language !== input.titleLanguage) {
+    if (revision.title !== input.confirmedTitle || revision.language.toLowerCase() !== input.titleLanguage.toLowerCase()) {
       throw new SourceAdoptionConflict('source title differs from native Work revision');
     }
     // All Jena/object reads finish before Access locks. This receipt describes
@@ -188,7 +193,11 @@ export class SourceNativeWorkAttachmentStore {
         }
       });
     } finally { client.release(); }
-    return { attachment: await this.receipt(saved.row, original.binding), replayed: saved.replayed };
+    const attachment = await this.receipt(saved.row, original.binding);
+    if (attachment.titleLanguage.toLowerCase() !== input.titleLanguage.toLowerCase()) {
+      throw new SourceAdoptionConflict('source attachment language changed');
+    }
+    return { attachment, replayed: saved.replayed };
   }
 
   private withdrawal(row: WithdrawalRow, attachment: NativeWorkSourceAttachment): NativeWorkAttachmentWithdrawal {

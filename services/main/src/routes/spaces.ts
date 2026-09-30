@@ -1,3 +1,4 @@
+import { direction } from '../modules/display-language/select.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
@@ -18,6 +19,7 @@ export const openApiOperations = {
 const spaceCreateFields = {
   name: t.String({ minLength: 1, maxLength: 120,
     pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
+  language: t.Optional(t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' })),
   capabilities: t.Tuple([t.Literal('realm')]),
   actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
 };
@@ -28,7 +30,7 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       body: t.Union([
         t.Object({ profile: t.Literal('space-realm-v1'), ...spaceCreateFields },
           { additionalProperties: false }),
-        t.Object({ profile: t.Literal('space-realm-v2'), ...spaceCreateFields,
+        t.Object({ profile: t.Union([t.Literal('space-realm-v2'), t.Literal('space-realm-v3')]), ...spaceCreateFields,
         handle: t.Optional(t.String({ pattern: '^[a-z][a-z0-9-]{2,29}$' })),
         topics: t.Optional(t.Array(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
           { maxItems: 3, uniqueItems: true })),
@@ -42,9 +44,9 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       }
       try {
         const receipt = await createAdmittedRealmSpace(work.environment, work.account, work.access,
-          request, { name: body.name,
-            handle: body.profile === 'space-realm-v2' ? body.handle : undefined,
-            topics: body.profile === 'space-realm-v2' ? body.topics : undefined,
+          request, { name: body.name, language: body.language,
+            handle: body.profile !== 'space-realm-v1' ? body.handle : undefined,
+            topics: body.profile !== 'space-realm-v1' ? body.topics : undefined,
             actingSubject: body.actingSubject, idempotencyKey });
         return Response.json({ space: receipt.space, realm: receipt.realm,
           spaceRevision: receipt.spaceRevision, realmRevision: receipt.realmRevision,
@@ -99,7 +101,8 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         }
         const row = rows[0]!;
         return Response.json({ space, realm: row.realm!.value, owner: row.owner!.value,
-          name: row.name!.value, capabilities: ['realm'], state: 'active',
+          name: row.name!.value, language: row.name!['xml:lang'] ?? 'und',
+          direction: direction(row.name!['xml:lang'] ?? 'und'), capabilities: ['realm'], state: 'active',
           spaceRevision: row.spaceRevision!.value, realmRevision: row.realmRevision!.value,
           selectionPolicy: row.selectionPolicy!.value,
           membershipPolicy: row.membershipPolicy!.value,

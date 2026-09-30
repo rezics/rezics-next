@@ -1,3 +1,4 @@
+import { canonicalLanguage } from '../display-language/select.ts';
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
@@ -161,7 +162,7 @@ export function readWorkPayloadFromManifest(
   const state = readComponentState(objectDirectory, manifestIri, work);
   if (typeof state.mainVersion !== 'string' || !state.mainVersion.startsWith('https://rezics.com/id/')
     || typeof state.title !== 'string' || typeof state.language !== 'string'
-    || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(state.language)) {
+    || !canonicalLanguage(state.language)) {
     throw new RevisionCorrupt('payload does not match Work profile');
   }
   return { mainVersion: state.mainVersion, title: state.title, language: state.language,
@@ -220,7 +221,7 @@ export async function readWorkPayloadForRevision(
   const state = await readWorkComponentState(env, manifestIri, work);
   if (typeof state.mainVersion !== 'string' || !state.mainVersion.startsWith('https://rezics.com/id/')
     || typeof state.title !== 'string' || typeof state.language !== 'string'
-    || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(state.language)) {
+    || !canonicalLanguage(state.language)) {
     throw new RevisionCorrupt('payload does not match Work profile');
   }
   return { mainVersion: state.mainVersion, title: state.title, language: state.language,

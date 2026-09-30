@@ -1,3 +1,4 @@
+import { canonicalLanguage } from '../display-language/select.ts';
 import { languagePrior, readMainLanguageHeads } from './selection-heads.ts';
 import { DAILY_CONTEXT_ID, DAILY_CONTEXT_PROFILE, DAILY_OBSERVATION_ID, DAILY_OBSERVATION_PROFILE,
   DAILY_CADENCE, ISO_CALENDAR, canonicalRatingTimeZone, dailyRatingSlotIri,
@@ -50,7 +51,7 @@ import { PRIVATE_SEARCH_GRAPH, privateDraftTriples, privateDraftUnit } from '../
 import { MAIN_SELECTION_PROFILE, PUBLIC_SEARCH_GRAPH, mainSelectionDigest,
   mainSelectionReceiptIri, readMainSelectionReceipt } from './select-main.ts';
 import { MEMBERSHIP_POLICY, REVIEW_POLICY, SELECTION_POLICY, SPACE_REALM_PROFILE,
-  SPACE_REALM_PROFILE_V1,
+  SPACE_REALM_PROFILE_V1, SPACE_REALM_PROFILE_V2,
   readSpaceCreationReceipt, spaceCreationDigest, spaceCreationReceiptIri } from '../space/create.ts';
 import { REALM_SELECTION_PROFILE, realmSelectionDigest, realmSelectionReceiptIri,
   realmSelectionSlotIri, readRealmSelectionReceipt } from './select-realm.ts';
@@ -279,7 +280,7 @@ export async function reconcileRetainedWorkEdit(
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
         GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.work)} rv:head ${iri(receipt.workRevision)} ;
-          rdfs:label ${lit(payload.title)}@en .
+          rdfs:label ${lit(payload.title)}@${payload.language} .
           ${scalarTerm ? `${iri(receipt.work)} <${SCALAR_PREDICATE}> ${scalarTerm} .` : ''} }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(receipt.workRevision)} a rv:RevisionAnchor ; rv:component ${iri(receipt.work)} ;
@@ -352,7 +353,7 @@ export async function reconcileRetainedWorkEdit(
       ? await env.fuseki.query(`PREFIX rv: <${RV}>
           PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> ASK {
           GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.work)} rv:head ${iri(receipt.workRevision)} ;
-            rv:mainVersion ${iri(payload.mainVersion)} ; rdfs:label ${lit(payload.title)}@en .
+            rv:mainVersion ${iri(payload.mainVersion)} ; rdfs:label ${lit(payload.title)}@${payload.language} .
             ${scalarTerm ? `${iri(receipt.work)} <${SCALAR_PREDICATE}> ${scalarTerm} .` :
     `FILTER NOT EXISTS { ${iri(receipt.work)} <${SCALAR_PREDICATE}> ?scalar }`} }
         }`)
@@ -439,7 +440,7 @@ export async function reconcileRetainedWorkCreate(
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(receipt.work)} a schema:CreativeWork${payload.semanticTypes.map(type => `, <${type}>`).join('')} ;
             rv:mainVersion ${iri(receipt.mainVersion)} ;
-            rv:continuityProfile ${iri(CONTINUITY)} ; rdfs:label ${lit(payload.title)}@en ;
+            rv:continuityProfile ${iri(CONTINUITY)} ; rdfs:label ${lit(payload.title)}@${payload.language} ;
             rv:head ${iri(receipt.workRevision)} .
           ${iri(receipt.mainVersion)} a rv:MainVersion ; rv:work ${iri(receipt.work)} ;
             rv:hostingPolicy rv:MetadataOnly ; rv:head ${iri(receipt.mainRevision)} .
@@ -523,7 +524,7 @@ export async function reconcileRetainedWorkCreate(
       ? await env.fuseki.query(`PREFIX rv: <${RV}>
           PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> ASK {
           GRAPH ${iri(GRAPHS.current)} {
-            ${iri(receipt.work)} rdfs:label ${lit(payload.title)}@en ;
+            ${iri(receipt.work)} rdfs:label ${lit(payload.title)}@${payload.language} ;
               rv:head ${iri(receipt.workRevision)} .
             ${iri(receipt.mainVersion)} rv:head ${iri(receipt.mainRevision)} . }
         }`)
@@ -2431,8 +2432,17 @@ export async function reconcileRetainedRealmSpaceCreate(
   try { spaceState = readComponentState(env.objectDirectory, receipt.spaceManifest,
     space, profile); }
   catch {
-    profile = SPACE_REALM_PROFILE_V1;
-    spaceState = readComponentState(env.objectDirectory, receipt.spaceManifest, space, profile);
+    profile = SPACE_REALM_PROFILE_V2;
+    try { spaceState = readComponentState(env.objectDirectory, receipt.spaceManifest, space, profile); }
+    catch {
+      profile = SPACE_REALM_PROFILE_V1;
+      spaceState = readComponentState(env.objectDirectory, receipt.spaceManifest, space, profile);
+    }
+  }
+  // Older profiles recorded English implicitly; replay preserves that recorded meaning.
+  const language = profile === SPACE_REALM_PROFILE ? spaceState.language : 'en';
+  if (typeof language !== 'string' || !canonicalLanguage(language)) {
+    throw new RetainedEffectConflict('retained Space name language is invalid');
   }
   const realmState = readComponentState(env.objectDirectory, receipt.realmManifest,
     realm, profile);
@@ -2451,7 +2461,7 @@ export async function reconcileRetainedRealmSpaceCreate(
     || realmState.selectionPolicy !== SELECTION_POLICY
     || realmState.membershipPolicy !== MEMBERSHIP_POLICY
     || realmState.reviewPolicy !== REVIEW_POLICY
-    || spaceCreationDigest({ name: spaceState.name, actingSubject: owner,
+    || spaceCreationDigest({ name: spaceState.name, language, actingSubject: owner,
       ...handle !== undefined ? { handle } : {},
       ...topics !== undefined ? { topics: topics as string[] } : {} })
       !== receipt.requestDigest) {
@@ -2483,11 +2493,11 @@ export async function reconcileRetainedRealmSpaceCreate(
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(space)} a rv:Space ; rv:owner ${iri(owner)} ;
-            ${profile === SPACE_REALM_PROFILE ? `rv:definitionProfile ${iri(profile)} ;` : ''}
+            ${profile !== SPACE_REALM_PROFILE_V1 ? `rv:definitionProfile ${iri(profile)} ;` : ''}
             rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public ;
-            rdfs:label ${lit(spaceState.name)}@en ; rv:head ${iri(spaceRevision)} .
+            rdfs:label ${lit(spaceState.name)}@${language} ; rv:head ${iri(spaceRevision)} .
           ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ;
-            ${profile === SPACE_REALM_PROFILE ? `rv:definitionProfile ${iri(profile)} ;` : ''}
+            ${profile !== SPACE_REALM_PROFILE_V1 ? `rv:definitionProfile ${iri(profile)} ;` : ''}
             ${handle !== undefined ? `rv:communityHandle ${lit(handle)} ;` : ''}
             ${Array.isArray(topics) && topics.length ? `rv:topic ${topics.map(topic => iri(topic as string)).join(', ')} ;` : ''}
             rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
@@ -2547,7 +2557,7 @@ export async function reconcileRetainedRealmSpaceCreate(
     let updateError: unknown;
     if (!existing) {
       try { await retainedCommand(env, update, receipt,
-        profile === SPACE_REALM_PROFILE ? 'space-realm-v2' : 'space-realm-v1', [
+        profile.split('/').at(-1)! as ProfileId, [
         { shape: `${profile}/space-shape`, focus: space },
         { shape: `${profile}/realm-shape`, focus: realm },
       ]); }
